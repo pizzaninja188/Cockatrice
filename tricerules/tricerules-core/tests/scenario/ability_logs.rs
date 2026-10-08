@@ -80,7 +80,7 @@ fn ability_logs_cover_activated_mana_sacrifice_and_targeted_abilities() {
 fn ability_logs_preserve_optional_targeted_trigger_presentation_through_decline() {
     let mut engine = GameEngine::new(207_002, &[0, 1], 20, None, true).unwrap();
     advance_to_main1_from_game_start(&mut engine);
-    inject_graveyard_card(&mut engine, 0, "grizzly_bears");
+    let graveyard_card = inject_graveyard_card(&mut engine, 0, "grizzly_bears");
     inject_card_into_hand(&mut engine, 0, "gravedigger");
     grant_pool(&mut engine, 0);
     engine
@@ -118,7 +118,26 @@ fn ability_logs_preserve_optional_targeted_trigger_presentation_through_decline(
         engine.apply_command(1, &decline).is_err(),
         "opponent cannot decline"
     );
-    let declined = engine.apply_command(0, &decline).unwrap();
+    assert!(
+        engine.apply_command(0, &decline).is_err(),
+        "the controller chooses targets before the resolution-time may decision"
+    );
+    assert_eq!(engine.state.pending_triggers.len(), 1);
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                    decline: false,
+                    selected_modes: Vec::new(),
+                    targets: target_object(graveyard_card),
+                })),
+            },
+        )
+        .expect("choose the legal graveyard target");
+    pass_both_players(&mut engine);
+    let declined =
+        answer_optional_triggered_ability_choice(&mut engine, ResolutionChoiceDecision::Decline);
     let log = ability_log(&declined);
     assert!(log.text.starts_with("P0 declines optional trigger: "));
     assert_eq!(log.ability_presentation.as_ref().unwrap().ability, ability);

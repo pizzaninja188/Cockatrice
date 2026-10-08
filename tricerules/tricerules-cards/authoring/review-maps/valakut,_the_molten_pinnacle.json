@@ -1,0 +1,104 @@
+{
+  "format_version": 1,
+  "oracle_id": "1bc44216-4e06-4f66-89b7-5c327004604e",
+  "spans": [
+    {
+      "face_id": "valakut_the_molten_pinnacle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "valakut_the_molten_pinnacle",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/intervening_if",
+        "/faces/0/triggered_abilities/0/effect/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "valakut_the_molten_pinnacle",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Land",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverPermanentEntersBattlefield/filter/permanent_type"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if/BattlefieldAggregate"
+    },
+    {
+      "symbol": "BattlefieldAggregate::Count",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if/BattlefieldAggregate/aggregate"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::AnyTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/DamageTarget/target/kind"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_valakut::valakut_registers_exact_identity_and_complete_land_definition",
+      "covers": "exact Oracle identity, one land face, and all three printed abilities"
+    },
+    {
+      "test": "scenario deck_coverage_valakut::valakut_enters_tapped_and_can_tap_for_red",
+      "covers": "land play enters tapped; the battlefield tap ability produces red without using the stack"
+    },
+    {
+      "test": "scenario deck_coverage_valakut::valakut_requires_five_other_mountains_and_makes_its_may_choice_on_resolution",
+      "covers": "four other Mountains do not trigger; five do; target is chosen at stack placement; the controller may decline or accept on resolution"
+    },
+    {
+      "test": "scenario deck_coverage_valakut::valakut_counts_two_simultaneous_mountains_as_each_others_fifth_other",
+      "covers": "four controlled Mountains plus two simultaneous Mountain entries produce two independent targeted damage triggers"
+    },
+    {
+      "test": "scenario deck_coverage_valakut::valakut_rechecks_other_mountains_when_the_trigger_resolves",
+      "covers": "the observed entrant leaving leaves five other Mountains and qualifies; another Mountain leaving makes the second intervening-if check fail"
+    },
+    {
+      "test": "scenario deck_coverage_valakut::valakut_reentered_mountain_is_a_new_generation_for_the_other_count",
+      "covers": "four other Mountains do not qualify; after the exact observed Cinder Glade leaves and reenters as a new generation, that same physical card counts as the fifth other Mountain"
+    },
+    {
+      "test": "scenario deck_coverage_valakut::valakut_source_leaves_but_its_targeted_trigger_still_resolves",
+      "covers": "after target selection, Valakut leaves the battlefield; its independent triggered ability still offers the resolution-time may choice and deals damage when accepted"
+    },
+    {
+      "test": "scenario deck_coverage_valakut::valakut_fizzles_if_its_only_chosen_permanent_target_leaves",
+      "covers": "when the only chosen permanent target leaves, the ability fizzles before presenting its optional resolution choice"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

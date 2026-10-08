@@ -368,6 +368,7 @@ fn issue_377_control_clause_payloads_are_exact() {
         aggregate,
         min,
         max,
+        ..
     } = condition
     else {
         panic!("Doc Ock must gate on a battlefield aggregate: {condition:?}");

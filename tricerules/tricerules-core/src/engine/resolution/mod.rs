@@ -1258,6 +1258,75 @@ impl GameEngine {
             return Ok(ResolutionProgress::Completed);
         }
 
+        // CR 603.5: a targeted triggered ability chooses targets as it is put on the stack, then
+        // asks whether to perform its optional effects only after the CR 603.4 and 608.2b checks.
+        // Untargeted optional abilities continue to use their authored resolution branch.
+        if top.is_triggered
+            && top
+                .triggered_ability
+                .as_ref()
+                .is_some_and(|ability| ability.may)
+            && had_chosen_targets
+            && !targeted_effects.is_empty()
+        {
+            let prompt = format!("{spell_label}: apply the optional effect?");
+            let apply_label = "Apply the optional effect".to_string();
+            self.state.pending_resolution = Some(PendingResolution {
+                deciding_player: top.controller,
+                presentation: PendingResolutionPresentation {
+                    source_object_id: top.id,
+                    candidates: Vec::new(),
+                    min: 0,
+                    max: 1,
+                    ordered: false,
+                    prompt: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ResolutionBranch,
+                    unique_names: false,
+                },
+                continuation: ResolutionContinuation::OptionalTriggeredAbility {
+                    stack: ParkedStackResolution::new(top),
+                },
+            });
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                    rv1::ResolutionChoiceRequired {
+                        deciding_player_id: self
+                            .state
+                            .pending_resolution
+                            .as_ref()
+                            .expect("optional trigger choice was parked")
+                            .deciding_player,
+                        source_object_id: self
+                            .state
+                            .pending_resolution
+                            .as_ref()
+                            .expect("optional trigger choice was parked")
+                            .presentation
+                            .source_object_id,
+                        prompt_text: prompt.clone(),
+                        choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                        min: 0,
+                        max: 1,
+                        resolution_branches: vec![rv1::ResolutionBranchOption {
+                            branch_index: 0,
+                            label: apply_label.clone(),
+                            cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                            cost_text: String::new(),
+                            selectable: true,
+                            search_zones: Vec::new(),
+                            presentation: Some(rv1::PresentationRef {
+                                fallback_text: apply_label,
+                                ..Default::default()
+                            }),
+                        }],
+                        ..Default::default()
+                    },
+                )),
+            });
+            events.push(ev_log(prompt));
+            return Ok(ResolutionProgress::Parked);
+        }
+
         self.run_effect_list(&top, &spell_label, resolution_effects, 0, events)
     }
 

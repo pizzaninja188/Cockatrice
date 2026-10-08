@@ -1875,6 +1875,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
         .expect("p0 pass trigger on stack");
     e.apply_command(1, &pass())
         .expect("p1 pass resolves trigger");
+    answer_optional_triggered_ability_choice(&mut e, ResolutionChoiceDecision::SelectBranch);
 
     assert!(
         !e.state.players[0].graveyard.contains(&bears_oid),

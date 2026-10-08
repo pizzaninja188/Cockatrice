@@ -318,9 +318,10 @@ fn issue_336_affectionate_indrik_may_fight_and_may_decline() {
         "a rejected target leaves the optional trigger pending"
     );
     decline
-        .apply_command(0, &choose_permanent_targets(&[], true))
-        .expect("CR 603.5: decline the optional fight");
+        .apply_command(0, &choose_permanent_targets(&[bear], false))
+        .expect("choose the fight target before the resolution-time may choice");
     resolve_entire_stack_two_player(&mut decline);
+    answer_optional_triggered_ability_choice(&mut decline, ResolutionChoiceDecision::Decline);
     assert_eq!(decline.state.objects[&bear].zone, Zone::Battlefield);
     assert_eq!(decline.state.objects[&bear].damage, 0);
 
@@ -331,6 +332,7 @@ fn issue_336_affectionate_indrik_may_fight_and_may_decline() {
         .apply_command(0, &choose_permanent_targets(&[bear], false))
         .expect("CR 701.14: fight the chosen creature");
     resolve_entire_stack_two_player(&mut fight);
+    answer_optional_triggered_ability_choice(&mut fight, ResolutionChoiceDecision::SelectBranch);
     assert_eq!(
         fight.state.objects[&bear].zone,
         Zone::Graveyard,
@@ -355,6 +357,7 @@ fn issue_336_graveshifter_may_return_a_creature_card_and_may_decline() {
         .apply_command(0, &choose_graveyard_targets(&[creature_card], false))
         .expect("return the creature card");
     resolve_entire_stack_two_player(&mut engine);
+    answer_optional_triggered_ability_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
     assert_eq!(engine.state.objects[&creature_card].zone, Zone::Hand);
     assert_eq!(engine.state.objects[&land_card].zone, Zone::Graveyard);
 
@@ -362,9 +365,10 @@ fn issue_336_graveshifter_may_return_a_creature_card_and_may_decline() {
     let card = inject_graveyard_card(&mut decline, 0, "grizzly_bears");
     move_ready_to_battlefield(&mut decline, 0, "graveshifter");
     decline
-        .apply_command(0, &choose_graveyard_targets(&[], true))
-        .expect("decline the optional return");
+        .apply_command(0, &choose_graveyard_targets(&[card], false))
+        .expect("choose the target before the resolution-time may choice");
     resolve_entire_stack_two_player(&mut decline);
+    answer_optional_triggered_ability_choice(&mut decline, ResolutionChoiceDecision::Decline);
     assert_eq!(decline.state.objects[&card].zone, Zone::Graveyard);
 }
 
@@ -388,6 +392,7 @@ fn issue_336_reclamation_sage_may_destroy_an_artifact_and_may_decline() {
         .apply_command(0, &choose_permanent_targets(&[artifact], false))
         .expect("destroy the chosen artifact");
     resolve_entire_stack_two_player(&mut engine);
+    answer_optional_triggered_ability_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
     assert_eq!(engine.state.objects[&artifact].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&creature].zone, Zone::Battlefield);
 
@@ -395,9 +400,10 @@ fn issue_336_reclamation_sage_may_destroy_an_artifact_and_may_decline() {
     let artifact = inject_permanent_on_battlefield(&mut decline, 1, "bonesplitter");
     move_ready_to_battlefield(&mut decline, 0, "reclamation_sage");
     decline
-        .apply_command(0, &choose_permanent_targets(&[], true))
-        .expect("decline the optional destroy");
+        .apply_command(0, &choose_permanent_targets(&[artifact], false))
+        .expect("choose the target before the resolution-time may choice");
     resolve_entire_stack_two_player(&mut decline);
+    answer_optional_triggered_ability_choice(&mut decline, ResolutionChoiceDecision::Decline);
     assert_eq!(decline.state.objects[&artifact].zone, Zone::Battlefield);
 }
 

@@ -1494,9 +1494,37 @@ impl GameEngine {
                 ))
             }
             GameCondition::BattlefieldAggregate {
-                filter, aggregate, ..
-            } => condition
-                .matches_value(self.battlefield_aggregate_value(filter, *aggregate, context)),
+                filter,
+                aggregate,
+                exclude_observed_object,
+                ..
+            } => {
+                let value = if *exclude_observed_object {
+                    let Some(observed) =
+                        trigger_context.and_then(|trigger| trigger.observed_object)
+                    else {
+                        return false;
+                    };
+                    let matching = self.battlefield_matching_characteristics(filter, context);
+                    let count = matching
+                        .iter()
+                        .filter(|(object_id, _)| {
+                            *object_id != observed.object_id
+                                || self
+                                    .state
+                                    .zone_change_generation
+                                    .get(object_id)
+                                    .copied()
+                                    .unwrap_or(0)
+                                    != observed.zone_change_generation
+                        })
+                        .count();
+                    clamp_public_count(count)
+                } else {
+                    self.battlefield_aggregate_value(filter, *aggregate, context)
+                };
+                condition.matches_value(value)
+            }
             GameCondition::Devotion { color, .. } => {
                 condition.matches_value(super::characteristics::devotion_value(
                     &self.state,

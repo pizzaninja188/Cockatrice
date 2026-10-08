@@ -6636,6 +6636,7 @@ mod issue_158_predicate_tests {
             aggregate: BattlefieldAggregate::DistinctNames,
             min: Some(7),
             max: None,
+            exclude_observed_object: false,
         };
         assert!(union.validate().is_ok());
 

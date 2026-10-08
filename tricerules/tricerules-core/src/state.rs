@@ -846,7 +846,8 @@ pub struct StagedTrigger {
     /// The event's affected players and observed objects, kept separate from CR 115 targets and
     /// preserved while this trigger waits for APNAP ordering or target selection.
     pub trigger_context: TriggerContext,
-    /// CR 603.5: an optional triggered ability may be declined before it is put on the stack.
+    /// Whether the triggered ability's effects are optional. CR 603.5 decisions happen on
+    /// resolution, after any required targets and modes have been chosen for the stack.
     pub may: bool,
 }
 
@@ -914,7 +915,8 @@ pub struct PendingTrigger {
     /// Safe public name captured when this triggered ability fired.
     pub source_label: String,
     pub controller: PlayerId,
-    /// CR 603.5: an optional triggered ability may be declined before it is put on the stack.
+    /// Whether the triggered ability's effects are optional. The choice is made on resolution,
+    /// after any required targets and modes have been chosen for the stack.
     pub may: bool,
     /// Mirror of [`StackItem::trigger_context`], carried across target selection so a targeted
     /// event-dependent trigger keeps its event references when it finally reaches the stack.
@@ -1103,6 +1105,11 @@ pub enum PendingLibraryLookStage {
 #[derive(serde::Serialize, Debug, Clone)]
 #[allow(private_interfaces)] // The Teferi cohort is engine-private even though continuations are inspectable.
 pub enum ResolutionContinuation {
+    /// The targets of a targeted triggered ability were chosen as it went on the stack; this
+    /// resolution-time choice decides whether its optional effects happen.
+    OptionalTriggeredAbility {
+        stack: ParkedStackResolution,
+    },
     DrawReplacement {
         stack: Option<ParkedStackResolution>,
     },
@@ -1370,6 +1377,7 @@ pub enum ResolutionContinuation {
 impl ResolutionContinuation {
     pub fn stack(&self) -> Option<&ParkedStackResolution> {
         match self {
+            Self::OptionalTriggeredAbility { stack } => Some(stack),
             Self::DrawReplacement { stack } => stack.as_ref(),
             Self::DiscardReplacement { stack }
             | Self::Custom { stack, .. }
@@ -1421,6 +1429,7 @@ impl ResolutionContinuation {
 
     pub fn stack_mut(&mut self) -> Option<&mut ParkedStackResolution> {
         match self {
+            Self::OptionalTriggeredAbility { stack } => Some(stack),
             Self::DrawReplacement { stack } => stack.as_mut(),
             Self::DiscardReplacement { stack }
             | Self::Custom { stack, .. }

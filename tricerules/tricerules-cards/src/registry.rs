@@ -2445,6 +2445,15 @@ impl CardRegistry {
                             reason,
                         }
                     })?;
+                    if condition.requires_observed_object_context()
+                        && !ability.trigger.observes_permanent_entry()
+                    {
+                        return Err(RegistryError::InvalidCard {
+                            id: id.clone(),
+                            reason: "observed-object battlefield exclusion requires a permanent-entry observer"
+                                .into(),
+                        });
+                    }
                 }
                 for effect in &ability.effect {
                     if effect.uses_trigger_object_reference()
@@ -2898,6 +2907,15 @@ impl CardRegistry {
                                 reason,
                             }
                         })?;
+                        if condition.requires_observed_object_context()
+                            && !ability.trigger.observes_permanent_entry()
+                        {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "observed-object battlefield exclusion requires a permanent-entry observer"
+                                    .into(),
+                            });
+                        }
                     }
                 }
                 // An ability's effect list gets the same two checks a spell's does: each effect
@@ -4555,6 +4573,44 @@ mod tests {
             CardRegistry::from_chunks(&[fixture]).expect_err("ETB supplies no observed object");
         assert!(matches!(error, RegistryError::InvalidCard { reason, .. }
             if reason.contains("trigger that supplies an observed object")));
+    }
+
+    #[test]
+    fn observed_object_battlefield_count_requires_a_supplying_trigger() {
+        let card = |trigger: &str| {
+            format!(
+                r#"(
+                    id: "observed_count_probe",
+                    name: "Observed Count Probe",
+                    face_id: "observed_count_probe",
+                    mana_cost: "{{1}}",
+                    types: ["Enchantment"],
+                    triggered_abilities: [(
+                        ability_id: "triggered_01",
+                        presentation: Fallback,
+                        trigger: {trigger},
+                        intervening_if: Some(BattlefieldAggregate(
+                            filter: (controllers: Controller, card_type: Some(Land),
+                                required_subtypes: ["Mountain"]),
+                            aggregate: Count,
+                            min: Some(5),
+                            exclude_observed_object: true,
+                        )),
+                        effect: [GainLife(amount: 1)],
+                    )],
+                )"#
+            )
+        };
+        let observing_trigger = "WheneverPermanentEntersBattlefield(controller: Controller, filter: (permanent_type: Some(Land)), creature_filter: None)";
+        CardRegistry::from_chunks(&[&card(observing_trigger)])
+            .expect("permanent-entry watcher supplies an observed object generation");
+
+        let leaving_observer = "WheneverPermanentLeavesBattlefield(controller: Controller, filter: (permanent_type: Some(Land)), destination: OneOf([Graveyard]), cardinality: EachObject)";
+        let error = CardRegistry::from_chunks(&[&card(leaving_observer)]).expect_err(
+            "a departure observer checks intervening-if before its event object is bound",
+        );
+        assert!(matches!(error, RegistryError::InvalidCard { reason, .. }
+            if reason.contains("requires a permanent-entry observer")));
     }
 
     #[test]

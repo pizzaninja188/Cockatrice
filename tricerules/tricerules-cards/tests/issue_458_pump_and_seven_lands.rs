@@ -112,6 +112,7 @@ fn seven_lands_condition() -> GameCondition {
         aggregate: BattlefieldAggregate::Count,
         min: Some(7),
         max: None,
+        exclude_observed_object: false,
     }
 }
 

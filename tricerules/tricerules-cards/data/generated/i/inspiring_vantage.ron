@@ -6,5 +6,5 @@
   mana_cost: "",
   types: ["Land"],
   activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([2]), costs: [Tap], effect: [ProduceMana(options: [(r: 1), (w: 1)])])],
-  static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:EntersTapped(affected:Self_,condition:Some(BattlefieldAggregate(filter:(token:None,any_of:None,controllers:Controller,card_type:Some(Land),color:None,name:None,required_subtypes:[],exclude_source:true),aggregate:Count,min:Some(3),max:None)),unless_cost:None))],
+  static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:EntersTapped(affected:Self_,condition:Some(BattlefieldAggregate(filter:(token:None,any_of:None,controllers:Controller,card_type:Some(Land),color:None,name:None,required_subtypes:[],exclude_source:true),aggregate:Count,min:Some(3),max:None,exclude_observed_object:false)),unless_cost:None))],
 )

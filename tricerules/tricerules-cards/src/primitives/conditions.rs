@@ -238,6 +238,10 @@ pub enum GameCondition {
         min: Option<u32>,
         #[serde(default)]
         max: Option<u32>,
+        /// Exclude the exact event-observed object generation from a trigger-time count.
+        /// Valakut uses this for its "five other Mountains" intervening-if condition.
+        #[serde(default)]
+        exclude_observed_object: bool,
     },
     /// CR 700.5: count matching mana-cost symbols on permanents controlled by the source's
     /// current controller. Nylea and Purphoros use this dependency-free layer-4 threshold.
@@ -326,6 +330,19 @@ impl GameCondition {
         })
     }
 
+    /// Whether this predicate needs the event-bound permanent reference supplied by its trigger.
+    pub fn requires_observed_object_context(&self) -> bool {
+        self.any_node_matches(|condition| {
+            matches!(
+                condition,
+                Self::BattlefieldAggregate {
+                    exclude_observed_object: true,
+                    ..
+                }
+            )
+        })
+    }
+
     /// Validate a condition in a context without a completed spell cast (costs, abilities,
     /// continuous effects, and the snapshot declarations themselves).
     pub(crate) fn validate_live(&self) -> Result<(), String> {
@@ -336,6 +353,11 @@ impl GameCondition {
         }
         if self.requires_triggering_spell_context() {
             return Err("triggering-spell mana spending requires a spell-cast trigger".into());
+        }
+        if self.requires_observed_object_context() {
+            return Err(
+                "observed-object battlefield exclusion requires a supplying trigger".into(),
+            );
         }
         if self.any_node_matches(|condition| matches!(condition, Self::CastOrigin { .. })) {
             return Err("CastOrigin is available only as a face cast condition".into());
@@ -350,6 +372,11 @@ impl GameCondition {
         }
         if self.requires_triggering_spell_context() {
             return Err("triggering-spell mana spending requires a spell-cast trigger".into());
+        }
+        if self.requires_observed_object_context() {
+            return Err(
+                "observed-object battlefield exclusion requires a supplying trigger".into(),
+            );
         }
         self.validate_cast_snapshot_reference(0)?;
         self.validate_without_self_entry_spell()
@@ -490,9 +517,18 @@ impl GameCondition {
                 validate_optional_bounds(min.as_ref(), max.as_ref(), "BattlefieldCreatureCount")
             }
             GameCondition::BattlefieldAggregate {
-                filter, min, max, ..
+                filter,
+                aggregate,
+                exclude_observed_object,
+                min,
+                max,
             } => {
                 filter.validate()?;
+                if *exclude_observed_object && *aggregate != BattlefieldAggregate::Count {
+                    return Err(
+                        "observed-object exclusion is only defined for battlefield counts".into(),
+                    );
+                }
                 validate_optional_bounds(min.as_ref(), max.as_ref(), "BattlefieldAggregate")
             }
             GameCondition::Devotion { min, max, .. } => {
@@ -899,5 +935,62 @@ mod hand_size_selector_tests {
         };
 
         assert!(condition.validate().is_ok());
+    }
+}
+
+#[cfg(test)]
+mod observed_object_aggregate_tests {
+    use super::*;
+
+    fn count(exclude_observed_object: bool) -> GameCondition {
+        GameCondition::BattlefieldAggregate {
+            filter: BattlefieldPermanentFilter {
+                required_supertypes: Vec::new(),
+                token: None,
+                any_of: None,
+                controllers: RelativePlayerSet::Controller,
+                card_type: Some(CardTypeFilter::Land),
+                color: None,
+                name: None,
+                required_subtypes: vec!["Mountain".into()],
+                exclude_source: false,
+            },
+            aggregate: BattlefieldAggregate::Count,
+            min: Some(5),
+            max: None,
+            exclude_observed_object,
+        }
+    }
+
+    #[test]
+    fn observed_object_exclusion_is_count_only_and_requires_trigger_context() {
+        let condition = count(true);
+        assert!(condition.validate_trigger_condition().is_ok());
+        assert!(condition
+            .validate_live()
+            .unwrap_err()
+            .contains("supplying trigger"));
+
+        let GameCondition::BattlefieldAggregate {
+            filter,
+            min,
+            max,
+            exclude_observed_object,
+            ..
+        } = condition
+        else {
+            unreachable!();
+        };
+        let invalid_aggregate = GameCondition::BattlefieldAggregate {
+            filter,
+            aggregate: BattlefieldAggregate::DistinctNames,
+            min,
+            max,
+            exclude_observed_object,
+        };
+        assert!(invalid_aggregate
+            .validate()
+            .unwrap_err()
+            .contains("only defined for battlefield counts"));
     }
 }

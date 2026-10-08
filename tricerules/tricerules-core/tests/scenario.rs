@@ -1131,3 +1131,6 @@ mod deck_coverage_weapons_manufacturing;
 
 #[path = "scenario/deck_coverage_esikas_chariot.rs"]
 mod deck_coverage_esikas_chariot;
+
+#[path = "scenario/deck_coverage_valakut.rs"]
+mod deck_coverage_valakut;

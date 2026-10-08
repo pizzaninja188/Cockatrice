@@ -101,6 +101,7 @@ fn hidden_lair_condition() -> GameCondition {
             aggregate: BattlefieldAggregate::Count,
             min: Some(1),
             max: None,
+            exclude_observed_object: false,
         },
     ])
 }

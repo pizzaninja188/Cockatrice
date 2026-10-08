@@ -579,6 +579,7 @@ impl GameEngine {
                         .as_ref()
                         .is_some_and(|condition| {
                             condition.requires_affected_player_context()
+                                || condition.requires_observed_object_context()
                                 || matches!(
                                     condition,
                                     GameCondition::TriggeringSpellManaSpent { .. }
@@ -2195,7 +2196,12 @@ impl GameEngine {
             // CR 603.4, first of the two checks: an intervening-"if" clause that is false as the
             // ability would go on the stack means it never triggers at all.
             .filter(|(_, ta, _)| {
-                self.intervening_if_holds(source_id, controller, ta.intervening_if.as_ref())
+                let requires_event_context = ta
+                    .intervening_if
+                    .as_ref()
+                    .is_some_and(GameCondition::requires_observed_object_context);
+                requires_event_context
+                    || self.intervening_if_holds(source_id, controller, ta.intervening_if.as_ref())
             })
             .map(|(idx, ta, origin)| CollectedTrigger {
                 captured_spell: None,
@@ -2502,6 +2508,7 @@ impl GameEngine {
                 let requires_event_context =
                     ability.intervening_if.as_ref().is_some_and(|condition| {
                         condition.requires_affected_player_context()
+                            || condition.requires_observed_object_context()
                             || matches!(condition, GameCondition::TriggeringSpellManaSpent { .. })
                     });
                 source.event_conditions_checked
@@ -2697,7 +2704,7 @@ impl GameEngine {
             ability_text,
             presentation,
             trigger_context,
-            may,
+            ..
         } = trigger;
         let needs_target = target_schema(&ability.effect, ability.targeting.as_ref()).has_targets();
         let modal_modes = ability.modal.as_ref().map(|modal| {
@@ -2769,8 +2776,9 @@ impl GameEngine {
                 modes.iter().filter(|mode| mode.selectable).count() >= modal.min_modes as usize
             })
         });
-        if needs_choice && ((has_legal_target && modal_has_enough_choices) || may) {
+        if needs_choice && has_legal_target && modal_has_enough_choices {
             let was_empty = self.state.pending_triggers.is_empty();
+            let may = ability.may;
             self.state.pending_triggers.push_back(PendingTrigger {
                 object_id: virtual_id,
                 source_permanent_id: source_id,
@@ -2786,6 +2794,8 @@ impl GameEngine {
                 source_label: card_name.clone(),
                 controller,
                 trigger_context,
+                // Preserve the ability's optionality; the target/mode prompt cannot decline it.
+                // CR 603.5 places that choice on resolution.
                 may,
             });
             if was_empty {
@@ -2796,7 +2806,7 @@ impl GameEngine {
                             ability_index: ability_index as u32,
                             ability_text: ability_text.clone(),
                             controller_player_id: controller,
-                            may_decline: may,
+                            may_decline: false,
                             targets: legal_targets.clone(),
                             min_modes,
                             max_modes,
@@ -2813,8 +2823,8 @@ impl GameEngine {
                 ));
             }
         } else if needs_choice {
-            // CR 603.3d: a targeted trigger with no legal target is removed from the stack. An
-            // optional trigger remains pending so its controller can explicitly decline it.
+            // CR 603.3d: a trigger that requires targets but has no legal target is removed,
+            // even when its effects are optional. Optionality is decided only on resolution.
         } else {
             self.state.stack_presentations.insert(
                 virtual_id,
@@ -3347,6 +3357,63 @@ mod tests {
         )
         .unwrap();
         (engine, source)
+    }
+
+    #[test]
+    fn intervening_if_for_observed_entry_excludes_that_mountain_from_the_other_count() {
+        let mut engine = GameEngine::new(164_002, &[0, 1], 20, None, true).unwrap();
+        let mut mountains = Vec::new();
+        for _ in 0..5 {
+            let object_id = engine.state.players[0].hand[0];
+            engine.state.objects.get_mut(&object_id).unwrap().card_id = "mountain".into();
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                object_id,
+                Zone::Battlefield,
+                None,
+            )
+            .unwrap();
+            mountains.push(object_id);
+        }
+        let observed = *mountains.last().unwrap();
+        let generation = engine.state.zone_change_generation[&observed];
+        let condition = GameCondition::BattlefieldAggregate {
+            filter: BattlefieldPermanentFilter {
+                required_supertypes: Vec::new(),
+                token: None,
+                any_of: None,
+                controllers: RelativePlayerSet::Controller,
+                card_type: Some(CardTypeFilter::Land),
+                color: None,
+                name: None,
+                required_subtypes: vec!["Mountain".into()],
+                exclude_source: false,
+            },
+            aggregate: BattlefieldAggregate::Count,
+            min: Some(5),
+            max: None,
+            exclude_observed_object: true,
+        };
+        let trigger_context = TriggerContext {
+            observed_object: Some(TriggerObjectRef {
+                object_id: observed,
+                zone_change_generation: generation,
+                controller_at_event: 0,
+            }),
+            ..Default::default()
+        };
+
+        assert!(
+            !engine.intervening_if_holds_at_generation(
+                observed,
+                0,
+                Some(&condition),
+                None,
+                Some(&trigger_context),
+            ),
+            "four Mountains other than the observed entrant do not meet the five-Mountain threshold"
+        );
     }
 
     fn add_limited_grant(engine: &mut GameEngine, source: ObjectId, trigger: TriggerCondition) {

@@ -42,8 +42,9 @@ pub(crate) use tricerules_proto::ruled::v1::{
     DeclareAttackers, DeclareBlockers, DiscardToHandSize, ExecutePermanentAction, FlexPipPayment,
     LandSource, ManaSpendSelection, PassPriority, PermanentActionKind, PlayLand,
     PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
-    ResolutionChoiceRequired, RuledCommand, RuledEventBatch, SelectedSpellMode,
-    SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TargetRefKind, UndoManaAbility,
+    ResolutionChoiceDecision, ResolutionChoiceRequired, RuledCommand, RuledEventBatch,
+    SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TargetRefKind,
+    UndoManaAbility,
 };
 
 pub(crate) fn pass() -> RuledCommand {
@@ -768,6 +769,35 @@ pub(crate) fn resolve_entire_stack_two_player(e: &mut GameEngine) {
         }
         pass_both_players(e);
     }
+}
+
+pub(crate) fn answer_optional_triggered_ability_choice(
+    e: &mut GameEngine,
+    decision: rv1::ResolutionChoiceDecision,
+) -> RuledEventBatch {
+    let pending = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("optional triggered ability is awaiting its resolution choice");
+    assert!(matches!(
+        &pending.continuation,
+        ResolutionContinuation::OptionalTriggeredAbility { .. }
+    ));
+    assert_eq!(
+        pending.presentation.choice_kind,
+        ChoiceKind::ResolutionBranch
+    );
+    let deciding_player = pending.deciding_player;
+    let command = RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            decision: decision as i32,
+            selected_branch_index: 0,
+            ..Default::default()
+        })),
+    };
+    e.apply_command(deciding_player, &command)
+        .expect("answer optional triggered ability resolution choice")
 }
 
 pub(crate) fn hand_cast_source(hand_card_index: usize) -> CastSource {

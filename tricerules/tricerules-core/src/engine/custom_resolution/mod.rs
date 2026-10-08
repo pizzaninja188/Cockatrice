@@ -5,8 +5,8 @@
 //! outstanding [`PendingResolution`] before returning an error so rejected commands are atomic.
 
 use super::events::{
-    ev_log, ev_log_hidden_from, ev_log_private, ev_priority_changed, finish_with_events,
-    format_spell_targets_log, object_display_name,
+    ev_log, ev_log_ability, ev_log_hidden_from, ev_log_private, ev_priority_changed,
+    finish_with_events, format_spell_targets_log, object_display_name,
 };
 use super::legal_actions::fill_legal;
 use super::resolution::{
@@ -103,6 +103,12 @@ impl GameEngine {
                 return Err(EngineError::Illegal("unknown resolution choice decision"));
             }
         };
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::OptionalTriggeredAbility { .. }
+        ) {
+            return self.finish_optional_triggered_ability_choice(pending, answer, decision);
+        }
         if matches!(
             &pending.continuation,
             ResolutionContinuation::TargetedPlayerPermanentChoice {
@@ -297,6 +303,9 @@ impl GameEngine {
         }
 
         match &pending.continuation {
+            ResolutionContinuation::OptionalTriggeredAbility { .. } => {
+                unreachable!("optional triggered ability choice handled above")
+            }
             ResolutionContinuation::SimultaneousEntryOrder { .. } => {
                 return self.finish_entry_timestamp_order_choice(pending, chosen);
             }
@@ -486,6 +495,68 @@ impl GameEngine {
             ev.push(ev_priority_changed(self));
         }
         Ok(finish_with_events(self, ev))
+    }
+
+    fn finish_optional_triggered_ability_choice(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let invalid_shape = !answer.chosen_object_ids.is_empty()
+            || !answer.chosen_player_ids.is_empty()
+            || answer.selected_branch_index != 0
+            || answer.cast_spell.is_some()
+            || answer.chosen_combat_defender.is_some()
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+            || answer.spell_cast_announcement.is_some();
+        if invalid_shape {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "optional triggered ability choice contains unrelated fields",
+            ));
+        }
+        let stack = match &pending.continuation {
+            ResolutionContinuation::OptionalTriggeredAbility { stack } => stack.clone(),
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "optional triggered ability continuation missing",
+                ));
+            }
+        };
+        let mut events = Vec::new();
+        let ability_text = stack.item.ability_text.as_deref().unwrap_or_default();
+        let ability_presentation = self
+            .state
+            .stack_presentations
+            .get(&stack.item.id)
+            .and_then(|presentation| presentation.primary.clone());
+        let resume_index = match decision {
+            rv1::ResolutionChoiceDecision::SelectBranch => Some(0),
+            rv1::ResolutionChoiceDecision::Decline => {
+                events.push(ev_log_ability(
+                    format!("P{} declines optional trigger: ", pending.deciding_player),
+                    ability_text,
+                    ability_presentation,
+                    String::new(),
+                ));
+                Some(self.build_resolution_effects(&stack.item).0.len() as u32)
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "optional triggered ability requires apply or decline",
+                ));
+            }
+        };
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            resume_index,
+            stack.previous_result,
+            events,
+        )
     }
 
     fn finish_aura_return(

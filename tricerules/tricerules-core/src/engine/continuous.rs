@@ -2163,6 +2163,7 @@ mod static_permanent_keyword_grant_tests {
             aggregate: BattlefieldAggregate::Count,
             min: Some(1),
             max: None,
+            exclude_observed_object: false,
         });
         engine.refresh_source_static_abilities(aura);
         remove(&mut engine, aura);

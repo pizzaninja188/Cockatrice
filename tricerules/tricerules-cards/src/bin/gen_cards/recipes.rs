@@ -10161,6 +10161,7 @@ fn match_activated_tap_conditional_pair_mana(
                     aggregate: BattlefieldAggregate::Count,
                     min: Some(1),
                     max: None,
+                    exclude_observed_object: false,
                 },
             ])],
             activation_limit: None,
@@ -10469,6 +10470,7 @@ fn land_count_entry_condition(min: Option<u32>, max: Option<u32>) -> GameConditi
         aggregate: BattlefieldAggregate::Count,
         min,
         max,
+        exclude_observed_object: false,
     }
 }
 
@@ -10551,6 +10553,7 @@ fn mount_or_vehicle_entry_condition() -> GameCondition {
         aggregate: BattlefieldAggregate::Count,
         min: None,
         max: Some(0),
+        exclude_observed_object: false,
     }
 }
 
@@ -12924,6 +12927,7 @@ fn match_static_control_artifact_plus_one_zero_deathtouch(
                         aggregate: BattlefieldAggregate::Count,
                         min: Some(1),
                         max: None,
+                        exclude_observed_object: false,
                     },
                     remove_creature: false,
                     set_types: None,
@@ -12988,6 +12992,7 @@ fn match_static_seven_lands_plus_p_plus_t(
                 aggregate: BattlefieldAggregate::Count,
                 min: Some(7),
                 max: None,
+                exclude_observed_object: false,
             },
             remove_creature: false,
             set_types: None,
@@ -15751,6 +15756,7 @@ fn match_control_another_villain_hexproof(
                         aggregate: BattlefieldAggregate::Count,
                         min: Some(1),
                         max: None,
+                        exclude_observed_object: false,
                     },
                     remove_creature: false,
                     set_types: None,

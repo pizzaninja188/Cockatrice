@@ -45,6 +45,7 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
             aggregate: BattlefieldAggregate::Count,
             min: Some(1),
             max: None,
+            ..
         }
     ));
     assert!(matches!(
@@ -60,6 +61,7 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
             aggregate: BattlefieldAggregate::Count,
             min: Some(1),
             max: None,
+            ..
         } if name == "Faerie Miscreant"
     ));
     assert!(matches!(
@@ -73,6 +75,7 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
             aggregate: BattlefieldAggregate::MaximumPower,
             min: Some(4),
             max: None,
+            ..
         }
     ));
     assert!(matches!(
@@ -86,6 +89,7 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
             aggregate: BattlefieldAggregate::MaximumPower,
             min: Some(4),
             max: None,
+            ..
         }
     ));
 }
@@ -146,6 +150,7 @@ fn battlefield_aggregate_conditions_reject_invalid_bounds_and_names() {
         aggregate: BattlefieldAggregate::TotalPower,
         min,
         max,
+        exclude_observed_object: false,
     };
     assert!(condition(None, None, None).validate().is_err());
     assert!(condition(None, Some(2), Some(1)).validate().is_err());

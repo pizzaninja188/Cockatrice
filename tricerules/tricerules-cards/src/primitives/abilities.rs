@@ -1105,6 +1105,13 @@ impl TriggerCondition {
         )
     }
 
+    /// Whether a matching event binds its entering permanent before the first intervening-if
+    /// check. This is narrower than `supplies_trigger_object`, which also covers departure and
+    /// other observers whose event object is captured only after that check.
+    pub(crate) fn observes_permanent_entry(&self) -> bool {
+        matches!(self, Self::WheneverPermanentEntersBattlefield { .. })
+    }
+
     /// Whether a matching event supplies the committed cardinality read by `Amount::EventCount`.
     pub(crate) fn supplies_event_count(&self) -> bool {
         matches!(self, Self::WheneverPlayerDiscardsOneOrMoreCards { .. })

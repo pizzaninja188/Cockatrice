@@ -512,17 +512,10 @@ fn issue_164_decline_rejected_target_and_refresh_do_not_refund_a_trigger() {
     engine.initial_response_batch();
     assert_eq!(engine.state.trigger_uses_this_turn, usage);
     engine
-        .apply_command(
-            0,
-            &RuledCommand {
-                cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                    decline: true,
-                    selected_modes: vec![],
-                    targets: vec![],
-                })),
-            },
-        )
-        .unwrap();
+        .apply_command(0, &choose_trigger_target(graveyard_card))
+        .expect("choose a legal target after rejecting the wrong zone");
+    pass_both_players(&mut engine);
+    answer_optional_triggered_ability_choice(&mut engine, ResolutionChoiceDecision::Decline);
     assert!(engine.state.pending_triggers.is_empty());
     assert_eq!(engine.state.objects[&graveyard_card].zone, Zone::Graveyard);
     refire_begin_combat(&mut engine);

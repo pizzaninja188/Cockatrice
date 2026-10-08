@@ -350,6 +350,7 @@ fn issue_351_gravblade_heavy_keeps_the_artifact_condition() {
                 aggregate: BattlefieldAggregate::Count,
                 min: Some(1),
                 max: None,
+                exclude_observed_object: false,
             },
             remove_creature: false,
             set_types: None,

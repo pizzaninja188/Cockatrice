@@ -248,6 +248,7 @@ fn issue_416_roads_fixture_matches_the_emitted_definition() {
                     aggregate: BattlefieldAggregate::Count,
                     min: None,
                     max: Some(0),
+                    exclude_observed_object: false,
                 }),
                 unless_cost: None,
             },

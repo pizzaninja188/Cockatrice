@@ -11,7 +11,10 @@
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
 use tricerules_core::Zone;
-use tricerules_proto::ruled::v1::{ChooseTriggerTarget, RuledCommand, TargetRef, TargetRefKind};
+use tricerules_proto::ruled::v1::{
+    ruled_command::Cmd, ChooseTriggerTarget, ResolutionChoiceDecision, RuledCommand,
+    SubmitResolutionChoice, TargetRef, TargetRefKind,
+};
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
@@ -197,8 +200,86 @@ fn issue_misc18_battle_rattle_shaman_pumps_at_beginning_of_combat() {
     );
     semantic::accepted(&mut e, 0, &choose_trigger_target(bear));
     resolve_entire_stack_two_player(&mut e);
+    answer_optional_triggered_ability_choice(&mut e, ResolutionChoiceDecision::SelectBranch);
     assert_eq!(e.effective_power(bear), Some(4), "+2/+0 until end of turn");
     assert_eq!(e.effective_toughness(bear), Some(2), "toughness unchanged");
+}
+
+#[test]
+fn issue_misc18_targeted_optional_trigger_cannot_be_declined_before_targeting() {
+    let mut e = engine(818_016);
+    inject_permanent_on_battlefield(&mut e, 0, "battle-rattle_shaman");
+    let bear = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 2, 2);
+    e.apply_command(0, &primitive_yield())
+        .expect("main phase to beginning of combat");
+    assert_eq!(e.state.pending_triggers.len(), 1);
+
+    let decline = RuledCommand {
+        cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+            decline: true,
+            ..Default::default()
+        })),
+    };
+    assert!(
+        e.apply_command(0, &decline).is_err(),
+        "a targeted may trigger requires its target before the resolution-time may choice"
+    );
+    assert_eq!(
+        e.state.pending_triggers.len(),
+        1,
+        "rejection preserves the trigger"
+    );
+    semantic::accepted(&mut e, 0, &choose_trigger_target(bear));
+    assert_eq!(e.state.stack.len(), 1);
+}
+
+#[test]
+fn issue_misc18_targeted_optional_trigger_offers_resolution_choice() {
+    let mut e = engine(818_017);
+    inject_permanent_on_battlefield(&mut e, 0, "battle-rattle_shaman");
+    let bear = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 2, 2);
+    e.apply_command(0, &primitive_yield())
+        .expect("main phase to beginning of combat");
+    semantic::accepted(&mut e, 0, &choose_trigger_target(bear));
+
+    pass_priority_round(&mut e);
+    assert!(
+        e.state.pending_resolution.is_some(),
+        "targeted may must ask whether to apply its effect while resolving"
+    );
+    assert_eq!(
+        e.effective_power(bear),
+        Some(2),
+        "the effect waits for the answer"
+    );
+}
+
+#[test]
+fn issue_misc18_targeted_optional_trigger_acceptance_and_decline_are_distinct() {
+    for (seed, decision, expected_power) in [
+        (818_018, ResolutionChoiceDecision::SelectBranch, 4),
+        (818_019, ResolutionChoiceDecision::Decline, 2),
+    ] {
+        let mut e = engine(seed);
+        inject_permanent_on_battlefield(&mut e, 0, "battle-rattle_shaman");
+        let bear = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 2, 2);
+        e.apply_command(0, &primitive_yield())
+            .expect("main phase to beginning of combat");
+        semantic::accepted(&mut e, 0, &choose_trigger_target(bear));
+        pass_priority_round(&mut e);
+
+        let answer = RuledCommand {
+            cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                decision: decision as i32,
+                selected_branch_index: 0,
+                ..Default::default()
+            })),
+        };
+        semantic::accepted(&mut e, 0, &answer);
+        assert_eq!(e.effective_power(bear), Some(expected_power));
+        assert!(e.state.pending_resolution.is_none());
+        assert!(e.state.stack.is_empty());
+    }
 }
 
 #[test]

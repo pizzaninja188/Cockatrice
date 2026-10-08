@@ -113,6 +113,7 @@ fn issue_481_registers_both_complete_cards_and_exact_conditional_effects() {
                 aggregate: BattlefieldAggregate::Count,
                 min: Some(1),
                 max: None,
+                ..
             },
         effect,
     }] = taken.spell_effect.as_slice()
@@ -142,6 +143,7 @@ fn issue_481_registers_both_complete_cards_and_exact_conditional_effects() {
                 aggregate: BattlefieldAggregate::Count,
                 min: Some(1),
                 max: None,
+                ..
             },
         effect,
     }] = failed.spell_effect.as_slice()

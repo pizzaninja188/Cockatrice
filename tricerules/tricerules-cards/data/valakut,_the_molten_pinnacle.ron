@@ -1,0 +1,48 @@
+// Oracle text pinned to Scryfall oracle_cards 1bc44216-4e06-4f66-89b7-5c327004604e.
+// Card identity and rulings were checked against Scryfall on 2026-10-08.
+// CR 305.6/305.8 (Mountain subtype), 614.1c (enters tapped), 603.4 (intervening-if),
+// 603.5 (optional trigger effect), 115.1d (trigger target selection), and 608.2b (target legality).
+(
+  id: "valakut,_the_molten_pinnacle",
+  name: "Valakut, the Molten Pinnacle",
+  face_id: "valakut_the_molten_pinnacle",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [Tap],
+    effect: [ProduceMana(options: [(r: 1)])],
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land), required_subtypes: ["Mountain"]),
+    ),
+    intervening_if: Some(BattlefieldAggregate(
+      filter: (
+        controllers: Controller,
+        card_type: Some(Land),
+        required_subtypes: ["Mountain"],
+      ),
+      aggregate: Count,
+      min: Some(5),
+      exclude_observed_object: true,
+    )),
+    effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose any target",
+      effect_indices: [0],
+    )])),
+    may: true,
+  )],
+  static_abilities: [(
+    ability_id: "enters_tapped",
+    presentation: OracleLines([1]),
+    definition: EntersTapped(affected: Self_),
+  )],
+)

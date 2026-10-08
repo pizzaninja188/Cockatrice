@@ -2664,18 +2664,21 @@ fn rejected_trigger_target_leaves_the_trigger_pending() {
         "the rejected choice must leave the trigger pending, not consume it"
     );
 
-    // Both ways out of the prompt still work after a rejection.
+    // A rejected target preserves the prompt. The legal target is chosen first, then the
+    // optional effect can be declined only when it resolves.
     e.apply_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                decline: true,
+                decline: false,
                 selected_modes: Vec::new(),
-                targets: vec![],
+                targets: trigger_targets(bears),
             })),
         },
     )
-    .expect("declining an optional trigger still works after a rejected target");
+    .expect("the legal target remains selectable after a rejected target");
+    pass_both_players(&mut e);
+    answer_optional_triggered_ability_choice(&mut e, ResolutionChoiceDecision::Decline);
     assert!(e.state.pending_triggers.is_empty());
     assert!(
         e.state.players[0].graveyard.contains(&bears),
@@ -2732,6 +2735,7 @@ fn trigger_target_can_be_retried_after_a_rejection() {
     )
     .expect("retrying with a legal target works");
     pass_both_players(&mut e);
+    answer_optional_triggered_ability_choice(&mut e, ResolutionChoiceDecision::SelectBranch);
     assert!(
         e.state.players[0].hand.contains(&bears),
         "the retried trigger returned the card to hand"

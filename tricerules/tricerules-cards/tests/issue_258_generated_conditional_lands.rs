@@ -132,6 +132,7 @@ fn issue_258_conditional_lands_preserve_exact_public_predicates() {
                         aggregate,
                         min: actual_min,
                         max: actual_max,
+                        ..
                     }),
                 unless_cost: None,
                 ..

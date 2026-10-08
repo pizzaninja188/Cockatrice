@@ -98,6 +98,7 @@ fn issue_139_refresh_publishes_targets_for_granted_trigger_beyond_printed_abilit
         )
         .expect("choose the published graveyard target");
     pass_both_players(&mut engine);
+    answer_optional_triggered_ability_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
     assert!(engine.state.players[0].hand.contains(&graveyard_creature));
 }
 
@@ -181,5 +182,6 @@ fn issue_139_refresh_publishes_targets_from_stored_non_primary_face_ability() {
         )
         .expect("the stored face-one ability validates its legal target");
     pass_both_players(&mut engine);
+    answer_optional_triggered_ability_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
     assert!(engine.state.players[0].hand.contains(&graveyard_creature));
 }

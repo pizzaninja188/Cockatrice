@@ -251,6 +251,7 @@ fn issue_misc11_batch_maps_definitions() {
                 aggregate: BattlefieldAggregate::Count,
                 min: None,
                 max: Some(0),
+                ..
             }),
         unless_cost: None,
     } = &agna_static.definition
