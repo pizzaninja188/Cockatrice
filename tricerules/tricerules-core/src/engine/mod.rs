@@ -1803,6 +1803,7 @@ impl GameEngine {
             last_known_keywords_by_generation: HashMap::new(),
             last_known_colors_by_generation: HashMap::new(),
             last_known_types_by_generation: HashMap::new(),
+            last_known_names_by_generation: HashMap::new(),
             last_known_controller_by_generation: HashMap::new(),
             last_known_counters_by_generation: HashMap::new(),
             last_known_pt_by_generation: HashMap::new(),

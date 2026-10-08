@@ -243,6 +243,11 @@ pub enum GameCondition {
         #[serde(default)]
         exclude_observed_object: bool,
     },
+    /// Guardian Project: the event-observed creature has no shared name with another creature
+    /// controlled by the trigger controller or a creature card in that controller's graveyard.
+    /// The trigger's exact object generation supplies the name at entry or its last-known name
+    /// if it has left the battlefield before this intervening-if is checked again.
+    ObservedObjectNameIsUnique,
     /// CR 700.5: count matching mana-cost symbols on permanents controlled by the source's
     /// current controller. Nylea and Purphoros use this dependency-free layer-4 threshold.
     Devotion {
@@ -338,7 +343,7 @@ impl GameCondition {
                 Self::BattlefieldAggregate {
                     exclude_observed_object: true,
                     ..
-                }
+                } | Self::ObservedObjectNameIsUnique
             )
         })
     }
@@ -355,9 +360,7 @@ impl GameCondition {
             return Err("triggering-spell mana spending requires a spell-cast trigger".into());
         }
         if self.requires_observed_object_context() {
-            return Err(
-                "observed-object battlefield exclusion requires a supplying trigger".into(),
-            );
+            return Err("event-observed condition requires a supplying trigger".into());
         }
         if self.any_node_matches(|condition| matches!(condition, Self::CastOrigin { .. })) {
             return Err("CastOrigin is available only as a face cast condition".into());
@@ -374,9 +377,7 @@ impl GameCondition {
             return Err("triggering-spell mana spending requires a spell-cast trigger".into());
         }
         if self.requires_observed_object_context() {
-            return Err(
-                "observed-object battlefield exclusion requires a supplying trigger".into(),
-            );
+            return Err("event-observed condition requires a supplying trigger".into());
         }
         self.validate_cast_snapshot_reference(0)?;
         self.validate_without_self_entry_spell()
@@ -462,6 +463,7 @@ impl GameCondition {
             | GameCondition::SelfWasBargained
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ObjectTapped { .. } => Ok(()),
+            GameCondition::ObservedObjectNameIsUnique => Ok(()),
             GameCondition::OpponentHasMoreThanYou { .. } => Ok(()),
             GameCondition::ActivePlayer { .. } => Ok(()),
             GameCondition::LifeChangedThisTurn { .. } => Ok(()),
@@ -564,6 +566,7 @@ impl GameCondition {
             | GameCondition::ObjectWasDealtDamageThisTurn { .. }
             | GameCondition::ObjectTapped { .. }
             | GameCondition::ObjectMatches { .. } => false,
+            GameCondition::ObservedObjectNameIsUnique => false,
             GameCondition::CreatureDeathsThisTurn { min, max }
             | GameCondition::PermanentCardsEnteredGraveyardThisTurn { min, max, .. }
             | GameCondition::PermanentsSacrificedThisTurn { min, max, .. }
@@ -992,5 +995,15 @@ mod observed_object_aggregate_tests {
             .validate()
             .unwrap_err()
             .contains("only defined for battlefield counts"));
+    }
+
+    #[test]
+    fn observed_name_condition_requires_event_context() {
+        let condition = GameCondition::ObservedObjectNameIsUnique;
+        assert!(condition.validate_trigger_condition().is_ok());
+        assert!(condition
+            .validate_live()
+            .unwrap_err()
+            .contains("supplying trigger"));
     }
 }

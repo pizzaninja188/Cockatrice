@@ -1525,6 +1525,96 @@ impl GameEngine {
                 };
                 condition.matches_value(value)
             }
+            GameCondition::ObservedObjectNameIsUnique => {
+                let Some(observed) = trigger_context.and_then(|trigger| trigger.observed_object)
+                else {
+                    return false;
+                };
+                let current_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&observed.object_id)
+                    .copied()
+                    .unwrap_or(0);
+                let observed_is_current = current_generation == observed.zone_change_generation
+                    && self
+                        .state
+                        .objects
+                        .get(&observed.object_id)
+                        .is_some_and(|object| object.zone == Zone::Battlefield);
+                let observed_names = if observed_is_current {
+                    self.characteristics(observed.object_id)
+                        .map(|characteristics| characteristics.names)
+                } else {
+                    self.state
+                        .last_known_names_by_generation
+                        .get(&(observed.object_id, observed.zone_change_generation))
+                        .cloned()
+                };
+                let Some(observed_names) = observed_names else {
+                    return false;
+                };
+                let observed_names: Vec<_> = observed_names
+                    .into_iter()
+                    .filter(|name| !name.is_empty())
+                    .collect();
+                if observed_names.is_empty() {
+                    return true;
+                }
+
+                let shares_name = |candidate_names: &[String]| {
+                    candidate_names.iter().any(|candidate_name| {
+                        !candidate_name.is_empty() && observed_names.contains(candidate_name)
+                    })
+                };
+                let battlefield_duplicate = self
+                    .state
+                    .players
+                    .iter()
+                    .flat_map(|player| player.battlefield.iter().copied())
+                    .any(|candidate_oid| {
+                        let candidate_generation = self
+                            .state
+                            .zone_change_generation
+                            .get(&candidate_oid)
+                            .copied()
+                            .unwrap_or(0);
+                        if candidate_oid == observed.object_id
+                            && candidate_generation == observed.zone_change_generation
+                        {
+                            return false;
+                        }
+                        self.state
+                            .objects
+                            .get(&candidate_oid)
+                            .filter(|object| object.zone == Zone::Battlefield)
+                            .and_then(|_| self.characteristics(candidate_oid))
+                            .is_some_and(|characteristics| {
+                                characteristics.controller == context.controller
+                                    && characteristics.is_creature()
+                                    && shares_name(&characteristics.names)
+                            })
+                    });
+                let graveyard_duplicate = self
+                    .state
+                    .players
+                    .iter()
+                    .find(|player| player.id == context.controller)
+                    .into_iter()
+                    .flat_map(|player| player.graveyard.iter().copied())
+                    .filter_map(|oid| self.state.objects.get(&oid))
+                    .filter(|object| {
+                        object.zone == Zone::Graveyard && self.state.is_card_object(object.id)
+                    })
+                    .filter_map(|object| self.registry.get(&object.card_id))
+                    .any(|definition| {
+                        definition.card_types_outside_stack().contains(&"Creature")
+                            && observed_names
+                                .iter()
+                                .any(|name| definition.has_name_outside_stack(name))
+                    });
+                !battlefield_duplicate && !graveyard_duplicate
+            }
             GameCondition::Devotion { color, .. } => {
                 condition.matches_value(super::characteristics::devotion_value(
                     &self.state,

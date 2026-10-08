@@ -226,6 +226,8 @@ mod conditional_spell_costs;
 mod control;
 #[path = "scenario/copy_effects.rs"]
 mod copy_effects;
+#[path = "scenario/deck_coverage_guardian_project.rs"]
+mod deck_coverage_guardian_project;
 
 #[path = "scenario/counters_and_pump.rs"]
 mod counters_and_pump;

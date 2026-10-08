@@ -2788,6 +2788,9 @@ pub(super) fn record_last_known_characteristics(
     state
         .last_known_types_by_generation
         .insert((oid, generation), characteristics.types);
+    state
+        .last_known_names_by_generation
+        .insert((oid, generation), characteristics.names);
 }
 
 struct PreparedZoneMove {

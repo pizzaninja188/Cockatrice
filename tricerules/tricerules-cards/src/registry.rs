@@ -2450,7 +2450,7 @@ impl CardRegistry {
                     {
                         return Err(RegistryError::InvalidCard {
                             id: id.clone(),
-                            reason: "observed-object battlefield exclusion requires a permanent-entry observer"
+                            reason: "event-observed condition requires a permanent-entry observer"
                                 .into(),
                         });
                     }
@@ -2912,8 +2912,9 @@ impl CardRegistry {
                         {
                             return Err(RegistryError::InvalidCard {
                                 id: card.id.clone(),
-                                reason: "observed-object battlefield exclusion requires a permanent-entry observer"
-                                    .into(),
+                                reason:
+                                    "event-observed condition requires a permanent-entry observer"
+                                        .into(),
                             });
                         }
                     }
@@ -4609,6 +4610,24 @@ mod tests {
         let error = CardRegistry::from_chunks(&[&card(leaving_observer)]).expect_err(
             "a departure observer checks intervening-if before its event object is bound",
         );
+        assert!(matches!(error, RegistryError::InvalidCard { reason, .. }
+            if reason.contains("requires a permanent-entry observer")));
+    }
+
+    #[test]
+    fn observed_name_condition_requires_a_permanent_entry_observer() {
+        let fixture = r#"(
+            id: "observed_name_probe", name: "Observed Name Probe", face_id: "observed_name_probe",
+            mana_cost: "{1}", types: ["Enchantment"],
+            triggered_abilities: [(
+                ability_id: "triggered_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield,
+                intervening_if: Some(ObservedObjectNameIsUnique),
+                effect: [Draw(count: 1)],
+            )],
+        )"#;
+        let error = CardRegistry::from_chunks(&[fixture])
+            .expect_err("a self-entry event does not bind an entering permanent");
         assert!(matches!(error, RegistryError::InvalidCard { reason, .. }
             if reason.contains("requires a permanent-entry observer")));
     }

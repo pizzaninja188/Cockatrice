@@ -1,0 +1,71 @@
+{
+  "format_version": 1,
+  "oracle_id": "4f9e07ae-6341-4b46-9f77-f17ab659d266",
+  "spans": [
+    {
+      "face_id": "guardian_project",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/intervening_if",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::ObservedObjectNameIsUnique",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_guardian_project::guardian_project_does_not_trigger_for_a_name_already_on_the_battlefield",
+      "covers": "A same-named creature controlled at entry suppresses the trigger"
+    },
+    {
+      "test": "scenario deck_coverage_guardian_project::guardian_project_does_not_trigger_for_a_name_in_its_controllers_graveyard",
+      "covers": "A same-named creature card in the trigger controller's graveyard suppresses the trigger"
+    },
+    {
+      "test": "scenario deck_coverage_guardian_project::guardian_project_draws_for_a_unique_name_even_if_an_opponent_controls_that_name",
+      "covers": "An opponent's same-named creature does not suppress the controller's draw"
+    },
+    {
+      "test": "scenario deck_coverage_guardian_project::guardian_project_rechecks_controlled_creatures_when_its_trigger_resolves",
+      "covers": "A same-named creature added under the trigger controller before resolution makes the intervening-if false"
+    },
+    {
+      "test": "scenario deck_coverage_guardian_project::guardian_project_uses_the_departed_name_when_the_creature_is_exiled",
+      "covers": "The exact observed generation's last-known name is still used when it left for exile"
+    },
+    {
+      "test": "scenario deck_coverage_guardian_project::guardian_project_counts_the_observed_creature_in_its_graveyard",
+      "covers": "The entering card itself counts as a matching creature card if it is in its controller's graveyard at resolution"
+    },
+    {
+      "test": "scenario deck_coverage_guardian_project::guardian_project_uses_the_departed_generation_name_after_a_creature_reenters",
+      "covers": "Last-known names remain bound to the original zone-change generation when the physical card returns"
+    },
+    {
+      "test": "scenario deck_coverage_guardian_project::guardian_project_uses_a_copied_name_after_the_observed_card_leaves",
+      "covers": "A departing Clone uses its copied battlefield name against a creature card in its controller's graveyard"
+    },
+    {
+      "test": "scenario deck_coverage_guardian_project::guardian_project_treats_face_down_creature_names_as_empty",
+      "covers": "Two face-down creatures and a same-printed-name graveyard card share no rules name"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

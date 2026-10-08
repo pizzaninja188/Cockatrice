@@ -1370,7 +1370,8 @@ impl CharacteristicsEvaluator<'_> {
                         | PlayerComparisonMetric::CreatureCount => false,
                     })
             }
-            GameCondition::BattlefieldAggregate { .. } => false,
+            GameCondition::BattlefieldAggregate { .. }
+            | GameCondition::ObservedObjectNameIsUnique => false,
             GameCondition::Devotion { color, .. } => condition.matches_value(devotion_value(
                 self.state,
                 self.registry,

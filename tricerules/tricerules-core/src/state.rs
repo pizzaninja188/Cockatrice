@@ -2528,6 +2528,9 @@ pub struct GameState {
     /// generation-scoped so a leave-and-return object cannot rewrite an older ability's source.
     pub last_known_colors_by_generation: HashMap<(ObjectId, u64), Vec<Color>>,
     pub last_known_types_by_generation: HashMap<(ObjectId, u64), Vec<String>>,
+    /// Last-known derived names keyed by object generation for event-bound intervening-if checks
+    /// after the observed permanent leaves or returns as a new object (CR 400.7, 608.2h).
+    pub last_known_names_by_generation: HashMap<(ObjectId, u64), Vec<String>>,
     /// Last-known derived controller keyed by source object and generation. Resolving abilities
     /// use this for source-controller wording after the source leaves the battlefield.
     pub last_known_controller_by_generation: HashMap<(ObjectId, u64), PlayerId>,
