@@ -1216,6 +1216,7 @@ impl GameEngine {
         }
         self.state.turn_instance = self.state.turn_instance.saturating_add(1);
         self.state.trigger_uses_this_turn.clear();
+        self.state.trigger_modes_used_this_turn.clear();
         let ap = self.state.active_player_id();
         // CR 500.4: "until your next turn" effects end as that turn begins, before the untap
         // step or any turn-begin observer sees the new turn. The resolving controller was captured

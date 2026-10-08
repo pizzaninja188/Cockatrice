@@ -1075,6 +1075,7 @@ fn parse_rules_text(
                 min_modes: assembly_emission.min_modes,
                 max_modes: assembly_emission.max_modes,
                 all_modes_cast_cost: None,
+                trigger_mode_selection_restriction: None,
                 modes,
             });
             return Ok(parsed);
@@ -1106,6 +1107,7 @@ fn parse_rules_text(
                 min_modes: assembly_emission.min_modes,
                 max_modes: assembly_emission.max_modes,
                 all_modes_cast_cost: Some(all_modes_ref),
+                trigger_mode_selection_restriction: None,
                 modes,
             });
             return Ok(parsed);
@@ -1313,6 +1315,7 @@ fn parse_rules_text(
                             min_modes: assembly_emission.min_modes,
                             max_modes: assembly_emission.max_modes,
                             all_modes_cast_cost: None,
+                            trigger_mode_selection_restriction: None,
                             modes,
                         }),
                         targeting: None,

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::{
     ActivatedAbilityDef, ArmySubtype, CardResultAction, CardSearchZone, CardTypeFilter,
     CastCostReceiptCondition, Color, ConditionalSearchDestination, ContinuousEffectKind,
@@ -840,6 +840,8 @@ pub struct StagedTrigger {
     /// CR 603.3d: the ability's controller — the controller of its source permanent.
     pub controller: PlayerId,
     pub ability_index: usize,
+    /// Provenance captured when this ability matched; never reconstruct from live source state.
+    pub ability_origin: Option<TriggerAbilityOrigin>,
     pub ability: TriggeredAbilityDef,
     pub ability_text: String,
     pub presentation: Option<tricerules_proto::ruled::v1::PresentationRef>,
@@ -908,6 +910,8 @@ pub struct PendingTrigger {
     pub source_zone_change: u64,
     pub source_face_change: u64,
     pub ability_index: usize,
+    /// Provenance captured when this ability matched; mode use follows this exact occurrence.
+    pub ability_origin: Option<TriggerAbilityOrigin>,
     pub ability: TriggeredAbilityDef,
     pub ability_text: String,
     pub presentation: Option<tricerules_proto::ruled::v1::PresentationRef>,
@@ -2615,6 +2619,9 @@ pub struct GameState {
     /// Printed trigger caps for the current actual turn instance, independent of active seat.
     /// Including the instance also makes direct deterministic turn-boundary fixtures safe.
     pub trigger_uses_this_turn: HashMap<(u64, TriggerUseKey), u32>,
+    /// CR 700.2b: modes already chosen for a restricted triggered ability in each turn instance.
+    /// Source generation and ability origin isolate separate objects and independent abilities.
+    pub trigger_modes_used_this_turn: HashMap<(u64, TriggerUseKey), BTreeSet<ModeId>>,
     pub next_trigger_grant_id: u64,
     /// Internal committed tap instruction identity; shared by simultaneous transitions only.
     pub next_tap_action_id: u64,
@@ -3100,6 +3107,7 @@ impl GameState {
                     card_name: delayed.card_name,
                     controller: delayed.controller,
                     ability_index: 0,
+                    ability_origin: None,
                     ability_text,
                     presentation: delayed.presentation,
                     trigger_context: TriggerContext {

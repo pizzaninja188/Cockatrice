@@ -1,0 +1,37 @@
+// Exact Oracle e69e8de4-b521-4888-8074-17f1efe2f345 and rulings fetched 2026-10-08.
+// CR 603.2c, 603.3b/c, 700.2b, 514.2, and 400.7 govern discard instances, modal trigger
+// ordering and announcement, the turn boundary, and source incarnation identity.
+(
+  id: "monument_to_endurance",
+  name: "Monument to Endurance",
+  face_id: "monument_to_endurance",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "discard_modes",
+    presentation: OracleLines([1, 2, 3, 4]),
+    trigger: WheneverPlayerDiscardsCard(player: Controller, filter: None),
+    modal: Some((
+      min_modes: 1,
+      max_modes: 1,
+      trigger_mode_selection_restriction: Some(OnlyModesNotChosenEarlierThisTurn),
+      modes: [
+        (
+          mode_id: "draw_a_card",
+          presentation: OracleLines([2]),
+          effects: [Draw(count: 1)],
+        ),
+        (
+          mode_id: "create_treasure",
+          presentation: OracleLines([3]),
+          effects: [CreateTokens(token: "treasure", count: 1)],
+        ),
+        (
+          mode_id: "opponents_lose_life",
+          presentation: OracleLines([4]),
+          effects: [LoseLife(amount: Fixed(3), who: EachOpponent)],
+        ),
+      ],
+    )),
+  )],
+)

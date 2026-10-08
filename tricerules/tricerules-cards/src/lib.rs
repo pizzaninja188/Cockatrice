@@ -14,7 +14,7 @@ pub mod token_def;
 
 pub use card_def::{
     is_creature_type, CardDefinition, CardFace, CharacteristicDefiningAbility, ClassLevelBar,
-    FaceRef, IdentifiedStaticAbility, Layout, ModalDef, ModeDef,
+    FaceRef, IdentifiedStaticAbility, Layout, ModalDef, ModeDef, TriggerModeSelectionRestriction,
 };
 pub use identity::{
     ability_fallback, choice_fallback, external_oracle_lines, mode_fallback,

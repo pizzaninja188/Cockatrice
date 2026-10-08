@@ -45,13 +45,27 @@ pub struct ModeDef {
     pub targeting: Option<TargetingDef>,
 }
 
-/// The choose-N definition of a modal spell (CR 700.2).
+/// Cross-trigger restriction on modes for one triggered ability occurrence.
+///
+/// Monument to Endurance and The Vision share this per-turn unchosen-mode rule. Mode identity is
+/// authored by `ModeId`; command indices remain prompt-local coordinates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TriggerModeSelectionRestriction {
+    /// Each trigger chooses one mode that this same ability has not chosen earlier this turn.
+    OnlyModesNotChosenEarlierThisTurn,
+}
+
+/// The choose-N definition of a modal ability (CR 700.2).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModalDef {
     pub min_modes: u32,
     pub max_modes: u32,
     #[serde(default)]
     pub all_modes_cast_cost: Option<CastCostOptionRef>,
+    /// Additional per-turn mode use tracked for a triggered ability's exact source occurrence.
+    /// This is invalid for modal spells and applies only when exactly one mode is selected.
+    #[serde(default)]
+    pub trigger_mode_selection_restriction: Option<TriggerModeSelectionRestriction>,
     /// Modes in printed order. A mode may be selected at most once in the initial implementation.
     #[serde(default)]
     pub modes: Vec<ModeDef>,
@@ -77,6 +91,21 @@ impl ModalDef {
                 self.max_modes,
                 self.modes.len()
             ));
+        }
+        if self
+            .trigger_mode_selection_restriction
+            .is_some_and(|_| context != EffectContext::Ability)
+        {
+            return Err(
+                "trigger mode selection restriction is valid only on triggered abilities".into(),
+            );
+        }
+        if self.trigger_mode_selection_restriction.is_some()
+            && (self.min_modes != 1 || self.max_modes != 1)
+        {
+            return Err(
+                "trigger mode selection restriction requires exactly one mode per trigger".into(),
+            );
         }
         let mut mode_ids = HashSet::new();
         for mode in &self.modes {

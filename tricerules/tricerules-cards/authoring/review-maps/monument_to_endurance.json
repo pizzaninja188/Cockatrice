@@ -1,0 +1,84 @@
+{
+  "format_version": 1,
+  "oracle_id": "e69e8de4-b521-4888-8074-17f1efe2f345",
+  "spans": [
+    {
+      "face_id": "monument_to_endurance",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/modal"
+      ]
+    },
+    {
+      "face_id": "monument_to_endurance",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/triggered_abilities/0/modal/modes/0/effects/0"]
+    },
+    {
+      "face_id": "monument_to_endurance",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/triggered_abilities/0/modal/modes/1/effects/0"]
+    },
+    {
+      "face_id": "monument_to_endurance",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": ["/faces/0/triggered_abilities/0/modal/modes/2/effects/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerDiscardsCard",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/modal/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/modal/modes/1/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/modal/modes/2/effects/0"
+    }
+  ],
+  "tokens": ["treasure"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_monument_to_endurance::monument_each_discard_trigger_excludes_modes_chosen_by_earlier_trigger",
+      "covers": "Faithless Looting discards two cards, creating one trigger per card; the first selected mode is unavailable for the next trigger"
+    },
+    {
+      "test": "scenario deck_coverage_monument_to_endurance::monument_exhausts_three_modes_without_a_fourth_stack_item_and_resolves_each_mode",
+      "covers": "Windfall creates four discard triggers; each of the three modes resolves once and the fourth exhausted trigger is removed"
+    },
+    {
+      "test": "scenario deck_coverage_monument_to_endurance::monument_instances_keep_independent_mode_histories",
+      "covers": "Two physical Monument sources can each choose the same mode during the same turn"
+    },
+    {
+      "test": "scenario deck_coverage_monument_to_endurance::monument_mode_history_starts_fresh_after_source_changes_zone_generation",
+      "covers": "The same physical Monument object gets fresh mode choices after leaving and returning to the battlefield"
+    },
+    {
+      "test": "scenario deck_coverage_monument_to_endurance::monument_mode_history_resets_at_the_next_turn_boundary",
+      "covers": "The chosen mode becomes available again on the controller's next turn"
+    },
+    {
+      "test": "scenario deck_coverage_monument_to_endurance::monument_mode_remains_used_after_its_trigger_is_countered",
+      "covers": "Tishana's Tidebinder counters the trigger after mode selection; the selected mode stays unavailable for a later trigger"
+    },
+    {
+      "test": "scenario deck_coverage_monument_to_endurance::monument_mode_history_diagnostic_is_replay_deterministic",
+      "covers": "The same seeded command sequence chooses all three modes and produces identical canonically ordered replay diagnostics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

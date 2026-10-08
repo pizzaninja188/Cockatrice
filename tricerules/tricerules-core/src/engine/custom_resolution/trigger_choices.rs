@@ -38,12 +38,44 @@ impl GameEngine {
         let card_name = pending.source_label.clone();
         let target_source =
             TargetSourceIdentity::captured(pending.source_permanent_id, pending.source_zone_change);
+        let mode_history_key = pending
+            .ability
+            .modal
+            .as_ref()
+            .filter(|modal| modal.trigger_mode_selection_restriction.is_some())
+            .and_then(|_| {
+                pending.ability_origin.clone().map(|ability_origin| {
+                    (
+                        self.state.turn_instance,
+                        TriggerUseKey {
+                            object_id: pending.source_permanent_id,
+                            zone_change_generation: pending.source_zone_change,
+                            ability_origin,
+                        },
+                    )
+                })
+            });
+        let mode_history_origin_missing = pending
+            .ability
+            .modal
+            .as_ref()
+            .is_some_and(|modal| modal.trigger_mode_selection_restriction.is_some())
+            && pending.ability_origin.is_none();
+        let used_modes = mode_history_key
+            .as_ref()
+            .and_then(|key| self.state.trigger_modes_used_this_turn.get(key))
+            .cloned()
+            .unwrap_or_default();
         let mut chosen_modes = Vec::new();
         let mut public_targets = Vec::new();
         let mut chosen_mode_indices = Vec::new();
         let mut chosen_mode_labels = Vec::new();
         let validation = if let Some(modal) = &pending.ability.modal {
-            if !targets.is_empty()
+            if mode_history_origin_missing {
+                Err(EngineError::Illegal(
+                    "restricted trigger mode choice requires ability provenance",
+                ))
+            } else if !targets.is_empty()
                 || selected_modes.len() < modal.min_modes as usize
                 || selected_modes.len() > modal.max_modes as usize
             {
@@ -62,6 +94,14 @@ impl GameEngine {
                         result = Err(EngineError::Illegal("bad triggered mode index"));
                         break;
                     };
+                    if modal.trigger_mode_selection_restriction.is_some()
+                        && used_modes.contains(&mode.mode_id)
+                    {
+                        result = Err(EngineError::Illegal(
+                            "trigger mode was already selected this turn",
+                        ));
+                        break;
+                    }
                     if let Err(error) = validate_ability_targets_with_context(
                         self,
                         player,
@@ -165,6 +205,13 @@ impl GameEngine {
                 chosen_cast_costs: vec![],
             },
         );
+        if let Some(history_key) = mode_history_key {
+            self.state
+                .trigger_modes_used_this_turn
+                .entry(history_key)
+                .or_default()
+                .extend(chosen_modes.iter().map(|mode| mode.mode_id.clone()));
+        }
         self.state.stack.push(StackItem {
             mana_colors_spent_to_cast: Default::default(),
             id: virtual_id,

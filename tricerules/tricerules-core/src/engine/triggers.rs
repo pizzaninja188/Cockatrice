@@ -737,6 +737,7 @@ impl GameEngine {
                     card_name,
                     controller: trigger.controller,
                     ability_index: trigger.ability_index,
+                    ability_origin: trigger.ability_origin,
                     ability: trigger.ability,
                     ability_text: trigger.ability_text,
                     presentation,
@@ -2700,6 +2701,7 @@ impl GameEngine {
             card_name,
             controller,
             ability_index,
+            ability_origin,
             ability,
             ability_text,
             presentation,
@@ -2707,6 +2709,32 @@ impl GameEngine {
             ..
         } = trigger;
         let needs_target = target_schema(&ability.effect, ability.targeting.as_ref()).has_targets();
+        let mode_history_key = ability
+            .modal
+            .as_ref()
+            .filter(|modal| modal.trigger_mode_selection_restriction.is_some())
+            .and_then(|_| {
+                ability_origin.clone().map(|ability_origin| {
+                    (
+                        self.state.turn_instance,
+                        TriggerUseKey {
+                            object_id: source_id,
+                            zone_change_generation: source_zone_change,
+                            ability_origin,
+                        },
+                    )
+                })
+            });
+        let mode_history_origin_missing = ability
+            .modal
+            .as_ref()
+            .is_some_and(|modal| modal.trigger_mode_selection_restriction.is_some())
+            && ability_origin.is_none();
+        let used_modes = mode_history_key
+            .as_ref()
+            .and_then(|key| self.state.trigger_modes_used_this_turn.get(key))
+            .cloned()
+            .unwrap_or_default();
         let modal_modes = ability.modal.as_ref().map(|modal| {
             modal
                 .modes
@@ -2728,6 +2756,9 @@ impl GameEngine {
                             .groups
                             .iter()
                             .all(|group| legal_target_group_has_minimum(&self.state, group));
+                    let selectable = selectable
+                        && !mode_history_origin_missing
+                        && !used_modes.contains(&mode.mode_id);
                     rv1::LegalSpellMode {
                         mode_index: mode_index as u32,
                         label: mode_fallback(&ability_text, &mode.mode_id),
@@ -2793,6 +2824,7 @@ impl GameEngine {
                 card_id,
                 source_label: card_name.clone(),
                 controller,
+                ability_origin,
                 trigger_context,
                 // Preserve the ability's optionality; the target/mode prompt cannot decline it.
                 // CR 603.5 places that choice on resolution.
@@ -2823,7 +2855,7 @@ impl GameEngine {
                 ));
             }
         } else if needs_choice {
-            // CR 603.3d: a trigger that requires targets but has no legal target is removed,
+            // CR 603.3d: a trigger that has no legal target or enough legal modes is removed,
             // even when its effects are optional. Optionality is decided only on resolution.
         } else {
             self.state.stack_presentations.insert(

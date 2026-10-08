@@ -1852,6 +1852,7 @@ impl GameEngine {
             activated_ability_slots: BTreeMap::new(),
             triggered_once: HashSet::new(),
             trigger_uses_this_turn: HashMap::new(),
+            trigger_modes_used_this_turn: HashMap::new(),
             next_trigger_grant_id: 0,
             next_tap_action_id: 0,
             active_exile_play_permissions: Vec::new(),

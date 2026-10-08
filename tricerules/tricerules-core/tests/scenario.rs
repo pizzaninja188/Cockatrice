@@ -1134,3 +1134,6 @@ mod deck_coverage_esikas_chariot;
 
 #[path = "scenario/deck_coverage_valakut.rs"]
 mod deck_coverage_valakut;
+
+#[path = "scenario/deck_coverage_monument_to_endurance.rs"]
+mod deck_coverage_monument_to_endurance;

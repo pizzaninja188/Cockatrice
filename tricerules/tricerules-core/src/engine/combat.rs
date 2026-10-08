@@ -2275,6 +2275,10 @@ impl GameEngine {
         self.state.triggered_once = internal.pre_attack_state.triggered_once.clone();
         self.state.trigger_uses_this_turn =
             internal.pre_attack_state.trigger_uses_this_turn.clone();
+        self.state.trigger_modes_used_this_turn = internal
+            .pre_attack_state
+            .trigger_modes_used_this_turn
+            .clone();
         self.state.pending_triggers = internal.pre_attack_state.pending_triggers.clone();
         self.state.staged_trigger_groups = internal.pre_attack_state.staged_trigger_groups.clone();
         self.state.captured_spell_copies = internal.pre_attack_state.captured_spell_copies.clone();

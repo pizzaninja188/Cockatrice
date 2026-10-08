@@ -1358,6 +1358,7 @@ pub(super) fn create_reflexive_trigger(
                 card_name,
                 controller: cx.controller,
                 ability_index: 0,
+                ability_origin: None,
                 ability: TriggeredAbilityDef {
                     ability_id: ability.ability_id,
                     presentation: ability.presentation,
