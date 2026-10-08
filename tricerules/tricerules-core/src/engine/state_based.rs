@@ -517,19 +517,86 @@ impl GameEngine {
         missing.sort_unstable();
         ordered.extend(missing);
 
-        let desired: Vec<_> = ordered
-            .iter()
-            .filter_map(|&oid| {
-                self.state
-                    .objects
-                    .get(&oid)
-                    .filter(|object| object.zone == Zone::Battlefield)
-                    .and_then(|_| {
-                        self.characteristics(oid)
-                            .map(|value| (oid, value.controller))
-                    })
-            })
-            .collect();
+        let mut expired_source_control_duration = false;
+        let desired = loop {
+            let desired: Vec<_> = ordered
+                .iter()
+                .filter_map(|&oid| {
+                    self.state
+                        .objects
+                        .get(&oid)
+                        .filter(|object| object.zone == Zone::Battlefield)
+                        .and_then(|_| {
+                            self.characteristics(oid)
+                                .map(|value| (oid, value.controller))
+                        })
+                })
+                .collect();
+            let expired: Vec<_> = self
+                .state
+                .continuous_effects
+                .iter()
+                .filter_map(|effect| {
+                    let EffectDuration::WhileSourceControlledBy {
+                        source_object_id,
+                        source_zone_change_generation,
+                        controller,
+                    } = &effect.duration
+                    else {
+                        return None;
+                    };
+                    let source_is_current = self
+                        .state
+                        .objects
+                        .get(source_object_id)
+                        .is_some_and(|source| source.zone == Zone::Battlefield)
+                        && self
+                            .state
+                            .zone_change_generation
+                            .get(source_object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == *source_zone_change_generation;
+                    let source_controller = desired.iter().find_map(|&(object_id, current)| {
+                        (object_id == *source_object_id).then_some(current)
+                    });
+                    let ability_controller_is_in_game = self
+                        .state
+                        .player_idx(*controller)
+                        .is_some_and(|index| !self.state.players[index].has_lost);
+                    (!source_is_current
+                        || source_controller != Some(*controller)
+                        || !ability_controller_is_in_game)
+                        .then_some((
+                            *source_object_id,
+                            *source_zone_change_generation,
+                            *controller,
+                        ))
+                })
+                .collect();
+            if expired.is_empty() {
+                break desired;
+            }
+
+            // A "for as long as" control duration ends permanently on its first loss. Remove
+            // every duration that is false in this layer-2 snapshot, then recompute. No controller
+            // cache or observer sees an intermediate state from an earlier pass.
+            self.state.continuous_effects.retain(|effect| {
+                !matches!(
+                    &effect.duration,
+                    EffectDuration::WhileSourceControlledBy {
+                        source_object_id,
+                        source_zone_change_generation,
+                        controller,
+                    } if expired.contains(&(
+                        *source_object_id,
+                        *source_zone_change_generation,
+                        *controller,
+                    ))
+                )
+            });
+            expired_source_control_duration = true;
+        };
         let mut changed_ids = Vec::new();
         let mut control_transitions = Vec::new();
         for &(oid, controller) in &desired {
@@ -547,7 +614,7 @@ impl GameEngine {
         }
         if changed_ids.is_empty() {
             self.reconcile_combat_characteristics(out);
-            return false;
+            return expired_source_control_duration;
         }
 
         for player in &mut self.state.players {
@@ -990,6 +1057,111 @@ mod sba_tests {
         assert!(object.summoning_sick);
         assert!(!e.state.players[0].battlefield.contains(&target));
         assert!(e.state.players[1].battlefield.contains(&target));
+    }
+
+    #[test]
+    fn resolving_source_control_duration_expires_before_control_is_published() {
+        let mut e = engine();
+        let source = add_creature(&mut e, 0, 2, 0);
+        let target = add_creature(&mut e, 1, 2, 0);
+        let source_generation = e
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            // This is the stack ability's id, deliberately distinct from the permanent source.
+            source_id: Some(u32::MAX),
+            affected: AffectedScope::Single(target),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(0),
+            },
+            condition: None,
+            duration: EffectDuration::WhileSourceControlledBy {
+                source_object_id: source,
+                source_zone_change_generation: source_generation,
+                controller: 0,
+            },
+            timestamp: 1,
+        });
+        let mut out = Vec::new();
+        e.reindex_battlefield_control(&mut out);
+        assert_eq!(e.state.objects[&target].controller, 0);
+
+        e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(1),
+            },
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 2,
+        });
+        out.clear();
+        e.reindex_battlefield_control(&mut out);
+
+        assert_eq!(e.state.objects[&source].controller, 1);
+        assert_eq!(
+            e.state.objects[&target].controller, 1,
+            "losing control of the exact source must end the earlier control lease"
+        );
+        assert_eq!(
+            e.state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0),
+            source_generation,
+            "source control changes do not create a new object"
+        );
+    }
+
+    #[test]
+    fn resolving_source_control_duration_drains_for_the_exact_source_generation() {
+        let mut e = engine();
+        let source = add_creature(&mut e, 0, 2, 0);
+        let target = add_creature(&mut e, 1, 2, 0);
+        let source_generation = e
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            // The creating stack ability id is not the battlefield source id.
+            source_id: Some(u32::MAX),
+            affected: AffectedScope::Single(target),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(0),
+            },
+            condition: None,
+            duration: EffectDuration::WhileSourceControlledBy {
+                source_object_id: source,
+                source_zone_change_generation: source_generation,
+                controller: 0,
+            },
+            timestamp: 1,
+        });
+        assert_eq!(e.characteristics(target).unwrap().controller, 0);
+
+        move_object_to_zone(&mut e.state, e.registry, source, Zone::Graveyard, None)
+            .expect("move the exact source incarnation");
+
+        assert_eq!(
+            e.state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0),
+            source_generation + 1
+        );
+        assert!(e.state.continuous_effects.is_empty());
+        assert_eq!(e.characteristics(target).unwrap().controller, 1);
     }
 
     #[test]

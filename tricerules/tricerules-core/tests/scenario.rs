@@ -17,6 +17,9 @@ mod deck_coverage_aligned_hedron_network;
 #[path = "scenario/deck_coverage_lavabrink_floodgates.rs"]
 mod deck_coverage_lavabrink_floodgates;
 
+#[path = "scenario/deck_coverage_pyreswipe_hawk.rs"]
+mod deck_coverage_pyreswipe_hawk;
+
 #[path = "scenario/deck_coverage_flux_abundance.rs"]
 mod deck_coverage_flux_abundance;
 

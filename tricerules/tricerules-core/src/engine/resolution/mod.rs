@@ -2981,6 +2981,20 @@ fn commit_zone_move(
         prior_generation
     );
     if leaving_battlefield {
+        // A resolving "for as long as you control this source" effect belongs to this exact
+        // source incarnation. Drain it before the zone-change generation is incremented; the
+        // ability's stack object is a different id and cannot serve as this binding.
+        state.continuous_effects.retain(|effect| {
+            !matches!(
+                &effect.duration,
+                EffectDuration::WhileSourceControlledBy {
+                    source_object_id,
+                    source_zone_change_generation,
+                    ..
+                } if *source_object_id == oid
+                    && *source_zone_change_generation == prior_generation
+            )
+        });
         state.death_replacement_effects.retain(|effect| {
             effect.object_id != oid || effect.zone_change_generation != prior_generation
         });

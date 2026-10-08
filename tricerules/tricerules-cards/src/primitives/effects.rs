@@ -6287,6 +6287,9 @@ pub enum ResolvingEffectDuration {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GainControlDuration {
     UntilEndOfTurn,
+    /// Resolving control lasts only while its ability controller retains control of the exact
+    /// battlefield source incarnation. Used by Pyreswipe Hawk and Sower of Temptation.
+    WhileYouControlSource,
     UntilEndOfControllerNextTurnIfBattlefieldMaximumGreaterThanTargetManaValue {
         filter: BattlefieldPermanentFilter,
     },
@@ -6357,6 +6360,13 @@ pub enum EffectDuration {
     UntilEndOfNextTurn {
         player: i32,
         created_turn_instance: u64,
+    },
+    /// A resolving layer-2 control effect whose duration ends permanently when its exact source
+    /// incarnation is no longer controlled by the ability controller.
+    WhileSourceControlledBy {
+        source_object_id: u32,
+        source_zone_change_generation: u64,
+        controller: i32,
     },
     /// A continuous effect linked to a permanent remaining on the battlefield. This covers both
     /// static abilities (CR 604.3 / 611.3) and resolving effects with a "for as long as" duration

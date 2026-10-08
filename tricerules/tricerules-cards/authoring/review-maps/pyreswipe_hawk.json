@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "35a03b0f-9dac-476a-97e9-67767c1e453e",
+  "spans": [
+    {
+      "face_id": "pyreswipe_hawk",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "pyreswipe_hawk",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    },
+    {
+      "face_id": "pyreswipe_hawk",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1/trigger",
+        "/faces/0/triggered_abilities/1/effect/0",
+        "/faces/0/triggered_abilities/1/targeting/groups/0"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_pyreswipe_hawk::pyreswipe_hawk_has_its_complete_single_face_and_attack_value_is_snapshotted_on_resolution",
+      "covers": "exact card identity, single-face characteristics, printed keywords, Oracle-line mappings, the greatest controlled artifact mana value measured at attack-trigger resolution, and the resolved pump staying fixed after that maximum rises"
+    },
+    {
+      "test": "scenario deck_coverage_pyreswipe_hawk::expend_six_target_is_optional_and_requires_the_source_at_resolution",
+      "covers": "exact six-mana threshold crossing, optional artifact target, no-target choice, and same-ObjectId Hawk departure and return before resolution"
+    },
+    {
+      "test": "scenario deck_coverage_pyreswipe_hawk::expend_target_that_leaves_and_returns_is_a_different_artifact_object",
+      "covers": "target artifact zone-change generation revalidation when the selected artifact leaves and returns before resolution"
+    },
+    {
+      "test": "scenario deck_coverage_pyreswipe_hawk::expend_trigger_needs_hawk_under_its_controller_and_can_start_after_control_returns",
+      "covers": "four-player owner/controller separation, another player retains source control at resolution, and source control is lost and regained before the duration starts"
+    },
+    {
+      "test": "scenario deck_coverage_pyreswipe_hawk::source_control_loss_after_application_expires_the_artifact_lease_permanently",
+      "covers": "source control loss after the lease begins returns control to the artifact owner, and later source control regain does not revive the expired duration"
+    },
+    {
+      "test": "scenario deck_coverage_pyreswipe_hawk::source_control_loss_preserves_a_later_layer_two_control_effect_on_the_artifact",
+      "covers": "a later timestamped layer-two control effect remains authoritative after Pyreswipe Hawk's earlier source-bound duration expires"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

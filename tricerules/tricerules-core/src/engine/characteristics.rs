@@ -1486,6 +1486,26 @@ pub(super) fn effect_affects(
     if !static_source_identity_is_current(state, registry, effect) {
         return false;
     }
+    if let EffectDuration::WhileSourceControlledBy {
+        source_object_id,
+        source_zone_change_generation,
+        ..
+    } = &effect.duration
+    {
+        let source_is_current = state
+            .objects
+            .get(source_object_id)
+            .is_some_and(|source| source.zone == Zone::Battlefield)
+            && state
+                .zone_change_generation
+                .get(source_object_id)
+                .copied()
+                .unwrap_or(0)
+                == *source_zone_change_generation;
+        if !source_is_current {
+            return false;
+        }
+    }
     if !matches!(effect.affected, AffectedScope::Single(_))
         && !state
             .objects

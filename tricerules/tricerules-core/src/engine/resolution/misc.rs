@@ -355,15 +355,46 @@ pub(super) fn gain_control(
     {
         return Ok(EffectOutcome::Continue);
     }
-    let target_mana_value = cx
-        .engine
-        .characteristics(target)
-        .map_or(0, |characteristics| characteristics.mana_value);
     let duration = match duration {
         GainControlDuration::UntilEndOfTurn => EffectDuration::UntilEndOfTurn,
+        GainControlDuration::WhileYouControlSource => {
+            let Some(source_object_id) = cx.top.source_permanent_id else {
+                return Ok(EffectOutcome::Continue);
+            };
+            let source_is_current = cx
+                .engine
+                .state
+                .objects
+                .get(&source_object_id)
+                .is_some_and(|object| object.zone == Zone::Battlefield)
+                && cx
+                    .engine
+                    .state
+                    .zone_change_generation
+                    .get(&source_object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == cx.top.source_zone_change;
+            let source_controller = cx
+                .engine
+                .characteristics(source_object_id)
+                .map(|characteristics| characteristics.controller);
+            if !source_is_current || source_controller != Some(cx.controller) {
+                return Ok(EffectOutcome::Continue);
+            }
+            EffectDuration::WhileSourceControlledBy {
+                source_object_id,
+                source_zone_change_generation: cx.top.source_zone_change,
+                controller: cx.controller,
+            }
+        }
         GainControlDuration::UntilEndOfControllerNextTurnIfBattlefieldMaximumGreaterThanTargetManaValue {
             filter,
         } => {
+            let target_mana_value = cx
+                .engine
+                .characteristics(target)
+                .map_or(0, |characteristics| characteristics.mana_value);
             let maximum = cx.engine.resolve_amount(
                 &Amount::Count(CountExpression::BattlefieldMaximum {
                     filter,
@@ -384,6 +415,7 @@ pub(super) fn gain_control(
     };
     let duration_label = match duration {
         EffectDuration::UntilEndOfNextTurn { .. } => "until end of its controller's next turn",
+        EffectDuration::WhileSourceControlledBy { .. } => "for as long as you control its source",
         _ => "until end of turn",
     };
     cx.engine.state.continuous_effects.push(ContinuousEffect {

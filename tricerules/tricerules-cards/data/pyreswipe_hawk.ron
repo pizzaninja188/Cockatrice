@@ -1,0 +1,48 @@
+// Oracle and rulings checked against the Wizards Bloomburrow release notes on 2026-10-08.
+// CR 700.14, 611.2a-c, 613.1b/613.7, 400.7, 508.3a, and 603.2 govern the two triggers and
+// the source-bound control duration.
+(
+  id: "pyreswipe_hawk",
+  name: "Pyreswipe Hawk",
+  face_id: "pyreswipe_hawk",
+  mana_cost: "{3}{R}{R}",
+  types: ["Creature", "Elemental", "Bird"],
+  power: 4,
+  toughness: 4,
+  keywords: [Flying, Haste],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+      effect: [PumpTarget(
+        power: 0,
+        toughness: 0,
+        scale: Some((
+          basis: Amount(Count(BattlefieldMaximum(
+            filter: (controllers: Controller, card_type: Some(Artifact)),
+            characteristic: ManaValue,
+          ))),
+          power_per_unit: 1,
+          toughness_per_unit: 0,
+        )),
+        subject: Source,
+      )],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([3]),
+      trigger: WheneverPlayerExpendsMana(amount: 6),
+      effect: [GainControl(
+        target: (kind: AnyPermanent, permanent_types: [Artifact]),
+        duration: WhileYouControlSource,
+      )],
+      targeting: Some((groups: [(
+        min: 0,
+        max: 1,
+        prompt: "Choose up to one target artifact",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)
