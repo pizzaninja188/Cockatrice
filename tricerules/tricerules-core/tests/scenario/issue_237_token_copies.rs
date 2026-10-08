@@ -125,6 +125,7 @@ fn issue_237_double_faced_permanent_spell_copy_becomes_double_faced_token() {
     )
     .unwrap();
     advance_to_main1_from_game_start(&mut engine);
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
     ensure_in_hand(&mut engine, 0, "reckless_waif_merciless_predator");
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "reckless_waif_merciless_predator");
@@ -137,6 +138,11 @@ fn issue_237_double_faced_permanent_spell_copy_becomes_double_faced_token() {
     let copy_id = copy.id;
     engine.state.stack.push(copy);
     let batch = resolve_top(&mut engine);
+    assert_eq!(
+        token_created_events(&batch).len(),
+        1,
+        "CR 111.13 excludes a resolving permanent-spell copy from token creation replacement"
+    );
     assert_eq!(token_created_events(&batch)[0].object_id, copy_id);
     assert!(engine.state.objects[&copy_id].token_faces.is_some());
 }

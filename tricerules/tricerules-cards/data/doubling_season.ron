@@ -1,0 +1,19 @@
+(
+  id: "doubling_season",
+  name: "Doubling Season",
+  face_id: "doubling_season",
+  mana_cost: "{4}{G}",
+  types: ["Enchantment"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: DoubleTokensCreatedUnderYourControl,
+    ),
+    (
+      ability_id: "static_02",
+      presentation: OracleLines([2]),
+      definition: DoubleEffectCountersPlacedOnPermanentsYouControl,
+    ),
+  ],
+)

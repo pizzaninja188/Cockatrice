@@ -119,6 +119,36 @@ fn engine() -> GameEngine {
     engine
 }
 
+#[test]
+fn entry_counter_doublers_use_a_shared_precommit_source_snapshot() {
+    let mut engine = engine();
+    let active_season = object(&mut engine, "doubling_season", Zone::Battlefield, 0);
+    engine.emit_static_abilities_on_enter(active_season);
+
+    let entering_season = object(&mut engine, "doubling_season", Zone::Stack, 0);
+    let prism = object(&mut engine, "astral_cornucopia", Zone::Stack, 0);
+    let season_entry = event(&engine, entering_season);
+    let mut prism_entry = event(&engine, prism);
+    prism_entry.entry_counters.insert(CounterKind::Charge, 2);
+    let mut entries = vec![season_entry, prism_entry];
+
+    engine.replace_entry_counter_events(entries.iter_mut());
+    assert_eq!(
+        entries[1].entry_counters[&CounterKind::Charge],
+        4,
+        "the source snapshot includes the established season but excludes the simultaneous entrant"
+    );
+
+    for entry in entries {
+        engine.commit_battlefield_entry_state(entry, None).unwrap();
+    }
+    assert_eq!(
+        engine.state.objects[&prism].counter_count(CounterKind::Charge),
+        4,
+        "sequential internal commits retain the simultaneous event's shared multiplier"
+    );
+}
+
 // Internal incarnation regression: normal commands cannot move an entrant during its prompt.
 #[test]
 fn metamorph_internal_entry_copy_rejects_actual_entrant_leave_return() {

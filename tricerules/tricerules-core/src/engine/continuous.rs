@@ -13,9 +13,9 @@ pub(super) use early_static::materialize_early_static_components;
 #[cfg(test)]
 mod land_mana_tests;
 
-/// The rules event that causes a counter placement. Only effect placements participate in the
-/// narrow CR 614.16 replacement implemented for #499; costs, turn-based actions, and entry
-/// counters stay on their own rules paths.
+/// The rules event that causes a counter placement. Ordinary effect placements participate in
+/// the CR 614.16 replacement. Entry counters are replaced on their finalized entry event before
+/// entering this funnel; costs, turn-based actions, and damage results do not participate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum CounterPlacementOrigin {
     Effect,
@@ -263,9 +263,10 @@ impl GameEngine {
         count
     }
 
-    /// CR 614.16: apply the implemented counter replacement only to counters placed by effects
-    /// on a permanent controlled by the source of each active replacement. This deliberately
-    /// leaves paid costs, turn-based actions, and entry counters outside the supported subset.
+    /// CR 614.16: apply the ordinary counter replacement only to counters placed by effects on a
+    /// permanent controlled by the source of each active replacement. Entry counters are
+    /// multiplied on the finalized entry event before commitment; this path leaves paid costs,
+    /// turn-based actions, entry events, and damage results unchanged.
     fn ordinary_counter_placement_replaced_count(
         &self,
         target: ObjectId,
@@ -301,6 +302,81 @@ impl GameEngine {
             }
         }
         replaced
+    }
+
+    fn active_static_replacement_instances_for_controller(
+        &self,
+        controller: PlayerId,
+        matches: impl Fn(&StaticAbilityDef) -> bool,
+    ) -> u32 {
+        let mut sources: Vec<_> = self
+            .state
+            .objects
+            .values()
+            .filter(|object| object.zone == Zone::Battlefield && object.controller == controller)
+            .map(|object| object.id)
+            .collect();
+        sources.sort_unstable();
+
+        let mut instances = 0u32;
+        for source in sources {
+            for ability in self.active_static_ability_definitions(source) {
+                if matches(&ability) {
+                    instances = instances.saturating_add(1);
+                }
+            }
+        }
+        instances
+    }
+
+    /// Apply active effect-created token replacements for this recipient before object IDs are
+    /// minted. A permanent-spell copy that becomes a token does not use this path (CR 111.13).
+    pub(super) fn token_creation_replaced_count(&self, controller: PlayerId, count: u32) -> u32 {
+        let instances =
+            self.active_static_replacement_instances_for_controller(controller, |ability| {
+                matches!(
+                    ability,
+                    StaticAbilityDef::DoubleTokensCreatedUnderYourControl
+                )
+            });
+        (0..instances).fold(count, |count, _| count.saturating_mul(2))
+    }
+
+    /// Apply counter doublers to completed entry events from one source snapshot. Call this only
+    /// after entry choices finish and before committing any entrant; newly entering sources then
+    /// cannot affect themselves or later siblings in the same simultaneous event.
+    pub(super) fn replace_entry_counter_events<'a>(
+        &self,
+        events: impl IntoIterator<Item = &'a mut BattlefieldEntryEvent>,
+    ) {
+        let events = events.into_iter().collect::<Vec<_>>();
+        let mut instances_by_controller = BTreeMap::new();
+        for event in &events {
+            instances_by_controller
+                .entry(event.destination_controller)
+                .or_insert_with(|| {
+                    self.active_static_replacement_instances_for_controller(
+                        event.destination_controller,
+                        |ability| {
+                            matches!(
+                                ability,
+                                StaticAbilityDef::DoubleEffectCountersPlacedOnPermanentsYouControl
+                            )
+                        },
+                    )
+                });
+        }
+        for event in events {
+            let instances = instances_by_controller
+                .get(&event.destination_controller)
+                .copied()
+                .unwrap_or_default();
+            for count in event.entry_counters.values_mut() {
+                for _ in 0..instances {
+                    *count = count.saturating_mul(2);
+                }
+            }
+        }
     }
 
     pub(super) fn place_counters_with_event(
@@ -583,6 +659,7 @@ impl GameEngine {
                 | StaticAbilityDef::LimitAttackers { .. }
                 | StaticAbilityDef::AttackTax { .. }
                 | StaticAbilityDef::DoubleEffectCountersPlacedOnPermanentsYouControl
+                | StaticAbilityDef::DoubleTokensCreatedUnderYourControl
                 | StaticAbilityDef::MultiplyManaFromTappedPermanents { .. } => {
                     // Queried at the relevant event; no independent effect record is needed.
                 }
@@ -2577,7 +2654,7 @@ mod issue_499_effect_counter_replacement_tests {
     }
 
     #[test]
-    fn effect_counter_replacement_excludes_cost_turn_based_and_entry_origins() {
+    fn ordinary_effect_counter_replacement_excludes_other_placement_origins() {
         let target = r#"(
             id: "counter_target", name: "Counter Target", face_id: "counter_target",
             types: ["Land"],
@@ -2595,6 +2672,8 @@ mod issue_499_effect_counter_replacement_tests {
                 .expect("typed replacement fixture");
 
         let registry: &'static tricerules_cards::CardRegistry = Box::leak(Box::new(registry));
+        // Entry counters use replace_entry_counter_events after entry choices finalize; this
+        // low-level placement funnel must leave Entry unchanged, like costs and turn-based actions.
         for (index, (origin, expected)) in [
             (CounterPlacementOrigin::Effect, 2),
             (CounterPlacementOrigin::Cost, 1),

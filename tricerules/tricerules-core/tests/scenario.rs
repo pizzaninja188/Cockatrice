@@ -8,6 +8,9 @@
 #[path = "scenario/deck_coverage_devotion_gods.rs"]
 mod deck_coverage_devotion_gods;
 
+#[path = "scenario/deck_coverage_doubling_season.rs"]
+mod deck_coverage_doubling_season;
+
 #[path = "scenario/deck_coverage_flux_abundance.rs"]
 mod deck_coverage_flux_abundance;
 

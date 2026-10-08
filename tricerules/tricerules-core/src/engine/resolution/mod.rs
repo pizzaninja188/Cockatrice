@@ -2186,6 +2186,9 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         self.prune_invalid_observer_entry_auras(&mut entries)?;
+        // These returns are one simultaneous entry event. Apply every entrant's entry counters
+        // from the same pre-commit Doubling Season snapshot before moving any object.
+        self.replace_entry_counter_events(entries.iter_mut().map(|entry| &mut entry.event));
         let mut trigger_events = Vec::new();
         for entry in entries {
             let object_id = entry.event.object_id;
@@ -2436,7 +2439,8 @@ impl GameEngine {
             if self.state.player_idx(pid).is_none() {
                 continue;
             }
-            for _ in 0..count {
+            let replaced_count = self.token_creation_replaced_count(pid, count);
+            for _ in 0..replaced_count {
                 let oid = self.state.next_object_id;
                 self.state.next_object_id += 1;
                 self.state.objects.insert(
@@ -2508,9 +2512,13 @@ impl GameEngine {
                     created,
                 });
             }
-            let noun = if count == 1 { "token" } else { "tokens" };
+            let noun = if replaced_count == 1 {
+                "token"
+            } else {
+                "tokens"
+            };
             logs.push(format!(
-                "P{pid} creates {count} {name} {noun} ({spell_label})."
+                "P{pid} creates {replaced_count} {name} {noun} ({spell_label})."
             ));
         }
         Ok((entries, logs))

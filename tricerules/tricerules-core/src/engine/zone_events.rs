@@ -277,6 +277,9 @@ impl GameEngine {
                 }
             }
         }
+        // The paired departure, when present, is now complete. Freeze entry-counter replacement
+        // against that battlefield before the first member of the simultaneous batch enters.
+        self.replace_entry_counter_events(batch.ready.iter_mut());
         for entry in batch.ready {
             let oid = entry.object_id;
             let chosen_x = entry.chosen_x;

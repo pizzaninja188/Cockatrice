@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "01546b7d-a233-4176-8843-d732074dc5b6",
+  "spans": [
+    {
+      "face_id": "doubling_season",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "doubling_season",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/static_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::DoubleTokensCreatedUnderYourControl",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "StaticAbilityDef::DoubleEffectCountersPlacedOnPermanentsYouControl",
+      "typed_path": "/faces/0/static_abilities/1/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_doubling_season::doubling_season_registers_exact_identity_and_both_replacement_abilities",
+      "covers": "complete card identity, cost, type, face and both Oracle clauses"
+    },
+    {
+      "test": "scenario deck_coverage_doubling_season::effect_created_tokens_compound_and_keep_their_physical_identity",
+      "covers": "one and two Doubling Seasons replace one token instruction with two and four tokens, preserving unique object identities and characteristics"
+    },
+    {
+      "test": "scenario deck_coverage_doubling_season::token_replacement_uses_each_recipient_controller",
+      "covers": "token creation for an opponent is replaced only by that recipient's Doubling Season"
+    },
+    {
+      "test": "scenario deck_coverage_doubling_season::doublers_preserve_tapped_token_properties",
+      "covers": "replacement-created tokens preserve the tapped property"
+    },
+    {
+      "test": "scenario deck_coverage_doubling_season::effect_created_copy_tokens_are_doubled_without_losing_copiable_values",
+      "covers": "effect-created copy tokens are doubled while retaining the copied characteristics and controller"
+    },
+    {
+      "test": "scenario deck_coverage_doubling_season::effect_and_entry_counters_are_doubled",
+      "covers": "effect counters and Pentad Prism entry counters are doubled"
+    },
+    {
+      "test": "scenario issue_106_mobilize::doubling_season_doubles_mobilize_tokens_with_their_chosen_attacker_properties",
+      "covers": "doubled Mobilize tokens preserve tapped and attacking status, each selected planeswalker defender, and simultaneous entry ordering"
+    },
+    {
+      "test": "scenario issue_237_token_copies::issue_237_double_faced_permanent_spell_copy_becomes_double_faced_token",
+      "covers": "a resolving permanent-spell copy still becomes exactly one token under Doubling Season, per CR 111.13"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

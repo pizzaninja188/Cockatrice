@@ -2990,10 +2990,11 @@ impl GameEngine {
 
     pub(super) fn commit_battlefield_entry(
         &mut self,
-        event: BattlefieldEntryEvent,
+        mut event: BattlefieldEntryEvent,
         attached_to: Option<AttachmentRecipient>,
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
+        self.replace_entry_counter_events(std::iter::once(&mut event));
         let attached_to = attached_to.or(event.attached_to);
         let object_id = event.object_id;
         let chosen_x = event.chosen_x;
@@ -3400,6 +3401,9 @@ impl GameEngine {
             .iter()
             .map(|entry| entry.event.object_id)
             .collect::<Vec<_>>();
+        // Snapshot all currently active doublers before committing the first token. The batch
+        // shares this source set even though its members are committed one at a time internally.
+        self.replace_entry_counter_events(entries.iter_mut().map(|entry| &mut entry.event));
         let mut trigger_events = Vec::new();
         for entry in &entries {
             trigger_events.push(GameEvent::EntersBattlefield {

@@ -2146,9 +2146,12 @@ pub enum StaticAbilityDef {
         affected: CounterPlacementAffected,
     },
     /// CR 614.16: double counters placed on permanents you control by resolving effects.
-    /// This narrow Doubling Season counter clause excludes paid costs, turn-based actions, and
-    /// entry-counter replacement; token doubling is not represented by this variant.
+    /// Entry-counter replacement is applied to the completed entry event before commit; this
+    /// variant's ordinary placement path excludes paid costs, turn-based actions, and damage.
     DoubleEffectCountersPlacedOnPermanentsYouControl,
+    /// CR 614.16: double tokens created under this permanent's controller by an effect.
+    /// Doubling Season and Parallel Lives share this replacement behavior.
+    DoubleTokensCreatedUnderYourControl,
     /// CR 106.12: modify mana from a permanent tapped to activate a mana ability. The multiplier
     /// covers Mana Reflection and Nyxbloom Ancient's corresponding two- and three-fold effects.
     MultiplyManaFromTappedPermanents {
