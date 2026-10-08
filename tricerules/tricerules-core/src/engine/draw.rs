@@ -533,6 +533,503 @@ mod library_replacement_tests {
     }
 }
 
+#[cfg(test)]
+mod zurs_weirding_tests {
+    use super::*;
+
+    fn fixture(players: &[PlayerId], drawer: PlayerId) -> GameEngine {
+        let mut engine = GameEngine::new(
+            801204,
+            players,
+            20,
+            Some(vec![vec!["forest".into(); 24]; players.len()]),
+            true,
+        )
+        .unwrap();
+        engine.registry = CardRegistry::global();
+        engine.state.opening = None;
+
+        let source_owner = players[0];
+        add_permanent(&mut engine, source_owner, "zurs_weirding");
+        assert_ne!(drawer, source_owner);
+        engine
+    }
+
+    fn add_permanent(engine: &mut GameEngine, owner: PlayerId, card_id: &str) -> ObjectId {
+        let index = engine.state.player_idx(owner).unwrap();
+        let oid = engine.state.players[index].library[0];
+        resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            oid,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        engine.state.objects.get_mut(&oid).unwrap().card_id = card_id.into();
+        oid
+    }
+
+    fn start(engine: &mut GameEngine, drawer: PlayerId) -> Vec<rv1::RuledEvent> {
+        let mut events = Vec::new();
+        let progress = engine
+            .start_draw_transaction(
+                vec![(drawer, 1)],
+                DrawCompletion::FinishDrawStep {
+                    active_player: drawer,
+                    occurrence: 0,
+                },
+                "Zur's Weirding regression",
+                &mut events,
+            )
+            .unwrap();
+        assert!(matches!(progress, DrawProgress::Parked));
+        events
+    }
+
+    fn choose(engine: &mut GameEngine, player: PlayerId, branch: u32) -> RuledEventBatch {
+        engine
+            .submit_resolution_choice(
+                player,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: branch,
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+    }
+
+    fn choose_replacement(
+        engine: &mut GameEngine,
+        player: PlayerId,
+        action: DrawReplacementAction,
+    ) {
+        let Some(PendingReplacementEvent::Draw(work)) = &engine.state.pending_replacement_event
+        else {
+            panic!("draw replacement order")
+        };
+        let handle = work
+            .applications
+            .iter()
+            .find(|application| {
+                std::mem::discriminant(&application.action) == std::mem::discriminant(&action)
+            })
+            .map(|application| application.handle)
+            .unwrap();
+        engine
+            .submit_resolution_choice(
+                player,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![handle],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+    }
+
+    fn pending_choice(engine: &GameEngine) -> rv1::ResolutionChoiceRequired {
+        let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) = engine
+            .draw_replacement_choice_event()
+            .and_then(|event| event.ev)
+        else {
+            panic!("Zur's Weirding payer choice")
+        };
+        choice
+    }
+
+    #[test]
+    fn zurs_weirding_global_draw_is_replaced_for_an_opponent() {
+        let mut engine = fixture(&[0, 1, 2], 1);
+        let events = start(&mut engine, 1);
+        assert!(events
+            .iter()
+            .any(|event| matches!(event.ev, Some(rv1::ruled_event::Ev::CardsRevealed(_)))));
+        assert!(engine.state.pending_resolution.is_some());
+        assert_eq!(engine.state.players[1].hand.len(), 7);
+        let choice = pending_choice(&engine);
+        assert_eq!(choice.deciding_player_id, 0);
+        assert_eq!(choice.resolution_branches.len(), 2);
+        assert!(choice.public_reveal.is_none());
+        assert!(engine.draw_action_reveal().is_some());
+    }
+
+    #[test]
+    fn zurs_weirding_zone_views_publish_each_current_hand_and_clear_when_the_source_leaves() {
+        let mut engine = fixture(&[0, 1, 2], 1);
+        let Some(rv1::ruled_event::Ev::ZoneView(first)) = engine.ev_zone_view_sync_tracked().ev
+        else {
+            panic!("zone view")
+        };
+        for player in &engine.state.players {
+            let view = first
+                .per_player
+                .iter()
+                .find(|view| view.player_id == player.id)
+                .unwrap();
+            let public_hand = view.public_hand.as_ref().expect("active public hand");
+            assert_eq!(public_hand.cards.len(), player.hand.len());
+            for (card, &oid) in public_hand.cards.iter().zip(player.hand.iter()) {
+                assert_eq!(card.object_id, oid);
+                assert_eq!(card.card_id, engine.state.objects[&oid].card_id);
+                assert!(!card.card_name.is_empty());
+            }
+        }
+
+        engine.state.players[2].hand.clear();
+        let Some(rv1::ruled_event::Ev::ZoneView(empty_hand)) =
+            engine.ev_zone_view_sync_tracked().ev
+        else {
+            panic!("updated zone view")
+        };
+        assert!(empty_hand.battlefields_unchanged);
+        let player_two = empty_hand
+            .per_player
+            .iter()
+            .find(|view| view.player_id == 2)
+            .unwrap();
+        assert!(player_two.public_hand.is_some());
+        assert!(player_two.public_hand.as_ref().unwrap().cards.is_empty());
+
+        let source = engine.state.players[0]
+            .battlefield
+            .iter()
+            .copied()
+            .find(|oid| engine.state.objects[oid].card_id == "zurs_weirding")
+            .unwrap();
+        resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        let Some(rv1::ruled_event::Ev::ZoneView(cleared)) = engine.ev_zone_view_sync_tracked().ev
+        else {
+            panic!("cleared zone view")
+        };
+        assert!(cleared
+            .per_player
+            .iter()
+            .all(|view| view.public_hand.is_none()));
+    }
+
+    #[test]
+    fn zurs_weirding_collects_public_apnap_choices_before_simultaneous_payments() {
+        let mut engine = fixture(&[0, 1, 2, 3], 1);
+        let before_hand = engine.state.players[1].hand.len();
+        let before_library = engine.state.players[1].library.len();
+        let top = engine.state.players[1].library[0];
+        let events = start(&mut engine, 1);
+        let reveal = engine.draw_action_reveal().unwrap();
+        assert_eq!(reveal.cards[0].object_id, top);
+        assert_eq!(pending_choice(&engine).deciding_player_id, 0);
+
+        let first = choose(&mut engine, 0, 0);
+        let first_pay_log = first
+            .events
+            .iter()
+            .position(|event| {
+                matches!(
+                    event.ev.as_ref(),
+                    Some(rv1::ruled_event::Ev::Log(log)) if log.text.contains("P0 chooses to pay")
+                )
+            })
+            .unwrap();
+        let next_prompt = first
+            .events
+            .iter()
+            .position(|event| {
+                matches!(
+                    event.ev,
+                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+                )
+            })
+            .unwrap();
+        assert!(
+            first_pay_log < next_prompt,
+            "the public choice precedes the next prompt"
+        );
+        assert_eq!(pending_choice(&engine).deciding_player_id, 2);
+        assert_eq!(engine.state.players[0].life, 20);
+        assert_eq!(engine.state.players[2].life, 20);
+        assert_eq!(engine.state.players[3].life, 20);
+        assert_eq!(engine.state.players[1].library.front(), Some(&top));
+        assert_eq!(engine.draw_action_reveal(), Some(reveal.clone()));
+
+        choose(&mut engine, 2, 0);
+        assert_eq!(pending_choice(&engine).deciding_player_id, 3);
+        let Some(PendingReplacementEvent::Draw(work)) = &engine.state.pending_replacement_event
+        else {
+            panic!("parked payer transaction")
+        };
+        assert!(matches!(
+            work.action.as_ref().map(|action| &action.stage),
+            Some(DrawLibraryStage::ZurPayment { pay_intents, .. }) if pay_intents == &[0, 2]
+        ));
+        let card = &work.action.as_ref().unwrap().reveal.as_ref().unwrap().cards[0];
+        assert_eq!(card.object_id, top);
+        assert_eq!(engine.state.players[1].library.front(), Some(&top));
+        assert_eq!(engine.state.objects[&top].zone, Zone::Library);
+        assert_eq!(
+            engine
+                .state
+                .zone_change_generation
+                .get(&top)
+                .copied()
+                .unwrap_or(0),
+            card.zone_change_generation
+        );
+        assert_eq!(engine.state.players[0].life, 20);
+        assert_eq!(engine.state.players[2].life, 20);
+        let final_batch = choose(&mut engine, 3, 1);
+
+        assert_eq!(engine.state.players[0].life, 18);
+        assert_eq!(engine.state.players[2].life, 18);
+        assert_eq!(engine.state.players[3].life, 20);
+        assert_eq!(engine.state.players[1].hand.len(), before_hand);
+        assert_eq!(engine.state.players[1].library.len(), before_library - 1);
+        assert_eq!(engine.state.objects[&top].zone, Zone::Graveyard);
+        assert_eq!(engine.state.players[1].graveyard.last(), Some(&top));
+        assert!(engine.draw_action_reveal().is_none());
+        let life_events = final_batch
+            .events
+            .iter()
+            .filter_map(|event| match event.ev.as_ref() {
+                Some(rv1::ruled_event::Ev::LifeChanged(change)) => Some(change.player_id),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(life_events.contains(&0));
+        assert!(life_events.contains(&2));
+        assert!(!life_events.contains(&3));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event.ev, Some(rv1::ruled_event::Ev::CardsRevealed(_)))));
+    }
+
+    #[test]
+    fn zurs_weirding_all_declines_draw_and_an_empty_library_payment_prevents_loss() {
+        let mut engine = fixture(&[0, 1, 2], 1);
+        let hand = engine.state.players[1].hand.len();
+        let library = engine.state.players[1].library.len();
+        let top = engine.state.players[1].library[0];
+        start(&mut engine, 1);
+        choose(&mut engine, 0, 1);
+        let done = choose(&mut engine, 2, 1);
+        assert_eq!(engine.state.players[1].hand.len(), hand + 1);
+        assert_eq!(engine.state.objects[&top].zone, Zone::Hand);
+        assert_eq!(engine.state.players[1].library.len(), library - 1);
+        assert!(!engine.state.players[1].pending_library_loss);
+        assert!(engine.draw_action_reveal().is_none());
+        assert!(!done.events.iter().any(|event| matches!(
+            event.ev.as_ref(),
+            Some(rv1::ruled_event::Ev::LifeChanged(_))
+        )));
+
+        let mut empty = fixture(&[0, 1, 2], 1);
+        let library = std::mem::take(&mut empty.state.players[1].library);
+        for oid in library {
+            resolution::move_object_to_zone(
+                &mut empty.state,
+                empty.registry,
+                oid,
+                Zone::Exile,
+                None,
+            )
+            .unwrap();
+        }
+        start(&mut empty, 1);
+        assert!(empty.draw_action_reveal().is_none());
+        choose(&mut empty, 0, 0);
+        choose(&mut empty, 2, 1);
+        assert_eq!(empty.state.players[0].life, 18);
+        assert!(empty.state.players[1].library.is_empty());
+        assert!(!empty.state.players[1].pending_library_loss);
+
+        let mut empty_unpaid = fixture(&[0, 1, 2], 1);
+        let library = std::mem::take(&mut empty_unpaid.state.players[1].library);
+        for oid in library {
+            resolution::move_object_to_zone(
+                &mut empty_unpaid.state,
+                empty_unpaid.registry,
+                oid,
+                Zone::Exile,
+                None,
+            )
+            .unwrap();
+        }
+        start(&mut empty_unpaid, 1);
+        choose(&mut empty_unpaid, 0, 1);
+        choose(&mut empty_unpaid, 2, 1);
+        assert!(empty_unpaid.state.players[1].has_lost);
+        assert!(!empty_unpaid.state.players[1].pending_library_loss);
+        assert_eq!(empty_unpaid.state.players[0].life, 20);
+        assert_eq!(empty_unpaid.state.players[2].life, 20);
+        assert!(empty_unpaid.state.players[1].library.is_empty());
+    }
+
+    #[test]
+    fn zurs_weirding_revalidates_every_payment_before_the_group_debit() {
+        for another_payer_pays in [false, true] {
+            let mut engine = fixture(&[0, 1, 2], 1);
+            engine.state.players[0].life = 2;
+            let top = engine.state.players[1].library[0];
+            let before_hand = engine.state.players[1].hand.len();
+            start(&mut engine, 1);
+            choose(&mut engine, 0, 0);
+            engine.state.players[0].life = 1;
+            choose(&mut engine, 2, u32::from(!another_payer_pays));
+
+            assert_eq!(engine.state.players[0].life, 1);
+            assert_eq!(
+                engine.state.players[2].life,
+                if another_payer_pays { 18 } else { 20 }
+            );
+            if another_payer_pays {
+                assert_eq!(engine.state.objects[&top].zone, Zone::Graveyard);
+                assert_eq!(engine.state.players[1].hand.len(), before_hand);
+            } else {
+                assert_eq!(engine.state.objects[&top].zone, Zone::Hand);
+                assert_eq!(engine.state.players[1].hand.len(), before_hand + 1);
+            }
+        }
+    }
+
+    #[test]
+    fn zurs_weirding_skips_a_departed_payer_and_does_not_charge_a_selected_payer_who_concedes() {
+        let mut current_leaves = fixture(&[0, 1, 2], 1);
+        let top = current_leaves.state.players[1].library[0];
+        start(&mut current_leaves, 1);
+        let same_reveal = current_leaves.draw_action_reveal();
+        current_leaves.concede_batch(0).unwrap();
+        assert_eq!(pending_choice(&current_leaves).deciding_player_id, 2);
+        assert_eq!(current_leaves.draw_action_reveal(), same_reveal);
+        choose(&mut current_leaves, 2, 1);
+        assert_eq!(current_leaves.state.players[0].life, 20);
+        assert_eq!(current_leaves.state.objects[&top].zone, Zone::Hand);
+
+        let mut selected_leaves = fixture(&[0, 1, 2], 1);
+        let selected_top = selected_leaves.state.players[1].library[0];
+        start(&mut selected_leaves, 1);
+        choose(&mut selected_leaves, 0, 0);
+        selected_leaves.concede_batch(0).unwrap();
+        assert_eq!(pending_choice(&selected_leaves).deciding_player_id, 2);
+        choose(&mut selected_leaves, 2, 1);
+        assert_eq!(selected_leaves.state.players[0].life, 20);
+        assert_eq!(
+            selected_leaves.state.objects[&selected_top].zone,
+            Zone::Hand
+        );
+    }
+
+    #[test]
+    fn zurs_weirding_and_abundance_follow_the_drawers_selected_replacement_order() {
+        for zur_first in [false, true] {
+            let mut engine = fixture(&[0, 1, 2], 1);
+            let before_hand = engine.state.players[1].hand.len();
+            add_permanent(&mut engine, 1, "abundance");
+            start(&mut engine, 1);
+
+            if zur_first {
+                choose_replacement(&mut engine, 1, DrawReplacementAction::ZurWeirding);
+                choose(&mut engine, 0, 1);
+                choose(&mut engine, 2, 1);
+            } else {
+                choose_replacement(
+                    &mut engine,
+                    1,
+                    DrawReplacementAction::Library(
+                        LibraryDrawReplacement::RevealUntilLandOrNonland,
+                    ),
+                );
+            }
+
+            let optional = pending_choice(&engine);
+            assert_eq!(optional.deciding_player_id, 1);
+            assert_eq!(
+                optional.choice_kind,
+                rv1::ChoiceKind::ResolutionBranch as i32
+            );
+            choose(&mut engine, 1, 0); // Replace the draw with Abundance.
+            choose(&mut engine, 1, 0); // Choose a land; this fixture's library contains Forests.
+            assert_eq!(engine.state.players[1].hand.len(), before_hand + 1);
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(engine.draw_action_reveal().is_none());
+            assert_eq!(engine.state.players[0].life, 20);
+            assert_eq!(engine.state.players[2].life, 20);
+        }
+    }
+
+    #[test]
+    fn zurs_weirding_instances_apply_once_each_to_the_same_draw_event() {
+        for first_instance_pays in [false, true] {
+            let mut engine = fixture(&[0, 1, 2], 1);
+            let top = engine.state.players[1].library[0];
+            add_permanent(&mut engine, 2, "zurs_weirding");
+            start(&mut engine, 1);
+            choose_replacement(&mut engine, 1, DrawReplacementAction::ZurWeirding);
+
+            if !first_instance_pays {
+                choose(&mut engine, 0, 1);
+                choose(&mut engine, 2, 1);
+                assert_eq!(pending_choice(&engine).deciding_player_id, 0);
+                assert!(engine.draw_action_reveal().is_some());
+                choose(&mut engine, 0, 0);
+                choose(&mut engine, 2, 1);
+            } else {
+                choose(&mut engine, 0, 0);
+                choose(&mut engine, 2, 1);
+            }
+
+            assert_eq!(engine.state.objects[&top].zone, Zone::Graveyard);
+            assert_eq!(engine.state.players[1].hand.len(), 7);
+            assert_eq!(engine.state.players[0].life, 18);
+            assert_eq!(engine.state.players[2].life, 20);
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(engine.draw_action_reveal().is_none());
+        }
+    }
+
+    #[test]
+    fn zurs_weirding_logged_payer_choices_replay_identically() {
+        fn branch(index: u32) -> rv1::RuledCommand {
+            rv1::RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                        selected_branch_index: index,
+                        ..Default::default()
+                    },
+                )),
+            }
+        }
+
+        let mut engine = fixture(&[0, 1, 2, 3], 1);
+        let mut replay = fixture(&[0, 1, 2, 3], 1);
+        let first_start = start(&mut engine, 1);
+        let replay_start = start(&mut replay, 1);
+        assert_eq!(first_start, replay_start);
+
+        let commands = [(0, branch(0)), (2, branch(0)), (3, branch(1))];
+        for (actor, command) in &commands {
+            let recorded = engine.apply_command(*actor, command).unwrap();
+            let replayed = replay.apply_command(*actor, command).unwrap();
+            assert_eq!(recorded, replayed);
+            assert_eq!(engine.state.command_index, replay.state.command_index);
+            assert_eq!(
+                engine.diagnostic_snapshot().unwrap(),
+                replay.diagnostic_snapshot().unwrap()
+            );
+        }
+        assert_eq!(engine.state.players[0].life, 18);
+        assert_eq!(engine.state.players[2].life, 18);
+        assert_eq!(engine.state.players[1].hand.len(), 7);
+        assert_eq!(engine.state.players[1].graveyard.len(), 1);
+    }
+}
+
 #[derive(serde::Serialize, Debug, Clone)]
 struct DrawApplication {
     handle: u32,
@@ -546,6 +1043,7 @@ enum DrawReplacementAction {
     Double,
     WinInstead,
     Library(LibraryDrawReplacement),
+    ZurWeirding,
 }
 
 enum AppliedDrawProgress {
@@ -560,6 +1058,11 @@ enum DrawLibraryStage {
     ChooseKind,
     ChooseToHand(Vec<(ObjectId, u64)>),
     OrderBottom(Vec<(ObjectId, u64)>),
+    ZurPayment {
+        payers: Vec<PlayerId>,
+        cursor: usize,
+        pay_intents: Vec<PlayerId>,
+    },
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -670,16 +1173,16 @@ impl GameEngine {
         sources.sort_unstable();
         let mut result = Vec::new();
         for source in sources {
-            if !printed_static_source_is_available(&self.state, self.registry, source)
-                || self
-                    .characteristics(source)
-                    .is_none_or(|value| value.controller != drawer)
-            {
+            if !printed_static_source_is_available(&self.state, self.registry, source) {
                 continue;
             }
+            let source_controller = self.characteristics(source).map(|value| value.controller);
             for ability in self.active_static_abilities(source) {
                 let action = match ability.definition {
-                    StaticAbilityDef::DoubleControllerDraws { condition } => {
+                    StaticAbilityDef::ZurWeirding => DrawReplacementAction::ZurWeirding,
+                    StaticAbilityDef::DoubleControllerDraws { condition }
+                        if source_controller == Some(drawer) =>
+                    {
                         if condition
                             == DrawReplacementCondition::ExceptFirstSuccessfulDrawInOwnDrawStep
                             && first_own_step
@@ -689,11 +1192,14 @@ impl GameEngine {
                         DrawReplacementAction::Double
                     }
                     StaticAbilityDef::WinControllerInsteadOfEmptyLibraryDraw
-                        if controller_library_empty(&self.state, drawer) =>
+                        if source_controller == Some(drawer)
+                            && controller_library_empty(&self.state, drawer) =>
                     {
                         DrawReplacementAction::WinInstead
                     }
-                    StaticAbilityDef::ReplaceControllerDrawWithLibraryChoice { kind } => {
+                    StaticAbilityDef::ReplaceControllerDrawWithLibraryChoice { kind }
+                        if source_controller == Some(drawer) =>
+                    {
                         DrawReplacementAction::Library(kind)
                     }
                     _ => continue,
@@ -759,10 +1265,11 @@ impl GameEngine {
         if self.state.is_terminal() {
             return Ok(DrawProgress::GameEnded);
         }
-        while let Some(request) = work.requests.front_mut() {
+        while !work.requests.is_empty() {
+            let player = work.requests.front().expect("current draw request").player;
             let Some(index) = self
                 .state
-                .player_idx(request.player)
+                .player_idx(player)
                 .filter(|index| !self.state.players[*index].has_lost)
             else {
                 work.requests.pop_front();
@@ -771,8 +1278,13 @@ impl GameEngine {
                 continue;
             };
             if work.action.is_some() {
+                self.advance_zur_payment_choice(&mut work, events)?;
+                if work.action.is_none() {
+                    continue;
+                }
                 return Ok(self.park_draw_library_action(work, events));
             }
+            let request = work.requests.front_mut().expect("current draw request");
             if work.nodes.is_empty() {
                 if request.remaining == 0 {
                     events.push(ev_log(format!(
@@ -836,7 +1348,7 @@ impl GameEngine {
                 return Ok(DrawProgress::Parked);
             }
             if let Some((identity, action)) = candidates.into_iter().next() {
-                match self.apply_draw_replacement(&mut work, identity, action) {
+                match self.apply_draw_replacement(&mut work, identity, action, events)? {
                     AppliedDrawProgress::GameEnded => return Ok(DrawProgress::GameEnded),
                     AppliedDrawProgress::Parked => {
                         return Ok(self.park_draw_library_action(work, events))
@@ -880,7 +1392,8 @@ impl GameEngine {
         work: &mut PendingDrawTransaction,
         identity: DrawReplacementIdentity,
         action: DrawReplacementAction,
-    ) -> AppliedDrawProgress {
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<AppliedDrawProgress, EngineError> {
         let mut node = work.nodes.pop().expect("current draw node");
         let source = identity.source;
         node.applied.push(identity);
@@ -889,7 +1402,7 @@ impl GameEngine {
                 // Children inherit ancestors; a subsequently modified sibling never changes them.
                 work.nodes.push(node.clone());
                 work.nodes.push(node);
-                AppliedDrawProgress::Continue
+                Ok(AppliedDrawProgress::Continue)
             }
             DrawReplacementAction::WinInstead => {
                 // CR 614.6: consume the draw before attempting the replacement's win. Even a
@@ -899,7 +1412,7 @@ impl GameEngine {
                     .get_or_insert(crate::state::GameOutcome::Winner(
                         work.requests.front().expect("drawer").player,
                     ));
-                AppliedDrawProgress::GameEnded
+                Ok(AppliedDrawProgress::GameEnded)
             }
             DrawReplacementAction::Library(kind) => {
                 let player = work.requests.front().expect("drawer").player;
@@ -918,7 +1431,7 @@ impl GameEngine {
                             .copied()
                             .collect::<Vec<_>>();
                         if cards.is_empty() {
-                            return AppliedDrawProgress::Continue;
+                            return Ok(AppliedDrawProgress::Continue);
                         }
                         DrawLibraryStage::ChooseToHand(super::library_choices::capture(
                             self, &cards,
@@ -935,9 +1448,172 @@ impl GameEngine {
                     stage,
                     reveal: None,
                 });
-                AppliedDrawProgress::Parked
+                Ok(AppliedDrawProgress::Parked)
+            }
+            DrawReplacementAction::ZurWeirding => {
+                let drawer = work.requests.front().expect("drawer").player;
+                let drawer_index = self.state.player_idx(drawer).expect("drawer");
+                let revealed_card = self.state.players[drawer_index].library.front().copied();
+                let mut reveal = revealed_card.and_then(|oid| {
+                    super::reveals::reveal_choice(
+                        &self.state,
+                        self.registry,
+                        &[oid],
+                        source,
+                        &super::events::object_display_name(&self.state, self.registry, source),
+                    )
+                });
+                if let Some(reveal) = reveal.as_mut() {
+                    reveal.reveal_id =
+                        format!("draw:{}:{}:{}", self.state.command_index, source, drawer);
+                    events.push(rv1::RuledEvent {
+                        ev: Some(rv1::ruled_event::Ev::CardsRevealed(reveal.clone())),
+                    });
+                }
+                let mut payers = self
+                    .state
+                    .players
+                    .iter()
+                    .filter(|player| player.id != drawer && !player.has_lost)
+                    .map(|player| player.id)
+                    .collect::<Vec<_>>();
+                payers.sort_by_key(|player| self.state.apnap_rank(*player));
+                work.nodes.push(node);
+                work.action = Some(DrawLibraryAction {
+                    source,
+                    source_label: super::events::object_display_name(
+                        &self.state,
+                        self.registry,
+                        source,
+                    ),
+                    stage: DrawLibraryStage::ZurPayment {
+                        payers,
+                        cursor: 0,
+                        pay_intents: Vec::new(),
+                    },
+                    reveal,
+                });
+                Ok(AppliedDrawProgress::Parked)
             }
         }
+    }
+
+    fn advance_zur_payment_choice(
+        &mut self,
+        work: &mut PendingDrawTransaction,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(action) = work.action.as_mut() else {
+            return Ok(());
+        };
+        let DrawLibraryStage::ZurPayment { payers, cursor, .. } = &mut action.stage else {
+            return Ok(());
+        };
+        while let Some(payer) = payers.get(*cursor).copied() {
+            let still_in_game = self
+                .state
+                .player_idx(payer)
+                .is_some_and(|index| !self.state.players[index].has_lost);
+            if still_in_game {
+                break;
+            }
+            *cursor += 1;
+        }
+        let complete = *cursor >= payers.len();
+        if complete {
+            self.finish_zur_payment(work, events)?;
+        }
+        Ok(())
+    }
+
+    fn finish_zur_payment(
+        &mut self,
+        work: &mut PendingDrawTransaction,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let action = work.action.take().expect("Zur payment action");
+        let DrawLibraryStage::ZurPayment { pay_intents, .. } = action.stage else {
+            unreachable!("Zur payment stage")
+        };
+        let drawer = work.requests.front().expect("drawer").player;
+        let revealed_card = action
+            .reveal
+            .as_ref()
+            .and_then(|reveal| reveal.cards.first())
+            .map(|card| (card.object_id, card.zone_change_generation));
+        let revealed_card_is_current = match revealed_card {
+            None => self
+                .state
+                .player_idx(drawer)
+                .is_some_and(|index| self.state.players[index].library.is_empty()),
+            Some((oid, generation)) => {
+                self.state
+                    .player_idx(drawer)
+                    .is_some_and(|index| self.state.players[index].library.front() == Some(&oid))
+                    && self.state.objects.get(&oid).is_some_and(|object| {
+                        object.zone == Zone::Library
+                            && self
+                                .state
+                                .zone_change_generation
+                                .get(&oid)
+                                .copied()
+                                .unwrap_or(0)
+                                == generation
+                    })
+            }
+        };
+        let payer_intents = if revealed_card_is_current {
+            pay_intents
+        } else {
+            Vec::new()
+        };
+        let payable = payer_intents
+            .into_iter()
+            .filter_map(|payer| {
+                let index = self.state.player_idx(payer)?;
+                let player = &self.state.players[index];
+                let life_lost = self.state.turn_history.current.player(payer).life_lost;
+                (payer != drawer
+                    && !player.has_lost
+                    && player.life >= 2
+                    && player.life.checked_sub(2).is_some()
+                    && life_lost.checked_add(2).is_some())
+                .then_some((payer, index))
+            })
+            .collect::<Vec<_>>();
+        if !payable.is_empty() {
+            for (_, index) in &payable {
+                super::history::commit_life_change(&mut self.state, *index, -2);
+            }
+            for (payer, index) in &payable {
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                        player_id: *payer,
+                        new_total: self.state.players[*index].life,
+                        delta: -2,
+                    })),
+                });
+                events.push(super::events::ev_log(format!(
+                    "P{payer} pays 2 life for Zur's Weirding."
+                )));
+            }
+            if let Some((oid, _)) = revealed_card {
+                let card_name = super::events::object_display_name(&self.state, self.registry, oid);
+                resolution::move_object_to_zone(
+                    &mut self.state,
+                    self.registry,
+                    oid,
+                    Zone::Graveyard,
+                    None,
+                )?;
+                events.push(super::events::ev_log(format!(
+                    "P{drawer} puts {card_name} into its owner's graveyard (Zur's Weirding)."
+                )));
+            }
+            work.nodes.pop().expect("consumed Zur draw node");
+        }
+        work.action = None;
+        Ok(())
     }
 
     pub(super) fn draw_replacement_choice_event(&self) -> Option<rv1::RuledEvent> {
@@ -976,6 +1652,7 @@ impl GameEngine {
                                     DrawReplacementAction::WinInstead => "Win the game instead.",
                                     DrawReplacementAction::Library(LibraryDrawReplacement::LookAtTopThree) => "Look at three cards and put one into your hand instead.",
                                     DrawReplacementAction::Library(LibraryDrawReplacement::RevealUntilLandOrNonland) => "Choose whether to replace this draw with a land/nonland reveal.",
+                                    DrawReplacementAction::ZurWeirding => "Reveal this card; another player may pay 2 life to put it into its owner's graveyard.",
                                 }
                                 .to_string(),
                             )
@@ -1047,7 +1724,7 @@ impl GameEngine {
         };
         work.completion.transfer_stack(stack);
         let mut events = Vec::new();
-        match self.apply_draw_replacement(&mut work, identity, action) {
+        match self.apply_draw_replacement(&mut work, identity, action, &mut events)? {
             AppliedDrawProgress::GameEnded => return Ok(finish_with_events(self, events)),
             AppliedDrawProgress::Parked => {
                 self.park_draw_library_action(work, &mut events);

@@ -2090,6 +2090,19 @@ message LibraryCard {
   uint32 object_id = 2 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
+// Current public identity of a hand card while a rules effect reveals that hand. This is a
+// display snapshot only; it deliberately has no Server_Card id or hand slot.
+message PublicHandCard {
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint64 zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string card_id = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string card_name = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+message PublicHandView {
+  repeated PublicHandCard cards = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
 // Presentation-only emblem identity. This is deliberately not a battlefield permanent: the
 // engine owns emblem rules state while Servatrice mirrors each marker as a table token.
 message EmblemMarkerView {
@@ -2143,6 +2156,8 @@ message RuledPerPlayerView {
   repeated PlayerCounterView player_counters = 39 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Public Commander cards in declaration order. Their physical card objects stay outside the library.
   repeated uint32 command_zone_object_ids = 40 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Present while an active effect makes this entire hand public; present with no cards for an empty hand.
+  optional PublicHandView public_hand = 41 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message PlayerCounterView {

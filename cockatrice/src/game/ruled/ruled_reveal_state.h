@@ -11,6 +11,7 @@ namespace ruled::v1
 {
 class CardsRevealed;
 class ActivePublicRevealSnapshot;
+class ZoneViewSync;
 } // namespace ruled::v1
 
 // One presentation history for all public reveals. Completed entries are immutable snapshots,
@@ -53,6 +54,7 @@ public:
     bool publish(const ruled::v1::CardsRevealed &reveal);
     bool beginChoice(const ruled::v1::CardsRevealed &reveal, const QVector<int> &choiceCardIds);
     void completeChoice();
+    void applyPublicHands(const ruled::v1::ZoneViewSync &snapshot);
     void applyActiveSnapshot(const ruled::v1::ActivePublicRevealSnapshot &snapshot);
     void dismiss(const QString &id);
     void clear();
@@ -65,6 +67,10 @@ public:
     const QMap<QString, Entry> &entries() const
     {
         return entries_;
+    }
+    const QMap<int, QVector<Card>> &publicHands() const
+    {
+        return publicHands_;
     }
     const QStringList &order() const
     {
@@ -84,6 +90,7 @@ signals:
 
 private:
     QMap<QString, Entry> entries_;
+    QMap<int, QVector<Card>> publicHands_;
     QStringList order_;
     QSet<QString> seen_;
     QSet<QString> active_;

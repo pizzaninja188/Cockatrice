@@ -2,6 +2,7 @@
 #include "../ruled/ruled_preparation_display.h"
 
 #include "../ruled/ruled_actions.h"
+#include "../ruled/ruled_zone_view_policy.h"
 #include "../board/card_drag_item.h"
 #include "../board/card_item.h"
 #include "../abstract_game.h"
@@ -85,7 +86,8 @@ void ZoneViewZone::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*o
 
 void ZoneViewZone::initializeCards(const QList<const ServerInfo_Card *> &cardList)
 {
-    int numberCards = qobject_cast<ZoneViewZoneLogic *>(getLogic())->getNumberCards();
+    auto *logic = qobject_cast<ZoneViewZoneLogic *>(getLogic());
+    int numberCards = logic->getNumberCards();
     if (!cardList.isEmpty()) {
         for (int i = 0; i < cardList.size(); ++i) {
             auto card = cardList[i];
@@ -107,18 +109,22 @@ void ZoneViewZone::initializeCards(const QList<const ServerInfo_Card *> &cardLis
             zoneCards[i]->setId(cardList[i]->id());
         }
         reorganizeCards();
-    } else if (!qobject_cast<ZoneViewZoneLogic *>(getLogic())->getOriginalZone()->contentsKnown()) {
+    } else if (ruledZoneViewHasAuthoritativeCardList(logic->getRevealZone(), logic->getWriteableRevealZone())) {
+        // An empty read-only reveal is an authoritative empty snapshot. Do not copy the
+        // scaffold hand into it or ask the server to dump that hidden zone.
+        reorganizeCards();
+    } else if (!logic->getOriginalZone()->contentsKnown()) {
         Command_DumpZone cmd;
         cmd.set_player_id(getLogic()->getPlayer()->getPlayerInfo()->getId());
         cmd.set_zone_name(getLogic()->getName().toStdString());
         cmd.set_number_cards(numberCards);
-        cmd.set_is_reversed(qobject_cast<ZoneViewZoneLogic *>(getLogic())->getIsReversed());
+        cmd.set_is_reversed(logic->getIsReversed());
 
         PendingCommand *pend = getLogic()->getPlayer()->getPlayerActions()->prepareGameCommand(cmd);
         connect(pend, &PendingCommand::finished, this, &ZoneViewZone::zoneDumpReceived);
         getLogic()->getPlayer()->getPlayerActions()->sendGameCommand(pend);
     } else {
-        const CardList &c = qobject_cast<ZoneViewZoneLogic *>(getLogic())->getOriginalZone()->getCards();
+        const CardList &c = logic->getOriginalZone()->getCards();
         int number = numberCards == -1 ? c.size() : (numberCards < c.size() ? numberCards : c.size());
         for (int i = 0; i < number; i++) {
             CardItem *card = c.at(i);

@@ -811,6 +811,12 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     // The omission marker describes the two concealed fields, so it is concealed with them:
     // a client learning "this player's hand did not change" is a (small) information leak.
     view->set_private_zones_unchanged(true);
+    auto *publicHand = view->mutable_public_hand();
+    auto *publicHandCard = publicHand->add_cards();
+    publicHandCard->set_object_id(902u);
+    publicHandCard->set_zone_change_generation(3u);
+    publicHandCard->set_card_id("public_hand_card");
+    publicHandCard->set_card_name("Revealed Hand Card");
     auto *publicPermanent = view->add_battlefield_objects();
     publicPermanent->set_object_id(101);
     publicPermanent->set_card_id("grizzly_bears");
@@ -1023,6 +1029,12 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
         EXPECT_EQ(redactedView.hand_cards_size(), 0);
         EXPECT_EQ(redactedView.library_cards_size(), 0);
         EXPECT_FALSE(redactedView.private_zones_unchanged());
+        ASSERT_TRUE(redactedView.has_public_hand());
+        ASSERT_EQ(redactedView.public_hand().cards_size(), 1);
+        EXPECT_EQ(redactedView.public_hand().cards(0).object_id(), 902u);
+        EXPECT_EQ(redactedView.public_hand().cards(0).zone_change_generation(), 3u);
+        EXPECT_EQ(redactedView.public_hand().cards(0).card_id(), "public_hand_card");
+        EXPECT_EQ(redactedView.public_hand().cards(0).card_name(), "Revealed Hand Card");
         ASSERT_EQ(redactedView.battlefield_objects_size(), 1);
         EXPECT_EQ(redactedView.battlefield_objects(0).object_id(), 101u);
     }
@@ -1041,6 +1053,156 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
                             [](const auto &event) { return event.has_log() && event.log().text() == "P1 only"; }));
     EXPECT_TRUE(
         std::none_of(forP2.events().begin(), forP2.events().end(), [](const auto &event) { return event.has_log(); }));
+}
+
+TEST_F(RuledBatchTest, GenericResolutionChoiceReconnectRestoresCurrentPublicHandSnapshot)
+{
+    ruled::v1::IpcResponse seed;
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto *p1View = seedView->add_per_player();
+    p1View->set_player_id(p1->getPlayerId());
+    auto *publicHandCard = p1View->mutable_public_hand()->add_cards();
+    publicHandCard->set_object_id(1201u);
+    publicHandCard->set_zone_change_generation(2u);
+    publicHandCard->set_card_id("island");
+    publicHandCard->set_card_name("Island");
+    auto *p2View = seedView->add_per_player();
+    p2View->set_player_id(p2->getPlayerId());
+    p2View->mutable_public_hand(); // Presence with no cards means a revealed empty hand.
+    updatePendingResolutionChoiceCache(seed);
+
+    ruled::v1::IpcResponse response;
+    auto *batch = response.mutable_batch();
+    auto *choice = batch->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    choice->set_prompt_text("Pay 2 life for each revealed card?");
+    updatePendingResolutionChoiceCache(response);
+
+    for (Server_Player *recipient : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, reconnect);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 1);
+        const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        const auto restoredView = std::find_if(restored.events().begin(), restored.events().end(),
+                                               [](const auto &event) { return event.has_zone_view(); });
+        ASSERT_NE(restoredView, restored.events().end());
+        const auto p1Restored = std::find_if(restoredView->zone_view().per_player().begin(),
+                                             restoredView->zone_view().per_player().end(),
+                                             [this](const auto &view) { return view.player_id() == p1->getPlayerId(); });
+        ASSERT_NE(p1Restored, restoredView->zone_view().per_player().end());
+        ASSERT_TRUE(p1Restored->has_public_hand());
+        ASSERT_EQ(p1Restored->public_hand().cards_size(), 1);
+        EXPECT_EQ(p1Restored->public_hand().cards(0).object_id(), 1201u);
+        const auto p2Restored = std::find_if(restoredView->zone_view().per_player().begin(),
+                                             restoredView->zone_view().per_player().end(),
+                                             [this](const auto &view) { return view.player_id() == p2->getPlayerId(); });
+        ASSERT_NE(p2Restored, restoredView->zone_view().per_player().end());
+        ASSERT_TRUE(p2Restored->has_public_hand());
+        EXPECT_EQ(p2Restored->public_hand().cards_size(), 0);
+    }
+
+    // The in-flight draw may finish after Zur leaves, but reconnect must not retain its
+    // continuous public-hand snapshot.
+    ruled::v1::IpcResponse sourceLeft;
+    auto *endedBatch = sourceLeft.mutable_batch();
+    auto *endedView = endedBatch->add_events()->mutable_zone_view();
+    endedView->add_per_player()->set_player_id(p1->getPlayerId());
+    endedView->add_per_player()->set_player_id(p2->getPlayerId());
+    auto *stillPending = endedBatch->add_events()->mutable_resolution_choice_required();
+    stillPending->set_deciding_player_id(p1->getPlayerId());
+    stillPending->set_choice_kind(ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    stillPending->set_prompt_text("Finish the already-started draw replacement.");
+    updatePendingResolutionChoiceCache(sourceLeft);
+    for (Server_Player *recipient : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, reconnect);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 1);
+        const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        const auto restoredView = std::find_if(restored.events().begin(), restored.events().end(),
+                                               [](const auto &event) { return event.has_zone_view(); });
+        ASSERT_NE(restoredView, restored.events().end());
+        for (const auto &playerView : restoredView->zone_view().per_player())
+            EXPECT_FALSE(playerView.has_public_hand());
+    }
+
+    ruled::v1::IpcResponse completed;
+    updatePendingResolutionChoiceCache(completed);
+    ResponseContainer afterCompletion(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, afterCompletion);
+    EXPECT_TRUE(afterCompletion.getPostResponseQueue().isEmpty());
+}
+
+TEST_F(RuledBatchTest, OrdinaryReconnectRestoresCurrentPublicHandAndRevealWithoutPrivateZones)
+{
+    ruled::v1::IpcResponse seed;
+    auto *seedBatch = seed.mutable_batch();
+    auto *view = seedBatch->add_events()->mutable_zone_view();
+    auto *p1View = view->add_per_player();
+    p1View->set_player_id(p1->getPlayerId());
+    auto *privateHandCard = p1View->add_hand_cards();
+    privateHandCard->set_object_id(1301u);
+    privateHandCard->set_card_id("private_island");
+    auto *publicHandCard = p1View->mutable_public_hand()->add_cards();
+    publicHandCard->set_object_id(1301u);
+    publicHandCard->set_zone_change_generation(4u);
+    publicHandCard->set_card_id("island");
+    publicHandCard->set_card_name("Island");
+    auto *p2View = view->add_per_player();
+    p2View->set_player_id(p2->getPlayerId());
+    p2View->mutable_public_hand(); // Presence with no cards is a revealed empty hand.
+
+    auto *activeReveal = seedBatch->add_events()->mutable_active_public_reveal_snapshot()->add_reveals();
+    activeReveal->set_reveal_id("draw:52:801:1");
+    activeReveal->set_source_object_id(801u);
+    activeReveal->set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY);
+    activeReveal->set_zone_owner_player_id(p2->getPlayerId());
+    auto *revealedCard = activeReveal->add_cards();
+    revealedCard->set_object_id(1401u);
+    revealedCard->set_zone_change_generation(6u);
+    revealedCard->set_card_id("forest");
+    revealedCard->set_card_name("Forest");
+    updatePendingResolutionChoiceCache(seed);
+
+    for (Server_Player *recipient : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, reconnect);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 1);
+        const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+
+        const auto restoredView = std::find_if(restored.events().begin(), restored.events().end(),
+                                               [](const auto &event) { return event.has_zone_view(); });
+        ASSERT_NE(restoredView, restored.events().end());
+        EXPECT_FALSE(restoredView->zone_view().battlefields_unchanged());
+        const auto p1Restored = std::find_if(restoredView->zone_view().per_player().begin(),
+                                             restoredView->zone_view().per_player().end(),
+                                             [this](const auto &playerView) {
+                                                 return playerView.player_id() == p1->getPlayerId();
+                                             });
+        ASSERT_NE(p1Restored, restoredView->zone_view().per_player().end());
+        EXPECT_EQ(p1Restored->hand_cards_size(), 0);
+        EXPECT_EQ(p1Restored->library_cards_size(), 0);
+        EXPECT_FALSE(p1Restored->private_zones_unchanged());
+        ASSERT_TRUE(p1Restored->has_public_hand());
+        ASSERT_EQ(p1Restored->public_hand().cards_size(), 1);
+        EXPECT_EQ(p1Restored->public_hand().cards(0).object_id(), 1301u);
+        const auto snapshot = std::find_if(restored.events().begin(), restored.events().end(),
+                                           [](const auto &event) {
+                                               return event.has_active_public_reveal_snapshot();
+                                           });
+        ASSERT_NE(snapshot, restored.events().end());
+        ASSERT_EQ(snapshot->active_public_reveal_snapshot().reveals_size(), 1);
+        EXPECT_EQ(snapshot->active_public_reveal_snapshot().reveals(0).reveal_id(), "draw:52:801:1");
+    }
 }
 
 // The HandSlotMap is re-sent only when the mapping changed. It rides on every ruled command

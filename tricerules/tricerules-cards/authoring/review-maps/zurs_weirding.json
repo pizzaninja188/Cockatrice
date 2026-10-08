@@ -1,0 +1,38 @@
+{
+  "format_version": 1,
+  "oracle_id": "c6eaa147-3566-43a9-999a-d58b877496f5",
+  "spans": [
+    {
+      "face_id": "zurs_weirding",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::ZurWeirding",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_coverage_zurs_weirding::zurs_weirding_has_its_exact_printed_identity",
+      "covers": "exact Oracle identity, mana cost, Enchantment type, and one ability mapped to both printed paragraphs"
+    },
+    {
+      "test": "scenario deck_coverage_zurs_weirding::zurs_weirding_replaces_each_opponent_draw_in_divination",
+      "covers": "active all-player public hand snapshots, a card paid directly to its owner's graveyard, and a separate declined Divination draw"
+    },
+    {
+      "test": "scenario deck_coverage_zurs_weirding::zurs_weirding_collects_four_player_apnap_choices_before_debiting_life",
+      "covers": "four-player APNAP pay/decline choices are logged before both life payments apply together; a second draw remains independent"
+    },
+    {
+      "test": "scenario deck_coverage_zurs_weirding::song_of_the_dryads_removes_zurs_weirding_public_hand_and_draw_replacement",
+      "covers": "Song of the Dryads sets Zur's Weirding to a Forest, ending its printed static ability so hands stop being revealed and the normal draw proceeds"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

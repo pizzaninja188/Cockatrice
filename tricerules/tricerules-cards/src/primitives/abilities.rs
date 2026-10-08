@@ -2094,6 +2094,9 @@ pub enum StaticAbilityDef {
     ReplaceControllerDrawWithLibraryChoice {
         kind: LibraryDrawReplacement,
     },
+    /// Zur's Weirding combines a public-hand continuous effect with a global draw replacement:
+    /// every player's draw is revealed and may be replaced by other players paying life.
+    ZurWeirding,
     /// CR 722.3: Infirmary Healer and Elite Interceptor enter with a prepared designation.
     EntersPrepared,
     /// Hand-active replacement and exile trigger, used by Fiery Temper and Arrogant Wurm.

@@ -460,6 +460,13 @@ TEST(RuledZoneViewPolicyTest, OpponentCommandZoneIsPublicOnlyInRuledGames)
     }
 }
 
+TEST(RuledZoneViewPolicyTest, EmptyReadOnlyRevealUsesItsAuthoritativeEmptyCardList)
+{
+    EXPECT_TRUE(ruledZoneViewHasAuthoritativeCardList(true, false));
+    EXPECT_FALSE(ruledZoneViewHasAuthoritativeCardList(true, true));
+    EXPECT_FALSE(ruledZoneViewHasAuthoritativeCardList(false, false));
+}
+
 TEST_F(RuledClientTest, ConvokeSelectionUsesPublishedColorAndGeneration)
 {
     auto &payment = state->payment;
@@ -9317,6 +9324,52 @@ TEST_F(RuledClientTest, PrivateOpponentHandLookDoesNotEnterThePublicGameLog)
     EXPECT_TRUE(timeline.at(0).at(0).toString().isEmpty());
 }
 
+TEST_F(RuledClientTest, PersistentPublicHandsReconcileEvenWhenBattlefieldsAreUnchanged)
+{
+    auto applyHands = [&](bool secondSnapshot, bool effectActive) {
+        ruled::v1::RuledEventBatch batch;
+        auto *zoneView = batch.add_events()->mutable_zone_view();
+        zoneView->set_battlefields_unchanged(true);
+        auto *owner = zoneView->add_per_player();
+        owner->set_player_id(kLocalPlayer + 1);
+        if (effectActive) {
+            auto *publicHand = owner->mutable_public_hand();
+            auto *card = publicHand->add_cards();
+            card->set_object_id(700u);
+            card->set_zone_change_generation(2u);
+            card->set_card_id(secondSnapshot ? "island" : "forest");
+            card->set_card_name(secondSnapshot ? "Island" : "Forest");
+            if (!secondSnapshot) {
+                card = publicHand->add_cards();
+                card->set_object_id(701u);
+                card->set_zone_change_generation(1u);
+                card->set_card_id("grizzly_bears");
+                card->set_card_name("Grizzly Bears");
+            }
+        }
+        auto *emptyOwner = zoneView->add_per_player();
+        emptyOwner->set_player_id(kLocalPlayer + 2);
+        if (effectActive)
+            emptyOwner->mutable_public_hand();
+        apply(batch);
+    };
+
+    applyHands(false, true);
+    ASSERT_TRUE(state->reveals.publicHands().contains(kLocalPlayer + 1));
+    ASSERT_EQ(state->reveals.publicHands().value(kLocalPlayer + 1).size(), 2);
+    EXPECT_EQ(state->reveals.publicHands().value(kLocalPlayer + 1).first().name, QStringLiteral("Forest"));
+    ASSERT_TRUE(state->reveals.publicHands().contains(kLocalPlayer + 2));
+    EXPECT_TRUE(state->reveals.publicHands().value(kLocalPlayer + 2).isEmpty());
+
+    applyHands(true, true);
+    ASSERT_EQ(state->reveals.publicHands().value(kLocalPlayer + 1).size(), 1);
+    EXPECT_EQ(state->reveals.publicHands().value(kLocalPlayer + 1).first().cardId, QStringLiteral("island"));
+    EXPECT_TRUE(state->reveals.publicHands().contains(kLocalPlayer + 2));
+
+    applyHands(false, false);
+    EXPECT_TRUE(state->reveals.publicHands().isEmpty()) << "absence clears the live hand after the effect ends";
+}
+
 TEST_F(RuledClientTest, PublicHandRevealIsInteractiveOnlyForDeciderAndIgnoresPreviewBatches)
 {
     QSignalSpy publicReveal(&state->reveals, &RuledRevealState::changed);
@@ -9429,6 +9482,56 @@ TEST_F(RuledClientTest, PublicChoiceUsesSharedSurfaceRegardlessOfChoiceKind)
     ASSERT_TRUE(state->isResolutionHandPickActive());
     EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Revealed);
     EXPECT_TRUE(state->pendingChoice->publicReveal);
+}
+
+TEST_F(RuledClientTest, ZurPaymentBranchUsesSeparateActiveLibraryReveal)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *reveal = batch.add_events()->mutable_cards_revealed();
+    reveal->set_reveal_id("draw:41:801:2");
+    reveal->set_source_object_id(801);
+    reveal->set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY);
+    reveal->set_zone_owner_player_id(kLocalPlayer + 1);
+    auto *card = reveal->add_cards();
+    card->set_object_id(44);
+    card->set_zone_change_generation(3);
+    card->set_card_id("island");
+    card->set_card_name("Island");
+
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_source_object_id(801);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    choice->set_prompt_text("Pay 2 life to put the revealed card into its owner's graveyard?");
+    choice->set_min(1);
+    choice->set_max(1);
+    auto *pay = choice->add_resolution_branches();
+    pay->set_branch_index(0);
+    pay->set_label("Pay 2 life");
+    pay->set_selectable(true);
+    auto *decline = choice->add_resolution_branches();
+    decline->set_branch_index(1);
+    decline->set_label("Decline");
+    decline->set_selectable(true);
+
+    auto *active = batch.add_events()->mutable_active_public_reveal_snapshot();
+    *active->add_reveals() = *reveal;
+    (*batch.mutable_legal_by_player())[kLocalPlayer].set_undoable_mana_abilities(0);
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::ResolutionBranch));
+    ASSERT_EQ(state->pendingChoice->choiceOptions.size(), 2);
+    EXPECT_EQ(state->pendingChoice->choiceOptions[0].label, QStringLiteral("Pay 2 life"));
+    EXPECT_TRUE(state->pendingChoice->choiceOptions[0].enabled);
+    EXPECT_EQ(state->pendingChoice->choiceOptions[1].label, QStringLiteral("Decline"));
+    EXPECT_FALSE(state->pendingChoice->publicReveal);
+    EXPECT_EQ(host.dialogRequests, 0);
+
+    ASSERT_EQ(state->reveals.entries().size(), 1);
+    const auto &entry = state->reveals.entries().first();
+    EXPECT_EQ(entry.id, QStringLiteral("draw:41:801:2"));
+    EXPECT_EQ(entry.phase, RuledRevealState::Phase::Active);
+    EXPECT_EQ(entry.cardNames(), QStringList({QStringLiteral("Island")}));
 }
 
 TEST(RuledRevealStateTest, ReusingAnOccurrenceIdCannotReplaceItsRevealedIdentity)

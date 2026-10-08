@@ -1,0 +1,9 @@
+// Oracle ID c6eaa147-3566-43a9-999a-d58b877496f5; source and rulings checked 2026-10-08.
+(
+  id: "zurs_weirding", name: "Zur's Weirding", face_id: "zurs_weirding",
+  mana_cost: "{3}{U}", types: ["Enchantment"],
+  static_abilities: [(
+    ability_id: "static_01", presentation: OracleLines([1, 2]),
+    definition: ZurWeirding,
+  )],
+)

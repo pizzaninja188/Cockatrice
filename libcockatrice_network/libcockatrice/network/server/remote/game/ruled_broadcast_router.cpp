@@ -117,11 +117,13 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
     }
     if (pendingResolutionChoice)
         *pendingResolutionState.mutable_legal_by_player() = response.batch().legal_by_player();
-    if (pendingResolutionChoice && pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
+    if (pendingResolutionChoice) {
         if (currentPublicZoneView)
             pendingResolutionState.add_events()->mutable_zone_view()->CopyFrom(*currentPublicZoneView);
-        for (const auto &event : response.batch().events()) {
-            if (event.has_mana_pool_updated()) pendingResolutionState.add_events()->CopyFrom(event);
+        if (pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
+            for (const auto &event : response.batch().events()) {
+                if (event.has_mana_pool_updated()) pendingResolutionState.add_events()->CopyFrom(event);
+            }
         }
     }
     if (std::any_of(legal.begin(), legal.end(), [](const auto &entry) {
@@ -151,7 +153,13 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
 {
     const bool opening = !pendingOpeningState.legal_by_player().empty();
     const bool casting = !pendingAnnouncementState.legal_by_player().empty();
-    if (!participant || (!opening && !casting && !pendingResolutionChoice.has_value())) {
+    const bool hasPublicHand = currentPublicZoneView &&
+                               std::any_of(currentPublicZoneView->per_player().begin(),
+                                           currentPublicZoneView->per_player().end(),
+                                           [](const auto &player) { return player.has_public_hand(); });
+    const bool hasActiveReveal = activePublicRevealSnapshot && activePublicRevealSnapshot->reveals_size() > 0;
+    const bool hasPublicSnapshot = hasPublicHand || hasActiveReveal;
+    if (!participant || (!opening && !casting && !pendingResolutionChoice.has_value() && !hasPublicSnapshot)) {
         return;
     }
     ruled::v1::IpcResponse snapshot;
@@ -163,11 +171,13 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
         if (pendingResolutionChoice && pendingResolutionChoice->choice_kind() != ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
             batch->add_events()->mutable_resolution_choice_required()->CopyFrom(*pendingResolutionChoice);
         }
-    } else {
+    } else if (pendingResolutionChoice) {
         batch->add_events()->mutable_resolution_choice_required()->CopyFrom(*pendingResolutionChoice);
         *batch->mutable_legal_by_player() = pendingResolutionState.legal_by_player();
         for (const auto &event : pendingResolutionState.events())
             batch->add_events()->CopyFrom(event);
+    } else if (currentPublicZoneView) {
+        batch->add_events()->mutable_zone_view()->CopyFrom(*currentPublicZoneView);
     }
     if (activePublicRevealSnapshot)
         batch->add_events()->mutable_active_public_reveal_snapshot()->CopyFrom(*activePublicRevealSnapshot);

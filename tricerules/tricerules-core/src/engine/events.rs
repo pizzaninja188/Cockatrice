@@ -483,6 +483,33 @@ impl GameEngine {
         let p = &self.state.players[idx];
         rv1::RuledPerPlayerView {
             player_id: p.id,
+            public_hand: self.has_active_zur_weirding().then(|| rv1::PublicHandView {
+                cards: p
+                    .hand
+                    .iter()
+                    .map(|&oid| {
+                        let object = self.state.objects.get(&oid);
+                        let card_id = object
+                            .map(|object| object.card_id.clone())
+                            .unwrap_or_default();
+                        rv1::PublicHandCard {
+                            object_id: oid,
+                            zone_change_generation: self
+                                .state
+                                .zone_change_generation
+                                .get(&oid)
+                                .copied()
+                                .unwrap_or(0),
+                            card_name: self
+                                .registry
+                                .get(&card_id)
+                                .map(|definition| definition.name.clone())
+                                .unwrap_or_else(|| card_id.clone()),
+                            card_id,
+                        }
+                    })
+                    .collect(),
+            }),
             player_counters: p
                 .counters
                 .iter()
@@ -763,6 +790,23 @@ impl GameEngine {
                 })
                 .collect(),
         }
+    }
+
+    fn has_active_zur_weirding(&self) -> bool {
+        self.state
+            .players
+            .iter()
+            .flat_map(|player| player.battlefield.iter().copied())
+            .any(|source| {
+                super::characteristics::printed_static_source_is_available(
+                    &self.state,
+                    self.registry,
+                    source,
+                ) && self
+                    .active_static_abilities(source)
+                    .iter()
+                    .any(|ability| matches!(ability.definition, StaticAbilityDef::ZurWeirding))
+            })
     }
 
     fn battlefield_view_snapshot(&self) -> BattlefieldViewSnapshot {

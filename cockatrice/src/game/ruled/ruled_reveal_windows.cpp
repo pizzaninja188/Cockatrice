@@ -27,6 +27,12 @@ RuledRevealWindows::~RuledRevealWindows()
             view->close();
         }
     }
+    for (auto view : publicHandWindows) {
+        if (view) {
+            disconnect(view, nullptr, this, nullptr);
+            view->close();
+        }
+    }
 }
 
 void RuledRevealWindows::refresh()
@@ -37,6 +43,16 @@ void RuledRevealWindows::refresh()
     for (const auto &id : windows.keys()) {
         if (!entries.contains(id) || state->reveals.windowsSuppressed()) {
             auto view = windows.take(id);
+            if (view) {
+                disconnect(view, nullptr, this, nullptr);
+                view->close();
+            }
+        }
+    }
+    const auto &publicHands = state->reveals.publicHands();
+    for (const int playerId : publicHandWindows.keys()) {
+        if (!publicHands.contains(playerId) || state->reveals.windowsSuppressed()) {
+            auto view = publicHandWindows.take(playerId);
             if (view) {
                 disconnect(view, nullptr, this, nullptr);
                 view->close();
@@ -121,6 +137,49 @@ void RuledRevealWindows::refresh()
         if (!entry.sourceDescription.isEmpty())
             title += tr(" — %1").arg(entry.sourceDescription);
         view->setWindowTitle(title);
+        ++position;
+    }
+
+    for (auto it = publicHands.cbegin(); it != publicHands.cend(); ++it) {
+        Player *owner = game->getPlayerManager()->getPlayers().value(it.key(), nullptr);
+        auto *scaffold = owner ? owner->getZones().value(ZoneNames::HAND) : nullptr;
+        if (!owner || !scaffold) {
+            auto view = publicHandWindows.take(it.key());
+            if (view) {
+                disconnect(view, nullptr, this, nullptr);
+                view->close();
+            }
+            continue;
+        }
+        QList<ServerInfo_Card> storage;
+        for (int i = 0; i < it.value().size(); ++i) {
+            ServerInfo_Card card;
+            card.set_name(it.value()[i].name.toStdString());
+            // These are per-window display ids only; a public hand snapshot carries no physical
+            // Server_Card id or hand-slot binding and the window cannot submit a card action.
+            card.set_id(-1 - i);
+            card.set_face_down(false);
+            card.set_annotation(tr("Publicly revealed hand").toStdString());
+            storage.append(std::move(card));
+        }
+        QList<const ServerInfo_Card *> cards;
+        for (const auto &card : storage)
+            cards.append(&card);
+        auto view = publicHandWindows.value(it.key());
+        if (!view) {
+            view = new ZoneViewWidget(owner, scaffold, -1, true, false, cards, false, false, true, false);
+            publicHandWindows.insert(it.key(), view);
+            scene->addItem(view);
+            view->setPos(340 + (position % 4) * 40, 80 + (position % 4) * 40);
+        } else {
+            view->getZone()->getLogic()->clearContents();
+            view->getZone()->initializeCards(cards);
+        }
+        view->closeable = false;
+        view->setWindowFlags(view->windowFlags() & ~Qt::WindowCloseButtonHint);
+        view->getZone()->getLogic()->setProperty("ruledPublicHandPlayerId", it.key());
+        view->getZone()->getLogic()->setProperty("ruledPublicHandSnapshot", true);
+        view->setWindowTitle(tr("%1's publicly revealed hand").arg(owner->getPlayerInfo()->getName()));
         ++position;
     }
 }

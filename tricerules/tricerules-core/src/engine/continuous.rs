@@ -572,6 +572,7 @@ impl GameEngine {
                 | StaticAbilityDef::DoubleControllerLifeGain
                 | StaticAbilityDef::WinControllerInsteadOfEmptyLibraryDraw
                 | StaticAbilityDef::ReplaceControllerDrawWithLibraryChoice { .. }
+                | StaticAbilityDef::ZurWeirding
                 | StaticAbilityDef::NoMaximumHandSize { .. }
                 | StaticAbilityDef::MaximumHandSizeTwenty
                 | StaticAbilityDef::SpellCannotBeCountered

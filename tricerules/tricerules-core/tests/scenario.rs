@@ -371,6 +371,8 @@ mod deck_coverage_voltaic_key;
 mod deck_coverage_waterlogged_grove;
 #[path = "scenario/deck_coverage_words_of_wisdom.rs"]
 mod deck_coverage_words_of_wisdom;
+#[path = "scenario/deck_coverage_zurs_weirding.rs"]
+mod deck_coverage_zurs_weirding;
 #[path = "scenario/dev_commands.rs"]
 mod dev_commands;
 #[path = "scenario/dynamic_amounts.rs"]

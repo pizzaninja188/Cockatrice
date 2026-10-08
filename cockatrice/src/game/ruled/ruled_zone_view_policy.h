@@ -14,4 +14,9 @@ inline bool ruledCustomZoneViewAllowed(bool localOrJudge, bool ruledMode, const 
     return localOrJudge || (ruledMode && zoneName == QLatin1String(ZoneNames::COMMAND));
 }
 
+inline bool ruledZoneViewHasAuthoritativeCardList(bool revealZone, bool writeableRevealZone)
+{
+    return revealZone && !writeableRevealZone;
+}
+
 #endif // COCKATRICE_RULED_ZONE_VIEW_POLICY_H

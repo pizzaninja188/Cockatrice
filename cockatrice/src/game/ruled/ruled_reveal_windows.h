@@ -24,6 +24,7 @@ private:
     QPointer<GameScene> scene;
     QPointer<RuledClientState> state;
     QMap<QString, QPointer<ZoneViewWidget>> windows;
+    QMap<int, QPointer<ZoneViewWidget>> publicHandWindows;
 };
 
 #endif

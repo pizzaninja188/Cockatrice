@@ -93,6 +93,28 @@ void RuledRevealState::completeChoice()
     emit changed();
 }
 
+void RuledRevealState::applyPublicHands(const ruled::v1::ZoneViewSync &snapshot)
+{
+    QMap<int, QVector<Card>> next;
+    for (const auto &player : snapshot.per_player()) {
+        if (!player.has_public_hand())
+            continue;
+        QVector<Card> cards;
+        cards.reserve(player.public_hand().cards_size());
+        for (const auto &card : player.public_hand().cards()) {
+            if (card.card_id().empty() || card.card_name().empty())
+                continue;
+            cards.append({card.object_id(), card.zone_change_generation(), QString::fromStdString(card.card_id()),
+                          QString::fromStdString(card.card_name())});
+        }
+        next.insert(player.player_id(), std::move(cards));
+    }
+    if (next == publicHands_)
+        return;
+    publicHands_ = std::move(next);
+    emit changed();
+}
+
 void RuledRevealState::applyActiveSnapshot(const ruled::v1::ActivePublicRevealSnapshot &snapshot)
 {
     QSignalBlocker block(this);
@@ -135,6 +157,7 @@ void RuledRevealState::dismiss(const QString &id)
 void RuledRevealState::clear()
 {
     entries_.clear();
+    publicHands_.clear();
     order_.clear();
     seen_.clear();
     active_.clear();

@@ -8,7 +8,13 @@ impl GameEngine {
     ) -> rv1::ResolutionChoiceRequired {
         let action = work.action.as_ref().expect("draw library action");
         let mut choice = rv1::ResolutionChoiceRequired {
-            deciding_player_id: work.requests.front().expect("drawer").player,
+            deciding_player_id: match &action.stage {
+                DrawLibraryStage::ZurPayment { payers, cursor, .. } => payers
+                    .get(*cursor)
+                    .copied()
+                    .unwrap_or_else(|| work.requests.front().expect("drawer").player),
+                _ => work.requests.front().expect("drawer").player,
+            },
             source_object_id: action.source,
             min: 1,
             max: 1,
@@ -67,6 +73,31 @@ impl GameEngine {
                 // Bottom candidates/order stay private; attaching that full snapshot here would
                 // violate the client's requirement that reveal cards equal choice candidates.
             }
+            DrawLibraryStage::ZurPayment { .. } => {
+                choice.choice_kind = rv1::ChoiceKind::ResolutionBranch as i32;
+                choice.prompt_text =
+                    "Pay 2 life to put the revealed card into its owner's graveyard?".into();
+                let can_pay = self
+                    .state
+                    .player_idx(choice.deciding_player_id)
+                    .is_some_and(|index| {
+                        !self.state.players[index].has_lost && self.state.players[index].life >= 2
+                    });
+                choice.resolution_branches = vec![
+                    rv1::ResolutionBranchOption {
+                        branch_index: 0,
+                        label: "Pay 2 life".into(),
+                        selectable: can_pay,
+                        ..Default::default()
+                    },
+                    rv1::ResolutionBranchOption {
+                        branch_index: 1,
+                        label: "Decline".into(),
+                        selectable: true,
+                        ..Default::default()
+                    },
+                ];
+            }
         }
         choice
     }
@@ -119,11 +150,17 @@ impl GameEngine {
             unreachable!()
         };
         let action = work.action.as_ref().expect("draw action");
-        let player = work.requests.front().expect("drawer").player;
-        let expected_decision = match &action.stage {
-            DrawLibraryStage::Optional | DrawLibraryStage::ChooseKind => {
-                rv1::ResolutionChoiceDecision::SelectBranch
+        let drawer = work.requests.front().expect("drawer").player;
+        let player = match &action.stage {
+            DrawLibraryStage::ZurPayment { payers, cursor, .. } => {
+                payers.get(*cursor).copied().unwrap_or(drawer)
             }
+            _ => drawer,
+        };
+        let expected_decision = match &action.stage {
+            DrawLibraryStage::Optional
+            | DrawLibraryStage::ChooseKind
+            | DrawLibraryStage::ZurPayment { .. } => rv1::ResolutionChoiceDecision::SelectBranch,
             DrawLibraryStage::ChooseToHand(_) | DrawLibraryStage::OrderBottom(_) => {
                 rv1::ResolutionChoiceDecision::Unspecified
             }
@@ -140,6 +177,15 @@ impl GameEngine {
             && match &action.stage {
                 DrawLibraryStage::Optional | DrawLibraryStage::ChooseKind => {
                     chosen.is_empty() && answer.selected_branch_index < 2
+                }
+                DrawLibraryStage::ZurPayment { .. } => {
+                    chosen.is_empty()
+                        && answer.selected_branch_index < 2
+                        && (answer.selected_branch_index != 0
+                            || self.state.player_idx(player).is_some_and(|index| {
+                                !self.state.players[index].has_lost
+                                    && self.state.players[index].life >= 2
+                            }))
                 }
                 DrawLibraryStage::ChooseToHand(cards) | DrawLibraryStage::OrderBottom(cards) => {
                     let count = if matches!(action.stage, DrawLibraryStage::ChooseToHand(_)) {
@@ -252,6 +298,29 @@ impl GameEngine {
             }
             DrawLibraryStage::OrderBottom(_) => {
                 self.order_draw_library_bottom(player, chosen, &mut events);
+            }
+            DrawLibraryStage::ZurPayment {
+                payers,
+                mut cursor,
+                mut pay_intents,
+            } => {
+                if answer.selected_branch_index == 0 {
+                    pay_intents.push(player);
+                    events.push(super::super::events::ev_log(format!(
+                        "P{player} chooses to pay 2 life for Zur's Weirding."
+                    )));
+                } else {
+                    events.push(super::super::events::ev_log(format!(
+                        "P{player} declines to pay 2 life for Zur's Weirding."
+                    )));
+                }
+                cursor += 1;
+                action.stage = DrawLibraryStage::ZurPayment {
+                    payers,
+                    cursor,
+                    pay_intents,
+                };
+                work.action = Some(action);
             }
         }
         match self.advance_draw_transaction(work, &mut events)? {

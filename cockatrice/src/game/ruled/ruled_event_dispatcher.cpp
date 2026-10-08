@@ -1835,6 +1835,7 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
 {
     ctx.preparationSnapshotSeen = true;
     ctx.preparationCopies.clear();
+    state->reveals.applyPublicHands(view);
     if (!view.battlefields_unchanged()) {
         state->engineOidMarkedDamage.clear();
         state->engineOidBattlefieldPower.clear();
