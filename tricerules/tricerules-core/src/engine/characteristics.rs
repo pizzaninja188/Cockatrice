@@ -990,6 +990,9 @@ impl CharacteristicsEvaluator<'_> {
             GameCondition::ControllerLibraryEmpty => {
                 super::draw::controller_library_empty(self.state, controller)
             }
+            // Registry validation rejects this predicate in continuous characteristic conditions
+            // until its CR 613 dependency evaluation is implemented.
+            GameCondition::ControlsCreatureTiedForGreatestPower => false,
             GameCondition::AllOf(branches) => branches.iter().all(|branch| {
                 self.characteristic_condition_holds_in_view(
                     branch,

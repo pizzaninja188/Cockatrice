@@ -243,6 +243,10 @@ pub enum GameCondition {
         #[serde(default)]
         exclude_observed_object: bool,
     },
+    /// Thickest in the Thicket draws at resolution if its ability controller controls at least
+    /// one creature tied for greatest current battlefield creature power. Signed power is
+    /// compared before any amount conversion; no creature means false.
+    ControlsCreatureTiedForGreatestPower,
     /// Guardian Project: the event-observed creature has no shared name with another creature
     /// controlled by the trigger controller or a creature card in that controller's graveyard.
     /// The trigger's exact object generation supplies the name at entry or its last-known name
@@ -463,6 +467,7 @@ impl GameCondition {
             | GameCondition::SelfWasBargained
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ObjectTapped { .. } => Ok(()),
+            GameCondition::ControlsCreatureTiedForGreatestPower => Ok(()),
             GameCondition::ObservedObjectNameIsUnique => Ok(()),
             GameCondition::OpponentHasMoreThanYou { .. } => Ok(()),
             GameCondition::ActivePlayer { .. } => Ok(()),
@@ -566,6 +571,7 @@ impl GameCondition {
             | GameCondition::ObjectWasDealtDamageThisTurn { .. }
             | GameCondition::ObjectTapped { .. }
             | GameCondition::ObjectMatches { .. } => false,
+            GameCondition::ControlsCreatureTiedForGreatestPower => false,
             GameCondition::ObservedObjectNameIsUnique => false,
             GameCondition::CreatureDeathsThisTurn { min, max }
             | GameCondition::PermanentCardsEnteredGraveyardThisTurn { min, max, .. }

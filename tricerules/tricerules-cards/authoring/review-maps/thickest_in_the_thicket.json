@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "4d60dae0-7be4-4859-99ac-781a27bcfd93",
+  "spans": [
+    {
+      "face_id": "thickest_in_the_thicket",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "thickest_in_the_thicket",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1/trigger",
+        "/faces/0/triggered_abilities/1/effect/0"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_thickest_in_the_thicket::thickest_has_its_complete_single_face_and_exact_trigger_definitions",
+      "covers": "exact card identity and face, mana cost and type, both Oracle-line mappings, mandatory creature target, and unconditional end-step trigger structure"
+    },
+    {
+      "test": "scenario deck_coverage_thickest_in_the_thicket::entry_trigger_reads_current_target_power_and_resolves_after_its_source_leaves",
+      "covers": "target power is read once when the entry trigger resolves, includes existing counters, and remains available after the enchantment leaves"
+    },
+    {
+      "test": "scenario deck_coverage_thickest_in_the_thicket::entry_trigger_places_no_counters_for_a_negative_target_power",
+      "covers": "negative target power produces zero counters under CR 107.1b"
+    },
+    {
+      "test": "scenario deck_coverage_thickest_in_the_thicket::entry_trigger_fizzles_when_its_target_leaves_and_returns",
+      "covers": "zone-change generation makes the returned creature a different object from the selected target"
+    },
+    {
+      "test": "scenario deck_coverage_thickest_in_the_thicket::end_step_trigger_is_unconditional_and_checks_the_maximum_at_resolution",
+      "covers": "the end-step trigger exists while an opponent has greater power and draws after the controller ties the current maximum"
+    },
+    {
+      "test": "scenario deck_coverage_thickest_in_the_thicket::end_step_does_not_draw_when_an_opponent_becomes_the_unique_power_leader",
+      "covers": "current greatest-power comparison is evaluated at resolution and an opponent's unique lead prevents the draw"
+    },
+    {
+      "test": "scenario deck_coverage_thickest_in_the_thicket::greatest_power_check_compares_signed_values_across_four_players",
+      "covers": "four-player signed comparisons, controller lead among negative powers, opponent lead, and a negative tie"
+    },
+    {
+      "test": "scenario deck_coverage_thickest_in_the_thicket::greatest_power_check_is_false_with_no_battlefield_creatures",
+      "covers": "no creature supplies no greatest-power tie and causes no draw"
+    },
+    {
+      "test": "scenario deck_coverage_thickest_in_the_thicket::greatest_power_check_treats_undefined_creature_power_as_zero",
+      "covers": "CR 208.5: an undefined creature power is zero for comparison, and zero exceeds a negative creature power"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

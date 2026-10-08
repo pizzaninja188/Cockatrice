@@ -275,6 +275,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             groups,
             effect_role_counts,
         };
+        schema.validate_chosen_target_power_references(effects)?;
         for (effect_index, effect) in effects.iter().enumerate() {
             let SpellEffectKind::ChooseResolutionBranch {
                 chooser: super::PlayerRecipient::TargetedPlayer { group_index, kind },
@@ -369,6 +370,86 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             }
         }
         Ok(schema)
+    }
+
+    fn validate_chosen_target_power_references(
+        &self,
+        effects: &[SpellEffectKind],
+    ) -> Result<(), String> {
+        fn collect_effect_references(effect: &SpellEffectKind, references: &mut Vec<(u32, u32)>) {
+            match effect {
+                SpellEffectKind::PutCounters { count, .. } => {
+                    count.chosen_target_power_references(references);
+                }
+                SpellEffectKind::Conditional { effect, .. }
+                | SpellEffectKind::ConditionalCastCost { effect, .. } => {
+                    collect_effect_references(effect, references);
+                }
+                SpellEffectKind::ChooseResolutionBranch {
+                    branches,
+                    otherwise,
+                    ..
+                } => {
+                    for branch in branches {
+                        for nested in &branch.effects {
+                            collect_effect_references(nested, references);
+                        }
+                    }
+                    for nested in otherwise {
+                        collect_effect_references(nested, references);
+                    }
+                }
+                // A reflexive trigger owns a separate target schema compiled with its definition.
+                // It must bind its own target-powered amount there, not to this effect list.
+                SpellEffectKind::CreateReflexiveTrigger { .. } => {}
+                _ => {}
+            }
+        }
+
+        for (effect_index, effect) in effects.iter().enumerate() {
+            let mut references = Vec::new();
+            collect_effect_references(effect, &mut references);
+            if references.is_empty() {
+                continue;
+            }
+
+            let roles = effect.target_roles();
+            if roles.len() != 1 || !roles[0].is_creature_only() {
+                return Err(
+                    "ChosenTargetPower requires one creature-only target on its PutCounters effect"
+                        .into(),
+                );
+            }
+
+            for (group_index, target_index) in references {
+                if target_index != 0 {
+                    return Err(
+                        "ChosenTargetPower must reference the only target in its group".into(),
+                    );
+                }
+                let group = self.groups.get(group_index as usize).ok_or_else(|| {
+                    "ChosenTargetPower references an absent target group".to_string()
+                })?;
+                if group.min != 1 || group.max != 1 {
+                    return Err(
+                        "ChosenTargetPower requires a mandatory singleton target group".into(),
+                    );
+                }
+                if group.bindings.len() != 1
+                    || !group.bindings.iter().any(|binding| {
+                        binding.effect_index == effect_index
+                            && binding.role_index == 0
+                            && binding.role.is_creature_only()
+                    })
+                {
+                    return Err(
+                        "ChosenTargetPower target group must bind only its own PutCounters creature target"
+                            .into(),
+                    );
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Bound role groups of the specialized artifact exchange instruction.
@@ -1463,8 +1544,10 @@ mod tests {
     }
     use super::*;
     use crate::primitives::{
-        Amount, EffectSubject, PermanentTypeFilter, PlayerRecipient, RelativePlayerSet,
+        Amount, CountExpression, EffectSubject, PermanentTypeFilter, PlayerRecipient,
+        RelativePlayerSet,
     };
+    use crate::CounterKind;
 
     fn target_filter(ron: &str) -> TargetFilter {
         ron::from_str(ron).expect("deserialize target filter")
@@ -1472,6 +1555,151 @@ mod tests {
 
     fn graveyard_filter(ron: &str) -> GraveyardFilter {
         ron::from_str(ron).expect("deserialize graveyard filter")
+    }
+
+    fn chosen_power_counter_effect(
+        group_index: u32,
+        target_index: u32,
+        target_kind: TargetKind,
+    ) -> SpellEffectKind {
+        SpellEffectKind::PutCounters {
+            counter: CounterKind::PlusOnePlusOne,
+            count: Amount::Count(CountExpression::ChosenTargetPower {
+                group_index,
+                target_index,
+            }),
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: target_kind,
+                ..Default::default()
+            })),
+        }
+    }
+
+    fn target_group(min: u32, max: u32, effect_indices: Vec<u32>) -> TargetingDef {
+        TargetingDef {
+            groups: vec![TargetGroupDef {
+                chooser: TargetChooser::Controller,
+                min,
+                max,
+                prompt: "Choose target creature".into(),
+                effect_indices,
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn chosen_target_power_schema_requires_its_mandatory_singleton_creature_target() {
+        let valid = vec![chosen_power_counter_effect(0, 0, TargetKind::Creature)];
+        assert!(TargetSchema::compile(&valid, Some(&target_group(1, 1, vec![0]))).is_ok());
+
+        for effect in [
+            chosen_power_counter_effect(1, 0, TargetKind::Creature),
+            chosen_power_counter_effect(0, 1, TargetKind::Creature),
+        ] {
+            assert!(
+                TargetSchema::compile(&[effect], Some(&target_group(1, 1, vec![0]))).is_err(),
+                "out-of-range target coordinates are rejected"
+            );
+        }
+        assert!(
+            TargetSchema::compile(
+                &[SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Count(CountExpression::ChosenTargetPower {
+                        group_index: 0,
+                        target_index: 0,
+                    }),
+                    subject: EffectSubject::Source,
+                }],
+                None,
+            )
+            .is_err(),
+            "an unbound count cannot fall back to zero"
+        );
+
+        for (min, max) in [(0, 1), (1, 2)] {
+            assert!(
+                TargetSchema::compile(&valid, Some(&target_group(min, max, vec![0]))).is_err(),
+                "optional and multiple target slots are rejected"
+            );
+        }
+        for target_kind in [TargetKind::AnyPlayer, TargetKind::AnyPermanent] {
+            let effect = vec![chosen_power_counter_effect(0, 0, target_kind)];
+            assert!(
+                TargetSchema::compile(&effect, Some(&target_group(1, 1, vec![0]))).is_err(),
+                "only a creature target can supply the amount"
+            );
+        }
+    }
+
+    #[test]
+    fn chosen_target_power_schema_checks_wrapped_amounts_and_exclusive_effect_binding() {
+        let nested = vec![SpellEffectKind::PutCounters {
+            counter: CounterKind::PlusOnePlusOne,
+            count: Amount::DivideRoundedDown {
+                amount: Box::new(Amount::Count(CountExpression::Affine {
+                    constant: 0,
+                    terms: vec![crate::primitives::QuantityTerm {
+                        coefficient: 1,
+                        quantity: CountExpression::ChosenTargetPower {
+                            group_index: 0,
+                            target_index: 0,
+                        },
+                    }],
+                })),
+                divisor: 2,
+            },
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                ..Default::default()
+            })),
+        }];
+        assert!(TargetSchema::compile(&nested, Some(&target_group(1, 1, vec![0]))).is_ok());
+
+        let mismatched_nested = vec![SpellEffectKind::Conditional {
+            condition: crate::primitives::GameCondition::ControllerLibraryEmpty,
+            effect: Box::new(chosen_power_counter_effect(1, 0, TargetKind::Creature)),
+        }];
+        assert!(
+            TargetSchema::compile(&mismatched_nested, Some(&target_group(1, 1, vec![0]))).is_err()
+        );
+
+        let extra_binding = vec![
+            chosen_power_counter_effect(0, 0, TargetKind::Creature),
+            SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    ..Default::default()
+                })),
+            },
+        ];
+        assert!(
+            TargetSchema::compile(&extra_binding, Some(&target_group(1, 1, vec![0, 1]))).is_err()
+        );
+    }
+
+    #[test]
+    fn chosen_target_power_is_rejected_outside_put_counters_even_when_wrapped() {
+        let amount = Amount::DivideRoundedDown {
+            amount: Box::new(Amount::Count(CountExpression::Affine {
+                constant: 0,
+                terms: vec![crate::primitives::QuantityTerm {
+                    coefficient: 1,
+                    quantity: CountExpression::ChosenTargetPower {
+                        group_index: 0,
+                        target_index: 0,
+                    },
+                }],
+            })),
+            divisor: 2,
+        };
+        let effect = SpellEffectKind::GainLife { amount };
+        assert!(effect
+            .validate(crate::primitives::EffectContext::Ability)
+            .is_err());
     }
 
     fn controller_of_target_effects(

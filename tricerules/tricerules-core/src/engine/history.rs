@@ -1053,6 +1053,42 @@ impl GameEngine {
             GameCondition::ControllerLibraryEmpty => {
                 super::draw::controller_library_empty(&self.state, context.controller)
             }
+            GameCondition::ControlsCreatureTiedForGreatestPower => {
+                let mut greatest_power = None;
+                let mut controller_controls_greatest = false;
+                for object_id in self
+                    .state
+                    .players
+                    .iter()
+                    .flat_map(|player| player.battlefield.iter().copied())
+                {
+                    let Some(characteristics) = self.characteristics(object_id) else {
+                        continue;
+                    };
+                    if !characteristics.is_creature() {
+                        continue;
+                    }
+                    let power = characteristics.signed_power.unwrap_or(0);
+                    match greatest_power {
+                        None => {
+                            greatest_power = Some(power);
+                            controller_controls_greatest =
+                                characteristics.controller == context.controller;
+                        }
+                        Some(greatest) if power > greatest => {
+                            greatest_power = Some(power);
+                            controller_controls_greatest =
+                                characteristics.controller == context.controller;
+                        }
+                        Some(greatest) if power == greatest => {
+                            controller_controls_greatest |=
+                                characteristics.controller == context.controller;
+                        }
+                        Some(_) => {}
+                    }
+                }
+                controller_controls_greatest
+            }
             GameCondition::AllOf(branches) => branches.iter().all(|branch| {
                 self.condition_holds_with_trigger_context(branch, context, trigger_context)
             }),
@@ -2012,6 +2048,35 @@ impl GameEngine {
                     .fold(0_u32, |total, c| total.saturating_add(c.mana_value)),
             ),
             CountExpression::SourcePower => self.source_power_toughness(context).0,
+            CountExpression::ChosenTargetPower {
+                group_index,
+                target_index,
+            } => self
+                .condition_object_identity(
+                    ConditionObjectRef::ChosenTarget {
+                        group_index: *group_index,
+                        target_index: *target_index,
+                    },
+                    condition_context,
+                )
+                .and_then(|(object_id, generation)| {
+                    let object = self.state.objects.get(&object_id)?;
+                    if object.zone != Zone::Battlefield
+                        || self
+                            .state
+                            .zone_change_generation
+                            .get(&object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            != generation
+                    {
+                        return None;
+                    }
+                    self.characteristics(object_id)
+                        .filter(|characteristics| characteristics.is_creature())
+                        .and_then(|characteristics| characteristics.signed_power)
+                })
+                .unwrap_or(0),
             CountExpression::SourceCounterCount { counter } => {
                 i64::from(self.source_counter_count(
                     context.source_object_id,

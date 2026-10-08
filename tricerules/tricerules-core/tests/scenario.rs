@@ -20,6 +20,9 @@ mod deck_coverage_lavabrink_floodgates;
 #[path = "scenario/deck_coverage_pyreswipe_hawk.rs"]
 mod deck_coverage_pyreswipe_hawk;
 
+#[path = "scenario/deck_coverage_thickest_in_the_thicket.rs"]
+mod deck_coverage_thickest_in_the_thicket;
+
 #[path = "scenario/deck_coverage_flux_abundance.rs"]
 mod deck_coverage_flux_abundance;
 

@@ -4495,7 +4495,9 @@ impl SpellEffectKind {
             | SpellEffectKind::CreateTokens { count: amount, .. }
             | SpellEffectKind::CreateTokenCopies { count: amount, .. }
             | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => {
-                if matches!(self, Self::Draw { .. } | Self::TargetPlayerDraws { .. }) {
+                if matches!(self, Self::PutCounters { .. }) {
+                    amount.validate_targeted_put_counters(context)?;
+                } else if matches!(self, Self::Draw { .. } | Self::TargetPlayerDraws { .. }) {
                     amount.validate_player_effect(context)?;
                 } else {
                     amount.validate_effect(context)?;

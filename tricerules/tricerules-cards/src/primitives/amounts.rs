@@ -58,6 +58,10 @@ pub enum CountExpression {
     ControlledNoncreatureArtifactManaValueSum,
     /// Brambleguard Captain and Boulderbranch Golem use the original source's power.
     SourcePower,
+    /// Thickest in the Thicket reads the current derived power of its exact selected creature
+    /// when its targeted `PutCounters` instruction resolves. TargetSchema binds the coordinates
+    /// to that instruction's mandatory singleton creature target.
+    ChosenTargetPower { group_index: u32, target_index: u32 },
     /// Chasm Skulker reads one counter kind on the original battlefield incarnation, using
     /// last-known counters if it has departed. Other counter-based source quantities share
     /// this vocabulary without changing specialized immediate mana-output semantics.
@@ -194,6 +198,25 @@ impl CountExpression {
         }
     }
     pub(crate) fn validate(&self) -> Result<(), String> {
+        self.validate_with_target_power(false)
+    }
+
+    fn chosen_target_power_references(&self, references: &mut Vec<(u32, u32)>) {
+        match self {
+            Self::ChosenTargetPower {
+                group_index,
+                target_index,
+            } => references.push((*group_index, *target_index)),
+            Self::Affine { terms, .. } => {
+                for term in terms {
+                    term.quantity.chosen_target_power_references(references);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn validate_with_target_power(&self, allow_chosen_target_power: bool) -> Result<(), String> {
         match self {
             Self::CastCostPaymentCount { cost } => cost.validate(),
             Self::SourceCounterCount { counter } => counter.validate(),
@@ -208,6 +231,10 @@ impl CountExpression {
             | Self::SourcePower
             | Self::ControlledNoncreatureArtifactManaValueSum
             | Self::ManaColorsSpentToCast => Ok(()),
+            Self::ChosenTargetPower { .. } if allow_chosen_target_power => Ok(()),
+            Self::ChosenTargetPower { .. } => {
+                Err("ChosenTargetPower requires a targeted PutCounters count".into())
+            }
             Self::CardsInHand { players } if players.identifies_one_player() => Ok(()),
             Self::CardsInHand { .. } => Err("CardsInHand requires a single player selector".into()),
             Self::DeclaredAttackers { filter, .. } => filter.validate(),
@@ -232,7 +259,8 @@ impl CountExpression {
                     {
                         return Err("affine quantity requires nonzero coefficients and public, non-affine leaves".into());
                     }
-                    term.quantity.validate()?;
+                    term.quantity
+                        .validate_with_target_power(allow_chosen_target_power)?;
                 }
                 Ok(())
             }
@@ -325,6 +353,16 @@ pub enum Amount {
 }
 
 impl Amount {
+    pub(crate) fn chosen_target_power_references(&self, references: &mut Vec<(u32, u32)>) {
+        match self {
+            Self::Count(expression) => expression.chosen_target_power_references(references),
+            Self::DivideRoundedDown { amount, .. } => {
+                amount.chosen_target_power_references(references)
+            }
+            _ => {}
+        }
+    }
+
     pub(crate) fn uses_previous_mill_mana_value_sum(&self) -> bool {
         match self {
             Self::Count(expression) => expression.uses_previous_mill_mana_value_sum(),
@@ -441,14 +479,37 @@ impl Amount {
     }
 
     pub(super) fn validate_effect(&self, context: EffectContext) -> Result<(), String> {
+        self.validate_effect_with_target_power(context, false)
+    }
+
+    pub(super) fn validate_targeted_put_counters(
+        &self,
+        context: EffectContext,
+    ) -> Result<(), String> {
+        self.validate_effect_with_target_power(context, true)
+    }
+
+    fn validate_effect_with_target_power(
+        &self,
+        context: EffectContext,
+        allow_chosen_target_power: bool,
+    ) -> Result<(), String> {
         if self.uses_affected_player_result() {
             return Err("affected-player result count requires a player draw instruction".into());
         }
-        self.validate_player_effect(context)
+        self.validate_player_effect_with_target_power(context, allow_chosen_target_power)
     }
 
     pub(super) fn validate_player_effect(&self, context: EffectContext) -> Result<(), String> {
-        self.validate()?;
+        self.validate_player_effect_with_target_power(context, false)
+    }
+
+    fn validate_player_effect_with_target_power(
+        &self,
+        context: EffectContext,
+        allow_chosen_target_power: bool,
+    ) -> Result<(), String> {
+        self.validate_with_target_power(allow_chosen_target_power)?;
         if self.uses_entry_cast_colors() || self.entry_cast_cost_reference().is_some() {
             return Err("cast-payment colors require an intrinsic entry replacement".into());
         }
@@ -565,14 +626,20 @@ impl Amount {
     }
 
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_with_target_power(false)
+    }
+
+    fn validate_with_target_power(&self, allow_chosen_target_power: bool) -> Result<(), String> {
         match self {
             Amount::Conditional { condition, .. } => condition.validate_without_self_entry_spell(),
-            Amount::Count(expression) => expression.validate(),
+            Amount::Count(expression) => {
+                expression.validate_with_target_power(allow_chosen_target_power)
+            }
             Amount::DivideRoundedDown { amount, divisor } => {
                 if *divisor == 0 {
                     return Err("DivideRoundedDown divisor must be positive".into());
                 }
-                amount.validate()
+                amount.validate_with_target_power(allow_chosen_target_power)
             }
             Amount::Fixed(_) | Amount::X | Amount::CastCost(_) | Amount::EventCount => Ok(()),
         }

@@ -1,0 +1,36 @@
+// Pinned Oracle and both card-specific rulings verified against Scryfall and the official
+// Bloomburrow release notes. CR 107.1b, 208.5, 603.2, 608.2b/h, 613.4c govern this definition.
+(
+    id: "thickest_in_the_thicket",
+    name: "Thickest in the Thicket",
+    face_id: "thickest_in_the_thicket",
+    mana_cost: "{3}{G}{G}",
+    types: ["Enchantment"],
+    triggered_abilities: [
+        (
+            ability_id: "triggered_01",
+            presentation: OracleLines([1]),
+            trigger: WhenSelfEntersBattlefield,
+            effect: [PutCounters(
+                counter: PlusOnePlusOne,
+                count: Count(ChosenTargetPower(group_index: 0, target_index: 0)),
+                subject: Chosen((kind: Creature)),
+            )],
+            targeting: Some((groups: [(
+                min: 1,
+                max: 1,
+                prompt: "Choose target creature",
+                effect_indices: [0],
+            )])),
+        ),
+        (
+            ability_id: "triggered_02",
+            presentation: OracleLines([2]),
+            trigger: AtBeginningOfEndStep(player: Controller),
+            effect: [Conditional(
+                condition: ControlsCreatureTiedForGreatestPower,
+                effect: Draw(who: Controller, count: 2),
+            )],
+        ),
+    ],
+)

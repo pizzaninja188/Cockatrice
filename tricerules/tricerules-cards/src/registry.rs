@@ -972,12 +972,13 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 if condition.any_node_matches(|node| {
                     matches!(
                         node,
-                        GameCondition::BattlefieldAggregate {
-                            aggregate: BattlefieldAggregate::DistinctNames
-                                | BattlefieldAggregate::TotalPower
-                                | BattlefieldAggregate::MaximumPower,
-                            ..
-                        }
+                        GameCondition::ControlsCreatureTiedForGreatestPower
+                            | GameCondition::BattlefieldAggregate {
+                                aggregate: BattlefieldAggregate::DistinctNames
+                                    | BattlefieldAggregate::TotalPower
+                                    | BattlefieldAggregate::MaximumPower,
+                                ..
+                            }
                     )
                 }) {
                     return Err(RegistryError::InvalidCard {
@@ -1068,6 +1069,17 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     id: card.id.clone(),
                     reason,
                 })?;
+            if condition.any_node_matches(|node| {
+                matches!(
+                    node,
+                    crate::primitives::GameCondition::ControlsCreatureTiedForGreatestPower
+                )
+            }) {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "ControlsCreatureTiedForGreatestPower cannot drive characteristic-layer conditions until CR 613.8 dependency ordering is implemented".into(),
+                });
+            }
             if *delta_power == 0
                 && *delta_toughness == 0
                 && set_types.is_none()
@@ -1143,12 +1155,13 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 && condition.any_node_matches(|node| {
                     matches!(
                         node,
-                        crate::primitives::GameCondition::BattlefieldAggregate {
-                            aggregate: BattlefieldAggregate::DistinctNames
-                                | BattlefieldAggregate::TotalPower
-                                | BattlefieldAggregate::MaximumPower,
-                            ..
-                        }
+                        crate::primitives::GameCondition::ControlsCreatureTiedForGreatestPower
+                            | crate::primitives::GameCondition::BattlefieldAggregate {
+                                aggregate: BattlefieldAggregate::DistinctNames
+                                    | BattlefieldAggregate::TotalPower
+                                    | BattlefieldAggregate::MaximumPower,
+                                ..
+                            }
                     )
                 })
             {
@@ -1418,6 +1431,17 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                         id: card.id.clone(),
                         reason,
                     })?;
+                if condition.any_node_matches(|node| {
+                    matches!(
+                        node,
+                        crate::primitives::GameCondition::ControlsCreatureTiedForGreatestPower
+                    )
+                }) {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "ControlsCreatureTiedForGreatestPower cannot drive characteristic-layer conditions until CR 613.8 dependency ordering is implemented".into(),
+                    });
+                }
                 if !triggered_abilities.is_empty()
                     || !activated_abilities.is_empty()
                     || !restriction.is_empty()
@@ -1441,11 +1465,12 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     && condition.any_node_matches(|node| {
                         matches!(
                             node,
-                            crate::primitives::GameCondition::BattlefieldAggregate {
-                                aggregate: BattlefieldAggregate::TotalPower
-                                    | BattlefieldAggregate::MaximumPower,
-                                ..
-                            }
+                            crate::primitives::GameCondition::ControlsCreatureTiedForGreatestPower
+                                | crate::primitives::GameCondition::BattlefieldAggregate {
+                                    aggregate: BattlefieldAggregate::TotalPower
+                                        | BattlefieldAggregate::MaximumPower,
+                                    ..
+                                }
                         )
                     })
                 {
@@ -4780,6 +4805,26 @@ mod tests {
                 if reason.contains("CR 613.8 dependency ordering")
         ));
 
+        let greatest_power = r#"(
+            id: "bad_power_tied_conditional",
+            name: "Bad Power Tied Conditional",
+            face_id: "bad_power_tied_conditional",
+            mana_cost: "{G}",
+            types: ["Creature", "Test"],
+            power: 1,
+            toughness: 1,
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+                condition: ControlsCreatureTiedForGreatestPower,
+                delta_power: 1,
+            ))],
+        )"#;
+        let err = CardRegistry::from_chunks_and_tokens(&[greatest_power], &[]).unwrap_err();
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("CR 613.8 dependency ordering")
+        ));
+
         let nested_recursive = r#"(
             id: "bad_nested_recursive_conditional",
             name: "Bad Nested Recursive Conditional",
@@ -4805,6 +4850,50 @@ mod tests {
             err,
             RegistryError::InvalidCard { reason, .. }
                 if reason.contains("CR 613.8 dependency ordering")
+        ));
+    }
+
+    #[test]
+    fn greatest_power_condition_is_rejected_for_every_conditional_characteristic_path() {
+        let conditional_type_change = r#"(
+            id: "bad_greatest_power_type_change",
+            name: "Bad Greatest Power Type Change",
+            face_id: "bad_greatest_power_type_change",
+            mana_cost: "{G}",
+            types: ["Creature", "Test"],
+            power: 1,
+            toughness: 1,
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+                condition: ControlsCreatureTiedForGreatestPower,
+                remove_creature: true,
+            ))],
+        )"#;
+        let error = CardRegistry::from_chunks_and_tokens(&[conditional_type_change], &[])
+            .expect_err("greatest-power conditions cannot drive conditional self characteristics");
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("cannot drive characteristic-layer conditions")
+        ));
+
+        let attached_type_change = r#"(
+            id: "bad_attached_greatest_power_type_change",
+            name: "Bad Attached Greatest Power Type Change",
+            face_id: "bad_attached_greatest_power_type_change",
+            mana_cost: "{1}{G}",
+            types: ["Enchantment", "Aura"],
+            spell_effect: [AuraAttach(target: (kind: Creature))],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(
+                condition: Some(ControlsCreatureTiedForGreatestPower),
+                set_types: Some((card_types: [Artifact])),
+            ))],
+        )"#;
+        let error = CardRegistry::from_chunks_and_tokens(&[attached_type_change], &[])
+            .expect_err("greatest-power conditions cannot drive attached characteristic layers");
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("cannot drive characteristic-layer conditions")
         ));
     }
 
@@ -4876,6 +4965,24 @@ mod tests {
             RegistryError::InvalidCard { reason, .. }
                 if reason.contains("CR 613.8 dependency ordering")
         ));
+        let tied_power_dependency = r#"(
+            id: "bad_attached_tied_power_dependency",
+            name: "Bad Attached Tied Power Dependency",
+            face_id: "bad_attached_tied_power_dependency",
+            mana_cost: "{2}",
+            types: ["Artifact", "Equipment"],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(
+                condition: Some(ControlsCreatureTiedForGreatestPower),
+                keywords: [FirstStrike],
+            ))],
+        )"#;
+        let error = CardRegistry::from_chunks(&[tied_power_dependency])
+            .expect_err("greatest-power-conditioned attached characteristics");
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("CR 613.8 dependency ordering")
+        ));
     }
 
     #[test]
@@ -4900,6 +5007,28 @@ mod tests {
         )"#;
         let error = CardRegistry::from_chunks(&[power_dependency])
             .expect_err("power-dependent conditioned anthem");
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("CR 613.8 dependency ordering")
+        ));
+
+        let tied_power_dependency = r#"(
+            id: "bad_tied_power_conditioned_anthem",
+            name: "Bad Tied Power Conditioned Anthem",
+            face_id: "bad_tied_power_conditioned_anthem",
+            mana_cost: "{2}{W}",
+            types: ["Creature", "Test"],
+            power: 2,
+            toughness: 2,
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AnthemKeyword(
+                filter: (controller: YouControl),
+                condition: ControlsCreatureTiedForGreatestPower,
+                keyword: FirstStrike,
+            ))],
+        )"#;
+        let error = CardRegistry::from_chunks(&[tied_power_dependency])
+            .expect_err("greatest-power-conditioned anthem");
         assert!(matches!(
             error,
             RegistryError::InvalidCard { reason, .. }
