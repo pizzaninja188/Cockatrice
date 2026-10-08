@@ -1859,6 +1859,11 @@ pub enum SpellEffectKind {
         from: CounterSnapshotSource,
         subject: EffectSubject,
     },
+    /// CR 122.5: move one counter of a resolution-chosen kind between two distinct target
+    /// permanents. Nesting Grounds needs a move whose removal and effect-origin placement are
+    /// atomic; `RemoveCounters` plus `PutCounters` would incorrectly lose the counter when the
+    /// destination cannot receive it.
+    MoveOneCounterBetweenTargets,
     /// CR 119 + 119.4: drain `amount` life from a target player and give that much life to the
     /// controller ("target player loses N life and you gain N life"). Covered by Blood Artist,
     /// Falkenrath Noble, and drain-life spells like Vampire's Kiss. The target must be a player.
@@ -2681,6 +2686,23 @@ fn artifact_exchange_graveyard_filter() -> &'static GraveyardFilter {
     &FILTER
 }
 
+fn counter_move_source_target_filter() -> &'static TargetFilter {
+    static FILTER: LazyLock<TargetFilter> = LazyLock::new(|| TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        controller: TargetController::You,
+        ..TargetFilter::default()
+    });
+    &FILTER
+}
+
+fn counter_move_destination_target_filter() -> &'static TargetFilter {
+    static FILTER: LazyLock<TargetFilter> = LazyLock::new(|| TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        ..TargetFilter::default()
+    });
+    &FILTER
+}
+
 impl SpellEffectKind {
     /// Inspect a conditional consumer without changing its outer result context.
     pub(crate) fn result_consuming_amount(&self) -> Option<&Amount> {
@@ -3047,6 +3069,10 @@ impl SpellEffectKind {
             SpellEffectKind::ExchangeArtifactWithGraveyard => vec![
                 TargetRole::Filtered(artifact_exchange_permanent_filter()),
                 TargetRole::GraveyardCard(artifact_exchange_graveyard_filter()),
+            ],
+            SpellEffectKind::MoveOneCounterBetweenTargets => vec![
+                TargetRole::Filtered(counter_move_source_target_filter()),
+                TargetRole::Filtered(counter_move_destination_target_filter()),
             ],
             SpellEffectKind::CreatureDealsDamageEqualToPower { source, target } => {
                 vec![TargetRole::Filtered(source), TargetRole::Filtered(target)]

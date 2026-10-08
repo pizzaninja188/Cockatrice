@@ -1154,3 +1154,6 @@ mod deck_coverage_valakut;
 
 #[path = "scenario/deck_coverage_monument_to_endurance.rs"]
 mod deck_coverage_monument_to_endurance;
+
+#[path = "scenario/deck_coverage_nesting_grounds.rs"]
+mod deck_coverage_nesting_grounds;

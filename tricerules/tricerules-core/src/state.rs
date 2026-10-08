@@ -1008,6 +1008,15 @@ pub struct PendingResolutionBranch {
     pub stage: PendingResolutionBranchStage,
 }
 
+/// The counter-kind offers and exact grouped permanent targets for Nesting Grounds' parked
+/// resolution. The stored order is also the stable branch-index order published to the client.
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct PendingCounterMove {
+    pub source_target: StackTarget,
+    pub destination_target: StackTarget,
+    pub offered_counter_kinds: Vec<CounterKind>,
+}
+
 #[derive(serde::Serialize, Debug, Clone)]
 pub enum PendingResolutionBranchStage {
     /// The object controller is selecting a player to make the original chooser's choice. `None`
@@ -1149,6 +1158,10 @@ pub enum ResolutionContinuation {
     AuthoredBranch {
         stack: ParkedStackResolution,
         branch: PendingResolutionBranch,
+    },
+    CounterMove {
+        stack: ParkedStackResolution,
+        counter_move: PendingCounterMove,
     },
     PermanentChoice {
         stack: ParkedStackResolution,
@@ -1391,6 +1404,7 @@ impl ResolutionContinuation {
             | Self::ManaPayment { stack, .. }
             | Self::JoinForces { stack, .. }
             | Self::AuthoredBranch { stack, .. }
+            | Self::CounterMove { stack, .. }
             | Self::PermanentChoice { stack, .. }
             | Self::TargetedPlayerPermanentChoice { stack, .. }
             | Self::BeholdChoice { stack, .. }
@@ -1443,6 +1457,7 @@ impl ResolutionContinuation {
             | Self::ManaPayment { stack, .. }
             | Self::JoinForces { stack, .. }
             | Self::AuthoredBranch { stack, .. }
+            | Self::CounterMove { stack, .. }
             | Self::PermanentChoice { stack, .. }
             | Self::TargetedPlayerPermanentChoice { stack, .. }
             | Self::BeholdChoice { stack, .. }

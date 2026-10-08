@@ -24,6 +24,7 @@ use crate::state::PendingTargetedPlayerChoiceStage;
 mod attacking_tokens;
 mod branches;
 mod copy_choices;
+mod counter_move;
 mod explore;
 mod hand_choice;
 mod join_forces;
@@ -129,6 +130,12 @@ impl GameEngine {
             ResolutionContinuation::JoinForces { .. }
         ) {
             return self.finish_join_forces_payment(pending, answer, decision, player);
+        }
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::CounterMove { .. }
+        ) {
+            return self.finish_counter_move_choice(pending, answer, decision);
         }
         if matches!(
             pending.continuation,
@@ -433,7 +440,8 @@ impl GameEngine {
             }
             ResolutionContinuation::Custom { .. } => {}
             ResolutionContinuation::ManaPayment { .. }
-            | ResolutionContinuation::JoinForces { .. } => unreachable!("handled above"),
+            | ResolutionContinuation::JoinForces { .. }
+            | ResolutionContinuation::CounterMove { .. } => unreachable!("handled above"),
         }
 
         let (key, controller, item, step_no, scratch) = match &pending.continuation {

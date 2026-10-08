@@ -1,0 +1,39 @@
+// Oracle and rulings verified against Scryfall and the official Modern Horizons 3 release notes.
+// CR 115.3, 122.2, 122.5, 602.5d, 608.2b, and 614.16 govern this definition.
+(
+    id: "nesting_grounds",
+    name: "Nesting Grounds",
+    face_id: "nesting_grounds",
+    types: ["Land"],
+    activated_abilities: [
+        (
+            ability_id: "add_colorless",
+            presentation: OracleLines([1]),
+            costs: [Tap],
+            effect: [ProduceMana(options: [(c: 1)])],
+        ),
+        (
+            ability_id: "move_counter",
+            presentation: OracleLines([2]),
+            costs: [Mana("{1}"), Tap],
+            effect: [MoveOneCounterBetweenTargets],
+            targeting: Some((groups: [
+                (
+                    min: 1,
+                    max: 1,
+                    prompt: "Choose target permanent you control",
+                    effect_indices: [0],
+                    distinct_from: [1],
+                ),
+                (
+                    min: 1,
+                    max: 1,
+                    prompt: "Choose another target permanent",
+                    effect_indices: [0],
+                    distinct_from: [0],
+                ),
+            ])),
+            timing: SorcerySpeed,
+        ),
+    ],
+)

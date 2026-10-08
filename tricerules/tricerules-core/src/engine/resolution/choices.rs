@@ -3,10 +3,10 @@ use crate::engine::events::{ev_log, object_display_name};
 use crate::engine::presentation::{
     ability_presentation, stack_child_presentation_ref, PresentationPath, StackPresentationSource,
 };
-use crate::engine::targeting::TargetSourceIdentity;
+use crate::engine::targeting::{counter_move_target_pair_is_current, TargetSourceIdentity};
 use crate::engine::{rv1, ConditionContext, EngineError};
 use crate::state::{
-    ParkedStackResolution, PendingResolution, PendingResolutionBranch,
+    ParkedStackResolution, PendingCounterMove, PendingResolution, PendingResolutionBranch,
     PendingResolutionBranchStage, PendingResolutionPresentation, PendingTargetedPlayerChoiceStage,
     ResolutionContinuation, StackItem, StagedTrigger, StagedTriggerGroup, TriggerContext,
     TriggerObjectRef,
@@ -18,6 +18,125 @@ use tricerules_cards::primitives::{
     ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SpellEffectKind,
     TargetController, TargetFilter, TargetKind, TriggerCondition, TriggeredAbilityDef,
 };
+
+pub(super) fn move_one_counter_between_targets(
+    cx: &mut EffectCx<'_>,
+) -> Result<EffectOutcome, EngineError> {
+    let source_targets = cx
+        .top
+        .targets
+        .iter()
+        .filter(|target| target.group_index == 0)
+        .copied()
+        .collect::<Vec<_>>();
+    let destination_targets = cx
+        .top
+        .targets
+        .iter()
+        .filter(|target| target.group_index == 1)
+        .copied()
+        .collect::<Vec<_>>();
+    let ([source_target], [destination_target]) =
+        (source_targets.as_slice(), destination_targets.as_slice())
+    else {
+        // CR 608.2b permits the ability to resolve when one target remains legal; the move
+        // itself requires both. The resolution snapshot has already removed illegal targets.
+        return Ok(EffectOutcome::Continue);
+    };
+    let source_target = *source_target;
+    let destination_target = *destination_target;
+    if !counter_move_target_pair_is_current(cx.engine, cx.top, &source_target, &destination_target)
+    {
+        return Ok(EffectOutcome::Continue);
+    }
+    let source = source_target.object_id;
+    let destination = destination_target.object_id;
+    let offered_counter_kinds = cx
+        .engine
+        .state
+        .objects
+        .get(&source)
+        .filter(|object| object.zone == Zone::Battlefield)
+        .map(|object| {
+            object
+                .counters
+                .iter()
+                .filter_map(|(&kind, &count)| (count > 0).then_some(kind))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let Some(first_kind) = offered_counter_kinds.first().copied() else {
+        return Ok(EffectOutcome::Continue);
+    };
+    // Permission and the replacement path do not depend on the selected counter kind in the
+    // current rules vocabulary. Preflight before prompting so an impossible move is a no-op.
+    if !cx
+        .engine
+        .counter_move_can_complete(source, destination, first_kind)
+    {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let stack = ParkedStackResolution::new(cx.top.clone())
+        .with_previous_result(cx.previous_effect_result.clone());
+    let prompt = "Choose a counter to move.".to_string();
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player: cx.controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates: Vec::new(),
+            min: 1,
+            max: 1,
+            ordered: false,
+            prompt: prompt.clone(),
+            choice_kind: rv1::ChoiceKind::ResolutionBranch,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::CounterMove {
+            stack,
+            counter_move: PendingCounterMove {
+                source_target,
+                destination_target,
+                offered_counter_kinds: offered_counter_kinds.clone(),
+            },
+        },
+    });
+    let options = offered_counter_kinds
+        .iter()
+        .enumerate()
+        .map(|(index, kind)| {
+            let label = format!("Move one {} counter", kind.label());
+            rv1::ResolutionBranchOption {
+                branch_index: index as u32,
+                label: label.clone(),
+                cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                cost_text: String::new(),
+                selectable: true,
+                search_zones: Vec::new(),
+                presentation: Some(rv1::PresentationRef {
+                    fallback_text: label,
+                    ..Default::default()
+                }),
+            }
+        })
+        .collect();
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                deciding_player_id: cx.controller,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                min: 1,
+                max: 1,
+                resolution_branches: options,
+                ..Default::default()
+            },
+        )),
+    });
+    cx.events.push(ev_log(prompt));
+    Ok(EffectOutcome::Suspended)
+}
 
 /// Capture the current control set for a live targeted player. Teferi uses this as the player
 /// information to preserve if that player later leaves during its parked resolution choice.

@@ -337,6 +337,34 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             }
         }
         for (effect_index, effect) in effects.iter().enumerate() {
+            if !matches!(effect, SpellEffectKind::MoveOneCounterBetweenTargets) {
+                continue;
+            }
+            let valid_group = |group_index: usize, role_index: usize, other_group: u32| {
+                let Some(group) = schema.groups.get(group_index) else {
+                    return false;
+                };
+                group.min == 1
+                    && group.max == 1
+                    && group.chooser == TargetChooser::Controller
+                    && group.bindings.len() == 1
+                    && group.distinct_from.as_ref() == [other_group]
+                    && group.bindings[0].effect_index == effect_index
+                    && group.bindings[0].role_index == role_index
+                    && group.bindings[0].role == roles[effect_index][role_index]
+            };
+            if targeting.is_none()
+                || schema.groups.len() != 2
+                || !valid_group(0, 0, 1)
+                || !valid_group(1, 1, 0)
+            {
+                return Err(
+                    "counter movement requires two mandatory singleton permanent target groups; the first is controlled by the activator, and the groups are distinct"
+                        .into(),
+                );
+            }
+        }
+        for (effect_index, effect) in effects.iter().enumerate() {
             let Some((group_index, kind)) = effect.targeted_mass_scope() else {
                 continue;
             };
@@ -1588,6 +1616,76 @@ mod tests {
                 cast_cost_expansion: None,
             }],
         }
+    }
+
+    fn counter_move_targeting() -> TargetingDef {
+        let group = |prompt: &str, distinct_from| TargetGroupDef {
+            chooser: TargetChooser::Controller,
+            min: 1,
+            max: 1,
+            prompt: prompt.into(),
+            effect_indices: vec![0],
+            distinct_from,
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        };
+        TargetingDef {
+            groups: vec![
+                group("Choose target permanent you control", vec![1]),
+                group("Choose another target permanent", vec![0]),
+            ],
+        }
+    }
+
+    #[test]
+    fn nesting_grounds_schema_requires_two_mandatory_distinct_permanent_targets() {
+        let effects = vec![SpellEffectKind::MoveOneCounterBetweenTargets];
+        let valid = counter_move_targeting();
+        assert!(TargetSchema::compile(&effects, Some(&valid)).is_ok());
+        assert!(TargetSchema::compile(&effects, None).is_err());
+
+        let mut optional = valid.clone();
+        optional.groups[0].min = 0;
+        assert!(TargetSchema::compile(&effects, Some(&optional)).is_err());
+
+        let mut multiple = valid.clone();
+        multiple.groups[1].max = 2;
+        assert!(TargetSchema::compile(&effects, Some(&multiple)).is_err());
+
+        let mut delegated = valid.clone();
+        delegated.groups[0].chooser = TargetChooser::ChosenOpponent;
+        assert!(TargetSchema::compile(&effects, Some(&delegated)).is_err());
+
+        let mut not_distinct = valid.clone();
+        not_distinct.groups[1].distinct_from.clear();
+        assert!(TargetSchema::compile(&effects, Some(&not_distinct)).is_err());
+
+        let mut extra_group = valid.clone();
+        extra_group.groups.push(TargetGroupDef {
+            chooser: TargetChooser::Controller,
+            min: 1,
+            max: 1,
+            prompt: "Unexpected target".into(),
+            effect_indices: vec![0],
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        });
+        assert!(TargetSchema::compile(&effects, Some(&extra_group)).is_err());
+
+        let non_permanent_group = vec![
+            SpellEffectKind::MoveOneCounterBetweenTargets,
+            SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(1),
+                target: TargetFilter {
+                    kind: TargetKind::AnyPlayer,
+                    ..Default::default()
+                },
+            },
+        ];
+        let mut wrong_effect_role = valid;
+        wrong_effect_role.groups[1].effect_indices = vec![1];
+        assert!(TargetSchema::compile(&non_permanent_group, Some(&wrong_effect_role)).is_err());
     }
 
     #[test]

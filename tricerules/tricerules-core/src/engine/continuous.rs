@@ -214,6 +214,139 @@ impl GameEngine {
         }
         removed
     }
+
+    /// CR 122.5: check the counter move after simulating the removal, because the destination's
+    /// counter permission and effect-origin replacement path must be evaluated in the state that
+    /// would exist between removal and placement. The simulation is private and restores the
+    /// exact source counter timestamp before returning.
+    fn counter_move_preflight(
+        &mut self,
+        source: ObjectId,
+        destination: ObjectId,
+        kind: CounterKind,
+    ) -> Option<u32> {
+        if source == destination
+            || !self
+                .state
+                .objects
+                .get(&destination)
+                .is_some_and(|object| object.zone == Zone::Battlefield)
+        {
+            return None;
+        }
+        let (before, timestamp) = {
+            let source_object = self
+                .state
+                .objects
+                .get(&source)
+                .filter(|object| object.zone == Zone::Battlefield)?;
+            (
+                source_object.counter_count(kind),
+                source_object.counter_timestamps.get(&kind).copied(),
+            )
+        };
+        if before == 0 {
+            return None;
+        }
+
+        self.state
+            .objects
+            .get_mut(&source)
+            .expect("counter-move source was checked")
+            .set_counter(kind, before - 1);
+        let can_place = self.can_receive_counters(destination)
+            && self.ordinary_counter_placement_replaced_count(
+                destination,
+                1,
+                CounterPlacementOrigin::Effect,
+            ) > 0;
+        let source_object = self
+            .state
+            .objects
+            .get_mut(&source)
+            .expect("counter-move source remains present during preflight");
+        source_object.set_counter(kind, before);
+        if let Some(timestamp) = timestamp {
+            source_object.counter_timestamps.insert(kind, timestamp);
+        } else {
+            source_object.counter_timestamps.remove(&kind);
+        }
+        can_place.then_some(before)
+    }
+
+    pub(super) fn counter_move_can_complete(
+        &mut self,
+        source: ObjectId,
+        destination: ObjectId,
+        kind: CounterKind,
+    ) -> bool {
+        self.counter_move_preflight(source, destination, kind)
+            .is_some()
+    }
+
+    /// Commit a preflighted one-counter move without an intervening rules transition. It returns
+    /// only the destination placement event; the caller fires placement triggers after the move
+    /// is complete. Siege's existing last-defense trigger is staged only after placement succeeds,
+    /// so a failed placement leaves neither a counter change nor a staged trigger behind.
+    pub(super) fn move_one_counter_between(
+        &mut self,
+        source: ObjectId,
+        destination: ObjectId,
+        kind: CounterKind,
+    ) -> Option<GameEvent> {
+        let before = self.counter_move_preflight(source, destination, kind)?;
+        let source_counters = self.state.objects.get(&source)?.counters.clone();
+        let source_timestamps = self.state.objects.get(&source)?.counter_timestamps.clone();
+        let destination_counters = self.state.objects.get(&destination)?.counters.clone();
+        let destination_timestamps = self
+            .state
+            .objects
+            .get(&destination)?
+            .counter_timestamps
+            .clone();
+
+        self.state
+            .objects
+            .get_mut(&source)
+            .expect("counter-move source was preflighted")
+            .set_counter(kind, before - 1);
+        let Some(event) = self.place_counters_with_event(
+            destination,
+            kind,
+            1,
+            false,
+            CounterPlacementOrigin::Effect,
+        ) else {
+            // Placement should be guaranteed by the post-removal preflight. Keep CR 122.5
+            // atomic if a future placement path adds another failure point.
+            let source_object = self
+                .state
+                .objects
+                .get_mut(&source)
+                .expect("counter-move source remains present during commit");
+            source_object.counters = source_counters;
+            source_object.counter_timestamps = source_timestamps;
+            let destination_object = self
+                .state
+                .objects
+                .get_mut(&destination)
+                .expect("counter-move destination remains present during commit");
+            destination_object.counters = destination_counters;
+            destination_object.counter_timestamps = destination_timestamps;
+            return None;
+        };
+
+        if kind == CounterKind::Defense
+            && before == 1
+            && self.characteristics(source).is_some_and(|characteristics| {
+                characteristics.has_type("Battle") && characteristics.has_type("Siege")
+            })
+        {
+            self.stage_siege_defeat_trigger(source);
+        }
+        Some(event)
+    }
+
     /// Tatterkite / Blossombind: consult live copied abilities and attachment membership.
     /// This also runs after an entrant's face is established, before its entry counters.
     pub(super) fn can_receive_counters(&self, target: ObjectId) -> bool {

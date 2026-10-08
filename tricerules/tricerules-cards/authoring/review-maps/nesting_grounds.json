@@ -1,0 +1,104 @@
+{
+  "format_version": 1,
+  "oracle_id": "d27bb97d-286b-4947-8d7b-443e4df93319",
+  "spans": [
+    {
+      "face_id": "nesting_grounds",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "nesting_grounds",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/types",
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveOneCounterBetweenTargets",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/1/targeting"
+    },
+    {
+      "symbol": "ActivationTiming::SorcerySpeed",
+      "typed_path": "/faces/0/activated_abilities/1/timing"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_nesting_grounds::nesting_grounds_registers_its_complete_two_ability_land_definition",
+      "covers": "one exact Land face, both activated abilities, colorless mana output, {1}, tap, sorcery timing, and two cross-distinct permanent target groups"
+    },
+    {
+      "test": "scenario deck_coverage_nesting_grounds::nesting_grounds_moves_one_selected_counter_between_distinct_player_targets",
+      "covers": "four-player owner/controller roles, stable resolution-time counter options, and moving only the selected kind"
+    },
+    {
+      "test": "scenario deck_coverage_nesting_grounds::nesting_grounds_keeps_its_mana_ability_and_sorcery_speed_costs",
+      "covers": "immediate mana ability, required mana/tap costs, sorcery-speed rejection, and no-choice completion when the source has no counters"
+    },
+    {
+      "test": "scenario deck_coverage_nesting_grounds::nesting_grounds_rejects_same_or_uncontrolled_source_targets_before_payment",
+      "covers": "the target groups cannot share an object, the first target must be controlled by the activator, and players are not permanents"
+    },
+    {
+      "test": "scenario deck_coverage_nesting_grounds::nesting_grounds_does_not_offer_a_choice_without_a_movable_counter",
+      "covers": "an empty source or a Tatterkite destination completes without a counter choice, counter mutation, or Siege trigger"
+    },
+    {
+      "test": "scenario deck_coverage_nesting_grounds::nesting_grounds_source_can_leave_without_affecting_its_activated_ability",
+      "covers": "the ability resolves and moves a counter after Nesting Grounds itself leaves the battlefield"
+    },
+    {
+      "test": "scenario deck_coverage_nesting_grounds::nesting_grounds_invalidates_either_target_after_a_zone_change_and_return",
+      "covers": "either target's original ObjectId generation becomes illegal after that permanent leaves and returns"
+    },
+    {
+      "test": "scenario deck_coverage_nesting_grounds::nesting_grounds_revalidates_the_selected_counter_before_completing_a_parked_choice",
+      "covers": "a selected counter removed while parked or a target generation changed while parked completes as a no-op"
+    },
+    {
+      "test": "scenario deck_coverage_nesting_grounds::nesting_grounds_preserves_doubling_saga_and_siege_counter_paths",
+      "covers": "effect-origin counter doubling, Saga lore chapter collection, successful last-defense Siege trigger, and blocked last-defense atomicity"
+    },
+    {
+      "test": "scenario deck_coverage_nesting_grounds::nesting_grounds_rejects_wrong_decider_malformed_and_unoffered_choices_without_consuming_them",
+      "covers": "wrong-decider, malformed, and unoffered answers preserve the pending choice; the offered index moves its mapped counter kind"
+    },
+    {
+      "test": "scenario deck_coverage_nesting_grounds::nesting_grounds_revalidates_first_target_control_during_parked_choice",
+      "covers": "the first target must still be controlled by the activator when a parked answer is applied"
+    },
+    {
+      "test": "scenario deck_coverage_nesting_grounds::nesting_grounds_ability_and_branch_choice_replay_deterministically",
+      "covers": "the accepted activation, priority passes, logged branch answer, event batches, and final engine snapshot replay identically"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

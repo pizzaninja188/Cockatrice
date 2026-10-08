@@ -133,6 +133,50 @@ pub(super) fn stack_target_identity_is_current(engine: &GameEngine, target: &Sta
     })
 }
 
+/// Recheck Nesting Grounds' two exact target roles when its resolution-time counter choice is
+/// answered. The targets have already passed CR 608.2b once; this protects the parked continuation
+/// if a target's generation, battlefield status, or controller changes while it waits.
+pub(in crate::engine) fn counter_move_target_pair_is_current(
+    engine: &GameEngine,
+    item: &StackItem,
+    source_target: &StackTarget,
+    destination_target: &StackTarget,
+) -> bool {
+    if source_target.group_index != 0
+        || destination_target.group_index != 1
+        || source_target.object_id == destination_target.object_id
+        || source_target.zone_change_generation.is_none()
+        || destination_target.zone_change_generation.is_none()
+    {
+        return false;
+    }
+    let roles = SpellEffectKind::MoveOneCounterBetweenTargets.target_roles();
+    let [TargetRole::Filtered(source_filter), TargetRole::Filtered(destination_filter)] =
+        roles.as_slice()
+    else {
+        return false;
+    };
+    let source = TargetSourceIdentity::for_stack_item(engine, item);
+    let is_current = |target: &StackTarget, role: TargetRole<'_>| {
+        stack_target_identity_is_current(engine, target)
+            && target.required_controller.is_none_or(|required| {
+                engine
+                    .characteristics(target.object_id)
+                    .is_some_and(|characteristics| characteristics.controller == required)
+            })
+            && target_role_legal_at_resolution(
+                engine,
+                role,
+                target.object_id,
+                item.controller,
+                source,
+                item.trigger_context,
+            )
+    };
+    is_current(source_target, TargetRole::Filtered(source_filter))
+        && is_current(destination_target, TargetRole::Filtered(destination_filter))
+}
+
 /// The object that sourced a targeted spell or ability, captured at the moment targets are
 /// chosen. Object ids are stable across zone changes in this engine, so CR 400.7 identity also
 /// requires the source's zone-change generation.
@@ -1073,6 +1117,7 @@ fn validate_effect_targets(
         | SpellEffectKind::Fight { .. }
         | SpellEffectKind::AttachEquipment { .. }
         | SpellEffectKind::ExchangeArtifactWithGraveyard
+        | SpellEffectKind::MoveOneCounterBetweenTargets
         | SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { .. }
         | SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { .. } => {
             return Err(EngineError::Illegal(
