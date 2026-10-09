@@ -187,6 +187,17 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
         if (group.has_pair_constraint()) {
             parsed.pairConstraint = group.pair_constraint();
         }
+        parsed.hasXTargetChoices = group.has_x_target_choices();
+        if (parsed.hasXTargetChoices) {
+            for (const auto &choice : group.x_target_choices().choices()) {
+                RuledXTargetChoiceData parsedChoice;
+                parsedChoice.xValue = choice.x_value();
+                for (const auto &candidate : choice.candidates()) {
+                    parsedChoice.candidateGenerations.insert(candidate.object_id(), candidate.zone_change_generation());
+                }
+                parsed.xTargetChoices.append(std::move(parsedChoice));
+            }
+        }
         for (const quint32 other : group.distinct_from_group_indices()) {
             parsed.distinctFromGroupIndices.append(static_cast<int>(other));
         }

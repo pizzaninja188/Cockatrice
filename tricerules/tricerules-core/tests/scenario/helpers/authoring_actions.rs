@@ -90,6 +90,8 @@ pub(crate) fn activation(
             ability.activatable,
         )
     };
+    let mut x_value = 0;
+    let mut activation_targets = Vec::new();
     if let Some(offer) = legal.valid_targets_by_ability.get(&key) {
         if offer.groups.iter().any(|group| group.chosen_by_opponent) {
             let group = offer
@@ -123,6 +125,38 @@ pub(crate) fn activation(
                 })),
             });
         }
+        if let Some(group) = offer
+            .groups
+            .iter()
+            .find(|group| group.x_target_choices.is_some())
+        {
+            if group.min != 1 || group.max != 1 {
+                return Err("unsupported X-bound target group shape".into());
+            }
+            let choices = group
+                .x_target_choices
+                .as_ref()
+                .ok_or("missing X-target offer")?;
+            let choice = choices
+                .choices
+                .iter()
+                .find(|choice| !choice.candidates.is_empty())
+                .ok_or("no X-target pair in engine offer")?;
+            let candidate = choice
+                .candidates
+                .first()
+                .ok_or("selected X choice has no target candidate")?;
+            x_value = choice.x_value;
+            activation_targets.push(TargetRef {
+                object_id: candidate.object_id,
+                group_index: group.group_index,
+                kind: TargetRefKind::Permanent as i32,
+                expected_zone_change_generation: Some(candidate.zone_change_generation),
+                ..Default::default()
+            });
+        } else {
+            activation_targets = targets(e, actor, Some(offer))?;
+        }
     }
     let mut command = RuledCommand {
         cmd: Some(Cmd::ActivateAbility(ActivateAbility {
@@ -130,7 +164,8 @@ pub(crate) fn activation(
             source_zone: zone,
             expected_zone_change_generation: generation,
             ability_index: index,
-            targets: targets(e, actor, legal.valid_targets_by_ability.get(&key))?,
+            targets: activation_targets,
+            x_value,
             cost_selections: costs,
             ..Default::default()
         })),
@@ -195,6 +230,15 @@ pub(crate) fn targets(
                 kind,
                 group_index: group.group_index,
                 damage_amount: 0,
+                expected_zone_change_generation: (kind == TargetRefKind::Permanent as i32).then(
+                    || {
+                        e.state
+                            .zone_change_generation
+                            .get(&object_id)
+                            .copied()
+                            .unwrap_or(0)
+                    },
+                ),
             });
             picked += 1;
         }

@@ -138,6 +138,7 @@ fn attack_group_threshold_is_not_rechecked_when_the_trigger_resolves() {
             &cast_spell(
                 unsummon,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: departing_attacker,
                     damage_amount: 0,
                     group_index: 0,

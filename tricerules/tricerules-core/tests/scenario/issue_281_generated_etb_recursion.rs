@@ -31,6 +31,7 @@ fn choose_graveyard_target(engine: &mut GameEngine, object_id: u32) {
                     decline: false,
                     selected_modes: Vec::new(),
                     targets: vec![TargetRef {
+                        expected_zone_change_generation: None,
                         object_id,
                         damage_amount: 0,
                         group_index: 0,
@@ -127,6 +128,7 @@ fn issue_281_targets_only_controller_owned_instants_and_sorceries() {
                         decline: false,
                         selected_modes: Vec::new(),
                         targets: vec![TargetRef {
+                            expected_zone_change_generation: None,
                             object_id: illegal,
                             damage_amount: 0,
                             group_index: 0,

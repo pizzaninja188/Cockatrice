@@ -88,6 +88,7 @@ fn grab_the_prize_keeps_payment_results_for_copies_and_later_zone_changes() {
             &cast_spell(
                 twincast,
                 vec![tricerules_proto::ruled::v1::TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: original,
                     damage_amount: 0,
                     group_index: 0,

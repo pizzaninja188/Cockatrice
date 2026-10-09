@@ -1,0 +1,75 @@
+{
+  "format_version": 1,
+  "oracle_id": "03f5c566-825c-4c46-9c01-a2f9b1e70a13",
+  "spans": [
+    { "face_id": "the_mycosynth_gardens", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/activated_abilities/0"] },
+    { "face_id": "the_mycosynth_gardens", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/activated_abilities/1"] },
+    { "face_id": "the_mycosynth_gardens", "start_line": 3, "end_line": 3, "typed_paths": ["/faces/0/activated_abilities/2"] }
+  ],
+  "primitive_references": [
+    { "symbol": "AbilityCost::Tap", "typed_path": "/faces/0/activated_abilities/0/costs/0" },
+    { "symbol": "SpellEffectKind::ProduceMana", "typed_path": "/faces/0/activated_abilities/0/effect/0" },
+    { "symbol": "AbilityCost::Mana", "typed_path": "/faces/0/activated_abilities/1/costs/0" },
+    { "symbol": "AbilityCost::Tap", "typed_path": "/faces/0/activated_abilities/1/costs/1" },
+    { "symbol": "SpellEffectKind::ProduceMana", "typed_path": "/faces/0/activated_abilities/1/effect/0" },
+    { "symbol": "AbilityCost::Mana", "typed_path": "/faces/0/activated_abilities/2/costs/0" },
+    { "symbol": "AbilityCost::Tap", "typed_path": "/faces/0/activated_abilities/2/costs/1" },
+    { "symbol": "SpellEffectKind::CopyTargetArtifactWithManaValueX", "typed_path": "/faces/0/activated_abilities/2/effect/0" }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_mycosynth_gardens::gardens_first_mana_ability_adds_colorless_immediately",
+      "covers": "the first printed mana ability taps the land for one colorless mana without using the stack"
+    },
+    {
+      "test": "scenario deck_coverage_mycosynth_gardens::gardens_second_mana_ability_pays_one_and_adds_each_color_immediately",
+      "covers": "the second printed mana ability pays one generic mana and independently chooses each of the five colors without using the stack"
+    },
+    {
+      "test": "scenario deck_coverage_mycosynth_gardens::gardens_publishes_exact_x_target_pairs_with_current_generations",
+      "covers": "engine candidates bind X to current mana value, controller, artifact type, nontoken status, and battlefield incarnation"
+    },
+    {
+      "test": "scenario deck_coverage_mycosynth_gardens::gardens_rejects_a_target_that_left_and_returned_before_submission",
+      "covers": "a target that leaves and returns before activation submission retains its ObjectId but has a new generation and is rejected"
+    },
+    {
+      "test": "scenario deck_coverage_mycosynth_gardens::gardens_copies_target_characteristics_but_keeps_its_physical_state",
+      "covers": "the copy uses current copiable values while retaining Gardens physical identity, counters or tap state, and zone generation"
+    },
+    {
+      "test": "scenario deck_coverage_mycosynth_gardens::gardens_copy_carries_the_target_combat_requirements",
+      "covers": "the copied face supplies its noncharacteristic combat requirement state"
+    },
+    {
+      "test": "scenario deck_coverage_mycosynth_gardens::gardens_can_legally_target_itself_when_it_is_an_artifact",
+      "covers": "a qualifying artifact Gardens can target itself and the effect is a no-op on its current copiable values"
+    },
+    {
+      "test": "scenario deck_coverage_mycosynth_gardens::gardens_does_not_copy_a_new_source_incarnation_after_it_leaves_and_returns",
+      "covers": "the source Gardens leaving and returning while the ability is pending cannot cause the new incarnation to be copied"
+    },
+    {
+      "test": "scenario deck_coverage_mycosynth_gardens::gardens_rechecks_target_controller_when_the_ability_resolves",
+      "covers": "a target controlled by an opponent at resolution is illegal"
+    },
+    {
+      "test": "scenario deck_coverage_mycosynth_gardens::gardens_rechecks_artifact_type_when_the_ability_resolves",
+      "covers": "a target that loses artifact type before resolution is illegal even when its mana value still matches X"
+    },
+    {
+      "test": "scenario deck_coverage_mycosynth_gardens::gardens_keeps_a_snapshot_of_cursed_mirrors_temporary_copy",
+      "covers": "copying Cursed Mirror's current copy with haste snapshots those copiable values after Cursed Mirror's turn cleanup restores its printed face"
+    },
+    {
+      "test": "scenario deck_coverage_mycosynth_gardens::gardens_rejects_mismatched_or_stale_x_target_choices_without_paying",
+      "covers": "mismatched X, stale target generation, and missing required generation reject atomically"
+    },
+    {
+      "test": "scenario deck_coverage_mycosynth_gardens::gardens_does_not_copy_when_target_mana_value_changes_before_resolution",
+      "covers": "resolution rechecks the target's current mana value against announced X before copying"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

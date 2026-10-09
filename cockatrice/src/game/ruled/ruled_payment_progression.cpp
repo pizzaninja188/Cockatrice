@@ -1300,6 +1300,7 @@ void RuledPaymentUi::cancelPendingActivatedAbility()
     if (!actions->pendingActivatedAbility.valid) {
         return;
     }
+    const bool restartAfterTargetInvalidation = actions->pendingActivatedAbility.restartAfterTargetInvalidation;
     const QString abilityText = actions->pendingActivatedAbility.abilityText;
     const QString cardName = actions->pendingActivatedAbility.cardName;
 
@@ -1325,8 +1326,14 @@ void RuledPaymentUi::cancelPendingActivatedAbility()
     emit actions->ruledGraveyardCostSelectionChanged(false, 0, 0);
     resumeAfterManaAbility();
     emit actions->landTapUndoAvailableChanged(actions->landTapUndoCurrentlyAvailable());
-    actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-        PlayerActions::tr("Canceled activating %1.").arg(cardName.isEmpty() ? abilityText : cardName));
+    if (restartAfterTargetInvalidation) {
+        actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
+            PlayerActions::tr("Canceled activating %1 because its target changed during payment. Choose the ability again.")
+                .arg(cardName.isEmpty() ? abilityText : cardName));
+    } else {
+        actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
+            PlayerActions::tr("Canceled activating %1.").arg(cardName.isEmpty() ? abilityText : cardName));
+    }
 }
 
 Command_RuledPayload *RuledPaymentUi::newRuledPayloadActivateManaAbilityForLand(CardItem *card, QChar desiredColor)
@@ -2409,10 +2416,37 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     const int xPips =
         ruledActivatedManaXPipCount(manaCostStr, selectedAbility && selectedAbility->xCounterManaChoice.has_value());
     if (xPips > 0) {
-        const auto chosenX = promptBoundedManaCount(
-            actions->player->getGame()->getTab(), PlayerActions::tr("Choose X"),
-            PlayerActions::tr("Value of X for %1:").arg(actions->pendingActivatedAbility.cardName),
-            ruledActivatedXChoiceMaximum(actions->pendingActivatedAbility, xPips));
+        const auto xTargetGroup = std::find_if(activationTargets.groups.cbegin(), activationTargets.groups.cend(),
+                                               [](const auto &group) { return group.hasXTargetChoices; });
+        std::optional<quint32> chosenX;
+        if (xTargetGroup != activationTargets.groups.cend()) {
+            QStringList choices;
+            const quint32 maximum = ruledActivatedXChoiceMaximum(actions->pendingActivatedAbility, xPips);
+            for (const quint32 value : ruledAvailableXTargetValues(*xTargetGroup)) {
+                if (value <= maximum) {
+                    choices.append(QString::number(value));
+                }
+            }
+            if (choices.isEmpty()) {
+                cancelPendingActivatedAbility();
+                return true;
+            }
+            bool accepted = false;
+            const QString selected = QInputDialog::getItem(
+                actions->player->getGame()->getTab(), PlayerActions::tr("Choose X"),
+                PlayerActions::tr("Choose X and a matching artifact for %1:").arg(actions->pendingActivatedAbility.cardName),
+                choices, 0, false, &accepted);
+            bool parsed = false;
+            const quint32 value = selected.toUInt(&parsed);
+            if (accepted && parsed) {
+                chosenX = value;
+            }
+        } else {
+            chosenX = promptBoundedManaCount(
+                actions->player->getGame()->getTab(), PlayerActions::tr("Choose X"),
+                PlayerActions::tr("Value of X for %1:").arg(actions->pendingActivatedAbility.cardName),
+                ruledActivatedXChoiceMaximum(actions->pendingActivatedAbility, xPips));
+        }
         if (!ruledApplyActivatedXChoice(actions->pendingActivatedAbility, xPips, chosenX)) {
             cancelPendingActivatedAbility();
             return true;

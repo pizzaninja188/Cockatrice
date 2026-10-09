@@ -260,6 +260,7 @@ impl GameEngine {
                 damage_amount: original_target.damage_amount,
                 group_index: original_target.group_index,
                 kind: original_target.kind,
+                expected_zone_change_generation: original_target.zone_change_generation,
             };
             validate_spell_targets(
                 self,
@@ -337,6 +338,7 @@ impl GameEngine {
                 damage_amount: target.damage_amount,
                 group_index: target.group_index,
                 kind: target.kind,
+                expected_zone_change_generation: target.zone_change_generation,
             })
             .collect();
         let event_targets: Vec<_> = published_targets

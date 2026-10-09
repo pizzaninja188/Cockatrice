@@ -637,6 +637,7 @@ pub(super) fn copy_target_spell(
                                 damage_amount: target.damage_amount,
                                 group_index: target.group_index,
                                 kind: target.kind,
+                                expected_zone_change_generation: target.zone_change_generation,
                             })
                             .collect(),
                         ability_annotation: "(copy)".to_string(),

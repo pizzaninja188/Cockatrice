@@ -922,12 +922,18 @@ impl GameEngine {
     fn snapshot_resolution_targets(&self, top: &mut StackItem) {
         let source = TargetSourceIdentity::for_stack_item(self, top);
         let controller = top.controller;
-        let legal = |requirements: &[TargetRole<'_>], target: &StackTarget| {
+        let chosen_x = top.chosen_x;
+        let trigger_context = top.trigger_context;
+        let legal = |requirements: &[TargetRole<'_>], target: &StackTarget, x_bound: bool| {
             stack_target_identity_is_current(self, target)
                 && target.required_controller.is_none_or(|player| {
                     self.characteristics(target.object_id)
                         .is_some_and(|value| value.controller == player)
                 })
+                && (!x_bound
+                    || self
+                        .characteristics(target.object_id)
+                        .is_some_and(|value| value.mana_value == chosen_x))
                 && requirements.iter().all(|&role| {
                     target_role_legal_at_resolution(
                         self,
@@ -935,7 +941,7 @@ impl GameEngine {
                         target.object_id,
                         controller,
                         source,
-                        top.trigger_context,
+                        trigger_context,
                     )
                 })
         };
@@ -958,10 +964,20 @@ impl GameEngine {
                     continue;
                 };
                 let requirements = target_roles_by_group(&mode.effects, mode.targeting.as_ref());
+                let x_bound_groups = super::targeting::x_target_group_indices(
+                    &mode.effects,
+                    mode.targeting.as_ref(),
+                );
                 chosen.targets.retain(|target| {
                     requirements
                         .get(target.group_index as usize)
-                        .is_some_and(|group| legal(group, target))
+                        .is_some_and(|group| {
+                            legal(
+                                group,
+                                target,
+                                x_bound_groups.contains(&(target.group_index as usize)),
+                            )
+                        })
                 });
             }
             return;
@@ -994,10 +1010,17 @@ impl GameEngine {
             (&face.spell_effect[..], face.targeting.as_ref())
         };
         let requirements = target_roles_by_group(effects, targeting);
+        let x_bound_groups = super::targeting::x_target_group_indices(effects, targeting);
         top.targets.retain(|target| {
             requirements
                 .get(target.group_index as usize)
-                .is_some_and(|group| legal(group, target))
+                .is_some_and(|group| {
+                    legal(
+                        group,
+                        target,
+                        x_bound_groups.contains(&(target.group_index as usize)),
+                    )
+                })
         });
     }
 

@@ -283,6 +283,7 @@ fn reanimated_clever_impersonator_stays_in_its_graveyard_when_its_copied_aura_ha
     let cast = cast_spell(
         hand_index_for_card(&engine, 0, "reanimate"),
         vec![tricerules_proto::ruled::v1::TargetRef {
+            expected_zone_change_generation: None,
             object_id: clever,
             damage_amount: 0,
             group_index: 0,

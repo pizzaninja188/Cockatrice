@@ -116,6 +116,7 @@ fn choose_graveyard_target(engine: &mut GameEngine, object_id: u32) {
                     decline: false,
                     selected_modes: Vec::new(),
                     targets: vec![TargetRef {
+                        expected_zone_change_generation: None,
                         object_id,
                         damage_amount: 0,
                         group_index: 0,
@@ -149,6 +150,7 @@ fn pending_graveyard_targets(engine: &GameEngine, batch: &RuledEventBatch) -> Ve
 fn permanent_targets(ids: &[u32]) -> Vec<TargetRef> {
     ids.iter()
         .map(|object_id| TargetRef {
+            expected_zone_change_generation: None,
             object_id: *object_id,
             damage_amount: 0,
             group_index: 0,
@@ -387,6 +389,7 @@ fn issue_328_elvish_regrower_returns_controller_permanent_cards_to_hand() {
                             decline: false,
                             selected_modes: Vec::new(),
                             targets: vec![TargetRef {
+                                expected_zone_change_generation: None,
                                 object_id: illegal,
                                 damage_amount: 0,
                                 group_index: 0,

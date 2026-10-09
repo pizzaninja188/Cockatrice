@@ -1173,6 +1173,7 @@ fn validate_effect_targets(
         SpellEffectKind::TapOrUntap { target: _ }
         | SpellEffectKind::SkipNextUntap { target: _ }
         | SpellEffectKind::GainControl { target: _, duration: _ }
+        | SpellEffectKind::CopyTargetArtifactWithManaValueX { target: _ }
         | SpellEffectKind::Tap {
             subject: EffectSubject::Chosen(_),
         }
@@ -1687,6 +1688,56 @@ pub(super) fn validate_ability_targets(
     )
 }
 
+pub(super) fn x_target_group_indices(
+    effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
+) -> std::collections::HashSet<usize> {
+    target_schema(effects, targeting)
+        .groups
+        .iter()
+        .enumerate()
+        .filter_map(|(group_index, group)| {
+            group
+                .bindings
+                .iter()
+                .any(|binding| {
+                    matches!(
+                        effects.get(binding.effect_index),
+                        Some(SpellEffectKind::CopyTargetArtifactWithManaValueX { .. })
+                    )
+                })
+                .then_some(group_index)
+        })
+        .collect()
+}
+
+pub(super) fn validate_x_target_mana_value(
+    engine: &GameEngine,
+    effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
+    targets: &[rv1::TargetRef],
+    x_value: u32,
+) -> Result<(), EngineError> {
+    for group_index in x_target_group_indices(effects, targeting) {
+        let mut selected = targets
+            .iter()
+            .filter(|target| target.group_index as usize == group_index);
+        let Some(target) = selected.next() else {
+            return Err(EngineError::Illegal("X-bound target is missing"));
+        };
+        if selected.next().is_some()
+            || engine
+                .characteristics(target.object_id)
+                .is_none_or(|characteristics| characteristics.mana_value != x_value)
+        {
+            return Err(EngineError::Illegal(
+                "X must equal the target artifact's current mana value",
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn validate_ability_targets_with_context(
     engine: &GameEngine,
     caster: PlayerId,
@@ -1797,6 +1848,20 @@ fn validate_grouped_targets(
             if !seen.insert(target.object_id) {
                 return Err(EngineError::Illegal("duplicate target in target group"));
             }
+            if target
+                .expected_zone_change_generation
+                .is_some_and(|expected| {
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&target.object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        != expected
+                })
+            {
+                return Err(EngineError::Illegal("target generation is stale"));
+            }
             if group.same_graveyard {
                 let owner = engine
                     .state
@@ -1814,6 +1879,15 @@ fn validate_grouped_targets(
                 }
             }
             for binding in &group.bindings {
+                if matches!(
+                    effects.get(binding.effect_index),
+                    Some(SpellEffectKind::CopyTargetArtifactWithManaValueX { .. })
+                ) && target.expected_zone_change_generation.is_none()
+                {
+                    return Err(EngineError::Illegal(
+                        "target generation is required for this ability",
+                    ));
+                }
                 target_legality_error_for_binding(
                     engine,
                     binding.role,
@@ -2388,6 +2462,45 @@ fn compute_targets_with_context(
                 .map(|item| item.id)
                 .filter(|&object_id| legal(object_id))
                 .collect();
+            let x_target_choices = group
+                .bindings
+                .iter()
+                .any(|binding| {
+                    matches!(
+                        effects.get(binding.effect_index),
+                        Some(SpellEffectKind::CopyTargetArtifactWithManaValueX { .. })
+                    )
+                })
+                .then(|| {
+                    let mut choices =
+                        std::collections::BTreeMap::<u32, Vec<rv1::XTargetCandidate>>::new();
+                    for &object_id in &permanent_ids {
+                        let Some(characteristics) = engine.characteristics(object_id) else {
+                            continue;
+                        };
+                        let generation = engine
+                            .state
+                            .zone_change_generation
+                            .get(&object_id)
+                            .copied()
+                            .unwrap_or(0);
+                        choices.entry(characteristics.mana_value).or_default().push(
+                            rv1::XTargetCandidate {
+                                object_id,
+                                zone_change_generation: generation,
+                            },
+                        );
+                    }
+                    rv1::XTargetChoices {
+                        choices: choices
+                            .into_iter()
+                            .map(|(x_value, candidates)| rv1::XTargetChoice {
+                                x_value,
+                                candidates,
+                            })
+                            .collect(),
+                    }
+                });
             let mut self_legal = false;
             let mut opponent_legal = false;
             for player in &engine.state.players {
@@ -2414,6 +2527,7 @@ fn compute_targets_with_context(
                 distinct_from_group_indices: group.distinct_from.to_vec(),
                 same_graveyard: group.same_graveyard,
                 pair_constraint: None,
+                x_target_choices,
             }
         })
         .collect::<Vec<_>>();
@@ -3660,12 +3774,14 @@ mod tests {
                     damage_amount: 0,
                     group_index: 0,
                     kind: 0,
+                    expected_zone_change_generation: None,
                 },
                 rv1::TargetRef {
                     object_id: second,
                     damage_amount: 0,
                     group_index: 1,
                     kind: 0,
+                    expected_zone_change_generation: None,
                 },
             ]
         };

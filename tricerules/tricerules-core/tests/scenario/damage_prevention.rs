@@ -110,6 +110,7 @@ fn anti_venom_prevents_direct_damage_and_gets_attempted_damage_counters() {
             &cast_spell(
                 bolt,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: anti_venom,
                     damage_amount: 0,
                     group_index: 0,
@@ -188,6 +189,7 @@ fn anti_venom_with_shield_awaiting_five_damage(seed: u64) -> (GameEngine, u32, u
             &cast_spell_x(
                 blaze,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: anti_venom,
                     damage_amount: 0,
                     group_index: 0,
@@ -487,6 +489,7 @@ fn lethal_damage_runs_state_based_actions_after_the_ordering_choice() {
             &cast_spell_x(
                 blaze,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: bears,
                     damage_amount: 0,
                     group_index: 0,
@@ -658,6 +661,7 @@ fn stomp_damage_still_gives_anti_venom_attempted_damage_counters() {
             &cast_spell_face(
                 stomp,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: anti_venom,
                     damage_amount: 0,
                     group_index: 0,

@@ -128,6 +128,7 @@ fn boros_charm_keyword_modes_apply_to_the_correct_snapshot() {
             vec![(
                 2,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: opponent,
                     damage_amount: 0,
                     group_index: 0,
@@ -186,6 +187,7 @@ fn boros_charm_double_strike_mode_rejects_targets_outside_the_battlefield() {
                 vec![(
                     2,
                     vec![TargetRef {
+                        expected_zone_change_generation: None,
                         object_id,
                         damage_amount: 0,
                         group_index: 0,
@@ -204,6 +206,7 @@ fn boros_charm_double_strike_mode_rejects_targets_outside_the_battlefield() {
             vec![(
                 2,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: creature,
                     damage_amount: 0,
                     group_index: 0,
@@ -300,6 +303,7 @@ fn copied_modal_spell_retains_modes_and_mode_targets() {
         &cast_spell(
             twincast,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: charm_stack_id,
                 damage_amount: 0,
                 group_index: 0,
@@ -374,6 +378,7 @@ fn cryptic_command_bounce_then_tap_uses_printed_order_and_relative_controller() 
                 (
                     1,
                     vec![TargetRef {
+                        expected_zone_change_generation: None,
                         object_id: bounced,
                         damage_amount: 0,
                         group_index: 0,
@@ -484,6 +489,7 @@ fn cryptic_command_counter_and_draw_resolve_together() {
                 (
                     0,
                     vec![TargetRef {
+                        expected_zone_change_generation: None,
                         object_id: bear_stack_id,
                         damage_amount: 0,
                         group_index: 0,
@@ -532,6 +538,7 @@ fn cryptic_command_requires_exactly_two_distinct_modes() {
                     (
                         1,
                         vec![TargetRef {
+                            expected_zone_change_generation: None,
                             object_id: permanent,
                             damage_amount: 0,
                             group_index: 0,

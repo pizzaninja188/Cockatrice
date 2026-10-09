@@ -43,6 +43,7 @@ fn lightning_bolt_rejects_basic_land_target() {
             &cast_spell(
                 bolt_idx,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: land_oid,
                     damage_amount: 0,
                     group_index: 0,
@@ -142,6 +143,7 @@ fn giant_growth_rejects_land_target() {
             &cast_spell(
                 growth_idx,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: land_oid,
                     damage_amount: 0,
                     group_index: 0,
@@ -209,6 +211,7 @@ fn giant_growth_fizzles_if_creature_target_dies_before_resolution() {
         &cast_spell(
             growth_idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -232,6 +235,7 @@ fn giant_growth_fizzles_if_creature_target_dies_before_resolution() {
         &cast_spell(
             bolt_idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -323,6 +327,7 @@ fn lightning_bolt_fizzles_when_creature_target_left_battlefield() {
         &cast_spell(
             bolt_a,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -345,6 +350,7 @@ fn lightning_bolt_fizzles_when_creature_target_left_battlefield() {
         &cast_spell(
             bolt_b,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -427,6 +433,7 @@ fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
         &cast_spell(
             gfth_idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -450,6 +457,7 @@ fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
         &cast_spell(
             bolt_idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -555,6 +563,7 @@ fn go_for_the_throat_rejects_artifact_creature_target() {
             &cast_spell(
                 gftt_idx,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: ornithopter_oid,
                     damage_amount: 0,
                     group_index: 0,
@@ -611,6 +620,7 @@ fn bump_in_the_night_rejects_creature_target() {
             &cast_spell(
                 bump_idx,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: bear,
                     damage_amount: 0,
                     group_index: 0,
@@ -814,6 +824,7 @@ fn swords_to_plowshares_fizzles_if_target_dies_before_resolution() {
         &cast_spell(
             swords_idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -828,6 +839,7 @@ fn swords_to_plowshares_fizzles_if_target_dies_before_resolution() {
         &cast_spell(
             bolt_idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -904,6 +916,7 @@ fn unsummon_rejects_land_target() {
             &cast_spell(
                 idx,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: island_oid,
                     damage_amount: 0,
                     group_index: 0,
@@ -1048,6 +1061,7 @@ fn hexproof_opponent_cannot_target_with_spell() {
         &cast_spell(
             bolt_idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: scout,
                 damage_amount: 0,
                 group_index: 0,
@@ -1111,6 +1125,7 @@ fn hexproof_controller_can_target_own_permanent() {
         &cast_spell(
             gg_idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: scout,
                 damage_amount: 0,
                 group_index: 0,
@@ -1180,6 +1195,7 @@ fn shroud_controller_cannot_target_own_permanent() {
         &cast_spell(
             gg_idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: enchantress,
                 damage_amount: 0,
                 group_index: 0,
@@ -1222,6 +1238,7 @@ fn royal_assassin_destroys_tapped_creature() {
             assassin,
             0,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bears,
                 damage_amount: 0,
                 group_index: 0,
@@ -1272,6 +1289,7 @@ fn royal_assassin_cannot_target_untapped_creature() {
             assassin,
             0,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bears,
                 damage_amount: 0,
                 group_index: 0,
@@ -1326,6 +1344,7 @@ fn icy_manipulator_cannot_target_an_enchantment() {
             icy,
             0,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: aura,
                 damage_amount: 0,
                 group_index: 0,
@@ -1342,6 +1361,7 @@ fn icy_manipulator_cannot_target_an_enchantment() {
             icy,
             0,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bears,
                 damage_amount: 0,
                 group_index: 0,
@@ -1390,6 +1410,7 @@ fn eyeblights_ending_cannot_target_an_elf() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: elf,
                 damage_amount: 0,
                 group_index: 0,
@@ -1404,6 +1425,7 @@ fn eyeblights_ending_cannot_target_an_elf() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bears,
                 damage_amount: 0,
                 group_index: 0,
@@ -1449,6 +1471,7 @@ fn avacynian_priest_taps_only_non_humans() {
                 priest,
                 0,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: human,
                     damage_amount: 0,
                     group_index: 0,
@@ -1471,6 +1494,7 @@ fn avacynian_priest_taps_only_non_humans() {
             priest,
             0,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bears,
                 damage_amount: 0,
                 group_index: 0,
@@ -1606,6 +1630,7 @@ fn bladebrand_target_tables_exclude_objects_outside_the_battlefield() {
         &cast_spell(
             bolt_slot,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: 1,
                 damage_amount: 0,
                 group_index: 0,
@@ -1694,6 +1719,7 @@ fn bladebrand_rejects_cast_targets_outside_the_battlefield() {
         &cast_spell(
             bolt_slot,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: 1,
                 damage_amount: 0,
                 group_index: 0,
@@ -1715,6 +1741,7 @@ fn bladebrand_rejects_cast_targets_outside_the_battlefield() {
             &cast_spell(
                 idx,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id,
                     damage_amount: 0,
                     group_index: 0,
@@ -1741,6 +1768,7 @@ fn bladebrand_rejects_cast_targets_outside_the_battlefield() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bears,
                 damage_amount: 0,
                 group_index: 0,
@@ -1784,6 +1812,7 @@ fn published_stack_targets_include_copies_in_bottom_to_top_order() {
         &cast_spell(
             bolt_slot,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: 1,
                 damage_amount: 0,
                 group_index: 0,

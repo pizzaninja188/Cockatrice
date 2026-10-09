@@ -131,6 +131,14 @@ RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFace
         const auto ability = state.activatedAbilityForOid(sourceOid, abilityIndex);
         if (!ability || (manaAbilitiesOnly && !ability->isManaAbility()))
             continue;
+        const auto targets = state.abilityTargetData(sourceOid, abilityIndex);
+        const bool hasXTargetChoices = std::any_of(targets.groups.cbegin(), targets.groups.cend(),
+                                                   [](const auto &group) { return group.hasXTargetChoices; });
+        const bool hasLegalXTargetChoice =
+            !hasXTargetChoices ||
+            std::all_of(targets.groups.cbegin(), targets.groups.cend(), [](const auto &group) {
+                return !group.hasXTargetChoices || !ruledAvailableXTargetValues(group).isEmpty();
+            });
         const QStringList manaOptions = ability->manaOptionsForSelection();
         const QString abilityLabel = ability->menuLabel();
         for (int optionIndex = 0; optionIndex < manaOptions.size(); ++optionIndex) {
@@ -141,7 +149,7 @@ RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFace
                            : QObject::tr("%1 — Add {%2}").arg(abilityLabel, manaOptions.at(optionIndex)))
                     : abilityLabel;
             options.append({RuledCardActionMenuOption::Kind::ActivateAbility, abilityIndex, label,
-                            state.abilityActivatable(sourceOid, abilityIndex), optionIndex});
+                            state.abilityActivatable(sourceOid, abilityIndex) && hasLegalXTargetChoice, optionIndex});
         }
     }
     return options;

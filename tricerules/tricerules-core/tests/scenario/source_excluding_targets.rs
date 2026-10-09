@@ -7,6 +7,7 @@ fn choose_trigger_target(target_object_id: u32) -> RuledCommand {
             decline: false,
             selected_modes: Vec::new(),
             targets: vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: target_object_id,
                 damage_amount: 0,
                 group_index: 0,
@@ -18,6 +19,7 @@ fn choose_trigger_target(target_object_id: u32) -> RuledCommand {
 
 fn target(object_id: u32) -> Vec<TargetRef> {
     vec![TargetRef {
+        expected_zone_change_generation: None,
         object_id,
         damage_amount: 0,
         group_index: 0,

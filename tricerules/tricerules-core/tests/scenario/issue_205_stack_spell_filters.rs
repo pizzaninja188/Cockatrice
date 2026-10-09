@@ -2,6 +2,7 @@ use super::helpers::*;
 
 fn stack_target(object_id: u32) -> Vec<TargetRef> {
     vec![TargetRef {
+        expected_zone_change_generation: None,
         object_id,
         damage_amount: 0,
         group_index: 0,

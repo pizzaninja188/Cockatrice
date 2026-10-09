@@ -1,0 +1,40 @@
+// Oracle identity 03f5c566-825c-4c46-9c01-a2f9b1e70a13 verified against the pinned local source.
+// Current copy characteristics (including layer-1 copy exceptions) are captured at resolution.
+(
+  id: "the_mycosynth_gardens",
+  name: "The Mycosynth Gardens",
+  face_id: "the_mycosynth_gardens",
+  mana_cost: "",
+  types: ["Land", "Sphere"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+    ),
+    (
+      ability_id: "activated_03",
+      presentation: OracleLines([3]),
+      costs: [Mana("{X}"), Tap],
+      effect: [CopyTargetArtifactWithManaValueX(target: (
+        kind: AnyPermanent,
+        controller: You,
+        permanent_types: [Artifact],
+        token: Some(false),
+      ))],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target nontoken artifact you control with mana value X",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

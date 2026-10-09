@@ -35,6 +35,7 @@ fn choose_graveyard_trigger_target(engine: &mut GameEngine, object_id: u32) {
                     decline: false,
                     selected_modes: Vec::new(),
                     targets: vec![TargetRef {
+                        expected_zone_change_generation: None,
                         object_id,
                         damage_amount: 0,
                         group_index: 0,
@@ -158,6 +159,7 @@ fn issue_375_coati_descend_4_needs_four_permanent_cards_and_targets_only_permane
                     decline: false,
                     selected_modes: Vec::new(),
                     targets: vec![TargetRef {
+                        expected_zone_change_generation: None,
                         object_id: bolt,
                         damage_amount: 0,
                         group_index: 0,

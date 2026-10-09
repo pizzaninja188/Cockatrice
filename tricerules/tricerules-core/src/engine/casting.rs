@@ -9,7 +9,7 @@ use super::presentation::{
 };
 use super::targeting::{
     capture_stack_target, target_filter_legal_at_resolution, validate_ability_targets,
-    validate_spell_targets, TargetSourceIdentity,
+    validate_spell_targets, validate_x_target_mana_value, TargetSourceIdentity,
 };
 use super::*;
 use crate::engine::events::ev_log_ability;
@@ -2091,6 +2091,13 @@ impl GameEngine {
             &ability.effect,
             ability.targeting.as_ref(),
             targets,
+        )?;
+        validate_x_target_mana_value(
+            self,
+            &ability.effect,
+            ability.targeting.as_ref(),
+            targets,
+            x_value,
         )?;
 
         let announcement = self.capture_ability_announcement(

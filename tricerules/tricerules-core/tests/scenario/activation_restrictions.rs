@@ -9,6 +9,7 @@ fn activation_engine(seed: u64) -> GameEngine {
 
 fn target(object_id: u32) -> Vec<TargetRef> {
     vec![TargetRef {
+        expected_zone_change_generation: None,
         object_id,
         damage_amount: 0,
         group_index: 0,

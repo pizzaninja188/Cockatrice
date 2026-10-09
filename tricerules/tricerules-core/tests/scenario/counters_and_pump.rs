@@ -182,6 +182,7 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
         &cast_spell(
             counter_idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bolt_oid,
                 damage_amount: 0,
                 group_index: 0,
@@ -258,6 +259,7 @@ fn giant_growth_pump_expires_after_active_turn_ends() {
         &cast_spell(
             growth_idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -416,6 +418,7 @@ fn fiery_hellhound_source_pump_rejects_supplied_target() {
                 hound,
                 0,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: hound,
                     damage_amount: 0,
                     group_index: 0,
@@ -483,6 +486,7 @@ fn two_giant_growths_stack_correctly() {
             &cast_spell(
                 growth_idx,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: bear,
                     damage_amount: 0,
                     group_index: 0,
@@ -560,6 +564,7 @@ fn battlegrowth_counter_raises_pt_and_persists() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -645,6 +650,7 @@ fn zone_view_reports_counter_annotation() {
         &cast_spell(
             bg,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -740,6 +746,7 @@ fn plus_and_minus_counters_annihilate() {
         &cast_spell(
             bg,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -769,6 +776,7 @@ fn plus_and_minus_counters_annihilate() {
         &cast_spell(
             ii,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -839,6 +847,7 @@ fn minus_counter_to_zero_toughness_kills_via_sba() {
         &cast_spell(
             ii,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: sorc,
                 damage_amount: 0,
                 group_index: 0,
@@ -904,6 +913,7 @@ fn marked_damage_clears_at_cleanup() {
         &cast_spell(
             growth_idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -984,6 +994,7 @@ fn bounce_clears_counters_and_marked_damage() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
                 group_index: 0,
@@ -1363,6 +1374,7 @@ fn anthem_buff_drains_when_source_leaves_battlefield() {
         &cast_spell(
             b_idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: anthem,
                 damage_amount: 0,
                 group_index: 0,

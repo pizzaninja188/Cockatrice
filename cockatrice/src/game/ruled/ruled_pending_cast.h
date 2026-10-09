@@ -211,6 +211,7 @@ struct PendingActivatedAbility
     QVector<RuledFlexPip> flexPips;
     QVector<quint32> lifePipIndices;
     bool targetingCostApplied = false;
+    bool restartAfterTargetInvalidation = false;
 
     /// Shared activation identity and choice header; target and payment cohorts are appended by the host.
     void writeActivationHeader(ruled::v1::ActivateAbility &command) const
@@ -906,9 +907,16 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
         const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
         const auto group = data.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(data)
                                                  : data.groups.value(ability.activeTargetGroupPosition);
+        if (group.hasXTargetChoices) {
+            const auto candidateGeneration = ruledXTargetCandidateGeneration(group, ability.xValue, oid);
+            if (kind != RuledTargetCandidateKind::Battlefield || !candidateGeneration ||
+                *candidateGeneration != state.battlefieldGenerationByOid.value(oid, 0)) {
+                return RuledTargetClickEligibility::Illegal;
+            }
+        }
         return !group.chosenByOpponent && ruledTargetDataContains(group, kind, oid, localPlayerId) &&
                        ruledTargetPairCompatible(group, ruledTargetRefKind(group, oid, localPlayerId), oid,
-                                                  ruledSelectedTargetRefs(ability))
+                                                   ruledSelectedTargetRefs(ability))
                    ? RuledTargetClickEligibility::Legal
                    : RuledTargetClickEligibility::Illegal;
     }
@@ -1051,7 +1059,21 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
             });
             const auto &candidates =
                 group == data.groups.cend() ? static_cast<const RuledTargetGroupData &>(data) : *group;
+            const auto xTargetGeneration =
+                candidates.hasXTargetChoices
+                    ? ruledXTargetCandidateGeneration(candidates, ability.xValue, target.ref.object_id())
+                    : std::optional<quint64>{};
+            const bool xTargetIncarnationMatches =
+                !candidates.hasXTargetChoices ||
+                (xTargetGeneration && target.ref.has_expected_zone_change_generation() &&
+                 target.ref.expected_zone_change_generation() == *xTargetGeneration &&
+                 target.zoneChangeGeneration == *xTargetGeneration &&
+                 state.battlefieldGenerationByOid.value(target.ref.object_id(), 0) == *xTargetGeneration);
+            if (candidates.hasXTargetChoices && !xTargetIncarnationMatches && ability.targetingCostApplied) {
+                ability.restartAfterTargetInvalidation = true;
+            }
             if (!ruledTargetDataContainsOid(candidates, target.ref.object_id(), localPlayerId) ||
+                !xTargetIncarnationMatches ||
                 !ruledTargetPairCompatible(candidates, target.ref.kind(), target.ref.object_id(),
                                            ruledSelectedTargetRefs(ability))) {
                 const int position =

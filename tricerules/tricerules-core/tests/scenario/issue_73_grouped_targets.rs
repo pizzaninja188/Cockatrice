@@ -5,6 +5,7 @@ fn grouped(object_ids: &[u32]) -> Vec<TargetRef> {
         .iter()
         .copied()
         .map(|object_id| TargetRef {
+            expected_zone_change_generation: None,
             object_id,
             damage_amount: 0,
             group_index: 0,

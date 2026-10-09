@@ -164,6 +164,7 @@ fn pridemalkin_rechecks_controller_and_counter_presence_continuously() {
                     decline: false,
                     selected_modes: Vec::new(),
                     targets: vec![TargetRef {
+                        expected_zone_change_generation: None,
                         object_id: pridemalkin,
                         damage_amount: 0,
                         group_index: 0,

@@ -142,6 +142,12 @@ enum class RuledTargetItemKind : int
 
 /// One engine-authored target group. Candidate sets are deliberately published independently;
 /// the client collects groups in order and the engine validates the final assignment atomically.
+struct RuledXTargetChoiceData
+{
+    quint32 xValue = 0;
+    QHash<quint32, quint64> candidateGenerations;
+};
+
 struct RuledTargetGroupData
 {
     int groupIndex = 0;
@@ -158,7 +164,43 @@ struct RuledTargetGroupData
     bool chosenByOpponent = false;
     /// Presence matters: a present constraint with no edges permits no pair.
     std::optional<ruled::v1::TargetPairConstraint> pairConstraint;
+    /// Presence identifies a target group whose legal objects depend on announced X.
+    bool hasXTargetChoices = false;
+    QVector<RuledXTargetChoiceData> xTargetChoices;
 };
+
+[[nodiscard]] inline QVector<quint32> ruledAvailableXTargetValues(const RuledTargetGroupData &group)
+{
+    QVector<quint32> result;
+    if (!group.hasXTargetChoices) {
+        return result;
+    }
+    for (const auto &choice : group.xTargetChoices) {
+        if (!choice.candidateGenerations.isEmpty() && !result.contains(choice.xValue)) {
+            result.append(choice.xValue);
+        }
+    }
+    std::sort(result.begin(), result.end());
+    return result;
+}
+
+[[nodiscard]] inline std::optional<quint64> ruledXTargetCandidateGeneration(const RuledTargetGroupData &group,
+                                                                            quint32 xValue,
+                                                                            quint32 targetOid)
+{
+    if (!group.hasXTargetChoices) {
+        return std::nullopt;
+    }
+    for (const auto &choice : group.xTargetChoices) {
+        if (choice.xValue == xValue) {
+            const auto candidate = choice.candidateGenerations.constFind(targetOid);
+            if (candidate != choice.candidateGenerations.constEnd()) {
+                return candidate.value();
+            }
+        }
+    }
+    return std::nullopt;
+}
 
 /// Compare opaque typed identities published by the engine, without reconstructing ownership.
 [[nodiscard]] bool ruledTargetPairCompatible(const RuledTargetGroupData &group,

@@ -42,6 +42,11 @@ void RuledTargetUi::reconcile(PlayerActions *actions)
         return;
     }
 
+    if (actions->pendingActivatedAbility.restartAfterTargetInvalidation) {
+        actions->ruledPayment->cancelPendingActivatedAbility();
+        return;
+    }
+
     auto &spell = actions->pendingRuledSpellCast;
     if (spell.valid && spell.waitingForTarget) {
         spell.inDamageAllocationMode = false;
@@ -746,7 +751,17 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
     selected.ref.set_object_id(targetOid);
     selected.ref.set_group_index(static_cast<quint32>(group.groupIndex));
     selected.ref.set_kind(ruledTargetRefKind(group, targetOid, actions->player->getPlayerInfo()->getId()));
-    selected.zoneChangeGeneration = handler->battlefieldGenerationByOid.value(targetOid);
+    if (group.hasXTargetChoices) {
+        const auto generation = ruledXTargetCandidateGeneration(
+            group, actions->pendingActivatedAbility.xValue, targetOid);
+        if (!generation) {
+            return true;
+        }
+        selected.ref.set_expected_zone_change_generation(*generation);
+        selected.zoneChangeGeneration = *generation;
+    } else {
+        selected.zoneChangeGeneration = handler->battlefieldGenerationByOid.value(targetOid);
+    }
     actions->pendingActivatedAbility.selectedTargets.append(selected);
     ++actions->pendingActivatedAbility.activeTargetGroupPosition;
     actions->pendingActivatedAbility.waitingForTarget =

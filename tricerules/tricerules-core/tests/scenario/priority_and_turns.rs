@@ -1300,6 +1300,7 @@ fn doom_blade_targets_only_nonblack_creatures() {
             &cast_spell(
                 idx,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: black,
                     damage_amount: 0,
                     group_index: 0,
@@ -1317,6 +1318,7 @@ fn doom_blade_targets_only_nonblack_creatures() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: green,
                 damage_amount: 0,
                 group_index: 0,
@@ -1399,6 +1401,7 @@ fn essence_scatter_and_negate_respect_spell_type() {
             &cast_spell(
                 neg_idx,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: bears_spell,
                     damage_amount: 0,
                     group_index: 0,
@@ -1416,6 +1419,7 @@ fn essence_scatter_and_negate_respect_spell_type() {
         &cast_spell(
             es_idx,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bears_spell,
                 damage_amount: 0,
                 group_index: 0,
@@ -1453,6 +1457,7 @@ fn essence_scatter_and_negate_respect_spell_type() {
             &cast_spell(
                 es2,
                 vec![TargetRef {
+                    expected_zone_change_generation: None,
                     object_id: bolt_spell,
                     damage_amount: 0,
                     group_index: 0,
@@ -1469,6 +1474,7 @@ fn essence_scatter_and_negate_respect_spell_type() {
         &cast_spell(
             neg2,
             vec![TargetRef {
+                expected_zone_change_generation: None,
                 object_id: bolt_spell,
                 damage_amount: 0,
                 group_index: 0,

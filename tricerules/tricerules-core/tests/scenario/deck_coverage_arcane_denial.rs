@@ -14,6 +14,7 @@ const FOUR_PLAYER_IDS: [i32; 4] = [4, 9, 27, 35];
 
 fn stack_target(object_id: u32) -> Vec<TargetRef> {
     vec![TargetRef {
+        expected_zone_change_generation: None,
         object_id,
         damage_amount: 0,
         group_index: 0,

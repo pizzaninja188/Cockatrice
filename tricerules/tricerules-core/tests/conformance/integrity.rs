@@ -75,6 +75,7 @@ fn tref(object_id: u32) -> TargetRef {
         damage_amount: 0,
         group_index: 0,
         kind: 0,
+        expected_zone_change_generation: None,
     }
 }
 

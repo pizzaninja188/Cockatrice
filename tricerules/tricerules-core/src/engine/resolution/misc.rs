@@ -22,6 +22,53 @@ use crate::engine::presentation::{
 };
 use crate::engine::{attempt_untap, set_tapped, UntapOutcome};
 
+/// Mycosynth Gardens applies a layer-1 copy effect to its exact source incarnation. The target
+/// snapshot contains only copiable values; physical identity, counters, attachments, and tapped
+/// status remain on the Gardens object.
+pub(super) fn copy_target_artifact_with_mana_value_x(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::CopyTargetArtifactWithManaValueX { .. } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let [target] = cx.targets else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some(source_id) = cx.top.source_permanent_id else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if !cx.engine.source_is_current_object(cx.top)
+        || cx
+            .engine
+            .state
+            .objects
+            .get(&source_id)
+            .is_none_or(|source| source.zone != Zone::Battlefield)
+    {
+        return Ok(EffectOutcome::Continue);
+    }
+    let Some(values) = cx.engine.copiable_values_for(*target) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let object = cx
+        .engine
+        .state
+        .objects
+        .get_mut(&source_id)
+        .expect("the current source object was checked above");
+    object.must_attack_if_able = values.face.must_attack_if_able;
+    object.must_block_if_able = values.face.must_block_if_able;
+    object.copiable_values = Some(values);
+    object.copy_revision = object.copy_revision.saturating_add(1);
+    object.active_copy_occurrence = Some(object.copy_revision);
+    cx.events.push(ev_log(format!(
+        "{} becomes a copy of artifact {target}.",
+        cx.spell_label,
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn change_source_face(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

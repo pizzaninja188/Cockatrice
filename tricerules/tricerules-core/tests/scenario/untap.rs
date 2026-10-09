@@ -8,6 +8,7 @@ use tricerules_cards::MassPlayerSet;
 
 fn target(oid: u32) -> Vec<TargetRef> {
     vec![TargetRef {
+        expected_zone_change_generation: None,
         object_id: oid,
         damage_amount: 0,
         group_index: 0,

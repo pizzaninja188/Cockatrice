@@ -1620,6 +1620,143 @@ TEST(RuledPendingTargetTest, ClickEligibilityCoversAbilitiesTriggersAndCopyRetar
               RuledTargetClickEligibility::Illegal);
 }
 
+TEST(RuledXTargetChoiceTest, PublishesOnlyEngineBoundValuesAndGenerations)
+{
+    RuledTargetGroupData group;
+    group.hasXTargetChoices = true;
+    RuledXTargetChoiceData zero;
+    zero.xValue = 0;
+    zero.candidateGenerations.insert(41, 3);
+    RuledXTargetChoiceData four;
+    four.xValue = 4;
+    four.candidateGenerations.insert(42, 9);
+    group.xTargetChoices = {zero, four};
+
+    EXPECT_EQ(ruledAvailableXTargetValues(group), QVector<quint32>({0, 4}));
+    EXPECT_EQ(ruledXTargetCandidateGeneration(group, 0, 41), std::optional<quint64>(3));
+    EXPECT_EQ(ruledXTargetCandidateGeneration(group, 4, 42), std::optional<quint64>(9));
+    EXPECT_FALSE(ruledXTargetCandidateGeneration(group, 4, 41).has_value());
+}
+
+TEST(RuledXTargetChoiceTest, ActivationTargetRequiresTheChosenValueAndCurrentIncarnation)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    RuledTargetGroupData group;
+    group.groupIndex = 0;
+    group.validPermanentIds.insert(42);
+    group.hasXTargetChoices = true;
+    RuledXTargetChoiceData choice;
+    choice.xValue = 4;
+    choice.candidateGenerations.insert(42, 9);
+    group.xTargetChoices.append(choice);
+    RuledSpellTargetData targets;
+    targets.groups.append(group);
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(44, 2), targets);
+    state.battlefieldGenerationByOid.insert(42, 9);
+
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.waitingForTarget = true;
+    ability.permanentOid = 44;
+    ability.abilityIndex = 2;
+    ability.xValue = 4;
+    EXPECT_EQ(ruledTargetClickEligibility({}, ability, state, RuledTargetCandidateKind::Battlefield, 42, 0),
+              RuledTargetClickEligibility::Legal);
+    ability.xValue = 0;
+    EXPECT_EQ(ruledTargetClickEligibility({}, ability, state, RuledTargetCandidateKind::Battlefield, 42, 0),
+              RuledTargetClickEligibility::Illegal);
+
+    ability.xValue = 4;
+    state.battlefieldGenerationByOid.insert(42, 10);
+    EXPECT_EQ(ruledTargetClickEligibility({}, ability, state, RuledTargetCandidateKind::Battlefield, 42, 0),
+              RuledTargetClickEligibility::Illegal);
+
+    PendingActivatedAbility::Target selected;
+    selected.ref.set_object_id(42);
+    selected.ref.set_group_index(0);
+    selected.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    selected.ref.set_expected_zone_change_generation(9);
+    selected.zoneChangeGeneration = 9;
+    ability.selectedTargets.append(selected);
+    PendingRuledSpellCast spell;
+    EXPECT_TRUE(reconcileRuledPendingTargets(spell, ability, state, 0));
+    EXPECT_TRUE(ability.selectedTargets.isEmpty());
+    EXPECT_TRUE(ability.waitingForTarget);
+}
+
+TEST(RuledXTargetChoiceTest, StaleTargetAfterTargetCostApplicationRequiresActivationRestart)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    RuledTargetGroupData group;
+    group.groupIndex = 0;
+    group.validPermanentIds.insert(42);
+    group.hasXTargetChoices = true;
+    RuledXTargetChoiceData currentChoice;
+    currentChoice.xValue = 4;
+    currentChoice.candidateGenerations.insert(42, 10);
+    group.xTargetChoices.append(currentChoice);
+    RuledSpellTargetData targets;
+    targets.groups.append(group);
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(44, 2), targets);
+    state.battlefieldGenerationByOid.insert(42, 10);
+
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.waitingForTarget = true;
+    ability.waitingForMana = true;
+    ability.targetingCostApplied = true;
+    ability.remainingCost.insert(QChar('X'), 3);
+    ability.permanentOid = 44;
+    ability.abilityIndex = 2;
+    ability.xValue = 4;
+    PendingActivatedAbility::Target selected;
+    selected.ref.set_object_id(42);
+    selected.ref.set_group_index(0);
+    selected.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    selected.ref.set_expected_zone_change_generation(9);
+    selected.zoneChangeGeneration = 9;
+    ability.selectedTargets.append(selected);
+    PendingRuledSpellCast spell;
+
+    EXPECT_TRUE(reconcileRuledPendingTargets(spell, ability, state, 0));
+    EXPECT_TRUE(ability.selectedTargets.isEmpty());
+    EXPECT_TRUE(ability.waitingForTarget);
+    EXPECT_TRUE(ability.restartAfterTargetInvalidation);
+    EXPECT_TRUE(ability.targetingCostApplied);
+    EXPECT_EQ(ability.remainingCost.value(QChar('X')), 3);
+}
+
+TEST(RuledXTargetChoiceTest, AbilityMenuDisablesAnEnginePublishedEmptyChoiceSet)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    RuledAbilityEntry ability;
+    ability.text = QStringLiteral("{X}, {T}: Copy target artifact.");
+    ability.manaCost = QStringLiteral("X");
+    ability.activatable = true;
+    state.activatedAbilitiesByOid.insert(44, RuledAbilityEntries{ability});
+
+    RuledSpellTargetData targets;
+    RuledTargetGroupData group;
+    group.hasXTargetChoices = true;
+    targets.groups.append(group);
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(44, 0), targets);
+    auto options = RuledPendingCast::cardActionMenuOptions({}, state, 44);
+    ASSERT_EQ(options.size(), 1);
+    EXPECT_FALSE(options.first().enabled);
+
+    RuledXTargetChoiceData choice;
+    choice.xValue = 0;
+    choice.candidateGenerations.insert(42, 7);
+    targets.groups[0].xTargetChoices.append(choice);
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(44, 0), targets);
+    options = RuledPendingCast::cardActionMenuOptions({}, state, 44);
+    ASSERT_EQ(options.size(), 1);
+    EXPECT_TRUE(options.first().enabled);
+}
+
 TEST(RuledPendingTargetTest, CastCostObjectEligibilityUsesThePublishedOptionCandidates)
 {
     PendingRuledSpellCast spell;
@@ -2656,6 +2793,12 @@ TEST_F(RuledClientTest, ParsesTargetingTablesForHandSlotsAndAbilities)
     abilityGroup->set_max(1);
     abilityGroup->add_valid_permanent_ids(200);
     abilityGroup->set_can_target_self(true);
+    auto *xTargetChoices = abilityGroup->mutable_x_target_choices();
+    auto *xTargetChoice = xTargetChoices->add_choices();
+    xTargetChoice->set_x_value(4);
+    auto *xTargetCandidate = xTargetChoice->add_candidates();
+    xTargetCandidate->set_object_id(200);
+    xTargetCandidate->set_zone_change_generation(7);
     apply(batch);
 
     EXPECT_FALSE(state->isValidSpellTarget(1, 0, 100));
@@ -2667,6 +2810,12 @@ TEST_F(RuledClientTest, ParsesTargetingTablesForHandSlotsAndAbilities)
     ASSERT_EQ(state->spellTargetData(1, 0).groups.size(), 2);
     EXPECT_EQ(state->spellTargetData(1, 0).groups.at(1).validPermanentIds, QSet<quint32>({202}));
     EXPECT_EQ(state->spellTargetData(1, 0).groups.at(1).distinctFromGroupIndices, QVector<int>({0}));
+    const auto parsedAbilityTargets = state->abilityTargetData(100, 2);
+    ASSERT_EQ(parsedAbilityTargets.groups.size(), 1);
+    EXPECT_TRUE(parsedAbilityTargets.groups.first().hasXTargetChoices);
+    EXPECT_EQ(ruledAvailableXTargetValues(parsedAbilityTargets.groups.first()), QVector<quint32>({4}));
+    EXPECT_EQ(ruledXTargetCandidateGeneration(parsedAbilityTargets.groups.first(), 4, 200),
+              std::optional<quint64>(7));
     // A different face of the same slot carries its own (here: empty) target set.
     EXPECT_FALSE(state->isValidSpellTarget(1, 1, 100));
     EXPECT_TRUE(state->isValidSpellStackTarget(1, 0, 300));

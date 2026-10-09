@@ -534,6 +534,7 @@ pub(crate) fn deploy_to_battlefield(
 /// Player targets for `DamageTarget` spells use `TargetRef.object_id == player_id` (see engine).
 pub(crate) fn target_player(pid: i32) -> Vec<TargetRef> {
     vec![TargetRef {
+        expected_zone_change_generation: None,
         object_id: pid as u32,
         damage_amount: 0,
         group_index: 0,
@@ -551,6 +552,7 @@ pub(crate) fn target_object(oid: u32) -> Vec<TargetRef> {
 /// Player target with explicit damage allocation, for `DamageTargets` spells (Fireball, Fire).
 pub(crate) fn target_player_damage(pid: i32, damage: u32) -> Vec<TargetRef> {
     vec![TargetRef {
+        expected_zone_change_generation: None,
         object_id: pid as u32,
         damage_amount: damage,
         group_index: 0,
@@ -563,6 +565,7 @@ pub(crate) fn targets_with_damage(pairs: Vec<(u32, u32)>) -> Vec<TargetRef> {
     pairs
         .into_iter()
         .map(|(oid, dmg)| TargetRef {
+            expected_zone_change_generation: None,
             object_id: oid,
             damage_amount: dmg,
             group_index: 0,

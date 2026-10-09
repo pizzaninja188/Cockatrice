@@ -522,6 +522,9 @@ message TargetRef {
   // Object domain chosen from the engine-published candidate sets. ObjectId and PlayerId share
   // the wire integer space, so stack presentation must not guess this from the numeric value.
   TargetRefKind kind = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Optional identity guard from the engine-published candidate. The engine requires it for
+  // targets whose legality depends on the exact battlefield incarnation.
+  optional uint64 expected_zone_change_generation = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message SelectedSpellMode {
@@ -726,6 +729,9 @@ message LegalTargetGroup {
   // Presence requires an engine-published compatible pair with an earlier selected group.
   // Present with no pairs means no legal selection; absent means no pair constraint.
   TargetPairConstraint pair_constraint = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Present for effects whose activation X is bound to a target's current characteristic.
+  // An empty choices list means no legal X-target pair exists.
+  XTargetChoices x_target_choices = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Opaque engine-authored compatibility for Goblin Welder's two target roles. Consumers
@@ -738,6 +744,22 @@ message TargetPairConstraint {
 message TargetPairChoice {
   TargetCandidateRef prior_target = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   TargetCandidateRef candidate = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+// Engine-authored X-to-target choices for abilities such as The Mycosynth Gardens. Message
+// presence identifies the specialized activation even when no legal candidates exist.
+message XTargetChoices {
+  repeated XTargetChoice choices = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message XTargetChoice {
+  uint32 x_value = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated XTargetCandidate candidates = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message XTargetCandidate {
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint64 zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message TargetedCostReductionApplication {

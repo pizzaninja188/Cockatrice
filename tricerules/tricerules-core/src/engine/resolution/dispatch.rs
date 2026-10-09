@@ -190,6 +190,9 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::CopyTargetSpell { .. } => {
             stack_ops::copy_target_spell(cx, effect)?
         }
+        effect @ SpellEffectKind::CopyTargetArtifactWithManaValueX { .. } => {
+            misc::copy_target_artifact_with_mana_value_x(cx, effect)?
+        }
         effect @ SpellEffectKind::GainLife { .. } => life::gain_life(cx, effect)?,
         effect @ SpellEffectKind::LoseLife { .. } => life::lose_life(cx, effect)?,
         effect @ SpellEffectKind::TargetPlayerGainsLife { .. } => {

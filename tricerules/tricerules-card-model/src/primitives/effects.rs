@@ -1322,6 +1322,12 @@ pub enum SpellEffectKind {
         #[serde(default)]
         spell_filter: StackSpellFilter,
     },
+    /// Mycosynth Gardens: copy the exact targeted artifact permanent whose current mana value
+    /// equals this activated ability's announced X. The target filter carries the printed
+    /// "artifact you control" restriction; engine target publication and resolution also bind X.
+    CopyTargetArtifactWithManaValueX {
+        target: TargetFilter,
+    },
     /// Striking Palette and Doublecast: a one-shot delayed copy trigger, expiring this turn.
     CopyNextSpellThisTurn,
     /// Engine-created delayed trigger instruction; its captured spell is stored with the trigger.
@@ -3261,6 +3267,9 @@ impl SpellEffectKind {
             | SpellEffectKind::PreventNextDamage { target, .. }
             | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target }
             | SpellEffectKind::PreventAllCombatDamageByTargetTurn { target } => {
+                vec![TargetRole::Filtered(target)]
+            }
+            SpellEffectKind::CopyTargetArtifactWithManaValueX { target } => {
                 vec![TargetRole::Filtered(target)]
             }
             SpellEffectKind::ExileTargetGainLifeEqualToPower => {
