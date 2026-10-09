@@ -433,7 +433,8 @@ impl GameEngine {
                             ReplacementPriority::Other,
                             Some(format!("{} — enters prepared", face.name)),
                         ),
-                        StaticAbilityDef::EntersAsCopy { .. } => (
+                        StaticAbilityDef::EntersAsCopy { .. }
+                        | StaticAbilityDef::EntersAsCopyWithHasteUntilEndOfTurn { .. } => (
                             ReplacementPriority::EntryCopy,
                             Some(format!("{} — enters as a copy", face.name)),
                         ),
@@ -583,14 +584,14 @@ impl GameEngine {
         effect_id: &EntryReplacementEffectId,
     ) -> Option<TargetFilter> {
         self.entry_copy_definition(event, effect_id)
-            .map(|(filter, _)| filter)
+            .map(|(filter, _, _)| filter)
     }
 
     fn entry_copy_definition(
         &self,
         event: &BattlefieldEntryEvent,
         effect_id: &EntryReplacementEffectId,
-    ) -> Option<(TargetFilter, bool)> {
+    ) -> Option<(TargetFilter, bool, bool)> {
         let EntryReplacementEffectId::Intrinsic {
             object_id,
             copy_revision,
@@ -615,7 +616,10 @@ impl GameEngine {
             StaticAbilityDef::EntersAsCopy {
                 filter,
                 artifact_in_addition,
-            } => Some((filter.clone(), *artifact_in_addition)),
+            } => Some((filter.clone(), *artifact_in_addition, false)),
+            StaticAbilityDef::EntersAsCopyWithHasteUntilEndOfTurn { filter } => {
+                Some((filter.clone(), false, true))
+            }
             _ => None,
         }
     }
@@ -2044,11 +2048,13 @@ impl GameEngine {
         let saved = (
             object.copiable_values.clone(),
             object.copy_revision,
+            object.active_copy_occurrence,
             object.must_attack_if_able,
             object.must_block_if_able,
         );
         object.copiable_values = Some(values.clone());
         object.copy_revision = object.copy_revision.saturating_add(1);
+        object.active_copy_occurrence = Some(object.copy_revision);
         object.must_attack_if_able = values.face.must_attack_if_able;
         object.must_block_if_able = values.face.must_block_if_able;
 
@@ -2094,8 +2100,9 @@ impl GameEngine {
         if let Some(object) = self.state.objects.get_mut(&object_id) {
             object.copiable_values = saved.0;
             object.copy_revision = saved.1;
-            object.must_attack_if_able = saved.2;
-            object.must_block_if_able = saved.3;
+            object.active_copy_occurrence = saved.2;
+            object.must_attack_if_able = saved.3;
+            object.must_block_if_able = saved.4;
         }
         candidates
     }
@@ -2587,7 +2594,8 @@ impl GameEngine {
                     .map(|ability| &ability.definition);
                 match ability {
                     Some(StaticAbilityDef::EntersPrepared) => event.prepared = true,
-                    Some(StaticAbilityDef::EntersAsCopy { .. }) => {
+                    Some(StaticAbilityDef::EntersAsCopy { .. })
+                    | Some(StaticAbilityDef::EntersAsCopyWithHasteUntilEndOfTurn { .. }) => {
                         debug_assert!(false, "copy source choice must be completed before apply")
                     }
                     Some(StaticAbilityDef::EntersTapped {
@@ -3064,6 +3072,8 @@ impl GameEngine {
         event: BattlefieldEntryEvent,
         attached_to: Option<AttachmentRecipient>,
     ) -> Result<Vec<GameEvent>, EngineError> {
+        let temporary_copy_baseline = Self::entry_copy_rollback_candidate(&event)
+            .and_then(|candidate| candidate.temporary_copy_baseline.clone());
         self.validate_battlefield_entry_commit(&event)?;
         // CR 400.7a: the marked characteristic-changing mana effects on a permanent spell
         // continue to apply to the permanent it becomes. Do not carry unrelated stack effects.
@@ -3121,6 +3131,22 @@ impl GameEngine {
             Zone::Battlefield,
             Some(event.destination_controller),
         )?;
+        if let Some(baseline) = temporary_copy_baseline {
+            let generation = self.state.zone_change_generation[&event.object_id];
+            let installed_copy_revision = self.state.objects[&event.object_id].copy_revision;
+            self.state.active_temporary_copies.retain(|effect| {
+                effect.object_id != event.object_id || effect.zone_change_generation != generation
+            });
+            self.state
+                .active_temporary_copies
+                .push(crate::state::ActiveTemporaryCopy {
+                    object_id: event.object_id,
+                    zone_change_generation: generation,
+                    expires_at_cleanup_turn_instance: self.state.turn_instance,
+                    installed_copy_revision,
+                    baseline,
+                });
+        }
         for mut record in event.chosen_opponents.iter().cloned() {
             record.key.source_zone_change = self.state.zone_change_generation[&event.object_id];
             self.state.chosen_opponents.push(record);
@@ -3886,7 +3912,7 @@ impl GameEngine {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("copy source choice is stale"));
         };
-        let Some((filter, artifact_in_addition)) =
+        let Some((filter, artifact_in_addition, add_haste_until_cleanup)) =
             self.entry_copy_definition(&entry.event, &effect_id)
         else {
             entry.copy_source_effect = Some(effect_id);
@@ -3949,6 +3975,19 @@ impl GameEngine {
                     }
                 }
             }
+            if add_haste_until_cleanup {
+                fn add_haste(face: &mut CardFace) {
+                    if !face.keywords.contains(&Keyword::Haste) {
+                        face.keywords.push(Keyword::Haste);
+                    }
+                }
+                add_haste(&mut values.face);
+                if let Some(faces) = &mut values.room_faces {
+                    for face in faces {
+                        add_haste(face);
+                    }
+                }
+            }
             let Some(entering) = self.state.objects.get(&entry.event.object_id) else {
                 entry.copy_source_effect = Some(effect_id);
                 self.state.pending_replacement_event =
@@ -3966,6 +4005,16 @@ impl GameEngine {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal("provisional copy chain became stale"));
             }
+            let temporary_copy_baseline = add_haste_until_cleanup.then(|| {
+                previous_copy
+                    .and_then(|candidate| candidate.temporary_copy_baseline.clone())
+                    .unwrap_or_else(|| crate::state::TemporaryCopyBaseline {
+                        copiable_values: entering.copiable_values.clone(),
+                        active_copy_occurrence: entering.active_copy_occurrence,
+                        must_attack_if_able: entering.must_attack_if_able,
+                        must_block_if_able: entering.must_block_if_able,
+                    })
+            });
             let candidate = PendingCopyCandidate {
                 source_id,
                 source_generation,
@@ -3984,6 +4033,10 @@ impl GameEngine {
                     || entering.copiable_values.clone(),
                     |candidate| candidate.entering_copiable_values.clone(),
                 ),
+                entering_active_copy_occurrence: previous_copy
+                    .map_or(entering.active_copy_occurrence, |candidate| {
+                        candidate.entering_active_copy_occurrence
+                    }),
                 entering_must_attack_if_able: previous_copy
                     .map_or(entering.must_attack_if_able, |candidate| {
                         candidate.entering_must_attack_if_able
@@ -3992,6 +4045,7 @@ impl GameEngine {
                     .map_or(entering.must_block_if_able, |candidate| {
                         candidate.entering_must_block_if_able
                     }),
+                temporary_copy_baseline,
                 values,
             };
             self.install_entry_copy_candidate(entry.event.object_id, &candidate)?;
@@ -4066,6 +4120,7 @@ impl GameEngine {
         object.must_block_if_able = candidate.values.face.must_block_if_able;
         object.copiable_values = Some(candidate.values.clone());
         object.copy_revision = object.copy_revision.saturating_add(1);
+        object.active_copy_occurrence = Some(object.copy_revision);
         Ok(())
     }
 
@@ -4090,6 +4145,7 @@ impl GameEngine {
         }
         object.copiable_values = candidate.entering_copiable_values.clone();
         object.copy_revision = candidate.rollback_copy_revision;
+        object.active_copy_occurrence = candidate.entering_active_copy_occurrence;
         object.must_attack_if_able = candidate.entering_must_attack_if_able;
         object.must_block_if_able = candidate.entering_must_block_if_able;
         Ok(())

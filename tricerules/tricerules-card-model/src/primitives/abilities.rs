@@ -2196,6 +2196,12 @@ pub enum StaticAbilityDef {
         #[serde(default)]
         artifact_in_addition: bool,
     },
+    /// CR 614.12 / 707.9a: Cursed Mirror's specialized entry copy effect. The selected
+    /// creature's copiable values gain haste, and this copy effect expires during cleanup.
+    EntersAsCopyWithHasteUntilEndOfTurn {
+        #[serde(default = "TargetFilter::default_creature")]
+        filter: TargetFilter,
+    },
     /// CR 614.12 / 305.6-305.7: choose one basic land type as this land enters, then offer the
     /// linked optional cost. The type choice and cost are one replacement-effect application;
     /// no unrelated replacement effect may be interposed between them.

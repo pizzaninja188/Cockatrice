@@ -1,0 +1,9 @@
+(
+  id: "cursed_mirror",
+  name: "Cursed Mirror",
+  face_id: "cursed_mirror",
+  mana_cost: "{2}{R}",
+  types: ["Artifact"],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(r: 1)])])],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: EntersAsCopyWithHasteUntilEndOfTurn(filter: (kind: Creature)))],
+)

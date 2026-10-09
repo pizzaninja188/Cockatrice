@@ -1201,7 +1201,9 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 });
             }
         }
-        if let StaticAbilityDef::EntersAsCopy { filter, .. } = ability {
+        if let StaticAbilityDef::EntersAsCopy { filter, .. }
+        | StaticAbilityDef::EntersAsCopyWithHasteUntilEndOfTurn { filter } = ability
+        {
             filter
                 .validate_characteristic_constraints()
                 .map_err(|reason| RegistryError::InvalidCard {
@@ -1216,7 +1218,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             }) {
                 return Err(RegistryError::InvalidCard {
                     id: card.id.clone(),
-                    reason: "EntersAsCopy requires an untargeted Creature or AnyPermanent filter"
+                    reason: "entry copy requires an untargeted Creature or AnyPermanent filter"
                         .into(),
                 });
             }
@@ -2287,6 +2289,7 @@ fn validate_class_level_bars(
                 &ability.definition,
                 StaticAbilityDef::EntersPrepared
                     | StaticAbilityDef::EntersAsCopy { .. }
+                    | StaticAbilityDef::EntersAsCopyWithHasteUntilEndOfTurn { .. }
                     | StaticAbilityDef::EntersWithChosenBasicLandType { .. }
                     | StaticAbilityDef::AsEntersChooseOpponent { .. }
                     | StaticAbilityDef::EntersTapped { .. }

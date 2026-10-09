@@ -493,6 +493,9 @@ pub struct GameObject {
     /// Incremented whenever a copy snapshot is installed. Intrinsic replacement identity uses
     /// this revision so abilities acquired from the copied face are evaluated once.
     pub copy_revision: u64,
+    /// Stable identity of the currently active copy occurrence. Unlike `copy_revision`, this can
+    /// be restored when a temporary copy effect expires and reveals an earlier copy effect.
+    pub active_copy_occurrence: Option<u64>,
     pub zone: Zone,
     pub tapped: bool,
     pub summoning_sick: bool,
@@ -1902,9 +1905,30 @@ pub(crate) struct PendingCopyCandidate {
     /// Original pre-entry baseline; entering_copy_revision guards the latest installation.
     pub rollback_copy_revision: u64,
     pub entering_copiable_values: Option<CopiableValues>,
+    pub entering_active_copy_occurrence: Option<u64>,
     pub entering_must_attack_if_able: bool,
     pub entering_must_block_if_able: bool,
+    /// Exact value state beneath this temporary copy effect. For consecutive temporary effects
+    /// in one entry event this retains the earliest nonexpiring baseline.
+    pub temporary_copy_baseline: Option<TemporaryCopyBaseline>,
     pub values: CopiableValues,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct TemporaryCopyBaseline {
+    pub copiable_values: Option<CopiableValues>,
+    pub active_copy_occurrence: Option<u64>,
+    pub must_attack_if_able: bool,
+    pub must_block_if_able: bool,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct ActiveTemporaryCopy {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+    pub expires_at_cleanup_turn_instance: u64,
+    pub installed_copy_revision: u64,
+    pub baseline: TemporaryCopyBaseline,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -2597,6 +2621,9 @@ pub struct GameState {
     pub(crate) linked_exile_records: BTreeMap<LinkedExileKey, Vec<LinkedExiledObject>>,
     /// Small deterministic entry-ordered collection; designations are not copiable values.
     pub(crate) chosen_opponents: Vec<ChosenOpponentRecord>,
+    /// Generation-bound temporary copy effects. Only their copiable-value baseline is restored;
+    /// expiry metadata is never part of another object's copy snapshot.
+    pub(crate) active_temporary_copies: Vec<ActiveTemporaryCopy>,
     /// CR 310.11a: public protector chosen for each battlefield Siege. The zone-change funnel
     /// removes this mapping so a returned Battle must choose again.
     pub battle_protectors: HashMap<ObjectId, PlayerId>,
@@ -2667,6 +2694,9 @@ pub struct GameState {
     /// CR 514.3: a trigger occurred during cleanup, so players receive priority and another
     /// cleanup step follows once the stack is empty and everyone passes.
     pub cleanup_priority_active: bool,
+    /// Whether an SBA was performed during the current cleanup step (CR 514.3a), including when
+    /// no trigger remains to put on the stack.
+    pub(crate) cleanup_sba_performed: bool,
     /// Pre-game flow; `None` once the duel has started (upkeep of turn 1).
     pub opening: Option<OpeningSequence>,
     /// Seat index of the player who takes the first turn (CR 103.8: only they skip their first draw step).

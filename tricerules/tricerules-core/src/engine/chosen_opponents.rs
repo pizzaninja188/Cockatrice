@@ -33,7 +33,11 @@ impl GameEngine {
             ),
             link_id: link.clone(),
             occurrence: if object.copiable_values.is_some() {
-                ChosenOpponentOccurrence::AcquiredCopy(object.copy_revision)
+                ChosenOpponentOccurrence::AcquiredCopy(
+                    object
+                        .active_copy_occurrence
+                        .unwrap_or(object.copy_revision),
+                )
             } else {
                 ChosenOpponentOccurrence::NativeOrTokenBase
             },

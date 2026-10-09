@@ -2464,6 +2464,7 @@ impl GameEngine {
                         token_faces: copy.and_then(|snapshot| snapshot.faces.clone()),
                         copiable_values: None,
                         copy_revision: 0,
+                        active_copy_occurrence: None,
                         // Proposed tokens live in no player's zone until entry replacements finish.
                         zone: Zone::Stack,
                         tapped: enters_tapped,
@@ -2988,6 +2989,9 @@ fn commit_zone_move(
         prior_generation
     );
     if leaving_battlefield {
+        state.active_temporary_copies.retain(|effect| {
+            effect.object_id != oid || effect.zone_change_generation != prior_generation
+        });
         // A resolving "for as long as you control this source" effect belongs to this exact
         // source incarnation. Drain it before the zone-change generation is incremented; the
         // ability's stack object is a different id and cannot serve as this binding.
@@ -3116,6 +3120,7 @@ fn commit_zone_move(
             o.face_down = false;
             o.copiable_values = None;
             o.copy_revision = 0;
+            o.active_copy_occurrence = None;
             if let Some((power, toughness, must_attack, must_block)) = front_face_values {
                 o.power = power;
                 o.toughness = toughness;
@@ -3536,6 +3541,7 @@ mod anthem_scope_tests {
                 token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
+                active_copy_occurrence: None,
                 zone: Zone::Battlefield,
                 tapped: false,
                 summoning_sick: false,
@@ -3641,6 +3647,7 @@ mod attached_subject_tests {
                 token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
+                active_copy_occurrence: None,
                 zone: Zone::Battlefield,
                 tapped: false,
                 summoning_sick: false,
@@ -8090,6 +8097,7 @@ mod source_keyword_tests {
                 token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
+                active_copy_occurrence: None,
                 zone: Zone::Battlefield,
                 tapped: false,
                 summoning_sick: false,
@@ -8135,6 +8143,7 @@ mod source_keyword_tests {
                 token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
+                active_copy_occurrence: None,
                 zone: Zone::Battlefield,
                 tapped: false,
                 summoning_sick: false,

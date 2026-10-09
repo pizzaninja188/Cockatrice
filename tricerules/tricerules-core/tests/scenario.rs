@@ -244,6 +244,9 @@ mod conditional_spell_costs;
 mod control;
 #[path = "scenario/copy_effects.rs"]
 mod copy_effects;
+
+#[path = "scenario/deck_coverage_cursed_mirror.rs"]
+mod deck_coverage_cursed_mirror;
 #[path = "scenario/deck_coverage_guardian_project.rs"]
 mod deck_coverage_guardian_project;
 

@@ -8,15 +8,28 @@ impl GameEngine {
     /// CR 704.4: state-based actions are checked and performed repeatedly until a check finds
     /// nothing left to do. Stops early if a legend-rule SBA pauses for player choice.
     pub(super) fn apply_sbas(&mut self, out: &mut Vec<rv1::RuledEvent>) -> Result<(), EngineError> {
+        self.apply_sbas_and_report(out).map(|_| ())
+    }
+
+    /// Run the full state-based-action loop and report whether a CR 704 action was performed.
+    /// Bookkeeping that settles derived indexes is deliberately excluded from the result.
+    pub(super) fn apply_sbas_and_report(
+        &mut self,
+        out: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
         if self.state.is_terminal() {
-            return Ok(());
+            return Ok(false);
         }
-        while !self.state.is_terminal()
-            && self.state.pending_resolution.is_none()
-            && self.apply_sbas_once(out)?
-        {}
+        let mut performed = false;
+        while !self.state.is_terminal() && self.state.pending_resolution.is_none() {
+            let (changed, performed_this_pass) = self.apply_sbas_once(out)?;
+            performed |= performed_this_pass;
+            if !changed {
+                break;
+            }
+        }
         self.debug_assert_battlefield_control_index();
-        Ok(())
+        Ok(performed)
     }
 
     /// The battlefield lists are the *control* index (see [`GameObject::controller`]). Every zone
@@ -71,9 +84,9 @@ impl GameEngine {
     pub(super) fn apply_sbas_once(
         &mut self,
         out: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<bool, EngineError> {
+    ) -> Result<(bool, bool), EngineError> {
         if self.state.is_terminal() {
-            return Ok(false);
+            return Ok((false, false));
         }
         let lost_players = self
             .state
@@ -112,8 +125,9 @@ impl GameEngine {
             changed = true;
         }
         if self.state.pending_resolution.is_some() {
-            return Ok(changed);
+            return Ok((changed, false));
         }
+        let mut performed = false;
         // CR 704.5c: a player with ten or more poison counters loses. All players at the
         // threshold lose in the same SBA pass before their departures are reconciled.
         for player in &mut self.state.players {
@@ -127,6 +141,7 @@ impl GameEngine {
             {
                 player.has_lost = true;
                 changed = true;
+                performed = true;
             }
         }
         let zone_snapshot = self.snapshot_zone_event();
@@ -226,6 +241,7 @@ impl GameEngine {
                 o.set_counter(CounterKind::PlusOnePlusOne, plus - pairs);
                 o.set_counter(CounterKind::MinusOneMinusOne, minus - pairs);
                 changed = true;
+                performed = true;
             }
         }
 
@@ -244,6 +260,7 @@ impl GameEngine {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             if let Ok(died) = destroy_permanent(&mut self.state, self.registry, id) {
                 changed = true;
+                performed = true;
                 if let Some(owner_id) = owner {
                     out.push(permanent_moved_event(
                         &self.state,
@@ -264,6 +281,7 @@ impl GameEngine {
             let (regenerated, tap_event) = consume_regen_shield(self, id, out);
             if regenerated {
                 changed = true;
+                performed = true;
                 tap_events.extend(tap_event);
                 let name = snapshot
                     .as_ref()
@@ -272,6 +290,7 @@ impl GameEngine {
                 out.push(super::events::ev_log(format!("{name} regenerates.")));
             } else if let Ok(died) = destroy_permanent(&mut self.state, self.registry, id) {
                 changed = true;
+                performed = true;
                 if let Some(owner_id) = owner {
                     out.push(permanent_moved_event(
                         &self.state,
@@ -304,6 +323,7 @@ impl GameEngine {
             };
             if let Ok(died) = sacrifice_permanent(&mut self.state, self.registry, id) {
                 changed = true;
+                performed = true;
                 out.push(permanent_moved_event(
                     &self.state,
                     id,
@@ -358,6 +378,7 @@ impl GameEngine {
             if let Some(eq) = self.state.objects.get_mut(&eq_id) {
                 eq.attached_to = None;
                 changed = true;
+                performed = true;
             }
         }
 
@@ -405,6 +426,7 @@ impl GameEngine {
                 player.graveyard.retain(|&oid| oid != id);
             }
             changed = true;
+            performed = true;
         }
         let vanished: Vec<ObjectId> = self
             .state
@@ -420,6 +442,7 @@ impl GameEngine {
                         || effect.duration != EffectDuration::WhileSourceInGraveyard
                 });
                 changed = true;
+                performed = true;
                 // Sweep every player, not just the owner: the battlefield list is keyed by
                 // controller, so a token that changed control would otherwise leave a dangling
                 // oid behind.
@@ -475,6 +498,7 @@ impl GameEngine {
                 .is_some_and(|value| value.is_creature());
             if let Ok(died) = destroy_permanent(&mut self.state, self.registry, id) {
                 changed = true;
+                performed = true;
                 if let Some(owner_id) = owner {
                     out.push(permanent_moved_event(
                         &self.state,
@@ -492,8 +516,9 @@ impl GameEngine {
         self.fire_zone_triggers(aura_zones, aura_events, out);
         if self.apply_legend_sbas(out)? {
             changed = true;
+            performed = true;
         }
-        Ok(changed)
+        Ok((changed, performed))
     }
 
     /// Materialize CR 613 layer-2 control into the battlefield control index. Characteristics
@@ -781,6 +806,7 @@ mod sba_tests {
                 token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
+                active_copy_occurrence: None,
                 zone: Zone::Battlefield,
                 tapped: false,
                 summoning_sick: false,

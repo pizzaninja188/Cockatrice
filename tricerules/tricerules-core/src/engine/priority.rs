@@ -1087,14 +1087,16 @@ impl GameEngine {
                 self.clear_all_mana_pools();
                 self.state.turn_step = Cleanup;
                 self.state.passes_since_stack_change = 0;
+                self.state.cleanup_sba_performed = false;
                 // No PhaseChanged: clients keep highlighting end step during engine cleanup (CR 514).
                 // Carry the caller's accumulated events forward (consistent with the `Draw` branch);
                 // shadowing `ev` with a fresh vec here would silently drop anything already in it.
-                self.apply_sbas(ev)?;
+                self.state.cleanup_sba_performed |= self.apply_sbas_and_report(ev)?;
                 return self.start_cleanup_or_roll_turn(std::mem::take(ev));
             }
             Cleanup if self.state.cleanup_priority_active => {
                 self.state.cleanup_priority_active = false;
+                self.state.cleanup_sba_performed = false;
                 return self.start_cleanup_or_roll_turn(std::mem::take(ev));
             }
             _ => {
@@ -1134,7 +1136,7 @@ impl GameEngine {
                 self.maximum_hand_size(pid)
             )));
             ev.push(ev_priority_changed(self));
-            self.apply_sbas(&mut ev)?;
+            self.state.cleanup_sba_performed |= self.apply_sbas_and_report(&mut ev)?;
             return Ok(finish_with_events(self, ev));
         }
         self.state.cleanup_discard_player = None;
@@ -1203,7 +1205,7 @@ impl GameEngine {
             discard_receipts.push(discard_receipt);
         }
         self.fire_discard_batches(vec![(player, discard_receipts)], &mut ev);
-        self.apply_sbas(&mut ev)?;
+        self.state.cleanup_sba_performed |= self.apply_sbas_and_report(&mut ev)?;
         if self.state.players[idx].hand.len() > self.maximum_hand_size(player) {
             ev.push(ev_priority_changed(self));
             return Ok(finish_with_events(self, ev));
@@ -1219,6 +1221,7 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         self.state.cleanup_discard_player = None;
         self.cleanup_until_end_of_turn_effects();
+        self.cleanup_temporary_copies();
         let ending_turn_instance = self.state.turn_instance;
         self.state
             .active_exile_play_permissions
@@ -1228,8 +1231,12 @@ impl GameEngine {
         self.reindex_battlefield_control(&mut ev);
         self.cleanup_marked_damage();
         self.clear_all_mana_pools();
+        self.state.cleanup_sba_performed |= self.apply_sbas_and_report(&mut ev)?;
         self.flush_staged_triggers(&mut ev);
-        if !self.state.stack.is_empty() || self.state.blocking_choice().is_some() {
+        if self.state.cleanup_sba_performed
+            || !self.state.stack.is_empty()
+            || self.state.blocking_choice().is_some()
+        {
             self.state.cleanup_priority_active = true;
             if let Some(index) = self.state.player_idx(self.state.active_player_id()) {
                 self.state.priority_idx = index;
@@ -1241,6 +1248,7 @@ impl GameEngine {
             return Ok(finish_with_events(self, ev));
         }
         self.state.cleanup_priority_active = false;
+        self.state.cleanup_sba_performed = false;
         self.state.lands_played_this_turn = 0;
         self.state.activation_uses_this_turn.clear();
         let ending_player = self.state.active_player_id();

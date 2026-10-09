@@ -796,7 +796,8 @@ impl GameEngine {
                 | StaticAbilityDef::MultiplyManaFromTappedPermanents { .. } => {
                     // Queried at the relevant event; no independent effect record is needed.
                 }
-                StaticAbilityDef::EntersAsCopy { .. } => {
+                StaticAbilityDef::EntersAsCopy { .. }
+                | StaticAbilityDef::EntersAsCopyWithHasteUntilEndOfTurn { .. } => {
                     // CR 614.12 / 707.5 entry replacement, handled before zone commitment in
                     // `engine::replacement`; there is no post-entry continuous effect to emit.
                 }
@@ -1667,6 +1668,49 @@ impl GameEngine {
         });
     }
 
+    /// CR 707.2 / 614.12: expire a committed temporary entry-copy effect, restoring its exact
+    /// previous copiable values only if no later copy effect has replaced it.
+    pub(super) fn cleanup_temporary_copies(&mut self) -> bool {
+        let turn_instance = self.state.turn_instance;
+        let effects = std::mem::take(&mut self.state.active_temporary_copies);
+        let mut remaining = Vec::with_capacity(effects.len());
+        let mut changed = false;
+        for effect in effects {
+            let current_generation = self
+                .state
+                .zone_change_generation
+                .get(&effect.object_id)
+                .copied()
+                .unwrap_or(0);
+            let current_object = self.state.objects.get(&effect.object_id);
+            if current_generation != effect.zone_change_generation
+                || !current_object.is_some_and(|object| object.zone == Zone::Battlefield)
+            {
+                continue;
+            }
+            if effect.expires_at_cleanup_turn_instance > turn_instance {
+                remaining.push(effect);
+                continue;
+            }
+            let Some(object) = self.state.objects.get_mut(&effect.object_id) else {
+                continue;
+            };
+            if object.copy_revision != effect.installed_copy_revision {
+                // A later copy effect is now authoritative. Expiring a shadowed effect must not
+                // invalidate linked choices or disturb the later copy's copiable values.
+                continue;
+            }
+            object.copiable_values = effect.baseline.copiable_values;
+            object.active_copy_occurrence = effect.baseline.active_copy_occurrence;
+            object.must_attack_if_able = effect.baseline.must_attack_if_able;
+            object.must_block_if_able = effect.baseline.must_block_if_able;
+            object.copy_revision = object.copy_revision.saturating_add(1);
+            changed = true;
+        }
+        self.state.active_temporary_copies = remaining;
+        changed
+    }
+
     pub(super) fn special_action_prohibited(
         &self,
         object_id: ObjectId,
@@ -1941,6 +1985,7 @@ mod issue_461_activation_prohibition_tests {
             token_origin: None,
             token_faces: None,
             copy_revision: 0,
+            active_copy_occurrence: None,
             zone: Zone::Battlefield,
             tapped: false,
             summoning_sick: false,
@@ -2903,6 +2948,7 @@ mod issue_499_effect_counter_replacement_tests {
             token_origin: None,
             token_faces: None,
             copy_revision: 0,
+            active_copy_occurrence: None,
             zone: Zone::Battlefield,
             tapped: false,
             summoning_sick: false,

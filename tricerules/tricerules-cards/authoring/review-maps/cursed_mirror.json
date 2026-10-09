@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "spans": [
+    {
+      "face_id": "cursed_mirror",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "cursed_mirror",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_cursed_mirror::cursed_mirror_temporarily_copies_a_creature_with_haste_then_restores_its_mana_ability",
+      "covers": "copies an opponent creature with haste through the turn, then restores Cursed Mirror and its red mana ability"
+    },
+    {
+      "test": "scenario deck_coverage_cursed_mirror::welder_returned_cursed_mirror_expires_its_entry_copy_at_cleanup",
+      "covers": "a noncast Goblin Welder return registers Mirror's cleanup expiry and binds it to the new zone-change generation"
+    },
+    {
+      "test": "scenario deck_coverage_cursed_mirror::mirrorworks_token_copy_of_cursed_mirror_expires_while_preserving_token_identity",
+      "covers": "a Mirrorworks token copy uses Cursed Mirror's entry choice, expires at cleanup, and retains its token origin"
+    },
+    {
+      "test": "scenario deck_coverage_cursed_mirror::mirror_copied_clever_impersonator_keeps_black_vise_opponent_choice_after_cleanup",
+      "covers": "the later Clever Impersonator copy replaces Mirror's temporary copy while Black Vise's linked opponent choice remains stable"
+    },
+    {
+      "test": "scenario deck_coverage_cursed_mirror::later_clone_entry_copy_replaces_mirror_haste_and_is_not_reverted_at_cleanup",
+      "covers": "a later Clone copy choice replaces the earlier Mirror copy and haste exception"
+    },
+    {
+      "test": "scenario deck_coverage_cursed_mirror::cleanup_sba_without_triggers_still_grants_cleanup_priority",
+      "covers": "copy expiry moves an illegal Aura, detaches Equipment, preserves counters/tap/ObjectId/generation, emits a current battlefield view, and preserves cleanup SBA priority"
+    },
+    {
+      "test": "scenario deck_coverage_cursed_mirror::clone_of_a_copying_mirror_keeps_copiable_haste_after_mirror_reverts",
+      "covers": "another object copies Mirror's copiable haste but not its cleanup duration"
+    },
+    {
+      "test": "scenario deck_coverage_cursed_mirror::declining_cursed_mirror_copy_leaves_its_artifact_mana_ability_available",
+      "covers": "declining the optional copy choice leaves the printed artifact and red mana ability"
+    },
+    {
+      "test": "scenario deck_coverage_cursed_mirror::copied_elvish_visionary_etb_ability_triggers_for_cursed_mirrors_controller",
+      "covers": "the chosen creature's copied enters-the-battlefield trigger resolves for Mirror's controller"
+    },
+    {
+      "test": "scenario deck_coverage_cursed_mirror::mirror_copying_animated_mirror_chains_temporary_copy_and_expires_to_native_values",
+      "covers": "Tough Cookie animates a native Mirror without changing copiable values; the entering Mirror acquires and resolves a second temporary Mirror replacement, then both temporary copies expire to its native values"
+    },
+    {
+      "test": "scenario deck_coverage_cursed_mirror::mirror_clone_animated_mirror_chain_restores_the_intervening_persistent_copy",
+      "covers": "a temporary Mirror copy acquires Clone's persistent copy, which copies an animated Mirror and applies a later temporary Mirror copy; cleanup restores the persistent copy occurrence and values"
+    }
+  ],
+  "complete_definition_review_confirmed": true,
+  "oracle_id": "4d67e2a7-4aa7-44cc-853b-500d7aac046d"
+}
