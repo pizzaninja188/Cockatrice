@@ -15,7 +15,7 @@ use super::*;
 #[cfg(test)]
 mod entry_layers_tests;
 use crate::state::{
-    ChosenOpponentKey, ChosenOpponentRecord, PendingAuraEntryRecipient,
+    ChosenCreatureTypeRecord, ChosenOpponentRecord, LinkedChoiceKey, PendingAuraEntryRecipient,
     ReplacementSourcePresentation,
 };
 
@@ -446,6 +446,10 @@ impl GameEngine {
                             ReplacementPriority::Other,
                             Some(format!("{} — choose an opponent", face.name)),
                         ),
+                        StaticAbilityDef::AsEntersChooseCreatureType { .. } => (
+                            ReplacementPriority::Other,
+                            Some(format!("{} — choose a creature type", face.name)),
+                        ),
                         StaticAbilityDef::EntersTapped {
                             affected: EntersTappedAffected::Self_,
                             condition,
@@ -694,7 +698,7 @@ impl GameEngine {
         &self,
         event: &BattlefieldEntryEvent,
         effect_id: &EntryReplacementEffectId,
-    ) -> Option<ChosenOpponentKey> {
+    ) -> Option<LinkedChoiceKey> {
         let EntryReplacementEffectId::Intrinsic {
             object_id,
             copy_revision,
@@ -714,6 +718,121 @@ impl GameEngine {
             return None;
         };
         self.chosen_opponent_key(*object_id, event.face_index, &face, link_id)
+    }
+
+    fn entry_creature_type_key(
+        &self,
+        event: &BattlefieldEntryEvent,
+        effect_id: &EntryReplacementEffectId,
+    ) -> Option<LinkedChoiceKey> {
+        let EntryReplacementEffectId::Intrinsic {
+            object_id,
+            copy_revision,
+            ability_index,
+        } = effect_id
+        else {
+            return None;
+        };
+        let object = self.state.objects.get(object_id)?;
+        if *object_id != event.object_id || object.copy_revision != *copy_revision {
+            return None;
+        }
+        let face = self.battlefield_entry_face(event)?;
+        let StaticAbilityDef::AsEntersChooseCreatureType { link_id } =
+            &face.static_abilities.get(*ability_index)?.definition
+        else {
+            return None;
+        };
+        self.chosen_creature_type_key(*object_id, event.face_index, &face, link_id)
+    }
+
+    fn entry_needs_creature_type_choice(
+        &self,
+        event: &BattlefieldEntryEvent,
+        effect_id: &EntryReplacementEffectId,
+    ) -> bool {
+        let Some(key) = self.entry_creature_type_key(event, effect_id) else {
+            return false;
+        };
+        !event
+            .chosen_creature_types
+            .iter()
+            .any(|record| record.key == key)
+    }
+
+    fn entry_creature_type_choice_event(&self, event: &BattlefieldEntryEvent) -> rv1::RuledEvent {
+        rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    variable_mana_contribution: false,
+                    deciding_player_id: event.destination_controller,
+                    source_object_id: event.object_id,
+                    prompt_text: "Choose a creature type as this permanent enters.".into(),
+                    choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                    min: 1,
+                    max: 1,
+                    resolution_branches: tricerules_card_model::CREATURE_TYPES
+                        .iter()
+                        .enumerate()
+                        .map(|(index, creature_type)| rv1::ResolutionBranchOption {
+                            branch_index: index as u32,
+                            label: (*creature_type).to_owned(),
+                            selectable: true,
+                            ..Default::default()
+                        })
+                        .collect(),
+                    ..Default::default()
+                },
+            )),
+        }
+    }
+
+    fn park_entry_creature_type_choice(
+        &mut self,
+        item: StackItem,
+        event: BattlefieldEntryEvent,
+        completion: BattlefieldEntryCompletion,
+        effect_id: EntryReplacementEffectId,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let key = self
+            .entry_creature_type_key(&event, &effect_id)
+            .expect("current intrinsic creature-type choice");
+        let entering_zone = self.state.objects[&event.object_id].zone;
+        let entering_generation = key.source_zone_change;
+        let prompt = "Choose a creature type as this permanent enters.".to_owned();
+        events.push(self.entry_creature_type_choice_event(&event));
+        let deciding_player = event.destination_controller;
+        let source_object_id = event.object_id;
+        self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
+            Box::new(PendingBattlefieldEntry {
+                event,
+                applications: Vec::new(),
+                copy_source_effect: None,
+                copy_source_candidates: Vec::new(),
+                completion,
+            }),
+        ));
+        self.state.pending_resolution = Some(PendingResolution {
+            deciding_player,
+            presentation: PendingResolutionPresentation {
+                source_object_id,
+                candidates: Vec::new(),
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind: rv1::ChoiceKind::ResolutionBranch,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::EntryChooseCreatureType {
+                stack: ParkedStackResolution::new(item),
+                effect_id,
+                key,
+                entering_zone,
+                entering_generation,
+            },
+        });
     }
 
     fn entry_opponent_players(&self, event: &BattlefieldEntryEvent) -> Vec<PlayerId> {
@@ -1191,6 +1310,109 @@ impl GameEngine {
                 events.extend(batch.events);
             }
         }
+        Ok(())
+    }
+
+    pub(super) fn refresh_entry_creature_type_departure(
+        &mut self,
+        departed_objects: &HashSet<ObjectId>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(pending) = self.state.pending_resolution.clone() else {
+            return Ok(());
+        };
+        let ResolutionContinuation::EntryChooseCreatureType {
+            stack,
+            effect_id,
+            key,
+            entering_zone,
+            entering_generation,
+        } = &pending.continuation
+        else {
+            return Ok(());
+        };
+        let Some(PendingReplacementEvent::BattlefieldEntry(entry)) =
+            self.state.pending_replacement_event.as_ref()
+        else {
+            return Ok(());
+        };
+        let mut entry = (**entry).clone();
+        if let BattlefieldEntryCompletion::ZoneEntryBatch(batch) = &mut entry.completion {
+            self.reconcile_departed_zone_entry_members(batch, departed_objects);
+        }
+        self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
+            Box::new(entry.clone()),
+        ));
+        let source_is_current = self
+            .state
+            .objects
+            .get(&entry.event.object_id)
+            .is_some_and(|object| object.zone == *entering_zone)
+            && self
+                .state
+                .zone_change_generation
+                .get(&entry.event.object_id)
+                .copied()
+                .unwrap_or(0)
+                == *entering_generation
+            && self
+                .entry_creature_type_key(&entry.event, effect_id)
+                .as_ref()
+                == Some(key);
+        let decider_is_live = self
+            .state
+            .player_idx(pending.deciding_player)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        if source_is_current && decider_is_live {
+            // Player departure clears the relay's cached prompt. Reproject the still-current
+            // mandatory choice so a reconnecting decider receives the original entry decision.
+            events.push(self.entry_creature_type_choice_event(&entry.event));
+            return Ok(());
+        }
+
+        let stack = stack.clone();
+        self.state.pending_resolution = None;
+        self.state.pending_replacement_event = None;
+        let batch = match entry.completion {
+            BattlefieldEntryCompletion::PermanentSpell { .. } => self
+                .complete_parked_resolution_with_previous(
+                    stack.item,
+                    Some(0),
+                    stack.previous_result,
+                    Vec::new(),
+                )?,
+            BattlefieldEntryCompletion::ResolutionEffect { .. }
+            | BattlefieldEntryCompletion::Ninjutsu { .. } => self
+                .complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    stack.previous_result,
+                    Vec::new(),
+                )?,
+            BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
+                self.reconcile_departed_zone_entry_members(&mut batch, departed_objects);
+                let mut resumed_events = Vec::new();
+                if let Some(stack) =
+                    self.continue_zone_entry_batch(stack, *batch, &mut resumed_events)?
+                {
+                    self.complete_parked_resolution_with_previous(
+                        stack.item,
+                        stack.resume_effect_index,
+                        stack.previous_result,
+                        resumed_events,
+                    )?
+                } else {
+                    finish_with_events(self, resumed_events)
+                }
+            }
+            completion => self.finish_entry_copy_without_recipient(
+                stack,
+                entry.event,
+                completion,
+                Vec::new(),
+            )?,
+        };
+        events.extend(batch.events);
         Ok(())
     }
 
@@ -2493,7 +2715,9 @@ impl GameEngine {
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
-                    deciding_player_id: event.deciding_player,
+                    // CR 109.5: "you" on an as-enters ability is its would-be controller,
+                    // which can differ from the card's owner for a reanimated permanent.
+                    deciding_player_id: event.destination_controller,
                     source_object_id: event.object_id,
                     prompt_text: prompt.clone(),
                     choice_kind: rv1::ChoiceKind::CopySource as i32,
@@ -2521,7 +2745,7 @@ impl GameEngine {
             )),
         });
         events.push(ev_log(prompt.clone()));
-        let deciding_player = event.deciding_player;
+        let deciding_player = event.destination_controller;
         let entering_zone = self.state.objects[&event.object_id].zone;
         let entering_generation = self
             .state
@@ -2607,6 +2831,7 @@ impl GameEngine {
                         event.tapped = true;
                     }
                     Some(StaticAbilityDef::AsEntersChooseOpponent { .. }) => {}
+                    Some(StaticAbilityDef::AsEntersChooseCreatureType { .. }) => {}
                     Some(StaticAbilityDef::EntersWithCounters {
                         affected: EntersWithCountersAffected::Self_,
                         counter,
@@ -2861,6 +3086,16 @@ impl GameEngine {
                             continue;
                         }
                         self.park_entry_opponent_choice(
+                            item,
+                            event,
+                            completion,
+                            effect_id.clone(),
+                            events,
+                        );
+                        return BattlefieldEntryProgress::Parked;
+                    }
+                    if self.entry_needs_creature_type_choice(&event, effect_id) {
+                        self.park_entry_creature_type_choice(
                             item,
                             event,
                             completion,
@@ -3150,6 +3385,10 @@ impl GameEngine {
         for mut record in event.chosen_opponents.iter().cloned() {
             record.key.source_zone_change = self.state.zone_change_generation[&event.object_id];
             self.state.chosen_opponents.push(record);
+        }
+        for mut record in event.chosen_creature_types.iter().cloned() {
+            record.key.source_zone_change = self.state.zone_change_generation[&event.object_id];
+            self.state.chosen_creature_types.push(record);
         }
         self.state.continuous_effects.extend(spell_effects);
         let bargained = event.cast_cost_receipts.iter().any(|receipt| {
@@ -4397,6 +4636,16 @@ impl GameEngine {
             );
             self.transfer_entry_choice_resume(&stack);
             return Ok(finish_with_events(self, events));
+        } else if self.entry_needs_creature_type_choice(&entry.event, &application.effect_id) {
+            self.park_entry_creature_type_choice(
+                stack.item.clone(),
+                entry.event,
+                entry.completion,
+                application.effect_id,
+                &mut events,
+            );
+            self.transfer_entry_choice_resume(&stack);
+            return Ok(finish_with_events(self, events));
         } else if let Some(cost) = self.entry_unless_cost(&entry.event, &application.effect_id) {
             self.park_entry_cost_choice(
                 stack.item.clone(),
@@ -4504,6 +4753,103 @@ impl GameEngine {
         });
         self.apply_entry_replacement(&mut entry.event, effect_id);
         let mut events = Vec::new();
+        match self.advance_or_park_battlefield_entry(
+            stack.item.clone(),
+            entry.event,
+            entry.completion.clone(),
+            &mut events,
+        ) {
+            BattlefieldEntryProgress::Parked => {
+                self.transfer_entry_choice_resume(&stack);
+                Ok(finish_with_events(self, events))
+            }
+            BattlefieldEntryProgress::Skipped(event) => {
+                self.finish_entry_copy_without_recipient(stack, *event, entry.completion, events)
+            }
+            BattlefieldEntryProgress::Ready(event) => {
+                self.complete_pending_battlefield_entry(pending, *event, entry.completion, events)
+            }
+        }
+    }
+
+    pub(super) fn finish_entry_creature_type_choice(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, effect_id, key, entering_zone, entering_generation) =
+            match &pending.continuation {
+                ResolutionContinuation::EntryChooseCreatureType {
+                    stack,
+                    effect_id,
+                    key,
+                    entering_zone,
+                    entering_generation,
+                } => (
+                    stack.clone(),
+                    effect_id.clone(),
+                    key.clone(),
+                    *entering_zone,
+                    *entering_generation,
+                ),
+                _ => return Err(EngineError::Illegal("creature-type continuation missing")),
+            };
+        let entry = match &self.state.pending_replacement_event {
+            Some(PendingReplacementEvent::BattlefieldEntry(entry)) => Some((**entry).clone()),
+            _ => None,
+        };
+        let selected = tricerules_card_model::CREATURE_TYPES
+            .get(answer.selected_branch_index as usize)
+            .copied();
+        let valid = decision == rv1::ResolutionChoiceDecision::SelectBranch
+            && answer.chosen_object_ids.is_empty()
+            && answer.chosen_player_ids.is_empty()
+            && answer.payment.is_none()
+            && answer.restricted_mana.is_empty()
+            && answer.cast_spell.is_none()
+            && answer.spell_cast_announcement.is_none()
+            && answer.chosen_combat_defender.is_none()
+            && entry.as_ref().is_some_and(|entry| {
+                self.state
+                    .objects
+                    .get(&entry.event.object_id)
+                    .is_some_and(|object| object.zone == entering_zone)
+                    && self
+                        .state
+                        .zone_change_generation
+                        .get(&entry.event.object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == entering_generation
+                    && self
+                        .entry_creature_type_key(&entry.event, &effect_id)
+                        .as_ref()
+                        == Some(&key)
+                    && self.entry_needs_creature_type_choice(&entry.event, &effect_id)
+            })
+            && selected.is_some();
+        if !valid {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "creature-type choice is malformed or stale",
+            ));
+        }
+        let mut entry = entry.unwrap();
+        self.state.pending_replacement_event = None;
+        let creature_type = selected.unwrap();
+        entry
+            .event
+            .chosen_creature_types
+            .push(ChosenCreatureTypeRecord {
+                key,
+                creature_type: creature_type.to_owned(),
+            });
+        self.apply_entry_replacement(&mut entry.event, effect_id);
+        let mut events = vec![ev_log(format!(
+            "P{} chooses {} for this permanent.",
+            entry.event.destination_controller, creature_type
+        ))];
         match self.advance_or_park_battlefield_entry(
             stack.item.clone(),
             entry.event,
@@ -5134,6 +5480,7 @@ mod tests {
             set_types: None,
             chosen_basic_land_type: None,
             chosen_opponents: Vec::new(),
+            chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::from([
                 (CounterKind::PlusOnePlusOne, 3),
                 (CounterKind::Stun, 2),
@@ -5194,6 +5541,7 @@ mod tests {
             set_types: None,
             chosen_basic_land_type: None,
             chosen_opponents: Vec::new(),
+            chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
             attached_to: None,
@@ -5280,6 +5628,7 @@ mod tests {
             set_types: None,
             chosen_basic_land_type: None,
             chosen_opponents: Vec::new(),
+            chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
             attached_to: None,
@@ -5351,6 +5700,7 @@ mod tests {
             set_types: None,
             chosen_basic_land_type: None,
             chosen_opponents: Vec::new(),
+            chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
             entry_modifiers: vec![ResolvingPermanentModifier::AddTypes(
                 tricerules_card_model::TypeLineAddition {

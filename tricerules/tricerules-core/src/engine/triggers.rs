@@ -8,6 +8,18 @@ use super::targeting::{
 use super::*;
 use crate::engine::events::ev_log_ability;
 
+fn collect_source_chosen_creature_type_links(
+    filter: &PermanentEventFilter,
+    links: &mut Vec<tricerules_card_model::AbilityLinkId>,
+) {
+    if let Some(link_id) = &filter.source_chosen_creature_type {
+        links.push(link_id.clone());
+    }
+    for branch in filter.any_of.iter().flatten() {
+        collect_source_chosen_creature_type_links(branch, links);
+    }
+}
+
 /// One triggered ability that matched an event and is about to go on the stack (or be parked for
 /// target selection) — the unit a trigger scan yields and [`GameEngine::push_trigger`] consumes.
 ///
@@ -167,6 +179,53 @@ impl GameEngine {
                 stack_item: None,
                 previous_effect_result: None,
             },
+        )
+    }
+
+    fn event_filter_matches_with_trigger_origin(
+        &self,
+        filter: &PermanentEventFilter,
+        fact: &TurnObjectFact,
+        source: &TriggerSourceSnapshot,
+        origin: &TriggerAbilityOrigin,
+    ) -> bool {
+        let mut links = Vec::new();
+        collect_source_chosen_creature_type_links(filter, &mut links);
+        let chosen_creature_type = match links.as_slice() {
+            [] => None,
+            [link_id] => match origin {
+                TriggerAbilityOrigin::Printed(consumer) => {
+                    let mut matches = source.chosen_creature_types.iter().filter(|record| {
+                        record.key.source_object_id == source.object_id
+                            && record.key.source_zone_change == source.zone_change_generation
+                            && record.key.link_id == *link_id
+                            && record.key.producer.card_id == consumer.card_id
+                            && record.key.producer.face_id == consumer.face_id
+                    });
+                    match matches.next() {
+                        Some(record) if matches.next().is_none() => {
+                            Some(record.creature_type.as_str())
+                        }
+                        _ => None,
+                    }
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        super::history::permanent_event_fact_matches_with_chosen_creature_type(
+            &self.state,
+            filter,
+            fact,
+            ConditionContext {
+                controller: source.controller,
+                source_object_id: source.object_id,
+                source_zone_change: source.zone_change_generation,
+                resolving_spell_id: None,
+                stack_item: None,
+                previous_effect_result: None,
+            },
+            chosen_creature_type,
         )
     }
 
@@ -1015,32 +1074,36 @@ impl GameEngine {
 
                 for source in sources {
                     let src_ctrl = source.controller;
-                    out.extend(self.matching_snapshot_abilities(source, |tc| {
-                        let TriggerCondition::WheneverPermanentEntersBattlefield {
-                            controller,
-                            filter,
-                            creature_filter,
-                        } = tc
-                        else {
-                            return false;
-                        };
-                        let rel_ok = self.relative_player_matches(
-                            *controller,
-                            entering_controller,
-                            src_ctrl,
-                        );
-                        if !rel_ok {
-                            return false;
-                        }
-                        let fact = self.event_object_fact(entering_id).expect("entrant exists");
-                        self.event_filter_matches(filter, &fact, source)
-                            && creature_filter.as_ref().is_none_or(|filter| {
+                    out.extend(self.matching_snapshot_abilities_with_origin(
+                        source,
+                        |tc, origin| {
+                            let TriggerCondition::WheneverPermanentEntersBattlefield {
+                                controller,
+                                filter,
+                                creature_filter,
+                            } = tc
+                            else {
+                                return false;
+                            };
+                            let rel_ok = self.relative_player_matches(
+                                *controller,
+                                entering_controller,
+                                src_ctrl,
+                            );
+                            if !rel_ok {
+                                return false;
+                            }
+                            let fact = self.event_object_fact(entering_id).expect("entrant exists");
+                            self.event_filter_matches_with_trigger_origin(
+                                filter, &fact, source, origin,
+                            ) && creature_filter.as_ref().is_none_or(|filter| {
                                 Self::creature_event_filter_matches_characteristics(
                                     &entering_characteristics,
                                     filter,
                                 )
                             })
-                    }));
+                        },
+                    ));
                 }
                 out
             }
@@ -2274,6 +2337,32 @@ impl GameEngine {
             .as_ref()
             .map(|characteristics| characteristics.controller)
             .unwrap_or(object.controller);
+        let zone_change_generation = self
+            .state
+            .zone_change_generation
+            .get(&source_id)
+            .copied()
+            .unwrap_or(0);
+        let active_choice_occurrence = if object.copiable_values.is_some() {
+            LinkedChoiceOccurrence::AcquiredCopy(
+                object
+                    .active_copy_occurrence
+                    .unwrap_or(object.copy_revision),
+            )
+        } else {
+            LinkedChoiceOccurrence::NativeOrTokenBase
+        };
+        let chosen_creature_types = self
+            .state
+            .chosen_creature_types
+            .iter()
+            .filter(|record| {
+                record.key.source_object_id == source_id
+                    && record.key.source_zone_change == zone_change_generation
+                    && record.key.occurrence == active_choice_occurrence
+            })
+            .cloned()
+            .collect();
         let attached_to = object.attached_to.map(|recipient| match recipient {
             AttachmentRecipient::Object(object_id) => {
                 let current_generation = self
@@ -2296,6 +2385,7 @@ impl GameEngine {
         Some(TriggerSourceSnapshot {
             copy_snapshot: copying::token_copy_snapshot_from(&self.state, self.registry, source_id)
                 .map(Box::new),
+            chosen_creature_types,
             counters: object.counters.clone(),
             owner: object.owner,
             is_token: object.is_token(),
@@ -2325,12 +2415,7 @@ impl GameEngine {
             source_concealed: object.face_down,
             controller,
             face_index,
-            zone_change_generation: self
-                .state
-                .zone_change_generation
-                .get(&source_id)
-                .copied()
-                .unwrap_or(0),
+            zone_change_generation,
             face_change_generation: self
                 .state
                 .face_change_generation
@@ -2477,10 +2562,18 @@ impl GameEngine {
         source: &TriggerSourceSnapshot,
         filter: impl Fn(&TriggerCondition) -> bool,
     ) -> Vec<CollectedTrigger> {
+        self.matching_snapshot_abilities_with_origin(source, |condition, _| filter(condition))
+    }
+
+    pub(super) fn matching_snapshot_abilities_with_origin(
+        &self,
+        source: &TriggerSourceSnapshot,
+        filter: impl Fn(&TriggerCondition, &TriggerAbilityOrigin) -> bool,
+    ) -> Vec<CollectedTrigger> {
         source
             .triggered_abilities
             .iter()
-            .filter(|(_, ability, _)| filter(&ability.trigger))
+            .filter(|(_, ability, origin)| filter(&ability.trigger, origin))
             .filter(|(_, ability, origin)| {
                 let TriggerCondition::AtBeginningOfChosenPlayerUpkeep { link_id } =
                     &ability.trigger
@@ -3903,6 +3996,7 @@ mod tests {
         let source = TriggerSourceSnapshot {
             source_concealed: false,
             copy_snapshot: None,
+            chosen_creature_types: Vec::new(),
             counters: BTreeMap::new(),
             owner: 0,
             is_token: false,
@@ -4004,6 +4098,7 @@ mod tests {
         let watcher = TriggerSourceSnapshot {
             source_concealed: false,
             copy_snapshot: None,
+            chosen_creature_types: Vec::new(),
             counters: BTreeMap::new(),
             owner: 1,
             is_token: false,
@@ -4546,6 +4641,7 @@ mod tests {
         let source = TriggerSourceSnapshot {
             source_concealed: false,
             copy_snapshot: None,
+            chosen_creature_types: Vec::new(),
             counters: BTreeMap::new(),
             owner: 0,
             is_token: false,
@@ -5119,5 +5215,163 @@ mod tests {
                 triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: {trigger}, effect: [PumpTarget(power: 1, toughness: 0, subject: TriggerObject)], )])"#);
             assert!(CardRegistry::from_chunks_and_tokens(&[&data], &[]).is_err(), "{trigger}");
         }
+    }
+
+    #[test]
+    fn chosen_creature_type_is_scoped_to_the_active_linked_copy_occurrence() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            607_205,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let source = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&source).unwrap().card_id = "molten_echoes".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        let face = engine.effective_face(source).unwrap().into_owned();
+        let link_id = face
+            .static_abilities
+            .iter()
+            .find_map(|ability| match &ability.definition {
+                StaticAbilityDef::AsEntersChooseCreatureType { link_id } => Some(link_id.clone()),
+                _ => None,
+            })
+            .expect("Molten Echoes has its linked entry choice");
+        let mut key = engine
+            .chosen_creature_type_key(source, 0, &face, &link_id)
+            .expect("the printed producer has an occurrence key");
+        key.source_zone_change = engine.state.zone_change_generation[&source];
+        engine
+            .state
+            .chosen_creature_types
+            .push(ChosenCreatureTypeRecord {
+                key,
+                creature_type: "Bear".into(),
+            });
+
+        let bear = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&bear).unwrap().card_id = "grizzly_bears".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            bear,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        let fact = engine.event_object_fact(bear).unwrap();
+        let matching_filter = match &face.triggered_abilities[0].trigger {
+            TriggerCondition::WheneverPermanentEntersBattlefield { filter, .. } => filter,
+            _ => panic!("Molten Echoes observes battlefield entry"),
+        };
+
+        let native_snapshot = engine.trigger_source_snapshot(source).unwrap();
+        let origin = native_snapshot.triggered_abilities[0].2.clone();
+        assert!(engine.event_filter_matches_with_trigger_origin(
+            matching_filter,
+            &fact,
+            &native_snapshot,
+            &origin,
+        ));
+        let mut nonmatching = fact.clone();
+        nonmatching.types = vec!["Creature".into(), "Elf".into()];
+        assert!(!engine.event_filter_matches_with_trigger_origin(
+            matching_filter,
+            &nonmatching,
+            &native_snapshot,
+            &origin,
+        ));
+        let mut token = fact.clone();
+        token.is_token = true;
+        assert!(!engine.event_filter_matches_with_trigger_origin(
+            matching_filter,
+            &token,
+            &native_snapshot,
+            &origin,
+        ));
+        let mut changeling = fact.clone();
+        changeling.types = vec!["Creature".into()];
+        changeling.all_creature_types = true;
+        assert!(engine.event_filter_matches_with_trigger_origin(
+            matching_filter,
+            &changeling,
+            &native_snapshot,
+            &origin,
+        ));
+
+        assert_eq!(
+            engine
+                .collect_event_triggers(&[GameEvent::EntersBattlefield {
+                    object_id: bear,
+                    chosen_x: 0,
+                }])
+                .len(),
+            1,
+            "the controller's Bear entry creates the linked trigger"
+        );
+        let opponent_bear =
+            issue_168_fixture_object(&mut engine, 1, "grizzly_bears", Zone::Battlefield);
+        assert!(
+            engine
+                .collect_event_triggers(&[GameEvent::EntersBattlefield {
+                    object_id: opponent_bear,
+                    chosen_x: 0,
+                }])
+                .is_empty(),
+            "controller: Controller excludes the opponent's Bear"
+        );
+
+        let copy_values = engine.copiable_values_for(source).unwrap();
+        let object = engine.state.objects.get_mut(&source).unwrap();
+        object.copiable_values = Some(copy_values);
+        object.copy_revision = object.copy_revision.saturating_add(1);
+        object.active_copy_occurrence = Some(object.copy_revision);
+        let acquired_snapshot = engine.trigger_source_snapshot(source).unwrap();
+        assert!(acquired_snapshot.chosen_creature_types.is_empty());
+        let acquired_origin = acquired_snapshot.triggered_abilities[0].2.clone();
+        assert!(!engine.event_filter_matches_with_trigger_origin(
+            matching_filter,
+            &fact,
+            &acquired_snapshot,
+            &acquired_origin,
+        ));
+
+        let mut elf_alternative = PermanentEventFilter::default();
+        elf_alternative.required_subtypes.push("Elf".into());
+        let mut nested_or = PermanentEventFilter {
+            any_of: Some(vec![matching_filter.clone(), elf_alternative]),
+            ..matching_filter.clone()
+        };
+        nested_or.source_chosen_creature_type = None;
+        let mut elf = fact.clone();
+        elf.types = vec!["Creature".into(), "Elf".into()];
+        assert!(engine.event_filter_matches_with_trigger_origin(
+            &nested_or,
+            &elf,
+            &acquired_snapshot,
+            &acquired_origin,
+        ));
+
+        let object = engine.state.objects.get_mut(&source).unwrap();
+        object.copiable_values = None;
+        object.active_copy_occurrence = None;
+        let restored_snapshot = engine.trigger_source_snapshot(source).unwrap();
+        let restored_origin = restored_snapshot.triggered_abilities[0].2.clone();
+        assert!(engine.event_filter_matches_with_trigger_origin(
+            matching_filter,
+            &fact,
+            &restored_snapshot,
+            &restored_origin,
+        ));
     }
 }

@@ -1728,6 +1728,46 @@ fn validate_chosen_opponent_links(face: &CardFace) -> Result<(), String> {
     producers[0].validate()
 }
 
+fn collect_chosen_creature_type_links(
+    filter: &crate::primitives::PermanentEventFilter,
+    links: &mut Vec<crate::AbilityLinkId>,
+) {
+    if let Some(link_id) = &filter.source_chosen_creature_type {
+        links.push(link_id.clone());
+    }
+    for branch in filter.any_of.iter().flatten() {
+        collect_chosen_creature_type_links(branch, links);
+    }
+}
+
+fn validate_chosen_creature_type_links(face: &CardFace) -> Result<(), String> {
+    let producers = face
+        .static_abilities
+        .iter()
+        .filter_map(|ability| match &ability.definition {
+            StaticAbilityDef::AsEntersChooseCreatureType { link_id } => Some(link_id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let mut consumers = Vec::new();
+    for ability in &face.triggered_abilities {
+        if let TriggerCondition::WheneverPermanentEntersBattlefield { filter, .. } =
+            &ability.trigger
+        {
+            collect_chosen_creature_type_links(filter, &mut consumers);
+        }
+    }
+    if producers.is_empty() && consumers.is_empty() {
+        return Ok(());
+    }
+    if producers.len() != 1 || consumers.len() != 1 || producers[0] != &consumers[0] {
+        return Err(
+            "chosen-creature-type link requires one matching printed producer and observer".into(),
+        );
+    }
+    producers[0].validate()
+}
+
 fn validate_granted_chosen_opponent(ability: &crate::TriggeredAbilityDef) -> Result<(), String> {
     if matches!(
         ability.trigger,
@@ -2128,6 +2168,7 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
     }
     validate_linked_exile_pairs(face)?;
     validate_chosen_opponent_links(face)?;
+    validate_chosen_creature_type_links(face)?;
     let mut cast_cost_group_ids = HashSet::new();
     for group in &face.cast_cost_groups {
         group.validate()?;
@@ -2292,6 +2333,7 @@ fn validate_class_level_bars(
                     | StaticAbilityDef::EntersAsCopyWithHasteUntilEndOfTurn { .. }
                     | StaticAbilityDef::EntersWithChosenBasicLandType { .. }
                     | StaticAbilityDef::AsEntersChooseOpponent { .. }
+                    | StaticAbilityDef::AsEntersChooseCreatureType { .. }
                     | StaticAbilityDef::EntersTapped { .. }
                     | StaticAbilityDef::EntersWithCounters { .. }
                     | StaticAbilityDef::SpellCannotBeCountered

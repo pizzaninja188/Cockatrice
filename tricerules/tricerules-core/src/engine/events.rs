@@ -52,6 +52,7 @@ impl GameEngine {
     ) -> Vec<String> {
         let mut labels = Vec::new();
         labels.extend(self.chosen_opponent_labels(oid));
+        labels.extend(self.chosen_creature_type_labels(oid));
         if object.zone == Zone::Battlefield
             && face.is_some_and(|face| !face.class_level_bars.is_empty())
         {
@@ -827,6 +828,7 @@ impl GameEngine {
                     .filter_map(|oid| self.state.objects.get(oid))
                     .map(|object| BattlefieldObjectSnapshot {
                         chosen_opponent_labels: self.chosen_opponent_labels(object.id),
+                        chosen_creature_type_labels: self.chosen_creature_type_labels(object.id),
                         preparation: self.state.prepared_permanents.get(&object.id).copied(),
                         object_id: object.id,
                         card_id: object.card_id.clone(),

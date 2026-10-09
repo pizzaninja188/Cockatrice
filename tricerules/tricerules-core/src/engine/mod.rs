@@ -6,13 +6,14 @@ use crate::state::{
     ActivationUseIdentity, ActivationUseKey, ActiveDamagePrevention, ActiveDeathReplacement,
     ActiveEventObserver, ActiveExilePlayPermission, AffectedScope, AttachmentRecipient,
     AttackingTokenBatch, BattlefieldEntryCompletion, BattlefieldEntryEvent, BlockingChoice,
-    CardResultCohort, CardResultEntry, CastCostObjectReceipt, CastCostReceipt, ChosenMode,
-    ClassLevelDesignation, CombatAttackAssignment, CombatDefenderTarget, CombatState,
-    ContinuousEffect, CopiableValues, DamagePreventionAmount, DamagePreventionProhibition,
-    DamagePreventionScope, DelayedTriggerPayload, EffectResult, EntryReplacementApplication,
-    EntryReplacementEffectId, EventObserverMatcher, EventObserverPayload, ExilePlayPermissionScope,
-    GameObject, GameState, ImmediateObserverAction, LinkedExileKey, LinkedExiledObject, ObjectId,
-    ObservedGameEvent, ObserverReturnEntry, OpeningSequence, ParkedStackResolution, PendingAmass,
+    CardResultCohort, CardResultEntry, CastCostObjectReceipt, CastCostReceipt,
+    ChosenCreatureTypeRecord, ChosenMode, ClassLevelDesignation, CombatAttackAssignment,
+    CombatDefenderTarget, CombatState, ContinuousEffect, CopiableValues, DamagePreventionAmount,
+    DamagePreventionProhibition, DamagePreventionScope, DelayedTriggerPayload, EffectResult,
+    EntryReplacementApplication, EntryReplacementEffectId, EventObserverMatcher,
+    EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState, ImmediateObserverAction,
+    LinkedChoiceOccurrence, LinkedExileKey, LinkedExiledObject, ObjectId, ObservedGameEvent,
+    ObserverReturnEntry, OpeningSequence, ParkedStackResolution, PendingAmass,
     PendingBattlefieldEntry, PendingCopyCandidate, PendingEntryTimestampOrder, PendingHandChoice,
     PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
     PendingManaPayment, PendingObserverReturnBatch, PendingPlayerDiscardChoice,
@@ -1006,6 +1007,7 @@ pub enum EngineError {
 #[derive(serde::Serialize, Clone, Debug)]
 struct TriggerSourceSnapshot {
     copy_snapshot: Option<Box<TokenCopySnapshot>>,
+    chosen_creature_types: Vec<ChosenCreatureTypeRecord>,
     counters: BTreeMap<CounterKind, u32>,
     /// Derived event-time types, captured before any member of a simultaneous departure moves.
     types: Vec<String>,
@@ -1335,6 +1337,7 @@ struct PlayerBattlefieldSnapshot {
 #[derive(Clone, PartialEq, Eq)]
 struct BattlefieldObjectSnapshot {
     chosen_opponent_labels: Vec<String>,
+    chosen_creature_type_labels: Vec<String>,
     preparation: Option<ObjectId>,
     object_id: ObjectId,
     card_id: String,
@@ -1811,6 +1814,7 @@ impl GameEngine {
             captured_spell_copies: Default::default(),
             linked_exile_records: Default::default(),
             chosen_opponents: Vec::new(),
+            chosen_creature_types: Vec::new(),
             active_temporary_copies: Vec::new(),
             battle_protectors: HashMap::new(),
             stack: Vec::new(),

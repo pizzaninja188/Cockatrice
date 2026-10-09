@@ -33,6 +33,8 @@ mod deck_coverage_combustible_gearhulk;
 mod deck_coverage_flameshadow_conjuring;
 #[path = "scenario/deck_coverage_mirrorworks.rs"]
 mod deck_coverage_mirrorworks;
+#[path = "scenario/deck_coverage_molten_echoes.rs"]
+mod deck_coverage_molten_echoes;
 
 #[path = "scenario/deck_coverage_natures_will.rs"]
 mod deck_coverage_natures_will;

@@ -939,6 +939,7 @@ fn devotion_projected_entry_excludes_own_pip_and_uses_destination_controller() {
         set_types: None,
         chosen_basic_land_type: None,
         chosen_opponents: vec![],
+        chosen_creature_types: vec![],
         entry_counters: BTreeMap::new(),
         entry_modifiers: vec![],
         attached_to: None,

@@ -64,6 +64,7 @@ impl GameEngine {
             set_types: None,
             chosen_basic_land_type: None,
             chosen_opponents: Vec::new(),
+            chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
             attached_to: None,

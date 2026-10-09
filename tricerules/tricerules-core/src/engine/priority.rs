@@ -317,6 +317,9 @@ impl GameEngine {
         self.state
             .chosen_opponents
             .retain(|record| !owned.contains(&record.key.source_object_id));
+        self.state
+            .chosen_creature_types
+            .retain(|record| !owned.contains(&record.key.source_object_id));
         for id in unowned_stack_cards {
             move_object_to_zone(&mut self.state, self.registry, id, Zone::Exile, None)?;
         }
@@ -555,6 +558,7 @@ impl GameEngine {
         self.refresh_observer_aura_departure(events)?;
         self.refresh_participating_entry_departure(&departed_objects, events)?;
         self.refresh_entry_opponent_departure(&departed_objects, events)?;
+        self.refresh_entry_creature_type_departure(&departed_objects, events)?;
         self.refresh_authored_branch_departure(events)?;
         self.refresh_targeted_player_permanent_choice_departure(events)?;
         self.advance_departed_join_forces_payer(events)?;

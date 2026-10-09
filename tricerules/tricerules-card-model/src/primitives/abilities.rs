@@ -2212,6 +2212,11 @@ pub enum StaticAbilityDef {
     AsEntersChooseOpponent {
         link_id: AbilityLinkId,
     },
+    /// CR 614.12 / 607.2d: Molten Echoes records a creature type for the linked triggered
+    /// ability on this exact permanent ability occurrence.
+    AsEntersChooseCreatureType {
+        link_id: AbilityLinkId,
+    },
     /// CR 614.1d: modify a proposed battlefield-entry event rather than tapping the permanent
     /// after it enters. Intrinsic examples include Diregraf Ghoul and the gainland cycle;
     /// `Permanents` is the global Orb of Dreams form.

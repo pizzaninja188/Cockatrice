@@ -282,6 +282,7 @@ fn event(engine: &GameEngine, oid: ObjectId) -> BattlefieldEntryEvent {
         set_types: None,
         chosen_basic_land_type: None,
         chosen_opponents: Vec::new(),
+        chosen_creature_types: Vec::new(),
         entry_counters: BTreeMap::new(),
         entry_modifiers: Vec::new(),
         attached_to: None,
@@ -290,6 +291,138 @@ fn event(engine: &GameEngine, oid: ObjectId) -> BattlefieldEntryEvent {
         accepted_aura_recipient: None,
         applied_effects: Vec::new(),
     }
+}
+
+#[test]
+fn molten_echoes_and_matching_creature_entering_together_wait_for_choice_then_trigger() {
+    let mut engine = engine();
+    let bear = object(&mut engine, "grizzly_bears", Zone::Graveyard, 0);
+    let molten_echoes = object(&mut engine, "molten_echoes", Zone::Graveyard, 0);
+    let mut events = Vec::new();
+
+    // Process the matching creature first so it is already in the batch's ready cohort when
+    // Molten Echoes parks its mandatory as-enters choice.
+    let resumed = engine
+        .begin_zone_entry_batch(
+            ParkedStackResolution::new(engine.observer_return_item(molten_echoes, 0)),
+            vec![event(&engine, bear), event(&engine, molten_echoes)],
+            Zone::Graveyard,
+            "simultaneous return",
+            None,
+            &mut events,
+        )
+        .expect("the simultaneous entry batch is valid");
+    assert!(resumed.is_none(), "the type choice parks the whole batch");
+    assert_eq!(engine.state.objects[&bear].zone, Zone::Graveyard);
+    assert_eq!(engine.state.objects[&molten_echoes].zone, Zone::Graveyard);
+    let choice = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Molten Echoes needs a creature-type choice");
+    assert_eq!(choice.deciding_player, 0);
+    assert_eq!(choice.presentation.source_object_id, molten_echoes);
+
+    let bear_branch = tricerules_card_model::CREATURE_TYPES
+        .iter()
+        .position(|creature_type| *creature_type == "Bear")
+        .expect("Bear is a canonical creature type") as u32;
+    engine
+        .apply_command(
+            0,
+            &rv1::RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                        selected_branch_index: bear_branch,
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("choosing Bear resumes and commits the complete entry batch");
+
+    // Both entrants have timestamp-sensitive characteristics, so resolving the type choice
+    // correctly proceeds to the engine's timestamp-order choice before the batch commits.
+    let timestamp_order = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the complete entrant cohort requests timestamp order")
+        .presentation
+        .candidates
+        .clone();
+    assert_eq!(timestamp_order.len(), 2);
+    engine
+        .apply_command(
+            0,
+            &rv1::RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        chosen_object_ids: timestamp_order,
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("ordering the simultaneous entrants commits the complete batch");
+
+    assert_eq!(
+        engine.state.objects[&bear].zone,
+        Zone::Battlefield,
+        "the batch should be committed after the type choice; pending resolution: {:?}",
+        engine.state.pending_resolution,
+    );
+    assert_eq!(engine.state.objects[&molten_echoes].zone, Zone::Battlefield);
+    let matching_triggers: Vec<_> = engine
+        .state
+        .stack
+        .iter()
+        .filter(|item| {
+            item.triggered_ability
+                .as_ref()
+                .is_some_and(|ability| ability.ability_id.as_str() == "copy_matching_creature")
+        })
+        .collect();
+    assert_eq!(matching_triggers.len(), 1);
+    assert_eq!(
+        matching_triggers[0]
+            .trigger_context
+            .observed_object
+            .as_ref()
+            .map(|object| object.object_id),
+        Some(bear),
+        "the simultaneous matching entrant remains the trigger's exact observed object"
+    );
+
+    for _ in 0..2 {
+        let player = engine.state.priority_player_id();
+        engine
+            .apply_command(
+                player,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                },
+            )
+            .expect("players pass to resolve Molten Echoes' trigger");
+    }
+    let copies: Vec<_> = engine.state.players[0]
+        .battlefield
+        .iter()
+        .copied()
+        .filter(|object_id| {
+            engine.state.objects[object_id]
+                .token_origin
+                .as_ref()
+                .is_some_and(|identity| identity.source_card_id == "grizzly_bears")
+        })
+        .collect();
+    assert_eq!(
+        copies.len(),
+        1,
+        "the trigger creates one copy of the entrant"
+    );
+    assert!(engine.effective_has_keyword(copies[0], tricerules_cards::Keyword::Haste));
 }
 
 fn paid_divination_stack(engine: &mut GameEngine) -> ParkedStackResolution {

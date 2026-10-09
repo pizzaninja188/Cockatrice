@@ -334,7 +334,7 @@ fn issue_234_simultaneous_return_waits_for_copy_choice_then_applies_modifiers() 
 }
 
 #[test]
-fn issue_234_multiplayer_entry_choices_follow_owner_apnap_before_atomic_return() {
+fn issue_234_multiplayer_copy_choices_use_destination_controller_before_atomic_return() {
     let mut engine = setup();
     engine
         .state
@@ -369,11 +369,23 @@ fn issue_234_multiplayer_entry_choices_follow_owner_apnap_before_atomic_return()
             .as_ref()
             .unwrap()
             .deciding_player,
-        1
+        0
     );
 
-    engine
+    assert!(engine
         .apply_command(1, &submit_resolution_choice(vec![model]))
+        .is_err());
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .deciding_player,
+        0
+    );
+    engine
+        .apply_command(0, &submit_resolution_choice(vec![model]))
         .unwrap();
     assert_eq!(engine.state.objects[&first].zone, Zone::Exile);
     assert_eq!(engine.state.objects[&second].zone, Zone::Exile);
@@ -384,10 +396,22 @@ fn issue_234_multiplayer_entry_choices_follow_owner_apnap_before_atomic_return()
             .as_ref()
             .unwrap()
             .deciding_player,
-        3
+        0
+    );
+    assert!(engine
+        .apply_command(3, &submit_resolution_choice(vec![model]))
+        .is_err());
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .deciding_player,
+        0
     );
     engine
-        .apply_command(3, &submit_resolution_choice(vec![model]))
+        .apply_command(0, &submit_resolution_choice(vec![model]))
         .unwrap();
     answer_simultaneous_entry_order_in_engine_order(&mut engine);
 

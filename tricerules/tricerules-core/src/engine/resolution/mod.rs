@@ -1089,6 +1089,7 @@ impl GameEngine {
                         set_types: None,
                         chosen_basic_land_type: None,
                         chosen_opponents: Vec::new(),
+                        chosen_creature_types: Vec::new(),
                         entry_counters: BTreeMap::new(),
                         entry_modifiers: Vec::new(),
                         attached_to: None,
@@ -2116,6 +2117,7 @@ impl GameEngine {
                 set_types: None,
                 chosen_basic_land_type: None,
                 chosen_opponents: Vec::new(),
+                chosen_creature_types: Vec::new(),
                 entry_counters: BTreeMap::new(),
                 entry_modifiers: Vec::new(),
                 attached_to: None,
@@ -2509,6 +2511,7 @@ impl GameEngine {
                         set_types: None,
                         chosen_basic_land_type: None,
                         chosen_opponents: Vec::new(),
+                        chosen_creature_types: Vec::new(),
                         entry_counters: BTreeMap::new(),
                         entry_modifiers: Vec::new(),
                         attached_to: None,
@@ -3023,6 +3026,9 @@ fn commit_zone_move(
         state.battle_protectors.remove(&oid);
         state
             .chosen_opponents
+            .retain(|record| record.key.source_object_id != oid);
+        state
+            .chosen_creature_types
             .retain(|record| record.key.source_object_id != oid);
         {
             let object = TriggerObjectRef {

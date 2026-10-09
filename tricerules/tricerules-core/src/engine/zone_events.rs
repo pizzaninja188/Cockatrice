@@ -728,6 +728,7 @@ mod timestamp_order_tests {
             set_types: None,
             chosen_basic_land_type: None,
             chosen_opponents: Vec::new(),
+            chosen_creature_types: Vec::new(),
             entry_counters: Default::default(),
             entry_modifiers: vec![],
             attached_to: None,

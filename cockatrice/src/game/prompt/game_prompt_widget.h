@@ -10,6 +10,7 @@ class QPushButton;
 class QHBoxLayout;
 class QVBoxLayout;
 class QCheckBox;
+class RuledLargeChoicePicker;
 
 class GamePromptWidget : public QWidget
 {
@@ -232,6 +233,7 @@ private:
     /// Hide every priority / combat / targeting control — what the take-over modes all do.
     void hideActionAndCombatButtons();
     void updateZoneSelectionControls();
+    [[nodiscard]] bool usesLargeChoicePicker() const;
     [[nodiscard]] int matchingZoneSelectionOption() const;
     void refreshTargetingPromptText();
 
@@ -289,6 +291,7 @@ private:
     QPushButton *resolutionPaymentDeclineButton = nullptr;
     QVBoxLayout *choiceOptionsRow = nullptr;
     QVector<QPushButton *> choiceOptionButtons;
+    RuledLargeChoicePicker *largeChoicePicker = nullptr;
     QHBoxLayout *zoneSelectionRow = nullptr;
     QCheckBox *zoneSelectionHandCheckBox = nullptr;
     QCheckBox *zoneSelectionGraveyardCheckBox = nullptr;

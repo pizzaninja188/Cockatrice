@@ -569,6 +569,16 @@ pub(super) fn permanent_event_fact_matches(
     fact: &TurnObjectFact,
     context: ConditionContext<'_>,
 ) -> bool {
+    permanent_event_fact_matches_with_chosen_creature_type(state, filter, fact, context, None)
+}
+
+pub(super) fn permanent_event_fact_matches_with_chosen_creature_type(
+    state: &GameState,
+    filter: &PermanentEventFilter,
+    fact: &TurnObjectFact,
+    context: ConditionContext<'_>,
+    chosen_creature_type: Option<&str>,
+) -> bool {
     let type_matches = filter
         .permanent_type
         .is_none_or(|permanent_type| fact.has_type(permanent_type.as_str()));
@@ -592,13 +602,23 @@ pub(super) fn permanent_event_fact_matches(
             .required_subtypes
             .iter()
             .all(|subtype| fact.has_type(subtype))
+        && filter
+            .source_chosen_creature_type
+            .as_ref()
+            .is_none_or(|_| chosen_creature_type.is_some_and(|chosen| fact.has_type(chosen)))
         && (!filter.exclude_source
             || fact.object_id != context.source_object_id
             || fact.zone_change_generation != context.source_zone_change)
         && filter.any_of.as_ref().is_none_or(|branches| {
-            branches
-                .iter()
-                .any(|branch| permanent_event_fact_matches(state, branch, fact, context))
+            branches.iter().any(|branch| {
+                permanent_event_fact_matches_with_chosen_creature_type(
+                    state,
+                    branch,
+                    fact,
+                    context,
+                    chosen_creature_type,
+                )
+            })
         })
 }
 

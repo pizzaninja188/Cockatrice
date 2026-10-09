@@ -56,6 +56,31 @@ fn mana_amount_ron_omits_zero_fields_and_round_trips() {
 }
 
 #[test]
+fn permanent_event_filter_omits_unset_linked_creature_type_from_ron() {
+    let mut filter = crate::primitives::PermanentEventFilter::default();
+    let encoded_default = ron::ser::to_string(&filter).expect("filter should serialize");
+    assert!(
+        !encoded_default.contains("source_chosen_creature_type"),
+        "an absent optional filter field must preserve existing generated RON"
+    );
+    assert_eq!(
+        ron::from_str::<crate::primitives::PermanentEventFilter>(&encoded_default)
+            .expect("filter should round-trip"),
+        filter
+    );
+
+    filter.source_chosen_creature_type =
+        Some(crate::AbilityLinkId::new("chosen_type").expect("stable link id should be valid"));
+    let encoded_linked = ron::ser::to_string(&filter).expect("linked filter should serialize");
+    assert!(encoded_linked.contains("source_chosen_creature_type"));
+    assert_eq!(
+        ron::from_str::<crate::primitives::PermanentEventFilter>(&encoded_linked)
+            .expect("linked filter should round-trip"),
+        filter
+    );
+}
+
+#[test]
 fn land_type_additions_and_replacements_validate_distinct_subtype_rules() {
     let forest: super::TypeLineAddition = ron::from_str("(land_types: [Forest])").unwrap();
     assert!(

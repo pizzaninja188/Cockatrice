@@ -1,4 +1,5 @@
 #include "game_prompt_widget.h"
+#include "../ruled/ruled_large_choice_picker.h"
 
 #include <QCheckBox>
 #include <QHBoxLayout>
@@ -218,6 +219,16 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     choiceOptionsRow->setSpacing(4);
     layout->addLayout(choiceOptionsRow);
 
+    largeChoicePicker = new RuledLargeChoicePicker(this);
+    largeChoicePicker->setObjectName(QStringLiteral("ruledLargeChoicePicker"));
+    largeChoicePicker->hide();
+    connect(largeChoicePicker, &RuledLargeChoicePicker::optionRequested, this, [this](int optionIndex) {
+        if (effectiveMode() == PromptMode::ChoiceOptions && promptState.mode == PromptMode::ChoiceOptions) {
+            emit ruledChoiceOptionRequested(optionIndex);
+        }
+    });
+    layout->addWidget(largeChoicePicker);
+
     zoneSelectionRow = new QHBoxLayout;
     zoneSelectionRow->setContentsMargins(0, 0, 0, 0);
     zoneSelectionRow->setSpacing(8);
@@ -357,6 +368,7 @@ void GamePromptWidget::retranslateUi()
     zoneSelectionGraveyardCheckBox->setText(tr("Graveyard"));
     zoneSelectionLibraryCheckBox->setText(tr("Library"));
     zoneSelectionConfirmButton->setText(tr("Confirm"));
+    largeChoicePicker->retranslateUi();
 }
 
 // ---------------------------------------------------------------------------------------
@@ -406,12 +418,23 @@ void GamePromptWidget::setRuledPromptState(RuledPromptState newState)
     const bool enteringZoneSelection =
         promptState.mode != PromptMode::ZoneSelection && newState.mode == PromptMode::ZoneSelection;
     promptState = std::move(newState);
+    const bool useLargePicker = usesLargeChoicePicker();
     resolutionPaymentDeclineButton->setText(promptState.mode == PromptMode::AttackPayment ? tr("Cancel Attack")
                                                                                           : tr("Decline"));
     qDeleteAll(choiceOptionButtons);
     choiceOptionButtons.clear();
+    if (useLargePicker) {
+        QVector<RuledLargeChoicePicker::Option> options;
+        options.reserve(promptState.choiceOptions.size());
+        for (const auto &option : promptState.choiceOptions) {
+            options.append({option.index, option.label, option.enabled});
+        }
+        largeChoicePicker->setOptions(options);
+    } else {
+        largeChoicePicker->clear();
+    }
     for (const auto &option : promptState.choiceOptions) {
-        if (promptState.mode == PromptMode::ZoneSelection) {
+        if (promptState.mode == PromptMode::ZoneSelection || useLargePicker) {
             continue;
         }
         auto *button = new QPushButton(wrappedChoiceText(option.label, font()), this);
@@ -458,6 +481,13 @@ void GamePromptWidget::setRuledPromptState(RuledPromptState newState)
     applyPromptStateText();
     updateCombatButtonsVisibility();
     refreshPromptLabel();
+}
+
+bool GamePromptWidget::usesLargeChoicePicker() const
+{
+    // Resolution branches may contain the full creature-type vocabulary. Keep the current
+    // button layout for small choices and every non-resolution choice mode.
+    return promptState.mode == PromptMode::ChoiceOptions && promptState.choiceOptions.size() > 20;
 }
 
 void GamePromptWidget::applyPromptStateText()
@@ -825,8 +855,11 @@ void GamePromptWidget::updateCombatButtonsVisibility()
                                                  !promptState.variableManaContribution) ||
                                                mode == PromptMode::AttackPayment);
     for (auto *button : choiceOptionButtons) {
-        button->setVisible(mode == PromptMode::ChoiceOptions || mode == PromptMode::CastCostOptions || mode == PromptMode::AbilityAnnouncement);
+        button->setVisible(!usesLargeChoicePicker() &&
+                           (mode == PromptMode::ChoiceOptions || mode == PromptMode::CastCostOptions ||
+                            mode == PromptMode::AbilityAnnouncement));
     }
+    largeChoicePicker->setVisible(usesLargeChoicePicker() && mode == PromptMode::ChoiceOptions);
     updateZoneSelectionControls();
     declineClickChoiceButton->setVisible((mode == PromptMode::ClickChoice || mode == PromptMode::ChoiceOptions ||
                                           mode == PromptMode::ResolutionPick || mode == PromptMode::CostSelection ||

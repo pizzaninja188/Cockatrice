@@ -1,6 +1,7 @@
 //! Public game-state conditions and their reusable filters.
 
 use super::*;
+use crate::AbilityLinkId;
 use serde::{Deserialize, Serialize};
 
 /// A public game-state predicate evaluated by the rules engine at the timing required by its
@@ -806,6 +807,10 @@ pub struct PermanentEventFilter {
     pub token: Option<bool>,
     #[serde(default)]
     pub owner: Option<super::CastTriggerPlayer>,
+    /// Require the event permanent to have the type chosen by this source's matching linked
+    /// entry ability and observer occurrence. Missing or mismatched designations fail closed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_chosen_creature_type: Option<AbilityLinkId>,
     /// AND with the outer constraints; OR across branches, matching an object only once.
     #[serde(default)]
     pub any_of: Option<Vec<PermanentEventFilter>>,
@@ -813,6 +818,9 @@ pub struct PermanentEventFilter {
 
 impl PermanentEventFilter {
     pub(crate) fn validate(&self) -> Result<(), String> {
+        if let Some(link_id) = &self.source_chosen_creature_type {
+            link_id.validate()?;
+        }
         if self
             .required_subtypes
             .iter()

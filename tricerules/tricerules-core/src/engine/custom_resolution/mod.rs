@@ -163,6 +163,12 @@ impl GameEngine {
         }
         if matches!(
             pending.continuation,
+            ResolutionContinuation::EntryChooseCreatureType { .. }
+        ) {
+            return self.finish_entry_creature_type_choice(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
             ResolutionContinuation::SagaReadAhead { .. }
         ) {
             return self.finish_saga_read_ahead_choice(pending, answer, decision);
@@ -413,6 +419,9 @@ impl GameEngine {
             ResolutionContinuation::EntryChooseOpponent { .. } => {
                 unreachable!("opponent branch handled before object-choice validation")
             }
+            ResolutionContinuation::EntryChooseCreatureType { .. } => {
+                unreachable!("creature-type branch handled before object-choice validation")
+            }
             ResolutionContinuation::SagaReadAhead { .. } => {
                 unreachable!("read-ahead branch handled before object-choice validation")
             }
@@ -638,6 +647,7 @@ impl GameEngine {
             set_types: None,
             chosen_basic_land_type: None,
             chosen_opponents: Vec::new(),
+            chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
             attached_to: Some(recipient),

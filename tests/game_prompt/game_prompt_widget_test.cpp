@@ -6,6 +6,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
 #include <QSignalSpy>
@@ -74,6 +75,81 @@ TEST_F(GamePromptWidgetTest, AbilityAnnouncementWaitingOpponentHasNoActorControl
     widget->setRuledPromptState(prompt);
     EXPECT_FALSE(btn("cancelTargetingButton")->isHidden());
     EXPECT_FALSE(btn("undoLandTapButton")->isHidden());
+}
+
+TEST_F(GamePromptWidgetTest, LargeResolutionChoiceSearchesAndSubmitsOriginalEngineIndex)
+{
+    GamePromptWidget::RuledPromptState prompt;
+    prompt.mode = GamePromptWidget::PromptMode::ChoiceOptions;
+    prompt.text = "Choose a creature type.";
+    prompt.canDecline = true;
+    for (int i = 0; i < 324; ++i) {
+        prompt.choiceOptions.append({i * 3 + 2, i == 317 ? QStringLiteral("Wolverine") :
+                                                              QStringLiteral("Creature type %1").arg(i),
+                                    i != 4});
+    }
+    widget->setRuledPromptState(prompt);
+
+    auto *search = widget->findChild<QLineEdit *>("ruledLargeChoiceSearch");
+    auto *list = widget->findChild<QListWidget *>("ruledLargeChoiceList");
+    auto *confirm = btn("ruledLargeChoiceConfirm");
+    ASSERT_NE(search, nullptr);
+    ASSERT_NE(list, nullptr);
+    ASSERT_NE(confirm, nullptr);
+    EXPECT_EQ(list->count(), 324);
+    EXPECT_EQ(btn("ruledChoiceOptionButton_2"), nullptr);
+    EXPECT_FALSE(confirm->isEnabled());
+    EXPECT_FALSE(btn("declineClickChoiceButton")->isHidden());
+
+    search->setText(QStringLiteral("Creature type 4"));
+    auto disabledMatches = list->findItems(QStringLiteral("Creature type 4"), Qt::MatchExactly);
+    ASSERT_EQ(disabledMatches.size(), 1);
+    EXPECT_FALSE(disabledMatches[0]->flags() & Qt::ItemIsEnabled);
+    list->setCurrentItem(disabledMatches[0]);
+    EXPECT_FALSE(confirm->isEnabled());
+
+    search->setText(QStringLiteral("Wolverine"));
+    auto matches = list->findItems(QStringLiteral("Wolverine"), Qt::MatchExactly);
+    ASSERT_EQ(matches.size(), 1);
+    EXPECT_FALSE(matches[0]->isHidden());
+    list->setCurrentItem(matches[0]);
+    EXPECT_TRUE(confirm->isEnabled());
+
+    search->setText(QStringLiteral("no matching choice"));
+    EXPECT_FALSE(confirm->isEnabled());
+    search->setText(QStringLiteral("Wolverine"));
+    matches = list->findItems(QStringLiteral("Wolverine"), Qt::MatchExactly);
+    ASSERT_EQ(matches.size(), 1);
+    list->setCurrentItem(matches[0]);
+
+    QSignalSpy selected(widget.get(), &GamePromptWidget::ruledChoiceOptionRequested);
+    QSignalSpy declined(widget.get(), &GamePromptWidget::declineClickChoiceRequested);
+    btn("declineClickChoiceButton")->click();
+    EXPECT_EQ(declined.count(), 1);
+    EXPECT_EQ(selected.count(), 0);
+    confirm->click();
+    ASSERT_EQ(selected.count(), 1);
+    EXPECT_EQ(selected.at(0).at(0).toInt(), 317 * 3 + 2);
+
+    widget->setRuledPromptState({});
+    EXPECT_TRUE(widget->findChild<QWidget *>("ruledLargeChoicePicker")->isHidden());
+    EXPECT_EQ(list->count(), 0);
+}
+
+TEST_F(GamePromptWidgetTest, SmallResolutionChoicesKeepTheirExistingButtons)
+{
+    GamePromptWidget::RuledPromptState prompt;
+    prompt.mode = GamePromptWidget::PromptMode::ChoiceOptions;
+    prompt.choiceOptions = {{17, "Accept", true}, {29, "Decline", true}};
+    widget->setRuledPromptState(prompt);
+
+    ASSERT_NE(btn("ruledChoiceOptionButton_17"), nullptr);
+    EXPECT_FALSE(btn("ruledChoiceOptionButton_17")->isHidden());
+    EXPECT_TRUE(widget->findChild<QWidget *>("ruledLargeChoicePicker")->isHidden());
+    QSignalSpy selected(widget.get(), &GamePromptWidget::ruledChoiceOptionRequested);
+    btn("ruledChoiceOptionButton_29")->click();
+    ASSERT_EQ(selected.count(), 1);
+    EXPECT_EQ(selected.at(0).at(0).toInt(), 29);
 }
 
 // --- Pass priority ---

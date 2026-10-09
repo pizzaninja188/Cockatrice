@@ -1,0 +1,42 @@
+// Oracle/rulings verified 2026-10-09. CR 205.3m, 603.6, 607, 608.2h, 707.
+(
+  id: "molten_echoes",
+  name: "Molten Echoes",
+  face_id: "molten_echoes",
+  mana_cost: "{2}{R}{R}",
+  types: ["Enchantment"],
+  static_abilities: [(
+    ability_id: "choose_type",
+    presentation: OracleLines([1]),
+    definition: AsEntersChooseCreatureType(link_id: "chosen_type"),
+  )],
+  triggered_abilities: [(
+    ability_id: "copy_matching_creature",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (
+        permanent_type: Some(Creature),
+        token: Some(false),
+        source_chosen_creature_type: Some("chosen_type"),
+      ),
+    ),
+    effect: [
+      CreateTokenCopies(count: 1, source: TriggerObject),
+      ApplyPermanentModifier(
+        subject: PreviousEffectObject,
+        modifier: GrantKeywords([Haste]),
+        duration: Indefinite,
+      ),
+      CreateDelayedTrigger(
+        subject: Some(PreviousEffectObject),
+        ability: (
+          ability_id: "exile_copy",
+          presentation: OracleLines([2]),
+          trigger: AtBeginningOfNextEndStep,
+          effect: [Exile(subject: TriggerObject)],
+        ),
+      ),
+    ],
+  )],
+)

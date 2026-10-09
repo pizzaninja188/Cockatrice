@@ -19,26 +19,32 @@ use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 pub type PlayerId = i32;
 pub type ObjectId = u32;
 
-/// CR 607.5a: an acquired pair cannot borrow a choice made by an earlier occurrence.
+/// CR 607.5a: an acquired linked pair cannot borrow a choice made by an earlier occurrence.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ChosenOpponentOccurrence {
+pub(crate) enum LinkedChoiceOccurrence {
     NativeOrTokenBase,
     AcquiredCopy(u64),
 }
 
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
-pub struct ChosenOpponentKey {
+pub struct LinkedChoiceKey {
     pub(crate) source_object_id: ObjectId,
     pub(crate) source_zone_change: u64,
     pub(crate) producer: AbilityDefinitionId,
     pub(crate) link_id: AbilityLinkId,
-    pub(crate) occurrence: ChosenOpponentOccurrence,
+    pub(crate) occurrence: LinkedChoiceOccurrence,
 }
 
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ChosenOpponentRecord {
-    pub key: ChosenOpponentKey,
+    pub key: LinkedChoiceKey,
     pub player: PlayerId,
+}
+
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ChosenCreatureTypeRecord {
+    pub key: LinkedChoiceKey,
+    pub creature_type: String,
 }
 
 /// CR 104: a game ends either with a winner or in a draw. Windfall's simultaneous
@@ -1344,10 +1350,17 @@ pub enum ResolutionContinuation {
     EntryChooseOpponent {
         stack: ParkedStackResolution,
         effect_id: EntryReplacementEffectId,
-        key: ChosenOpponentKey,
+        key: LinkedChoiceKey,
         entering_zone: Zone,
         entering_generation: u64,
         players: Vec<PlayerId>,
+    },
+    EntryChooseCreatureType {
+        stack: ParkedStackResolution,
+        effect_id: EntryReplacementEffectId,
+        key: LinkedChoiceKey,
+        entering_zone: Zone,
+        entering_generation: u64,
     },
     SagaReadAhead {
         stack: ParkedStackResolution,
@@ -1437,6 +1450,7 @@ impl ResolutionContinuation {
             | Self::EntryReveal { stack, .. }
             | Self::EntryBasicLandType { stack, .. }
             | Self::EntryChooseOpponent { stack, .. }
+            | Self::EntryChooseCreatureType { stack, .. }
             | Self::SagaReadAhead { stack, .. }
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
@@ -1490,6 +1504,7 @@ impl ResolutionContinuation {
             | Self::EntryReveal { stack, .. }
             | Self::EntryBasicLandType { stack, .. }
             | Self::EntryChooseOpponent { stack, .. }
+            | Self::EntryChooseCreatureType { stack, .. }
             | Self::SagaReadAhead { stack, .. }
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
@@ -1688,6 +1703,8 @@ pub struct BattlefieldEntryEvent {
     pub chosen_basic_land_type: Option<tricerules_card_model::BasicLandType>,
     /// Provisional linked choices; installed only with the committed incarnation.
     pub(crate) chosen_opponents: Vec<ChosenOpponentRecord>,
+    /// CR 607 linked creature-type choices, installed only with the committed incarnation.
+    pub(crate) chosen_creature_types: Vec<ChosenCreatureTypeRecord>,
     /// Counter state accumulated by entry replacement effects before zone commitment.
     pub entry_counters: BTreeMap<CounterKind, u32>,
     /// CR 611.2e continuous effects created by the instruction putting this object onto the
@@ -2621,6 +2638,8 @@ pub struct GameState {
     pub(crate) linked_exile_records: BTreeMap<LinkedExileKey, Vec<LinkedExiledObject>>,
     /// Small deterministic entry-ordered collection; designations are not copiable values.
     pub(crate) chosen_opponents: Vec<ChosenOpponentRecord>,
+    /// Creature-type designations remain separate from copiable values and copy snapshots.
+    pub(crate) chosen_creature_types: Vec<ChosenCreatureTypeRecord>,
     /// Generation-bound temporary copy effects. Only their copiable-value baseline is restored;
     /// expiry metadata is never part of another object's copy snapshot.
     pub(crate) active_temporary_copies: Vec<ActiveTemporaryCopy>,
