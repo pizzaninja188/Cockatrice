@@ -960,16 +960,10 @@ impl GameEngine {
                         "No eligible blockers — auto-declaring empty blockers.".into(),
                     ));
                     ev.push(ev_phase(self, rv1::PhaseId::DeclareBlockers));
-                    // Emit BlockersDeclared (empty) AFTER phase_changed so the client's
-                    // blockersSubmittedThisStep ends up true (phase_changed resets it to false,
-                    // then BlockersDeclared sets it true; order matters).
-                    ev.push(RuledEvent {
-                        ev: Some(rv1::ruled_event::Ev::BlockersDeclared(
-                            rv1::BlockersDeclared {
-                                block_pairs: vec![],
-                            },
-                        )),
-                    });
+                    // Route automatic and submitted empty declarations through the same public
+                    // event and trigger collection boundary. Keep it after PhaseChanged so the
+                    // client's blockersSubmittedThisStep ends up true.
+                    self.finalize_block_declarations(&mut *ev)?;
                     ev.push(ev_priority_changed(self));
                 } else {
                     self.state.turn_step = DeclareBlockers;

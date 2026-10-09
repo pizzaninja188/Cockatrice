@@ -437,6 +437,44 @@ pub(super) fn gain_control(
     Ok(EffectOutcome::Continue)
 }
 
+/// CR 611.2a / 613.1b: Coveted Jewel's trigger changes control of its exact source permanent to
+/// the event-time attacking player. The effect is untargeted and remains until the artifact leaves.
+pub(super) fn give_control_of_source_to_attacking_player(
+    cx: &mut EffectCx<'_>,
+) -> Result<EffectOutcome, EngineError> {
+    let Some(source_id) = cx.top.source_permanent_id else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if !cx.engine.source_is_current_object(cx.top) {
+        return Ok(EffectOutcome::Continue);
+    }
+    let Some(attacking_player) = player_recipients(
+        cx,
+        tricerules_card_model::primitives::PlayerRecipient::TriggeringAttackingPlayer,
+    )
+    .first()
+    .copied() else {
+        return Ok(EffectOutcome::Continue);
+    };
+
+    cx.engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: Some(source_id),
+        affected: AffectedScope::Single(source_id),
+        kind: ContinuousEffectKind::Layer2Control {
+            controller: ControllerReference::Fixed(attacking_player),
+        },
+        condition: None,
+        duration: EffectDuration::Indefinite,
+        timestamp: cx.engine.state.command_index,
+    });
+    cx.engine.reindex_battlefield_control(cx.events);
+    cx.events.push(ev_log(format!(
+        "P{attacking_player} gains control of permanent {source_id}."
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn create_delayed_trigger(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

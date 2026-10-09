@@ -6,6 +6,10 @@
 
 use crate::helpers::*;
 use tricerules_core::{AttachmentRecipient, Zone};
+use tricerules_proto::ruled::v1::{
+    dev_command, ruled_command::Cmd, DeclareAttackers, DevCommand, DevMoveCard, DevZone,
+    RuledCommand,
+};
 
 #[test]
 fn chandras_outrage_damages_the_creature_and_its_controller() {
@@ -299,6 +303,98 @@ fn curse_attacking_reward_is_skipped_when_no_attacker_remains() {
         battlefield_token_oids(&engine, 0, "gold").len(),
         1,
         "only the Curse controller creates a Gold"
+    );
+}
+
+#[test]
+fn curse_attacking_reward_ignores_attackers_at_a_different_multiplayer_defender() {
+    let decks = Some(vec![
+        deck_with("mountain", &["curse_of_disturbance"]),
+        deck_with("forest", &[]),
+        deck_with("island", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        86_106,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .expect("new three-player engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let curse = relocate_to_battlefield(&mut engine, 0, "curse_of_disturbance", false);
+    engine.state.objects.get_mut(&curse).unwrap().attached_to =
+        Some(AttachmentRecipient::Player(1));
+    let attacker_at_cursed_player = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let attacker_at_other_player =
+        inject_creature_on_battlefield(&mut engine, 0, "colossal_dreadmaw");
+
+    engine
+        .apply_command(0, &primitive_yield())
+        .expect("begin combat");
+    for _ in 0..3 {
+        let player = engine.state.priority_player_id();
+        engine
+            .apply_command(player, &pass())
+            .expect("pass combat start");
+    }
+    assert_eq!(
+        engine.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers
+    );
+    let legal_assignments = engine.initial_response_batch().legal_by_player[&0]
+        .legal_attack_assignments
+        .clone();
+    let assignment_for = |attacker, defender| {
+        legal_assignments
+            .iter()
+            .find(|assignment| {
+                assignment.attacker_object_id == attacker
+                    && assignment.defending_player_id == defender
+            })
+            .cloned()
+            .unwrap_or_else(|| panic!("missing legal attack assignment {attacker} -> {defender}"))
+    };
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
+                    assignments: vec![
+                        assignment_for(attacker_at_cursed_player, 1),
+                        assignment_for(attacker_at_other_player, 2),
+                    ],
+                })),
+            },
+        )
+        .expect("attack the cursed player and another defender");
+    assert_eq!(engine.state.stack.len(), 1, "one Curse trigger is stacked");
+
+    engine.enable_dev_commands();
+    engine
+        .apply_command(
+            engine.state.priority_player_id(),
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: 0,
+                    dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                        card_name: "Grizzly Bears".into(),
+                        zone: DevZone::Graveyard as i32,
+                        ready: true,
+                    })),
+                })),
+            },
+        )
+        .expect("remove the only attacker assigned to the cursed player");
+    while !engine.state.stack.is_empty() {
+        pass_priority_round(&mut engine);
+    }
+
+    assert_eq!(
+        battlefield_token_oids(&engine, 0, "zombie_b_2_2").len(),
+        1,
+        "the Curse controller creates a Zombie, but the remaining attack at player 2 is not a recipient"
     );
 }
 

@@ -259,6 +259,9 @@ pub(super) fn execute_effect(
             stack_ops::copy_target_spell(cx, effect)?
         }
         effect @ SpellEffectKind::GainControl { .. } => misc::gain_control(cx, effect)?,
+        SpellEffectKind::GiveControlOfSourceToAttackingPlayer => {
+            misc::give_control_of_source_to_attacking_player(cx)?
+        }
         effect @ SpellEffectKind::CreateDelayedTrigger { .. } => {
             misc::create_delayed_trigger(cx, effect)?
         }

@@ -1,0 +1,34 @@
+(
+  id: "coveted_jewel",
+  name: "Coveted Jewel",
+  face_id: "coveted_jewel",
+  mana_cost: "{6}",
+  types: ["Artifact"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Tap],
+    effect: [ProduceMana(options: [(w: 3), (u: 3), (b: 3), (r: 3), (g: 3)])],
+  )],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Draw(who: Controller, count: 3)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([3]),
+      trigger: WheneverOpponentAttackGroup(
+        timing: AfterBlockersDeclared,
+        destination: Controller,
+      ),
+      effect: [
+        Draw(who: TriggeringAttackingPlayer, count: 3),
+        GiveControlOfSourceToAttackingPlayer,
+        Untap(subject: Source),
+      ],
+    ),
+  ],
+)

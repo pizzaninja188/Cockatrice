@@ -1275,6 +1275,10 @@ pub enum SpellEffectKind {
         target: TargetFilter,
         duration: GainControlDuration,
     },
+    /// CR 611.2a / 613.1b: the attacking player from Coveted Jewel's post-blocker attack-group
+    /// trigger gains control of the source artifact. This is untargeted and creates an indefinite
+    /// layer-2 control effect; ordinary targeted control changes use `GainControl`.
+    GiveControlOfSourceToAttackingPlayer,
     /// CR 701.6: counter target spell on the stack. `spell_filter` narrows which spells are legal
     /// targets by type and/or inclusive mana-value bounds. The default is unrestricted
     /// (Counterspell); creature and noncreature type filters cover Essence Scatter and Negate;
@@ -2638,10 +2642,14 @@ pub enum PlayerRecipient {
     /// The event-time defending player of the attack that caused this trigger. Scorch Spitter and
     /// similar attack triggers keep that player even if the source leaves before resolution.
     DefendingPlayer,
-    /// The event-time attacking player when that player is an opponent of the defender and still
-    /// controls at least one current attacker. Curse of Opulence and Curse of Disturbance use this
-    /// for their one-per-attack-event reward.
+    /// Each current opponent of the event's defending player who still controls a live attacker
+    /// assigned to attack that player. Evaluated from current combat state when the trigger
+    /// resolves, as required by Curse of Opulence and Curse of Disturbance.
     AttackingOpponentsOfDefendingPlayer,
+    /// The player captured as the attacker when this individual attack-group trigger occurred.
+    /// This event-time recipient remains defined if that player's creatures leave before the
+    /// trigger resolves. Coveted Jewel uses this for its draw and control effect.
+    TriggeringAttackingPlayer,
     /// "each opponent" — every other player still in the game. Pestilence-style drains.
     EachOpponent,
     /// "each player" — everyone still in the game, controller included. Earthquake's player half.
@@ -3037,7 +3045,69 @@ impl SpellEffectKind {
                 who: PlayerRecipient::DefendingPlayer
                     | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
                 ..
+            } | SpellEffectKind::Draw {
+                who: PlayerRecipient::TriggeringAttackingPlayer,
+                ..
+            } | SpellEffectKind::GiveControlOfSourceToAttackingPlayer
+        )
+    }
+
+    pub(crate) fn uses_triggering_attacking_player(&self) -> bool {
+        match self {
+            Self::Draw {
+                who: PlayerRecipient::TriggeringAttackingPlayer,
+                ..
+            } => true,
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.uses_triggering_attacking_player()
             }
+            Self::MayBehold { if_beheld, .. } => {
+                if_beheld.iter().any(Self::uses_triggering_attacking_player)
+            }
+            Self::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
+                branches.iter().any(|branch| {
+                    branch
+                        .effects
+                        .iter()
+                        .any(Self::uses_triggering_attacking_player)
+                }) || otherwise.iter().any(Self::uses_triggering_attacking_player)
+            }
+            _ => false,
+        }
+    }
+
+    fn has_unsupported_triggering_attacker_recipient(&self) -> bool {
+        use PlayerRecipient::TriggeringAttackingPlayer as Attacker;
+        matches!(
+            self,
+            Self::DamagePlayer { who: Attacker, .. }
+                | Self::Discard { who: Attacker, .. }
+                | Self::DrawDiscard { who: Attacker, .. }
+                | Self::ChooseResolutionBranch {
+                    chooser: Attacker,
+                    ..
+                }
+                | Self::ChoosePermanents {
+                    chooser: Attacker,
+                    ..
+                }
+                | Self::CreateDelayedTrigger {
+                    affected_player: Some(Attacker),
+                    ..
+                }
+                | Self::LoseLife { who: Attacker, .. }
+                | Self::ExileTopWithPlayPermission {
+                    player: Attacker,
+                    ..
+                }
+                | Self::Mill { who: Attacker, .. }
+                | Self::CreateTokens { who: Attacker, .. }
+                | Self::MayBehold { who: Attacker, .. }
+                | Self::SearchLibrary { who: Attacker, .. }
         )
     }
 
@@ -3288,6 +3358,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ProduceManaPerSourceCounter { .. }
             | SpellEffectKind::ProduceSplitManaFromRemovedStorageCounters { .. }
             | SpellEffectKind::AddMana { .. }
+            | SpellEffectKind::GiveControlOfSourceToAttackingPlayer
             | SpellEffectKind::MayBehold { .. }
             | SpellEffectKind::SearchLibrary { .. }
             | SpellEffectKind::SetSourceBasePowerToTownCount
@@ -4011,11 +4082,29 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if self.has_unsupported_triggering_attacker_recipient() {
+            return Err("TriggeringAttackingPlayer is supported only by Draw effects".into());
+        }
+        if matches!(
+            self,
+            Self::Draw {
+                who: PlayerRecipient::TriggeringAttackingPlayer,
+                ..
+            }
+        ) && context != EffectContext::Ability
+        {
+            return Err("TriggeringAttackingPlayer requires a triggered ability".into());
+        }
         if context == EffectContext::Spell && self.requires_source_counters() {
             return Err("source counter quantities require a battlefield ability source".into());
         }
         if matches!(self, Self::MyrBattlesphereAttack) && context != EffectContext::Ability {
             return Err("MyrBattlesphereAttack requires an attack ability source".into());
+        }
+        if matches!(self, Self::GiveControlOfSourceToAttackingPlayer)
+            && context != EffectContext::Ability
+        {
+            return Err("GiveControlOfSourceToAttackingPlayer requires a triggered ability".into());
         }
         if matches!(
             self,
@@ -6005,6 +6094,33 @@ impl SpellEffectKind {
                     .iter()
                     .any(|branch| branch.effects.iter().any(Self::requires_attack_trigger))
                     || otherwise.iter().any(Self::requires_attack_trigger)
+            }
+            _ => false,
+        }
+    }
+
+    pub(crate) fn requires_unblocked_opponent_attack_group(&self) -> bool {
+        match self {
+            Self::GiveControlOfSourceToAttackingPlayer => true,
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.requires_unblocked_opponent_attack_group()
+            }
+            Self::MayBehold { if_beheld, .. } => if_beheld
+                .iter()
+                .any(Self::requires_unblocked_opponent_attack_group),
+            Self::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
+                branches.iter().any(|branch| {
+                    branch
+                        .effects
+                        .iter()
+                        .any(Self::requires_unblocked_opponent_attack_group)
+                }) || otherwise
+                    .iter()
+                    .any(Self::requires_unblocked_opponent_attack_group)
             }
             _ => false,
         }

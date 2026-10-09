@@ -1625,6 +1625,7 @@ fn validate_effect_targets(
         | SpellEffectKind::DamagePlayer { .. }
         | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
         | SpellEffectKind::MyrBattlesphereAttack
+        | SpellEffectKind::GiveControlOfSourceToAttackingPlayer
         // CR 701.18: library search is untargeted; the library card is chosen via a pending
         // interrupt, not a target declared at cast time. Scry is the same shape — the cards it
         // acts on are the top of the controller's own library, decided at resolution.

@@ -1612,6 +1612,49 @@ impl GameEngine {
                 }
 
                 for source in sources {
+                    if !self
+                        .state
+                        .are_opponents(*attacking_player, source.controller)
+                    {
+                        continue;
+                    }
+                    let mut matching = self.matching_snapshot_abilities(source, |condition| {
+                        let TriggerCondition::WheneverOpponentAttackGroup {
+                            timing: AttackGroupTriggerTiming::AttackersDeclared,
+                            destination,
+                        } = condition
+                        else {
+                            return false;
+                        };
+                        attacks.iter().any(|attack| {
+                            attack.defending_player == source.controller
+                                && match (destination, attack.defender) {
+                                    (
+                                        AttackGroupDestination::Controller,
+                                        CombatDefenderTarget::Player(player),
+                                    ) => player == source.controller,
+                                    (
+                                        AttackGroupDestination::ControllerOrPlaneswalker,
+                                        CombatDefenderTarget::Player(player),
+                                    ) => player == source.controller,
+                                    (
+                                        AttackGroupDestination::ControllerOrPlaneswalker,
+                                        CombatDefenderTarget::Permanent(permanent),
+                                    ) => self.characteristics(permanent.object_id).is_some_and(
+                                        |characteristics| characteristics.has_type("Planeswalker"),
+                                    ),
+                                    _ => false,
+                                }
+                        })
+                    });
+                    for trigger in &mut matching {
+                        trigger.trigger_context.attacking_player = Some(*attacking_player);
+                        trigger.trigger_context.defending_player = Some(source.controller);
+                    }
+                    out.extend(matching);
+                }
+
+                for source in sources {
                     let Some(AttachmentSnapshot::Player(attached_player)) = source.attached_to
                     else {
                         continue;
@@ -1665,6 +1708,44 @@ impl GameEngine {
                             trigger.trigger_context.observed_object = Some(related);
                         }
                         out.extend(matching);
+                    }
+                }
+
+                if let Some(combat) = self.state.combat.as_ref() {
+                    for source in sources {
+                        let attacking_players: BTreeSet<PlayerId> = combat
+                            .attacking
+                            .iter()
+                            .filter(|attacker_id| !combat.blockers.contains_key(attacker_id))
+                            .filter_map(|attacker_id| {
+                                let assignment = combat.attack_assignments.get(attacker_id)?;
+                                (assignment.defending_player == source.controller
+                                    && assignment.defender
+                                        == CombatDefenderTarget::Player(source.controller)
+                                    && self.state.are_opponents(
+                                        assignment.attacker.controller_at_event,
+                                        source.controller,
+                                    ))
+                                .then_some(assignment.attacker.controller_at_event)
+                            })
+                            .collect();
+                        for attacking_player in attacking_players {
+                            let mut matching =
+                                self.matching_snapshot_abilities(source, |condition| {
+                                    matches!(
+                                        condition,
+                                        TriggerCondition::WheneverOpponentAttackGroup {
+                                            timing: AttackGroupTriggerTiming::AfterBlockersDeclared,
+                                            destination: AttackGroupDestination::Controller,
+                                        }
+                                    )
+                                });
+                            for trigger in &mut matching {
+                                trigger.trigger_context.attacking_player = Some(attacking_player);
+                                trigger.trigger_context.defending_player = Some(source.controller);
+                            }
+                            out.extend(matching);
+                        }
                     }
                 }
                 out
@@ -4720,6 +4801,238 @@ mod tests {
                 .collect_triggers(&other_defender, std::slice::from_ref(&source))
                 .is_empty(),
             "attacking another participant does not trigger the attached player's Curse"
+        );
+    }
+
+    #[test]
+    fn opponent_attack_group_trigger_fires_once_for_the_complete_declaration() {
+        let decks = Some(vec![
+            vec!["jace_beleren".into(); 8],
+            vec!["forest".into(); 8],
+            vec!["island".into(); 8],
+        ]);
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            6304,
+            &[0, 1, 2],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
+        let planeswalker = engine
+            .state
+            .objects
+            .values()
+            .find(|object| object.owner == 0 && object.card_id == "jace_beleren")
+            .expect("planeswalker card")
+            .id;
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            planeswalker,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("move the planeswalker onto the battlefield");
+        let source = TriggerSourceSnapshot {
+            source_concealed: false,
+            copy_snapshot: None,
+            chosen_creature_types: Vec::new(),
+            counters: BTreeMap::new(),
+            owner: 0,
+            is_token: false,
+            all_creature_types: false,
+            types: vec!["Artifact".into()],
+            power_toughness: (None, None),
+            event_conditions_checked: false,
+            object_id: 100,
+            card_id: "coveted_jewel".into(),
+            face_name: "Coveted Jewel".into(),
+            controller: 0,
+            face_index: 0,
+            zone_change_generation: 0,
+            face_change_generation: 0,
+            attached_to: None,
+            triggered_abilities: vec![(
+                0,
+                TriggeredAbilityDef {
+                    ability_id: AbilityId::new("triggered_01").unwrap(),
+                    presentation: AbilityPresentation::Fallback,
+                    trigger: TriggerCondition::WheneverOpponentAttackGroup {
+                        timing: AttackGroupTriggerTiming::AttackersDeclared,
+                        destination: AttackGroupDestination::ControllerOrPlaneswalker,
+                    },
+                    effect: vec![SpellEffectKind::Draw {
+                        who: PlayerRecipient::Controller,
+                        count: Amount::Fixed(1),
+                    }],
+                    modal: None,
+                    targeting: None,
+                    may: false,
+                    intervening_if: None,
+                    max_triggers_per_turn: None,
+                    triggers_only_once: false,
+                },
+                test_ability_origin(0),
+            )],
+        };
+        let attacker = |object_id| TriggerObjectRef {
+            object_id,
+            zone_change_generation: 0,
+            controller_at_event: 1,
+        };
+        let event = GameEvent::AttackersDeclared {
+            attacking_player: 1,
+            attacks: vec![
+                AttackEdgeSnapshot {
+                    attacker: attacker(200),
+                    defender: CombatDefenderTarget::Permanent(TriggerObjectRef {
+                        object_id: planeswalker,
+                        zone_change_generation: 0,
+                        controller_at_event: 0,
+                    }),
+                    defending_player: 0,
+                },
+                AttackEdgeSnapshot {
+                    attacker: attacker(202),
+                    defender: CombatDefenderTarget::Player(2),
+                    defending_player: 2,
+                },
+            ],
+        };
+
+        let triggers = engine.collect_triggers(&event, std::slice::from_ref(&source));
+        assert_eq!(triggers.len(), 1, "one attack group creates one trigger");
+        assert_eq!(triggers[0].trigger_context.attacking_player, Some(1));
+        assert_eq!(triggers[0].trigger_context.defending_player, Some(0));
+
+        let player_event = GameEvent::AttackersDeclared {
+            attacking_player: 1,
+            attacks: vec![AttackEdgeSnapshot {
+                attacker: attacker(203),
+                defender: CombatDefenderTarget::Player(0),
+                defending_player: 0,
+            }],
+        };
+        assert_eq!(
+            engine
+                .collect_triggers(&player_event, std::slice::from_ref(&source))
+                .len(),
+            1,
+            "attacking the source controller as a player also qualifies"
+        );
+    }
+
+    #[test]
+    fn opponent_unblocked_attack_group_ignores_blocked_members_and_requires_one_unblocked() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            6305,
+            &[0, 1, 2],
+            20,
+            None,
+            true,
+        )
+        .expect("engine");
+        let source = TriggerSourceSnapshot {
+            source_concealed: false,
+            copy_snapshot: None,
+            chosen_creature_types: Vec::new(),
+            counters: BTreeMap::new(),
+            owner: 0,
+            is_token: false,
+            all_creature_types: false,
+            types: vec!["Artifact".into()],
+            power_toughness: (None, None),
+            event_conditions_checked: false,
+            object_id: 100,
+            card_id: "coveted_jewel".into(),
+            face_name: "Coveted Jewel".into(),
+            controller: 0,
+            face_index: 0,
+            zone_change_generation: 0,
+            face_change_generation: 0,
+            attached_to: None,
+            triggered_abilities: vec![(
+                0,
+                TriggeredAbilityDef {
+                    ability_id: AbilityId::new("triggered_01").unwrap(),
+                    presentation: AbilityPresentation::Fallback,
+                    trigger: TriggerCondition::WheneverOpponentAttackGroup {
+                        timing: AttackGroupTriggerTiming::AfterBlockersDeclared,
+                        destination: AttackGroupDestination::Controller,
+                    },
+                    effect: vec![SpellEffectKind::Draw {
+                        who: PlayerRecipient::Controller,
+                        count: Amount::Fixed(1),
+                    }],
+                    modal: None,
+                    targeting: None,
+                    may: false,
+                    intervening_if: None,
+                    max_triggers_per_turn: None,
+                    triggers_only_once: false,
+                },
+                test_ability_origin(0),
+            )],
+        };
+        let assignment = |object_id| CombatAttackAssignment {
+            attacker: TriggerObjectRef {
+                object_id,
+                zone_change_generation: 0,
+                controller_at_event: 1,
+            },
+            defender: CombatDefenderTarget::Player(0),
+            defending_player: 0,
+        };
+        let mut planeswalker_attack = assignment(203);
+        planeswalker_attack.defender = CombatDefenderTarget::Permanent(TriggerObjectRef {
+            object_id: 400,
+            zone_change_generation: 0,
+            controller_at_event: 0,
+        });
+        engine.state.combat = Some(CombatState {
+            attacking: vec![200, 201, 202, 203],
+            attack_assignments: [
+                (200, assignment(200)),
+                (201, assignment(201)),
+                (202, assignment(202)),
+                (203, planeswalker_attack),
+            ]
+            .into_iter()
+            .collect(),
+            blockers: [(201, vec![300])].into_iter().collect(),
+            damage_assignments: HashMap::new(),
+            trample_player_damage: HashMap::new(),
+            damage_assignment_needed: false,
+            attackers_declared: true,
+            blockers_declared_by: vec![0],
+            blockers_declared: true,
+            assign_combat_damage_phase: false,
+            first_strike_attackers: Vec::new(),
+            first_strike_blockers: HashMap::new(),
+            first_strike_damage_done: false,
+        });
+        let event = GameEvent::BlockersDeclared { edges: Vec::new() };
+
+        let triggers = engine.collect_triggers(&event, std::slice::from_ref(&source));
+        assert_eq!(
+            triggers.len(),
+            1,
+            "the unblocked attackers form one trigger group"
+        );
+        assert_eq!(triggers[0].trigger_context.attacking_player, Some(1));
+        assert_eq!(triggers[0].trigger_context.defending_player, Some(0));
+
+        let combat = engine.state.combat.as_mut().unwrap();
+        combat.blockers.insert(200, vec![301]);
+        combat.blockers.insert(202, vec![302]);
+        assert!(
+            engine
+                .collect_triggers(&event, std::slice::from_ref(&source))
+                .is_empty(),
+            "all player-targeting attackers are blocked, and an unblocked planeswalker attack is ineligible"
         );
     }
 

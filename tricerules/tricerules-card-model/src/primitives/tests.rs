@@ -3114,6 +3114,80 @@ fn issue_207_stack_ability_and_source_linked_ability_loss_primitives_parse() {
     assert!(remove.validate(EffectContext::Ability).is_ok());
 }
 #[test]
+fn coveted_jewel_control_change_requires_its_post_blocker_player_attack_group() {
+    let ron = r#"(ability_id: "triggered_01", presentation: Fallback,
+        trigger: WheneverOpponentAttackGroup(timing: AfterBlockersDeclared, destination: Controller),
+        effect: [GiveControlOfSourceToAttackingPlayer])"#;
+    let mut ability: super::TriggeredAbilityDef =
+        ron::from_str(ron).expect("Coveted Jewel trigger parses");
+    ability
+        .validate_shape()
+        .expect("the event-time attacker control effect has its required trigger context");
+    assert!(super::SpellEffectKind::GiveControlOfSourceToAttackingPlayer
+        .validate(super::EffectContext::Spell)
+        .is_err());
+
+    let activated: super::ActivatedAbilityDef = ron::from_str(
+        r#"(ability_id: "activated_01", presentation: Fallback, costs: [Tap],
+            effect: [GiveControlOfSourceToAttackingPlayer])"#,
+    )
+    .expect("activated ability with the trigger-only effect parses for validation");
+    let activated_error = activated.validate_shape().expect_err(
+        "source control by an attacking player must not be admitted on an activated ability",
+    );
+    assert!(
+        activated_error.contains("post-blocker player attack-group trigger"),
+        "unexpected activated source-control validation error: {activated_error}"
+    );
+
+    ability.trigger = super::TriggerCondition::WheneverSelfAttacks {
+        minimum_other_attackers: 0,
+    };
+    assert!(ability
+        .validate_shape()
+        .expect_err("source control must not run without the opponent's unblocked attack event")
+        .contains("post-blocker player attack-group trigger"));
+}
+
+#[test]
+fn triggering_attacker_recipient_is_draw_only_and_requires_coveted_jewels_trigger() {
+    let mut ability: super::TriggeredAbilityDef = ron::from_str(
+        r#"(ability_id: "triggered_01", presentation: Fallback,
+            trigger: WheneverOpponentAttackGroup(timing: AfterBlockersDeclared, destination: Controller),
+            effect: [Draw(who: TriggeringAttackingPlayer, count: 3)])"#,
+    )
+    .expect("event-time attacker draw parses");
+    ability
+        .validate_shape()
+        .expect("the post-blocker trigger supplies the event-time attacker");
+
+    ability.trigger = super::TriggerCondition::WheneverAttachedPlayerIsAttacked;
+    assert!(ability
+        .validate_shape()
+        .expect_err("an unrelated trigger cannot use Coveted Jewel's attacker recipient")
+        .contains("post-blocker player attack-group trigger"));
+
+    let activated: super::ActivatedAbilityDef = ron::from_str(
+        r#"(ability_id: "activated_01", presentation: Fallback, costs: [Tap],
+            effect: [Draw(who: TriggeringAttackingPlayer, count: 1)])"#,
+    )
+    .expect("activated ability with attacker recipient parses for validation");
+    assert!(
+        activated.validate_shape().is_err(),
+        "an activated ability cannot use a recipient that requires a trigger's defender context"
+    );
+
+    let invalid_damage = super::SpellEffectKind::DamagePlayer {
+        amount: super::Amount::Fixed(1),
+        who: super::PlayerRecipient::TriggeringAttackingPlayer,
+    };
+    assert!(invalid_damage
+        .validate(super::EffectContext::Ability)
+        .expect_err("the event-time attacker recipient is implemented only for Draw")
+        .contains("supported only by Draw"));
+}
+
+#[test]
 fn simple_fallbacks_cover_synthetic_choices_and_keep_unknown_instructions_whole() {
     let branch: super::ResolutionBranchDef = ron::from_str(
         r#"(branch_id: "continue", presentation: Fallback, cost: None, effects: [])"#,

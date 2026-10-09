@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "98492d7d-3b9e-4ae1-ac45-1b508d6d2670",
+  "spans": [
+    {
+      "face_id": "coveted_jewel",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    },
+    {
+      "face_id": "coveted_jewel",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "coveted_jewel",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/triggered_abilities/1"]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_coveted_jewel::coveted_jewel_enters_with_three_cards_and_makes_three_mana_of_one_color",
+      "covers": "the entry trigger draws three cards and its tapped mana ability produces three mana of one chosen color"
+    },
+    {
+      "test": "scenario deck_coverage_coveted_jewel::coveted_jewel_auto_empty_blocker_event_draws_transfers_control_and_untaps",
+      "covers": "after blockers are declared with no blockers, one attack group makes its attacking player draw three, gain control of the Jewel, and untap it"
+    },
+    {
+      "test": "scenario deck_coverage_coveted_jewel::coveted_jewel_explicit_mixed_blockers_trigger_once_for_the_unblocked_group",
+      "covers": "a mixed blocked and unblocked attack group produces one trigger for the unblocked group"
+    },
+    {
+      "test": "scenario deck_coverage_coveted_jewel::old_coveted_jewel_trigger_does_not_change_returned_source_incarnation",
+      "covers": "a pending attack trigger survives its source leaving, while its control and untap effects cannot change the returned source incarnation"
+    },
+    {
+      "test": "scenario deck_coverage_coveted_jewel::coveted_jewel_keeps_the_triggering_attacker_after_its_creature_leaves",
+      "covers": "the attack trigger's event-time attacking player still draws and gains control after the attacking creature leaves"
+    },
+    {
+      "test": "scenario deck_coverage_coveted_jewel::coveted_jewel_multiplayer_attack_group_waits_for_last_defender_and_uses_effective_controller",
+      "covers": "a three-player attack group waits for every attacked defender and triggers once for the Jewel's effective Layer 2 controller"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1551,10 +1551,7 @@ impl GameEngine {
                         object_id: defender_ref.object_id,
                         zone_change_generation: option.defender_zone_change_generation,
                         controller_at_event: self
-                            .state
-                            .objects
-                            .get(&defender_ref.object_id)
-                            .map(|object| object.controller)
+                            .controller_of(defender_ref.object_id)
                             .ok_or(EngineError::Illegal("attacking-token defender missing"))?,
                     })
                 }
@@ -1573,10 +1570,7 @@ impl GameEngine {
                     .copied()
                     .unwrap_or(0),
                 controller_at_event: self
-                    .state
-                    .objects
-                    .get(&object_id)
-                    .map(|object| object.controller)
+                    .controller_of(object_id)
                     .ok_or(EngineError::Illegal("attacking token missing"))?,
             };
             parsed.push((
@@ -3296,4 +3290,281 @@ pub(super) fn is_blocking(state: &GameState, oid: ObjectId) -> bool {
 /// CR 508/509: true if `oid` is currently an attacker or a blocker in the active combat.
 pub(super) fn is_attacking_or_blocking(state: &GameState, oid: ObjectId) -> bool {
     is_attacking(state, oid) || is_blocking(state, oid)
+}
+
+#[cfg(test)]
+mod attack_group_tests {
+    use super::*;
+
+    fn attack_group_fixture() -> (GameEngine, ObjectId, [ObjectId; 3], ObjectId) {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 8],
+            vec!["coveted_jewel".into(); 8],
+            vec!["grizzly_bears".into(); 8],
+        ]);
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            508510,
+            &[0, 1, 2],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
+        let owned_objects = |owner, card_id: &str, count| {
+            engine
+                .state
+                .objects
+                .values()
+                .filter(|object| object.owner == owner && object.card_id == card_id)
+                .take(count)
+                .map(|object| object.id)
+                .collect::<Vec<_>>()
+        };
+        let jewel = owned_objects(1, "coveted_jewel", 1)[0];
+        let attackers: [ObjectId; 3] = owned_objects(0, "grizzly_bears", 3)
+            .try_into()
+            .expect("three attacker fixtures");
+        let blocker = owned_objects(2, "grizzly_bears", 1)[0];
+        for attacker in attackers {
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                attacker,
+                Zone::Battlefield,
+                Some(0),
+            )
+            .expect("move attacker to battlefield");
+        }
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            jewel,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .expect("move Jewel to battlefield");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            blocker,
+            Zone::Battlefield,
+            Some(2),
+        )
+        .expect("move blocker to battlefield");
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(jewel),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(2),
+            },
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 1,
+        });
+        engine.state.combat = Some(CombatState {
+            attacking: Vec::new(),
+            attack_assignments: HashMap::new(),
+            blockers: HashMap::new(),
+            damage_assignments: HashMap::new(),
+            trample_player_damage: HashMap::new(),
+            damage_assignment_needed: false,
+            attackers_declared: true,
+            blockers_declared_by: Vec::new(),
+            blockers_declared: false,
+            assign_combat_damage_phase: false,
+            first_strike_attackers: Vec::new(),
+            first_strike_blockers: HashMap::new(),
+            first_strike_damage_done: false,
+        });
+        assert_eq!(
+            engine
+                .characteristics(jewel)
+                .expect("Jewel characteristics")
+                .controller,
+            2
+        );
+        engine.initial_response_batch();
+        (engine, jewel, attackers, blocker)
+    }
+
+    fn defender_option(engine: &GameEngine, player: PlayerId) -> rv1::CombatDefenderOption {
+        engine
+            .legal_combat_defender_options()
+            .into_iter()
+            .find(|option| option.defending_player_id == player)
+            .expect("legal player defender")
+    }
+
+    #[test]
+    fn attacking_object_snapshot_uses_effective_layer_two_controller() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 8],
+            vec!["forest".into(); 8],
+        ]);
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            508509,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
+        let attacker = engine
+            .state
+            .objects
+            .values()
+            .find(|object| object.owner == 0 && object.card_id == "grizzly_bears")
+            .expect("attacker card")
+            .id;
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            attacker,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("move attacker to battlefield");
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(attacker),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(1),
+            },
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 1,
+        });
+        engine.state.combat = Some(CombatState {
+            attacking: Vec::new(),
+            attack_assignments: HashMap::new(),
+            blockers: HashMap::new(),
+            damage_assignments: HashMap::new(),
+            trample_player_damage: HashMap::new(),
+            damage_assignment_needed: false,
+            attackers_declared: true,
+            blockers_declared_by: Vec::new(),
+            blockers_declared: false,
+            assign_combat_damage_phase: false,
+            first_strike_attackers: Vec::new(),
+            first_strike_blockers: HashMap::new(),
+            first_strike_damage_done: false,
+        });
+        let defender = engine
+            .legal_combat_defender_options()
+            .into_iter()
+            .find(|option| option.defending_player_id == 1)
+            .expect("opponent player defender");
+
+        engine
+            .add_attacking_objects(&[attacker], &[defender])
+            .expect("add attacking object");
+
+        assert_eq!(
+            engine.state.combat.as_ref().unwrap().attack_assignments[&attacker]
+                .attacker
+                .controller_at_event,
+            1,
+            "later grouped combat triggers use the effective event-time controller"
+        );
+    }
+
+    #[test]
+    fn coveted_jewel_attack_group_includes_attackers_added_before_but_not_after_finalization() {
+        let (mut engine, _jewel, attackers, _blocker) = attack_group_fixture();
+        let at_other_defender = defender_option(&engine, 1);
+        let at_jewel_controller = defender_option(&engine, 2);
+
+        engine
+            .add_attacking_objects(&[attackers[0]], &[at_other_defender])
+            .expect("add first attacker before blockers");
+        engine
+            .add_attacking_objects(&[attackers[1]], &[at_jewel_controller])
+            .expect("add attacker at Jewel's controller before blockers");
+        assert!(
+            engine.state.staged_trigger_groups.is_empty(),
+            "the group waits for blockers"
+        );
+
+        engine.state.combat.as_mut().unwrap().blockers_declared = true;
+        let mut events = Vec::new();
+        engine
+            .finalize_block_declarations(&mut events)
+            .expect("finalize blocker declarations");
+        assert_eq!(
+            engine.state.staged_trigger_groups.len(),
+            1,
+            "the completed group stages one trigger group"
+        );
+        let staged = engine
+            .state
+            .staged_trigger_groups
+            .front()
+            .expect("Coveted Jewel trigger group");
+        assert_eq!(staged.triggers.len(), 1, "one group trigger");
+        let trigger = &staged.triggers[0];
+        assert_eq!(trigger.trigger_context.attacking_player, Some(0));
+        assert_eq!(trigger.trigger_context.defending_player, Some(2));
+
+        engine.state.combat.as_mut().unwrap().blockers_declared = true;
+        engine
+            .add_attacking_objects(&[attackers[2]], &[at_jewel_controller])
+            .expect("add attacker after blockers finalized");
+        assert_eq!(
+            engine.state.staged_trigger_groups.len(),
+            1,
+            "an attacker added after finalization does not create another declaration trigger"
+        );
+    }
+
+    #[test]
+    fn coveted_jewel_does_not_trigger_for_attacker_that_remains_blocked_after_blocker_leaves() {
+        let (mut engine, _jewel, attackers, blocker) = attack_group_fixture();
+        let at_jewel_controller = defender_option(&engine, 2);
+        engine
+            .add_attacking_objects(&[attackers[0]], &[at_jewel_controller])
+            .expect("declare attacker at Jewel's controller");
+        engine
+            .state
+            .combat
+            .as_mut()
+            .expect("combat")
+            .blockers
+            .insert(attackers[0], vec![blocker]);
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            blocker,
+            Zone::Graveyard,
+            Some(2),
+        )
+        .expect("the declared blocker leaves");
+        let mut events = Vec::new();
+        engine.remove_combat_participants(&[blocker], &mut events);
+        assert_eq!(
+            engine
+                .state
+                .combat
+                .as_ref()
+                .unwrap()
+                .blockers
+                .get(&attackers[0]),
+            Some(&Vec::new()),
+            "the empty blocker group preserves that the attacker was blocked"
+        );
+
+        engine.state.combat.as_mut().unwrap().blockers_declared = true;
+        let mut final_events = Vec::new();
+        engine
+            .finalize_block_declarations(&mut final_events)
+            .expect("finalize blocker declarations");
+        assert!(
+            engine.state.staged_trigger_groups.is_empty(),
+            "a blocker leaving does not make its attacker unblocked"
+        );
+    }
 }

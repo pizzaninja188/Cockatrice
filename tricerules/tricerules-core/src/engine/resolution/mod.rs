@@ -429,6 +429,7 @@ fn simple_player_recipients(
         | PlayerRecipient::DefendingPlayer
         | PlayerRecipient::EachOtherPlayerThanAffectedPlayer
         | PlayerRecipient::AttackingOpponentsOfDefendingPlayer => Vec::new(),
+        PlayerRecipient::TriggeringAttackingPlayer => Vec::new(),
         PlayerRecipient::EachOpponent => {
             let mut players = state
                 .players
@@ -588,6 +589,80 @@ fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
             .into_iter()
             .collect(),
         PlayerRecipient::AttackingOpponentsOfDefendingPlayer => {
+            let Some(defending_player) = cx.top.trigger_context.defending_player else {
+                return Vec::new();
+            };
+            let defender_is_live = cx
+                .engine
+                .state
+                .player_idx(defending_player)
+                .is_some_and(|idx| !cx.engine.state.players[idx].has_lost);
+            if !defender_is_live {
+                return Vec::new();
+            }
+            let assignments = cx
+                .engine
+                .state
+                .combat
+                .as_ref()
+                .map(|combat| {
+                    combat
+                        .attacking
+                        .iter()
+                        .filter_map(|attacker| {
+                            combat
+                                .attack_assignments
+                                .get(attacker)
+                                .copied()
+                                .map(|assignment| (*attacker, assignment))
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let mut recipients = Vec::new();
+            for (attacker, assignment) in assignments {
+                if assignment.attacker.object_id != attacker
+                    || assignment.defending_player != defending_player
+                    || assignment.defender != CombatDefenderTarget::Player(defending_player)
+                    || cx
+                        .engine
+                        .state
+                        .zone_change_generation
+                        .get(&attacker)
+                        .copied()
+                        .unwrap_or(0)
+                        != assignment.attacker.zone_change_generation
+                    || !cx
+                        .engine
+                        .state
+                        .objects
+                        .get(&attacker)
+                        .is_some_and(|object| object.zone == Zone::Battlefield)
+                {
+                    continue;
+                }
+                let Some(attacking_player) = cx.engine.controller_of(attacker) else {
+                    continue;
+                };
+                let attacking_player_is_live = cx
+                    .engine
+                    .state
+                    .player_idx(attacking_player)
+                    .is_some_and(|idx| !cx.engine.state.players[idx].has_lost);
+                if attacking_player_is_live
+                    && cx
+                        .engine
+                        .state
+                        .are_opponents(attacking_player, defending_player)
+                    && !recipients.contains(&attacking_player)
+                {
+                    recipients.push(attacking_player);
+                }
+            }
+            recipients.sort_by_key(|player| cx.engine.state.apnap_rank(*player));
+            recipients
+        }
+        PlayerRecipient::TriggeringAttackingPlayer => {
             let Some((attacking_player, defending_player)) = cx
                 .top
                 .trigger_context
@@ -596,29 +671,19 @@ fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
             else {
                 return Vec::new();
             };
-            let attacker_is_eligible = cx
+            let attacking_player_is_live = cx
                 .engine
                 .state
                 .player_idx(attacking_player)
-                .is_some_and(|idx| !cx.engine.state.players[idx].has_lost)
+                .is_some_and(|idx| !cx.engine.state.players[idx].has_lost);
+            (attacking_player_is_live
                 && cx
                     .engine
                     .state
-                    .are_opponents(attacking_player, defending_player)
-                && cx.engine.state.combat.as_ref().is_some_and(|combat| {
-                    combat.attacking.iter().any(|&object_id| {
-                        cx.engine
-                            .state
-                            .objects
-                            .get(&object_id)
-                            .is_some_and(|object| object.zone == Zone::Battlefield)
-                            && cx.engine.controller_of(object_id) == Some(attacking_player)
-                    })
-                });
-            attacker_is_eligible
-                .then_some(attacking_player)
-                .into_iter()
-                .collect()
+                    .are_opponents(attacking_player, defending_player))
+            .then_some(attacking_player)
+            .into_iter()
+            .collect()
         }
         _ => simple_player_recipients(
             &cx.engine.state,
@@ -7853,7 +7918,7 @@ mod attached_subject_tests {
     }
 
     #[test]
-    fn issue_86_attacking_recipient_is_player_set_generic_and_distinct_from_controller() {
+    fn issue_86_attacking_recipient_rechecks_attackers_at_resolution() {
         let mut engine = GameEngine::new(
             tricerules_cards::registry::global(),
             86_107,
@@ -7866,9 +7931,26 @@ mod attached_subject_tests {
         engine.state.players.push(PlayerState::new(30, 20));
         let source = add_battlefield_object(&mut engine, 10, "capture_sphere");
         let attacker = add_battlefield_object(&mut engine, 30, "grizzly_bears");
+        let attacker_generation = engine
+            .state
+            .zone_change_generation
+            .get(&attacker)
+            .copied()
+            .unwrap_or(0);
         engine.state.combat = Some(CombatState {
             attacking: vec![attacker],
-            attack_assignments: HashMap::new(),
+            attack_assignments: HashMap::from([(
+                attacker,
+                CombatAttackAssignment {
+                    attacker: TriggerObjectRef {
+                        object_id: attacker,
+                        zone_change_generation: attacker_generation,
+                        controller_at_event: 30,
+                    },
+                    defender: CombatDefenderTarget::Player(20),
+                    defending_player: 20,
+                },
+            )]),
             blockers: HashMap::new(),
             damage_assignments: HashMap::new(),
             trample_player_damage: HashMap::new(),
@@ -7909,6 +7991,37 @@ mod attached_subject_tests {
             player_recipients(&cx, PlayerRecipient::AttackingOpponentsOfDefendingPlayer),
             [30]
         );
+        assert_eq!(
+            player_recipients(&cx, PlayerRecipient::TriggeringAttackingPlayer),
+            [30]
+        );
+        cx.engine
+            .state
+            .combat
+            .as_mut()
+            .expect("combat")
+            .attack_assignments
+            .get_mut(&attacker)
+            .expect("assignment")
+            .defender = CombatDefenderTarget::Player(10);
+        assert!(
+            player_recipients(&cx, PlayerRecipient::AttackingOpponentsOfDefendingPlayer).is_empty(),
+            "an attacker aimed at another multiplayer defender does not count"
+        );
+        assert_eq!(
+            player_recipients(&cx, PlayerRecipient::TriggeringAttackingPlayer),
+            [30],
+            "the event-time recipient is not recalculated from other current combat assignments"
+        );
+        cx.engine
+            .state
+            .combat
+            .as_mut()
+            .expect("combat")
+            .attack_assignments
+            .get_mut(&attacker)
+            .expect("assignment")
+            .defender = CombatDefenderTarget::Player(20);
         cx.engine
             .state
             .combat
@@ -7916,8 +8029,40 @@ mod attached_subject_tests {
             .expect("combat")
             .attacking
             .clear();
+        move_object_to_zone(
+            &mut cx.engine.state,
+            cx.engine.registry,
+            attacker,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("attacker leaves the battlefield before trigger resolution");
         assert!(
-            player_recipients(&cx, PlayerRecipient::AttackingOpponentsOfDefendingPlayer).is_empty()
+            player_recipients(&cx, PlayerRecipient::AttackingOpponentsOfDefendingPlayer).is_empty(),
+            "the Curse reward has no attacking-player recipient after all attackers leave"
+        );
+        assert_eq!(
+            player_recipients(&cx, PlayerRecipient::TriggeringAttackingPlayer),
+            [30],
+            "the event-time recipient remains after all attackers leave"
+        );
+        let attacker_player_idx = cx.engine.state.player_idx(30).expect("attacking player");
+        cx.engine.state.players[attacker_player_idx].has_lost = true;
+        assert!(
+            player_recipients(&cx, PlayerRecipient::AttackingOpponentsOfDefendingPlayer).is_empty(),
+            "a player who has left the game cannot receive the effect"
+        );
+        assert!(
+            player_recipients(&cx, PlayerRecipient::TriggeringAttackingPlayer).is_empty(),
+            "a player who has left the game cannot receive the event-time effect"
+        );
+        cx.engine.state.players[attacker_player_idx].has_lost = false;
+        let defender_player_idx = cx.engine.state.player_idx(20).expect("defending player");
+        cx.engine.state.players[defender_player_idx].has_lost = true;
+        assert_eq!(
+            player_recipients(&cx, PlayerRecipient::TriggeringAttackingPlayer),
+            [30],
+            "the recipient is the live event-time attacker even if the defender leaves"
         );
     }
 }

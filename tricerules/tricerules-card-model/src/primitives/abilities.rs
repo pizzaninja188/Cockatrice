@@ -470,6 +470,16 @@ impl ActivatedAbilityDef {
         if self
             .effect
             .iter()
+            .any(SpellEffectKind::requires_unblocked_opponent_attack_group)
+        {
+            return Err(
+                "GiveControlOfSourceToAttackingPlayer requires a post-blocker player attack-group trigger"
+                    .into(),
+            );
+        }
+        if self
+            .effect
+            .iter()
             .any(SpellEffectKind::uses_defending_player_reference)
         {
             return Err("activated abilities cannot reference a trigger's defending player".into());
@@ -572,6 +582,13 @@ impl ActivatedAbilityDef {
             effect.validate(EffectContext::Ability)?;
         }
         SpellEffectKind::validate_list(&self.effect)?;
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::uses_triggering_attacking_player)
+        {
+            return Err("TriggeringAttackingPlayer requires a triggered ability".into());
+        }
         if self
             .effect
             .iter()
@@ -679,6 +696,14 @@ pub enum TriggerCondition {
         min_attackers: Option<u32>,
         #[serde(default)]
         max_attackers: Option<u32>,
+    },
+    /// One trigger for an opponent's complete attack group against this source's controller.
+    /// Ever-Watching Threshold checks at declaration and also includes that player's
+    /// planeswalkers; Coveted Jewel checks after blockers and includes only attacks against the
+    /// player. The timing encodes whether unblocked attackers are required.
+    WheneverOpponentAttackGroup {
+        timing: AttackGroupTriggerTiming,
+        destination: AttackGroupDestination,
     },
     /// CR 508.1m / 508.3a: whenever the object this Aura or Equipment is attached to attacks.
     /// Heart-Piercer Bow and Battle Mastery establish Equipment/Aura reuse of the event-time
@@ -1063,6 +1088,17 @@ impl TriggerCondition {
             {
                 Err("WheneverControllerAttacks min_attackers cannot exceed max_attackers".into())
             }
+            Self::WheneverOpponentAttackGroup {
+                timing: AttackGroupTriggerTiming::AttackersDeclared,
+                destination: AttackGroupDestination::Controller,
+            }
+            | Self::WheneverOpponentAttackGroup {
+                timing: AttackGroupTriggerTiming::AfterBlockersDeclared,
+                destination: AttackGroupDestination::ControllerOrPlaneswalker,
+            } => Err(
+                "opponent attack-group trigger supports declaration-time player-or-planeswalker groups and post-blocker player groups only"
+                    .into(),
+            ),
             Self::WheneverPlayerExpendsMana { amount: 0, .. } => {
                 Err("Expend threshold must be at least one".into())
             }
@@ -1146,6 +1182,7 @@ impl TriggerCondition {
             Self::WheneverSelfAttacks { .. }
                 | Self::WheneverAttachedObjectAttacks
                 | Self::WheneverAttachedPlayerIsAttacked
+                | Self::WheneverOpponentAttackGroup { .. }
         )
     }
 
@@ -1157,6 +1194,24 @@ impl TriggerCondition {
                 | Self::WheneverSpellBecomesTarget { .. }
         )
     }
+}
+
+/// Combat boundary at which an opponent attack-group trigger is checked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AttackGroupTriggerTiming {
+    /// CR 508.1m: after the complete attacker declaration group is chosen.
+    AttackersDeclared,
+    /// CR 509.3g: after blockers are declared, for groups with at least one unblocked attacker.
+    AfterBlockersDeclared,
+}
+
+/// Attacked destination recognized by an opponent attack-group trigger.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AttackGroupDestination {
+    /// Attacks against this source's controller as a player.
+    Controller,
+    /// Attacks against this source's controller as a player or a planeswalker they control.
+    ControllerOrPlaneswalker,
 }
 
 /// Trigger cardinality for "one or more creatures you control deal combat damage to a player"
@@ -1651,6 +1706,31 @@ impl TriggeredAbilityDef {
                     .into(),
             );
         }
+        let uses_triggering_attacking_player = effects
+            .iter()
+            .copied()
+            .any(SpellEffectKind::uses_triggering_attacking_player)
+            || self.modal.as_ref().is_some_and(|modal| {
+                modal.modes.iter().any(|mode| {
+                    mode.effects
+                        .iter()
+                        .any(SpellEffectKind::uses_triggering_attacking_player)
+                })
+            });
+        if uses_triggering_attacking_player
+            && !matches!(
+                self.trigger,
+                TriggerCondition::WheneverOpponentAttackGroup {
+                    timing: AttackGroupTriggerTiming::AfterBlockersDeclared,
+                    destination: AttackGroupDestination::Controller,
+                }
+            )
+        {
+            return Err(
+                "TriggeringAttackingPlayer requires a post-blocker player attack-group trigger"
+                    .into(),
+            );
+        }
         if effects
             .iter()
             .copied()
@@ -1683,6 +1763,31 @@ impl TriggeredAbilityDef {
         if requires_attack && !matches!(self.trigger, TriggerCondition::WheneverSelfAttacks { .. })
         {
             return Err("MyrBattlesphereAttack requires WheneverSelfAttacks".into());
+        }
+        let requires_unblocked_opponent_attack_group = self
+            .effect
+            .iter()
+            .any(SpellEffectKind::requires_unblocked_opponent_attack_group)
+            || self.modal.as_ref().is_some_and(|modal| {
+                modal.modes.iter().any(|mode| {
+                    mode.effects
+                        .iter()
+                        .any(SpellEffectKind::requires_unblocked_opponent_attack_group)
+                })
+            });
+        if requires_unblocked_opponent_attack_group
+            && !matches!(
+                self.trigger,
+                TriggerCondition::WheneverOpponentAttackGroup {
+                    timing: AttackGroupTriggerTiming::AfterBlockersDeclared,
+                    destination: AttackGroupDestination::Controller,
+                }
+            )
+        {
+            return Err(
+                "GiveControlOfSourceToAttackingPlayer requires a post-blocker player attack-group trigger"
+                    .into(),
+            );
         }
         for effect in &self.effect {
             effect.validate(EffectContext::Ability)?;
