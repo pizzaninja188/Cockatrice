@@ -873,6 +873,31 @@ impl GameEngine {
                             additional_effect,
                         });
                 }
+                StaticAbilityDef::DoubleDamage { subject } => {
+                    let id = self.state.next_damage_doubling_effect_id;
+                    self.state.next_damage_doubling_effect_id = id.saturating_add(1);
+                    let scope = match subject {
+                        DamageDoublingSubject::AnySource => DamageDoublingScope::AnySource,
+                        DamageDoublingSubject::CreatureYouControl => {
+                            DamageDoublingScope::CreatureYouControl {
+                                ability_source: object_id,
+                            }
+                        }
+                    };
+                    let source_label = effective_name.clone().unwrap_or_else(|| card_id.clone());
+                    let source_presentation = self.replacement_source_presentation(object_id);
+                    self.state
+                        .damage_doubling_effects
+                        .push(ActiveDamageDoubling {
+                            id,
+                            static_origin: Some(static_origin.clone()),
+                            source_id: Some(object_id),
+                            source_label,
+                            source_presentation,
+                            scope,
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                        });
+                }
                 StaticAbilityDef::AnthemPt {
                     filter,
                     condition,

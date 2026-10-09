@@ -45,7 +45,7 @@ pub(super) fn damage_target(
         source_has_deathtouch,
         source_has_lifelink,
     }];
-    let Some(completed) = engine.process_or_park_damage_batch(top, damage, events) else {
+    let Some(completed) = engine.process_or_park_damage_batch(top, damage, events)? else {
         return Ok(EffectOutcome::Suspended);
     };
     engine.commit_completed_damage_batch(&completed, events)?;
@@ -99,7 +99,7 @@ pub(super) fn creature_deals_damage_equal_to_power(
     }];
     let Some(completed) = cx
         .engine
-        .process_or_park_damage_batch(cx.top, damage, cx.events)
+        .process_or_park_damage_batch(cx.top, damage, cx.events)?
     else {
         return Ok(EffectOutcome::Suspended);
     };
@@ -201,7 +201,7 @@ pub(super) fn fight(
     };
     let Some(completed) = cx
         .engine
-        .process_or_park_damage_batch(cx.top, damage, cx.events)
+        .process_or_park_damage_batch(cx.top, damage, cx.events)?
     else {
         return Ok(EffectOutcome::Suspended);
     };
@@ -321,7 +321,7 @@ pub(super) fn damage_targets(
             source_has_lifelink,
         });
     }
-    let Some(completed) = engine.process_or_park_damage_batch(cx.top, damage, events) else {
+    let Some(completed) = engine.process_or_park_damage_batch(cx.top, damage, events)? else {
         return Ok(EffectOutcome::Suspended);
     };
     engine.commit_completed_damage_batch(&completed, events)?;
@@ -371,7 +371,7 @@ pub(super) fn damage_player(
         .collect();
     let Some(completed) = cx
         .engine
-        .process_or_park_damage_batch(cx.top, damage, cx.events)
+        .process_or_park_damage_batch(cx.top, damage, cx.events)?
     else {
         return Ok(EffectOutcome::Suspended);
     };
@@ -438,7 +438,7 @@ pub(super) fn damage_attacked_player_or_planeswalker(
     }];
     let Some(completed) = cx
         .engine
-        .process_or_park_damage_batch(cx.top, damage, cx.events)
+        .process_or_park_damage_batch(cx.top, damage, cx.events)?
     else {
         return Ok(EffectOutcome::Suspended);
     };

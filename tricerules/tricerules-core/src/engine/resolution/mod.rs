@@ -3104,6 +3104,10 @@ fn commit_zone_move(
                 && effect.duration == EffectDuration::WhileSourceOnBattlefield;
             !recipient_is_this_object && !static_from_this
         });
+        state.damage_doubling_effects.retain(|effect| {
+            !(effect.source_id == Some(oid)
+                && effect.duration == EffectDuration::WhileSourceOnBattlefield)
+        });
         // CR 400.7 / 121.2: a zone change makes this a new game object — transient
         // battlefield-only state (marked damage, deathtouch marking, tap status, regeneration
         // shields) and all counters do not carry over. Centralized here so every leave path
@@ -7997,7 +8001,8 @@ mod source_keyword_tests {
                             }],
                             &mut events,
                         )
-                        .unwrap();
+                        .unwrap()
+                        .expect("damage batch completes");
                     engine
                         .commit_completed_damage_batch(&completed, &mut events)
                         .unwrap();
@@ -8010,7 +8015,7 @@ mod source_keyword_tests {
                     );
                     assert_eq!(object.deathtouch_damage, dealt > 0);
                     assert_eq!(engine.state.players[0].life, 20 + dealt as i32);
-                    assert_eq!(completed[0].result.prevented, prevented);
+                    assert_eq!(completed[0].result.prevented, u64::from(prevented));
                 }
             }
         }

@@ -3,17 +3,17 @@
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
     AbilityDefinitionId, ActivatedAbilityOccurrence, ActivatedAbilitySlotLedger,
-    ActivationUseIdentity, ActivationUseKey, ActiveDamagePrevention, ActiveDeathReplacement,
-    ActiveEventObserver, ActiveExilePlayPermission, AffectedScope, AttachmentRecipient,
-    AttackingTokenBatch, BattlefieldEntryCompletion, BattlefieldEntryEvent, BlockingChoice,
-    CardResultCohort, CardResultEntry, CastCostObjectReceipt, CastCostReceipt,
+    ActivationUseIdentity, ActivationUseKey, ActiveDamageDoubling, ActiveDamagePrevention,
+    ActiveDeathReplacement, ActiveEventObserver, ActiveExilePlayPermission, AffectedScope,
+    AttachmentRecipient, AttackingTokenBatch, BattlefieldEntryCompletion, BattlefieldEntryEvent,
+    BlockingChoice, CardResultCohort, CardResultEntry, CastCostObjectReceipt, CastCostReceipt,
     ChosenCreatureTypeRecord, ChosenMode, ClassLevelDesignation, CombatAttackAssignment,
-    CombatDefenderTarget, CombatState, ContinuousEffect, CopiableValues, DamagePreventionAmount,
-    DamagePreventionProhibition, DamagePreventionScope, DelayedTriggerPayload, EffectResult,
-    EntryReplacementApplication, EntryReplacementEffectId, EventObserverMatcher,
-    EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState, ImmediateObserverAction,
-    LinkedChoiceOccurrence, LinkedExileKey, LinkedExiledObject, ObjectId, ObservedGameEvent,
-    ObserverReturnEntry, OpeningSequence, ParkedStackResolution, PendingAmass,
+    CombatDefenderTarget, CombatState, ContinuousEffect, CopiableValues, DamageDoublingScope,
+    DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
+    DelayedTriggerPayload, EffectResult, EntryReplacementApplication, EntryReplacementEffectId,
+    EventObserverMatcher, EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState,
+    ImmediateObserverAction, LinkedChoiceOccurrence, LinkedExileKey, LinkedExiledObject, ObjectId,
+    ObservedGameEvent, ObserverReturnEntry, OpeningSequence, ParkedStackResolution, PendingAmass,
     PendingBattlefieldEntry, PendingCopyCandidate, PendingEntryTimestampOrder, PendingHandChoice,
     PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
     PendingManaPayment, PendingObserverReturnBatch, PendingPlayerDiscardChoice,
@@ -47,24 +47,25 @@ use tricerules_card_model::primitives::{
     CombatDamageTriggerCardinality, CombatRestriction, CombatRestrictionScope, ConditionObjectRef,
     ConditionPlayerSet, ConditionalSearchDestination, ContinuousEffectKind, ControllerReference,
     CountExpression, CounterKind, CounterRemovalPaymentSource, CreatureEventFilter,
-    CreatureScopeController, CreatureScopeFilter, DamageDivision, DamagePreventionAdditionalEffect,
-    DamagePreventionSubject, DelayedTokenSacrificeTiming, DrawDiscardOrder, EffectDuration,
-    EffectSubject, EntersTappedAffected, EntersWithCountersAffected, EntryCost, Evasion,
-    FaceChangeAction, GainControlDuration, GameCondition, GraveyardAggregate, HandCardAction,
-    HandCardChooser, HandChoiceVisibility, Keyword, LibraryBottomOrder, LibraryPartitionKind,
-    LibraryPlacement, LifeAmount, LifeChangeKind, ManaAmount, ManaSpendFilter, MassPlayerSet,
-    ObjectCastCostKind, ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter,
-    PermanentTypeFilter, PlayerComparisonMetric, PlayerLifeAggregate, PlayerQuantifier,
-    PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, PreventionAmountBasis,
-    ProtectionCardType, ProtectionGrant, ProtectionQuality, PtScaleBasis, RelativePlayerSet,
-    ResolutionBranchDef, ResolutionCost, ResolvingEffectDuration, ResolvingPermanentModifier,
-    ReturnController, SearchDestination, SearchSelectionSlot, SearchZoneSelection,
-    SpecialActionAffected, SpecialActionKind, SpecialActionManaPurpose, SpellCastFilter,
-    SpellCastOrigin, SpellCostFilter, SpellCostModifier, SpellEffectKind, SpellKeyword,
-    SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, StaticDamagePreventionAmount,
-    StaticEmblemEffect, TapTriggerCardinality, TargetController, TargetFilter, TargetKind,
-    TargetOwner, TargetingCostAction, TargetingCostProtected, TargetingDef, TargetingSourceFilter,
-    TriggerCondition, TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
+    CreatureScopeController, CreatureScopeFilter, DamageDivision, DamageDoublingSubject,
+    DamagePreventionAdditionalEffect, DamagePreventionSubject, DelayedTokenSacrificeTiming,
+    DrawDiscardOrder, EffectDuration, EffectSubject, EntersTappedAffected,
+    EntersWithCountersAffected, EntryCost, Evasion, FaceChangeAction, GainControlDuration,
+    GameCondition, GraveyardAggregate, HandCardAction, HandCardChooser, HandChoiceVisibility,
+    Keyword, LibraryBottomOrder, LibraryPartitionKind, LibraryPlacement, LifeAmount,
+    LifeChangeKind, ManaAmount, ManaSpendFilter, MassPlayerSet, ObjectCastCostKind,
+    ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
+    PlayerComparisonMetric, PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient,
+    PowerComparison, PowerToughnessCharacteristic, PreventionAmountBasis, ProtectionCardType,
+    ProtectionGrant, ProtectionQuality, PtScaleBasis, RelativePlayerSet, ResolutionBranchDef,
+    ResolutionCost, ResolvingEffectDuration, ResolvingPermanentModifier, ReturnController,
+    SearchDestination, SearchSelectionSlot, SearchZoneSelection, SpecialActionAffected,
+    SpecialActionKind, SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin, SpellCostFilter,
+    SpellCostModifier, SpellEffectKind, SpellKeyword, SpellManaSpentComparison, StackSpellFilter,
+    StaticAbilityDef, StaticDamagePreventionAmount, StaticEmblemEffect, TapTriggerCardinality,
+    TargetController, TargetFilter, TargetKind, TargetOwner, TargetingCostAction,
+    TargetingCostProtected, TargetingDef, TargetingSourceFilter, TriggerCondition,
+    TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
 };
 use tricerules_card_model::{
     is_creature_type, mode_fallback, CardDefinition, CardFace, CardRegistry,
@@ -1000,6 +1001,8 @@ pub enum EngineError {
     LifeNumericRange(&'static str),
     #[error("power/toughness numeric range exceeded: {0}")]
     PowerToughnessNumericRange(&'static str),
+    #[error("damage numeric range exceeded: {0}")]
+    DamageNumericRange(&'static str),
 }
 
 /// Internal game events emitted at state-change sites to drive the unified trigger-collection pass
@@ -1880,6 +1883,8 @@ impl GameEngine {
             static_emblems: Vec::new(),
             skip_next_untap: HashSet::new(),
             damage_prevention_effects: Vec::new(),
+            damage_doubling_effects: Vec::new(),
+            next_damage_doubling_effect_id: 1,
             damage_prevention_prohibitions: Vec::new(),
             next_damage_prevention_effect_id: 1,
             death_replacement_effects: Vec::new(),
@@ -2043,6 +2048,11 @@ impl GameEngine {
             !static_from_this
         });
         self.state.damage_prevention_effects.retain(|effect| {
+            !(effect.source_id == Some(permanent_id)
+                && effect.duration
+                    == tricerules_card_model::primitives::EffectDuration::WhileSourceOnBattlefield)
+        });
+        self.state.damage_doubling_effects.retain(|effect| {
             !(effect.source_id == Some(permanent_id)
                 && effect.duration
                     == tricerules_card_model::primitives::EffectDuration::WhileSourceOnBattlefield)
@@ -2376,6 +2386,11 @@ impl GameEngine {
                 && effect.duration == EffectDuration::WhileSourceOnBattlefield
                 && effect.static_origin.is_some())
         });
+        self.state.damage_doubling_effects.retain(|effect| {
+            !(effect.source_id == Some(object_id)
+                && effect.duration == EffectDuration::WhileSourceOnBattlefield
+                && effect.static_origin.is_some())
+        });
         self.emit_static_abilities_on_enter(object_id);
     }
 
@@ -2414,8 +2429,8 @@ impl GameEngine {
         }
         // `set_tapped` appends to this while the command runs; anything left over from an earlier
         // command (or from a rejected one, which never drains) is stale by definition.
-        // An earlier instruction can change the numeric domain before a later gain or P/T
-        // doubling. Capture the whole command; restore only typed numeric failures below.
+        // An earlier instruction can change the numeric domain before a later gain, P/T change,
+        // or damage replacement. Capture the whole command; restore typed numeric failures below.
         let numeric_checkpoint = self.numeric_checkpoint();
         self.state.untapped_this_command.clear();
         // Canonical settlement may discard every intermediate ZoneView and publish one final
@@ -2432,7 +2447,9 @@ impl GameEngine {
         let mut result = self.dispatch_command(player, cmd);
         if matches!(
             result,
-            Err(EngineError::LifeNumericRange(_) | EngineError::PowerToughnessNumericRange(_))
+            Err(EngineError::LifeNumericRange(_)
+                | EngineError::PowerToughnessNumericRange(_)
+                | EngineError::DamageNumericRange(_))
         ) {
             self.restore_numeric_checkpoint(numeric_checkpoint);
             return result;
@@ -2443,7 +2460,9 @@ impl GameEngine {
             if let Err(error) = self.settle_automatic_priority(policies, batch, cache_before) {
                 if matches!(
                     error,
-                    EngineError::LifeNumericRange(_) | EngineError::PowerToughnessNumericRange(_)
+                    EngineError::LifeNumericRange(_)
+                        | EngineError::PowerToughnessNumericRange(_)
+                        | EngineError::DamageNumericRange(_)
                 ) {
                     self.restore_numeric_checkpoint(numeric_checkpoint);
                 }

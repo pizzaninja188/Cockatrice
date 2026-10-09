@@ -1,0 +1,13 @@
+{
+  "format_version": 1,
+  "oracle_id": "7c340a39-4ee0-4ba1-bb66-6674f8020fda",
+  "complete_definition_review_confirmed": true,
+  "tokens": [],
+  "spans": [
+    {"face_id": "gratuitous_violence", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/static_abilities/0/definition"]}
+  ],
+  "semantic_fixtures": [
+    {"covers": "Exact single-face red Enchantment cost and one creature-you-control damage doubler", "test": "deck_coverage_gratuitous_violence::gratuitous_violence_is_registered_as_a_complete_card"},
+    {"covers": "Paid permanent entry, noncreature spell damage is excluded, and controlled creature combat damage doubles", "test": "scenario deck_coverage_gratuitous_violence::gratuitous_violence_doubles_only_its_controllers_creature_damage"}
+  ]
+}

@@ -584,7 +584,7 @@ pub(super) fn damage_all(
             source_has_lifelink: false,
         })
         .collect();
-    let Some(completed) = engine.process_or_park_damage_batch(cx.top, damage, events) else {
+    let Some(completed) = engine.process_or_park_damage_batch(cx.top, damage, events)? else {
         return Ok(EffectOutcome::Suspended);
     };
     engine

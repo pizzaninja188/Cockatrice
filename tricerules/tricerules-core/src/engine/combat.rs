@@ -2840,7 +2840,8 @@ impl GameEngine {
                         att_has_deathtouch,
                         att_has_lifelink,
                         events,
-                    ) else {
+                    )?
+                    else {
                         return Ok(());
                     };
                     let p = match recipient {
@@ -2906,7 +2907,8 @@ impl GameEngine {
                         blk_has_deathtouch,
                         blk_has_lifelink,
                         events,
-                    ) else {
+                    )?
+                    else {
                         return Ok(());
                     };
                     let dmg_to_att = result.dealt;
@@ -2923,7 +2925,7 @@ impl GameEngine {
                         af.damage = af
                             .damage
                             .checked_add(dmg_to_att)
-                            .ok_or(EngineError::LifeNumericRange("combat damage sum"))?;
+                            .ok_or(EngineError::DamageNumericRange("combat damage sum"))?;
                         // CR 702.2b / CR 704.5h: any damage from a deathtouch source is lethal.
                         if blk_has_deathtouch && dmg_to_att > 0 {
                             af.deathtouch_damage = true;
@@ -2946,7 +2948,8 @@ impl GameEngine {
                         att_has_deathtouch,
                         att_has_lifelink,
                         events,
-                    ) else {
+                    )?
+                    else {
                         return Ok(());
                     };
                     let dmg_to_blk = result.dealt;
@@ -2963,7 +2966,7 @@ impl GameEngine {
                         bf.damage = bf
                             .damage
                             .checked_add(dmg_to_blk)
-                            .ok_or(EngineError::LifeNumericRange("combat damage sum"))?;
+                            .ok_or(EngineError::DamageNumericRange("combat damage sum"))?;
                         // CR 702.2b: any damage from attacker with deathtouch is lethal.
                         if att_has_deathtouch && dmg_to_blk > 0 {
                             bf.deathtouch_damage = true;
@@ -3027,13 +3030,14 @@ impl GameEngine {
                         *has_deathtouch,
                         *has_lifelink,
                         events,
-                    ) else {
+                    )?
+                    else {
                         return Ok(());
                     };
                     let dealt = result.dealt;
                     total_blocker_damage = total_blocker_damage
                         .checked_add(dealt)
-                        .ok_or(EngineError::LifeNumericRange("combat damage sum"))?;
+                        .ok_or(EngineError::DamageNumericRange("combat damage sum"))?;
                     if dealt > 0 {
                         damage_dealt_events.push(DamageEvent::combat(
                             *blocker_id,
@@ -3052,7 +3056,7 @@ impl GameEngine {
                     af.damage = af
                         .damage
                         .checked_add(total_blocker_damage)
-                        .ok_or(EngineError::LifeNumericRange("combat damage sum"))?;
+                        .ok_or(EngineError::DamageNumericRange("combat damage sum"))?;
                     if any_blocker_deathtouch_hit {
                         af.deathtouch_damage = true;
                     }
@@ -3076,7 +3080,8 @@ impl GameEngine {
                             att_has_deathtouch,
                             att_has_lifelink,
                             events,
-                        ) else {
+                        )?
+                        else {
                             return Ok(());
                         };
                         let dmg_to_blk = result.dealt;
@@ -3093,7 +3098,7 @@ impl GameEngine {
                             bf.damage = bf
                                 .damage
                                 .checked_add(dmg_to_blk)
-                                .ok_or(EngineError::LifeNumericRange("combat damage sum"))?;
+                                .ok_or(EngineError::DamageNumericRange("combat damage sum"))?;
                             // CR 702.2b: any damage from attacker with deathtouch is lethal.
                             if att_has_deathtouch && dmg_to_blk > 0 {
                                 bf.deathtouch_damage = true;
@@ -3101,7 +3106,7 @@ impl GameEngine {
                         }
                         total_att_lifelink = total_att_lifelink
                             .checked_add(dmg_to_blk)
-                            .ok_or(EngineError::LifeNumericRange("combat damage sum"))?;
+                            .ok_or(EngineError::DamageNumericRange("combat damage sum"))?;
                     }
                     // CR 702.19: deal trample excess damage to the attacked recipient.
                     let player_trample_dmg =
@@ -3120,7 +3125,8 @@ impl GameEngine {
                                 att_has_deathtouch,
                                 att_has_lifelink,
                                 events,
-                            ) else {
+                            )?
+                            else {
                                 return Ok(());
                             };
                             let trample_after = match recipient {
@@ -3155,7 +3161,7 @@ impl GameEngine {
                             }
                             total_att_lifelink = total_att_lifelink
                                 .checked_add(trample_after)
-                                .ok_or(EngineError::LifeNumericRange("combat damage sum"))?;
+                                .ok_or(EngineError::DamageNumericRange("combat damage sum"))?;
                         }
                     }
                     // CR 702.15b: attacker with lifelink gains life = damage dealt to all blockers.

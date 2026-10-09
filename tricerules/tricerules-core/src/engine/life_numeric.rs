@@ -1,4 +1,4 @@
-//! Complete-command rollback for typed life and power/toughness numeric failures.
+//! Complete-command rollback for typed life, power/toughness, and damage numeric failures.
 use super::*;
 
 pub(super) struct NumericCheckpoint {

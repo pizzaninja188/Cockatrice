@@ -1902,6 +1902,14 @@ pub enum DamagePreventionSubject {
     OtherCreaturesYouControl,
 }
 
+/// Which damage sources a static doubling effect replaces. `AnySource` covers Furnace of Rath
+/// and Dictate of the Twin Gods; `CreatureYouControl` covers Gratuitous Violence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DamageDoublingSubject {
+    AnySource,
+    CreatureYouControl,
+}
+
 /// Capacity of a static prevention application. Static abilities do not have a total pool: the
 /// amount resets for each damage event while the source remains on the battlefield.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2251,6 +2259,12 @@ pub enum StaticAbilityDef {
         amount: StaticDamagePreventionAmount,
         #[serde(default)]
         additional_effect: Option<DamagePreventionAdditionalEffect>,
+    },
+    /// CR 614.1a / 614.5: replace a would-deal damage amount with exactly twice that amount.
+    /// Furnace of Rath and Dictate of the Twin Gods use `AnySource`; Gratuitous Violence uses
+    /// `CreatureYouControl`.
+    DoubleDamage {
+        subject: DamageDoublingSubject,
     },
     /// CR 601.2f / 602.2b: one generic cost increase is applied once for this static ability if
     /// an affected opponent's spell or activated ability targets at least one protected subject.

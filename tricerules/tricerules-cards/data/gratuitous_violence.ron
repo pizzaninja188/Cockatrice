@@ -1,0 +1,16 @@
+// Exact Oracle 7c340a39-4ee0-4ba1-bb66-6674f8020fda; source/rulings checked 2026-10-09.
+// https://api.scryfall.com/cards/e89024c5-eef5-468c-92b4-e53dd212909c
+// https://api.scryfall.com/cards/e89024c5-eef5-468c-92b4-e53dd212909c/rulings
+// CR 120.4b, 614.5, and 616 govern creature damage replacement and its ordering.
+(
+  id: "gratuitous_violence",
+  name: "Gratuitous Violence",
+  face_id: "gratuitous_violence",
+  mana_cost: "{2}{R}{R}{R}",
+  types: ["Enchantment"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: DoubleDamage(subject: CreatureYouControl),
+  )],
+)

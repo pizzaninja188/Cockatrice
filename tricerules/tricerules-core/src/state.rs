@@ -661,6 +661,28 @@ pub struct ActiveDamagePrevention {
     pub additional_effect: Option<DamagePreventionAdditionalEffect>,
 }
 
+/// Runtime scope of one continuous damage-doubling replacement. `CreatureYouControl` is
+/// evaluated against the source's captured event-time characteristics and this ability source's
+/// current controller (the rules meaning of "you").
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DamageDoublingScope {
+    AnySource,
+    CreatureYouControl { ability_source: ObjectId },
+}
+
+/// One independently identifiable static damage-doubling effect. The source identity and static
+/// origin keep copied or later face changes from rebinding a parked replacement choice.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub struct ActiveDamageDoubling {
+    pub id: u32,
+    pub static_origin: Option<TriggerAbilityOrigin>,
+    pub source_id: Option<ObjectId>,
+    pub source_label: String,
+    pub source_presentation: ReplacementSourcePresentation,
+    pub scope: DamageDoublingScope,
+    pub duration: EffectDuration,
+}
+
 /// A turn-scoped CR 614 replacement bound to one exact permanent generation. ObjectIds remain
 /// stable across zone changes for relay identity, so the generation is part of the rules object.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -2776,6 +2798,9 @@ pub struct GameState {
     /// Active CR 615 prevention effects. Healing Salve and Fog are both represented here so every
     /// producer enters one event pipeline and finite effects have stable opaque identities.
     pub damage_prevention_effects: Vec<ActiveDamagePrevention>,
+    /// Active CR 614 damage-doubling replacements, kept separate from CR 615 prevention.
+    pub damage_doubling_effects: Vec<ActiveDamageDoubling>,
+    pub next_damage_doubling_effect_id: u32,
     /// Active CR 615.12 prohibitions, deliberately separate from prevention effects.
     pub damage_prevention_prohibitions: Vec<DamagePreventionProhibition>,
     pub next_damage_prevention_effect_id: u32,

@@ -1,8 +1,8 @@
 //! Shared CR 120/615 damage-event preprocessing.
 //!
 //! Damage producers construct events here before mutating life, marked damage, deathtouch
-//! history, lifelink totals, or damage-trigger state. This keeps prevention and prohibitions out
-//! of incidental spell/combat iteration order and gives later CR 616 choices one event shape.
+//! history, lifelink totals, or damage-trigger state. This keeps replacements, prevention, and
+//! prohibitions out of incidental spell/combat iteration order and gives CR 616 one event shape.
 
 use super::events::{ev_log, finish_with_events, object_display_name};
 use super::targeting::TargetSourceIdentity;
@@ -115,7 +115,9 @@ impl DamageEvent {
 pub(crate) struct DamageResult {
     pub attempted: u32,
     pub dealt: u32,
-    pub prevented: u32,
+    /// Total damage removed by prevention applications. This can exceed `attempted` when
+    /// prevention and doubling effects are ordered more than once during one event.
+    pub prevented: u64,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -167,14 +169,15 @@ impl DamageBatchContinuation {
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct DamageApplicationChoice {
     pub choice_id: u32,
-    pub application: DamagePreventionApplication,
+    pub application: DamageReplacementApplication,
     pub event_index: usize,
 }
 
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DamagePreventionApplication {
+pub(crate) enum DamageReplacementApplication {
     Effect(u32),
     Protection(ProtectionQuality),
+    DoubleEffect(u32),
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -187,7 +190,8 @@ pub(crate) struct PendingDamageBatch {
 pub(crate) struct PendingDamageEvent {
     pub spec: DamageSpec,
     pub remaining: u32,
-    pub applied_applications: Vec<DamagePreventionApplication>,
+    pub prevented_total: u64,
+    pub applied_applications: Vec<DamageReplacementApplication>,
     /// Exact finite shield amounts consumed while reducing this damage occurrence.
     pub prevention_debits: Vec<(u32, u32)>,
     pub combat: Option<PendingCombatDamageOccurrence>,
@@ -214,17 +218,26 @@ enum DamageBatchProgress {
     Complete(Vec<CompletedDamage>),
     NeedsChoice {
         batch: PendingDamageBatch,
-        raw_candidates: Vec<(usize, DamagePreventionApplication, String)>,
+        raw_candidates: Vec<(usize, DamageReplacementApplication, String)>,
     },
 }
 
 impl GameEngine {
     fn damage_batch_needs_ordering(&self, damage: &[DamageSpec]) -> bool {
-        let by_event: Vec<Vec<DamagePreventionApplication>> = damage
+        let by_event: Vec<Vec<DamageReplacementApplication>> = damage
             .iter()
-            .map(|spec| self.prevention_applications(&spec.event))
+            .map(|spec| self.damage_replacement_applications(&spec.event))
             .collect();
         if by_event.iter().any(|candidates| candidates.len() > 1) {
+            return true;
+        }
+        if by_event.iter().any(|candidates| {
+            candidates
+                .iter()
+                .any(|candidate| matches!(candidate, DamageReplacementApplication::DoubleEffect(_)))
+        }) {
+            // Combat's legacy fast path commits each assigned event directly. Even a single
+            // doubler must route the whole simultaneous batch through the shared event pipeline.
             return true;
         }
         self.state.damage_prevention_effects.iter().any(|effect| {
@@ -232,7 +245,7 @@ impl GameEngine {
                 && by_event
                     .iter()
                     .filter(|candidates| {
-                        candidates.contains(&DamagePreventionApplication::Effect(effect.id))
+                        candidates.contains(&DamageReplacementApplication::Effect(effect.id))
                     })
                     .count()
                     > 1
@@ -254,18 +267,61 @@ impl GameEngine {
             .unwrap_or_default()
     }
 
-    fn prevention_applications(&self, event: &DamageEvent) -> Vec<DamagePreventionApplication> {
+    fn damage_replacement_applications(
+        &self,
+        event: &DamageEvent,
+    ) -> Vec<DamageReplacementApplication> {
         self.state
             .damage_prevention_effects
             .iter()
             .filter(|effect| self.prevention_effect_applies(effect, event))
-            .map(|effect| DamagePreventionApplication::Effect(effect.id))
+            .map(|effect| DamageReplacementApplication::Effect(effect.id))
+            .chain(
+                self.state
+                    .damage_doubling_effects
+                    .iter()
+                    .filter(|effect| self.damage_doubling_effect_applies(effect, event))
+                    .map(|effect| DamageReplacementApplication::DoubleEffect(effect.id)),
+            )
             .chain(
                 self.protection_applications(event)
                     .into_iter()
-                    .map(DamagePreventionApplication::Protection),
+                    .map(DamageReplacementApplication::Protection),
             )
             .collect()
+    }
+
+    fn damage_doubling_effect_applies(
+        &self,
+        effect: &ActiveDamageDoubling,
+        event: &DamageEvent,
+    ) -> bool {
+        if effect.duration == EffectDuration::WhileSourceOnBattlefield {
+            let Some(source) = effect.source_id else {
+                return false;
+            };
+            if effect.static_origin.as_ref().is_some_and(|origin| {
+                super::characteristics::normalized_static_origin(&self.state, self.registry, origin)
+                    .is_none()
+            }) || !super::characteristics::printed_static_source_is_available(
+                &self.state,
+                self.registry,
+                source,
+            ) {
+                return false;
+            }
+        }
+        match effect.scope {
+            DamageDoublingScope::AnySource => true,
+            DamageDoublingScope::CreatureYouControl { ability_source } => {
+                event
+                    .source
+                    .types
+                    .iter()
+                    .any(|kind| kind.eq_ignore_ascii_case("Creature"))
+                    && self.controller_of(ability_source) == Some(event.source.controller)
+            }
+        }
     }
 
     fn prevention_effect_applies(
@@ -340,7 +396,7 @@ impl GameEngine {
         item: &StackItem,
         mut damage: Vec<DamageSpec>,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Option<Vec<CompletedDamage>> {
+    ) -> Result<Option<Vec<CompletedDamage>>, EngineError> {
         for spec in &mut damage {
             let item_source = item.source_permanent_id.unwrap_or(item.id);
             spec.event.source.zone_change_generation = if spec.event.source.object_id == item_source
@@ -351,10 +407,17 @@ impl GameEngine {
                 None
             } else {
                 self.state
-                    .zone_change_generation
-                    .get(&spec.event.source.object_id)
-                    .copied()
+                    .objects
+                    .contains_key(&spec.event.source.object_id)
+                    .then(|| {
+                        self.state
+                            .zone_change_generation
+                            .get(&spec.event.source.object_id)
+                            .copied()
+                            .unwrap_or(0)
+                    })
             };
+            spec.event.source.controller = self.damage_source_controller(&spec.event);
             spec.event.source.wither = if spec.event.source.object_id == item_source {
                 self.resolving_source_has_keyword(item, Keyword::Wither)
             } else {
@@ -375,6 +438,7 @@ impl GameEngine {
                 .map(|spec| PendingDamageEvent {
                     recipient_generation: self.damage_recipient_generation(&spec.event),
                     remaining: spec.event.amount,
+                    prevented_total: 0,
                     spec,
                     applied_applications: Vec::new(),
                     prevention_debits: Vec::new(),
@@ -383,13 +447,13 @@ impl GameEngine {
                 .collect(),
             applications: Vec::new(),
         };
-        match self.advance_damage_batch(pending, events) {
-            DamageBatchProgress::Complete(completed) => Some(completed),
+        match self.advance_damage_batch(pending, events)? {
+            DamageBatchProgress::Complete(completed) => Ok(Some(completed)),
             DamageBatchProgress::NeedsChoice {
                 batch,
                 raw_candidates,
             } => {
-                self.park_damage_prevention_choice(
+                self.park_damage_replacement_choice(
                     DamageBatchContinuation::Stack {
                         item: Box::new(item.clone()),
                         resume_effect_index: None,
@@ -398,9 +462,39 @@ impl GameEngine {
                     raw_candidates,
                     events,
                 );
-                None
+                Ok(None)
             }
         }
+    }
+
+    fn damage_source_controller(&self, event: &DamageEvent) -> PlayerId {
+        let Some(generation) = event.source.zone_change_generation else {
+            return event.source.controller;
+        };
+        let is_current_battlefield_generation = self
+            .state
+            .zone_change_generation
+            .get(&event.source.object_id)
+            .copied()
+            .unwrap_or(0)
+            == generation
+            && self
+                .state
+                .objects
+                .get(&event.source.object_id)
+                .is_some_and(|object| object.zone == Zone::Battlefield);
+        let current_controller = match is_current_battlefield_generation {
+            true => self.controller_of(event.source.object_id),
+            false => None,
+        };
+        if let Some(controller) = current_controller {
+            return controller;
+        }
+        self.state
+            .last_known_controller_by_generation
+            .get(&(event.source.object_id, generation))
+            .copied()
+            .unwrap_or(event.source.controller)
     }
 
     /// Capture source qualities before activated costs commit, then resolve this fixed damage
@@ -456,6 +550,7 @@ impl GameEngine {
             damage: vec![PendingDamageEvent {
                 recipient_generation: self.damage_recipient_generation(&damage.event),
                 remaining: damage.event.amount,
+                prevented_total: 0,
                 spec: damage,
                 applied_applications: Vec::new(),
                 prevention_debits: Vec::new(),
@@ -463,7 +558,7 @@ impl GameEngine {
             }],
             applications: Vec::new(),
         };
-        match self.advance_damage_batch(pending, events) {
+        match self.advance_damage_batch(pending, events)? {
             DamageBatchProgress::Complete(completed) => {
                 let triggers =
                     self.commit_completed_damage_batch_collecting_triggers(&completed, events)?;
@@ -500,16 +595,16 @@ impl GameEngine {
                     },
                     stack => stack,
                 };
-                self.park_damage_prevention_choice(continuation, batch, raw_candidates, events);
+                self.park_damage_replacement_choice(continuation, batch, raw_candidates, events);
                 Ok((Vec::new(), Vec::new()))
             }
         }
     }
 
-    fn pending_prevention_candidates(
+    fn pending_damage_replacement_candidates(
         &self,
         batch: &PendingDamageBatch,
-    ) -> Vec<Vec<(DamagePreventionApplication, String)>> {
+    ) -> Vec<Vec<(DamageReplacementApplication, String)>> {
         batch
             .damage
             .iter()
@@ -524,12 +619,28 @@ impl GameEngine {
                     .filter(|effect| {
                         !damage
                             .applied_applications
-                            .contains(&DamagePreventionApplication::Effect(effect.id))
+                            .contains(&DamageReplacementApplication::Effect(effect.id))
                             && self.prevention_effect_applies(effect, &damage.spec.event)
                     })
                     .map(|effect| {
                         (
-                            DamagePreventionApplication::Effect(effect.id),
+                            DamageReplacementApplication::Effect(effect.id),
+                            effect.source_label.clone(),
+                        )
+                    });
+                let doublers = self
+                    .state
+                    .damage_doubling_effects
+                    .iter()
+                    .filter(|effect| {
+                        !damage
+                            .applied_applications
+                            .contains(&DamageReplacementApplication::DoubleEffect(effect.id))
+                            && self.damage_doubling_effect_applies(effect, &damage.spec.event)
+                    })
+                    .map(|effect| {
+                        (
+                            DamageReplacementApplication::DoubleEffect(effect.id),
                             effect.source_label.clone(),
                         )
                     });
@@ -539,15 +650,15 @@ impl GameEngine {
                     .filter(|quality| {
                         !damage
                             .applied_applications
-                            .contains(&DamagePreventionApplication::Protection(*quality))
+                            .contains(&DamageReplacementApplication::Protection(*quality))
                     })
                     .map(|quality| {
                         (
-                            DamagePreventionApplication::Protection(quality),
+                            DamageReplacementApplication::Protection(quality),
                             quality.label(),
                         )
                     });
-                effects.chain(protection).collect()
+                effects.chain(doublers).chain(protection).collect()
             })
             .collect()
     }
@@ -555,7 +666,7 @@ impl GameEngine {
     fn damage_affected_player(&self, event: &DamageEvent) -> Option<PlayerId> {
         let player = match event.recipient {
             DamageRecipient::Player(player) => player,
-            DamageRecipient::Permanent(oid) => self.state.objects.get(&oid)?.controller,
+            DamageRecipient::Permanent(oid) => self.controller_of(oid)?,
         };
         self.state
             .player_idx(player)
@@ -563,11 +674,11 @@ impl GameEngine {
             .map(|_| player)
     }
 
-    fn next_prevention_ordering_choice(
+    fn next_damage_ordering_choice(
         &self,
         batch: &PendingDamageBatch,
-        by_event: &[Vec<(DamagePreventionApplication, String)>],
-    ) -> Vec<(usize, DamagePreventionApplication, String)> {
+        by_event: &[Vec<(DamageReplacementApplication, String)>],
+    ) -> Vec<(usize, DamageReplacementApplication, String)> {
         let mut pairs = Vec::new();
         for (event_index, candidates) in by_event.iter().enumerate() {
             if candidates.len() > 1 {
@@ -582,7 +693,7 @@ impl GameEngine {
             if !matches!(effect.amount, DamagePreventionAmount::Remaining(_)) {
                 continue;
             }
-            let application = DamagePreventionApplication::Effect(effect.id);
+            let application = DamageReplacementApplication::Effect(effect.id);
             let occurrences: Vec<_> = by_event
                 .iter()
                 .enumerate()
@@ -596,7 +707,7 @@ impl GameEngine {
             if occurrences.len() > 1 {
                 for pair in occurrences {
                     if !pairs.iter().any(
-                        |existing: &(usize, DamagePreventionApplication, String)| {
+                        |existing: &(usize, DamageReplacementApplication, String)| {
                             existing.0 == pair.0 && existing.1 == pair.1
                         },
                     ) {
@@ -622,15 +733,15 @@ impl GameEngine {
         &mut self,
         mut batch: PendingDamageBatch,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> DamageBatchProgress {
+    ) -> Result<DamageBatchProgress, EngineError> {
         loop {
-            let by_event = self.pending_prevention_candidates(&batch);
-            let raw_candidates = self.next_prevention_ordering_choice(&batch, &by_event);
+            let by_event = self.pending_damage_replacement_candidates(&batch);
+            let raw_candidates = self.next_damage_ordering_choice(&batch, &by_event);
             if !raw_candidates.is_empty() {
-                return DamageBatchProgress::NeedsChoice {
+                return Ok(DamageBatchProgress::NeedsChoice {
                     batch,
                     raw_candidates,
-                };
+                });
             }
             let Some((event_index, application)) =
                 by_event
@@ -642,7 +753,7 @@ impl GameEngine {
                             .map(|(application, _)| (event_index, *application))
                     })
             else {
-                return DamageBatchProgress::Complete(
+                return Ok(DamageBatchProgress::Complete(
                     batch
                         .damage
                         .into_iter()
@@ -650,45 +761,79 @@ impl GameEngine {
                             result: DamageResult {
                                 attempted: damage.spec.event.amount,
                                 dealt: damage.remaining,
-                                prevented: damage.spec.event.amount - damage.remaining,
+                                prevented: damage.prevented_total,
                             },
                             prevention_debits: damage.prevention_debits,
                             spec: damage.spec,
                         })
                         .collect(),
-                );
+                ));
             };
-            let applied =
-                self.apply_prevention_application(&mut batch, event_index, application, events);
+            let applied = self.apply_damage_replacement_application(
+                &mut batch,
+                event_index,
+                application,
+                events,
+            )?;
             debug_assert!(applied);
         }
     }
 
-    fn apply_prevention_application(
+    fn apply_damage_replacement_application(
         &mut self,
         batch: &mut PendingDamageBatch,
         event_index: usize,
-        application: DamagePreventionApplication,
+        application: DamageReplacementApplication,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> bool {
+    ) -> Result<bool, EngineError> {
         let Some(damage) = batch.damage.get(event_index) else {
-            return false;
+            return Ok(false);
         };
         if damage.remaining == 0 || damage.applied_applications.contains(&application) {
-            return false;
+            return Ok(false);
         }
         let event = damage.spec.event.clone();
-        if let DamagePreventionApplication::Protection(quality) = application {
+        if let DamageReplacementApplication::DoubleEffect(effect_id) = application {
+            let Some(effect) = self
+                .state
+                .damage_doubling_effects
+                .iter()
+                .find(|effect| effect.id == effect_id)
+                .filter(|effect| self.damage_doubling_effect_applies(effect, &event))
+            else {
+                return Ok(false);
+            };
+            let source_label = effect.source_label.clone();
+            let Some(doubled) = damage.remaining.checked_mul(2) else {
+                return Err(EngineError::DamageNumericRange(
+                    "damage doubler multiplication",
+                ));
+            };
+            let damage = &mut batch.damage[event_index];
+            damage.remaining = doubled;
+            damage.applied_applications.push(application);
+            events.push(ev_log(format!(
+                "{source_label} doubles damage from {} to {doubled}.",
+                event.source.label
+            )));
+            return Ok(true);
+        }
+        if let DamageReplacementApplication::Protection(quality) = application {
             if !self.protection_applications(&event).contains(&quality) {
-                return false;
+                return Ok(false);
             }
             let prevented = if self.state.damage_prevention_prohibitions.is_empty() {
                 damage.remaining
             } else {
                 0
             };
+            let prevented_total = damage
+                .prevented_total
+                .checked_add(u64::from(prevented))
+                .ok_or(EngineError::DamageNumericRange("prevented damage total"))?;
             let damage = &mut batch.damage[event_index];
             damage.remaining -= prevented;
+            damage.prevented_total = prevented_total;
             damage.applied_applications.push(application);
             if prevented > 0 {
                 events.push(ev_log(format!(
@@ -697,9 +842,9 @@ impl GameEngine {
                     event.source.label
                 )));
             }
-            return true;
+            return Ok(true);
         }
-        let DamagePreventionApplication::Effect(effect_id) = application else {
+        let DamageReplacementApplication::Effect(effect_id) = application else {
             unreachable!();
         };
         let Some(effect_index) = self
@@ -710,7 +855,7 @@ impl GameEngine {
                 effect.id == effect_id && self.prevention_effect_applies(effect, &event)
             })
         else {
-            return false;
+            return Ok(false);
         };
         let unpreventable = !self.state.damage_prevention_prohibitions.is_empty();
         let application_attempted = damage.remaining;
@@ -727,6 +872,10 @@ impl GameEngine {
                 }
             }
         };
+        let prevented_total = damage
+            .prevented_total
+            .checked_add(u64::from(prevented))
+            .ok_or(EngineError::DamageNumericRange("prevented damage total"))?;
         if let DamagePreventionAmount::Remaining(remaining) = &mut effect.amount {
             *remaining -= prevented;
         }
@@ -736,6 +885,7 @@ impl GameEngine {
 
         let damage = &mut batch.damage[event_index];
         damage.remaining -= prevented;
+        damage.prevented_total = prevented_total;
         damage.applied_applications.push(application);
         if finite_remaining && prevented > 0 {
             damage.prevention_debits.push((effect_id, prevented));
@@ -777,14 +927,14 @@ impl GameEngine {
                 .damage_prevention_effects
                 .retain(|effect| effect.id != effect_id);
         }
-        true
+        Ok(true)
     }
 
-    fn park_damage_prevention_choice(
+    fn park_damage_replacement_choice(
         &mut self,
         completion: DamageBatchContinuation,
         mut batch: PendingDamageBatch,
-        raw_candidates: Vec<(usize, DamagePreventionApplication, String)>,
+        raw_candidates: Vec<(usize, DamageReplacementApplication, String)>,
         events: &mut Vec<rv1::RuledEvent>,
     ) {
         let deciding_event = &batch.damage[raw_candidates[0].0].spec.event;
@@ -807,12 +957,13 @@ impl GameEngine {
             });
             candidates.push(choice_id);
             candidate_effect_ids.push(match application {
-                DamagePreventionApplication::Effect(effect_id) => effect_id,
-                DamagePreventionApplication::Protection(_) => 0,
+                DamageReplacementApplication::Effect(effect_id) => effect_id,
+                DamageReplacementApplication::DoubleEffect(effect_id) => effect_id,
+                DamageReplacementApplication::Protection(_) => 0,
             });
             let damage = &batch.damage[event_index];
             let (source, description) = match application {
-                DamagePreventionApplication::Effect(effect_id) => self
+                DamageReplacementApplication::Effect(effect_id) => self
                     .state
                     .damage_prevention_effects
                     .iter()
@@ -840,7 +991,19 @@ impl GameEngine {
                         (effect.source_presentation.clone(), description)
                     })
                     .unwrap_or_else(|| (Default::default(), effect_label.clone())),
-                DamagePreventionApplication::Protection(_) => {
+                DamageReplacementApplication::DoubleEffect(effect_id) => self
+                    .state
+                    .damage_doubling_effects
+                    .iter()
+                    .find(|effect| effect.id == effect_id)
+                    .map(|effect| {
+                        (
+                            effect.source_presentation.clone(),
+                            "Double this damage.".to_string(),
+                        )
+                    })
+                    .unwrap_or_else(|| (Default::default(), effect_label.clone())),
+                DamageReplacementApplication::Protection(_) => {
                     let source = match damage.spec.event.recipient {
                         DamageRecipient::Permanent(object_id) => {
                             self.replacement_source_presentation(object_id)
@@ -864,7 +1027,7 @@ impl GameEngine {
             replacement_options.push(source.option(choice_id, summary.clone()));
             candidate_names.push(summary);
         }
-        let prompt = "Choose the next damage-prevention effect. Your choice applies immediately; then remaining effects are reevaluated.".to_string();
+        let prompt = "Choose the next damage replacement or prevention effect. Your choice applies immediately; then remaining effects are reevaluated.".to_string();
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
@@ -952,7 +1115,7 @@ impl GameEngine {
         source_has_deathtouch: bool,
         source_has_lifelink: bool,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Option<DamageResult> {
+    ) -> Result<Option<DamageResult>, EngineError> {
         self.process_prepared_combat_damage_batch(
             vec![DamageSpec {
                 event,
@@ -961,7 +1124,9 @@ impl GameEngine {
             }],
             events,
         )
-        .and_then(|completed| completed.first().map(|damage| damage.result))
+        .map(|completed| {
+            completed.and_then(|completed| completed.first().map(|damage| damage.result))
+        })
     }
 
     fn capture_combat_damage_source(&self, event: &mut DamageEvent) {
@@ -974,6 +1139,15 @@ impl GameEngine {
                 .unwrap_or(0)
         });
         event.source.wither = self.effective_has_keyword(source, Keyword::Wither);
+        if let Some(controller) = self
+            .state
+            .objects
+            .get(&source)
+            .filter(|object| object.zone == Zone::Battlefield)
+            .and_then(|_| self.controller_of(source))
+        {
+            event.source.controller = controller;
+        }
         if let Some(characteristics) = self.characteristics(source) {
             event.source.colors = characteristics.colors;
             event.source.types = characteristics.types;
@@ -1014,7 +1188,7 @@ impl GameEngine {
         &mut self,
         damage: Vec<DamageSpec>,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Option<Vec<CompletedDamage>> {
+    ) -> Result<Option<Vec<CompletedDamage>>, EngineError> {
         let pending = PendingDamageBatch {
             damage: damage
                 .into_iter()
@@ -1024,6 +1198,7 @@ impl GameEngine {
                     PendingDamageEvent {
                         recipient_generation: self.damage_recipient_generation(&spec.event),
                         remaining: spec.event.amount,
+                        prevented_total: 0,
                         combat: self.combat_damage_occurrence(&spec.event),
                         spec,
                         applied_applications: Vec::new(),
@@ -1033,27 +1208,27 @@ impl GameEngine {
                 .collect(),
             applications: Vec::new(),
         };
-        match self.advance_damage_batch(pending, events) {
-            DamageBatchProgress::Complete(completed) => Some(completed),
+        match self.advance_damage_batch(pending, events)? {
+            DamageBatchProgress::Complete(completed) => Ok(Some(completed)),
             DamageBatchProgress::NeedsChoice {
                 batch,
                 raw_candidates,
             } => {
                 self.state.combat_damage_priority_pending = true;
-                self.park_damage_prevention_choice(
+                self.park_damage_replacement_choice(
                     DamageBatchContinuation::Combat,
                     batch,
                     raw_candidates,
                     events,
                 );
-                None
+                Ok(None)
             }
         }
     }
 
     /// Preflight a simultaneous combat-damage batch. The legacy commit loop remains the fast path
-    /// when neither Wither nor an ordering decision is present. Wither uses the shared result
-    /// pipeline; CR 616 ordering parks the whole batch before any damage is committed.
+    /// when there is no doubling, Wither, or ordering decision. Damage replacements use the
+    /// shared result pipeline; CR 616 ordering parks the whole batch before any damage is committed.
     pub(super) fn try_park_ordered_combat_damage(
         &mut self,
         combat: &CombatState,
@@ -1168,7 +1343,7 @@ impl GameEngine {
         {
             return Ok(false);
         }
-        let completed = self.process_prepared_combat_damage_batch(damage, events);
+        let completed = self.process_prepared_combat_damage_batch(damage, events)?;
         if let Some(completed) = completed {
             self.commit_completed_damage_batch(&completed, events)?;
         }
@@ -1335,7 +1510,7 @@ impl GameEngine {
         });
         let old_applications = batch.applications.clone();
         self.state.pending_resolution = None;
-        match self.advance_damage_batch(batch, events) {
+        match self.advance_damage_batch(batch, events)? {
             DamageBatchProgress::NeedsChoice {
                 mut batch,
                 raw_candidates,
@@ -1363,7 +1538,7 @@ impl GameEngine {
                         Some(super::replacement::PendingReplacementEvent::Damage(batch));
                     self.state.pending_resolution = Some(pending);
                 } else {
-                    self.park_damage_prevention_choice(completion, batch, raw_candidates, events);
+                    self.park_damage_replacement_choice(completion, batch, raw_candidates, events);
                 }
             }
             DamageBatchProgress::Complete(completed) => {
@@ -1392,7 +1567,7 @@ impl GameEngine {
         Ok(())
     }
 
-    pub(crate) fn finish_damage_prevention_choice(
+    pub(crate) fn finish_damage_replacement_choice(
         &mut self,
         pending: PendingResolution,
         chosen_application_id: u32,
@@ -1426,14 +1601,14 @@ impl GameEngine {
         };
         let Some(pending_event) = self.state.pending_replacement_event.take() else {
             self.state.pending_resolution = Some(pending);
-            return Err(EngineError::Illegal("damage-prevention choice is stale"));
+            return Err(EngineError::Illegal("damage-replacement choice is stale"));
         };
         let mut batch = match pending_event {
             super::replacement::PendingReplacementEvent::Damage(batch) => batch,
             other => {
                 self.state.pending_replacement_event = Some(other);
                 self.state.pending_resolution = Some(pending);
-                return Err(EngineError::Illegal("damage-prevention choice is stale"));
+                return Err(EngineError::Illegal("damage-replacement choice is stale"));
             }
         };
         let Some(application) = batch
@@ -1446,30 +1621,30 @@ impl GameEngine {
                 Some(super::replacement::PendingReplacementEvent::Damage(batch));
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "damage-prevention application is stale",
+                "damage-replacement application is stale",
             ));
         };
         let mut events = Vec::new();
-        if !self.apply_prevention_application(
+        if !self.apply_damage_replacement_application(
             &mut batch,
             application.event_index,
             application.application,
             &mut events,
-        ) {
+        )? {
             self.state.pending_replacement_event =
                 Some(super::replacement::PendingReplacementEvent::Damage(batch));
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "damage-prevention effect is no longer active",
+                "damage-replacement effect is no longer active",
             ));
         }
-        let completed = match self.advance_damage_batch(batch, &mut events) {
+        let completed = match self.advance_damage_batch(batch, &mut events)? {
             DamageBatchProgress::Complete(completed) => completed,
             DamageBatchProgress::NeedsChoice {
                 batch,
                 raw_candidates,
             } => {
-                self.park_damage_prevention_choice(
+                self.park_damage_replacement_choice(
                     completion.clone(),
                     batch,
                     raw_candidates,
@@ -1557,12 +1732,7 @@ impl GameEngine {
                 let is_creature = characteristics.is_creature();
                 let is_planeswalker = characteristics.has_type("Planeswalker");
                 let is_battle = characteristics.has_type("Battle");
-                let was_defended = self
-                    .state
-                    .objects
-                    .get(&permanent)
-                    .is_some_and(|object| object.counter_count(CounterKind::Defense) > 0);
-                let Some(object) = self.state.objects.get_mut(&permanent) else {
+                let Some(object) = self.state.objects.get(&permanent) else {
                     return Ok(0);
                 };
                 if object.zone != Zone::Battlefield
@@ -1570,9 +1740,33 @@ impl GameEngine {
                 {
                     return Ok(0);
                 }
+                let was_defended = object.counter_count(CounterKind::Defense) > 0;
+                let marked_damage = if is_creature && !event.source.wither {
+                    Some(
+                        object
+                            .damage
+                            .checked_add(result.dealt)
+                            .ok_or(EngineError::DamageNumericRange("marked damage total"))?,
+                    )
+                } else {
+                    None
+                };
+                if is_creature
+                    && event.source.wither
+                    && result.dealt > 0
+                    && self.can_receive_counters(permanent)
+                {
+                    object
+                        .counter_count(CounterKind::MinusOneMinusOne)
+                        .checked_add(result.dealt)
+                        .ok_or(EngineError::DamageNumericRange("wither counter total"))?;
+                }
+                let Some(object) = self.state.objects.get_mut(&permanent) else {
+                    return Ok(0);
+                };
                 if is_creature {
-                    if !event.source.wither {
-                        object.damage = object.damage.saturating_add(result.dealt);
+                    if let Some(marked_damage) = marked_damage {
+                        object.damage = marked_damage;
                     }
                     if source_has_deathtouch && result.dealt > 0 {
                         object.deathtouch_damage = true;
@@ -1725,6 +1919,1014 @@ mod tests {
     use super::*;
 
     #[test]
+    fn controlled_creature_damage_doubler_replaces_noncombat_damage() {
+        let (mut engine, source) = damage_doubler_engine(
+            r#"(ability_id: "double_damage", presentation: Fallback,
+                definition: DoubleDamage(subject: CreatureYouControl))"#,
+        );
+        assert_eq!(engine.state.damage_doubling_effects.len(), 1);
+
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = source_item(source, generation);
+        item.card_id = "damage_doubler_fixture".into();
+        let completed = engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        source,
+                        0,
+                        "Damage Doubler Fixture",
+                        DamageRecipient::Player(1),
+                        3,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .expect("damage batch processes")
+            .expect("unprevented replacement completes immediately");
+
+        assert_eq!(completed[0].result.attempted, 3);
+        assert_eq!(completed[0].result.dealt, 6);
+        assert_eq!(completed[0].result.prevented, 0);
+        engine
+            .commit_completed_damage_batch(&completed, &mut Vec::new())
+            .expect("damage commits");
+        assert_eq!(engine.state.players[1].life, 14);
+    }
+
+    #[test]
+    fn damage_doubler_follows_its_current_controller_and_stops_when_suppressed() {
+        let (mut engine, source) = damage_doubler_engine(
+            r#"(ability_id: "double_damage", presentation: Fallback,
+                definition: DoubleDamage(subject: CreatureYouControl))"#,
+        );
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(1),
+            },
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1,
+        });
+
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = source_item(source, generation);
+        item.card_id = "damage_doubler_fixture".into();
+        let controlled = engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        source,
+                        1,
+                        "Damage Doubler Fixture",
+                        DamageRecipient::Player(0),
+                        3,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .expect("controlled source damage processes")
+            .expect("controlled source damage completes immediately");
+        assert_eq!(controlled[0].result.dealt, 6);
+
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 2,
+        });
+        let suppressed = engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        source,
+                        1,
+                        "Damage Doubler Fixture",
+                        DamageRecipient::Player(0),
+                        3,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .expect("suppressed source damage processes")
+            .expect("suppressed source damage completes immediately");
+        assert_eq!(suppressed[0].result.dealt, 3);
+    }
+
+    #[test]
+    fn combat_damage_uses_the_effective_controller_of_a_stolen_creature() {
+        let (mut engine, doubler) = damage_doubler_engine(
+            r#"(ability_id: "double_damage", presentation: Fallback,
+                definition: DoubleDamage(subject: CreatureYouControl))"#,
+        );
+        let attacker = move_fixture_source_to_battlefield(&mut engine, "plain_creature_fixture", 0);
+        for (timestamp, object_id) in [(1, doubler), (2, attacker)] {
+            engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(object_id),
+                kind: ContinuousEffectKind::Layer2Control {
+                    controller: ControllerReference::Fixed(1),
+                },
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp,
+            });
+        }
+
+        let result = engine
+            .process_or_park_combat_damage(
+                DamageEvent::combat(
+                    attacker,
+                    0,
+                    "stolen creature",
+                    DamageRecipient::Player(0),
+                    2,
+                ),
+                false,
+                false,
+                &mut Vec::new(),
+            )
+            .expect("combat damage processes")
+            .expect("one static doubler needs no ordering choice");
+
+        assert_eq!(result.attempted, 2);
+        assert_eq!(result.dealt, 4);
+    }
+
+    #[test]
+    fn controlled_permanent_orders_damage_replacements_by_its_effective_controller() {
+        let (mut engine, source) = damage_doubler_engine(
+            r#"(ability_id: "double_damage", presentation: Fallback,
+                definition: DoubleDamage(subject: AnySource))"#,
+        );
+        let target = move_fixture_source_to_battlefield(&mut engine, "plain_creature_fixture", 0);
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(target),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(1),
+            },
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1,
+        });
+        engine.add_damage_prevention(
+            None,
+            "one damage shield",
+            DamagePreventionScope::Recipient(target),
+            DamagePreventionAmount::FixedPerEvent(1),
+        );
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = source_item(source, generation);
+        item.card_id = "damage_doubler_fixture".into();
+
+        assert!(engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        source,
+                        0,
+                        "damage source",
+                        DamageRecipient::Permanent(target),
+                        2,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .expect("replacement choice is valid")
+            .is_none());
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("two replacements require an order")
+                .deciding_player,
+            1
+        );
+    }
+
+    #[test]
+    fn leaving_battlefield_removes_a_static_damage_doubler() {
+        let (mut engine, source) = damage_doubler_engine(
+            r#"(ability_id: "double_damage", presentation: Fallback,
+                definition: DoubleDamage(subject: CreatureYouControl))"#,
+        );
+        assert_eq!(engine.state.damage_doubling_effects.len(), 1);
+
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("source leaves the battlefield");
+
+        assert!(
+            engine.state.damage_doubling_effects.is_empty(),
+            "the battlefield static is removed with its source"
+        );
+    }
+
+    fn damage_doubler_engine(abilities: &str) -> (GameEngine, ObjectId) {
+        let fixture = format!(
+            r#"(
+                id: "damage_doubler_fixture",
+                name: "Damage Doubler Fixture",
+                face_id: "damage_doubler_fixture",
+                types: ["Creature"],
+                power: 2,
+                toughness: 2,
+                static_abilities: [{abilities}],
+            )"#
+        );
+        let plain_creature = r#"(
+            id: "plain_creature_fixture",
+            name: "Plain Creature Fixture",
+            face_id: "plain_creature_fixture",
+            types: ["Creature"],
+            power: 2,
+            toughness: 2,
+        )"#;
+        let noncreature = r#"(
+            id: "noncreature_source_fixture",
+            name: "Noncreature Source Fixture",
+            face_id: "noncreature_source_fixture",
+            types: ["Enchantment"],
+        )"#;
+        let registry =
+            CardRegistry::from_chunks_and_tokens(&[&fixture, plain_creature, noncreature], &[])
+                .expect("damage-doubling static ability fixture");
+        let registry = Box::leak(Box::new(registry));
+        let decks = Some(vec![
+            vec!["damage_doubler_fixture".into(); 7],
+            vec!["damage_doubler_fixture".into(); 7],
+        ]);
+        let mut engine =
+            GameEngine::new(registry, 614_501, &[0, 1], 20, decks, true).expect("engine");
+        let source = engine.state.players[0].hand.remove(0);
+        engine.state.players[0].battlefield.push(source);
+        engine.state.objects.get_mut(&source).unwrap().zone = Zone::Battlefield;
+        engine.emit_static_abilities_on_enter(source);
+        (engine, source)
+    }
+
+    fn move_fixture_source_to_battlefield(
+        engine: &mut GameEngine,
+        card_id: &str,
+        controller: PlayerId,
+    ) -> ObjectId {
+        let source = engine.state.players[0].hand.remove(0);
+        engine.state.players[controller as usize]
+            .battlefield
+            .push(source);
+        let object = engine.state.objects.get_mut(&source).unwrap();
+        object.card_id = card_id.into();
+        object.controller = controller;
+        object.base_controller = controller;
+        object.zone = Zone::Battlefield;
+        source
+    }
+
+    fn grant_wither_for_damage_test(engine: &mut GameEngine, source: ObjectId) {
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Wither),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 0,
+            trigger_grant_origin: None,
+        });
+    }
+
+    #[test]
+    fn prevention_and_doubling_order_changes_the_dealt_amount_and_prevented_total() {
+        fn result_when_first_application_is_doubler(double_first: bool) -> DamageResult {
+            let (mut engine, source) = damage_doubler_engine(
+                r#"(ability_id: "double_damage", presentation: Fallback,
+                    definition: DoubleDamage(subject: CreatureYouControl))"#,
+            );
+            let shield = engine.add_damage_prevention(
+                None,
+                "one damage shield",
+                DamagePreventionScope::Recipient(1),
+                DamagePreventionAmount::FixedPerEvent(1),
+            );
+            let generation = engine
+                .state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0);
+            let mut item = source_item(source, generation);
+            item.card_id = "damage_doubler_fixture".into();
+            assert!(engine
+                .process_or_park_damage_batch(
+                    &item,
+                    vec![DamageSpec {
+                        event: DamageEvent::noncombat(
+                            source,
+                            0,
+                            "Damage Doubler Fixture",
+                            DamageRecipient::Player(1),
+                            3,
+                        ),
+                        source_has_deathtouch: false,
+                        source_has_lifelink: false,
+                    }],
+                    &mut Vec::new(),
+                )
+                .unwrap()
+                .is_none());
+            let Some(super::super::replacement::PendingReplacementEvent::Damage(mut batch)) =
+                engine.state.pending_replacement_event.take()
+            else {
+                panic!("damage order choice must park the event")
+            };
+            engine.state.pending_resolution = None;
+            let chosen = batch
+                .applications
+                .iter()
+                .find(|application| {
+                    matches!(
+                        application.application,
+                        DamageReplacementApplication::DoubleEffect(_)
+                    ) == double_first
+                })
+                .expect("requested first application is offered")
+                .clone();
+            if !double_first {
+                assert!(matches!(
+                    chosen.application,
+                    DamageReplacementApplication::Effect(id) if id == shield
+                ));
+            }
+            engine
+                .apply_damage_replacement_application(
+                    &mut batch,
+                    chosen.event_index,
+                    chosen.application,
+                    &mut Vec::new(),
+                )
+                .unwrap();
+            let DamageBatchProgress::Complete(completed) =
+                engine.advance_damage_batch(batch, &mut Vec::new()).unwrap()
+            else {
+                panic!("the remaining single application resolves without another choice")
+            };
+            completed[0].result
+        }
+
+        let prevention_first = result_when_first_application_is_doubler(false);
+        assert_eq!(prevention_first.attempted, 3);
+        assert_eq!(prevention_first.dealt, 4);
+        assert_eq!(prevention_first.prevented, 1);
+
+        let doubling_first = result_when_first_application_is_doubler(true);
+        assert_eq!(doubling_first.attempted, 3);
+        assert_eq!(doubling_first.dealt, 5);
+        assert_eq!(doubling_first.prevented, 1);
+    }
+
+    #[test]
+    fn each_doubler_applies_once_and_two_instances_are_ordered() {
+        let (mut engine, source) = damage_doubler_engine(
+            r#"(ability_id: "first_double", presentation: Fallback,
+                definition: DoubleDamage(subject: AnySource)),
+                (ability_id: "second_double", presentation: Fallback,
+                definition: DoubleDamage(subject: AnySource))"#,
+        );
+        assert_eq!(engine.state.damage_doubling_effects.len(), 2);
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = source_item(source, generation);
+        item.card_id = "damage_doubler_fixture".into();
+        assert!(engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        source,
+                        0,
+                        "Damage Doubler Fixture",
+                        DamageRecipient::Player(1),
+                        2,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            1,
+            "the damaged player orders both replacements"
+        );
+        let Some(super::super::replacement::PendingReplacementEvent::Damage(mut batch)) =
+            engine.state.pending_replacement_event.take()
+        else {
+            panic!("two doublers require an ordering choice")
+        };
+        engine.state.pending_resolution = None;
+        let chosen = batch.applications[0].clone();
+        engine
+            .apply_damage_replacement_application(
+                &mut batch,
+                chosen.event_index,
+                chosen.application,
+                &mut Vec::new(),
+            )
+            .unwrap();
+        let DamageBatchProgress::Complete(completed) =
+            engine.advance_damage_batch(batch, &mut Vec::new()).unwrap()
+        else {
+            panic!("the remaining single doubler resolves without another choice")
+        };
+        assert_eq!(completed[0].result.attempted, 2);
+        assert_eq!(completed[0].result.dealt, 8);
+        assert_eq!(completed[0].result.prevented, 0);
+    }
+
+    #[test]
+    fn creature_you_control_scope_uses_the_event_source_and_ability_controller() {
+        for (card_id, controller, expected) in [
+            ("plain_creature_fixture", 1, 3),
+            ("noncreature_source_fixture", 0, 3),
+        ] {
+            let (mut engine, doubler) = damage_doubler_engine(
+                r#"(ability_id: "double_damage", presentation: Fallback,
+                    definition: DoubleDamage(subject: CreatureYouControl))"#,
+            );
+            let source = move_fixture_source_to_battlefield(&mut engine, card_id, controller);
+            let generation = engine
+                .state
+                .zone_change_generation
+                .get(&doubler)
+                .copied()
+                .unwrap_or(0);
+            let mut item = source_item(doubler, generation);
+            item.card_id = "damage_doubler_fixture".into();
+            let completed = engine
+                .process_or_park_damage_batch(
+                    &item,
+                    vec![DamageSpec {
+                        event: DamageEvent::noncombat(
+                            source,
+                            0,
+                            "test source",
+                            DamageRecipient::Player(1),
+                            3,
+                        ),
+                        source_has_deathtouch: false,
+                        source_has_lifelink: false,
+                    }],
+                    &mut Vec::new(),
+                )
+                .unwrap()
+                .expect("one nonmatching source has no ordering choice");
+            assert_eq!(completed[0].result.dealt, expected, "{card_id}");
+        }
+    }
+
+    #[test]
+    fn any_source_scope_doubles_noncreature_damage_from_an_opponent_controlled_source() {
+        let (mut engine, doubler) = damage_doubler_engine(
+            r#"(ability_id: "double_damage", presentation: Fallback,
+                definition: DoubleDamage(subject: AnySource))"#,
+        );
+        let source =
+            move_fixture_source_to_battlefield(&mut engine, "noncreature_source_fixture", 1);
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&doubler)
+            .copied()
+            .unwrap_or(0);
+        let mut item = source_item(doubler, generation);
+        item.card_id = "damage_doubler_fixture".into();
+        let completed = engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        source,
+                        1,
+                        "opponent's enchantment source",
+                        DamageRecipient::Player(0),
+                        2,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .unwrap()
+            .expect("one all-source doubler applies immediately");
+        assert_eq!(completed[0].result.dealt, 4);
+    }
+
+    #[test]
+    fn full_prevention_ends_the_event_before_an_unapplied_doubler() {
+        let (mut engine, source) = damage_doubler_engine(
+            r#"(ability_id: "double_damage", presentation: Fallback,
+                definition: DoubleDamage(subject: AnySource))"#,
+        );
+        let shield = engine.add_damage_prevention(
+            None,
+            "all damage shield",
+            DamagePreventionScope::Recipient(1),
+            DamagePreventionAmount::All,
+        );
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let item = source_item(source, generation);
+        assert!(engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        source,
+                        0,
+                        "Damage Doubler Fixture",
+                        DamageRecipient::Player(1),
+                        3,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .unwrap()
+            .is_none());
+        let Some(super::super::replacement::PendingReplacementEvent::Damage(mut batch)) =
+            engine.state.pending_replacement_event.take()
+        else {
+            panic!("prevention and doubling require an ordering choice");
+        };
+        engine.state.pending_resolution = None;
+        let shield_choice = batch
+            .applications
+            .iter()
+            .find(|application| {
+                application.application == DamageReplacementApplication::Effect(shield)
+            })
+            .unwrap()
+            .clone();
+        engine
+            .apply_damage_replacement_application(
+                &mut batch,
+                shield_choice.event_index,
+                shield_choice.application,
+                &mut Vec::new(),
+            )
+            .unwrap();
+        let DamageBatchProgress::Complete(completed) =
+            engine.advance_damage_batch(batch, &mut Vec::new()).unwrap()
+        else {
+            panic!("fully prevented damage cannot leave a pending replacement");
+        };
+        assert_eq!(completed[0].result.attempted, 3);
+        assert_eq!(completed[0].result.dealt, 0);
+        assert_eq!(completed[0].result.prevented, 3);
+    }
+
+    #[test]
+    fn damage_prevention_prohibition_does_not_block_a_doubler() {
+        let (mut engine, source) = damage_doubler_engine(
+            r#"(ability_id: "double_damage", presentation: Fallback,
+                definition: DoubleDamage(subject: AnySource))"#,
+        );
+        let shield = engine.add_damage_prevention(
+            None,
+            "all damage shield",
+            DamagePreventionScope::Recipient(1),
+            DamagePreventionAmount::All,
+        );
+        engine
+            .state
+            .damage_prevention_prohibitions
+            .push(DamagePreventionProhibition { source_id: None });
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let item = source_item(source, generation);
+        assert!(engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        source,
+                        0,
+                        "Damage Doubler Fixture",
+                        DamageRecipient::Player(1),
+                        3,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .unwrap()
+            .is_none());
+        let Some(super::super::replacement::PendingReplacementEvent::Damage(mut batch)) =
+            engine.state.pending_replacement_event.take()
+        else {
+            panic!("the prohibited shield and doubler are both applicable choices");
+        };
+        engine.state.pending_resolution = None;
+        let shield_choice = batch
+            .applications
+            .iter()
+            .find(|application| {
+                application.application == DamageReplacementApplication::Effect(shield)
+            })
+            .unwrap()
+            .clone();
+        engine
+            .apply_damage_replacement_application(
+                &mut batch,
+                shield_choice.event_index,
+                shield_choice.application,
+                &mut Vec::new(),
+            )
+            .unwrap();
+        let DamageBatchProgress::Complete(completed) =
+            engine.advance_damage_batch(batch, &mut Vec::new()).unwrap()
+        else {
+            panic!("the remaining single doubler resolves automatically");
+        };
+        assert_eq!(completed[0].result.dealt, 6);
+        assert_eq!(completed[0].result.prevented, 0);
+        assert!(engine
+            .state
+            .damage_prevention_effects
+            .iter()
+            .any(|effect| effect.id == shield));
+    }
+
+    #[test]
+    fn doubled_damage_cannot_saturate_marked_damage_total() {
+        let (mut engine, source) = damage_doubler_engine(
+            r#"(ability_id: "double_damage", presentation: Fallback,
+                definition: DoubleDamage(subject: CreatureYouControl))"#,
+        );
+        let target = move_fixture_source_to_battlefield(&mut engine, "plain_creature_fixture", 1);
+        engine.state.objects.get_mut(&target).unwrap().damage = u32::MAX;
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let item = source_item(source, generation);
+        let completed = engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        source,
+                        0,
+                        "Damage Doubler Fixture",
+                        DamageRecipient::Permanent(target),
+                        1,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .unwrap()
+            .expect("a single doubler resolves without an ordering choice");
+        assert_eq!(completed[0].result.dealt, 2);
+        assert!(matches!(
+            engine.commit_completed_damage_batch(&completed, &mut Vec::new()),
+            Err(EngineError::DamageNumericRange("marked damage total"))
+        ));
+        assert_eq!(engine.state.objects[&target].damage, u32::MAX);
+    }
+
+    #[test]
+    fn doubled_wither_damage_places_counters_for_the_final_amount() {
+        let (mut engine, source) = damage_doubler_engine(
+            r#"(ability_id: "double_damage", presentation: Fallback,
+                definition: DoubleDamage(subject: CreatureYouControl))"#,
+        );
+        grant_wither_for_damage_test(&mut engine, source);
+        let target = move_fixture_source_to_battlefield(&mut engine, "plain_creature_fixture", 1);
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let item = source_item(source, generation);
+        let completed = engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        source,
+                        0,
+                        "Damage Doubler Fixture",
+                        DamageRecipient::Permanent(target),
+                        1,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .unwrap()
+            .expect("one controlled-creature doubler resolves immediately");
+        assert_eq!(completed[0].result.dealt, 2);
+        assert!(completed[0].spec.event.source.wither);
+        engine
+            .commit_completed_damage_batch(&completed, &mut Vec::new())
+            .expect("doubled wither damage commits as counters");
+        assert_eq!(engine.state.objects[&target].damage, 0);
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::MinusOneMinusOne),
+            2
+        );
+    }
+
+    #[test]
+    fn doubled_wither_damage_reports_counter_total_overflow() {
+        let (mut engine, source) = damage_doubler_engine(
+            r#"(ability_id: "double_damage", presentation: Fallback,
+                definition: DoubleDamage(subject: CreatureYouControl))"#,
+        );
+        grant_wither_for_damage_test(&mut engine, source);
+        let target = move_fixture_source_to_battlefield(&mut engine, "plain_creature_fixture", 1);
+        engine
+            .state
+            .objects
+            .get_mut(&target)
+            .unwrap()
+            .set_counter(CounterKind::MinusOneMinusOne, u32::MAX);
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let item = source_item(source, generation);
+        let completed = engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        source,
+                        0,
+                        "Damage Doubler Fixture",
+                        DamageRecipient::Permanent(target),
+                        1,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .unwrap()
+            .expect("one controlled-creature doubler resolves immediately");
+        assert!(matches!(
+            engine.commit_completed_damage_batch(&completed, &mut Vec::new()),
+            Err(EngineError::DamageNumericRange("wither counter total"))
+        ));
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::MinusOneMinusOne),
+            u32::MAX
+        );
+        assert_eq!(engine.state.objects[&target].damage, 0);
+    }
+
+    #[test]
+    fn damage_overflow_during_choice_restores_the_entire_command_checkpoint() {
+        let abilities = (0..32)
+            .map(|index| {
+                format!(
+                    r#"(ability_id: "double_{index}", presentation: Fallback,
+                    definition: DoubleDamage(subject: AnySource))"#
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let (mut engine, source) = damage_doubler_engine(&abilities);
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let item = source_item(source, generation);
+        assert!(engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        source,
+                        0,
+                        "Damage Doubler Fixture",
+                        DamageRecipient::Player(1),
+                        1,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .unwrap()
+            .is_none());
+
+        for _ in 0..30 {
+            let choice = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("remaining doublers stay ordered")
+                .presentation
+                .candidates[0];
+            engine
+                .apply_command(
+                    1,
+                    &RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                            rv1::SubmitResolutionChoice {
+                                chosen_object_ids: vec![choice],
+                                ..Default::default()
+                            },
+                        )),
+                    },
+                )
+                .unwrap();
+        }
+        let pending_before = engine.state.pending_resolution.clone();
+        let replacement_before = engine.state.pending_replacement_event.clone();
+        assert_eq!(
+            pending_before
+                .as_ref()
+                .unwrap()
+                .presentation
+                .candidates
+                .len(),
+            2
+        );
+        let snapshot_before = engine.diagnostic_snapshot().unwrap();
+        let choice = pending_before.as_ref().unwrap().presentation.candidates[0];
+        assert!(matches!(
+            engine.apply_command(
+                1,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![choice],
+                            ..Default::default()
+                        },
+                    )),
+                }
+            ),
+            Err(EngineError::DamageNumericRange(
+                "damage doubler multiplication"
+            ))
+        ));
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), snapshot_before);
+        assert_eq!(
+            format!("{:?}", engine.state.pending_resolution),
+            format!("{:?}", pending_before)
+        );
+        assert_eq!(
+            format!("{:?}", engine.state.pending_replacement_event),
+            format!("{:?}", replacement_before)
+        );
+    }
+
+    #[test]
+    fn one_combat_doubler_routes_and_doubles_the_whole_simultaneous_batch() {
+        let decks = Some(vec![vec!["grizzly_bears".into(); 7]; 2]);
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            614_502,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
+        engine.state.turn_step = TurnStep::CombatDamage;
+        engine.state.active_player_idx = 0;
+        let first = move_bear_to_battlefield(&mut engine);
+        let second = move_bear_to_battlefield(&mut engine);
+        let assignment = |attacker| CombatAttackAssignment {
+            attacker: TriggerObjectRef {
+                object_id: attacker,
+                zone_change_generation: 0,
+                controller_at_event: 0,
+            },
+            defender: CombatDefenderTarget::Player(1),
+            defending_player: 1,
+        };
+        let combat = CombatState {
+            attacking: vec![first, second],
+            attack_assignments: HashMap::from([
+                (first, assignment(first)),
+                (second, assignment(second)),
+            ]),
+            blockers: HashMap::new(),
+            damage_assignments: HashMap::new(),
+            trample_player_damage: HashMap::new(),
+            damage_assignment_needed: false,
+            attackers_declared: true,
+            blockers_declared_by: vec![1],
+            blockers_declared: true,
+            assign_combat_damage_phase: false,
+            first_strike_attackers: Vec::new(),
+            first_strike_blockers: HashMap::new(),
+            first_strike_damage_done: false,
+        };
+        engine.state.combat = Some(combat.clone());
+        engine
+            .state
+            .damage_doubling_effects
+            .push(ActiveDamageDoubling {
+                id: 1,
+                static_origin: None,
+                source_id: None,
+                source_label: "test global doubler".into(),
+                source_presentation: Default::default(),
+                scope: DamageDoublingScope::AnySource,
+                duration: EffectDuration::UntilEndOfTurn,
+            });
+        let mut events = Vec::new();
+        assert!(engine
+            .try_park_ordered_combat_damage(
+                &combat,
+                super::super::combat::DamagePass::Normal,
+                &mut events,
+            )
+            .unwrap());
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(
+            engine.state.players[1].life, 12,
+            "both 2-power attackers deal doubled damage in the shared simultaneous batch"
+        );
+    }
+
+    #[test]
     fn outgoing_combat_prevention_uses_captured_generation_and_excludes_noncombat_and_copies() {
         let decks = Some(vec![
             vec!["grizzly_bears".into(); 7],
@@ -1796,7 +2998,8 @@ mod tests {
                 }],
                 &mut Vec::new(),
             )
-            .unwrap();
+            .unwrap()
+            .expect("unprevented damage completes");
         assert_eq!(
             pending[0].result.dealt, 2,
             "shielded creature still deals noncombat damage"
@@ -1850,7 +3053,7 @@ mod tests {
             .applications
             .iter()
             .find(|application| {
-                application.application == DamagePreventionApplication::Effect(fixed)
+                application.application == DamageReplacementApplication::Effect(fixed)
             })
             .unwrap()
             .choice_id;
@@ -2308,6 +3511,7 @@ mod tests {
         item.source_owner = Some(29);
         assert!(engine
             .process_or_park_damage_batch(&item, damage, &mut Vec::new())
+            .unwrap()
             .is_none());
         assert_eq!(
             engine
@@ -2332,7 +3536,7 @@ mod tests {
             .choice_id;
         let pending = engine.state.pending_resolution.take().unwrap();
         engine
-            .finish_damage_prevention_choice(pending, chosen)
+            .finish_damage_replacement_choice(pending, chosen)
             .unwrap();
         assert_eq!(
             engine
@@ -2420,7 +3624,7 @@ mod tests {
         );
         let event =
             DamageEvent::noncombat(source, 0, "test", DamageRecipient::Permanent(source), 1);
-        assert_eq!(engine.prevention_applications(&event).len(), 2);
+        assert_eq!(engine.damage_replacement_applications(&event).len(), 2);
         engine.state.continuous_effects.push(ContinuousEffect {
             trigger_grant_origin: None,
             source_id: None,
@@ -2438,23 +3642,23 @@ mod tests {
         });
         engine.refresh_source_static_abilities(source);
         assert_eq!(
-            engine.prevention_applications(&event),
-            vec![DamagePreventionApplication::Effect(shield)],
+            engine.damage_replacement_applications(&event),
+            vec![DamageReplacementApplication::Effect(shield)],
             "printed prevention is suppressed; independent resolving prevention remains"
         );
         engine
             .state
             .continuous_effects
             .retain(|effect| !matches!(effect.kind, ContinuousEffectKind::Layer4SetTypeLine(_)));
-        assert_eq!(engine.prevention_applications(&event).len(), 2);
+        assert_eq!(engine.damage_replacement_applications(&event).len(), 2);
         *engine
             .state
             .zone_change_generation
             .entry(source)
             .or_default() += 1;
         assert_eq!(
-            engine.prevention_applications(&event),
-            vec![DamagePreventionApplication::Effect(shield)],
+            engine.damage_replacement_applications(&event),
+            vec![DamageReplacementApplication::Effect(shield)],
             "a retained static record cannot bind to a later incarnation"
         );
     }
@@ -2497,6 +3701,7 @@ mod tests {
                 }],
                 &mut Vec::new(),
             )
+            .expect("damage batch processes")
             .expect("unprevented damage completes immediately");
         assert_eq!(completed[0].result.dealt, 1);
         engine
@@ -2536,6 +3741,7 @@ mod tests {
                 }],
                 &mut Vec::new(),
             )
+            .expect("damage batch processes")
             .expect("fully prevented damage completes immediately");
         assert_eq!(prevented[0].result.dealt, 0);
         engine

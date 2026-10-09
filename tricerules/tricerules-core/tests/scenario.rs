@@ -55,6 +55,8 @@ mod deck_coverage_sword_of_war_and_peace;
 mod deck_coverage_alhammarrets_archive;
 #[path = "scenario/deck_coverage_boompile.rs"]
 mod deck_coverage_boompile;
+#[path = "scenario/deck_coverage_gratuitous_violence.rs"]
+mod deck_coverage_gratuitous_violence;
 #[path = "scenario/deck_coverage_maze_of_ith.rs"]
 mod deck_coverage_maze_of_ith;
 #[path = "scenario/deck_coverage_mutational_advantage.rs"]
