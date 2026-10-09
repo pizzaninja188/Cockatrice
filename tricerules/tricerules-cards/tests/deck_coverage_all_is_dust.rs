@@ -1,9 +1,11 @@
 use tricerules_cards::primitives::{EffectContext, TargetController, TargetFilter, TargetKind};
-use tricerules_cards::{CardRegistry, Color, MassPlayerSet, SpellEffectKind};
+use tricerules_cards::{Color, MassPlayerSet, SpellEffectKind};
 
 #[test]
 fn all_is_dust_exact_printed_kindred_eldrazi_definition_and_five_color_union() {
-    let card = CardRegistry::global().get("all_is_dust").unwrap();
+    let card = tricerules_cards::registry::global()
+        .get("all_is_dust")
+        .unwrap();
     let face = card.primary_face();
     assert_eq!(card.name, "All Is Dust");
     assert_eq!(face.mana_cost.to_string(), "{7}");

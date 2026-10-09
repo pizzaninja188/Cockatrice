@@ -26,11 +26,11 @@ use tricerules_cards::primitives::{
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount, CardFace,
-    CardRegistry, Keyword, ManaCost,
+    Keyword, ManaCost,
 };
 
 fn face(id: &str) -> &'static CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .unwrap_or_else(|| panic!("missing reviewed card {id}"))
         .primary_face()
@@ -49,7 +49,7 @@ fn mana(w: u32, u: u32, b: u32, r: u32, g: u32) -> ManaAmount {
 
 #[test]
 fn issue_459_registers_the_three_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id, mana_cost, types, keywords, power_toughness) in [
         (
             "abzan_devotee",

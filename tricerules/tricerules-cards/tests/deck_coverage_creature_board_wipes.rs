@@ -2,12 +2,12 @@ use tricerules_cards::primitives::{
     BattlefieldPermanentFilter, CardTypeFilter, MassPlayerSet, RelativePlayerSet, TargetFilter,
 };
 use tricerules_cards::{
-    Amount, BattlefieldAggregate, CardRegistry, Color, Layout, SpellCostModifier, SpellEffectKind,
+    Amount, BattlefieldAggregate, Color, Layout, SpellCostModifier, SpellEffectKind,
 };
 
 #[test]
 fn creature_board_wipe_cards_have_complete_typed_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let act = registry
         .get("blasphemous_act")

@@ -125,6 +125,7 @@ fn put_on_top(engine: &mut GameEngine, player: usize, ids: &[&str]) -> Vec<u32> 
 
 fn station_engine(seed: u64, card_id: &str) -> (GameEngine, u32, u32) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -154,6 +155,7 @@ fn station_engine(seed: u64, card_id: &str) -> (GameEngine, u32, u32) {
 
 fn fell_engine(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -331,6 +333,7 @@ fn issue_313_extinguisher_destroys_only_the_legal_target_then_damages_all_creatu
     // to exercise state-based actions, and one creature with a regeneration
     // shield to pin the supported destruction interaction.
     let mut fresh = GameEngine::new(
+        tricerules_cards::registry::global(),
         313_011,
         &[0, 1],
         20,
@@ -399,6 +402,7 @@ fn issue_313_extinguisher_destroys_only_the_legal_target_then_damages_all_creatu
 #[test]
 fn issue_313_extinguisher_target_fizzle_suppresses_mass_damage_and_indestructible_survives() {
     let mut stale = GameEngine::new(
+        tricerules_cards::registry::global(),
         313_012,
         &[0, 1],
         20,
@@ -426,6 +430,7 @@ fn issue_313_extinguisher_target_fizzle_suppresses_mass_damage_and_indestructibl
     assert_eq!(stale.state.objects[&source].zone, Zone::Battlefield);
 
     let mut indestructible = GameEngine::new(
+        tricerules_cards::registry::global(),
         313_013,
         &[0, 1],
         20,
@@ -461,6 +466,7 @@ fn issue_313_extinguisher_target_fizzle_suppresses_mass_damage_and_indestructibl
 fn issue_313_extinguisher_source_changes_and_multiplayer_replay_remain_authoritative() {
     fn run(seed: u64) -> (Vec<Vec<u8>>, Zone, [u32; 3]) {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             seed,
             &[0, 1],
             20,
@@ -532,6 +538,7 @@ fn issue_313_extinguisher_source_changes_and_multiplayer_replay_remain_authorita
     assert_eq!(damage, [4, 4, 4]);
 
     let mut leaves = GameEngine::new(
+        tricerules_cards::registry::global(),
         313_015,
         &[0, 1],
         20,

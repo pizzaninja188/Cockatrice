@@ -12,7 +12,15 @@ fn setup_harmonize(seed: u64) -> (GameEngine, u32, u32, u64) {
         deck_with("island", &["unending_whisper", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let whisper = take_oid_from_library_or_hand(&mut engine, 0, "unending_whisper");
     engine.state.players[0].graveyard.push(whisper);
@@ -323,7 +331,15 @@ fn normal_hand_cast_does_not_receive_harmonize_stack_exit_replacement() {
         deck_with("island", &["unending_whisper"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(105_003, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        105_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "unending_whisper");
     give_mana(
@@ -352,7 +368,15 @@ fn countered_harmonize_spell_is_exiled() {
         deck_with("island", &["unending_whisper", "grizzly_bears"]),
         deck_with("island", &["counterspell"]),
     ]);
-    let mut engine = GameEngine::new(105_007, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        105_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let whisper = take_oid_from_library_or_hand(&mut engine, 0, "unending_whisper");
     engine.state.players[0].graveyard.push(whisper);
@@ -403,7 +427,15 @@ fn mammoth_bellow_reduces_only_generic_and_creates_one_five_five_elephant() {
         deck_with("island", &["mammoth_bellow", "serra_angel"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(105_008, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        105_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let bellow = take_oid_from_library_or_hand(&mut engine, 0, "mammoth_bellow");
     engine.state.players[0].graveyard.push(bellow);

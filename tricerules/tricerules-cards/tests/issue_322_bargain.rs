@@ -83,7 +83,7 @@ fn bargain_cards_match_the_reviewed_oracle_identities_and_costs() {
             "Creature",
         ),
     ] {
-        let card = CardRegistry::global()
+        let card = tricerules_cards::registry::global()
             .get(id)
             .unwrap_or_else(|| panic!("missing reviewed card {id}"));
         let face = card.primary_face();

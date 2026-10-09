@@ -25,7 +25,15 @@ fn stump_targets(source: u32, recipient: u32) -> Vec<TargetRef> {
 }
 
 fn stump_engine(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

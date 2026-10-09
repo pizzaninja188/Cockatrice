@@ -1,6 +1,6 @@
 use super::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration, StaticAbilityDef};
-use tricerules_cards::{CardRegistry, CounterKind, Keyword};
+use tricerules_cards::{CounterKind, Keyword};
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{
     cost_selection::Selection, dev_command, CostChoiceKind, CostObjectRef, CostObjectRefs,
@@ -40,6 +40,7 @@ fn activate_station(engine: &GameEngine, station: u32, crew: u32) -> RuledComman
 
 fn station_engine(seed: u64) -> (GameEngine, u32, u32) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -78,7 +79,7 @@ fn station_engine(seed: u64) -> (GameEngine, u32, u32) {
 
 #[test]
 fn issue_147_cards_are_registered_with_exact_station_and_modal_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let sweeper = registry
         .get("wurmwall_sweeper")
         .expect("Wurmwall Sweeper is registered")
@@ -296,7 +297,15 @@ fn copied_station_keeps_printed_abilities_but_not_charge_counters_or_threshold_s
 
 #[test]
 fn drill_too_deep_executes_each_mode_with_its_own_target_filter() {
-    let mut engine = GameEngine::new(147_005, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        147_005,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let spacecraft = inject_permanent_on_battlefield(&mut engine, 0, "wurmwall_sweeper");
     inject_card_into_hand(&mut engine, 0, "drill_too_deep");

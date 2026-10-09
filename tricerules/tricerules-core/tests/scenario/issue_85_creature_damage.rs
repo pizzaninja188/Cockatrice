@@ -25,7 +25,15 @@ fn rabid_bite_publishes_independent_groups_and_rejects_forged_roles_atomically()
         deck_with("forest", &["rabid_bite", "grizzly_bears"]),
         deck_with("forest", &["hill_giant"]),
     ]);
-    let mut engine = GameEngine::new(85_100, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        85_100,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let mine = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let theirs = relocate_to_battlefield(&mut engine, 1, "hill_giant", false);
@@ -65,7 +73,15 @@ fn rabid_bite_uses_the_sources_current_power() {
         deck_with("forest", &["rabid_bite", "grizzly_bears"]),
         deck_with("forest", &["colossal_dreadmaw"]),
     ]);
-    let mut engine = GameEngine::new(85_101, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        85_101,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let source = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let recipient = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);
@@ -100,7 +116,15 @@ fn hunters_edge_applies_its_counter_before_calculating_damage() {
         deck_with("forest", &["hunters_edge", "grizzly_bears"]),
         deck_with("forest", &["hill_giant"]),
     ]);
-    let mut engine = GameEngine::new(85_102, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        85_102,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let source = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let recipient = relocate_to_battlefield(&mut engine, 1, "hill_giant", false);
@@ -133,7 +157,15 @@ fn hunters_edge_still_adds_the_counter_when_only_the_recipient_is_illegal() {
         deck_with("forest", &["hunters_edge", "grizzly_bears"]),
         deck_with("forest", &["hill_giant"]),
     ]);
-    let mut engine = GameEngine::new(85_103, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        85_103,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let source = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let recipient = relocate_to_battlefield(&mut engine, 1, "hill_giant", false);
@@ -180,7 +212,15 @@ fn bite_target_that_leaves_and_returns_is_a_new_object() {
         deck_with("forest", &["rabid_bite", "grizzly_bears"]),
         deck_with("forest", &["hill_giant"]),
     ]);
-    let mut engine = GameEngine::new(85_104, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        85_104,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let source = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let recipient = relocate_to_battlefield(&mut engine, 1, "hill_giant", false);
@@ -210,7 +250,15 @@ fn bite_target_that_leaves_and_returns_is_a_new_object() {
 
 #[test]
 fn prodigal_sorcerer_lifelink_uses_the_shared_noncombat_damage_pipeline() {
-    let mut engine = GameEngine::new(85_105, &[0, 1], 20, None, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        85_105,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "prodigal_sorcerer");
     engine.state.players[0].life = 10;
@@ -236,7 +284,15 @@ fn prodigal_sorcerer_lifelink_uses_the_shared_noncombat_damage_pipeline() {
 #[test]
 fn prodigal_damage_feeds_general_damage_triggers_only_when_damage_is_dealt() {
     for (seed, prevented) in [(85_107, false), (85_108, true)] {
-        let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
         advance_to_main1_from_game_start(&mut engine);
         let source = inject_creature_on_battlefield(&mut engine, 0, "prodigal_sorcerer");
         if prevented {
@@ -269,7 +325,15 @@ fn prodigal_damage_feeds_general_damage_triggers_only_when_damage_is_dealt() {
 #[test]
 fn issue_175_noncombat_lifelink_preserves_damage_and_prevention() {
     for prevented in [false, true] {
-        let mut engine = GameEngine::new(175_401, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            175_401,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         advance_to_main1_from_game_start(&mut engine);
         let source = inject_creature_on_battlefield(&mut engine, 0, "prodigal_sorcerer");
         inject_creature_on_battlefield(&mut engine, 1, "giant_cindermaw");
@@ -311,7 +375,15 @@ fn rabid_bite_uses_creature_deathtouch_and_lifelink_after_prevention() {
         deck_with("forest", &["rabid_bite", "grizzly_bears"]),
         deck_with("forest", &["colossal_dreadmaw"]),
     ]);
-    let mut engine = GameEngine::new(85_106, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        85_106,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let source = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let recipient = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);

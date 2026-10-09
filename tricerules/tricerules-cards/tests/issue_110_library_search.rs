@@ -3,10 +3,9 @@ use tricerules_cards::primitives::{
     LibraryPlacement, PowerComparison, SearchDestination, SearchZoneSelection, SpellEffectKind,
     ZoneCardFilter,
 };
-use tricerules_cards::CardRegistry;
 
 fn card(id: &str) -> &'static tricerules_cards::CardDefinition {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .expect("issue #110 card is registered")
 }

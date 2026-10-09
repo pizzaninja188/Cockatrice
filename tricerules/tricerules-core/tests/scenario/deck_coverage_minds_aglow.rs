@@ -58,8 +58,15 @@ fn contribute(engine: &mut GameEngine, player: i32, mana: PaymentMana) {
 #[test]
 fn minds_aglow_collects_sequential_contributions_and_each_player_draws_the_total() {
     let decks = Some(vec![vec!["island".into(); 20]; PLAYERS.len()]);
-    let mut engine =
-        GameEngine::new(202_610_701, &PLAYERS, 20, decks, true).expect("new three-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_701,
+        &PLAYERS,
+        20,
+        decks,
+        true,
+    )
+    .expect("new three-player game");
     advance_to_main1_from_game_start(&mut engine);
 
     let third_player_mountain = inject_permanent_on_battlefield(&mut engine, 2, "mountain");
@@ -226,8 +233,15 @@ fn minds_aglow_contribution_command_log_replays_the_same_batches_and_state() {
     const REPLAY_PLAYERS: [i32; 2] = [4, 9];
     let make_engine = || {
         let decks = Some(vec![vec!["island".into(); 20]; REPLAY_PLAYERS.len()]);
-        let mut engine = GameEngine::new(202_610_703, &REPLAY_PLAYERS, 20, decks, true)
-            .expect("new two-player replay game");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            202_610_703,
+            &REPLAY_PLAYERS,
+            20,
+            decks,
+            true,
+        )
+        .expect("new two-player replay game");
         advance_to_main1_from_game_start(&mut engine);
         inject_card_into_hand(&mut engine, 0, MINDS_AGLOW);
         give_mana(
@@ -319,8 +333,15 @@ fn minds_aglow_contribution_command_log_replays_the_same_batches_and_state() {
 fn minds_aglow_resumes_when_its_controller_concedes_during_join_forces() {
     const FOUR_PLAYERS: [i32; 4] = [4, 9, 27, 31];
     let decks = Some(vec![vec!["island".into(); 20]; FOUR_PLAYERS.len()]);
-    let mut engine =
-        GameEngine::new(202_610_702, &FOUR_PLAYERS, 20, decks, true).expect("new four-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_702,
+        &FOUR_PLAYERS,
+        20,
+        decks,
+        true,
+    )
+    .expect("new four-player game");
     advance_to_main1_from_game_start(&mut engine);
     inject_card_into_hand(&mut engine, 0, MINDS_AGLOW);
     give_mana(
@@ -415,8 +436,15 @@ fn minds_aglow_resumes_when_its_controller_concedes_during_join_forces() {
 #[test]
 fn minds_aglow_accepts_only_restricted_mana_eligible_for_resolution_payments() {
     let decks = Some(vec![vec!["island".into(); 20]; PLAYERS.len()]);
-    let mut engine =
-        GameEngine::new(202_610_703, &PLAYERS, 20, decks, true).expect("new three-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_703,
+        &PLAYERS,
+        20,
+        decks,
+        true,
+    )
+    .expect("new three-player game");
     advance_to_main1_from_game_start(&mut engine);
     engine
         .state

@@ -2,7 +2,7 @@
 #![allow(unused_imports)] // The shared scenario helper module re-exports many helpers.
 
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, Layout};
+use tricerules_cards::Layout;
 use tricerules_core::{GameEngine, TurnStep, Zone};
 
 fn set_hand_size(engine: &mut GameEngine, player: usize, count: usize) {
@@ -22,7 +22,15 @@ fn set_hand_size(engine: &mut GameEngine, player: usize, count: usize) {
 
 fn two_player_game_with_source(card_id: &str, seed: u64) -> GameEngine {
     let decks = Some(vec![island_only_deck(), island_only_deck()]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 0, card_id);
     engine
@@ -36,7 +44,7 @@ fn reach_opponent_upkeep(engine: &mut GameEngine) {
 
 #[test]
 fn hand_size_upkeep_cards_have_reviewed_identity_and_characteristics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana_cost, types, power, toughness) in [
         (
             "ebony_owl_netsuke",
@@ -213,8 +221,15 @@ fn opponent_upkeep_damage_covers_each_opponent_in_three_player_game() {
         island_only_deck(),
         island_only_deck(),
     ]);
-    let mut engine =
-        GameEngine::new(202_609_301, &[0, 1, 2], 20, decks, true).expect("new three-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_609_301,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .expect("new three-player game");
     inject_permanent_on_battlefield(&mut engine, 0, "viseling");
     set_hand_size(&mut engine, 0, 7);
     set_hand_size(&mut engine, 1, 5);

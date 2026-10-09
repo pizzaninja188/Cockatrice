@@ -3,13 +3,13 @@
 use super::helpers::*;
 use tricerules_cards::primitives::{EntersTappedAffected, StaticAbilityDef};
 use tricerules_cards::{
-    AbilityCost, AbilitySourceZone, CardRegistry, Layout, ManaAmount, ManaCost, SpellEffectKind,
+    AbilityCost, AbilitySourceZone, Layout, ManaAmount, ManaCost, SpellEffectKind,
 };
 use tricerules_proto::ruled::v1 as rv1;
 
 #[test]
 fn urban_retreat_registers_its_complete_printed_identity() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("urban_retreat")
         .expect("complete Urban Retreat definition");
     assert_eq!(card.id, "urban_retreat");
@@ -74,7 +74,15 @@ fn urban_retreat_stages_from_hand_before_tapping_its_mana_creature_cost_candidat
         deck_with("forest", &["llanowar_elves", "eumidian_terrabotanist"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(60_810_001, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        60_810_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_card_into_hand(&mut engine, 0, "urban_retreat");
     let mana_creature = move_ready_to_battlefield(&mut engine, 0, "llanowar_elves");
@@ -257,7 +265,15 @@ fn urban_retreat_mana_ability_produces_each_printed_color_option() {
         deck_with("forest", &["urban_retreat"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(60_810_010, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        60_810_010,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let land = move_ready_to_battlefield(&mut engine, 0, "urban_retreat");
     assert!(engine.state.objects[&land].tapped, "the land enters tapped");
@@ -302,7 +318,15 @@ fn urban_retreat_requires_the_staged_hand_activation_transaction() {
         deck_with("forest", &["grizzly_bears"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(60_810_010, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        60_810_010,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_card_into_hand(&mut engine, 0, "urban_retreat");
     let creature = move_ready_to_battlefield(&mut engine, 0, "grizzly_bears");
@@ -374,7 +398,15 @@ fn urban_retreat_accepts_a_creature_tapped_by_springleaf_drum_during_payment() {
         deck_with("forest", &["springleaf_drum", "grizzly_bears"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(60_810_009, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        60_810_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_card_into_hand(&mut engine, 0, "urban_retreat");
     let drum = move_ready_to_battlefield(&mut engine, 0, "springleaf_drum");
@@ -489,7 +521,15 @@ fn urban_retreat_return_cost_triggers_leaves_ability_above_the_land_activation()
         deck_with("forest", &["featherbrained_filcher"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(60_810_005, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        60_810_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_card_into_hand(&mut engine, 0, "urban_retreat");
     let creature = move_ready_to_battlefield(&mut engine, 0, "featherbrained_filcher");
@@ -586,7 +626,15 @@ fn urban_retreat_hand_activation_is_limited_to_the_active_players_main_phase() {
         deck_with("island", &[]),
         deck_with("forest", &["llanowar_elves"]),
     ]);
-    let mut engine = GameEngine::new(60_810_006, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        60_810_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_card_into_hand(&mut engine, 1, "urban_retreat");
     let creature = move_ready_to_battlefield(&mut engine, 1, "llanowar_elves");
@@ -644,7 +692,15 @@ fn urban_retreat_rejects_missing_and_stale_tapped_creature_receipts() {
         deck_with("forest", &["llanowar_elves"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(60_810_002, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        60_810_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_card_into_hand(&mut engine, 0, "urban_retreat");
     let mana_creature = move_ready_to_battlefield(&mut engine, 0, "llanowar_elves");
@@ -761,7 +817,15 @@ fn urban_retreat_cancel_ends_its_temporary_public_reveal() {
         deck_with("forest", &["llanowar_elves"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(60_810_003, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        60_810_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_card_into_hand(&mut engine, 0, "urban_retreat");
     let _potential_return_candidate = move_ready_to_battlefield(&mut engine, 0, "llanowar_elves");
@@ -836,7 +900,15 @@ fn urban_retreat_does_not_move_a_new_hand_incarnation_when_its_ability_resolves(
         deck_with("forest", &["llanowar_elves"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(60_810_004, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        60_810_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_card_into_hand(&mut engine, 0, "urban_retreat");
     let mana_creature = move_ready_to_battlefield(&mut engine, 0, "llanowar_elves");

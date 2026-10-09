@@ -3,7 +3,15 @@ use super::helpers::*;
 #[test]
 fn issue_278_raid_draw_requires_an_attack_this_turn() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(278_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        278_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     inject_card_into_hand(&mut engine, 0, "storm_fleet_spy");

@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{AbilityCost, SpellEffectKind};
-use tricerules_cards::{AbilityPresentation, AbilitySourceZone, CardRegistry, Layout, ManaAmount};
+use tricerules_cards::{AbilityPresentation, AbilitySourceZone, Layout, ManaAmount};
 
 #[test]
 fn lotus_petal_registers_its_free_artifact_and_five_color_mana_ability() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("lotus_petal")
         .expect("Lotus Petal registry definition");

@@ -232,12 +232,12 @@ pub(super) fn execute_effect(
             zones::target_player_sacrifices(cx, effect)?
         }
         SpellEffectKind::TapOrUntap { .. } => {
-            use tricerules_cards::primitives::{ResolutionBranchDef, ResolutionCost};
+            use tricerules_card_model::primitives::{ResolutionBranchDef, ResolutionCost};
             let branches = [("tap", "Tap"), ("untap", "Untap")]
                 .into_iter()
                 .map(|(id, label)| ResolutionBranchDef {
-                    branch_id: tricerules_cards::ChoiceId::new(id).expect("static branch id"),
-                    presentation: tricerules_cards::AbilityPresentation::Fallback,
+                    branch_id: tricerules_card_model::ChoiceId::new(id).expect("static branch id"),
+                    presentation: tricerules_card_model::AbilityPresentation::Fallback,
                     runtime_fallback: Some(label.into()),
                     cost: ResolutionCost::None,
                     requirement: Default::default(),

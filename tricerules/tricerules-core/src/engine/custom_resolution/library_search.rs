@@ -456,7 +456,7 @@ impl GameEngine {
         }
         let card_label = object_display_name(&self.state, self.registry, oid);
         match destination {
-            tricerules_cards::primitives::GraveyardDestination::Hand => {
+            tricerules_card_model::primitives::GraveyardDestination::Hand => {
                 self.commit_observed_zone_move(oid, Zone::Hand, None, &mut events)?;
                 events.push(ev_log(format!(
                     "{spell_label} returns {card_label} from graveyard to hand."
@@ -468,7 +468,7 @@ impl GameEngine {
                     rv1::permanent_moved::Destination::Hand,
                 ));
             }
-            tricerules_cards::primitives::GraveyardDestination::Battlefield { tapped } => {
+            tricerules_card_model::primitives::GraveyardDestination::Battlefield { tapped } => {
                 match self.begin_battlefield_entry(
                     stack.item.clone(),
                     BattlefieldEntryEvent {
@@ -529,7 +529,7 @@ impl GameEngine {
                     rv1::permanent_moved::Destination::Battlefield,
                 ));
             }
-            tricerules_cards::primitives::GraveyardDestination::Exile => {
+            tricerules_card_model::primitives::GraveyardDestination::Exile => {
                 self.commit_observed_zone_move(oid, Zone::Exile, None, &mut events)?;
                 events.push(ev_log(format!(
                     "{spell_label} exiles {card_label} from the graveyard."
@@ -541,10 +541,10 @@ impl GameEngine {
                     rv1::permanent_moved::Destination::Exile,
                 ));
             }
-            tricerules_cards::primitives::GraveyardDestination::LibraryTop
-            | tricerules_cards::primitives::GraveyardDestination::LibraryBottom => {
-                let top =
-                    destination == tricerules_cards::primitives::GraveyardDestination::LibraryTop;
+            tricerules_card_model::primitives::GraveyardDestination::LibraryTop
+            | tricerules_card_model::primitives::GraveyardDestination::LibraryBottom => {
+                let top = destination
+                    == tricerules_card_model::primitives::GraveyardDestination::LibraryTop;
                 self.commit_observed_zone_move(oid, Zone::Library, None, &mut events)?;
                 if top {
                     let player_idx = self
@@ -998,7 +998,15 @@ mod tests {
         let destination: SearchDestination = serde_json::from_str("\"Graveyard\"")
             .expect("library searches must support a graveyard destination");
         for find in [true, false] {
-            let mut engine = GameEngine::new(90_030, &[0, 1, 2], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                90_030,
+                &[0, 1, 2],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             engine.state.turn_step = TurnStep::Main1;
             let wan = battlefield_card(&mut engine, "wan_shi_tong,_librarian");
             engine.state.players[0].battlefield.retain(|id| *id != wan);
@@ -1198,7 +1206,15 @@ mod tests {
     #[test]
     fn library_entry_cohort_preserves_previous_result_tail_and_one_search_completion() {
         for count in [2, 0] {
-            let mut engine = GameEngine::new(90_020 + count, &[0, 1], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                90_020 + count,
+                &[0, 1],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             engine.state.turn_step = TurnStep::Main1;
             battlefield_card(&mut engine, "orb_of_dreams");
             battlefield_card(&mut engine, "orb_of_dreams");
@@ -1241,14 +1257,14 @@ mod tests {
             let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &mut tail else {
                 unreachable!()
             };
-            let tricerules_cards::primitives::ResolutionBranchRequirement::CardResultCount {
+            let tricerules_card_model::primitives::ResolutionBranchRequirement::CardResultCount {
                 filter,
                 ..
             } = &mut branches[0].requirement
             else {
                 unreachable!()
             };
-            filter.action = tricerules_cards::primitives::CardResultAction::Mill;
+            filter.action = tricerules_card_model::primitives::CardResultAction::Mill;
             branches[0].effects = vec![SpellEffectKind::GainLife {
                 amount: Amount::Fixed(3),
             }];
@@ -1300,7 +1316,7 @@ mod tests {
                 .previous_result
                 .cards
                 .push(crate::state::CardResultEntry {
-                    action: tricerules_cards::primitives::CardResultAction::Mill,
+                    action: tricerules_card_model::primitives::CardResultAction::Mill,
                     affected_player: 0,
                     object_id: forest,
                     zone_change_generation: 0,
@@ -1380,7 +1396,15 @@ mod tests {
         // Cultivate's first card is already marked tapped when entry replacement checks begin,
         // so use a real two-replacement land-entry choice to exercise the same parked completion
         // payload. Multiversal Passage and Orb of Dreams both apply before the land enters.
-        let mut engine = GameEngine::new(90_001, &[0, 1], 20, None, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            90_001,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("engine");
         let orb = battlefield_card(&mut engine, "orb_of_dreams");
         let passage = library_card(&mut engine, "multiversal_passage");
         let to_hand = library_card(&mut engine, "forest");

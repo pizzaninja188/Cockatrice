@@ -29,6 +29,7 @@ fn resolve_top(engine: &mut GameEngine) -> RuledEventBatch {
 
 fn setup(seed: u64, with_graveyard_card: bool) -> (GameEngine, u32, Option<u32>) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,

@@ -2,28 +2,43 @@
 
 use super::helpers::*;
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, AbilitySourceZone, CardRegistry, CounterKind, Keyword,
-    Layout, ManaCost,
+    AbilityCost, AbilityPresentation, AbilitySourceZone, CounterKind, Keyword, Layout, ManaCost,
 };
 use tricerules_core::{GameEngine, Zone};
 
 fn pupu_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("forest", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
 
 fn pupu_engine_with_basic(seed: u64, basic: &str) -> GameEngine {
     let decks = Some(vec![deck_with(basic, &[]), deck_with(basic, &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
 
 #[test]
 fn pupu_ufo_registers_its_complete_printed_identity() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("pupu_ufo")
         .expect("complete PuPu UFO definition");
     assert_eq!(card.id, "pupu_ufo");

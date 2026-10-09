@@ -15,7 +15,7 @@ use tricerules_cards::primitives::{
     TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
-    AbilityPresentation, CardRegistry, CharacteristicDefiningAbility, Keyword, TriggerCondition,
+    AbilityPresentation, CharacteristicDefiningAbility, Keyword, TriggerCondition,
 };
 
 fn graveyard_creature_card_filter() -> ZoneCardFilter {
@@ -34,7 +34,7 @@ fn permanent_card_filter() -> ZoneCardFilter {
 
 #[test]
 fn issue_372_registers_the_four_completed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id, mana_cost, types, supertypes, stats, keywords) in [
         (
             "xande,_dark_mage",
@@ -94,7 +94,7 @@ fn issue_372_registers_the_four_completed_identities() {
 
 #[test]
 fn issue_372_excludes_the_unretained_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for name in ["Avatar Destiny", "Cid, Timeless Artificer"] {
         assert_eq!(
             registry.id_for_name(name),
@@ -106,7 +106,7 @@ fn issue_372_excludes_the_unretained_identities() {
 
 #[test]
 fn issue_372_xande_payload_and_presentation_are_exact() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("xande,_dark_mage")
         .expect("Xande, Dark Mage");
     let face = definition.primary_face();
@@ -136,7 +136,7 @@ fn issue_372_xande_payload_and_presentation_are_exact() {
 
 #[test]
 fn issue_372_moon_vigil_payload_and_presentation_are_exact() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("moon-vigil_adherents")
         .expect("Moon-Vigil Adherents");
     let face = definition.primary_face();
@@ -180,7 +180,7 @@ fn issue_372_moon_vigil_payload_and_presentation_are_exact() {
 
 #[test]
 fn issue_372_song_payload_and_presentation_are_exact() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("song_of_stupefaction")
         .expect("Song of Stupefaction");
     let face = definition.primary_face();
@@ -263,7 +263,7 @@ fn issue_372_song_payload_and_presentation_are_exact() {
 
 #[test]
 fn issue_372_exdeath_payload_and_presentation_are_exact() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("exdeath,_void_warlock_neo_exdeath,_dimensions_end")
         .expect("Exdeath, Void Warlock // Neo Exdeath, Dimension's End");
     let [front, back] = definition.faces.as_slice() else {

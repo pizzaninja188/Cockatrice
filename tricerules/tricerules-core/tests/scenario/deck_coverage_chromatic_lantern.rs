@@ -1,7 +1,7 @@
 //! Exact Lantern: paid cast, dynamic granted mana, stable slots and recipient identity.
 use super::helpers::*;
 use tricerules_cards::primitives::*;
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
+use tricerules_cards::{AbilityPresentation, Layout};
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{
     dev_command, AbilityInfo, DevCommand, DevMoveCard, DevZone, ResolutionChoiceDecision,
@@ -11,10 +11,11 @@ const LANTERN: &str = "chromatic_lantern";
 
 fn setup() -> (GameEngine, u32) {
     assert!(
-        CardRegistry::global().get(LANTERN).is_some(),
+        tricerules_cards::registry::global().get(LANTERN).is_some(),
         "exact Lantern is missing"
     );
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         508_100,
         &[0, 1],
         20,
@@ -87,7 +88,7 @@ fn reject(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
 }
 
 fn move_source(engine: &mut GameEngine, source: u32, zone: DevZone) {
-    let card_name = CardRegistry::global()
+    let card_name = tricerules_cards::registry::global()
         .get(&engine.state.objects[&source].card_id)
         .unwrap()
         .name
@@ -112,7 +113,7 @@ fn move_source(engine: &mut GameEngine, source: u32, zone: DevZone) {
 #[test]
 fn lantern_paid_cast_exact_definition_and_both_oracle_clauses() {
     let (mut engine, source) = setup();
-    let card = CardRegistry::global().get(LANTERN).unwrap();
+    let card = tricerules_cards::registry::global().get(LANTERN).unwrap();
     assert_eq!(card.name, "Chromatic Lantern");
     assert_eq!(card.layout, Layout::Normal);
     assert_eq!(card.face_count(), 1);
@@ -534,6 +535,7 @@ fn lantern_replays_paid_cast_grants_undo_and_new_source_incarnation() {
     use tricerules_proto::ruled::v1::{dev_command::Dev, DevAddMana, DevPutCardInZone};
     fn game() -> GameEngine {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             508_108,
             &[0, 1],
             20,

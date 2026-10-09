@@ -15,7 +15,15 @@ fn demonic_tutor_puts_chosen_card_in_hand() {
         },
         vec!["island".into(); 20],
     ]);
-    let mut e = GameEngine::new(1, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "demonic_tutor");
 
@@ -116,7 +124,15 @@ fn mystical_tutor_filters_to_instant_or_sorcery() {
         },
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(2, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "mystical_tutor");
 
@@ -202,7 +218,15 @@ fn mystical_tutor_rejects_non_instant_sorcery() {
         },
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(3, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        3,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "mystical_tutor");
 
@@ -257,7 +281,15 @@ fn demonic_tutor_empty_library_allows_empty_choice() {
         },
         vec!["island".into(); 20],
     ]);
-    let mut e = GameEngine::new(4, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "demonic_tutor");
 
@@ -298,7 +330,15 @@ fn search_library_choice_kind_is_library_search() {
         },
         vec!["island".into(); 20],
     ]);
-    let mut e = GameEngine::new(5, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "demonic_tutor");
 
@@ -338,7 +378,15 @@ fn mystical_tutor_finds_a_split_card_by_face_type() {
         },
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(4, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "mystical_tutor");
 
@@ -378,7 +426,15 @@ fn mystical_tutor_excludes_an_adventure_spell_face_in_library() {
         deck_with("island", &["mystical_tutor"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(5, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "mystical_tutor");
 

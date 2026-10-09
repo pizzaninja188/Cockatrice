@@ -8,7 +8,15 @@ use tricerules_cards::Keyword;
 use tricerules_core::{TurnStep, Zone};
 
 fn two_player_engine(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -17,7 +25,15 @@ fn three_player_main1(seed: u64) -> GameEngine {
     // The production harness is currently M2-only, but the EachOpponent effect is seat-generic.
     // Add a third fixture player after construction so this scenario exercises both opponents
     // without broadening the public engine constructor contract for issue #268.
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     engine
         .state
         .players
@@ -327,7 +343,15 @@ fn sephiroths_intervention_destroys_then_gains_two_life() {
 
 #[test]
 fn sudden_strike_accepts_only_an_attacking_or_blocking_creature() {
-    let mut engine = GameEngine::new(268_007, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        268_007,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut engine);
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine

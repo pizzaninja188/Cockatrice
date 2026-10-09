@@ -6,7 +6,7 @@
 //! and CR 115.1/608.2b govern the creature-only target and its revalidation.
 
 use tricerules_cards::primitives::{Amount, SpellEffectKind, TargetFilter};
-use tricerules_cards::{CardRegistry, Color, Layout};
+use tricerules_cards::{Color, Layout};
 
 #[derive(Clone, Copy)]
 struct CohortFixture {
@@ -79,7 +79,7 @@ const COHORT: [CohortFixture; 7] = [
 
 #[test]
 fn issue_452_family_registers_exactly_the_reviewed_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for card in COHORT {
         let definition = registry
             .get(card.id)

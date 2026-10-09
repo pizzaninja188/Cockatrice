@@ -12,11 +12,11 @@ use tricerules_cards::primitives::{
     RelativePlayerSet, ResolutionBranchRequirement, ResolutionBranchSelection, SpellEffectKind,
     StaticAbilityDef, TriggerCondition,
 };
-use tricerules_cards::{CardRegistry, Color, Layout};
+use tricerules_cards::{Color, Layout};
 
 #[test]
 fn issue_465_token_blockers_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     // The three predefined tokens carry their printed name, color, types and P/T.
     for (id, name, types, colors, power, toughness) in [

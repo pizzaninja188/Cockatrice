@@ -1,5 +1,4 @@
 use super::helpers::*;
-use tricerules_cards::CardRegistry;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ResolutionChoiceDecision, RuledCommand, SelectedSpellMode,
     SubmitResolutionChoice,
@@ -10,7 +9,15 @@ fn engine() -> GameEngine {
         std::iter::repeat_n("forest".to_string(), 20).collect(),
         std::iter::repeat_n("mountain".to_string(), 20).collect(),
     ]);
-    let mut engine = GameEngine::new(5900, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5900,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -256,7 +263,7 @@ fn issue_171_apothecary_fizzles_without_prompt_when_target_blinks() {
 
 #[test]
 fn issue_59_calibration_cards_are_registered() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for card_id in ["trufflesnout", "sparktongue_dragon", "crypt_lurker"] {
         assert!(

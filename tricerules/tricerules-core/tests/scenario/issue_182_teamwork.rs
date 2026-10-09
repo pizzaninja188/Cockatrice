@@ -33,7 +33,15 @@ fn issue_182_cruel_alliance_requires_teamwork_for_the_expanded_target_and_gains_
         deck_with("swamp", &["cruel_alliance", "grizzly_bears"]),
         deck_with("forest", &["colossal_dreadmaw"]),
     ]);
-    let mut engine = GameEngine::new(182_101, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        182_101,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "cruel_alliance");
     let teammate = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -74,7 +82,15 @@ fn issue_182_murdocks_crusade_links_teamwork_to_choosing_both_modes() {
             &["colossal_dreadmaw", "burn,_burn,_tree_and_fern"],
         ),
     ]);
-    let mut engine = GameEngine::new(182_102, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        182_102,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "murdocks_crusade");
     let creature = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);
@@ -143,7 +159,15 @@ fn issue_182_maria_triggers_only_from_the_teamwork_payment_action() {
         deck_with("swamp", &["cruel_alliance", "agent_maria_hill"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(182_103, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        182_103,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "cruel_alliance");
     let maria = relocate_to_battlefield(&mut engine, 0, "agent_maria_hill", false);
@@ -178,7 +202,15 @@ fn issue_182_object_kicker_and_required_sacrifice_or_mana_group_are_atomic() {
         ),
         deck_with("forest", &["hill_giant", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(182_104, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        182_104,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "stomped_by_the_foot");
     ensure_card_in_hand(&mut engine, 0, "stir_up_trouble");

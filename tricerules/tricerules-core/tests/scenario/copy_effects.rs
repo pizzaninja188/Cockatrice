@@ -8,7 +8,7 @@ use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone,
 #[test]
 fn copy_snapshot_does_not_require_a_registry_definition() {
     let (mut engine, source) = resolving_clone_with_source("serra_angel", 4601);
-    let face = tricerules_cards::CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("serra_angel")
         .unwrap()
         .primary_face()
@@ -39,7 +39,15 @@ fn token_copy_and_populate_create_independent_tokens() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(4602, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4602,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "serra_angel");
     let source = put_creature_on_battlefield(&mut engine, 0, "serra_angel");
@@ -94,7 +102,15 @@ fn token_copy_game(card_id: &str) -> (GameEngine, u32) {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(4603, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4603,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, card_id);
     let source = put_creature_on_battlefield(&mut engine, 0, card_id);
@@ -207,7 +223,7 @@ fn begin_populate(engine: &mut GameEngine) {
 fn token_copy_inline_ability_preserves_explicit_target_groups() {
     use tricerules_cards::primitives::{SpellEffectKind, TargetGroupDef, TargetingDef};
     let (mut engine, source) = token_copy_game("prodigal_sorcerer");
-    let mut face = tricerules_cards::CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("prodigal_sorcerer")
         .unwrap()
         .primary_face()
@@ -305,7 +321,7 @@ fn cackling_counterpart_flashback_creates_a_token_and_exiles_the_spell() {
 fn populate_resumes_effect_tail_after_a_copied_entry_choice() {
     use tricerules_cards::primitives::SpellEffectKind;
     let (mut engine, source) = token_copy_game("prodigal_sorcerer");
-    let mut face = tricerules_cards::CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("prodigal_sorcerer")
         .unwrap()
         .primary_face()
@@ -314,7 +330,7 @@ fn populate_resumes_effect_tail_after_a_copied_entry_choice() {
         SpellEffectKind::Populate,
         SpellEffectKind::GainLife { amount: 3.into() },
     ];
-    face.static_abilities = tricerules_cards::CardRegistry::global()
+    face.static_abilities = tricerules_cards::registry::global()
         .get("clone")
         .unwrap()
         .primary_face()
@@ -379,7 +395,7 @@ fn token_copy_and_populate_replay_identically() {
 fn issue_164_token_copy_has_its_own_cap_and_accepted_commands_replay_identically() {
     fn setup() -> (GameEngine, u32) {
         let (mut engine, source) = token_copy_game("soul_warden");
-        let mut face = tricerules_cards::CardRegistry::global()
+        let mut face = tricerules_cards::registry::global()
             .get("soul_warden")
             .unwrap()
             .primary_face()
@@ -462,7 +478,7 @@ fn issue_164_token_copy_has_its_own_cap_and_accepted_commands_replay_identically
 #[test]
 fn token_copy_inline_ability_revalidates_targets_after_source_disappears() {
     let (mut engine, source) = token_copy_game("prodigal_sorcerer");
-    let mut face = tricerules_cards::CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("prodigal_sorcerer")
         .unwrap()
         .primary_face()
@@ -515,7 +531,7 @@ fn token_copy_inline_ability_revalidates_targets_after_source_disappears() {
 #[test]
 fn token_copy_inline_display_and_live_ability_survive_registry_absence() {
     let (mut engine, source) = token_copy_game("prodigal_sorcerer");
-    let face = tricerules_cards::CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("prodigal_sorcerer")
         .unwrap()
         .primary_face()
@@ -669,7 +685,7 @@ fn token_copy_copied_etb_and_populate_etb_each_trigger_once() {
 #[test]
 fn token_copy_of_an_existing_copy_freezes_values_and_keeps_token_status() {
     let (mut engine, source) = token_copy_game("serra_angel");
-    let face = tricerules_cards::CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("grizzly_bears")
         .unwrap()
         .primary_face()
@@ -796,7 +812,15 @@ fn resolving_clone_with_source(source_card_id: &str, seed: u64) -> (GameEngine, 
             "forest".into(),
         ],
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = put_creature_on_battlefield(&mut engine, 1, source_card_id);
     give_mana(
@@ -838,7 +862,15 @@ fn clone_chooses_its_copy_source_during_resolution_not_casting() {
             "forest".into(),
         ],
     ]);
-    let mut engine = GameEngine::new(45_001, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        45_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = put_creature_on_battlefield(&mut engine, 1, "serra_angel");
     give_mana(
@@ -940,7 +972,15 @@ fn countered_clone_never_emits_a_copy_source_choice() {
             "island".into(),
         ],
     ]);
-    let mut engine = GameEngine::new(45_011, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        45_011,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     give_mana(
         &mut engine,
@@ -1171,7 +1211,15 @@ fn copying_an_already_copied_clone_uses_its_layer_one_values() {
             "forest".into(),
         ],
     ]);
-    let mut engine = GameEngine::new(45_006, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        45_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let angel = put_creature_on_battlefield(&mut engine, 1, "serra_angel");
 
@@ -1229,7 +1277,15 @@ fn clone_can_copy_a_registry_backed_token() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut engine = GameEngine::new(45_007, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        45_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     grant_pool(&mut engine, 0);
     let alarm = hand_index_for_card(&engine, 0, "raise_the_alarm");
@@ -1332,7 +1388,7 @@ fn leaving_the_battlefield_clears_copy_values_and_restores_clone() {
 #[test]
 fn issue_237_double_faced_entry_choice_freezes_both_faces_before_suspending() {
     let (mut engine, source) = token_copy_game("reckless_waif_merciless_predator");
-    let registry = tricerules_cards::CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let mut face = registry
         .get("reckless_waif_merciless_predator")
         .unwrap()

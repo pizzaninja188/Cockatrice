@@ -12,7 +12,15 @@ const ANCIENT_GRUDGE: &str = "ancient_grudge";
 
 #[test]
 fn ancient_grudge_destroys_an_artifact_and_uses_flashback() {
-    let mut engine = GameEngine::new(20_260_942, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_942,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let first_artifact_creature = inject_creature_on_battlefield(&mut engine, 1, "ornithopter");

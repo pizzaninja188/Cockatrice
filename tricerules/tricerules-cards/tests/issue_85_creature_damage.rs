@@ -50,7 +50,7 @@ fn issue_157_departure_snapshot_requires_an_observed_object() {
 
 #[test]
 fn issue_85_cards_share_the_grouped_creature_damage_primitive() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let rabid_definition = registry
         .get("rabid_bite")

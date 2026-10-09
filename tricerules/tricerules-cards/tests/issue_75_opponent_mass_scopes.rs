@@ -1,11 +1,10 @@
 use tricerules_cards::primitives::{
     Amount, CreatureScopeController, CreatureScopeFilter, PlayerRecipient, SpellEffectKind,
 };
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn opponent_mass_scope_cards_have_complete_oracle_behavior() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let chill = registry
         .get("uncomfortable_chill")

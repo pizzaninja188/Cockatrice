@@ -1662,7 +1662,7 @@ impl GameEngine {
     }
 
     fn copy_source_description(filter: &TargetFilter) -> String {
-        use tricerules_cards::primitives::{PermanentTypeFilter, TargetKind};
+        use tricerules_card_model::primitives::{PermanentTypeFilter, TargetKind};
 
         let noun = match filter.permanent_types.as_slice() {
             [PermanentTypeFilter::Artifact] => "artifact".to_string(),
@@ -3127,7 +3127,7 @@ impl GameEngine {
         }
         self.state.continuous_effects.extend(spell_effects);
         let bargained = event.cast_cost_receipts.iter().any(|receipt| {
-            receipt.object_cost_kind == Some(tricerules_cards::ObjectCastCostKind::Bargain)
+            receipt.object_cost_kind == Some(tricerules_card_model::ObjectCastCostKind::Bargain)
         });
         if event.cast_by.is_some() || bargained {
             self.state.spell_entry_facts.insert(
@@ -3484,9 +3484,9 @@ impl GameEngine {
                     ),
                 };
                 let ability = TriggeredAbilityDef {
-                    ability_id: tricerules_cards::AbilityId::new("delayed_sacrifice")
+                    ability_id: tricerules_card_model::AbilityId::new("delayed_sacrifice")
                         .expect("intrinsic ability id"),
-                    presentation: tricerules_cards::AbilityPresentation::Fallback,
+                    presentation: tricerules_card_model::AbilityPresentation::Fallback,
                     trigger,
                     effect: vec![SpellEffectKind::SacrificeObservedObjects],
                     modal: None,
@@ -4920,7 +4920,15 @@ mod tests {
     #[test]
     fn deploy_private_skip_fixture_bottoms_selected_card_that_never_entered() {
         // Characterize the shared copy/Aura skip seam, not a natural printed planeswalker copy.
-        let mut engine = GameEngine::new(90_220, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            90_220,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.state.opening = None;
         engine.state.turn_step = TurnStep::Main1;
         engine.state.priority_idx = 0;
@@ -5041,7 +5049,15 @@ mod tests {
 
     #[test]
     fn issue_153_tatterkite_enters_without_proposed_counters() {
-        let mut engine = GameEngine::new(153_008, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            153_008,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let object_id = engine.state.players[0].hand[0];
         engine.state.objects.get_mut(&object_id).unwrap().card_id = "tatterkite".into();
         let event = BattlefieldEntryEvent {
@@ -5093,7 +5109,15 @@ mod tests {
 
     #[test]
     fn conditional_entry_uses_the_captured_life_snapshot() {
-        let mut engine = GameEngine::new(97_007, &[0, 1], 20, None, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            97_007,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("engine");
         let snapshot = engine.player_life_snapshot();
         engine.state.players[1].life = 1;
         let event = BattlefieldEntryEvent {
@@ -5157,7 +5181,15 @@ mod tests {
             ],
             vec!["forest".into(); 7],
         ]);
-        let mut engine = GameEngine::new(97_008, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            97_008,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         let globe = engine
             .state
             .objects
@@ -5220,7 +5252,15 @@ mod tests {
             ],
             vec!["forest".into(); 7],
         ]);
-        let mut engine = GameEngine::new(234_002, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            234_002,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         let globe = engine
             .state
             .objects
@@ -5257,7 +5297,7 @@ mod tests {
             chosen_opponents: Vec::new(),
             entry_counters: BTreeMap::new(),
             entry_modifiers: vec![ResolvingPermanentModifier::AddTypes(
-                tricerules_cards::TypeLineAddition {
+                tricerules_card_model::TypeLineAddition {
                     land_types: Vec::new(),
                     card_types: Vec::new(),
                     creature_types: vec!["Dragon".into()],
@@ -5275,11 +5315,13 @@ mod tests {
             trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(globe),
-            kind: ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
-                card_types: vec![PermanentTypeFilter::Land],
-                creature_types: Vec::new(),
-                land_types: vec![BasicLandType::Forest],
-            }),
+            kind: ContinuousEffectKind::Layer4SetTypeLine(
+                tricerules_card_model::TypeLineReplacement {
+                    card_types: vec![PermanentTypeFilter::Land],
+                    creature_types: Vec::new(),
+                    land_types: vec![BasicLandType::Forest],
+                },
+            ),
             condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 5,
@@ -5298,6 +5340,7 @@ mod presentation_tests {
     #[test]
     fn replacement_images_never_resolve_concealed_source_identity() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             220_002,
             &[0, 1],
             20,

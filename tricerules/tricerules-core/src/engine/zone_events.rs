@@ -1,7 +1,7 @@
 //! CR 603.2c / 603.10a: an explicit rules-event boundary, independent of command and
 //! trigger-flush boundaries. Three Tree Scribe counts departures; Mortipede counts batches.
 use super::*;
-use tricerules_cards::primitives::{EventZone, ZoneEventCardinality, ZoneEventDestination};
+use tricerules_card_model::primitives::{EventZone, ZoneEventCardinality, ZoneEventDestination};
 
 #[derive(Clone)]
 pub(super) struct ZoneEventSnapshot {
@@ -623,7 +623,15 @@ mod timestamp_order_tests {
 
     #[test]
     fn paired_artifact_exchange_commits_both_generations_and_preserves_entry_replacement() {
-        let mut engine = GameEngine::new(2026100520, &[10, 20, 30], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            2026100520,
+            &[10, 20, 30],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let ids = engine.state.players[1].hand[..2].to_vec();
         for (&oid, card) in ids.iter().zip(["orb_of_dreams", "sol_ring"]) {
             engine.state.objects.get_mut(&oid).unwrap().card_id = card.into();
@@ -744,6 +752,7 @@ mod timestamp_order_tests {
     #[test]
     fn simultaneous_zone_entries_ask_controller_to_order_same_controller_permanents() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             613_701,
             &[0, 1],
             20,
@@ -818,6 +827,7 @@ mod timestamp_order_tests {
     #[test]
     fn simultaneous_entry_order_prompts_each_controller_in_apnap_order() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             613_702,
             &[0, 1],
             20,
@@ -899,6 +909,7 @@ mod timestamp_order_tests {
     #[test]
     fn stale_simultaneous_entry_generation_rejects_without_committing_cohort() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             613_703,
             &[0, 1],
             20,

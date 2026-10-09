@@ -14,9 +14,8 @@ use tricerules_cards::primitives::{
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, BattlefieldAggregate,
-    CardRegistry, CastTriggerPlayer, GameCondition, GraveyardAggregate, Keyword,
-    LibraryPartitionKind, ManaCost, RelativePlayerSet, SpellEffectKind, TriggerCondition,
-    ZoneCardFilter,
+    CastTriggerPlayer, GameCondition, GraveyardAggregate, Keyword, LibraryPartitionKind, ManaCost,
+    RelativePlayerSet, SpellEffectKind, TriggerCondition, ZoneCardFilter,
 };
 
 fn permanent_card_filter() -> ZoneCardFilter {
@@ -72,7 +71,7 @@ fn self_modifier(definition: &StaticAbilityDef) -> (&GameCondition, i32, i32, &[
 
 #[test]
 fn issue_377_registers_the_seventeen_retained_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id, mana_cost, types, keywords) in [
         (
             "akawalli,_the_seething_tower",
@@ -228,7 +227,7 @@ fn issue_377_registers_the_seventeen_retained_identities() {
 
 #[test]
 fn issue_377_excluded_identities_stay_unregistered() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for blocked in [
         // Cohort identities that stay behind a narrower non-cohort clause blocker.
         "killmonger,_scourge_of_wakanda",
@@ -248,7 +247,7 @@ fn issue_377_excluded_identities_stay_unregistered() {
 
 #[test]
 fn issue_377_control_clause_payloads_are_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let billowing = registry.get("billowing_shriekmass").expect("Billowing");
     let [SpellEffectKind::Mill {
@@ -397,7 +396,7 @@ fn issue_377_control_clause_payloads_are_exact() {
 
 #[test]
 fn issue_377_akawalli_authors_three_ordered_static_abilities() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("akawalli,_the_seething_tower")
         .expect("Akawalli, the Seething Tower");
     let face = definition.primary_face();
@@ -475,7 +474,7 @@ fn issue_377_descend_pumps_use_the_six_type_permanent_predicate() {
         ("echo_of_dusk", 1, 1, vec![Keyword::Lifelink]),
         ("frilled_cave-wurm", 2, 0, vec![]),
     ] {
-        let definition = CardRegistry::global().get(id).expect(id);
+        let definition = tricerules_cards::registry::global().get(id).expect(id);
         let [ability] = definition.primary_face().static_abilities.as_slice() else {
             panic!("{id} must have exactly one static ability");
         };
@@ -495,7 +494,7 @@ fn issue_377_descend_pumps_use_the_six_type_permanent_predicate() {
         );
     }
 
-    let didact_echo = CardRegistry::global()
+    let didact_echo = tricerules_cards::registry::global()
         .get("didact_echo")
         .expect("Didact Echo");
     let face = didact_echo.primary_face();
@@ -520,7 +519,7 @@ fn issue_377_descend_pumps_use_the_six_type_permanent_predicate() {
 
 #[test]
 fn issue_377_nonpermanent_graveyard_predicates_keep_printed_filters() {
-    let first_time_flyer = CardRegistry::global()
+    let first_time_flyer = tricerules_cards::registry::global()
         .get("first-time_flyer")
         .expect("First-Time Flyer");
     let (condition, power, toughness, _) =
@@ -539,7 +538,7 @@ fn issue_377_nonpermanent_graveyard_predicates_keep_printed_filters() {
     );
     assert_eq!((power, toughness), (1, 1));
 
-    let ghitu_lavarunner = CardRegistry::global()
+    let ghitu_lavarunner = tricerules_cards::registry::global()
         .get("ghitu_lavarunner")
         .expect("Ghitu Lavarunner");
     let (condition, power, toughness, keywords) =
@@ -561,7 +560,7 @@ fn issue_377_nonpermanent_graveyard_predicates_keep_printed_filters() {
     assert_eq!(branches[0].card_type, Some(CardTypeFilter::Instant));
     assert_eq!(branches[1].card_type, Some(CardTypeFilter::Sorcery));
 
-    let wildfire = CardRegistry::global()
+    let wildfire = tricerules_cards::registry::global()
         .get("wildfire_wickerfolk")
         .expect("Wildfire Wickerfolk");
     let (condition, power, toughness, keywords) =

@@ -786,6 +786,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tricerules-card-model"
+version = "0.1.0"
+dependencies = [
+ "once_cell",
+ "proptest",
+ "ron",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "tricerules-cards"
 version = "0.1.0"
 dependencies = [
@@ -798,6 +809,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror",
+ "tricerules-card-model",
 ]
 
 [[package]]
@@ -810,6 +822,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "tricerules-card-model",
  "tricerules-cards",
  "tricerules-proto",
 ]

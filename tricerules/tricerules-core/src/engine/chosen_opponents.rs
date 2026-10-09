@@ -8,7 +8,7 @@ impl GameEngine {
         source: ObjectId,
         face_index: usize,
         face: &CardFace,
-        link: &tricerules_cards::AbilityLinkId,
+        link: &tricerules_card_model::AbilityLinkId,
     ) -> Option<ChosenOpponentKey> {
         let object = self.state.objects.get(&source)?;
         let mut producers = face.static_abilities.iter().filter(|ability| {
@@ -43,7 +43,7 @@ impl GameEngine {
     pub(super) fn chosen_opponent_for(
         &self,
         source: ObjectId,
-        link: &tricerules_cards::AbilityLinkId,
+        link: &tricerules_card_model::AbilityLinkId,
     ) -> Option<PlayerId> {
         let object = self.state.objects.get(&source)?;
         if object.zone != Zone::Battlefield

@@ -2,7 +2,15 @@ use super::helpers::*;
 
 #[test]
 fn infectious_horror_attack_trigger_is_untargeted_life_loss_not_damage() {
-    let mut engine = GameEngine::new(87_001, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        87_001,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_declare_attackers(&mut engine);
     let horror = inject_creature_on_battlefield(&mut engine, 0, "infectious_horror");
     engine.state.add_damage_prevention_shield(1, 2);

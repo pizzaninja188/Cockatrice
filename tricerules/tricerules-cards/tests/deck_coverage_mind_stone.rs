@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{AbilityCost, PlayerRecipient, SpellEffectKind};
-use tricerules_cards::{AbilityPresentation, AbilitySourceZone, Amount, CardRegistry};
+use tricerules_cards::{AbilityPresentation, AbilitySourceZone, Amount};
 
 #[test]
 fn mind_stone_registers_its_colorless_mana_and_sacrifice_draw_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("mind_stone")
         .expect("Mind Stone registry definition");

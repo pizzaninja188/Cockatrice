@@ -10,7 +10,7 @@ fn issue_167_descend_cards_observe_earlier_card_entries_but_not_tokens() {
         let mut engine = end_step_engine(167301);
         for card in ["deep_goblin_skulltaker", "enterprising_scallywag"] {
             assert!(
-                tricerules_cards::CardRegistry::global().get(card).is_some(),
+                tricerules_cards::registry::global().get(card).is_some(),
                 "missing {card}"
             );
         }
@@ -54,7 +54,7 @@ fn issue_167_descend_cards_observe_earlier_card_entries_but_not_tokens() {
 #[test]
 fn issue_167_canonized_targeting_and_sacrifice_activation_are_authoritative() {
     let mut engine = end_step_engine(167302);
-    assert!(tricerules_cards::CardRegistry::global()
+    assert!(tricerules_cards::registry::global()
         .get("canonized_in_blood")
         .is_some());
     let enchantment = inject_permanent_on_battlefield(&mut engine, 0, "canonized_in_blood");
@@ -163,7 +163,15 @@ fn issue_167_descending_during_the_end_step_does_not_create_a_retroactive_trigge
 
 fn end_step_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("forest", &[]), deck_with("island", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -264,7 +272,15 @@ fn twinblade_assassins_draws_once_when_a_creature_died() {
         deck_with("swamp", &["murder"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(6002, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     inject_creature_on_battlefield(&mut engine, 0, "twinblade_assassins");
     let bear = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -380,7 +396,15 @@ fn source_that_changes_object_generation_gets_neither_mauler_effect() {
         deck_with("forest", &["sabertooth_mauler"]),
         deck_with("island", &["boomerang"]),
     ]);
-    let mut engine = GameEngine::new(6008, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let mauler = relocate_to_battlefield(&mut engine, 0, "sabertooth_mauler", true);
     ensure_in_hand(&mut engine, 1, "boomerang");

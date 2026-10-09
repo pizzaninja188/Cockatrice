@@ -7,13 +7,13 @@
 
 use tricerules_cards::primitives::PlayerRecipient;
 use tricerules_cards::{
-    AbilityPresentation, Amount, CardRegistry, Color, Keyword, Layout, LibraryPartitionKind,
-    SpellEffectKind, TriggerCondition,
+    AbilityPresentation, Amount, Color, Keyword, Layout, LibraryPartitionKind, SpellEffectKind,
+    TriggerCondition,
 };
 
 #[test]
 fn issue_329_registers_the_five_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name) in [
         ("bygone_colossus", "Bygone Colossus"),
         ("germinating_wurm", "Germinating Wurm"),
@@ -34,7 +34,7 @@ fn issue_329_registers_the_five_reviewed_identities() {
 
 #[test]
 fn issue_329_bygone_colossus_has_a_generic_warp_cost() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("bygone_colossus")
         .expect("Bygone Colossus");
     let face = definition.primary_face();
@@ -53,7 +53,7 @@ fn issue_329_bygone_colossus_has_a_generic_warp_cost() {
 
 #[test]
 fn issue_329_germinating_wurm_keeps_its_etb_gain_life() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("germinating_wurm")
         .expect("Germinating Wurm");
     let face = definition.primary_face();
@@ -85,7 +85,7 @@ fn issue_329_germinating_wurm_keeps_its_etb_gain_life() {
 
 #[test]
 fn issue_329_red_tiger_mechan_keeps_haste() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("red_tiger_mechan")
         .expect("Red Tiger Mechan");
     let face = definition.primary_face();
@@ -103,7 +103,7 @@ fn issue_329_red_tiger_mechan_keeps_haste() {
 
 #[test]
 fn issue_329_starbreach_whale_keeps_flying_and_etb_surveil_two() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("starbreach_whale")
         .expect("Starbreach Whale");
     let face = definition.primary_face();
@@ -139,7 +139,7 @@ fn issue_329_starbreach_whale_keeps_flying_and_etb_surveil_two() {
 
 #[test]
 fn issue_329_think_twice_has_a_flashback_cost_and_keeps_the_draw() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("think_twice")
         .expect("Think Twice");
     let face = definition.primary_face();
@@ -163,7 +163,7 @@ fn issue_329_think_twice_has_a_flashback_cost_and_keeps_the_draw() {
 
 #[test]
 fn issue_329_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let cases: &[(&str, &str, &str, &str)] = &[
         (
             "bygone_colossus",

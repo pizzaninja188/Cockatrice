@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     AbilityCost, GraveyardDestination, GraveyardOwner, SpellEffectKind, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, AbilitySourceZone, CardRegistry};
+use tricerules_cards::{AbilityPresentation, AbilitySourceZone};
 
 #[test]
 fn codex_shredder_registers_its_mill_and_recovery_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("codex_shredder")
         .expect("Codex Shredder registry definition");

@@ -1,7 +1,7 @@
 use super::helpers::*;
 use tricerules_cards::{
-    primitives::CounterKind, CardRegistry, ContinuousEffectKind, EffectDuration,
-    PermanentTypeFilter, TypeLineReplacement,
+    primitives::CounterKind, ContinuousEffectKind, EffectDuration, PermanentTypeFilter,
+    TypeLineReplacement,
 };
 use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine};
 use tricerules_proto::ruled::v1::{
@@ -14,7 +14,15 @@ fn setup_unblocked_kaito(seed: u64) -> (GameEngine, u32, u32) {
         deck_with("island", &["kaito,_bane_of_nightmares", "grizzly_bears"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "kaito,_bane_of_nightmares");
     ensure_card_in_hand(&mut engine, 0, "grizzly_bears");
@@ -65,7 +73,7 @@ fn ninjutsu_command(engine: &GameEngine, kaito: u32, attacker: u32) -> RuledComm
 #[test]
 fn issue_203_kaito_is_supported() {
     assert!(
-        CardRegistry::global()
+        tricerules_cards::registry::global()
             .get("kaito,_bane_of_nightmares")
             .is_some(),
         "Kaito must be present in the ruled registry"
@@ -78,7 +86,15 @@ fn kaito_battlefield_view_preserves_loyalty_indices_and_presentations() {
         deck_with("island", &["kaito,_bane_of_nightmares"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(203_012, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        203_012,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let kaito = move_ready_to_battlefield(&mut engine, 0, "kaito,_bane_of_nightmares");
 
@@ -129,7 +145,15 @@ fn animated_planeswalker_can_activate_loyalty_abilities() {
         deck_with("island", &["jace_beleren"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(203_001, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        203_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let jace = deploy_to_battlefield(&mut engine, 0, "jace_beleren", false);
     engine
@@ -385,7 +409,15 @@ fn kaito_animation_and_static_emblem_are_continuous_and_dynamic() {
         ),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(203_004, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        203_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let kaito = move_ready_to_battlefield(&mut engine, 0, "kaito,_bane_of_nightmares");
     let ninja = move_ready_to_battlefield(&mut engine, 0, "ninja_of_the_hand");
@@ -424,7 +456,15 @@ fn kaito_zero_surveils_two_then_draws_for_each_opponent_who_lost_life() {
         deck_with("island", &["kaito,_bane_of_nightmares"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(203_010, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        203_010,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let kaito = move_ready_to_battlefield(&mut engine, 0, "kaito,_bane_of_nightmares");
     engine.state.turn_history.current.player_mut(1).life_lost = 1;
@@ -457,7 +497,15 @@ fn kaito_minus_two_taps_and_places_two_stun_counters_on_one_target() {
         deck_with("island", &["kaito,_bane_of_nightmares"]),
         deck_with("island", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(203_009, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        203_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let kaito = move_ready_to_battlefield(&mut engine, 0, "kaito,_bane_of_nightmares");
     let target = move_ready_to_battlefield(&mut engine, 1, "grizzly_bears");

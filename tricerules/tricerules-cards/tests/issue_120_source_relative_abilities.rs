@@ -1,10 +1,12 @@
 use tricerules_cards::primitives::{EffectSubject, SpellEffectKind, TargetController, TargetKind};
-use tricerules_cards::{AbilityCost, CardRegistry, CounterKind};
+use tricerules_cards::{AbilityCost, CounterKind};
 
 #[test]
 fn issue_120_creatures_use_source_excluding_sacrifice_costs() {
     for (id, activation_mana) in [("hungry_ghoul", "{1}"), ("unburied_earthcarver", "{2}")] {
-        let definition = CardRegistry::global().get(id).expect("card is registered");
+        let definition = tricerules_cards::registry::global()
+            .get(id)
+            .expect("card is registered");
         let face = definition.primary_face();
         assert_eq!((face.power, face.toughness), (Some(2), Some(2)));
         let [ability] = face.activated_abilities.as_slice() else {
@@ -34,7 +36,7 @@ fn issue_120_creatures_use_source_excluding_sacrifice_costs() {
 
 #[test]
 fn issue_120_wingspan_stride_returns_its_untargeted_source() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("wingspan_stride")
         .expect("Wingspan Stride is registered");
     let face = definition.primary_face();

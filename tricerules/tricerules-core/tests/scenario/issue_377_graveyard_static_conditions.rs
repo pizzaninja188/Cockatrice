@@ -10,13 +10,21 @@
 //! Villain hexproof.
 
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, Keyword};
+use tricerules_cards::Keyword;
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::ResolutionChoiceDecision;
 
 fn engine_with(seed: u64, own: &[&str]) -> GameEngine {
     let decks = Some(vec![deck_with("forest", own), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -259,7 +267,7 @@ fn issue_377_wildfire_wickerfolk_counts_distinct_graveyard_card_types() {
 
 #[test]
 fn issue_377_land_animation_surface_stays_untouched() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert!(
         registry.get("cavernous_maw").is_none(),
         "Cavernous Maw stays ungenerated behind its cross-zone activation blocker"

@@ -2,8 +2,7 @@ use tricerules_cards::primitives::{
     GraveyardDestination, GraveyardOwner, TargetRole, TargetSchema,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, CardRegistry, CharacteristicDefiningAbility, ManaCost,
-    SpellEffectKind,
+    AbilityCost, AbilityPresentation, CharacteristicDefiningAbility, ManaCost, SpellEffectKind,
 };
 
 fn assert_graveyard_to_bottom_ability(
@@ -60,7 +59,7 @@ fn assert_graveyard_to_bottom_ability(
 
 #[test]
 fn issue_283_registers_barkform_harvester_and_tomb_trawler() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let barkform = registry
         .get("barkform_harvester")
@@ -109,7 +108,7 @@ fn issue_283_registers_barkform_harvester_and_tomb_trawler() {
 
 #[test]
 fn issue_283_matches_existing_authored_library_bottom_shape() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let malevolent = registry
         .get("malevolent_chandelier")
         .expect("Malevolent Chandelier is the authored library-bottom reference")

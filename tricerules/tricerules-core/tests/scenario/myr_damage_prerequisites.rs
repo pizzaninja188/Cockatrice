@@ -22,6 +22,7 @@ fn grant(engine: &mut GameEngine, oid: u32, kind: ContinuousEffectKind) {
 fn ready(owner: usize) -> (GameEngine, u32) {
     let deck = deck_with("forest", &[]);
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         513_101,
         &[0, 1, 2],
         20,

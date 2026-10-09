@@ -5,11 +5,11 @@ use tricerules_cards::primitives::{
     EffectSubject, LifeAmount, PermanentTypeFilter, PlayerRecipient, SpellEffectKind,
     TargetController, TargetKind,
 };
-use tricerules_cards::{CardRegistry, Keyword};
+use tricerules_cards::Keyword;
 
 #[test]
 fn issue_483_registers_complete_feed_the_swarm() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(
         registry.id_for_name("Feed the Swarm"),
         Some("feed_the_swarm")

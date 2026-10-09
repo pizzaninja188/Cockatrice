@@ -26,11 +26,11 @@ use tricerules_cards::primitives::{
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount, CardFace,
-    CardRegistry, Keyword, ManaCost, TriggerCondition,
+    Keyword, ManaCost, TriggerCondition,
 };
 
 fn face(id: &str) -> &'static CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .unwrap_or_else(|| panic!("missing reviewed card {id}"))
         .primary_face()
@@ -103,7 +103,7 @@ const REVIEWED_IDENTITIES: [ReviewedIdentity; 5] = [
 
 #[test]
 fn issue_460_registers_the_five_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for identity in REVIEWED_IDENTITIES {
         let ReviewedIdentity {
             id,
@@ -268,7 +268,7 @@ fn issue_460_uthros_psionicist_reduces_only_the_second_spell() {
 
 #[test]
 fn issue_460_handwritten_anchors_keep_the_recipe_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name) in [
         ("inspiring_captain", "Inspiring Captain"),
         ("vindictive_warden", "Vindictive Warden"),

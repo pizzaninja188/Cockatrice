@@ -504,12 +504,14 @@ pub(super) fn activated_ability_info(
     let mana_cost = eng.effective_ability_mana_cost(controller, source_id, ability);
     let x_counter_mana_choice = ability.storage_counter_split_mana().map(|(first, second)| {
         rv1::ability_info::XCounterManaChoice {
-            counter_label: tricerules_cards::CounterKind::Storage.label().to_string(),
+            counter_label: tricerules_card_model::CounterKind::Storage
+                .label()
+                .to_string(),
             max_x: eng
                 .state
                 .objects
                 .get(&source_id)
-                .map(|object| object.counter_count(tricerules_cards::CounterKind::Storage))
+                .map(|object| object.counter_count(tricerules_card_model::CounterKind::Storage))
                 .unwrap_or(0),
             first_color: mana_color_symbol(first).to_string(),
             second_color: mana_color_symbol(second).to_string(),
@@ -662,13 +664,13 @@ pub(super) fn activated_ability_info(
     }
 }
 
-fn mana_color_symbol(color: tricerules_cards::Color) -> &'static str {
+fn mana_color_symbol(color: tricerules_card_model::Color) -> &'static str {
     match color {
-        tricerules_cards::Color::White => "W",
-        tricerules_cards::Color::Blue => "U",
-        tricerules_cards::Color::Black => "B",
-        tricerules_cards::Color::Red => "R",
-        tricerules_cards::Color::Green => "G",
+        tricerules_card_model::Color::White => "W",
+        tricerules_card_model::Color::Blue => "U",
+        tricerules_card_model::Color::Black => "B",
+        tricerules_card_model::Color::Red => "R",
+        tricerules_card_model::Color::Green => "G",
     }
 }
 
@@ -1003,7 +1005,7 @@ pub(super) fn legal_ability_cost_choices(
     player: PlayerId,
     source: ObjectId,
     ability_index: usize,
-    ability: &tricerules_cards::ActivatedAbilityDef,
+    ability: &tricerules_card_model::ActivatedAbilityDef,
 ) -> rv1::LegalCostChoices {
     let Some(player_idx) = eng.state.player_idx(player) else {
         return rv1::LegalCostChoices::default();
@@ -1921,7 +1923,7 @@ fn harmonize_cast_cost_group(
 fn legal_mode_cast_cost_link(
     face: &CardFace,
     costs: &rv1::LegalCostChoices,
-    mode: &tricerules_cards::ModeDef,
+    mode: &tricerules_card_model::ModeDef,
 ) -> Option<(rv1::LinkedCastCostOption, bool)> {
     legal_cast_cost_link(face, costs, mode.linked_cast_cost.as_ref()?)
 }
@@ -3064,19 +3066,19 @@ mod cast_cost_timing_tests {
 
     #[test]
     fn conditional_instant_timing_is_published_only_with_a_live_cost_option() {
-        let group_id = tricerules_cards::ChoiceId::new("cast_cost_01").unwrap();
-        let option_id = tricerules_cards::ChoiceId::new("option_01").unwrap();
+        let group_id = tricerules_card_model::ChoiceId::new("cast_cost_01").unwrap();
+        let option_id = tricerules_card_model::ChoiceId::new("option_01").unwrap();
         let face = CardFace {
             is_sorcery: true,
             cast_cost_groups: vec![CastCostGroupDef {
                 group_id: group_id.clone(),
-                presentation: tricerules_cards::AbilityPresentation::Fallback,
+                presentation: tricerules_card_model::AbilityPresentation::Fallback,
                 min: 0,
                 max: 1,
                 options: vec![CastCostOptionDef::Mana {
                     option_id: option_id.clone(),
-                    presentation: tricerules_cards::AbilityPresentation::Fallback,
-                    kind: tricerules_cards::primitives::ManaCostChoiceKind::AdditionalPayment,
+                    presentation: tricerules_card_model::AbilityPresentation::Fallback,
+                    kind: tricerules_card_model::primitives::ManaCostChoiceKind::AdditionalPayment,
                     cost: ManaCost::parse("{1}").unwrap(),
                 }],
             }],

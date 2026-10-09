@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     Amount, PlayerRecipient, SpellEffectKind, TargetKind, TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Keyword, Layout, ManaCost};
+use tricerules_cards::{AbilityPresentation, Keyword, Layout, ManaCost};
 
 #[test]
 fn combustible_gearhulk_registers_its_exact_identity_and_etb_choice() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("combustible_gearhulk")
         .expect("Combustible Gearhulk needs a complete definition");
     assert_eq!(card.name, "Combustible Gearhulk");

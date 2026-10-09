@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     CastTriggerPlayer, DrawDiscardOrder, PermanentTypeFilter, PlayerRecipient, SpellEffectKind,
     TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
+use tricerules_cards::{AbilityPresentation, Layout};
 
 #[test]
 fn quicksmith_genius_registers_its_artifact_loot_trigger() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("quicksmith_genius")
         .expect("Quicksmith Genius registry definition");

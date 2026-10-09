@@ -12,10 +12,10 @@ use tricerules_cards::primitives::{
     CreatureScopeController, CreatureScopeFilter, SpellEffectKind, StaticAbilityDef,
     TriggerCondition,
 };
-use tricerules_cards::{Amount, CardFace, CardRegistry, Keyword};
+use tricerules_cards::{Amount, CardFace, Keyword};
 
 fn face(id: &str) -> &'static CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .unwrap_or_else(|| panic!("missing reviewed card {id}"))
         .primary_face()
@@ -32,7 +32,7 @@ fn flying_creatures_you_control(exclude_self: bool) -> CreatureScopeFilter {
 
 #[test]
 fn issue_476_registers_both_complete_standard_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana_cost, types, keywords, power_toughness) in [
         (
             "air_nomad_legacy",

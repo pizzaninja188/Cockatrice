@@ -5,7 +5,7 @@
 //! upkeep trigger; CR 701.23 the subtype search; and CR 605.1a/605.3b each Spawn/Scion mana ability.
 
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, Color};
+use tricerules_cards::Color;
 use tricerules_core::{GameEngine, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{permanent_moved::Destination, ChoiceKind};
 
@@ -14,7 +14,15 @@ fn engine(seed: u64) -> GameEngine {
         deck_with("island", &["divination"]),
         deck_with("forest", &["divination"]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -48,7 +56,7 @@ fn assert_and_sacrifice_eldrazi_token(
     assert_eq!(characteristics.power, Some(power));
     assert_eq!(characteristics.toughness, Some(1));
 
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get(token_id)
         .expect("Eldrazi token definition");
     let ability = definition
@@ -85,7 +93,7 @@ fn resolve_search_ability(engine: &mut GameEngine) -> RuledEventBatch {
 
 #[test]
 fn devoid_cards_are_colorless_but_keep_their_mana_cost_color_identity() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let messenger = registry
         .get("emrakuls_messenger")
         .expect("Emrakul's Messenger is registered");

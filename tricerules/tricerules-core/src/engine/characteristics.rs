@@ -88,7 +88,7 @@ impl Characteristics {
 
 pub(super) fn apply_type_line_replacement(
     characteristics: &mut Characteristics,
-    replacement: &tricerules_cards::primitives::TypeLineReplacement,
+    replacement: &tricerules_card_model::primitives::TypeLineReplacement,
 ) {
     characteristics.all_creature_types = false;
     characteristics.types.clear();
@@ -121,7 +121,7 @@ pub(super) fn apply_creature_type_removal(characteristics: &mut Characteristics)
 
 pub(super) fn apply_type_line_addition(
     characteristics: &mut Characteristics,
-    addition: &tricerules_cards::TypeLineAddition,
+    addition: &tricerules_card_model::TypeLineAddition,
 ) {
     for card_type in &addition.card_types {
         let card_type = card_type.as_str();
@@ -166,7 +166,7 @@ pub(super) fn devotion_value(
     color: Color,
     excluded_entrant: Option<ObjectId>,
 ) -> u32 {
-    use tricerules_cards::ManaSymbol;
+    use tricerules_card_model::ManaSymbol;
     let evaluator = CharacteristicsEvaluator { state, registry };
     state
         .objects
@@ -1994,7 +1994,7 @@ fn permanent_matches_target_scope(
     };
     (!filter
         .excluded_objects
-        .contains(&tricerules_cards::TargetObjectExclusion::Source)
+        .contains(&tricerules_card_model::TargetObjectExclusion::Source)
         || source != Some(oid))
         && kind_matches
         && controller_matches
@@ -2157,7 +2157,7 @@ pub(super) fn permanent_matches_filter_characteristics(
         return false;
     }
     if let Some(role) = filter.combat_role {
-        use tricerules_cards::CombatRole;
+        use tricerules_card_model::CombatRole;
         let matches = match role {
             CombatRole::Attacking => super::combat::is_attacking(state, oid),
             CombatRole::Blocking => super::combat::is_blocking(state, oid),
@@ -2456,7 +2456,7 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tricerules_cards::{CharacteristicDefiningAbility, TypeLineAddition};
+    use tricerules_card_model::{CharacteristicDefiningAbility, TypeLineAddition};
 
     mod devotion_tests;
 
@@ -2508,7 +2508,15 @@ mod tests {
             &[],
         )
         .unwrap();
-        let mut engine = GameEngine::new(305_099, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_099,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.registry = Box::leak(Box::new(registry));
         let source = insert_fixture(&mut engine, 0, "class_static_fixture", Zone::Battlefield);
         let creature = insert_fixture(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
@@ -2576,7 +2584,15 @@ mod tests {
             &[],
         )
         .unwrap();
-        let mut engine = GameEngine::new(305_100, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_100,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.registry = Box::leak(Box::new(registry));
         let source = insert_fixture(&mut engine, 0, "class_copy_fixture", Zone::Battlefield);
         let creature = insert_fixture(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
@@ -2613,11 +2629,13 @@ mod tests {
             trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(copy),
-            kind: ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
-                card_types: vec![PermanentTypeFilter::Artifact],
-                creature_types: Vec::new(),
-                land_types: Vec::new(),
-            }),
+            kind: ContinuousEffectKind::Layer4SetTypeLine(
+                tricerules_card_model::TypeLineReplacement {
+                    card_types: vec![PermanentTypeFilter::Artifact],
+                    creature_types: Vec::new(),
+                    land_types: Vec::new(),
+                },
+            ),
             condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 100,
@@ -2656,7 +2674,13 @@ mod tests {
     #[test]
     fn early_layer_scope_observes_later_land_creation() {
         for (addition_time, setting_time) in [(1, 2), (2, 1)] {
-            let mut engine = GameEngine::new_with_default_decks(305_001, &[0, 1], 20).unwrap();
+            let mut engine = GameEngine::new_with_default_decks(
+                tricerules_cards::registry::global(),
+                305_001,
+                &[0, 1],
+                20,
+            )
+            .unwrap();
             let oid = insert_fixture(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
             engine.state.continuous_effects.extend([
                 early_layer_type_effect(
@@ -2670,7 +2694,7 @@ mod tests {
                 early_layer_type_effect(
                     AffectedScope::Single(oid),
                     ContinuousEffectKind::Layer4SetTypeLine(
-                        tricerules_cards::TypeLineReplacement {
+                        tricerules_card_model::TypeLineReplacement {
                             card_types: vec![PermanentTypeFilter::Land],
                             creature_types: Vec::new(),
                             land_types: Vec::new(),
@@ -2694,14 +2718,20 @@ mod tests {
         for (artifact_to_land, land_to_artifact, expected) in
             [(1, 2, "Artifact"), (2, 1, "Land"), (1, 1, "Artifact")]
         {
-            let mut engine = GameEngine::new_with_default_decks(305_002, &[0, 1], 20).unwrap();
+            let mut engine = GameEngine::new_with_default_decks(
+                tricerules_cards::registry::global(),
+                305_002,
+                &[0, 1],
+                20,
+            )
+            .unwrap();
             let artifact = insert_fixture(&mut engine, 0, "sol_ring", Zone::Battlefield);
             let land = insert_fixture(&mut engine, 1, "forest", Zone::Battlefield);
             engine.state.continuous_effects.extend([
                 early_layer_type_effect(
                     early_layer_type_scope(PermanentTypeFilter::Artifact),
                     ContinuousEffectKind::Layer4SetTypeLine(
-                        tricerules_cards::TypeLineReplacement {
+                        tricerules_card_model::TypeLineReplacement {
                             card_types: vec![PermanentTypeFilter::Land],
                             creature_types: Vec::new(),
                             land_types: Vec::new(),
@@ -2712,7 +2742,7 @@ mod tests {
                 early_layer_type_effect(
                     early_layer_type_scope(PermanentTypeFilter::Land),
                     ContinuousEffectKind::Layer4SetTypeLine(
-                        tricerules_cards::TypeLineReplacement {
+                        tricerules_card_model::TypeLineReplacement {
                             card_types: vec![PermanentTypeFilter::Artifact],
                             creature_types: Vec::new(),
                             land_types: Vec::new(),
@@ -2733,7 +2763,13 @@ mod tests {
 
     #[test]
     fn early_layer_basic_subtype_addition_requires_evolving_land_type() {
-        let mut engine = GameEngine::new_with_default_decks(305_003, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            305_003,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let land = insert_fixture(&mut engine, 0, "island", Zone::Battlefield);
         let creature = insert_fixture(&mut engine, 1, "grizzly_bears", Zone::Battlefield);
         for oid in [land, creature] {
@@ -2763,7 +2799,15 @@ mod tests {
                     add_types: (card_types: [Artifact])))],
         )"#;
         let registry = CardRegistry::from_chunks_and_tokens(&[card], &[]).unwrap();
-        let mut engine = GameEngine::new(305_004, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_004,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.registry = Box::leak(Box::new(registry));
         let source = insert_fixture(&mut engine, 0, "early_static_land", Zone::Battlefield);
         engine.state.command_index = timestamp;
@@ -2836,12 +2880,18 @@ mod tests {
     #[test]
     fn early_layer_basic_setting_preserves_nonland_creature_subtypes() {
         for changeling in [true, false] {
-            let mut engine = GameEngine::new_with_default_decks(305_005, &[0, 1], 20).unwrap();
+            let mut engine = GameEngine::new_with_default_decks(
+                tricerules_cards::registry::global(),
+                305_005,
+                &[0, 1],
+                20,
+            )
+            .unwrap();
             let source = insert_fixture(&mut engine, 0, "dryad_arbor", Zone::Battlefield);
             if changeling {
                 let mut values = engine.copiable_values_for(source).unwrap();
                 values.face.characteristic_defining_abilities.push(
-                    tricerules_cards::IdentifiedAbility::fallback(
+                    tricerules_card_model::IdentifiedAbility::fallback(
                         "changeling",
                         CharacteristicDefiningAbility::Changeling,
                     )
@@ -2883,7 +2933,7 @@ mod tests {
                 .push(early_layer_type_effect(
                     AffectedScope::Single(source),
                     ContinuousEffectKind::Layer4SetTypeLine(
-                        tricerules_cards::TypeLineReplacement {
+                        tricerules_card_model::TypeLineReplacement {
                             card_types: vec![PermanentTypeFilter::Land],
                             creature_types: Vec::new(),
                             land_types: vec![BasicLandType::Forest],
@@ -2901,27 +2951,37 @@ mod tests {
 
     #[test]
     fn early_layer_loop_before_independent_addition_retains_later_type() {
-        let mut engine = GameEngine::new_with_default_decks(305_006, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            305_006,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         insert_fixture(&mut engine, 0, "forest", Zone::Battlefield);
         insert_fixture(&mut engine, 1, "sol_ring", Zone::Battlefield);
         let hybrid = insert_fixture(&mut engine, 0, "darksteel_citadel", Zone::Battlefield);
         engine.state.continuous_effects.extend([
             early_layer_type_effect(
                 early_layer_type_scope(PermanentTypeFilter::Land),
-                ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
-                    card_types: vec![PermanentTypeFilter::Artifact],
-                    creature_types: Vec::new(),
-                    land_types: Vec::new(),
-                }),
+                ContinuousEffectKind::Layer4SetTypeLine(
+                    tricerules_card_model::TypeLineReplacement {
+                        card_types: vec![PermanentTypeFilter::Artifact],
+                        creature_types: Vec::new(),
+                        land_types: Vec::new(),
+                    },
+                ),
                 1,
             ),
             early_layer_type_effect(
                 early_layer_type_scope(PermanentTypeFilter::Artifact),
-                ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
-                    card_types: vec![PermanentTypeFilter::Land],
-                    creature_types: Vec::new(),
-                    land_types: Vec::new(),
-                }),
+                ContinuousEffectKind::Layer4SetTypeLine(
+                    tricerules_card_model::TypeLineReplacement {
+                        card_types: vec![PermanentTypeFilter::Land],
+                        creature_types: Vec::new(),
+                        land_types: Vec::new(),
+                    },
+                ),
                 2,
             ),
             early_layer_type_effect(
@@ -2950,7 +3010,15 @@ mod tests {
                     keywords: [Flying]))],
         )"#;
         let registry = CardRegistry::from_chunks_and_tokens(&[card], &[]).unwrap();
-        let mut engine = GameEngine::new(305_007, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_007,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.registry = Box::leak(Box::new(registry));
         let source = insert_fixture(&mut engine, 0, "early_static_land", Zone::Battlefield);
         engine.emit_static_abilities_on_enter(source);
@@ -3000,7 +3068,15 @@ mod tests {
         let third = r#"(id: "early_creature", name: "Early Creature", face_id: "early_creature",
             types: ["Creature"], power: 1, toughness: 1)"#;
         let registry = CardRegistry::from_chunks_and_tokens(&[first, &second, third], &[]).unwrap();
-        let mut engine = GameEngine::new(305_008, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_008,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.registry = Box::leak(Box::new(registry));
         let a = insert_fixture(&mut engine, 0, "early_artifact", Zone::Battlefield);
         let b = insert_fixture(&mut engine, 1, "early_enchantment", Zone::Battlefield);
@@ -3014,11 +3090,13 @@ mod tests {
             .continuous_effects
             .push(early_layer_type_effect(
                 AffectedScope::Single(c),
-                ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
-                    card_types: vec![PermanentTypeFilter::Land],
-                    creature_types: Vec::new(),
-                    land_types: Vec::new(),
-                }),
+                ContinuousEffectKind::Layer4SetTypeLine(
+                    tricerules_card_model::TypeLineReplacement {
+                        card_types: vec![PermanentTypeFilter::Land],
+                        creature_types: Vec::new(),
+                        land_types: Vec::new(),
+                    },
+                ),
                 10,
             ));
         for order in [[a, b], [b, a]] {
@@ -3053,7 +3131,13 @@ mod tests {
 
     #[test]
     fn early_layer_printed_ability_readers_share_type_setting_suppression() {
-        let mut engine = GameEngine::new_with_default_decks(305_009, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            305_009,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let mana = insert_fixture(&mut engine, 0, "sol_ring", Zone::Battlefield);
         let trigger = insert_fixture(&mut engine, 0, "psychosis_crawler", Zone::Battlefield);
         let counter_lock = insert_fixture(&mut engine, 0, "tatterkite", Zone::Battlefield);
@@ -3086,7 +3170,7 @@ mod tests {
                 .push(early_layer_type_effect(
                     AffectedScope::Single(oid),
                     ContinuousEffectKind::Layer4SetTypeLine(
-                        tricerules_cards::TypeLineReplacement {
+                        tricerules_card_model::TypeLineReplacement {
                             card_types: vec![PermanentTypeFilter::Land],
                             creature_types: Vec::new(),
                             land_types: vec![BasicLandType::Forest],
@@ -3146,7 +3230,13 @@ mod tests {
 
     #[test]
     fn early_layer_life_prohibition_tracks_printed_text_restoration() {
-        let mut engine = GameEngine::new_with_default_decks(305_011, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            305_011,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let source = insert_fixture(&mut engine, 0, "giant_cindermaw", Zone::Battlefield);
         assert!(!engine.can_player_gain_life(1));
         engine
@@ -3154,11 +3244,13 @@ mod tests {
             .continuous_effects
             .push(early_layer_type_effect(
                 AffectedScope::Single(source),
-                ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
-                    card_types: vec![PermanentTypeFilter::Land],
-                    creature_types: Vec::new(),
-                    land_types: vec![BasicLandType::Forest],
-                }),
+                ContinuousEffectKind::Layer4SetTypeLine(
+                    tricerules_card_model::TypeLineReplacement {
+                        card_types: vec![PermanentTypeFilter::Land],
+                        creature_types: Vec::new(),
+                        land_types: vec![BasicLandType::Forest],
+                    },
+                ),
                 5,
             ));
         assert!(
@@ -3171,7 +3263,13 @@ mod tests {
 
     #[test]
     fn early_layer_hand_rules_track_printed_text_restoration() {
-        let mut engine = GameEngine::new_with_default_decks(305_012, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            305_012,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let vessel = insert_fixture(&mut engine, 0, "thought_vessel", Zone::Battlefield);
         let library = insert_fixture(&mut engine, 0, "library_of_leng", Zone::Battlefield);
         assert_eq!(engine.maximum_hand_size(0), usize::MAX);
@@ -3183,7 +3281,7 @@ mod tests {
                 .push(early_layer_type_effect(
                     AffectedScope::Single(oid),
                     ContinuousEffectKind::Layer4SetTypeLine(
-                        tricerules_cards::TypeLineReplacement {
+                        tricerules_card_model::TypeLineReplacement {
                             card_types: vec![PermanentTypeFilter::Land],
                             creature_types: Vec::new(),
                             land_types: vec![BasicLandType::Forest],
@@ -3214,7 +3312,15 @@ mod tests {
                 &[],
             )
             .unwrap();
-            let mut engine = GameEngine::new(305_013, &[0, 1], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                305_013,
+                &[0, 1],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             engine.registry = Box::leak(Box::new(registry));
             let source = insert_fixture(&mut engine, 0, "type_addition_source", Zone::Battlefield);
             let opponent_land =
@@ -3237,7 +3343,7 @@ mod tests {
                 .push(early_layer_type_effect(
                     AffectedScope::Single(creature),
                     ContinuousEffectKind::Layer4SetTypeLine(
-                        tricerules_cards::TypeLineReplacement {
+                        tricerules_card_model::TypeLineReplacement {
                             card_types: vec![PermanentTypeFilter::Land],
                             creature_types: Vec::new(),
                             land_types: Vec::new(),
@@ -3255,7 +3361,7 @@ mod tests {
                 .push(early_layer_type_effect(
                     AffectedScope::Single(source),
                     ContinuousEffectKind::Layer4SetTypeLine(
-                        tricerules_cards::TypeLineReplacement {
+                        tricerules_card_model::TypeLineReplacement {
                             card_types: vec![PermanentTypeFilter::Land],
                             creature_types: Vec::new(),
                             land_types: vec![BasicLandType::Swamp],
@@ -3319,8 +3425,13 @@ mod tests {
             )
         }
 
-        let mut engine =
-            GameEngine::new_with_default_decks(490_105, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            490_105,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         assert!(!holds(&engine, PlayerComparisonMetric::LifeTotal));
         engine.state.players[1].life += 1;
         assert!(holds(&engine, PlayerComparisonMetric::LifeTotal));
@@ -3352,7 +3463,7 @@ mod tests {
             .primary_face()
             .clone();
         face.characteristic_defining_abilities =
-            vec![tricerules_cards::IdentifiedAbility::fallback(
+            vec![tricerules_card_model::IdentifiedAbility::fallback(
                 "characteristic_01",
                 CharacteristicDefiningAbility::Changeling,
             )
@@ -3373,8 +3484,13 @@ mod tests {
 
     #[test]
     fn color_defining_cda_sets_base_color_before_layer_five_effects() {
-        let mut engine =
-            GameEngine::new_with_default_decks(903_401, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            903_401,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         let oid = engine.state.players[0].library[0];
         let mut face = engine
             .registry
@@ -3383,7 +3499,7 @@ mod tests {
             .primary_face()
             .clone();
         face.characteristic_defining_abilities =
-            vec![tricerules_cards::IdentifiedAbility::fallback(
+            vec![tricerules_card_model::IdentifiedAbility::fallback(
                 "defines_colors",
                 CharacteristicDefiningAbility::DefinesColors {
                     colors: vec![Color::Blue, Color::White],
@@ -3425,8 +3541,13 @@ mod tests {
 
     #[test]
     fn devoid_remains_applied_after_layer_six_ability_removal() {
-        let mut engine =
-            GameEngine::new_with_default_decks(903_402, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            903_402,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         let oid = engine.state.players[0].library[0];
         let mut face = engine
             .registry
@@ -3435,7 +3556,7 @@ mod tests {
             .primary_face()
             .clone();
         face.characteristic_defining_abilities =
-            vec![tricerules_cards::IdentifiedAbility::fallback(
+            vec![tricerules_card_model::IdentifiedAbility::fallback(
                 "devoid",
                 CharacteristicDefiningAbility::Devoid,
             )
@@ -3484,8 +3605,13 @@ mod tests {
 
     #[test]
     fn changeling_is_a_layer_4_cda_and_type_setting_overwrites_it() {
-        let mut engine =
-            GameEngine::new_with_default_decks(154_001, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            154_001,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         let oid = install_changeling_face(&mut engine, false);
 
         let characteristics = engine.characteristics(oid).expect("changeling");
@@ -3529,8 +3655,13 @@ mod tests {
 
     #[test]
     fn ability_removal_keeps_changeling_types_but_face_down_values_do_not() {
-        let mut engine =
-            GameEngine::new_with_default_decks(154_002, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            154_002,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         let oid = install_changeling_face(&mut engine, false);
         engine.state.continuous_effects.push(ContinuousEffect {
             trigger_grant_origin: None,
@@ -3559,8 +3690,13 @@ mod tests {
 
     #[test]
     fn layer_4_additions_are_ordered_deduplicated_and_feed_later_scopes() {
-        let mut engine =
-            GameEngine::new_with_default_decks(81_003, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            81_003,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         let oid = engine.state.next_object_id;
         engine.state.next_object_id += 1;
         engine.state.objects.insert(
@@ -3673,7 +3809,13 @@ mod tests {
 
     #[test]
     fn one_snapshot_applies_types_colors_layer_6_and_layer_7() {
-        let mut engine = GameEngine::new_with_default_decks(613, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            613,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         let oid = engine.state.next_object_id;
         engine.state.next_object_id += 1;
         engine.state.objects.insert(
@@ -3741,7 +3883,13 @@ mod tests {
 
     #[test]
     fn layer_2_control_changes_the_derived_controller() {
-        let mut engine = GameEngine::new_with_default_decks(614, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            614,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         let oid = engine.state.next_object_id;
         engine.state.next_object_id += 1;
         engine.state.objects.insert(
@@ -3796,7 +3944,13 @@ mod tests {
 
     #[test]
     fn source_controller_dependency_is_evaluated_before_attached_control() {
-        let mut engine = GameEngine::new_with_default_decks(615, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            615,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         let make_object = |id, owner, attached_to| GameObject {
             id,
             owner,
@@ -3874,7 +4028,13 @@ mod tests {
 
     #[test]
     fn later_layer_2_effect_wins_and_earlier_effect_resumes() {
-        let mut engine = GameEngine::new_with_default_decks(616, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            616,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         let oid = engine.state.next_object_id;
         engine.state.next_object_id += 1;
         engine.state.objects.insert(
@@ -3926,8 +4086,13 @@ mod tests {
 
     #[test]
     fn issue_75_static_opponent_scope_tracks_the_sources_current_controller() {
-        let mut engine =
-            GameEngine::new_with_default_decks(75_003, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            75_003,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         let make_object = |id: ObjectId,
                            controller: PlayerId,
                            card_id: &str,
@@ -4028,7 +4193,13 @@ mod tests {
 
     /// Issue #342: a registry whose only cards are fixtures for public graveyard counts.
     fn graveyard_scaling_engine(seed: u64) -> GameEngine {
-        let mut engine = GameEngine::new_with_default_decks(seed, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         engine.registry = Box::leak(Box::new(
             CardRegistry::from_chunks_and_tokens(
                 &[

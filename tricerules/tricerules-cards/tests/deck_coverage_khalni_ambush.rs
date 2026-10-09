@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, EntersTappedAffected, SpellEffectKind, StaticAbilityDef,
 };
-use tricerules_cards::{CardRegistry, Layout};
+use tricerules_cards::Layout;
 
 #[test]
 fn khalni_ambush_and_khalni_territory_register_both_faces() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("khalni_ambush_khalni_territory")
         .expect("Khalni Ambush // Khalni Territory");

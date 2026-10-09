@@ -81,7 +81,15 @@ fn living_phone_uses_printed_power_and_random_bottom_is_replay_deterministic() {
             deck_with("plains", &["living_phone", "lightning_bolt"]),
             deck_with("island", &[]),
         ]);
-        let mut engine = GameEngine::new(11000, &[0, 1], 20, decks, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            11000,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
         advance_to_main1_from_game_start(&mut engine);
         let living = relocate_to_battlefield(&mut engine, 0, "living_phone", false);
         ensure_in_hand(&mut engine, 0, "lightning_bolt");
@@ -146,7 +154,15 @@ fn say_its_name_mills_before_publishing_the_optional_current_graveyard_choice() 
         deck_with("forest", &["say_its_name"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(11001, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "say_its_name");
     let milled = put_on_top(&mut engine, 0, &["grizzly_bears", "forest", "island"]);
@@ -190,7 +206,15 @@ fn uncharted_voyage_asks_the_target_owner_then_resumes_with_casters_surveil() {
         deck_with("island", &["uncharted_voyage"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(11002, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "uncharted_voyage");
     let target = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -254,7 +278,15 @@ fn embermouth_rechecks_the_dragon_condition_when_the_search_completes() {
             deck_with("mountain", &["embermouth_sentinel"]),
             deck_with("island", &[]),
         ]);
-        let mut engine = GameEngine::new(11003, &[0, 1], 20, decks, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            11003,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
         advance_to_main1_from_game_start(&mut engine);
         ensure_in_hand(&mut engine, 0, "embermouth_sentinel");
         if with_dragon {
@@ -313,7 +345,15 @@ fn altanak_hand_ability_discards_itself_and_returns_the_exact_land_tapped() {
         deck_with("forest", &["altanak,_the_thrice-called"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(11004, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let altanak = inject_card_into_hand(&mut engine, 0, "altanak,_the_thrice-called");
     let land = inject_graveyard_card(&mut engine, 0, "mountain");
@@ -373,7 +413,15 @@ fn altanak_triggers_only_for_an_opponent_controlled_spell_or_ability_target() {
         deck_with("forest", &["altanak,_the_thrice-called"]),
         deck_with("mountain", &["lightning_bolt"]),
     ]);
-    let mut engine = GameEngine::new(11005, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let altanak = relocate_to_battlefield(&mut engine, 0, "altanak,_the_thrice-called", false);
     ensure_in_hand(&mut engine, 1, "lightning_bolt");

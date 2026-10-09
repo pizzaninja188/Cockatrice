@@ -8,12 +8,20 @@
 //! Dawnhand Eulogist's mill-then-branch instruction.
 
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, CounterKind, Keyword};
+use tricerules_cards::{CounterKind, Keyword};
 use tricerules_core::{TurnStep, Zone};
 
 fn engine_with(seed: u64, own: &[&str]) -> GameEngine {
     let decks = Some(vec![deck_with("forest", own), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -246,7 +254,15 @@ fn issue_374_hand_that_feeds_attack_pump_needs_four_distinct_card_types() {
         deck_with("forest", &["hand_that_feeds"]),
         deck_with("forest", &[]),
     ]);
-    let mut below = GameEngine::new(374_030, &[0, 1], 20, decks, true).expect("new game");
+    let mut below = GameEngine::new(
+        tricerules_cards::registry::global(),
+        374_030,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut below);
     let hand = relocate_to_battlefield(&mut below, 0, "hand_that_feeds", false);
     inject_graveyard_card(&mut below, 0, "grizzly_bears");
@@ -265,7 +281,15 @@ fn issue_374_hand_that_feeds_attack_pump_needs_four_distinct_card_types() {
         deck_with("forest", &["hand_that_feeds"]),
         deck_with("forest", &[]),
     ]);
-    let mut at = GameEngine::new(374_031, &[0, 1], 20, decks, true).expect("new game");
+    let mut at = GameEngine::new(
+        tricerules_cards::registry::global(),
+        374_031,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut at);
     let hand = relocate_to_battlefield(&mut at, 0, "hand_that_feeds", false);
     inject_graveyard_card(&mut at, 0, "grizzly_bears");
@@ -281,7 +305,15 @@ fn issue_374_hand_that_feeds_attack_pump_needs_four_distinct_card_types() {
         deck_with("forest", &["hand_that_feeds"]),
         deck_with("forest", &[]),
     ]);
-    let mut spells = GameEngine::new(374_032, &[0, 1], 20, decks, true).expect("new game");
+    let mut spells = GameEngine::new(
+        tricerules_cards::registry::global(),
+        374_032,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut spells);
     let hand = relocate_to_battlefield(&mut spells, 0, "hand_that_feeds", false);
     inject_graveyard_card(&mut spells, 0, "lightning_bolt");
@@ -298,7 +330,15 @@ fn issue_374_stinging_cave_crawler_attack_needs_four_permanent_cards() {
         deck_with("forest", &["stinging_cave_crawler"]),
         deck_with("forest", &[]),
     ]);
-    let mut below = GameEngine::new(374_040, &[0, 1], 20, decks, true).expect("new game");
+    let mut below = GameEngine::new(
+        tricerules_cards::registry::global(),
+        374_040,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut below);
     let crawler = relocate_to_battlefield(&mut below, 0, "stinging_cave_crawler", false);
     for _ in 0..3 {
@@ -317,7 +357,15 @@ fn issue_374_stinging_cave_crawler_attack_needs_four_permanent_cards() {
         deck_with("forest", &["stinging_cave_crawler"]),
         deck_with("forest", &[]),
     ]);
-    let mut at = GameEngine::new(374_041, &[0, 1], 20, decks, true).expect("new game");
+    let mut at = GameEngine::new(
+        tricerules_cards::registry::global(),
+        374_041,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut at);
     let crawler = relocate_to_battlefield(&mut at, 0, "stinging_cave_crawler", false);
     for _ in 0..4 {
@@ -335,7 +383,15 @@ fn issue_374_stinging_cave_crawler_attack_needs_four_permanent_cards() {
         deck_with("forest", &["stinging_cave_crawler"]),
         deck_with("forest", &[]),
     ]);
-    let mut spells = GameEngine::new(374_042, &[0, 1], 20, decks, true).expect("new game");
+    let mut spells = GameEngine::new(
+        tricerules_cards::registry::global(),
+        374_042,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut spells);
     let crawler = relocate_to_battlefield(&mut spells, 0, "stinging_cave_crawler", false);
     for _ in 0..2 {
@@ -383,7 +439,7 @@ fn issue_374_walltop_sentries_dies_with_a_lesson_card_gains_two() {
 
 #[test]
 fn issue_374_blocked_identities_are_not_registered() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for name in [
         "Fear of Burning Alive",
         "Fear of Missing Out",

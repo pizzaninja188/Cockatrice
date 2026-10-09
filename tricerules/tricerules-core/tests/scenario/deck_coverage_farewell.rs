@@ -2,15 +2,22 @@
 use super::helpers::*;
 use tricerules_cards::primitives::{ProtectionQuality, ZoneEventCardinality};
 use tricerules_cards::{
-    CardRegistry, CastTriggerPlayer, Color, ContinuousEffectKind, EffectDuration, Keyword,
-    PermanentTypeFilter, TriggerCondition, TypeLineAddition,
+    CastTriggerPlayer, Color, ContinuousEffectKind, EffectDuration, Keyword, PermanentTypeFilter,
+    TriggerCondition, TypeLineAddition,
 };
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 
 fn setup() -> GameEngine {
     let deck = deck_with("forest", &["farewell"]);
-    let mut engine = GameEngine::new(26_100_201, &[4, 9, 27], 20, Some(vec![deck; 3]), true)
-        .expect("Farewell registry support");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        26_100_201,
+        &[4, 9, 27],
+        20,
+        Some(vec![deck; 3]),
+        true,
+    )
+    .expect("Farewell registry support");
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "farewell");
     engine
@@ -63,7 +70,7 @@ fn modify(engine: &mut GameEngine, oid: u32, source: Option<u32>, kind: Continuo
 }
 
 fn grant_observer(engine: &mut GameEngine, source: u32, trigger: TriggerCondition) {
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("ajanis_pridemate")
         .unwrap()
         .primary_face()

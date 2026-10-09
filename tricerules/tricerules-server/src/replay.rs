@@ -84,7 +84,7 @@ pub fn build_resume_plan(
         .engine
         .as_ref()
         .ok_or("startup produced no engine")?;
-    let registry = tricerules_cards::CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     plan.display_decks = if start.player_decks.is_empty() {
         engine
             .state
@@ -395,7 +395,7 @@ pub fn reconstruct(capture: &Capture, options: &ReplayOptions) -> Result<ReplayR
     }
     let build_matches = capture.manifest["engine_build"].as_str() == Some(ENGINE_BUILD);
     let data_matches = capture.manifest["card_data_hash"].as_str()
-        == Some(tricerules_cards::CardRegistry::content_hash().as_str());
+        == Some(tricerules_cards::registry::content_hash().as_str());
     if (!build_matches || !data_matches) && !options.allow_build_mismatch {
         return Err("Engine build or card-data hash differs; use the original build or explicit --allow-build-mismatch comparison mode".into());
     }

@@ -7,7 +7,15 @@ fn engine(seed: u64) -> GameEngine {
         deck_with("forest", &["meltstriders_resolve"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("issue #216 engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("issue #216 engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

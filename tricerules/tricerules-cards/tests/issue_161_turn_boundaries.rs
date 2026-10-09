@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     AbilityCost, DelayedTokenSacrificeTiming, SpellEffectKind, StaticAbilityDef,
 };
-use tricerules_cards::{CardRegistry, Keyword};
+use tricerules_cards::Keyword;
 
 #[test]
 fn issue_161_cards_use_shared_turn_boundary_primitives() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let kav = registry
         .get("kav_landseeker")

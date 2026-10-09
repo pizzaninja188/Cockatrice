@@ -52,7 +52,7 @@ fn registry_with(card: &str) -> Result<CardRegistry, String> {
 
 #[test]
 fn issue_370_registers_the_three_completed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id, mana_cost, types, stats, keywords) in [
         (
             "chitin_gravestalker",
@@ -99,7 +99,7 @@ fn issue_370_registers_the_three_completed_identities() {
 
 #[test]
 fn issue_370_chitin_gravestalker_cost_modifier_payload_is_exact() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("chitin_gravestalker")
         .expect("Chitin Gravestalker");
     let face = definition.primary_face();
@@ -134,7 +134,7 @@ fn issue_370_chitin_gravestalker_cost_modifier_payload_is_exact() {
 
 #[test]
 fn issue_370_gargantuan_leech_cost_modifier_payload_is_exact() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("gargantuan_leech")
         .expect("Gargantuan Leech");
     let face = definition.primary_face();
@@ -179,7 +179,7 @@ fn issue_370_gargantuan_leech_cost_modifier_payload_is_exact() {
 
 #[test]
 fn issue_370_tolarian_terror_cost_modifier_payload_is_exact() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("tolarian_terror")
         .expect("Tolarian Terror");
     let face = definition.primary_face();
@@ -207,7 +207,7 @@ fn issue_370_tolarian_terror_cost_modifier_payload_is_exact() {
 
 #[test]
 fn issue_370_excludes_the_unretained_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for name in [
         "Diamond Weapon",
         "Hollow Marauder",

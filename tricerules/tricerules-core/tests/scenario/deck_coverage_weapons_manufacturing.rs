@@ -6,7 +6,6 @@
 //! planeswalker, or battle targets.
 
 use super::helpers::*;
-use tricerules_cards::CardRegistry;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ruled_event::Ev, ChooseTriggerTarget, TargetRef, TargetRefKind,
@@ -29,7 +28,15 @@ fn engine(seed: u64) -> GameEngine {
         ),
         deck_with("forest", &["sol_ring"]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     grant_pool(&mut engine, 0);
     grant_pool(&mut engine, 1);
@@ -63,7 +70,7 @@ fn resolve_top_spell(engine: &mut GameEngine) -> tricerules_proto::ruled::v1::Ru
 
 #[test]
 fn weapons_manufacturing_and_munitions_have_the_complete_printed_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get(WEAPONS_MANUFACTURING)
         .expect("Weapons Manufacturing registry definition");

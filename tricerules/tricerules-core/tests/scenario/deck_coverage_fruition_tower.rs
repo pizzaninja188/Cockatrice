@@ -1,6 +1,6 @@
 //! Reviewed actual-card reuse of cast/upkeep triggers and resolving amounts.
 use super::helpers::*;
-use tricerules_cards::{AbilityPresentation, CardRegistry, Color, Layout};
+use tricerules_cards::{AbilityPresentation, Color, Layout};
 use tricerules_core::{GameEngine, TurnStep, Zone};
 
 fn pass_all_players(engine: &mut GameEngine) {
@@ -27,7 +27,7 @@ fn set_hand_size(engine: &mut GameEngine, player: usize, count: usize) {
 
 #[test]
 fn exact_characteristics_and_presentation() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, cost, types, colors) in [
         (
             "forced_fruition",
@@ -72,7 +72,15 @@ fn exact_characteristics_and_presentation() {
 fn ivory_tower_uses_live_controller_hand_and_clamps_below_four() {
     for (at_trigger, at_resolution, gain) in [(7, 6, 2), (3, 7, 3), (7, 4, 0), (7, 2, 0)] {
         let decks = Some(vec![island_only_deck(), island_only_deck()]);
-        let mut engine = GameEngine::new(202_609_310, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            202_609_310,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         advance_to_main1_from_game_start(&mut engine);
         let source = inject_permanent_on_battlefield(&mut engine, 1, "ivory_tower");
         let generation = engine.state.zone_change_generation.get(&source).copied();
@@ -117,7 +125,15 @@ fn ivory_tower_uses_live_controller_hand_and_clamps_below_four() {
 #[test]
 fn ivory_tower_does_not_trigger_on_opponent_upkeep() {
     let decks = Some(vec![island_only_deck(), island_only_deck()]);
-    let mut engine = GameEngine::new(202_609_311, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_609_311,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 0, "ivory_tower");
     set_hand_size(&mut engine, 0, 7);
@@ -134,7 +150,15 @@ fn forced_fruition_draws_seven_for_each_opponent_before_their_spell_resolves() {
         island_only_deck(),
         island_only_deck(),
     ]);
-    let mut engine = GameEngine::new(202_609_312, &[0, 1, 2], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_609_312,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     pass_all_players(&mut engine);
     pass_all_players(&mut engine);
     assert_eq!(engine.state.turn_step, TurnStep::Main1);

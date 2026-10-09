@@ -5,7 +5,7 @@ use tricerules_cards::primitives::{
     CastTriggerPlayer, ContinuousEffectKind, EffectDuration, EffectSubject, SpellEffectKind,
     TriggerCondition,
 };
-use tricerules_cards::{CardRegistry, CounterKind};
+use tricerules_cards::CounterKind;
 use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{permanent_moved, ruled_event, ChoiceKind};
 
@@ -19,7 +19,7 @@ fn put_on_top(engine: &mut GameEngine, player: usize, card_id: &str) -> u32 {
 }
 
 fn grant_source_explore(engine: &mut GameEngine, source: u32) {
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("acrobatic_cheerleader")
         .expect("phase-trigger fixture")
         .primary_face()
@@ -49,7 +49,15 @@ fn grant_source_explore(engine: &mut GameEngine, source: u32) {
 }
 
 fn begin_source_explore(seed: u64, top_card: Option<&str>) -> (GameEngine, u32, Option<u32>) {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let top = top_card.map(|card_id| put_on_top(&mut engine, 0, card_id));
@@ -190,7 +198,15 @@ fn issue_206_departed_source_uses_last_known_controller_and_cannot_receive_a_cou
         deck_with("forest", &["storm_crow"]),
         deck_with("swamp", &["murder"]),
     ]);
-    let mut engine = GameEngine::new(206_005, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        206_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     grant_source_explore(&mut engine, source);
@@ -239,7 +255,15 @@ fn issue_206_spyglass_siren_creates_a_map_whose_atomic_activation_explores() {
         deck_with("island", &["spyglass_siren", "storm_crow"]),
         vec!["forest".into(); 20],
     ]);
-    let mut engine = GameEngine::new(206_004, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        206_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "spyglass_siren");
     give_mana(

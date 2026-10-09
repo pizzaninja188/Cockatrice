@@ -356,7 +356,7 @@ impl GameEngine {
                     &command.restricted_mana,
                 )?;
                 prepared.mana = ManaCost {
-                    pips: vec![tricerules_cards::mana::ManaSymbol::Generic(amount)],
+                    pips: vec![tricerules_card_model::mana::ManaSymbol::Generic(amount)],
                 };
             }
             (

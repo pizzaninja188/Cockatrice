@@ -37,8 +37,15 @@ fn issue_155_light_jammer_etb_attaches_and_grants_hexproof() {
         deck_with("island", &["illvoi_light_jammer"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine =
-        GameEngine::new(155_001, &[0, 1], 20, decks, true).expect("issue #155 cards validate");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        155_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("issue #155 cards validate");
     advance_to_main1_from_game_start(&mut engine);
     let creature = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     ensure_in_hand(&mut engine, 0, "illvoi_light_jammer");
@@ -79,8 +86,15 @@ fn issue_274_coral_sword_etb_revalidates_shared_target_and_expires_first_strike(
             deck_with("mountain", &["coral_sword", "coral_sword"]),
             deck_with("forest", &[]),
         ]);
-        let mut engine =
-            GameEngine::new(seed, &[0, 1], 20, decks, true).expect("Coral Sword validates");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("Coral Sword validates");
         advance_to_main1_from_game_start(&mut engine);
         let creature = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
         ensure_in_hand(&mut engine, 0, "coral_sword");
@@ -153,8 +167,15 @@ fn issue_155_new_equipment_generation_does_not_receive_the_old_attach_effect() {
         deck_with("island", &["illvoi_light_jammer"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine =
-        GameEngine::new(155_008, &[0, 1], 20, decks, true).expect("issue #155 cards validate");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        155_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("issue #155 cards validate");
     advance_to_main1_from_game_start(&mut engine);
     let creature = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     ensure_in_hand(&mut engine, 0, "illvoi_light_jammer");
@@ -235,8 +256,15 @@ fn issue_155_path_uses_pre_sacrifice_attachment_and_the_creatures_owner() {
         deck_with("plains", &["path_to_redemption"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine =
-        GameEngine::new(155_003, &[0, 1], 20, decks, true).expect("issue #155 cards validate");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        155_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("issue #155 cards validate");
     advance_to_main1_from_game_start(&mut engine);
     let creature = inject_creature_under_foreign_control(&mut engine, 1, 0, "grizzly_bears");
     let aura = cast_and_resolve_aura(
@@ -282,8 +310,15 @@ fn issue_155_watery_grasp_uses_the_current_attachment_at_resolution() {
         deck_with("island", &["watery_grasp"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine =
-        GameEngine::new(155_004, &[0, 1], 20, decks, true).expect("issue #155 cards validate");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        155_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("issue #155 cards validate");
     advance_to_main1_from_game_start(&mut engine);
     let first = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let second = inject_creature_under_foreign_control(&mut engine, 1, 0, "grizzly_bears");
@@ -324,8 +359,15 @@ fn issue_155_live_detachment_makes_attached_object_resolution_fail_closed() {
         deck_with("island", &["watery_grasp"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine =
-        GameEngine::new(155_005, &[0, 1], 20, decks, true).expect("issue #155 cards validate");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        155_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("issue #155 cards validate");
     advance_to_main1_from_game_start(&mut engine);
     let creature = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let aura = cast_and_resolve_aura(
@@ -363,8 +405,15 @@ fn issue_155_library_move_does_not_leave_a_token_in_a_hidden_zone() {
         deck_with("island", &["watery_grasp"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine =
-        GameEngine::new(155_006, &[0, 1], 20, decks, true).expect("issue #155 cards validate");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        155_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("issue #155 cards validate");
     advance_to_main1_from_game_start(&mut engine);
     let token = inject_creature_on_battlefield(&mut engine, 0, "ally_w_1_1");
     let aura = cast_and_resolve_aura(
@@ -398,8 +447,15 @@ fn issue_155_attached_library_shuffle_replays_identically() {
             deck_with("island", &["watery_grasp", "grizzly_bears"]),
             deck_with("forest", &[]),
         ]);
-        let mut engine =
-            GameEngine::new(155_007, &[0, 1], 20, decks, true).expect("issue #155 cards validate");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            155_007,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("issue #155 cards validate");
         advance_to_main1_from_game_start(&mut engine);
         let creature = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
         let aura = cast_and_resolve_aura(

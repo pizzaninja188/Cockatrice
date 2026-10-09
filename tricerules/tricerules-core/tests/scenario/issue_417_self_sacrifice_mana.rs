@@ -13,7 +13,7 @@ use tricerules_cards::primitives::{
     Amount, EffectSubject, PermanentTypeFilter, PlayerRecipient, TargetController, TargetFilter,
     TargetKind, TargetObjectExclusion, TypeLineAddition,
 };
-use tricerules_cards::{AbilityCost, ActivationTiming, CardRegistry, Keyword, ManaCost};
+use tricerules_cards::{AbilityCost, ActivationTiming, Keyword, ManaCost};
 use tricerules_core::{EngineError, TurnStep, Zone};
 use tricerules_proto::ruled::v1::BlockPair;
 
@@ -22,7 +22,15 @@ fn issue_417_engine(seed: u64, specials: &[&str]) -> GameEngine {
         deck_with("forest", specials),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("issue #417 engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("issue #417 engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -514,7 +522,7 @@ fn issue_417_tough_cookie_animates_a_noncreature_artifact_until_end_of_turn() {
 
 #[test]
 fn issue_417_registry_identities_types_keywords_and_payloads() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let gingerbrute = registry
         .get("gingerbrute")

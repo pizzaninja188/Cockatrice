@@ -49,7 +49,7 @@ fn selected_counter_removal_rejects_ambiguous_kind_and_event_only_controller_con
 
 #[test]
 fn issue_193_oracle_presentations_have_external_face_fingerprints() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for card_id in ["ray_fillet,_man_ray", "sage_of_fables"] {
         let card = registry.get(card_id).expect("issue 193 card");
         let face = card.primary_face();

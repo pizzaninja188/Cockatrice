@@ -2,12 +2,11 @@ use crate::helpers::*;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, EffectDuration, TriggerCondition, TriggeredAbilityDef,
 };
-use tricerules_cards::CardRegistry;
 use tricerules_core::state::PendingTrigger;
 use tricerules_core::{AffectedScope, ContinuousEffect};
 
 fn targeted_graveyard_trigger(trigger: TriggerCondition) -> TriggeredAbilityDef {
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("gravedigger")
         .expect("Gravedigger definition")
         .primary_face()
@@ -30,7 +29,15 @@ fn published_graveyard_targets(
 
 #[test]
 fn issue_139_refresh_publishes_targets_for_granted_trigger_beyond_printed_abilities() {
-    let mut engine = GameEngine::new(139_001, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        139_001,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let graveyard_creature = inject_graveyard_card(&mut engine, 0, "grizzly_bears");
     let ability = targeted_graveyard_trigger(TriggerCondition::WheneverSelfAttacks {
@@ -104,7 +111,15 @@ fn issue_139_refresh_publishes_targets_for_granted_trigger_beyond_printed_abilit
 
 #[test]
 fn issue_139_refresh_publishes_targets_from_stored_non_primary_face_ability() {
-    let mut engine = GameEngine::new(139_002, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        139_002,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "village_ironsmith_ironfang");
     engine

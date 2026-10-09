@@ -14,7 +14,7 @@ fn draw(amount: &str) -> String {
 
 #[test]
 fn blue_complete_definition_and_presentation() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("blue_suns_zenith").unwrap();
     assert_eq!(card.name, "Blue Sun's Zenith");
     assert_eq!(

@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{EntersTappedAffected, StaticAbilityDef};
-use tricerules_cards::{AbilityCost, AbilityPresentation, CardRegistry};
+use tricerules_cards::{AbilityCost, AbilityPresentation};
 
 fn mana_symbol(mana: &tricerules_cards::ManaAmount) -> char {
     match (mana.w, mana.u, mana.b, mana.r, mana.g, mana.c) {
@@ -14,7 +14,7 @@ fn mana_symbol(mana: &tricerules_cards::ManaAmount) -> char {
 
 #[test]
 fn issue_253_registers_all_twenty_four_lands_with_exact_ordered_options() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, expected_options) in [
         ("azorius_guildgate", "WU"),
         ("baron,_airship_kingdom", "UR"),

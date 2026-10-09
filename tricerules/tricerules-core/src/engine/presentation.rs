@@ -1,4 +1,4 @@
-use tricerules_cards::{
+use tricerules_card_model::{
     AbilityId, AbilityPresentation, CardFaceId, CardRegistry, ChoiceId, ModeId,
 };
 use tricerules_proto::ruled::v1 as rv1;
@@ -176,7 +176,7 @@ pub(super) fn spell_stack_presentation(
                     PresentationPath::Mode(&mode.mode_id),
                 ],
                 &mode.presentation,
-                tricerules_cards::mode_fallback(&face.name, &mode.mode_id),
+                tricerules_card_model::mode_fallback(&face.name, &mode.mode_id),
             ))
         })
         .collect();
@@ -186,36 +186,36 @@ pub(super) fn spell_stack_presentation(
             let group = face.cast_cost_groups.get(receipt.group_index as usize)?;
             let option = group.options.get(receipt.option_index as usize)?;
             let (option_id, mapping) = match option {
-                tricerules_cards::CastCostOptionDef::Blight {
+                tricerules_card_model::CastCostOptionDef::Blight {
                     option_id,
                     presentation,
                     ..
                 }
-                | tricerules_cards::CastCostOptionDef::Mana {
+                | tricerules_card_model::CastCostOptionDef::Mana {
                     option_id,
                     presentation,
                     ..
                 }
-                | tricerules_cards::CastCostOptionDef::Behold {
+                | tricerules_card_model::CastCostOptionDef::Behold {
                     option_id,
                     presentation,
                     ..
                 }
-                | tricerules_cards::CastCostOptionDef::DiscardCard {
+                | tricerules_card_model::CastCostOptionDef::DiscardCard {
                     option_id,
                     presentation,
                 }
-                | tricerules_cards::CastCostOptionDef::PayLife {
-                    option_id,
-                    presentation,
-                    ..
-                }
-                | tricerules_cards::CastCostOptionDef::TapPermanents {
+                | tricerules_card_model::CastCostOptionDef::PayLife {
                     option_id,
                     presentation,
                     ..
                 }
-                | tricerules_cards::CastCostOptionDef::SacrificePermanent {
+                | tricerules_card_model::CastCostOptionDef::TapPermanents {
+                    option_id,
+                    presentation,
+                    ..
+                }
+                | tricerules_card_model::CastCostOptionDef::SacrificePermanent {
                     option_id,
                     presentation,
                     ..
@@ -276,7 +276,7 @@ mod tests {
 
     #[test]
     fn real_card_cost_mapping_carries_stable_path_and_external_face_fingerprint() {
-        let registry = CardRegistry::global();
+        let registry = tricerules_cards::registry::global();
         let presentation = spell_stack_presentation(
             registry,
             "grow_from_the_ashes",
@@ -285,8 +285,8 @@ mod tests {
             &[CastCostReceipt {
                 group_index: 0,
                 option_index: 0,
-                group_id: Some(tricerules_cards::ChoiceId::new("cast_cost_01").unwrap()),
-                option_id: Some(tricerules_cards::ChoiceId::new("option_01").unwrap()),
+                group_id: Some(tricerules_card_model::ChoiceId::new("cast_cost_01").unwrap()),
+                option_id: Some(tricerules_card_model::ChoiceId::new("option_01").unwrap()),
                 object_cost_kind: None,
                 multikicker: None,
                 label: "Kicker {2}".into(),
@@ -315,7 +315,7 @@ mod tests {
 
     #[test]
     fn real_ability_mapping_keeps_definition_identity_and_fallback() {
-        let registry = CardRegistry::global();
+        let registry = tricerules_cards::registry::global();
         let card = registry
             .get("abandoned_campground")
             .expect("calibration card");
@@ -341,7 +341,7 @@ mod tests {
 
     #[test]
     fn token_ability_publishes_readable_fallback_without_unresolvable_oracle_mapping() {
-        let registry = CardRegistry::global();
+        let registry = tricerules_cards::registry::global();
         let card = registry.get("clue").unwrap();
         let face = card.primary_face();
         let ability = &face.activated_abilities[0];
@@ -363,16 +363,21 @@ mod tests {
 
     #[test]
     fn physical_spell_has_no_root_presentation() {
-        let presentation =
-            spell_stack_presentation(CardRegistry::global(), "aangs_journey", 0, &[], &[]);
+        let presentation = spell_stack_presentation(
+            tricerules_cards::registry::global(),
+            "aangs_journey",
+            0,
+            &[],
+            &[],
+        );
         assert!(presentation.primary.is_none());
     }
 
     #[test]
     fn physical_spell_child_keeps_its_stable_path_without_a_root() {
-        let ability_id = tricerules_cards::AbilityId::new("delayed_test").unwrap();
+        let ability_id = tricerules_card_model::AbilityId::new("delayed_test").unwrap();
         let reference = stack_child_presentation_ref(
-            CardRegistry::global(),
+            tricerules_cards::registry::global(),
             "aangs_journey",
             0,
             StackPresentationSource::PhysicalSpell,
@@ -390,7 +395,7 @@ mod tests {
             ["spell", "delayed_test"]
         );
         assert!(stack_child_presentation_ref(
-            CardRegistry::global(),
+            tricerules_cards::registry::global(),
             "aangs_journey",
             0,
             StackPresentationSource::Missing,
@@ -404,7 +409,7 @@ mod tests {
     #[test]
     fn modal_spell_publication_uses_stable_mode_identity_and_mapping() {
         let presentation = spell_stack_presentation(
-            CardRegistry::global(),
+            tricerules_cards::registry::global(),
             "boros_charm",
             0,
             &[ChosenMode {

@@ -57,7 +57,15 @@ fn issue_350_roamers_routine_harmonize_reduces_and_searches_then_exiles() {
         deck_with("forest", &["roamers_routine", "grizzly_bears"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(350_001, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        350_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
 
     let routine = take_oid_from_library_or_hand(&mut engine, 0, "roamers_routine");
@@ -141,7 +149,15 @@ fn issue_350_urenis_rebuff_harmonize_returns_a_creature_then_exiles() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(350_002, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        350_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
 
     let rebuff = take_oid_from_library_or_hand(&mut engine, 0, "urenis_rebuff");
@@ -192,7 +208,15 @@ fn issue_350_urenis_rebuff_normal_cast_uses_the_printed_cost_and_buries_the_spel
         deck_with("island", &["urenis_rebuff", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(350_003, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        350_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
 
     ensure_card_in_hand(&mut engine, 0, "urenis_rebuff");

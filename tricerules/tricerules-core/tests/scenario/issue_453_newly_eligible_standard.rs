@@ -19,7 +19,15 @@ fn main1_engine(seed: u64, own: &[&str], opposing: &[&str]) -> GameEngine {
         deck_with("forest", own),
         deck_with("forest", opposing),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -243,7 +251,15 @@ fn issue_453_vote_out_convoke_taps_a_creature_without_mana_for_the_generic() {
 #[test]
 fn issue_453_protective_response_destroys_only_attacking_or_blocking_creatures() {
     let decks = Some(vec![deck_with("forest", &[]), deck_with("plains", &[])]);
-    let mut engine = GameEngine::new(453_003, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        453_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut engine);
     let attacker = battlefield_object_for_card(&engine, 0, "grizzly_bears");
     let bystander = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -745,8 +761,15 @@ fn issue_453_basic_landcycling_searches_from_hand() {
             vec!["grizzly_bears".to_string(); 20],
             vec!["forest".to_string(); 20],
         ]);
-        let mut engine =
-            GameEngine::new(453_070 + index as u64, &[0, 1], 20, decks, true).expect("new game");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            453_070 + index as u64,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new game");
         advance_to_main1_from_game_start(&mut engine);
         let source = inject_card_into_hand(&mut engine, 0, card_id);
         let mountain = inject_library_card(&mut engine, 0, "mountain");

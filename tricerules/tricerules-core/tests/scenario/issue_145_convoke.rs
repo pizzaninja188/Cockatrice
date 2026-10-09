@@ -15,6 +15,7 @@ fn object_ref(engine: &GameEngine, oid: u32) -> rv1::CostObjectRef {
 
 fn setup(card: &str) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         145002,
         &[0, 1],
         20,
@@ -651,6 +652,7 @@ fn convoke_tapping_an_attacker_or_blocker_does_not_remove_it_from_combat() {
 #[test]
 fn convoke_mixed_payment_taps_a_summoning_sick_creature_without_making_mana() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         145001,
         &[0, 1],
         20,

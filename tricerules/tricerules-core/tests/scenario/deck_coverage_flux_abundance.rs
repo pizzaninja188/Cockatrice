@@ -3,7 +3,6 @@ use tricerules_cards::primitives::{
     Amount, CardResultAction, CardResultFilter, CardResultSource, CountExpression, DiscardQuantity,
     LibraryDrawReplacement, PlayerRecipient, RelativePlayerSet, SpellEffectKind, StaticAbilityDef,
 };
-use tricerules_cards::CardRegistry;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ChoiceKind, ResolutionChoiceDecision, SubmitResolutionChoice};
 
@@ -42,7 +41,7 @@ fn choose_branch(
 
 #[test]
 fn flux_has_its_complete_oracle_effect_sequence() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("flux")
         .expect("Flux is admitted as a complete card")
         .primary_face();
@@ -77,7 +76,7 @@ fn flux_has_its_complete_oracle_effect_sequence() {
 
 #[test]
 fn abundance_has_its_complete_draw_replacement() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("abundance")
         .expect("Abundance is admitted as a complete card")
         .primary_face();
@@ -100,7 +99,15 @@ fn abundance_has_its_complete_draw_replacement() {
 fn flux_uses_each_players_committed_discard_count() {
     let player_ids = [4, 9, 27];
     let decks = Some(vec![vec!["island".into(); 20]; player_ids.len()]);
-    let mut engine = GameEngine::new(84001, &player_ids, 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        84001,
+        &player_ids,
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let drawn = [
@@ -167,7 +174,15 @@ fn flux_draws_interact_with_abundance_one_draw_at_a_time() {
     let player_ids = [4, 9, 27];
     let mut decks = vec![vec!["island".into(); 20]; player_ids.len()];
     decks[0] = deck_with("island", &["abundance"]);
-    let mut engine = GameEngine::new(84002, &player_ids, 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        84002,
+        &player_ids,
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     move_ready_to_battlefield(&mut engine, 0, "abundance");
 

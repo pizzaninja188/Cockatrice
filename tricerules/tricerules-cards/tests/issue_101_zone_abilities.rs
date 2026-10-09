@@ -1,10 +1,8 @@
-use tricerules_cards::{
-    AbilityCost, AbilitySourceZone, CardRegistry, SearchDestination, SpellEffectKind,
-};
+use tricerules_cards::{AbilityCost, AbilitySourceZone, SearchDestination, SpellEffectKind};
 
 #[test]
 fn typecycling_is_authored_from_hand_with_self_discard_and_subtype_search() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (card_id, subtype) in [
         ("shepherding_spirits", "Plains"),
         ("slavering_branchsnapper", "Forest"),
@@ -37,7 +35,7 @@ fn typecycling_is_authored_from_hand_with_self_discard_and_subtype_search() {
 
 #[test]
 fn renew_is_authored_from_graveyard_with_self_exile() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for card_id in ["adorned_crocodile", "sagu_pummeler", "champion_of_dusan"] {
         let face = registry.get(card_id).expect(card_id).primary_face();
         let ability = face.activated_abilities.first().expect("renew ability");

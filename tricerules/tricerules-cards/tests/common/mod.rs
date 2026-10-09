@@ -1,5 +1,5 @@
 //! Registry assertions accept reviewed constants, never generator-produced expectations.
-use tricerules_cards::{CardFace, CardRegistry, Keyword};
+use tricerules_cards::{CardFace, Keyword};
 
 pub struct FaceExpectation<'a> {
     pub id: &'a str,
@@ -14,7 +14,7 @@ pub struct FaceExpectation<'a> {
 impl FaceExpectation<'_> {
     pub fn check(&self) -> &'static CardFace {
         let id = self.id;
-        let definition = CardRegistry::global()
+        let definition = tricerules_cards::registry::global()
             .get(id)
             .unwrap_or_else(|| panic!("missing {id}"));
         assert_eq!(definition.name, self.name, "{id}");

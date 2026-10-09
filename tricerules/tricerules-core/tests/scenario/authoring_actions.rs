@@ -5,7 +5,15 @@ use tricerules_proto::ruled::v1::{ruled_command::Cmd, AbilitySourceZone};
 #[test]
 fn graveyard_activation_carries_source_zone_and_generation() {
     let deck = deck_with("forest", &["fanatic_of_rhonas"]);
-    let mut e = GameEngine::new(702, &[0, 1], 20, Some(vec![deck.clone(), deck]), true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        702,
+        &[0, 1],
+        20,
+        Some(vec![deck.clone(), deck]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     let source = take_oid_from_library_or_hand(&mut e, 0, "fanatic_of_rhonas");
     e.state.players[0].graveyard.push(source);
@@ -37,7 +45,15 @@ fn graveyard_activation_carries_source_zone_and_generation() {
 #[test]
 fn main_phase_fixture_passes_all_three_players() {
     let deck = deck_with("forest", &[]);
-    let mut e = GameEngine::new(703, &[10, 20, 30], 20, Some(vec![deck; 3]), true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        703,
+        &[10, 20, 30],
+        20,
+        Some(vec![deck; 3]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     assert_eq!(e.state.turn_step, TurnStep::Main1);
     assert_eq!(e.state.priority_player_id(), 10);
@@ -46,7 +62,15 @@ fn main_phase_fixture_passes_all_three_players() {
 #[test]
 fn priority_round_finishes_existing_passes_without_crossing_next_window() {
     let deck = deck_with("forest", &[]);
-    let mut e = GameEngine::new(711, &[10, 20, 30], 20, Some(vec![deck; 3]), true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        711,
+        &[10, 20, 30],
+        20,
+        Some(vec![deck; 3]),
+        true,
+    )
+    .unwrap();
     e.apply_command(10, &pass()).unwrap();
     assert_eq!(e.state.turn_step, TurnStep::Upkeep);
     pass_priority_round(&mut e);

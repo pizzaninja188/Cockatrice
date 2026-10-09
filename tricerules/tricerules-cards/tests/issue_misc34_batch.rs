@@ -1,10 +1,10 @@
 //! Printed identities for five pinned Standard sequential spells.
 
-use tricerules_cards::{CardRegistry, Layout};
+use tricerules_cards::Layout;
 
 #[test]
 fn issue_misc34_registers_five_exact_card_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, kind) in [
         ("make_a_stand", "Make a Stand", "{2}{W}", "Instant"),
         (

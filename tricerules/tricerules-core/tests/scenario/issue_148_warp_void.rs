@@ -3,6 +3,7 @@ use tricerules_core::{TurnStep, Zone};
 
 fn engine() -> GameEngine {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         148001,
         &[0, 1],
         20,

@@ -5,7 +5,9 @@ fn ready_engine(seed: u64) -> GameEngine {
 }
 
 fn ready_engine_with_players(seed: u64, players: &[PlayerId]) -> GameEngine {
-    let mut engine = GameEngine::new_with_default_decks(seed, players, 20).unwrap();
+    let mut engine =
+        GameEngine::new_with_default_decks(tricerules_cards::registry::global(), seed, players, 20)
+            .unwrap();
     engine.state.opening = None;
     engine.state.turn_step = TurnStep::Main1;
     engine.state.priority_idx = 0;
@@ -84,7 +86,7 @@ fn effect(engine: &mut GameEngine, source: ObjectId, kind: ContinuousEffectKind,
 }
 
 fn forest_setting() -> ContinuousEffectKind {
-    ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+    ContinuousEffectKind::Layer4SetTypeLine(tricerules_card_model::TypeLineReplacement {
         card_types: vec![PermanentTypeFilter::Land],
         creature_types: Vec::new(),
         land_types: vec![BasicLandType::Forest],
@@ -250,7 +252,7 @@ fn exotic_orchard_ignores_opponent_land_activation_conditions_and_limits() {
     let conditional_land = permanent(&mut engine, "terrain_generator");
     give_control_to(&mut engine, conditional_land, 1);
 
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("terrain_generator")
         .unwrap()
         .primary_face()
@@ -260,7 +262,7 @@ fn exotic_orchard_ignores_opponent_land_activation_conditions_and_limits() {
         players: RelativePlayerSet::Controller,
     }];
     ability.activation_limit =
-        Some(tricerules_cards::primitives::ActivationLimit::PerTurn { max_activations: 1 });
+        Some(tricerules_card_model::primitives::ActivationLimit::PerTurn { max_activations: 1 });
     let SpellEffectKind::ProduceMana { options, .. } = &mut ability.effect[0] else {
         panic!("fixture starts with a mana ability");
     };
@@ -324,13 +326,13 @@ fn exotic_orchard_ignores_sorcery_speed_activation_legality() {
     let conditional_land = permanent(&mut engine, "terrain_generator");
     give_control_to(&mut engine, conditional_land, 1);
 
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("terrain_generator")
         .unwrap()
         .primary_face()
         .clone();
     face.activated_abilities[0].timing =
-        tricerules_cards::primitives::ActivationTiming::SorcerySpeed;
+        tricerules_card_model::primitives::ActivationTiming::SorcerySpeed;
     let SpellEffectKind::ProduceMana { options, .. } = &mut face.activated_abilities[0].effect[0]
     else {
         panic!("fixture starts with a mana ability");
@@ -556,7 +558,7 @@ fn intrinsic_land_mana_derives_unbaked_subtypes_and_preserves_authored_option_or
             effect(
                 &mut engine,
                 source,
-                ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+                ContinuousEffectKind::Layer4AddTypes(tricerules_card_model::TypeLineAddition {
                     land_types: vec![BasicLandType::Island],
                     ..Default::default()
                 }),
@@ -598,15 +600,15 @@ fn intrinsic_land_mana_catalog_preserves_authored_holes_and_independent_identica
     let mut engine = ready_engine(305_021);
     engine.registry = Box::leak(Box::new(registry));
     let source = permanent(&mut engine, "mana_index_probe");
-    let mut gift = CardRegistry::global()
+    let mut gift = tricerules_cards::registry::global()
         .get("forest")
         .unwrap()
         .primary_face()
         .activated_abilities[0]
         .clone();
     gift.intrinsic_land_mana = false;
-    gift.ability_id = tricerules_cards::AbilityId::new("gift_green").unwrap();
-    gift.presentation = tricerules_cards::AbilityPresentation::Fallback;
+    gift.ability_id = tricerules_card_model::AbilityId::new("gift_green").unwrap();
+    gift.presentation = tricerules_card_model::AbilityPresentation::Fallback;
     effect(
         &mut engine,
         source,
@@ -628,7 +630,7 @@ fn intrinsic_land_mana_catalog_preserves_authored_holes_and_independent_identica
     effect(
         &mut engine,
         source,
-        ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+        ContinuousEffectKind::Layer4AddTypes(tricerules_card_model::TypeLineAddition {
             card_types: vec![PermanentTypeFilter::Land],
             land_types: vec![BasicLandType::Forest],
             ..Default::default()
@@ -748,7 +750,7 @@ fn face_down_granted_damage_fixture() -> (GameEngine, ObjectId) {
     let mut engine = ready_engine(305_024);
     let source = face_down_permanent(&mut engine, "sol_ring");
     effect(&mut engine, source, forest_setting(), 2);
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("forest")
         .unwrap()
         .primary_face()
@@ -756,9 +758,9 @@ fn face_down_granted_damage_fixture() -> (GameEngine, ObjectId) {
         .clone();
     ability.intrinsic_land_mana = false;
     ability.effect = vec![SpellEffectKind::DamageTarget {
-        amount: tricerules_cards::Amount::Fixed(1),
-        target: tricerules_cards::primitives::TargetFilter {
-            kind: tricerules_cards::primitives::TargetKind::AnyTarget,
+        amount: tricerules_card_model::Amount::Fixed(1),
+        target: tricerules_card_model::primitives::TargetFilter {
+            kind: tricerules_card_model::primitives::TargetKind::AnyTarget,
             ..Default::default()
         },
     }];
@@ -866,7 +868,7 @@ fn intrinsic_land_mana_targeted_granted_trigger_captures_concealed_label_before_
     let mut engine = ready_engine(305_028);
     let source = face_down_permanent(&mut engine, "sol_ring");
     effect(&mut engine, source, forest_setting(), 1);
-    let definition = &CardRegistry::global()
+    let definition = &tricerules_cards::registry::global()
         .get("thorin_oakenshield")
         .unwrap()
         .primary_face()
@@ -881,9 +883,9 @@ fn intrinsic_land_mana_targeted_granted_trigger_captures_concealed_label_before_
     };
     let mut ability = triggered_abilities[0].clone();
     ability.effect = vec![SpellEffectKind::DamageTarget {
-        amount: tricerules_cards::Amount::Fixed(1),
-        target: tricerules_cards::primitives::TargetFilter {
-            kind: tricerules_cards::primitives::TargetKind::AnyTarget,
+        amount: tricerules_card_model::Amount::Fixed(1),
+        target: tricerules_card_model::primitives::TargetFilter {
+            kind: tricerules_card_model::primitives::TargetKind::AnyTarget,
             ..Default::default()
         },
     }];
@@ -956,7 +958,7 @@ fn intrinsic_land_mana_targeted_granted_trigger_captures_concealed_label_before_
 fn intrinsic_land_mana_mixed_zone_face_reserves_full_span_for_grants() {
     let mut engine = ready_engine(305_025);
     let source = permanent(&mut engine, "fetid_pools");
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("forest")
         .unwrap()
         .primary_face()
@@ -972,7 +974,7 @@ fn intrinsic_land_mana_mixed_zone_face_reserves_full_span_for_grants() {
     effect(
         &mut engine,
         source,
-        ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+        ContinuousEffectKind::Layer4AddTypes(tricerules_card_model::TypeLineAddition {
             land_types: vec![BasicLandType::Forest],
             ..Default::default()
         }),
@@ -1015,7 +1017,7 @@ fn intrinsic_land_mana_equal_timestamp_removal_orders_independent_grants() {
         let mut engine = ready_engine(305_026);
         let source = permanent(&mut engine, "sol_ring");
         effect(&mut engine, source, forest_setting(), 1);
-        let mut ability = CardRegistry::global()
+        let mut ability = tricerules_cards::registry::global()
             .get("forest")
             .unwrap()
             .primary_face()
@@ -1088,7 +1090,7 @@ fn intrinsic_land_mana_ignores_inactive_and_stale_static_removal() {
 fn lantern_granted_slots_do_not_rebind_after_an_earlier_occurrence_expires() {
     let mut engine = ready_engine(508_001);
     let recipient = permanent(&mut engine, "sol_ring");
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("forest")
         .unwrap()
         .primary_face()
@@ -1314,7 +1316,7 @@ fn lantern_recipient_slots_retire_even_on_same_zone_generation_changes() {
 
 #[test]
 fn lantern_identical_resolving_grants_have_independent_activation_limits() {
-    use tricerules_cards::primitives::ActivationLimit;
+    use tricerules_card_model::primitives::ActivationLimit;
     for limit in [
         ActivationLimit::PerTurn { max_activations: 1 },
         ActivationLimit::PerObject { max_activations: 1 },
@@ -1479,7 +1481,7 @@ fn lantern_scoped_producer_uses_live_controller_and_source_exclusions() {
     static_ability.definition = StaticAbilityDef::GrantActivatedAbilityToPermanents {
         filter: TargetFilter {
             kind: TargetKind::AnyPermanent,
-            controller: tricerules_cards::primitives::TargetController::You,
+            controller: tricerules_card_model::primitives::TargetController::You,
             permanent_types: vec![PermanentTypeFilter::Land],
             ..Default::default()
         },
@@ -1503,7 +1505,7 @@ fn lantern_scoped_producer_uses_live_controller_and_source_exclusions() {
     effect(
         &mut engine,
         source,
-        ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+        ContinuousEffectKind::Layer4AddTypes(tricerules_card_model::TypeLineAddition {
             card_types: vec![PermanentTypeFilter::Land],
             ..Default::default()
         }),
@@ -1557,8 +1559,8 @@ fn lantern_rite_shaped_creature_grant_obeys_sickness_and_explicit_source_exclusi
     parent.definition = StaticAbilityDef::GrantActivatedAbilityToPermanents {
         filter: TargetFilter {
             kind: TargetKind::Creature,
-            controller: tricerules_cards::primitives::TargetController::You,
-            excluded_objects: vec![tricerules_cards::TargetObjectExclusion::Source],
+            controller: tricerules_card_model::primitives::TargetController::You,
+            excluded_objects: vec![tricerules_card_model::TargetObjectExclusion::Source],
             ..Default::default()
         },
         activated_abilities: vec![child],
@@ -1603,7 +1605,7 @@ fn lantern_rite_shaped_creature_grant_obeys_sickness_and_explicit_source_exclusi
 
 #[test]
 fn lantern_identical_static_grants_keep_limits_when_a_source_is_suppressed() {
-    use tricerules_cards::primitives::ActivationLimit;
+    use tricerules_card_model::primitives::ActivationLimit;
     for limit in [
         ActivationLimit::PerTurn { max_activations: 1 },
         ActivationLimit::PerObject { max_activations: 1 },
@@ -1666,7 +1668,7 @@ fn lantern_identical_static_grants_keep_limits_when_a_source_is_suppressed() {
 
 #[test]
 fn lantern_nonmana_grants_capture_occurrence_and_presentation_before_source_cost_departure() {
-    use tricerules_cards::primitives::ActivationLimit;
+    use tricerules_card_model::primitives::ActivationLimit;
     let mut engine = ready_engine(508_008);
     let land = permanent(&mut engine, "forest");
     let mut child = engine

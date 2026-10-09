@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{AbilityCost, SpellEffectKind, TargetChooser, TargetSchema};
-use tricerules_cards::{AbilityPresentation, CardRegistry};
+use tricerules_cards::AbilityPresentation;
 
 #[test]
 fn arena_registers_its_complete_opponent_chosen_fight_ability() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(registry.id_for_name("Arena"), Some("arena"));
     let card = registry.get("arena").expect("actual Arena is registered");
     assert_eq!(card.name, "Arena");

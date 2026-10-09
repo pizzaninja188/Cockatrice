@@ -10,10 +10,10 @@ use tricerules_cards::primitives::{
     PermanentTypeFilter, ResolutionBranchSelection, ResolutionCost, SpellEffectKind, TargetFilter,
     TargetKind, TargetSchema, ZoneCardFilter,
 };
-use tricerules_cards::{CardRegistry, CounterKind, ModalDef, TriggerCondition};
+use tricerules_cards::{CounterKind, ModalDef, TriggerCondition};
 
 fn modal_ability(card_id: &str) -> tricerules_cards::TriggeredAbilityDef {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("{card_id} is registered"));
     let face = definition.primary_face();
@@ -48,7 +48,7 @@ fn assert_modal_schema(card_id: &str, modal: &ModalDef) {
 
 #[test]
 fn issue_424_registers_the_seven_triggered_modal_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id, mana_cost, types, keywords, power, toughness) in [
         (
             "daily_bugle_reporters",

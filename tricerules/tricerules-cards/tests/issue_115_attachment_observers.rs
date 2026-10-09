@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     CardTypeFilter, EffectSubject, GameCondition, HandCardChooser, PlayerRecipient,
     RelativePlayerSet, SpellEffectKind, StaticAbilityDef,
 };
-use tricerules_cards::{CardRegistry, Keyword, TriggerCondition};
+use tricerules_cards::{Keyword, TriggerCondition};
 
 #[test]
 fn issue_115_cards_and_treasure_have_exact_shared_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let pick = registry.get("goldvein_pick").expect("Goldvein Pick");
     let pick_face = pick.primary_face();

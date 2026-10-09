@@ -554,7 +554,7 @@ selection of one revealed card. Flow State uses costless `FirstApplicable` branc
 `AllOf` condition for the two graveyard types, evaluated once as the instruction resolves.
 
 1. Name two real cards or two mechanics supported by the proposed shape.
-2. Put the variant in the appropriate `tricerules-cards/src/primitives/` module.
+2. Put the variant in the appropriate `tricerules-card-model/src/primitives/` module.
 3. Add registry validation for authoring constraints and reject ambiguous or invalid shapes.
 4. Implement behavior in the matching engine domain rather than a card-specific dispatch path.
 5. Add focused primitive/registry coverage plus happy and illegal scenarios for real card consumers.

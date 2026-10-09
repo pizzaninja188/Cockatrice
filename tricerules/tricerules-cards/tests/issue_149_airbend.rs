@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{Amount, EffectSubject, SpellEffectKind, TargetKind};
-use tricerules_cards::{CardRegistry, ManaCost};
+use tricerules_cards::ManaCost;
 
 #[test]
 fn airbending_lesson_uses_the_reusable_owner_cast_permission() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("airbending_lesson")
         .expect("Airbending Lesson");
     let face = card.primary_face();

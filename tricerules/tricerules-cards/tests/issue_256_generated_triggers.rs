@@ -1,11 +1,9 @@
 use tricerules_cards::primitives::{PlayerRecipient, SpellEffectKind};
-use tricerules_cards::{
-    AbilityPresentation, Amount, CardRegistry, LibraryPartitionKind, TriggerCondition,
-};
+use tricerules_cards::{AbilityPresentation, Amount, LibraryPartitionKind, TriggerCondition};
 
 #[test]
 fn issue_256_registers_all_eleven_generated_cards_with_typed_triggers() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (id, ability_index, oracle_line) in [
         ("meticulous_artisan", 1, 2),

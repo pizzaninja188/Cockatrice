@@ -1,8 +1,8 @@
-use tricerules_cards::{CardRegistry, Color};
+use tricerules_cards::Color;
 
 #[test]
 fn four_deck_commanders_resolve_with_source_backed_identity() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, identity, setup_only) in [
         (
             "atraxa,_praetors_voice",

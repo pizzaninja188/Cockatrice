@@ -2,7 +2,15 @@ use crate::helpers::*;
 use tricerules_proto::ruled::v1 as rv1;
 
 fn damage_mana_engine(seed: u64, life: i32, card_id: &str) -> (GameEngine, u32) {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     engine.state.players[0].life = life;
     let source = inject_permanent_on_battlefield(&mut engine, 0, card_id);
@@ -481,7 +489,15 @@ fn issue_494_prevention_choice_keeps_spell_payment_open_until_damage_finishes() 
 
 #[test]
 fn issue_494_replacement_choice_resumes_resolution_time_mana_payment() {
-    let mut engine = GameEngine::new(494_035, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        494_035,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_permanent_on_battlefield(&mut engine, 0, "talisman_of_impulse");
     let island = inject_permanent_on_battlefield(&mut engine, 0, "island");

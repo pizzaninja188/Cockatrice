@@ -57,7 +57,15 @@ fn generated_life_payoffs_observe_one_committed_life_gain_event() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(266_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        266_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let pridemate = move_ready_to_battlefield(&mut engine, 0, "ajanis_pridemate");
     let mascot = move_ready_to_battlefield(&mut engine, 0, "pest_mascot");
@@ -89,7 +97,15 @@ fn generated_target_opponent_discard_is_chosen_by_the_affected_player() {
         deck_with("swamp", &["corrupt_court_official"]),
         deck_with("forest", &["storm_crow"]),
     ]);
-    let mut engine = GameEngine::new(266_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        266_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 1, "storm_crow");
     let discarded = engine.state.players[1]
@@ -128,7 +144,15 @@ fn generated_optional_bounce_excludes_source_and_revalidates_generation() {
         deck_with("island", &["rimekin_recluse"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(266_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        266_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let target = inject_creature_on_battlefield(&mut engine, 1, "storm_crow");
 

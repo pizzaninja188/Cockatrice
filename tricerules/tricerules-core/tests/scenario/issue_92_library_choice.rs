@@ -36,8 +36,15 @@ fn green_mana() -> ManaGift {
 
 #[test]
 fn issue_228_sleight_requires_one_private_card() {
-    let mut e =
-        GameEngine::new(22801, &[0, 1], 20, green_deck_with("sleight_of_hand"), true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        22801,
+        &[0, 1],
+        20,
+        green_deck_with("sleight_of_hand"),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "sleight_of_hand");
     let top = seat_on_top(&mut e, 0, &["forest", "island", "mountain"]);
@@ -71,7 +78,15 @@ fn issue_228_sleight_requires_one_private_card() {
 }
 
 fn issue_228_engine(card: &str) -> GameEngine {
-    let mut e = GameEngine::new(22802, &[0, 1], 20, green_deck_with(card), true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        22802,
+        &[0, 1],
+        20,
+        green_deck_with(card),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, card);
     e
@@ -304,6 +319,7 @@ fn issue_228_two_card_selection_rejects_duplicates_and_replays_deterministically
 #[test]
 fn commune_uses_images_for_all_looked_cards_then_orders_the_remainder() {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         9201,
         &[0, 1],
         20,
@@ -412,6 +428,7 @@ fn commune_uses_images_for_all_looked_cards_then_orders_the_remainder() {
 fn brightwood_rejects_noncreatures_and_random_order_is_replay_deterministic() {
     fn play() -> Vec<u32> {
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             9202,
             &[0, 1],
             20,

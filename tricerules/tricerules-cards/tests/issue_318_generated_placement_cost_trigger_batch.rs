@@ -11,8 +11,8 @@ use tricerules_cards::primitives::{
     TargetMatchFilter, TargetSchema,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CardRegistry, Color, Layout,
-    ManaCost, SpellEffectKind, TriggerCondition,
+    AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, Color, Layout, ManaCost,
+    SpellEffectKind, TriggerCondition,
 };
 
 fn single_group(targeting: &tricerules_cards::primitives::TargetingDef) -> &TargetGroupDef {
@@ -24,7 +24,7 @@ fn single_group(targeting: &tricerules_cards::primitives::TargetingDef) -> &Targ
 
 #[test]
 fn issue_318_registers_the_five_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_count, layout) in [
         ("misleading_motes", "Misleading Motes", 1, Layout::Normal),
         ("run_behind", "Run Behind", 1, Layout::Normal),
@@ -44,7 +44,7 @@ fn issue_318_registers_the_five_reviewed_identities() {
 
 #[test]
 fn issue_318_misleading_motes_offers_the_owners_placement_choice() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("misleading_motes")
         .expect("Misleading Motes");
     let face = definition.primary_face();
@@ -76,7 +76,7 @@ fn issue_318_misleading_motes_offers_the_owners_placement_choice() {
 
 #[test]
 fn issue_318_run_behind_reduces_only_for_attacking_targets() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("run_behind")
         .expect("Run Behind");
     let face = definition.primary_face();
@@ -115,7 +115,7 @@ fn issue_318_run_behind_reduces_only_for_attacking_targets() {
 
 #[test]
 fn issue_318_edgewall_pack_keeps_menace_and_creates_the_blockless_rat() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("edgewall_pack")
         .expect("Edgewall Pack");
     let face = definition.primary_face();
@@ -154,7 +154,7 @@ fn issue_318_edgewall_pack_keeps_menace_and_creates_the_blockless_rat() {
 
 #[test]
 fn issue_318_stratosoarer_grants_flying_and_keeps_basic_landcycling() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("stratosoarer")
         .expect("Stratosoarer");
     let face = definition.primary_face();
@@ -232,7 +232,7 @@ fn issue_318_stratosoarer_grants_flying_and_keeps_basic_landcycling() {
 
 #[test]
 fn issue_318_thieving_otter_draws_on_any_damage_to_an_opponent() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("thieving_otter")
         .expect("Thieving Otter");
     let face = definition.primary_face();
@@ -271,7 +271,7 @@ fn issue_318_thieving_otter_draws_on_any_damage_to_an_opponent() {
 
 #[test]
 fn issue_318_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let cases: &[(&str, &str, &str, &str)] = &[
         (
             "misleading_motes",

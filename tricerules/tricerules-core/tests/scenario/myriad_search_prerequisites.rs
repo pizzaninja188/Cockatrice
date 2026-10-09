@@ -11,6 +11,7 @@ fn myriad_search(
     tricerules_proto::ruled::v1::ResolutionChoiceRequired,
 ) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -206,6 +207,7 @@ fn actual_myriad_survives_source_owner_departure_at_search_and_timestamp_choice(
     for stage in [0, 2] {
         let deck = deck_with("forest", &[]);
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             202_610_070 + stage,
             &[0, 1, 2],
             20,
@@ -282,6 +284,7 @@ fn actual_myriad_survives_source_owner_departure_at_search_and_timestamp_choice(
 #[test]
 fn actual_myriad_enters_tapped_makes_colorless_and_requires_each_source_cost() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         202_610_080,
         &[0, 1],
         20,
@@ -462,6 +465,7 @@ fn grow_searched_cohort_cancels_when_searcher_leaves_during_entry_replacement() 
         &["grow_from_the_ashes", "orb_of_dreams", "orb_of_dreams"],
     );
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         202_610_092,
         &[0, 1, 2],
         20,
@@ -539,6 +543,7 @@ fn actual_myriad_searching_player_departure_cancels_search_and_entry_order_witho
     for selected_already in [false, true] {
         let deck = deck_with("forest", &["myriad_landscape"]);
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             202_610_081 + u64::from(selected_already),
             &[0, 1, 2],
             20,
@@ -609,7 +614,15 @@ fn grow_from_the_ashes_kicked_search_enters_one_simultaneous_cohort() {
         ),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(202_610_031, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_031,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     relocate_to_battlefield(&mut engine, 0, "orb_of_dreams", false);
     relocate_to_battlefield(&mut engine, 0, "orb_of_dreams", false);

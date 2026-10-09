@@ -64,4 +64,5 @@ target_link_libraries(
 )
 
 add_test(NAME ruled_e2e_smoke_test COMMAND ruled_e2e_smoke_test)
-set_tests_properties(ruled_e2e_smoke_test PROPERTIES TIMEOUT 300)
+# This runs the entire serial network suite; individual waits remain bounded in the harness.
+set_tests_properties(ruled_e2e_smoke_test PROPERTIES TIMEOUT 600)

@@ -1,6 +1,6 @@
 use super::*;
 use crate::engine::events::finish_with_events;
-use tricerules_cards::primitives::{PermanentTypeFilter, TypeLineAddition};
+use tricerules_card_model::primitives::{PermanentTypeFilter, TypeLineAddition};
 
 pub(super) fn amass(
     cx: &mut EffectCx<'_>,

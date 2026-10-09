@@ -1,12 +1,12 @@
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
-use tricerules_cards::{CardRegistry, CounterKind};
+use tricerules_cards::CounterKind;
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{dev_command::Dev, DevCommand, DevMoveCard, DevZone};
 
 #[test]
 fn issue_187_cards_are_registered_with_complete_authored_modes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let mind = registry
         .get("mind_transfer_protocol")
         .expect("Mind Transfer Protocol is registered");
@@ -34,7 +34,15 @@ fn issue_187_cards_are_registered_with_complete_authored_modes() {
 
 #[test]
 fn issue_187_mind_transfer_animates_an_artifact_sets_base_pt_and_draws() {
-    let mut engine = GameEngine::new(187_001, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        187_001,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let artifact = inject_permanent_on_battlefield(&mut engine, 0, "explosive_apparatus");
     inject_card_into_hand(&mut engine, 0, "mind_transfer_protocol");
@@ -85,7 +93,15 @@ fn issue_187_mind_transfer_animates_an_artifact_sets_base_pt_and_draws() {
 
 #[test]
 fn issue_187_quandrix_charm_third_mode_sets_base_pt() {
-    let mut engine = GameEngine::new(187_002, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        187_002,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     inject_card_into_hand(&mut engine, 0, "quandrix_charm");
@@ -118,7 +134,15 @@ fn issue_187_galion_samples_source_pt_at_resolution_and_uses_lki() {
         deck_with("forest", &["galion,_elvenkings_butler"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(187_003, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        187_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_declare_attackers(&mut engine);
     let target = battlefield_object_for_card(&engine, 0, "grizzly_bears");
     ensure_card_in_hand(&mut engine, 0, "galion,_elvenkings_butler");
@@ -196,7 +220,15 @@ fn issue_187_galion_samples_source_pt_at_resolution_and_uses_lki() {
 
 #[test]
 fn issue_187_layer_7b_setters_preserve_signed_internal_values() {
-    let mut engine = GameEngine::new(187_004, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        187_004,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine.state.continuous_effects.push(ContinuousEffect {
         trigger_grant_origin: None,

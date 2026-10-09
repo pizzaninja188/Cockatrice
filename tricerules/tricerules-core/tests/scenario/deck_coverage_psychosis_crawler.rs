@@ -3,18 +3,19 @@ use crate::helpers::*;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, EffectDuration, PermanentTypeFilter, TypeLineAddition,
 };
-use tricerules_cards::{CardRegistry, CounterKind};
+use tricerules_cards::CounterKind;
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 
 const CRAWLER: &str = "psychosis_crawler";
 
 fn crawler_engine(players: &[i32]) -> GameEngine {
     assert!(
-        CardRegistry::global().get(CRAWLER).is_some(),
+        tricerules_cards::registry::global().get(CRAWLER).is_some(),
         "missing exact Psychosis Crawler"
     );
     let deck = deck_with("forest", &[CRAWLER, "divination", "cackling_counterpart"]);
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         2026093011,
         players,
         20,

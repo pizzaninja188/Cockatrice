@@ -1,10 +1,10 @@
 //! Printed identities for five pinned Standard combat spells.
 
-use tricerules_cards::{CardRegistry, Layout};
+use tricerules_cards::Layout;
 
 #[test]
 fn issue_misc38_registers_five_exact_card_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, types) in [
         ("crash_through", "Crash Through", "{R}", &["Sorcery"][..]),
         ("efflorescence", "Efflorescence", "{2}{G}", &["Instant"][..]),

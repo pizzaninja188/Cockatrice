@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     Amount, GameCondition, GraveyardAggregate, PlayerRecipient, RelativePlayerSet,
     ResolutionBranchRequirement, ResolutionBranchSelection, SpellEffectKind,
 };
-use tricerules_cards::{CardRegistry, TriggerCondition};
+use tricerules_cards::TriggerCondition;
 
 #[test]
 fn issue_123_cards_use_the_generic_exile_play_effect() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let percussionist = registry
         .get("clockwork_percussionist")

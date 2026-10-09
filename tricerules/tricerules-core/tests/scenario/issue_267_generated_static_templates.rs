@@ -27,7 +27,15 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
 fn three_player_main1(seed: u64) -> GameEngine {
     // The constructor remains two-player for the production harness.  This fixture extends the
     // state only to exercise EachOpponent's seat-generic recipient expansion.
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     engine
         .state
         .players
@@ -85,7 +93,15 @@ fn issue_267_static_conditions_re_evaluate_and_entry_replacement_is_immediate() 
         ),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(267_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        267_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let bearer = move_ready_to_battlefield(&mut engine, 0, "bearer_of_glory");
@@ -115,7 +131,15 @@ fn issue_267_self_restriction_is_published_and_rejects_a_block() {
         deck_with("forest", &["grizzly_bears"]),
         deck_with("swamp", &["vampire_interloper"]),
     ]);
-    let mut engine = GameEngine::new(267_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        267_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let interloper = move_ready_to_battlefield(&mut engine, 1, "vampire_interloper");
@@ -154,7 +178,15 @@ fn issue_267_icetill_grants_two_land_plays_and_mills_after_landfall() {
         deck_with("forest", &["icetill_explorer"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(267_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        267_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     move_ready_to_battlefield(&mut engine, 0, "icetill_explorer");
     ensure_in_hand(&mut engine, 0, "forest");
@@ -188,7 +220,15 @@ fn issue_267_icetill_reuses_generation_bound_graveyard_land_permission() {
         deck_with("forest", &["icetill_explorer"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(267_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        267_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     move_ready_to_battlefield(&mut engine, 0, "icetill_explorer");
     let forest = inject_graveyard_card(&mut engine, 0, "forest");
@@ -219,7 +259,15 @@ fn issue_267_adventure_search_is_filtered_and_rat_tokens_keep_their_restriction(
         deck_with("plains", &["the_arkenstone_seek_the_heart"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(267_005, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        267_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let legendary = inject_library_card(&mut engine, 0, "jasmine_boreal");
     let ordinary = inject_library_card(&mut engine, 0, "grizzly_bears");
@@ -247,6 +295,7 @@ fn issue_267_adventure_search_is_filtered_and_rat_tokens_keep_their_restriction(
     }));
 
     let mut tokens = GameEngine::new(
+        tricerules_cards::registry::global(),
         267_006,
         &[0, 1],
         20,

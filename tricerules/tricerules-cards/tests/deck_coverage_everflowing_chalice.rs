@@ -1,12 +1,11 @@
 use tricerules_cards::primitives::{CountExpression, ManaCostChoiceKind, StaticAbilityDef};
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, CardRegistry, CounterKind, Layout, ManaAmount,
-    SpellEffectKind,
+    AbilityCost, AbilityPresentation, CounterKind, Layout, ManaAmount, SpellEffectKind,
 };
 
 #[test]
 fn everflowing_chalice_registers_its_complete_typed_face() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("everflowing_chalice")
         .expect("complete Chalice definition");

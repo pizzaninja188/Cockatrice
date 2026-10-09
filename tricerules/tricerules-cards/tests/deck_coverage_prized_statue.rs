@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{PlayerRecipient, SpellEffectKind, TriggerCondition};
-use tricerules_cards::{Amount, CardRegistry};
+use tricerules_cards::Amount;
 
 const TREASURE_TOKEN: &str = "treasure";
 
 #[test]
 fn prized_statue_registers_its_entry_and_graveyard_triggers() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("prized_statue").expect("Prized Statue");
     let face = card.primary_face();
     assert_eq!(face.name, "Prized Statue");

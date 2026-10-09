@@ -2,7 +2,7 @@
 use super::helpers::*;
 use prost::Message;
 use tricerules_cards::primitives::*;
-use tricerules_cards::{AbilityPresentation, CardRegistry, ControllerReference, Layout};
+use tricerules_cards::{AbilityPresentation, ControllerReference, Layout};
 use tricerules_core::{AffectedScope, AttachmentRecipient, ContinuousEffect, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{dev_command, ruled_event::Ev, DevCommand, DevMoveCard, DevZone};
 
@@ -10,11 +10,21 @@ const FLOODGATES: &str = "lavabrink_floodgates";
 
 fn setup(players: &[i32]) -> (GameEngine, u32) {
     assert!(
-        CardRegistry::global().get(FLOODGATES).is_some(),
+        tricerules_cards::registry::global()
+            .get(FLOODGATES)
+            .is_some(),
         "exact Lavabrink Floodgates is missing"
     );
     let decks = players.iter().map(|_| deck_with("island", &[])).collect();
-    let mut engine = GameEngine::new(603_120, players, 20, Some(decks), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        603_120,
+        players,
+        20,
+        Some(decks),
+        true,
+    )
+    .unwrap();
     let source = inject_permanent_on_battlefield(&mut engine, 0, FLOODGATES);
     (engine, source)
 }
@@ -130,7 +140,7 @@ fn change_control(engine: &mut GameEngine, object: u32, controller: i32) {
 
 #[test]
 fn lavabrink_floodgates_has_its_complete_single_face() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get(FLOODGATES)
         .expect("exact Lavabrink Floodgates card is registered");
 

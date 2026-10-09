@@ -3,6 +3,7 @@ use crate::helpers::*;
 #[test]
 fn issue_173_twincast_retains_x_but_not_the_faerie_bonus() {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         173004,
         &[0, 1],
         20,
@@ -97,7 +98,15 @@ fn setup_convolute_over_bolt() -> (GameEngine, u32, u32) {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(8801, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8801,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     give_mana(
@@ -465,7 +474,15 @@ fn countered_spell_moves_to_its_owners_graveyard() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(144, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        144,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
@@ -584,7 +601,15 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(91024, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        91024,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let m0 = hand_index_for_card(&e, 0, "mountain");
@@ -710,7 +735,15 @@ fn counterspell_counters_a_spell_on_stack() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(903, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        903,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
@@ -808,7 +841,15 @@ fn three_bolts_stack_lifo_active_sequential_then_non_active_response() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(4401, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4401,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let m0a = hand_index_for_card(&e, 0, "mountain");
@@ -932,7 +973,15 @@ fn five_lightning_bolts_combined_stack_resolves_lifo_two_players() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(4405, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4405,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let m0a = hand_index_for_card(&e, 0, "mountain");
@@ -1092,7 +1141,15 @@ fn non_active_holds_priority_two_bolts_on_stack_above_active_bolt() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(4402, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4402,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let m0 = hand_index_for_card(&e, 0, "mountain");
@@ -1181,7 +1238,15 @@ fn counterspell_on_top_bolt_fizzles_second_leaves_bottom_bolt() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(4403, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4403,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let m0a = hand_index_for_card(&e, 0, "mountain");
@@ -1297,7 +1362,15 @@ fn twincast_copies_bolt_both_deal_damage() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(144, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        144,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
@@ -1494,7 +1567,15 @@ fn twincast_rejects_non_spell_target() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(77, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        77,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Put a creature on P0's battlefield to (illegally) target.
@@ -1566,7 +1647,15 @@ fn countering_a_spell_copy_removes_it_without_error() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(144, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        144,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // P0 casts Lightning Bolt at P1.
@@ -1691,7 +1780,15 @@ fn twincast_copy_controller_chooses_new_target() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(144, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        144,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
@@ -1810,7 +1907,15 @@ fn twincast_awaiting_copy_target(seed: u64) -> (GameEngine, u32, u32) {
         deck_with("mountain", &["lightning_bolt"]),
         deck_with("island", &["twincast"]),
     ]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let original_target = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");

@@ -75,7 +75,15 @@ fn issue_338_worthy_cost_pays_a_sacrifice_and_exiles_a_creature_or_planeswalker(
         deck_with("swamp", &["worthy_cost", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(338_101, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_101,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let fodder = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -135,7 +143,15 @@ fn issue_338_worthy_cost_pays_a_sacrifice_and_exiles_a_creature_or_planeswalker(
         deck_with("swamp", &["worthy_cost", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut walker_engine = GameEngine::new(338_102, &[0, 1], 20, decks, true).expect("engine");
+    let mut walker_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_102,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut walker_engine);
     let fodder = inject_creature_on_battlefield(&mut walker_engine, 0, "grizzly_bears");
     let walker = inject_permanent_on_battlefield(&mut walker_engine, 1, "jace_beleren");
@@ -176,7 +192,15 @@ fn issue_338_eaten_alive_accepts_either_payment_and_exiles() {
         deck_with("swamp", &["eaten_alive", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(338_201, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_201,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let fodder = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -216,7 +240,15 @@ fn issue_338_eaten_alive_accepts_either_payment_and_exiles() {
         deck_with("swamp", &["eaten_alive", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut mana_engine = GameEngine::new(338_202, &[0, 1], 20, decks, true).expect("engine");
+    let mut mana_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_202,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut mana_engine);
     let target = inject_creature_on_battlefield(&mut mana_engine, 1, "grizzly_bears");
     ensure_card_in_hand(&mut mana_engine, 0, "eaten_alive");
@@ -247,7 +279,15 @@ fn issue_338_seize_the_spoils_discards_and_draws_with_a_treasure() {
         deck_with("mountain", &["seize_the_spoils", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(338_301, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_301,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "seize_the_spoils");
     ensure_card_in_hand(&mut engine, 0, "grizzly_bears");
@@ -297,7 +337,15 @@ fn issue_338_duty_beyond_death_grants_indestructible_and_a_counter() {
         deck_with("plains", &["duty_beyond_death", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(338_401, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_401,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let fodder = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let own = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -350,7 +398,15 @@ fn issue_338_arbiter_of_woe_etb_drains_each_opponent() {
         deck_with("swamp", &["arbiter_of_woe", "grizzly_bears"]),
         deck_with("forest", &["island"]),
     ]);
-    let mut engine = GameEngine::new(338_601, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_601,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let fodder = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     ensure_card_in_hand(&mut engine, 0, "arbiter_of_woe");

@@ -2,7 +2,7 @@
 use super::helpers::*;
 use prost::Message;
 use tricerules_cards::{
-    CardRegistry, ContinuousEffectKind, ControllerReference, EffectDuration, PermanentTypeFilter,
+    ContinuousEffectKind, ControllerReference, EffectDuration, PermanentTypeFilter,
     TypeLineReplacement,
 };
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
@@ -16,7 +16,15 @@ const CARD: &str = "metalwork_colossus";
 
 fn setup() -> GameEngine {
     let deck = deck_with("forest", &[]);
-    let mut e = GameEngine::new(26100472, &[10, 20, 30], 20, Some(vec![deck; 3]), true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        26100472,
+        &[10, 20, 30],
+        20,
+        Some(vec![deck; 3]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     inject_card_into_hand(&mut e, 0, CARD);
     e
@@ -184,7 +192,7 @@ fn metalwork_uses_derived_types_control_copy_and_battlefield_x_mana_value() {
         }),
     );
     expect_cost(&mut e, "{11}");
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("krark-clan_ironworks")
         .unwrap()
         .primary_face()
@@ -574,7 +582,7 @@ fn metalwork_simultaneous_cost_departing_observer_and_exile_replacement() {
         let source = inject_graveyard_card(&mut e, 0, CARD);
         let observer = inject_permanent_on_battlefield(&mut e, 0, "sol_ring");
         let member = inject_permanent_on_battlefield(&mut e, 0, "mind_stone");
-        let mut ability = CardRegistry::global()
+        let mut ability = tricerules_cards::registry::global()
             .get("ajanis_pridemate")
             .unwrap()
             .primary_face()

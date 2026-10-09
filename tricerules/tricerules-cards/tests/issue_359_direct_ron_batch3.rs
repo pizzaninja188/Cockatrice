@@ -6,7 +6,7 @@ use tricerules_cards::primitives::{
     Amount, CastCostGroupDef, CastCostOptionDef, ManaCostChoiceKind, MassPlayerSet,
     SpellEffectKind, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, ChoiceId, Color, ModeId};
+use tricerules_cards::{AbilityPresentation, ChoiceId, Color, ModeId};
 
 const CAUGHT_IN_THE_CROSSFIRE_FINGERPRINT: &str =
     "41c908e02a9144ff044c062a7f9b60c4a4f1066ffb9e25e5fbb978cde61b6805";
@@ -28,12 +28,12 @@ fn option_id(group: &CastCostGroupDef, index: usize) -> ChoiceId {
 
 #[test]
 fn issue_359_caught_in_the_crossfire_maps_both_printed_clauses() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("caught_in_the_crossfire")
         .expect("registered");
     assert_eq!(card.name, "Caught in the Crossfire");
     assert_eq!(
-        CardRegistry::global().id_for_name("Caught in the Crossfire"),
+        tricerules_cards::registry::global().id_for_name("Caught in the Crossfire"),
         Some("caught_in_the_crossfire")
     );
     let face = card.primary_face();

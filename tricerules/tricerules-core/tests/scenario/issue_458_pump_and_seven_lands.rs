@@ -20,7 +20,15 @@ fn main1(seed: u64) -> GameEngine {
 /// A deck that contains the reviewed creature so it can enter through the engine.
 fn creature_engine(seed: u64, card: &str) -> GameEngine {
     let decks = Some(vec![deck_with("forest", &[card]), deck_with("island", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

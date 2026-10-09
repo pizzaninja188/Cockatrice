@@ -23,7 +23,7 @@ fn devotion_gods_register_exact_faces_costs_types_keywords_and_oracle_lines() {
             5,
         ),
     ] {
-        let card = CardRegistry::global()
+        let card = tricerules_cards::registry::global()
             .get(id)
             .expect("the complete God must be registered");
         assert_eq!(card.name, name);

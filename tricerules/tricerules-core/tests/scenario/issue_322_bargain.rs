@@ -44,7 +44,15 @@ fn choose_trigger_target(target: u32) -> RuledCommand {
 #[test]
 fn archons_glory_applies_its_conditional_keywords_only_after_bargain() {
     for bargained in [false, true] {
-        let mut engine = GameEngine::new(322_001, &[0, 1], 20, None, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            322_001,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("engine");
         advance_to_main1_from_game_start(&mut engine);
         let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
         let treasure = inject_permanent_on_battlefield(&mut engine, 0, "treasure");
@@ -98,7 +106,15 @@ fn archons_glory_applies_its_conditional_keywords_only_after_bargain() {
 
 #[test]
 fn bargain_cost_rejects_ineligible_opponent_and_stale_objects_atomically() {
-    let mut engine = GameEngine::new(322_008, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        322_008,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let own_creature = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let own_treasure = inject_permanent_on_battlefield(&mut engine, 0, "treasure");
@@ -164,7 +180,15 @@ fn candy_grapple_uses_three_or_five_minus_five_from_the_committed_choice() {
             deck_with("swamp", &[]),
             deck_with("forest", &["colossal_dreadmaw"]),
         ]);
-        let mut engine = GameEngine::new(322_002, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            322_002,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         advance_to_main1_from_game_start(&mut engine);
         let target = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);
         let treasure = inject_permanent_on_battlefield(&mut engine, 0, "treasure");
@@ -204,7 +228,15 @@ fn candy_grapple_uses_three_or_five_minus_five_from_the_committed_choice() {
 
 #[test]
 fn copied_bargained_kellans_lightblades_keeps_the_choice_and_destroys_its_attacker() {
-    let mut engine = GameEngine::new(322_003, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        322_003,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let treasure = inject_permanent_on_battlefield(&mut engine, 0, "treasure");
@@ -275,7 +307,15 @@ fn nonbargained_kellans_lightblades_deals_three_damage() {
         deck_with("forest", &["colossal_dreadmaw"]),
         deck_with("plains", &[]),
     ]);
-    let mut engine = GameEngine::new(322_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        322_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let attacker = relocate_to_battlefield(&mut engine, 0, "colossal_dreadmaw", false);
     engine
@@ -313,7 +353,15 @@ fn nonbargained_kellans_lightblades_deals_three_damage() {
 
 #[test]
 fn bargained_ouphe_exiles_a_targeted_opponent_artifact() {
-    let mut engine = GameEngine::new(322_005, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        322_005,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let payment = inject_permanent_on_battlefield(&mut engine, 0, "treasure");
     let target = inject_permanent_on_battlefield(&mut engine, 1, "treasure");
@@ -346,7 +394,15 @@ fn bargained_ouphe_exiles_a_targeted_opponent_artifact() {
 
 #[test]
 fn unbargained_ouphe_and_a_permanent_copy_have_no_bargain_trigger() {
-    let mut unbargained = GameEngine::new(322_006, &[0, 1], 20, None, true).expect("engine");
+    let mut unbargained = GameEngine::new(
+        tricerules_cards::registry::global(),
+        322_006,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut unbargained);
     let target = inject_permanent_on_battlefield(&mut unbargained, 1, "treasure");
     inject_card_into_hand(&mut unbargained, 0, "troublemaker_ouphe");
@@ -365,7 +421,15 @@ fn unbargained_ouphe_and_a_permanent_copy_have_no_bargain_trigger() {
     assert!(unbargained.state.pending_triggers.is_empty());
     assert!(unbargained.state.players[1].battlefield.contains(&target));
 
-    let mut copy_game = GameEngine::new(322_007, &[0, 1], 20, None, true).expect("engine");
+    let mut copy_game = GameEngine::new(
+        tricerules_cards::registry::global(),
+        322_007,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut copy_game);
     let payment = inject_permanent_on_battlefield(&mut copy_game, 0, "treasure");
     inject_card_into_hand(&mut copy_game, 0, "troublemaker_ouphe");
@@ -408,7 +472,15 @@ fn unbargained_ouphe_and_a_permanent_copy_have_no_bargain_trigger() {
 
 #[test]
 fn copied_bargained_ouphe_spell_keeps_bargain_for_its_battlefield_entry() {
-    let mut engine = GameEngine::new(322_009, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        322_009,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let payment = inject_permanent_on_battlefield(&mut engine, 0, "treasure");
     let opponent_artifact = inject_permanent_on_battlefield(&mut engine, 1, "treasure");

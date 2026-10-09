@@ -7,7 +7,15 @@ use tricerules_proto::ruled::v1::ChoiceKind;
 
 fn engine_with_spell(seed: u64, spell: &str, basic: &str) -> GameEngine {
     let decks = Some(vec![deck_with(basic, &[spell]), vec!["forest".into(); 20]]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, spell);
     engine

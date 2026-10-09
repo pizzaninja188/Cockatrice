@@ -699,6 +699,7 @@ mod cast_color_tests {
     #[test]
     fn pentad_prism_uncast_copy_factory_clears_actual_paid_colors_before_token_entry() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             202_610_240,
             &[0, 1],
             20,

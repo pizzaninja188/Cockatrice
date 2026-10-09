@@ -27,7 +27,7 @@ pub(super) struct PendingAttackDeclarationInternal {
 pub(super) struct AttackManaAbilityReceipt {
     pub activation_command_index: u64,
     pub source: TriggerObjectRef,
-    pub ability_path: Vec<tricerules_cards::AbilityId>,
+    pub ability_path: Vec<tricerules_card_model::AbilityId>,
     pub source_label: String,
     pub ability: ActivatedAbilityDef,
     pub before_state: GameState,
@@ -44,7 +44,7 @@ pub(super) struct AttackManaAbilityReceipt {
     pub mana_damage_triggers: Vec<super::triggers::CollectedTrigger>,
     pub mana_output: ManaAmount,
     pub restriction_group_id: Option<u32>,
-    pub mana_restriction: Option<tricerules_cards::ManaSpendingRestriction>,
+    pub mana_restriction: Option<tricerules_card_model::ManaSpendingRestriction>,
     pub restriction_presentation: Option<rv1::PresentationRef>,
     /// Event-time trigger matches from paying this activation's costs, before use-limit filtering.
     pub cost_triggers: Vec<super::triggers::CollectedTrigger>,
@@ -58,7 +58,7 @@ pub(super) struct AttackManaAbilityReceipt {
 pub(super) struct AttackManaAbilityReceiptInput {
     pub before_state: GameState,
     pub source: ObjectId,
-    pub ability_path: Vec<tricerules_cards::AbilityId>,
+    pub ability_path: Vec<tricerules_card_model::AbilityId>,
     pub source_label: String,
     pub ability: ActivatedAbilityDef,
     pub cost_plan: super::payment::transaction::CostTransactionPlan,
@@ -1300,7 +1300,7 @@ impl GameEngine {
     ) -> bool {
         blocker_count > 1
             || (blocker_count == 1
-                && self.effective_has_keyword(attacker_id, tricerules_cards::Keyword::Trample))
+                && self.effective_has_keyword(attacker_id, tricerules_card_model::Keyword::Trample))
     }
 
     fn combat_restrictions(&self, oid: ObjectId) -> CombatRestriction {
@@ -1371,7 +1371,7 @@ impl GameEngine {
         if !characteristics.is_creature() {
             return Some("not creature");
         }
-        if characteristics.has_keyword(tricerules_cards::Keyword::Defender)
+        if characteristics.has_keyword(tricerules_card_model::Keyword::Defender)
             && !self.can_attack_as_though_without_defender(oid, &characteristics)
         {
             return Some("creature has defender");
@@ -1379,7 +1379,9 @@ impl GameEngine {
         if self.combat_restrictions(oid).cant_attack {
             return Some("creature cannot attack");
         }
-        if object.summoning_sick && !characteristics.has_keyword(tricerules_cards::Keyword::Haste) {
+        if object.summoning_sick
+            && !characteristics.has_keyword(tricerules_card_model::Keyword::Haste)
+        {
             return Some("summoning sick");
         }
         if object.tapped {
@@ -1839,7 +1841,7 @@ impl GameEngine {
             return false;
         }
         for evasion in &attacker.evasions {
-            let tricerules_cards::Evasion::Landwalk { land_subtype } = evasion;
+            let tricerules_card_model::Evasion::Landwalk { land_subtype } = evasion;
             if self.state.player_idx(defending_player).is_some_and(|idx| {
                 self.state.players[idx].battlefield.iter().any(|oid| {
                     self.characteristics(*oid).is_some_and(|land| {
@@ -1996,7 +1998,7 @@ impl GameEngine {
         for &oid in &list {
             // CR 702.20b — Vigilance: attacking doesn't cause this creature to tap.
             let has_vigilance =
-                self.effective_has_keyword(oid, tricerules_cards::Keyword::Vigilance);
+                self.effective_has_keyword(oid, tricerules_card_model::Keyword::Vigilance);
             if !has_vigilance {
                 tapping_attackers.push(oid);
             }
@@ -2515,11 +2517,11 @@ impl GameEngine {
 
         // Phase 2: compute trample flag and expected blockers before any borrow of combat.
         let att_has_trample =
-            self.effective_has_keyword(attacker_id, tricerules_cards::Keyword::Trample);
+            self.effective_has_keyword(attacker_id, tricerules_card_model::Keyword::Trample);
         // CR 702.2b: any nonzero damage from a deathtouch source is lethal, which lowers the
         // per-blocker lethal amount the trample assignment must cover (CR 702.19e) to 1.
         let att_has_deathtouch =
-            self.effective_has_keyword(attacker_id, tricerules_cards::Keyword::Deathtouch);
+            self.effective_has_keyword(attacker_id, tricerules_card_model::Keyword::Deathtouch);
 
         // Clone expected blockers to free the immutable borrow on combat before the mutable one.
         let expected_blockers: Vec<ObjectId> = self
@@ -2674,7 +2676,7 @@ impl GameEngine {
         &mut self,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
-        use tricerules_cards::Keyword;
+        use tricerules_card_model::Keyword;
         let ap = self.state.active_player_id();
         let c_init = self
             .state
@@ -2769,7 +2771,7 @@ impl GameEngine {
         pass: DamagePass,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
-        use tricerules_cards::Keyword;
+        use tricerules_card_model::Keyword;
         self.state.combat_damage_priority_pending = true;
         if self.try_park_ordered_combat_damage(c, pass, events)? {
             return Ok(());
@@ -3237,7 +3239,7 @@ pub(super) fn object_participates_in_pass(
     obj_id: ObjectId,
     is_attacker: bool,
 ) -> bool {
-    use tricerules_cards::Keyword;
+    use tricerules_card_model::Keyword;
     let has_fs = engine.effective_has_keyword(obj_id, Keyword::FirstStrike);
     let has_ds = engine.effective_has_keyword(obj_id, Keyword::DoubleStrike);
     match pass {
@@ -3258,7 +3260,7 @@ pub(super) fn object_participates_in_pass(
 /// True iff any current attacker or blocker has FirstStrike or DoubleStrike — used to decide
 /// whether the combat phase needs a first-strike damage substep (CR 510.4).
 pub(super) fn combat_needs_first_strike_step(engine: &GameEngine, c: &CombatState) -> bool {
-    use tricerules_cards::Keyword;
+    use tricerules_card_model::Keyword;
     let has_fs_or_ds = |id: ObjectId| {
         engine.effective_has_keyword(id, Keyword::FirstStrike)
             || engine.effective_has_keyword(id, Keyword::DoubleStrike)

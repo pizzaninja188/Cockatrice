@@ -92,7 +92,15 @@ fn any_and_named_counter_scopes_recompute_live_membership() {
         ),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(194_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        194_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     move_ready_to_battlefield(&mut engine, 0, "michelangelo,_mutant_bff");
     resolve_entire_stack_two_player(&mut engine);
@@ -176,7 +184,15 @@ fn source_control_departure_and_return_retarget_the_scope() {
         deck_with("island", &["herald_of_secret_streams", "grizzly_bears"]),
         deck_with("island", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(194_002, &[10, 20], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        194_002,
+        &[10, 20],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let herald = move_ready_to_battlefield(&mut engine, 0, "herald_of_secret_streams");
     let original_bear = move_ready_to_battlefield(&mut engine, 0, "grizzly_bears");
@@ -262,7 +278,15 @@ fn clone_copies_the_scoped_restriction_for_its_controller() {
         deck_with("island", &["clone", "grizzly_bears"]),
         deck_with("island", &["herald_of_secret_streams"]),
     ]);
-    let mut engine = GameEngine::new(194_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        194_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let herald = move_ready_to_battlefield(&mut engine, 1, "herald_of_secret_streams");
     engine
@@ -288,7 +312,15 @@ fn maximum_one_publishes_pairs_and_rejects_a_forged_double_block_atomically() {
         deck_with("forest", &["michelangelo,_mutant_bff", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(194_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        194_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     move_ready_to_battlefield(&mut engine, 0, "michelangelo,_mutant_bff");
     resolve_entire_stack_two_player(&mut engine);
@@ -353,7 +385,15 @@ fn cumulative_prohibition_removes_pairs_and_forged_blocks_are_rejected() {
         ),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(194_005, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        194_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     move_ready_to_battlefield(&mut engine, 0, "michelangelo,_mutant_bff");
     resolve_entire_stack_two_player(&mut engine);
@@ -392,7 +432,15 @@ fn gaining_a_counter_after_blockers_does_not_make_the_attacker_unblocked() {
         deck_with("island", &["herald_of_secret_streams", "grizzly_bears"]),
         deck_with("island", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(194_006, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        194_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     move_ready_to_battlefield(&mut engine, 0, "herald_of_secret_streams");
     let attacker = move_ready_to_battlefield(&mut engine, 0, "grizzly_bears");
@@ -429,7 +477,15 @@ fn michelangelo_creates_mutagen_on_entry_and_attack() {
         deck_with("forest", &["michelangelo,_mutant_bff"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(194_007, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        194_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let michelangelo = move_ready_to_battlefield(&mut engine, 0, "michelangelo,_mutant_bff");
     resolve_entire_stack_two_player(&mut engine);

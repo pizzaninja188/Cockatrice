@@ -3,6 +3,7 @@ use tricerules_core::Zone;
 
 fn game() -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         230,
         &[0, 1],
         20,

@@ -385,7 +385,7 @@ mod tests {
         assert!(draft.contains("MECHANICS UNRESOLVED"));
         assert_eq!(map["complete_definition_review_confirmed"], false);
         assert_eq!(map["semantic_fixtures"], serde_json::json!([]));
-        assert!(crate::CardRegistry::from_authoring_draft(&draft).is_err());
+        assert!(crate::registry::from_authoring_draft(&draft).is_err());
         let reviewed = draft
             .lines()
             .filter(|l| {
@@ -394,11 +394,11 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        let registry = crate::CardRegistry::from_authoring_draft(&reviewed).unwrap();
+        let registry = crate::registry::from_authoring_draft(&reviewed).unwrap();
         let def = registry.get("test_draw").unwrap();
         assert_eq!(
             def.primary_face().spell_effect,
-            crate::CardRegistry::from_authoring_draft(raw)
+            crate::registry::from_authoring_draft(raw)
                 .unwrap()
                 .get("divination")
                 .unwrap()

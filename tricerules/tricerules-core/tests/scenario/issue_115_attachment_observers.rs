@@ -23,7 +23,15 @@ fn issue_115_goldvein_pick_observes_equipped_creature_combat_damage() {
         deck_with("mountain", &["goldvein_pick"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(11501, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11501,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut engine);
 
     let attacker = engine.state.players[0]
@@ -100,7 +108,15 @@ fn issue_115_goldvein_pick_ignores_equipped_creature_noncombat_damage() {
         deck_with("island", &["goldvein_pick", "prodigal_sorcerer"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(11506, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11506,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let pick = relocate_to_battlefield(&mut engine, 0, "goldvein_pick", false);
@@ -132,7 +148,15 @@ fn issue_115_cracked_skull_destroys_the_damaged_same_generation_creature() {
         deck_with("mountain", &["cracked_skull", "lightning_bolt"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(11502, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11502,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let skull = relocate_to_battlefield(&mut engine, 0, "cracked_skull", false);
@@ -188,7 +212,15 @@ fn issue_115_cracked_skull_does_not_destroy_a_returned_new_object() {
         deck_with("mountain", &["cracked_skull", "lightning_bolt"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(11507, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11507,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let skull = relocate_to_battlefield(&mut engine, 0, "cracked_skull", false);
@@ -268,7 +300,15 @@ fn issue_115_quick_draw_katana_tracks_its_controllers_turn() {
         deck_with("plains", &["quick-draw_katana"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(11503, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11503,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     ensure_card_in_hand(&mut engine, 0, "quick-draw_katana");
@@ -309,7 +349,15 @@ fn issue_143_coercion_publicly_reveals_and_can_choose_any_card() {
         deck_with("swamp", &["coercion"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(11504, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11504,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let cleared: Vec<_> = engine.state.players[1].hand.drain(..).collect();
@@ -372,7 +420,15 @@ fn issue_143_cracked_skull_remains_a_private_look() {
         deck_with("swamp", &["cracked_skull"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(11505, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11505,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let cleared: Vec<_> = engine.state.players[1].hand.drain(..).collect();

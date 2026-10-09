@@ -6,7 +6,7 @@
 use super::helpers::*;
 use tricerules_cards::{
     primitives::{AbilityCost, ActivationTiming, SpellEffectKind, TargetChooser},
-    CardRegistry, CounterKind,
+    CounterKind,
 };
 use tricerules_core::{GameEngine, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
@@ -19,8 +19,15 @@ const NESTING_GROUNDS: &str = "nesting_grounds";
 fn four_player_engine(seed: u64) -> GameEngine {
     let mut deck = std::iter::repeat_n("forest".to_string(), 30).collect::<Vec<_>>();
     deck.extend(["grizzly_bears".to_string(), "sol_ring".to_string()]);
-    let mut engine = GameEngine::new(seed, &[0, 1, 2, 3], 20, Some(vec![deck; 4]), true)
-        .expect("new four-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1, 2, 3],
+        20,
+        Some(vec![deck; 4]),
+        true,
+    )
+    .expect("new four-player game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -63,7 +70,7 @@ fn pass_until_choice(engine: &mut GameEngine) -> ResolutionChoiceRequired {
 
 #[test]
 fn nesting_grounds_registers_its_complete_two_ability_land_definition() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get(NESTING_GROUNDS)
         .expect("the exact Nesting Grounds definition is registered");
     assert_eq!(definition.name, "Nesting Grounds");
@@ -121,7 +128,7 @@ fn resolve_without_counter_choice(engine: &mut GameEngine) {
 }
 
 fn move_owned_card(engine: &mut GameEngine, owner: i32, card_id: &str, destination: DevZone) {
-    let definition = tricerules_cards::CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get(card_id)
         .expect("registered card");
     engine.enable_dev_commands();

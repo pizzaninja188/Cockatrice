@@ -1,13 +1,14 @@
 use super::helpers::{advance_to_main1_from_game_start, authoring_rows::run_rows};
 use serde::Deserialize;
 use std::path::PathBuf;
-use tricerules_cards::CardRegistry;
 use tricerules_core::{EngineDeck, GameEngine};
 
 #[test]
 fn draft_constructor_is_explicit_and_preserves_production_registry() {
     let draft = r#"(id:"authoring_test_land",name:"Authoring Test Land",face_id:"authoring_test_land",types:["Land"] )"#;
-    let registry = Box::leak(Box::new(CardRegistry::from_authoring_draft(draft).unwrap()));
+    let registry = Box::leak(Box::new(
+        tricerules_cards::registry::from_authoring_draft(draft).unwrap(),
+    ));
     let decks = vec![
         EngineDeck {
             mainboard: vec!["authoring_test_land".into(); 20],
@@ -16,9 +17,11 @@ fn draft_constructor_is_explicit_and_preserves_production_registry() {
         2
     ];
     let engine =
-        GameEngine::new_for_authoring(1, &[0, 1], 20, Some(decks), true, registry).unwrap();
+        GameEngine::new_with_commander_decks(registry, 1, &[0, 1], 20, Some(decks), true).unwrap();
     assert_eq!(engine.state.players[0].hand.len(), 7);
-    assert!(CardRegistry::global().get("authoring_test_land").is_none());
+    assert!(tricerules_cards::registry::global()
+        .get("authoring_test_land")
+        .is_none());
 }
 
 #[derive(Deserialize)]
@@ -57,7 +60,7 @@ fn external_drafts() {
             2
         ];
         let mut e =
-            GameEngine::new_for_authoring(448_012, &[0, 1], 20, Some(decks), true, registry)
+            GameEngine::new_with_commander_decks(registry, 448_012, &[0, 1], 20, Some(decks), true)
                 .unwrap();
         advance_to_main1_from_game_start(&mut e);
         e

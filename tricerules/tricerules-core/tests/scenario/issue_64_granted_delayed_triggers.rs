@@ -15,8 +15,15 @@ fn infernal_scarring_grants_the_creature_controller_a_dies_trigger() {
         deck_with("swamp", &["infernal_scarring"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(6401, &[0, 1], 20, decks, true)
-        .expect("Infernal Scarring card data must validate");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6401,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("Infernal Scarring card data must validate");
     advance_to_main1_from_game_start(&mut e);
 
     let creature = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -60,7 +67,15 @@ fn multiple_infernal_scarrings_create_distinct_orderable_triggers() {
         deck_with("swamp", &["infernal_scarring", "infernal_scarring"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(6408, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6408,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let creature = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     inject_library_card(&mut e, 1, "forest");
@@ -103,7 +118,15 @@ fn infernal_scarring_removed_before_death_no_longer_grants_the_trigger() {
         deck_with("swamp", &["infernal_scarring", "tranquility"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(6409, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6409,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let creature = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     for card in ["infernal_scarring", "tranquility"] {
@@ -141,8 +164,15 @@ fn abnormal_endurance_returns_the_exact_dead_creature_tapped_under_its_owner() {
         deck_with("swamp", &["abnormal_endurance"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(6402, &[0, 1], 20, decks, true)
-        .expect("Abnormal Endurance card data must validate");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6402,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("Abnormal Endurance card data must validate");
     advance_to_main1_from_game_start(&mut e);
 
     let creature = inject_creature_under_foreign_control(&mut e, 1, 0, "grizzly_bears");
@@ -201,7 +231,15 @@ fn abnormal_endurance_does_not_return_a_card_that_left_the_graveyard() {
         deck_with("swamp", &["abnormal_endurance"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(6405, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6405,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let creature = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     ensure_card_in_hand(&mut e, 0, "abnormal_endurance");
@@ -239,7 +277,15 @@ fn abnormal_endurance_granted_trigger_expires_at_cleanup() {
         deck_with("swamp", &["abnormal_endurance"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(6407, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6407,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let creature = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     ensure_card_in_hand(&mut e, 0, "abnormal_endurance");
@@ -277,8 +323,15 @@ fn ray_of_command_control_loss_trigger_uses_the_stack_during_cleanup() {
         deck_with("island", &["ray_of_command"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(6403, &[0, 1], 20, decks, true)
-        .expect("Ray of Command card data must validate");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6403,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("Ray of Command card data must validate");
     advance_to_main1_from_game_start(&mut e);
 
     let creature = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -328,7 +381,15 @@ fn ray_of_command_triggers_once_on_an_earlier_control_change() {
         deck_with("island", &["ray_of_command"]),
         deck_with("island", &["ray_of_command"]),
     ]);
-    let mut e = GameEngine::new(6404, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6404,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let creature = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
 
@@ -378,7 +439,15 @@ fn ray_of_command_triggers_once_on_an_earlier_control_change() {
 #[test]
 fn next_end_step_delayed_trigger_is_one_shot_and_keeps_object_identity() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut e = GameEngine::new(6406, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6406,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let creature = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let generation = e

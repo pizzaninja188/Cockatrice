@@ -151,6 +151,7 @@ mod tests {
 
     fn setup() -> GameEngine {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             180_101,
             &[3, 11],
             20,

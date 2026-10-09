@@ -72,8 +72,15 @@ fn move_card_to_zone(engine: &mut GameEngine, player_id: i32, card_name: &str, z
 
 #[test]
 fn flameshadow_copies_the_entry_object_and_schedules_exact_token_exile() {
-    let mut engine =
-        GameEngine::new(202_610_702, &[4, 9, 27], 20, None, true).expect("new three-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_702,
+        &[4, 9, 27],
+        20,
+        None,
+        true,
+    )
+    .expect("new three-player game");
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 0, "flameshadow_conjuring");
 
@@ -170,8 +177,15 @@ fn flameshadow_copies_the_entry_object_and_schedules_exact_token_exile() {
 
 #[test]
 fn flameshadow_ignores_tokens_and_noncreature_entries_and_can_decline_the_copy() {
-    let mut engine =
-        GameEngine::new(202_610_703, &[4, 9], 20, None, true).expect("new two-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_703,
+        &[4, 9],
+        20,
+        None,
+        true,
+    )
+    .expect("new two-player game");
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 0, "flameshadow_conjuring");
 
@@ -262,8 +276,15 @@ fn flameshadow_ignores_tokens_and_noncreature_entries_and_can_decline_the_copy()
 
 #[test]
 fn flameshadow_trigger_uses_source_and_event_object_lki_after_they_leave() {
-    let mut engine =
-        GameEngine::new(202_610_704, &[4, 9], 20, None, true).expect("new two-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_704,
+        &[4, 9],
+        20,
+        None,
+        true,
+    )
+    .expect("new two-player game");
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 0, "flameshadow_conjuring");
 
@@ -345,8 +366,15 @@ fn flameshadow_trigger_uses_source_and_event_object_lki_after_they_leave() {
 
 #[test]
 fn flameshadow_exiles_the_exact_token_at_end_step_after_control_changes() {
-    let mut engine =
-        GameEngine::new(202_610_705, &[4, 9], 20, None, true).expect("new two-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_705,
+        &[4, 9],
+        20,
+        None,
+        true,
+    )
+    .expect("new two-player game");
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 0, "flameshadow_conjuring");
 
@@ -450,6 +478,7 @@ fn flameshadow_exiles_the_exact_token_at_end_step_after_control_changes() {
 fn flameshadow_copy_created_during_end_step_waits_for_the_next_turn_end_step() {
     let deck = deck_with("island", &[]);
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         202_610_706,
         &[4, 9],
         20,
@@ -557,8 +586,15 @@ fn flameshadow_copy_created_during_end_step_waits_for_the_next_turn_end_step() {
 
 #[test]
 fn flameshadow_copy_entry_choice_fixture_resumes_with_the_exact_token_reference() {
-    let mut engine =
-        GameEngine::new(202_610_707, &[4, 9], 20, None, true).expect("new two-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_707,
+        &[4, 9],
+        20,
+        None,
+        true,
+    )
+    .expect("new two-player game");
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 0, "flameshadow_conjuring");
     let copy_target = inject_permanent_on_battlefield(&mut engine, 0, "prodigal_sorcerer");
@@ -583,7 +619,7 @@ fn flameshadow_copy_entry_choice_fixture_resumes_with_the_exact_token_reference(
     // Engine fixture: retain Grizzly Bears' body while adding Clone's as-enters ability to the
     // observed object's copiable face. This isolates the generic parked-copy receipt path; it is
     // not a claim that a normal Clone copy retains that ability after choosing a source.
-    let registry = tricerules_cards::CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let mut face = registry
         .get("grizzly_bears")
         .expect("Grizzly Bears definition")
@@ -662,8 +698,15 @@ fn flameshadow_copy_entry_choice_fixture_resumes_with_the_exact_token_reference(
 
 #[test]
 fn flameshadow_token_and_haste_remain_when_its_delayed_exile_is_countered() {
-    let mut engine =
-        GameEngine::new(202_610_708, &[4, 9], 20, None, true).expect("new two-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_708,
+        &[4, 9],
+        20,
+        None,
+        true,
+    )
+    .expect("new two-player game");
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 0, "flameshadow_conjuring");
 
@@ -765,8 +808,15 @@ fn flameshadow_token_and_haste_remain_when_its_delayed_exile_is_countered() {
 
 #[test]
 fn flameshadow_stages_one_independent_trigger_per_simultaneous_nontoken_creature() {
-    let mut engine =
-        GameEngine::new(202_610_709, &[4, 9], 20, None, true).expect("new two-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_709,
+        &[4, 9],
+        20,
+        None,
+        true,
+    )
+    .expect("new two-player game");
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 0, "flameshadow_conjuring");
     let entrants = [

@@ -7,7 +7,7 @@ use super::helpers::*;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, ControllerReference, EffectDuration, TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
+use tricerules_cards::{AbilityPresentation, Layout};
 use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     dev_command, AttackAssignment, ChooseTriggerTarget, DeclareAttackers, DevCommand, DevMoveCard,
@@ -21,14 +21,22 @@ const ARTIFACT: &str = "sol_ring";
 /// Keep four distinct roles: Hawk owner P0, source/ability controller P2, artifact owner P1,
 /// and the later control-effect controller P3.
 fn four_player_engine(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[2, 0, 1, 3], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[2, 0, 1, 3],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
 
 fn setup_expend(seed: u64) -> (GameEngine, u32, u32) {
     assert!(
-        CardRegistry::global().get(HAWK).is_some(),
+        tricerules_cards::registry::global().get(HAWK).is_some(),
         "Pyreswipe Hawk is registered"
     );
     let mut engine = four_player_engine(seed);
@@ -156,7 +164,7 @@ fn dev_move_owned_card(engine: &mut GameEngine, owner: i32, card_name: &str, zon
 
 #[test]
 fn pyreswipe_hawk_has_its_complete_single_face_and_attack_value_is_snapshotted_on_resolution() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get(HAWK)
         .expect("Pyreswipe Hawk definition");
     assert_eq!(card.name, "Pyreswipe Hawk");

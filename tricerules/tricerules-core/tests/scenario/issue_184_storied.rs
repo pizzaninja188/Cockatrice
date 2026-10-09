@@ -38,7 +38,15 @@ fn storied_latches_once_and_is_published() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(184_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        184_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     move_ready_to_battlefield(&mut engine, 0, "oin_the_brave");
@@ -72,7 +80,15 @@ fn oin_bonus_turns_on_at_the_designation_boundary() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(184_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        184_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let oin = move_ready_to_battlefield(&mut engine, 0, "oin_the_brave");
@@ -94,7 +110,15 @@ fn bifur_doubles_its_dwarf_trigger_when_entry_establishes_story() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(184_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        184_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     move_ready_to_battlefield(&mut engine, 0, "bottle_gnomes");
     move_ready_to_battlefield(&mut engine, 0, "bottle_gnomes");
@@ -123,7 +147,15 @@ fn bombur_stays_tapped_without_a_story_then_untaps_with_one() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(184_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        184_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let bombur = move_ready_to_battlefield(&mut engine, 0, "bombur,_gentle_dreamer");
     engine
@@ -153,7 +185,15 @@ fn thorin_grants_ward_to_controlled_artifacts_after_story_is_gained() {
         ),
         deck_with("island", &["unsummon"]),
     ]);
-    let mut engine = GameEngine::new(184_005, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        184_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     move_ready_to_battlefield(&mut engine, 0, "thorin_oakenshield");
     let target = move_ready_to_battlefield(&mut engine, 0, "bottle_gnomes");

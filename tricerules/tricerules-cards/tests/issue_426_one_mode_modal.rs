@@ -11,10 +11,10 @@ use tricerules_cards::primitives::{
     PermanentTypeFilter, PtScale, PtScaleBasis, RelativePlayerSet, SpellEffectKind,
     TargetController, TargetFilter, TargetKind, TargetSchema, TypeLineAddition,
 };
-use tricerules_cards::{CardRegistry, CounterKind, Keyword, ModalDef};
+use tricerules_cards::{CounterKind, Keyword, ModalDef};
 
 fn modal(card_id: &str) -> ModalDef {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("{card_id} is registered"))
         .primary_face()
@@ -52,7 +52,7 @@ fn creature_or_planeswalker() -> TargetFilter {
 
 #[test]
 fn issue_426_registers_the_ten_one_mode_away_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id, mana_cost, types) in [
         (
             "cerebral_confiscation",

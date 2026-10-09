@@ -27,7 +27,15 @@ fn put_on_top(engine: &mut GameEngine, player: usize, card_ids: &[&str]) -> Vec<
 }
 
 fn creature_engine(seed: u64, card_id: &str, draws: &[&str]) -> (GameEngine, u32, Vec<u32>) {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, card_id);
     let drawn = put_on_top(&mut engine, 0, draws);
@@ -46,7 +54,15 @@ fn resolve_top_two_player(engine: &mut GameEngine) {
 }
 
 fn three_player_main1(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     engine
         .state
         .players

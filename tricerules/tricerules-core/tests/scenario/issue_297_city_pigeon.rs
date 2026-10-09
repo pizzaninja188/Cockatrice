@@ -2,7 +2,15 @@ use super::helpers::*;
 use tricerules_core::Zone;
 
 fn three_player_main1(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     engine
         .state
         .players
@@ -50,7 +58,15 @@ fn issue_297_city_pigeon_leaves_to_hand_graveyard_and_exile_once() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(297_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        297_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     for card_id in ["unsummon", "lightning_bolt", "wander_off"] {
@@ -107,7 +123,15 @@ fn issue_297_city_pigeon_uses_last_known_controller_but_owner_zone() {
         deck_with("island", &["unsummon"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(297_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        297_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let city = inject_creature_under_foreign_control(&mut engine, 1, 0, "city_pigeon");
@@ -178,7 +202,15 @@ fn issue_297_city_pigeon_blink_has_one_leave_food_and_no_return_duplicate() {
         deck_with("plains", &["city_pigeon", "wander_off"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(297_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        297_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     relocate_to_hand(&mut engine, 0, "city_pigeon");

@@ -5,7 +5,15 @@ use tricerules_proto::ruled::v1::ruled_event::Ev;
 
 #[test]
 fn sakura_tribe_elder_can_be_sacrificed_while_summoning_sick_to_find_a_tapped_basic_land() {
-    let mut engine = GameEngine::new(906_101, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        906_101,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let elder = inject_card_into_hand(&mut engine, 0, "sakura-tribe_elder");

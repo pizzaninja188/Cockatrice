@@ -12,7 +12,15 @@ fn legend_rule_controller_chooses_which_to_keep() {
         std::iter::repeat_n("isamaru,_hound_of_konda".to_string(), 10).collect::<Vec<_>>(),
         std::iter::repeat_n("forest".to_string(), 10).collect::<Vec<_>>(),
     ]);
-    let mut e = GameEngine::new(42, &[0, 1], 20, decks, true).expect("new engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        42,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut e);
 
     // Put two copies of Isamaru on P0's battlefield directly.
@@ -90,7 +98,15 @@ fn legend_rule_ltb_trigger_fires_on_removed_legend() {
         std::iter::repeat_n("kokusho,_the_evening_star".to_string(), 10).collect::<Vec<_>>(),
         std::iter::repeat_n("forest".to_string(), 10).collect::<Vec<_>>(),
     ]);
-    let mut e = GameEngine::new(43, &[0, 1], 20, decks, true).expect("new engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        43,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut e);
 
     let oid_a = deploy_to_battlefield(&mut e, 0, "kokusho,_the_evening_star", false);
@@ -140,7 +156,15 @@ fn legend_rule_reduces_to_one_with_multiple_copies() {
         std::iter::repeat_n("isamaru,_hound_of_konda".to_string(), 20).collect::<Vec<_>>(),
         std::iter::repeat_n("forest".to_string(), 10).collect::<Vec<_>>(),
     ]);
-    let mut e = GameEngine::new(44, &[0, 1], 20, decks, true).expect("new engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        44,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut e);
 
     let oid_a = deploy_to_battlefield(&mut e, 0, "isamaru,_hound_of_konda", false);
@@ -196,7 +220,15 @@ fn legend_rule_does_not_apply_to_non_legendary() {
         std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
         std::iter::repeat_n("forest".to_string(), 10).collect::<Vec<_>>(),
     ]);
-    let mut e = GameEngine::new(45, &[0, 1], 20, decks, true).expect("new engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        45,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut e);
 
     // Two Grizzly Bears on the battlefield — not legendary, no legend SBA.

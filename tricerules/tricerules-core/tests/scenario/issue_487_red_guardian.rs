@@ -16,7 +16,15 @@ const RED_GUARDIAN: &str = "red_guardian,_super-soldier";
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("plains", &[]), deck_with("island", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

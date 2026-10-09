@@ -2,10 +2,10 @@ use tricerules_cards::primitives::{
     AbilityCost, Amount, PermanentTypeFilter, SpellEffectKind, StaticAbilityDef, TargetFilter,
     TargetKind,
 };
-use tricerules_cards::{CardRegistry, ManaAmount};
+use tricerules_cards::ManaAmount;
 
 fn granted_ability(card_id: &str) -> &tricerules_cards::ActivatedAbilityDef {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("{card_id} must be registered"));
     let modifier = definition
@@ -27,7 +27,7 @@ fn granted_ability(card_id: &str) -> &tricerules_cards::ActivatedAbilityDef {
 
 #[test]
 fn gift_of_paradise_grants_the_exact_land_mana_ability() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("gift_of_paradise")
         .expect("Gift of Paradise must be registered");
     let face = definition.primary_face();
@@ -87,7 +87,7 @@ fn gift_of_paradise_grants_the_exact_land_mana_ability() {
 
 #[test]
 fn hermetic_study_grants_a_targeted_damage_ability() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("hermetic_study")
         .expect("Hermetic Study must be registered");
     let face = definition.primary_face();

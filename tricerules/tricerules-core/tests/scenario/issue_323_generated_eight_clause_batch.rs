@@ -19,7 +19,15 @@ fn deck_engine(seed: u64, own: &[&str], opposing: &[&str]) -> GameEngine {
         deck_with("island", own),
         deck_with("forest", opposing),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -67,7 +75,15 @@ fn issue_323_day_of_judgment_destroys_all_with_indestructible_and_regeneration_b
         ),
         deck_with("plains", &["savannah_lions"]),
     ]);
-    let mut engine = GameEngine::new(323_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        323_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let bears = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -134,7 +150,15 @@ fn issue_323_itll_quench_ya_charges_two_and_counters_on_decline() {
         deck_with("island", &["lightning_bolt"]),
         deck_with("island", &["itll_quench_ya!"]),
     ]);
-    let mut engine = GameEngine::new(323_010, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        323_010,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     give_mana(
@@ -202,7 +226,15 @@ fn issue_323_itll_quench_ya_payment_preserves_the_targeted_spell() {
         deck_with("island", &["lightning_bolt"]),
         deck_with("island", &["itll_quench_ya!"]),
     ]);
-    let mut engine = GameEngine::new(323_011, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        323_011,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     give_mana(
@@ -335,7 +367,15 @@ fn issue_323_shared_roots_searches_a_tapped_basic_land_and_shuffles() {
         deck_with("forest", &["shared_roots"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(323_040, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        323_040,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let forest = inject_library_card(&mut engine, 0, "forest");
@@ -387,7 +427,15 @@ fn issue_323_aggressive_mammoth_anthem_is_live_and_excludes_itself() {
         deck_with("forest", &["aggressive_mammoth", "go_for_the_throat"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(323_050, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        323_050,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let mammoth = move_ready_to_battlefield(&mut engine, 0, "aggressive_mammoth");
@@ -432,7 +480,15 @@ fn issue_323_enter_the_enigma_makes_the_target_unblockable_this_turn() {
         deck_with("island", &["enter_the_enigma"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(323_060, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        323_060,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -519,7 +575,15 @@ fn issue_323_professional_wrestler_treasure_and_single_blocker_limit() {
         deck_with("forest", &["professional_wrestler"]),
         deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(323_070, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        323_070,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let wrestler = move_ready_to_battlefield(&mut engine, 0, "professional_wrestler");

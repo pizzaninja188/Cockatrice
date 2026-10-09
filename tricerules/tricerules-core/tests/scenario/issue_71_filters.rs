@@ -8,7 +8,15 @@ fn legions_judgment_publishes_derived_power_targets_and_rejects_a_forged_cast() 
         deck_with("plains", &["legions_judgment"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(71_101, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        71_101,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let boosted_bear = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     engine
@@ -94,7 +102,15 @@ fn reckless_air_strike_modes_publish_disjoint_authoritative_targets() {
         deck_with("mountain", &["reckless_air_strike"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(71_102, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        71_102,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let flyer = inject_creature_on_battlefield(&mut engine, 1, "wind_drake");
     let artifact = inject_creature_on_battlefield(&mut engine, 1, "darksteel_myr");
@@ -133,7 +149,15 @@ fn run_afoul_targets_only_an_opponent_and_offers_only_their_flyers_to_sacrifice(
         deck_with("forest", &["run_afoul"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(71_103, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        71_103,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let flyer = inject_creature_on_battlefield(&mut engine, 1, "wind_drake");
     inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");

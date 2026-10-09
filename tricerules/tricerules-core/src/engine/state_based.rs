@@ -760,7 +760,8 @@ mod sba_tests {
     use super::*;
 
     fn engine() -> GameEngine {
-        GameEngine::new_with_default_decks(1, &[0, 1], 20).expect("new")
+        GameEngine::new_with_default_decks(tricerules_cards::registry::global(), 1, &[0, 1], 20)
+            .expect("new")
     }
 
     /// Put a vanilla creature ("walking_corpse", no keywords/triggers, non-legendary, non-token)
@@ -843,8 +844,8 @@ mod sba_tests {
                 .primary_face()
                 .clone();
             outer_face.spell_effect = vec![SpellEffectKind::AuraAttach {
-                target: tricerules_cards::primitives::TargetFilter {
-                    kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+                target: tricerules_card_model::primitives::TargetFilter {
+                    kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
                     ..Default::default()
                 },
             }];
@@ -863,7 +864,7 @@ mod sba_tests {
                 source_id: None,
                 affected: AffectedScope::Single(attachment),
                 kind: ContinuousEffectKind::Layer4SetTypeLine(
-                    tricerules_cards::TypeLineReplacement {
+                    tricerules_card_model::TypeLineReplacement {
                         card_types: vec![PermanentTypeFilter::Land],
                         creature_types: Vec::new(),
                         land_types: vec![BasicLandType::Forest],
@@ -961,7 +962,7 @@ mod sba_tests {
                 delta_toughness: -2,
             },
             condition: Some(
-                tricerules_cards::primitives::GameCondition::SourceCounterCount {
+                tricerules_card_model::primitives::GameCondition::SourceCounterCount {
                     counter: CounterKind::PlusOnePlusOne,
                     min: Some(1),
                     max: None,

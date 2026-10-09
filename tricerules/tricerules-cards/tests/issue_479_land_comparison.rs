@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     CastTriggerPlayer, EffectSubject, GameCondition, PermanentTypeFilter, PlayerComparisonMetric,
     SpellEffectKind, TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry};
+use tricerules_cards::AbilityPresentation;
 
 #[test]
 fn issue_479_ticket_tortoise_is_a_complete_conditioned_treasure_card() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let definition = registry
         .get("ticket_tortoise")
         .expect("Ticket Tortoise is registered");
@@ -42,7 +42,7 @@ fn issue_479_ticket_tortoise_is_a_complete_conditioned_treasure_card() {
 
 #[test]
 fn issue_479_sunstar_expansionist_has_both_complete_entry_and_landfall_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let definition = registry
         .get("sunstar_expansionist")
         .expect("Sunstar Expansionist is registered");

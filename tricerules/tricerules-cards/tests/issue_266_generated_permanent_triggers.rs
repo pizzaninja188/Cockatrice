@@ -9,7 +9,7 @@ use tricerules_cards::{
 
 #[test]
 fn issue_266_registers_the_reviewed_twenty_one_card_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for id in [
         "ajanis_pridemate",
         "pest_mascot",
@@ -39,7 +39,7 @@ fn issue_266_registers_the_reviewed_twenty_one_card_cohort() {
 
 #[test]
 fn issue_266_emits_exact_life_and_combined_event_triggers() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for id in ["ajanis_pridemate", "pest_mascot"] {
         let ability = first_ability(registry, id);
         assert_eq!(
@@ -111,7 +111,7 @@ fn issue_477_existing_life_gain_recipe_omits_default_first_turn_filter() {
 
 #[test]
 fn issue_266_emits_exact_target_cardinality_and_filters() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for id in ["cogwork_wrestler", "humbling_elder"] {
         let ability = first_ability(registry, id);
@@ -167,7 +167,7 @@ fn issue_266_emits_exact_target_cardinality_and_filters() {
 
 #[test]
 fn issue_266_emits_exact_draw_and_token_triggers() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for id in ["feather_of_flight", "lofty_dreams"] {
         assert_eq!(
             first_ability(registry, id).effect,

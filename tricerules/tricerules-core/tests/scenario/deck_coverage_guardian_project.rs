@@ -9,7 +9,15 @@ fn engine_with_cards(seed: u64, player_zero: &[&str], player_one: &[&str]) -> Ga
         deck_with("forest", player_zero),
         deck_with("island", player_one),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -83,7 +91,15 @@ fn guardian_project_does_not_trigger_for_a_name_already_on_the_battlefield() {
         ),
         deck_with("island", &[]),
     ]);
-    let mut e = GameEngine::new(9401, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9401,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     relocate_to_battlefield(&mut e, 0, "llanowar_elves", false);

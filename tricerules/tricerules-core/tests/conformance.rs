@@ -8,7 +8,6 @@ use helpers::authoring_actions as offers;
 use ruled_command::Cmd;
 use ruled_event::Ev;
 use std::sync::{Mutex, OnceLock};
-use tricerules_cards::CardRegistry;
 use tricerules_core::GameEngine;
 use tricerules_proto::ruled::v1::*;
 
@@ -143,7 +142,7 @@ impl Case {
     }
 }
 fn play_kind(card: &str, face: usize) -> &'static str {
-    if CardRegistry::global()
+    if tricerules_cards::registry::global()
         .get(card)
         .unwrap()
         .face(face)
@@ -157,7 +156,7 @@ fn play_kind(card: &str, face: usize) -> &'static str {
 }
 fn cases() -> Vec<Case> {
     let mut result = vec![];
-    for def in CardRegistry::global()
+    for def in tricerules_cards::registry::global()
         .definitions()
         .filter(|definition| !definition.commander_setup_only)
     {
@@ -476,7 +475,9 @@ fn exercise(case: &Case) -> Result<(), String> {
     }
 }
 fn evaluate(case: &Case) -> Result<Outcome, String> {
-    let def = CardRegistry::global().get(&case.card).unwrap();
+    let def = tricerules_cards::registry::global()
+        .get(&case.card)
+        .unwrap();
     if case.ability.is_none() && !def.face_available_from_hand(case.face) {
         return Ok(Outcome::IntentionalUncastable);
     }

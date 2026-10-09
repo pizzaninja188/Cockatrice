@@ -1,10 +1,10 @@
 //! Printed identities for four pinned Standard graveyard spells.
 
-use tricerules_cards::{CardRegistry, Layout};
+use tricerules_cards::Layout;
 
 #[test]
 fn issue_misc35_registers_four_exact_card_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, kind) in [
         ("helping_hand", "Helping Hand", "{W}", "Sorcery"),
         ("hazels_nocturne", "Hazel's Nocturne", "{3}{B}", "Instant"),

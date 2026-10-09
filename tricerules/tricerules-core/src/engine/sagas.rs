@@ -61,7 +61,15 @@ mod tests {
     use super::*;
 
     fn copied_saga() -> (GameEngine, ObjectId) {
-        let mut engine = GameEngine::new(185_100, &[0, 1], 20, None, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            185_100,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
         let object_id = engine.state.players[0].hand.remove(0);
         engine.state.players[0].battlefield.push(object_id);
         let face = engine

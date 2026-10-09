@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{SpellEffectKind, StaticAbilityDef, TargetKind};
-use tricerules_cards::{AbilityPresentation, BasicLandType, CardRegistry, PermanentTypeFilter};
+use tricerules_cards::{AbilityPresentation, BasicLandType, PermanentTypeFilter};
 
 #[test]
 fn yavimaya_exact_identity_adds_forest_to_every_land_without_authored_mana() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let id = registry
         .id_for_name("Yavimaya, Cradle of Growth")
         .expect("exact Yavimaya identity");
@@ -35,7 +35,7 @@ fn yavimaya_exact_identity_adds_forest_to_every_land_without_authored_mana() {
 
 #[test]
 fn song_exact_identity_enchants_any_permanent_and_sets_colorless_forest() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(
         registry.id_for_name("Song of the Dryads"),
         Some("song_of_the_dryads")

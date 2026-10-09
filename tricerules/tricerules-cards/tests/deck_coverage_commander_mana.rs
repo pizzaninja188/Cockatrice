@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::AbilityCost;
-use tricerules_cards::{CardRegistry, SpellEffectKind};
+use tricerules_cards::SpellEffectKind;
 
 #[test]
 fn arcane_signet_and_command_tower_use_only_the_commanders_declared_identity() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, cost, card_type) in [
         ("arcane_signet", "Arcane Signet", "{2}", "Artifact"),
         ("command_tower", "Command Tower", "", "Land"),

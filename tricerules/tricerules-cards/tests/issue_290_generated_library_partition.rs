@@ -1,13 +1,13 @@
 use std::collections::BTreeSet;
 
 use tricerules_cards::primitives::{LibraryPartitionKind, SpellEffectKind};
-use tricerules_cards::{AbilityPresentation, CardRegistry, TriggerCondition};
+use tricerules_cards::{AbilityPresentation, TriggerCondition};
 
 const ISSUE_290_CARD_IDS: [&str; 2] = ["sage_of_days", "gurmag_nightwatch"];
 
 #[test]
 fn issue_290_registers_exactly_the_reviewed_two_card_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for id in ISSUE_290_CARD_IDS {
         registry
             .get(id)
@@ -48,7 +48,7 @@ fn issue_290_registers_exactly_the_reviewed_two_card_cohort() {
 
 #[test]
 fn issue_290_emits_exact_etb_library_partition_with_presentation_metadata() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, types, power, toughness, fingerprint) in [
         (
             "sage_of_days",

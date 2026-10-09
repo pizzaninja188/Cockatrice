@@ -16,6 +16,7 @@ fn earthbend_fixture_count(count: u32) -> (GameEngine, u32, u32) {
     let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(&[&fixture], &[])
         .expect("Earthbend must be a reusable authored action");
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         150,
         &[0, 1],
         20,
@@ -204,7 +205,7 @@ fn earthbend_zero_creates_its_watcher_before_the_sba_death() {
 #[test]
 fn earthbend_preserves_mana_and_haste_but_cannot_return_a_token() {
     let (mut e, source, land) = earthbend_fixture();
-    let face = tricerules_cards::CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("forest")
         .unwrap()
         .primary_face()
@@ -237,7 +238,7 @@ fn earthbend_preserves_mana_and_haste_but_cannot_return_a_token() {
 #[test]
 fn earthbend_rebellious_captives_exhaust_resets_only_on_reentry() {
     use tricerules_proto::ruled::v1::DevZone;
-    tricerules_cards::CardRegistry::global()
+    tricerules_cards::registry::global()
         .get("rebellious_captives")
         .expect("calibration card exists");
     let (mut e, _, land) = earthbend_fixture();
@@ -269,7 +270,7 @@ fn earthbend_rebellious_captives_exhaust_resets_only_on_reentry() {
 
 #[test]
 fn earthbend_badgermole_target_and_counter_filtered_trample() {
-    tricerules_cards::CardRegistry::global()
+    tricerules_cards::registry::global()
         .get("badgermole")
         .expect("calibration card exists");
     let (mut e, bear, land) = earthbend_fixture();
@@ -310,7 +311,7 @@ fn earthbend_badgermole_target_and_counter_filtered_trample() {
 
 #[test]
 fn earthbend_dai_li_both_modes_and_discard_eligibility() {
-    tricerules_cards::CardRegistry::global()
+    tricerules_cards::registry::global()
         .get("dai_li_indoctrination")
         .expect("calibration card exists");
     for mode in [0, 1] {
@@ -486,7 +487,15 @@ fn dub_adds_knight_without_replacing_printed_types() {
         deck_with("plains", &["dub", "grizzly_bears"]),
         deck_with("swamp", &[]),
     ]);
-    let mut engine = GameEngine::new(81_001, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        81_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "dub");
     let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -538,7 +547,15 @@ fn liquimetal_coating_adds_artifact_until_cleanup_and_updates_legality() {
         deck_with("mountain", &["liquimetal_coating"]),
         deck_with("swamp", &["go_for_the_throat", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(81_002, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        81_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let coating = relocate_to_battlefield(&mut engine, 0, "liquimetal_coating", false);
     let bear = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -612,7 +629,15 @@ fn liquimetal_coating_type_addition_does_not_follow_a_zone_change() {
         deck_with("mountain", &["liquimetal_coating"]),
         deck_with("swamp", &["murder", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(81_004, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        81_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let coating = relocate_to_battlefield(&mut engine, 0, "liquimetal_coating", false);
     let bear = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);

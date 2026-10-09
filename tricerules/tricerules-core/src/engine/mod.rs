@@ -35,9 +35,9 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
-use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
-use tricerules_cards::primitives::TokenCopySource;
-use tricerules_cards::primitives::{
+use tricerules_card_model::mana::{ColorPip, ManaCost, ManaSymbol};
+use tricerules_card_model::primitives::TokenCopySource;
+use tricerules_card_model::primitives::{
     AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivatedCostModifier, AdditionalCost,
     Amount, AttachmentFilter, AttachmentKind, BasePowerToughnessValue, BasicLandType,
     BattlefieldAggregate, BattlefieldPermanentFilter, BattlefieldQuantityCharacteristic,
@@ -65,7 +65,7 @@ use tricerules_cards::primitives::{
     TargetOwner, TargetingCostAction, TargetingCostProtected, TargetingDef, TargetingSourceFilter,
     TriggerCondition, TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
 };
-use tricerules_cards::{
+use tricerules_card_model::{
     is_creature_type, mode_fallback, CardDefinition, CardFace, CardRegistry,
     CharacteristicDefiningAbility, FaceRef, Layout, ModalDef,
 };
@@ -249,6 +249,7 @@ mod face_change_tests {
         let mut p0: Vec<String> = cards.iter().map(|card| (*card).to_string()).collect();
         p0.extend(std::iter::repeat_n("forest".to_string(), 8));
         GameEngine::new(
+            tricerules_cards::registry::global(),
             341,
             &[0, 1],
             20,
@@ -287,6 +288,7 @@ mod face_change_tests {
     #[test]
     fn declared_commander_designation_survives_zones_and_excludes_same_name_copies() {
         let mut engine = GameEngine::new_with_commander_decks(
+            tricerules_cards::registry::global(),
             821,
             &[0, 1],
             20,
@@ -372,6 +374,7 @@ mod face_change_tests {
             "forest",
         ];
         let mut engine = GameEngine::new_with_commander_decks(
+            tricerules_cards::registry::global(),
             821,
             &[0, 1],
             20,
@@ -472,6 +475,7 @@ mod face_change_tests {
             "forest",
         ];
         let mut engine = GameEngine::new_with_commander_decks(
+            tricerules_cards::registry::global(),
             823,
             &[0, 1],
             20,
@@ -575,6 +579,7 @@ mod face_change_tests {
     #[test]
     fn commander_setup_only_definition_cannot_enter_a_mainboard() {
         let result = GameEngine::new_with_commander_decks(
+            tricerules_cards::registry::global(),
             23,
             &[0, 1],
             20,
@@ -595,6 +600,7 @@ mod face_change_tests {
     #[test]
     fn war_room_initial_declaration_distinguishes_colorless_from_absent_commander() {
         let engine = GameEngine::new_with_commander_decks(
+            tricerules_cards::registry::global(),
             510_030,
             &[7, 19],
             20,
@@ -643,6 +649,7 @@ mod face_change_tests {
     #[test]
     fn commander_mana_without_a_declared_identity_remains_a_zero_output_mana_ability() {
         let mut engine = GameEngine::new_with_commander_decks(
+            tricerules_cards::registry::global(),
             822,
             &[0, 1],
             20,
@@ -1259,7 +1266,7 @@ pub struct GameEngine {
     pending_spell_cast_internal: Option<casting::PendingSpellCastInternal>,
     pending_ability_activation_internal: Option<activation::PendingAbilityActivationInternal>,
     pending_attack_declaration_internal: Option<combat::PendingAttackDeclarationInternal>,
-    /// Shared process-wide registry (`CardRegistry::global()`); read-only.
+    /// Shared process-wide registry (`tricerules_cards::registry::global()`); read-only.
     registry: &'static CardRegistry,
     /// Debug-only: whether this session accepts `DevCommand` (see `engine::dev`). Off unless the
     /// sidecar explicitly enabled it; never settable by a command.
@@ -1620,6 +1627,7 @@ impl GameEngine {
     /// When `skip_opening_sequence` is true (scenario tests), opening hands are dealt immediately
     /// like the legacy engine (no choose-first / mulligan prompts).
     pub fn new(
+        registry: &'static CardRegistry,
         seed: u64,
         player_ids: &[PlayerId],
         starting_life: i32,
@@ -1636,6 +1644,7 @@ impl GameEngine {
                 .collect()
         });
         Self::new_with_commander_decks(
+            registry,
             seed,
             player_ids,
             starting_life,
@@ -1644,34 +1653,14 @@ impl GameEngine {
         )
     }
 
-    /// The ordinary constructor plus explicit Commander declarations. Kept alongside `new` so
-    /// scenario fixtures and non-Commander callers retain their established API.
+    /// Create an engine using a validated registry and explicit Commander declarations.
     pub fn new_with_commander_decks(
-        seed: u64,
-        player_ids: &[PlayerId],
-        starting_life: i32,
-        decks: Option<Vec<EngineDeck>>,
-        skip_opening_sequence: bool,
-    ) -> Result<Self, EngineError> {
-        Self::new_with_registry(
-            seed,
-            player_ids,
-            starting_life,
-            decks,
-            skip_opening_sequence,
-            CardRegistry::global(),
-        )
-    }
-
-    /// Offline test harness entry point. No production constructor reads draft paths or env vars.
-    #[cfg(feature = "authoring")]
-    pub fn new_for_authoring(
-        seed: u64,
-        player_ids: &[PlayerId],
-        starting_life: i32,
-        decks: Option<Vec<EngineDeck>>,
-        skip_opening_sequence: bool,
         registry: &'static CardRegistry,
+        seed: u64,
+        player_ids: &[PlayerId],
+        starting_life: i32,
+        decks: Option<Vec<EngineDeck>>,
+        skip_opening_sequence: bool,
     ) -> Result<Self, EngineError> {
         Self::new_with_registry(
             seed,
@@ -1910,11 +1899,12 @@ impl GameEngine {
     }
 
     pub fn new_with_default_decks(
+        registry: &'static CardRegistry,
         seed: u64,
         player_ids: &[PlayerId],
         starting_life: i32,
     ) -> Result<Self, EngineError> {
-        Self::new(seed, player_ids, starting_life, None, true)
+        Self::new(registry, seed, player_ids, starting_life, None, true)
     }
 
     /// Debug-only: allow `DevCommand` in this session (see `engine::dev`).
@@ -2042,13 +2032,13 @@ impl GameEngine {
         self.state.continuous_effects.retain(|e| {
             let static_from_this = e.source_id == Some(permanent_id)
                 && e.duration
-                    == tricerules_cards::primitives::EffectDuration::WhileSourceOnBattlefield;
+                    == tricerules_card_model::primitives::EffectDuration::WhileSourceOnBattlefield;
             !static_from_this
         });
         self.state.damage_prevention_effects.retain(|effect| {
             !(effect.source_id == Some(permanent_id)
                 && effect.duration
-                    == tricerules_cards::primitives::EffectDuration::WhileSourceOnBattlefield)
+                    == tricerules_card_model::primitives::EffectDuration::WhileSourceOnBattlefield)
         });
         if let Some(o) = self.state.objects.get_mut(&permanent_id) {
             o.face_up_index = new_face;

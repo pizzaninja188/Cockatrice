@@ -1,5 +1,4 @@
 use super::helpers::*;
-use tricerules_cards::CardRegistry;
 use tricerules_cards::CounterKind;
 use tricerules_core::state::CopiableValues;
 use tricerules_core::Zone;
@@ -10,7 +9,15 @@ fn engine_with_drowner(seed: u64) -> GameEngine {
         deck_with("island", &["floodpits_drowner", "grizzly_bears"]),
         deck_with("mountain", &["hill_giant", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     engine.enable_dev_commands();
     advance_to_main1_from_game_start(&mut engine);
     engine
@@ -230,7 +237,7 @@ fn issue_201_departed_or_returned_source_uses_captured_owner_without_moving_new_
 #[test]
 fn issue_201_departed_token_source_still_shuffles_its_owners_library() {
     let (mut engine, source, target, _) = setup_activation(201_007, 1);
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("floodpits_drowner")
         .unwrap()
         .primary_face()

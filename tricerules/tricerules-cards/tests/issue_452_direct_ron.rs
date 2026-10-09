@@ -8,7 +8,7 @@
 use tricerules_cards::primitives::{
     Amount, EffectSubject, SpellEffectKind, TargetFilter, TargetKind,
 };
-use tricerules_cards::{CardRegistry, Color, Layout};
+use tricerules_cards::{Color, Layout};
 
 fn single_group(
     targeting: &tricerules_cards::primitives::TargetingDef,
@@ -21,7 +21,7 @@ fn single_group(
 
 #[test]
 fn issue_452_direct_ron_registers_both_reviewed_handwritten_cards() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let stand_up = registry
         .get("stand_up_for_yourself")

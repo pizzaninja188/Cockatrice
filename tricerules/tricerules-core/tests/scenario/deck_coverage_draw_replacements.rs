@@ -1,9 +1,7 @@
 use super::helpers::*;
 use prost::Message;
 use tricerules_cards::primitives::{BasicLandType, ConditionObjectRef, ControllerReference};
-use tricerules_cards::{
-    CardRegistry, ContinuousEffectKind, CounterKind, EffectDuration, GameCondition,
-};
+use tricerules_cards::{ContinuousEffectKind, CounterKind, EffectDuration, GameCondition};
 use tricerules_core::{AffectedScope, ContinuousEffect};
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1 as rv1;
@@ -55,6 +53,7 @@ fn answer_replacements(
 fn setup(seed: u64) -> GameEngine {
     let deck = deck_with("island", &["thought_reflection", "teferis_ageless_insight"]);
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[4, 9, 27],
         20,
@@ -376,7 +375,7 @@ fn copied_replacement_uses_live_conditional_ability_availability_and_foreign_dra
     for tapped in [false, true] {
         let mut engine = setup(506_009);
         let copy = inject_permanent_on_battlefield(&mut engine, 0, "sol_ring");
-        let face = CardRegistry::global()
+        let face = tricerules_cards::registry::global()
             .get("thought_reflection")
             .unwrap()
             .primary_face()

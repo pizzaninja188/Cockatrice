@@ -7,7 +7,15 @@ fn capture_sphere_engine(seed: u64, creature_controller: usize) -> (GameEngine, 
         deck_with("island", &["capture_sphere", "vitalize"]),
         forest_only_deck(),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "capture_sphere");
     let creature =

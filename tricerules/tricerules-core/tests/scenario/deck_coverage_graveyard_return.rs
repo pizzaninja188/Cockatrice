@@ -9,6 +9,7 @@ fn setup(card: &str) -> GameEngine {
 
 fn setup_for(card: &str, players: &[i32]) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         202_610_501,
         players,
         20,
@@ -296,7 +297,7 @@ fn graveyard_return_entrants_observe_the_whole_simultaneous_cohort() {
                 .counters
                 .insert(tricerules_cards::CounterKind::Loyalty, 3);
         }
-        let observer = tricerules_cards::CardRegistry::global()
+        let observer = tricerules_cards::registry::global()
             .get("soul_warden")
             .unwrap()
             .primary_face()

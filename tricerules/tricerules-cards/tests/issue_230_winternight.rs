@@ -1,9 +1,10 @@
 use tricerules_cards::primitives::{Amount, CardTypeFilter, DiscardQuantity, SpellEffectKind};
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn issue_230_winternight_stories_has_both_complete_oracle_instructions_and_harmonize() {
-    let definition = CardRegistry::global().get("winternight_stories").unwrap();
+    let definition = tricerules_cards::registry::global()
+        .get("winternight_stories")
+        .unwrap();
     let face = definition.primary_face();
     assert_eq!(definition.name, "Winternight Stories");
     assert_eq!(face.mana_cost.to_string(), "{2}{U}");

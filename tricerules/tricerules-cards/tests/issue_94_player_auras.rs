@@ -1,11 +1,10 @@
 use tricerules_cards::primitives::{
     Amount, PlayerRecipient, SpellEffectKind, TargetFilter, TargetKind, TriggerCondition,
 };
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn curses_have_exact_attachment_data_and_complete_rewards() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana_cost, token) in [
         ("curse_of_opulence", "Curse of Opulence", "{R}", "gold"),
         (

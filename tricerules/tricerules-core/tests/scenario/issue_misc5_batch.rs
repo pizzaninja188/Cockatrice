@@ -30,7 +30,15 @@ fn choose_trigger_target(object_id: u32) -> RuledCommand {
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("swamp", &[]), deck_with("island", &[])]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
     grant_pool(&mut e, 0);
     grant_pool(&mut e, 1);
@@ -184,7 +192,15 @@ fn issue_misc5_ashioks_reaper_draws_for_a_departing_enchantment() {
 
 #[test]
 fn issue_misc5_battlesong_berserker_pumps_and_grants_menace() {
-    let mut e = GameEngine::new(729_005, &[0, 1], 20, None, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        729_005,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut e);
     let berserker = inject_creature_on_battlefield(&mut e, 0, "battlesong_berserker");
     let target = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -211,7 +227,15 @@ fn issue_misc5_battlesong_berserker_pumps_and_grants_menace() {
 
 #[test]
 fn issue_misc5_clammy_prowler_makes_another_attacker_unblockable() {
-    let mut e = GameEngine::new(729_007, &[0, 1], 20, None, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        729_007,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut e);
     let prowler = inject_creature_on_battlefield(&mut e, 0, "clammy_prowler");
     let fellow = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");

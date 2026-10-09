@@ -1,6 +1,5 @@
 //! Exact Into the Wilds upkeep, private look and optional land entry contract.
 use super::helpers::*;
-use tricerules_cards::CardRegistry;
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::ChoiceKind;
 
@@ -10,11 +9,21 @@ fn own_upkeep(seed: u64) -> GameEngine {
 
 fn own_upkeep_for(seed: u64, players: &[i32]) -> GameEngine {
     assert!(
-        CardRegistry::global().get("into_the_wilds").is_some(),
+        tricerules_cards::registry::global()
+            .get("into_the_wilds")
+            .is_some(),
         "actual Into the Wilds must be registered"
     );
     let decks = players.iter().map(|_| deck_with("forest", &[])).collect();
-    let mut engine = GameEngine::new(seed, players, 20, Some(decks), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        players,
+        20,
+        Some(decks),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 0, "into_the_wilds");
     end_active_turn(&mut engine, players[0]);
@@ -333,6 +342,7 @@ fn actual_into_the_wilds_logged_choice_replays_identically() {
 #[test]
 fn actual_into_the_wilds_real_cast_pays_exact_green_cost() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         202_610_078,
         &[0, 1],
         20,

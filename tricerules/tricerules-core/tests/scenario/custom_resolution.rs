@@ -10,7 +10,15 @@ fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
         },
         vec!["forest".into(); 30],
     ]);
-    let mut e = GameEngine::new(42, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        42,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "brainstorm");
 
@@ -78,7 +86,15 @@ fn brainstorm_put_back_emits_no_public_move_event() {
         },
         vec!["forest".into(); 30],
     ]);
-    let mut e = GameEngine::new(42, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        42,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "brainstorm");
 
@@ -127,7 +143,15 @@ fn brainstorm_rejects_card_not_in_hand_without_mutating() {
         },
         vec!["forest".into(); 30],
     ]);
-    let mut e = GameEngine::new(42, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        42,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     cast_instant_and_resolve(
         &mut e,
@@ -197,7 +221,15 @@ fn brainstorm_resolution_is_deterministic() {
             },
             vec!["forest".into(); 30],
         ]);
-        let mut e = GameEngine::new(1234, &[0, 1], 20, decks, true).expect("new");
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            1234,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
         advance_to_main1_from_game_start(&mut e);
         cast_instant_and_resolve(
             &mut e,
@@ -234,7 +266,15 @@ fn gifts_ungiven_opponent_chooses_the_split() {
         },
         vec!["forest".into(); 30],
     ]);
-    let mut e = GameEngine::new(7, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Inject four distinct-name cards so we always have exactly 4 to choose from.
@@ -342,7 +382,15 @@ fn gifts_ungiven_rejects_same_name_in_search() {
         },
         vec!["forest".into(); 30],
     ]);
-    let mut e = GameEngine::new(8, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Inject two Lightning Bolts (same name, different objects) plus three distinct others so
@@ -408,7 +456,7 @@ fn gifts_ungiven_rejects_same_name_in_search() {
 
 /// Registry `custom_effect` key → the card ids claiming it, for the two directions below.
 fn custom_effect_claims() -> std::collections::BTreeMap<&'static str, Vec<&'static str>> {
-    let reg = tricerules_cards::CardRegistry::global();
+    let reg = tricerules_cards::registry::global();
     let mut claims: std::collections::BTreeMap<&str, Vec<&str>> = Default::default();
     for def in reg.definitions() {
         for face in def.faces_iter() {
@@ -488,7 +536,15 @@ fn recast_bounced_creature_is_summoning_sick() {
         },
         vec!["forest".into(); 30],
     ]);
-    let mut e = GameEngine::new(4242, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4242,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // A grizzly already established on the battlefield (no longer summoning sick).

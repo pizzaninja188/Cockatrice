@@ -1,6 +1,5 @@
 //! Actual paid Deploy the Gatewatch and its private simultaneous entry contract.
 use super::helpers::*;
-use tricerules_cards::CardRegistry;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ChoiceKind;
 
@@ -105,6 +104,7 @@ fn actual_deploy_private_images_have_engine_eligibility_and_constant_waiting_wor
 #[test]
 fn actual_deploy_requires_two_white_mana_and_rejects_unaffordable_cast_atomically() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         202_610_093,
         &[0, 1],
         20,
@@ -633,10 +633,13 @@ fn paid_look(seed: u64, cards: &[&str]) -> (GameEngine, Vec<u32>, Vec<u32>) {
 
 fn paid_stack(seed: u64, players: &[i32]) -> GameEngine {
     assert!(
-        CardRegistry::global().get("deploy_the_gatewatch").is_some(),
+        tricerules_cards::registry::global()
+            .get("deploy_the_gatewatch")
+            .is_some(),
         "actual Deploy the Gatewatch must be registered"
     );
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         players,
         20,

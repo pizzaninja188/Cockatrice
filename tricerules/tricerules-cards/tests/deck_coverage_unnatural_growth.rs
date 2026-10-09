@@ -2,11 +2,13 @@ use tricerules_cards::primitives::{
     CastTriggerPlayer, CreatureScopeController, CreatureScopeFilter, EffectContext,
     SpellEffectKind, TargetKind, TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Color, Layout};
+use tricerules_cards::{AbilityPresentation, Color, Layout};
 
 #[test]
 fn growth_registers_complete_single_combat_trigger_and_exact_oracle_mapping() {
-    let card = CardRegistry::global().get("unnatural_growth").unwrap();
+    let card = tricerules_cards::registry::global()
+        .get("unnatural_growth")
+        .unwrap();
     assert_eq!(card.name, "Unnatural Growth");
     assert_eq!(card.layout, Layout::Normal);
     assert_eq!(card.face_count(), 1);

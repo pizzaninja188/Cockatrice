@@ -22,7 +22,15 @@ fn ghostform_accepts_zero_and_applies_to_two_targets() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(73_101, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        73_101,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let first = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let second = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -66,7 +74,15 @@ fn soul_salvage_returns_zero_one_or_two_creatures_in_selection_order() {
             deck_with("swamp", &["soul_salvage"]),
             deck_with("forest", &[]),
         ]);
-        let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
         advance_to_main1_from_game_start(&mut engine);
         let first = inject_graveyard_card(&mut engine, 0, "grizzly_bears");
         let second = inject_graveyard_card(&mut engine, 0, "storm_crow");
@@ -126,7 +142,15 @@ fn grouped_submission_rejects_duplicates_overfill_and_wrong_zone_before_costs() 
             &["grizzly_bears", "grizzly_bears", "grizzly_bears"],
         ),
     ]);
-    let mut engine = GameEngine::new(73_301, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        73_301,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let first = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let second = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -170,7 +194,15 @@ fn frost_breath_partially_resolves_when_one_target_leaves() {
         deck_with("island", &["frost_breath"]),
         deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(73_302, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        73_302,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let surviving = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let stale = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -222,7 +254,15 @@ fn frost_breath_fizzles_when_every_chosen_target_is_illegal() {
         deck_with("island", &["frost_breath"]),
         deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(73_303, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        73_303,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let first = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let second = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);

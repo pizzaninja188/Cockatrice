@@ -18,7 +18,15 @@ fn frost_breath_accepts_and_affects_two_distinct_creatures() {
         deck_with("island", &["frost_breath"]),
         deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(73_001, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        73_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let first = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let second = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", true);
@@ -91,7 +99,15 @@ fn crippling_chill_skips_exactly_the_next_controller_untap() {
         deck_with("island", &["crippling_chill"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(9301, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9301,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
 
     let bear = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -132,7 +148,15 @@ fn repeated_restrictions_on_an_already_tapped_target_expire_together() {
         deck_with("island", &["crippling_chill", "crippling_chill"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(9302, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9302,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let bear = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", true);
 
@@ -164,7 +188,15 @@ fn restriction_follows_the_permanents_current_controller() {
         deck_with("island", &["crippling_chill"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(9303, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9303,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let bear = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     cast_crippling_chill(&mut engine, 0, bear);
@@ -200,7 +232,15 @@ fn leaving_and_returning_clears_the_old_objects_restriction() {
         deck_with("island", &["crippling_chill", "unsummon"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(9304, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9304,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let bear = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     cast_crippling_chill(&mut engine, 0, bear);
@@ -237,7 +277,15 @@ fn crippling_chill_fizzles_without_drawing_when_its_target_leaves() {
         deck_with("island", &["crippling_chill"]),
         deck_with("island", &["grizzly_bears", "unsummon"]),
     ]);
-    let mut engine = GameEngine::new(9305, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9305,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let bear = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     ensure_in_hand(&mut engine, 0, "crippling_chill");

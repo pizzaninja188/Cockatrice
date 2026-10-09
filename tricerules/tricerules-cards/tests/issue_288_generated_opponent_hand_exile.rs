@@ -4,13 +4,13 @@ use tricerules_cards::primitives::{
     HandCardAction, HandCardChooser, HandChoiceVisibility, SpellEffectKind, TargetFilter,
     TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, TriggerCondition};
+use tricerules_cards::{AbilityPresentation, TriggerCondition};
 
 const ISSUE_288_CARD_IDS: [&str; 2] = ["skullcap_snail", "unscrupulous_agent"];
 
 #[test]
 fn issue_288_registers_exactly_the_reviewed_two_card_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for id in ISSUE_288_CARD_IDS {
         registry.get(id).unwrap_or_else(|| panic!("missing {id}"));
     }
@@ -49,7 +49,7 @@ fn issue_288_registers_exactly_the_reviewed_two_card_cohort() {
 
 #[test]
 fn issue_288_emits_exact_private_affected_player_exile_trigger() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for id in ISSUE_288_CARD_IDS {
         let card = registry.get(id).unwrap_or_else(|| panic!("missing {id}"));
         let face = card.primary_face();

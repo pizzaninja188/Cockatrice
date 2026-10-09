@@ -1,7 +1,7 @@
 //! Actual Frantic Search: private draw/discard, then untargeted simultaneous chosen-land untap.
 
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, ContinuousEffectKind, CounterKind, EffectDuration, Keyword};
+use tricerules_cards::{ContinuousEffectKind, CounterKind, EffectDuration, Keyword};
 use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine, Zone};
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEventBatch};
 
@@ -10,6 +10,7 @@ const SEARCH: &str = "frantic_search";
 fn setup() -> GameEngine {
     let deck = deck_with("island", &[]);
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         26_100_703,
         &[10, 20, 30],
         20,
@@ -262,7 +263,7 @@ fn frantic_search_paid_cast_and_both_choices_replay_deterministically() {
 
 #[test]
 fn frantic_search_paid_cast_private_discard_then_zero_one_three_lands() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get(SEARCH)
         .expect("exact original missing Frantic Search registered");
     assert_eq!(definition.name, "Frantic Search");
@@ -273,6 +274,7 @@ fn frantic_search_paid_cast_private_discard_then_zero_one_three_lands() {
     for count in [0, 1, 3] {
         let deck = deck_with("island", &[]);
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             26_100_702,
             &[10, 20, 30],
             20,

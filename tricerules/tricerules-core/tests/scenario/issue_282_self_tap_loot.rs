@@ -3,11 +3,10 @@
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
-use tricerules_cards::CardRegistry;
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 
 fn grant_llanowar_tap_ability(engine: &mut GameEngine, source: u32) {
-    let ability = CardRegistry::global()
+    let ability = tricerules_cards::registry::global()
         .get("llanowar_elves")
         .expect("Llanowar Elves definition")
         .primary_face()
@@ -44,8 +43,15 @@ fn issue_282_attack_taps_the_source_but_entering_tapped_does_not() {
         deck_with("forest", &["mechan_navigator"]),
         forest_only_deck(),
     ]);
-    let mut entering_tapped = GameEngine::new(282_001, &[0, 1], 20, decks.clone(), true)
-        .expect("new entering-tapped engine");
+    let mut entering_tapped = GameEngine::new(
+        tricerules_cards::registry::global(),
+        282_001,
+        &[0, 1],
+        20,
+        decks.clone(),
+        true,
+    )
+    .expect("new entering-tapped engine");
     advance_to_main1_from_game_start(&mut entering_tapped);
     let entered_tapped = relocate_to_battlefield(&mut entering_tapped, 0, "mechan_navigator", true);
     assert!(entering_tapped.state.objects[&entered_tapped].tapped);
@@ -54,8 +60,15 @@ fn issue_282_attack_taps_the_source_but_entering_tapped_does_not() {
         "entering tapped does not create a self-becomes-tapped trigger"
     );
 
-    let mut attacking =
-        GameEngine::new(282_002, &[0, 1], 20, decks, true).expect("new attacking engine");
+    let mut attacking = GameEngine::new(
+        tricerules_cards::registry::global(),
+        282_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new attacking engine");
     advance_to_declare_attackers(&mut attacking);
     let attacker = inject_creature_on_battlefield(&mut attacking, 0, "mechan_navigator");
     attacking
@@ -72,6 +85,7 @@ fn issue_282_attack_taps_the_source_but_entering_tapped_does_not() {
 #[test]
 fn issue_282_mandatory_loot_draws_before_the_private_discard_choice() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         282_003,
         &[0, 1],
         20,
@@ -131,6 +145,7 @@ fn issue_282_mandatory_loot_draws_before_the_private_discard_choice() {
 #[test]
 fn issue_282_other_effect_taps_optional_source_and_choice_is_controller_private() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         282_004,
         &[0, 1],
         20,
@@ -227,6 +242,7 @@ fn issue_282_other_effect_taps_optional_source_and_choice_is_controller_private(
 #[test]
 fn issue_282_optional_decline_does_not_draw() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         282_006,
         &[0, 1],
         20,
@@ -262,6 +278,7 @@ fn issue_282_optional_decline_does_not_draw() {
 #[test]
 fn issue_282_optional_empty_hand_cannot_pay_and_does_not_draw() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         282_005,
         &[0, 1],
         20,

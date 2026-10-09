@@ -13,6 +13,7 @@ const OHRAN_FROSTFANG: &str = "ohran_frostfang";
 
 fn engine(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,

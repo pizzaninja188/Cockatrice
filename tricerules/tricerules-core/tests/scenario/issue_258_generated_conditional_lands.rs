@@ -62,7 +62,15 @@ fn generated_surveil_activation_is_priority_generation_and_payment_safe_and_priv
         deck_with("forest", &["savage_mansion"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(258_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        258_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = relocate_to_battlefield(&mut engine, 0, "savage_mansion", false);
     let surveilled = seat_on_top(&mut engine, 0, "storm_crow");
@@ -134,8 +142,15 @@ fn generated_fast_and_slow_lands_use_other_current_derived_lands_at_boundaries()
             deck_with("island", &[card_id]),
             deck_with("forest", &[]),
         ]);
-        let mut engine =
-            GameEngine::new(258_100 + count, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            258_100 + count,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         advance_to_main1_from_game_start(&mut engine);
         for _ in 0..count {
             inject_permanent_on_battlefield(&mut engine, 0, "island");
@@ -151,7 +166,15 @@ fn generated_fast_and_slow_lands_use_other_current_derived_lands_at_boundaries()
         deck_with("island", &["botanical_sanctum"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(258_200, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        258_200,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 0, "island");
     inject_permanent_on_battlefield(&mut engine, 0, "island");
@@ -170,7 +193,15 @@ fn a_copy_of_a_generated_fast_land_rechecks_its_intrinsic_entry_condition() {
         deck_with("island", &["concealed_courtyard", "clone"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(258_300, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        258_300,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 0, "island");
     inject_permanent_on_battlefield(&mut engine, 0, "island");
@@ -235,8 +266,15 @@ fn generated_life_threshold_land_checks_every_player_at_thirteen_and_fourteen() 
             deck_with("plains", &["raucous_carnival"]),
             deck_with("island", &[]),
         ]);
-        let mut engine =
-            GameEngine::new(258_400 + third_life as u64, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            258_400 + third_life as u64,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         advance_to_main1_from_game_start(&mut engine);
         add_third_player(&mut engine);
         engine.state.players[1].life = 14;
@@ -257,6 +295,7 @@ fn generated_entry_condition_composes_with_another_replacement_in_either_order()
             deck_with("forest", &[]),
         ]);
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             258_500 + u64::from(choose_orb_first),
             &[0, 1],
             20,

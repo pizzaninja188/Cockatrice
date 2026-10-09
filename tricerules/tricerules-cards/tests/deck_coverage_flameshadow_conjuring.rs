@@ -3,11 +3,11 @@ use tricerules_cards::primitives::{
     ResolvingEffectDuration, ResolvingPermanentModifier, SpellEffectKind, TokenCopySource,
     TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout, ManaCost};
+use tricerules_cards::{AbilityPresentation, Layout, ManaCost};
 
 #[test]
 fn flameshadow_conjuring_is_registered_as_a_complete_card() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("flameshadow_conjuring")
         .expect("Flameshadow Conjuring needs a complete definition");
     assert_eq!(card.name, "Flameshadow Conjuring");

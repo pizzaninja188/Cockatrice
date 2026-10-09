@@ -1,13 +1,11 @@
 use tricerules_cards::primitives::{
     Amount, CastTriggerPlayer, CounterKind, EffectSubject, SpellEffectKind, TriggerCondition,
 };
-use tricerules_cards::{
-    AbilityCost, AbilityPresentation, AbilitySourceZone, CardRegistry, Keyword,
-};
+use tricerules_cards::{AbilityCost, AbilityPresentation, AbilitySourceZone, Keyword};
 
 #[test]
 fn issue_289_registers_both_cards_with_exact_discard_batch_triggers() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let cases = [
         (
             "scrounging_skyray",

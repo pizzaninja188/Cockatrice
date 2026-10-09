@@ -19,7 +19,15 @@ use tricerules_proto::ruled::v1::{
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("swamp", &[]), deck_with("island", &[])]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
     grant_pool(&mut e, 0);
     grant_pool(&mut e, 1);
@@ -281,7 +289,15 @@ fn issue_misc13_pterafractyl_enters_with_x_counters_and_gains_life() {
 
 #[test]
 fn issue_misc13_aurons_inspiration_pumps_attackers_and_flashbacks() {
-    let mut e = GameEngine::new(813_005, &[0, 1], 20, None, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        813_005,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut e);
     let first = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let second = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -349,7 +365,15 @@ fn issue_misc13_dictate_of_kruphix_draws_for_each_player() {
 
 #[test]
 fn issue_misc13_rowdy_research_reduces_per_attacker_and_draws_three() {
-    let mut e = GameEngine::new(813_007, &[0, 1], 20, None, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        813_007,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut e);
     let attackers: Vec<u32> = (0..3)
         .map(|_| inject_creature_on_battlefield(&mut e, 0, "grizzly_bears"))

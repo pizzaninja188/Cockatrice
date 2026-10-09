@@ -1,7 +1,6 @@
 //! Spine of Ish Sah: mandatory ETB destruction and incarnation-bound owner-hand return.
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
-use tricerules_cards::CardRegistry;
 use tricerules_core::state::{ActiveDeathReplacement, CopiableValues};
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
@@ -10,11 +9,19 @@ const SPINE: &str = "spine_of_ish_sah";
 
 fn spine_engine(seed: u64) -> GameEngine {
     assert!(
-        CardRegistry::global().get(SPINE).is_some(),
+        tricerules_cards::registry::global().get(SPINE).is_some(),
         "missing exact Spine of Ish Sah"
     );
     let deck = deck_with("forest", &["sol_ring"]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, Some(vec![deck; 2]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![deck; 2]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -388,7 +395,7 @@ fn spine_token_copy_cannot_return_but_real_sculpting_steel_copy_returns_its_unde
         .token_origin = Some(CopiableValues {
         source_card_id: SPINE.into(),
         source_face_index: 0,
-        face: CardRegistry::global()
+        face: tricerules_cards::registry::global()
             .get(SPINE)
             .unwrap()
             .primary_face()

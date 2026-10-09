@@ -631,6 +631,7 @@ mod tests {
         ];
         deck.resize(20, "forest".to_string());
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             83_101,
             &[0, 1],
             20,

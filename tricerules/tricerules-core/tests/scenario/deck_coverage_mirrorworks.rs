@@ -1,7 +1,6 @@
 //! Actual-card coverage for Mirrorworks' per-entry optional payment and event-object copy.
 
 use super::helpers::*;
-use tricerules_cards::CardRegistry;
 use tricerules_core::state::CopiableValues;
 use tricerules_core::{GameEngine, Zone};
 use tricerules_proto::ruled::v1::{
@@ -94,8 +93,15 @@ fn pass_until_resolution_choice(engine: &mut GameEngine) {
 
 #[test]
 fn mirrorworks_pays_per_trigger_and_copies_the_exact_entering_artifact_lki() {
-    let mut engine =
-        GameEngine::new(202_610_701, &[4, 9, 27], 20, None, true).expect("new three-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_701,
+        &[4, 9, 27],
+        20,
+        None,
+        true,
+    )
+    .expect("new three-player game");
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 0, "mirrorworks");
 
@@ -142,7 +148,7 @@ fn mirrorworks_pays_per_trigger_and_copies_the_exact_entering_artifact_lki() {
 
     // Model an already-applied copy effect, then let the observed artifact leave. Mirrorworks
     // must use this exact generation's last-known copiable values when its trigger resolves.
-    let mirrorworks = CardRegistry::global()
+    let mirrorworks = tricerules_cards::registry::global()
         .get("mirrorworks")
         .expect("Mirrorworks is a registered copy-value fixture");
     engine

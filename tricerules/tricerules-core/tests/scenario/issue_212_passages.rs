@@ -9,7 +9,15 @@ fn setup_passage(card_id: &str, extra_cards: &[&str]) -> (GameEngine, u32) {
         deck_with("forest", &specials),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(21200, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        21200,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let passage = relocate_to_battlefield(&mut engine, 0, card_id, false);
     (engine, passage)

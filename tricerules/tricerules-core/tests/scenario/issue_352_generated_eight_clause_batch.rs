@@ -19,7 +19,15 @@ fn main1_engine(seed: u64, own: &[&str], opposing: &[&str]) -> GameEngine {
         deck_with("forest", own),
         deck_with("forest", opposing),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -330,7 +338,15 @@ fn issue_352_cackling_slasher_enters_with_a_counter_only_after_a_death() {
         deck_with("swamp", &["cackling_slasher", "murder"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut with_death = GameEngine::new(352_009, &[0, 1], 20, decks, true).expect("new game");
+    let mut with_death = GameEngine::new(
+        tricerules_cards::registry::global(),
+        352_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut with_death);
     let bear = relocate_to_battlefield(&mut with_death, 1, "grizzly_bears", false);
     ensure_in_hand(&mut with_death, 0, "murder");

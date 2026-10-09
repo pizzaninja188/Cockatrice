@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     EffectSubject, SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
 };
-use tricerules_cards::{CardRegistry, Keyword};
+use tricerules_cards::Keyword;
 
 #[test]
 fn issue_37_cards_are_registered_as_complete() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for id in [
         "mind_control",
         "confiscate",
@@ -21,7 +21,7 @@ fn issue_37_cards_are_registered_as_complete() {
 
 #[test]
 fn control_auras_use_the_shared_source_relative_layer_2_primitive() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, kind) in [
         ("mind_control", TargetKind::Creature),
         ("confiscate", TargetKind::AnyPermanent),
@@ -42,7 +42,7 @@ fn control_auras_use_the_shared_source_relative_layer_2_primitive() {
 
 #[test]
 fn temporary_control_spells_preserve_their_oracle_effect_order() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let target = TargetFilter::default_creature();
     let chosen = EffectSubject::Chosen(Box::new(target.clone()));
     let control = SpellEffectKind::GainControl {
@@ -77,7 +77,7 @@ fn temporary_control_spells_preserve_their_oracle_effect_order() {
 
 #[test]
 fn cartouche_requires_a_creature_its_aura_controller_controls() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("cartouche_of_knowledge")
         .expect("Cartouche of Knowledge")
         .primary_face();

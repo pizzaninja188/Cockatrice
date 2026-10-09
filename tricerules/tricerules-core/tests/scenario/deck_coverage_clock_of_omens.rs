@@ -17,7 +17,15 @@ fn clock_engine(seed: u64) -> (GameEngine, u32) {
         deck_with("island", &["clock_of_omens", "sol_ring", "mind_stone"]),
         deck_with("forest", &["voltaic_key"]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let clock = relocate_to_battlefield(&mut engine, 0, "clock_of_omens", false);
     (engine, clock)

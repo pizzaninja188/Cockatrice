@@ -37,7 +37,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use crate::state::{GameObject, GameState, ObjectId, PlayerId, Zone};
-use tricerules_cards::{CardDefinition, CardRegistry};
+use tricerules_card_model::{CardDefinition, CardRegistry};
 use tricerules_proto::ruled::v1 as rv1;
 
 // One private prefixed module per card-id file under `src/custom/`, plus the `EFFECT_IMPLS` table

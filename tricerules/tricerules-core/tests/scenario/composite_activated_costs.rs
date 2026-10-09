@@ -8,7 +8,15 @@ fn apparatus_pays_mana_tap_and_self_sacrifice_before_resolution() {
         deck_with("mountain", &["explosive_apparatus"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(5201, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5201,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let apparatus = relocate_to_battlefield(&mut e, 0, "explosive_apparatus", false);
     e.state.players[0].mana_pool.colorless = 3;
@@ -40,7 +48,15 @@ fn portcullis_vine_can_tap_then_sacrifice_itself() {
         deck_with("forest", &["portcullis_vine"]),
         deck_with("mountain", &[]),
     ]);
-    let mut e = GameEngine::new(5202, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5202,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let vine = relocate_to_battlefield(&mut e, 0, "portcullis_vine", false);
     e.state.players[0].mana_pool.colorless = 2;
@@ -66,7 +82,15 @@ fn invalid_filtered_sacrifice_rolls_back_mana_and_tap() {
         deck_with("forest", &["portcullis_vine"]),
         deck_with("mountain", &[]),
     ]);
-    let mut e = GameEngine::new(5203, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5203,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let vine = relocate_to_battlefield(&mut e, 0, "portcullis_vine", false);
     let forest = relocate_to_battlefield(&mut e, 0, "forest", false);
@@ -96,7 +120,15 @@ fn hungry_ghoul_publishes_only_other_controlled_creatures_as_cost_choices() {
         deck_with("swamp", &["hungry_ghoul", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut e = GameEngine::new(5205, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5205,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let ghoul = relocate_to_battlefield(&mut e, 0, "hungry_ghoul", false);
     let friendly = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
@@ -123,7 +155,15 @@ fn hungry_ghoul_is_not_payable_without_another_creature() {
         deck_with("swamp", &["hungry_ghoul"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(5207, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5207,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let ghoul = relocate_to_battlefield(&mut e, 0, "hungry_ghoul", false);
 
@@ -146,7 +186,15 @@ fn hungry_ghoul_rejects_its_source_atomically_then_accepts_another_creature() {
         deck_with("swamp", &["hungry_ghoul", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(5206, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5206,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let ghoul = relocate_to_battlefield(&mut e, 0, "hungry_ghoul", false);
     let other = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
@@ -198,7 +246,15 @@ fn discard_cost_uses_authoritative_hand_slot() {
         deck_with("forest", &["noose_constrictor"]),
         deck_with("mountain", &[]),
     ]);
-    let mut e = GameEngine::new(5204, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5204,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let constrictor = relocate_to_battlefield(&mut e, 0, "noose_constrictor", false);
     let discarded_slot = hand_index_for_card(&e, 0, "forest");

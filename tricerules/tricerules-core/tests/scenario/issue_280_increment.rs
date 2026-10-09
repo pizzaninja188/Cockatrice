@@ -9,6 +9,7 @@ use tricerules_proto::ruled::v1::CastCostGroupSelection;
 
 fn engine_with(cards: &[&str]) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         280_001,
         &[0, 1],
         20,

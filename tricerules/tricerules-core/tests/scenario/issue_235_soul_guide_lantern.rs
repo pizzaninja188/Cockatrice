@@ -4,7 +4,7 @@ use tricerules_cards::primitives::{
     CardTypeFilter, CastTriggerPlayer, ContinuousEffectKind, EffectDuration, RelativePlayerSet,
     SpellEffectKind, TriggerCondition, ZoneCardFilter, ZoneEventCardinality,
 };
-use tricerules_cards::{CardRegistry, CounterKind};
+use tricerules_cards::CounterKind;
 use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     self as rv1, dev_command::Dev, DevCommand, DevMoveCard, DevPutCardInZone, DevZone,
@@ -12,7 +12,15 @@ use tricerules_proto::ruled::v1::{
 
 fn engine(seats: &[i32]) -> GameEngine {
     let decks = Some(vec![vec!["forest".to_string(); 20]; 2]);
-    let mut engine = GameEngine::new(235_001, &seats[..2], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        235_001,
+        &seats[..2],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     // Session creation still supports two seats. Extend the fixture to prove the
     // same player-set-generic resolution used by existing multiplayer scenarios.
     for &player in &seats[2..] {
@@ -236,7 +244,7 @@ fn all_opponents_depart_in_one_trigger_batch() {
     ] {
         let mut engine = engine(&[7, 19, 31]);
         let observer = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
-        let mut ability = CardRegistry::global()
+        let mut ability = tricerules_cards::registry::global()
             .get("ajanis_pridemate")
             .unwrap()
             .primary_face()

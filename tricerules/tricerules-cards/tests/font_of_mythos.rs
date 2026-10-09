@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{Amount, PlayerRecipient, SpellEffectKind, TriggerCondition};
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
+use tricerules_cards::{AbilityPresentation, Layout};
 
 #[test]
 fn font_of_mythos_registry_matches_reviewed_definition() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("font_of_mythos")
         .expect("Font of Mythos is registered");
     assert_eq!(card.layout, Layout::Normal);

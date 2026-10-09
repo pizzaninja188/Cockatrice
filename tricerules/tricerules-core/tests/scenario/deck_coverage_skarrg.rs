@@ -8,6 +8,7 @@ const SKARRG: &str = "skarrg,_the_rage_pits";
 
 fn engine(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,

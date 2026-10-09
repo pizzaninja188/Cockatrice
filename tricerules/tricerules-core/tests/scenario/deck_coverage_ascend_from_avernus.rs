@@ -2,20 +2,28 @@
 
 use super::helpers::*;
 use tricerules_cards::primitives::{CardTypeFilter, SpellEffectKind};
-use tricerules_cards::{CardRegistry, ManaCost};
+use tricerules_cards::ManaCost;
 use tricerules_core::{GameEngine, Zone};
 use tricerules_proto::ruled::v1::{ruled_event::Ev, StackResolveDestination};
 
 fn ascend_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("plains", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(seed, &[4, 9], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[4, 9],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
 
 #[test]
 fn ascend_from_avernus_registers_its_exact_card_identity() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("ascend_from_avernus")
         .expect("complete Ascend from Avernus definition")
         .primary_face();
@@ -36,7 +44,9 @@ fn ascend_from_avernus_registers_its_exact_card_identity() {
     assert_eq!(branches[0].card_type, Some(CardTypeFilter::Creature));
     assert_eq!(branches[1].card_type, Some(CardTypeFilter::Planeswalker));
     for card_id in ["grizzly_bears", "jace_beleren"] {
-        let candidate = CardRegistry::global().get(card_id).expect("candidate card");
+        let candidate = tricerules_cards::registry::global()
+            .get(card_id)
+            .expect("candidate card");
         assert!(candidate.matches_zone_card_filter(filter));
     }
     assert_eq!(face.spell_effect[1], SpellEffectKind::ExileResolvingSpell);

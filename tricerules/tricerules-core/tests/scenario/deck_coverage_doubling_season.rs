@@ -1,6 +1,6 @@
 //! Doubling Season's token and counter replacement behavior.
 use super::helpers::*;
-use tricerules_cards::{AbilityPresentation, CardRegistry, CounterKind, Layout};
+use tricerules_cards::{AbilityPresentation, CounterKind, Layout};
 use tricerules_core::{GameEngine, Zone};
 use tricerules_proto::ruled::v1::{ruled_command::Cmd, PaymentMana, PreviewPayment};
 
@@ -8,6 +8,7 @@ const SEASON: &str = "doubling_season";
 
 fn setup(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -35,7 +36,7 @@ fn battlefield_card(engine: &GameEngine, player: usize, card_id: &str) -> u32 {
 }
 
 fn seasons_registry_definition() -> &'static tricerules_cards::CardDefinition {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(SEASON)
         .expect("complete Doubling Season definition")
 }

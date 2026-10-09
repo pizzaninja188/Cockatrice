@@ -6,14 +6,22 @@
 //! resolution-time battlefield characteristics.
 
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, CounterKind};
+use tricerules_cards::CounterKind;
 use tricerules_core::{state::CopiableValues, GameEngine, TurnStep, Zone};
 
 const BROKERS_ASCENDANCY: &str = "brokers_ascendancy";
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("plains", &[]), deck_with("island", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -259,7 +267,7 @@ fn a_dual_creature_planeswalker_gets_both_counter_types() {
     let mut engine = engine(202_609_272);
     add_brokers(&mut engine, 0);
     let dual = planeswalker_with_loyalty(&mut engine, 0, "jace_beleren", 3);
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("jace_beleren")
         .expect("Jace Beleren")
         .primary_face()

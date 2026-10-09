@@ -56,7 +56,15 @@ fn choose_trigger_target_of_kind(object_id: u32, kind: TargetRefKind) -> RuledCo
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("swamp", &[]), deck_with("island", &[])]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
     grant_pool(&mut e, 0);
     grant_pool(&mut e, 1);
@@ -116,7 +124,15 @@ fn cast_counting_hand(e: &mut GameEngine, player: i32, card_id: &str) -> usize {
 
 #[test]
 fn issue_misc9_disruptor_wanderglyph_exiles_an_opponent_graveyard_card() {
-    let mut e = GameEngine::new(733_002, &[0, 1], 20, None, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        733_002,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut e);
     let glyph = inject_creature_on_battlefield(&mut e, 0, "disruptor_wanderglyph");
     let their_card = inject_graveyard_card(&mut e, 1, "grizzly_bears");
@@ -128,7 +144,15 @@ fn issue_misc9_disruptor_wanderglyph_exiles_an_opponent_graveyard_card() {
     assert_eq!(e.state.objects[&their_card].zone, Zone::Exile);
 
     // A card in the controller's own graveyard is outside the Opponent scope.
-    let mut bad = GameEngine::new(733_012, &[0, 1], 20, None, true).expect("engine");
+    let mut bad = GameEngine::new(
+        tricerules_cards::registry::global(),
+        733_012,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut bad);
     let glyph = inject_creature_on_battlefield(&mut bad, 0, "disruptor_wanderglyph");
     let own_card = inject_graveyard_card(&mut bad, 0, "grizzly_bears");
@@ -143,7 +167,15 @@ fn issue_misc9_disruptor_wanderglyph_exiles_an_opponent_graveyard_card() {
 
 #[test]
 fn issue_misc9_seasoned_consultant_pumps_when_three_attack() {
-    let mut e = GameEngine::new(733_003, &[0, 1], 20, None, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        733_003,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut e);
     let consultant = inject_creature_on_battlefield(&mut e, 0, "seasoned_consultant");
     let a = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -160,7 +192,15 @@ fn issue_misc9_seasoned_consultant_pumps_when_three_attack() {
     assert_eq!(e.effective_power(consultant), Some(base_power + 2));
 
     // Two attackers do not meet the threshold.
-    let mut no_trigger = GameEngine::new(733_013, &[0, 1], 20, None, true).expect("engine");
+    let mut no_trigger = GameEngine::new(
+        tricerules_cards::registry::global(),
+        733_013,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut no_trigger);
     let consultant = inject_creature_on_battlefield(&mut no_trigger, 0, "seasoned_consultant");
     let a = inject_creature_on_battlefield(&mut no_trigger, 0, "grizzly_bears");
@@ -236,7 +276,15 @@ fn issue_misc9_meteor_golem_destroys_an_opponent_nonland_permanent() {
 
 #[test]
 fn issue_misc9_jumbo_cactuar_pumps_itself_when_attacking() {
-    let mut e = GameEngine::new(733_007, &[0, 1], 20, None, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        733_007,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut e);
     let cactuar = inject_creature_on_battlefield(&mut e, 0, "jumbo_cactuar");
     let base_power = e.effective_power(cactuar).expect("power");

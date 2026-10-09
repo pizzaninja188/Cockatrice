@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     EffectSubject, SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
 };
-use tricerules_cards::{CardRegistry, TriggerCondition};
+use tricerules_cards::TriggerCondition;
 
 #[test]
 fn meltstriders_resolve_has_complete_oracle_behavior() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("meltstriders_resolve")
         .expect("Meltstrider's Resolve must be registered");
     let face = definition.primary_face();

@@ -1,5 +1,5 @@
 use tricerules_cards::{
-    AbilityCost, AdditionalCost, CardRegistry, ObjectContributionKind, ObjectPaymentConstraint,
+    AbilityCost, AdditionalCost, ObjectContributionKind, ObjectPaymentConstraint,
 };
 
 #[test]
@@ -28,7 +28,7 @@ fn aggregate_object_payments_are_typed_card_data() {
 
 #[test]
 fn issue_178_cards_use_the_shared_aggregate_constraints() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let forensic = registry
         .get("forensic_researcher")
         .expect("Forensic Researcher");

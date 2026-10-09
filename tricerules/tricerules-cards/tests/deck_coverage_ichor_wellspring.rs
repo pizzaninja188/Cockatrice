@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{Amount, PlayerRecipient, SpellEffectKind, TriggerCondition};
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
+use tricerules_cards::{AbilityPresentation, Layout};
 
 #[test]
 fn ichor_wellspring_registers_one_alternative_event_ability() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("ichor_wellspring")
         .expect("Ichor Wellspring registry definition");

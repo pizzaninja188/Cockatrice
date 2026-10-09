@@ -4,7 +4,7 @@ use common::FaceExpectation;
 use tricerules_cards::primitives::{
     CastTriggerPlayer, EffectSubject, SpellEffectKind, TriggerCondition,
 };
-use tricerules_cards::{CardRegistry, CounterKind, Keyword};
+use tricerules_cards::{CounterKind, Keyword};
 
 #[test]
 fn issue_296_accepts_every_successful_draw_trigger_without_an_ordinal() {
@@ -18,7 +18,8 @@ fn issue_296_accepts_every_successful_draw_trigger_without_an_ordinal() {
             effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
         )],
     )"#;
-    CardRegistry::from_authoring_draft(draft).expect("every-draw trigger is a typed contract");
+    tricerules_cards::registry::from_authoring_draft(draft)
+        .expect("every-draw trigger is a typed contract");
 }
 
 #[test]
@@ -37,7 +38,10 @@ fn issue_296_registers_both_complete_cards_with_distinct_characteristics() {
             (1, 1),
         ),
     ] {
-        assert_eq!(CardRegistry::global().id_for_name(name), Some(id));
+        assert_eq!(
+            tricerules_cards::registry::global().id_for_name(name),
+            Some(id)
+        );
         let face = FaceExpectation {
             id,
             name,

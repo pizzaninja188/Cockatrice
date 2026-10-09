@@ -21,9 +21,7 @@ use tricerules_cards::primitives::{
     StaticAbilityDef, TargetController, TargetFilter, TargetKind, TriggerCondition,
     TypeLineAddition, ZoneCardFilter,
 };
-use tricerules_cards::{
-    AbilityPresentation, CardFace, CardRegistry, CounterKind, Keyword, ManaCost,
-};
+use tricerules_cards::{AbilityPresentation, CardFace, CounterKind, Keyword, ManaCost};
 
 struct SpacecraftFixture {
     id: &'static str,
@@ -110,7 +108,7 @@ const SPACECRAFT: [SpacecraftFixture; 7] = [
 ];
 
 fn registered_face(card_id: &str) -> CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("{card_id} must be registered"))
         .primary_face()
@@ -659,7 +657,7 @@ fn issue_423_excluded_cohort_identities_have_no_registry_entry() {
         "the_seriema",
     ] {
         assert!(
-            CardRegistry::global().get(id).is_none(),
+            tricerules_cards::registry::global().get(id).is_none(),
             "{id} must stay unsupported until its missing capability ships"
         );
     }

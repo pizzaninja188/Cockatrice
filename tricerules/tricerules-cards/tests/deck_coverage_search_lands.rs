@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     CardTypeFilter, PlayerRecipient, SearchDestination, SpellEffectKind,
 };
-use tricerules_cards::{CardRegistry, Color, Layout};
+use tricerules_cards::{Color, Layout};
 
 #[test]
 fn deploy_the_gatewatch_complete_definition_and_identity_are_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("deploy_the_gatewatch").unwrap();
     assert_eq!(
         registry.id_for_name("Deploy the Gatewatch"),
@@ -37,7 +37,7 @@ fn assert_search_defaults(
     expected_name: &str,
     expected_destination: SearchDestination,
 ) -> tricerules_cards::primitives::ZoneCardFilter {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get(card_id)
         .unwrap_or_else(|| panic!("missing {card_id}"));
@@ -79,7 +79,7 @@ fn assert_search_defaults(
 #[test]
 fn nature_s_lore_searches_for_a_forest_subtype_and_enters_untapped() {
     assert_eq!(
-        CardRegistry::global().id_for_name("Nature's Lore"),
+        tricerules_cards::registry::global().id_for_name("Nature's Lore"),
         Some("natures_lore")
     );
     let filter = assert_search_defaults(
@@ -95,7 +95,7 @@ fn nature_s_lore_searches_for_a_forest_subtype_and_enters_untapped() {
 #[test]
 fn three_visits_searches_for_a_forest_subtype_and_enters_untapped() {
     assert_eq!(
-        CardRegistry::global().id_for_name("Three Visits"),
+        tricerules_cards::registry::global().id_for_name("Three Visits"),
         Some("three_visits")
     );
     let filter = assert_search_defaults(
@@ -111,7 +111,7 @@ fn three_visits_searches_for_a_forest_subtype_and_enters_untapped() {
 #[test]
 fn rampant_growth_searches_for_a_basic_land_and_enters_tapped() {
     assert_eq!(
-        CardRegistry::global().id_for_name("Rampant Growth"),
+        tricerules_cards::registry::global().id_for_name("Rampant Growth"),
         Some("rampant_growth")
     );
     let filter = assert_search_defaults(
@@ -126,7 +126,7 @@ fn rampant_growth_searches_for_a_basic_land_and_enters_tapped() {
 #[test]
 fn farseek_uses_four_or_branches_for_land_subtypes_and_enters_tapped() {
     assert_eq!(
-        CardRegistry::global().id_for_name("Farseek"),
+        tricerules_cards::registry::global().id_for_name("Farseek"),
         Some("farseek")
     );
     let filter = assert_search_defaults(
@@ -161,7 +161,7 @@ use tricerules_cards::AbilityPresentation;
 
 #[test]
 fn myriad_landscape_complete_definition_is_exact_and_all_lines_are_presented() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("myriad_landscape").unwrap();
     assert_eq!(
         registry.id_for_name("Myriad Landscape"),
@@ -270,7 +270,7 @@ fn ordinary_searches_keep_their_default_schema_and_semantics() {
 
 #[test]
 fn into_the_wilds_complete_definition_and_oracle_presentation_are_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("into_the_wilds").unwrap();
     assert_eq!(
         registry.id_for_name("Into the Wilds"),
@@ -309,7 +309,7 @@ fn into_the_wilds_complete_definition_and_oracle_presentation_are_exact() {
 
 #[test]
 fn chaos_warp_complete_definition_has_exact_face_cost_identity_and_permanent_target() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("chaos_warp").unwrap();
     assert_eq!(registry.id_for_name("Chaos Warp"), Some("chaos_warp"));
     assert_eq!(card.face_count(), 1);

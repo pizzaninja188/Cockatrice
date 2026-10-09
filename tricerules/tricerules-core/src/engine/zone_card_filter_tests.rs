@@ -2,7 +2,7 @@
 use super::resolution::move_object_to_zone;
 use super::targeting::{graveyard_target_legal, TargetSourceIdentity};
 use super::*;
-use tricerules_cards::primitives::{GraveyardFilter, GraveyardOwner};
+use tricerules_card_model::primitives::{GraveyardFilter, GraveyardOwner};
 
 fn fixture() -> GameEngine {
     let cards = [
@@ -18,6 +18,7 @@ fn fixture() -> GameEngine {
         .map(str::to_owned)
         .collect();
     GameEngine::new(
+        tricerules_cards::registry::global(),
         198_001,
         &[0, 1],
         20,

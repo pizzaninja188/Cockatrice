@@ -58,7 +58,7 @@ impl EffectiveActivatedAbility {
         }
     }
 
-    pub fn ability_path(&self) -> Vec<tricerules_cards::AbilityId> {
+    pub fn ability_path(&self) -> Vec<tricerules_card_model::AbilityId> {
         self.presentation_definition
             .as_ref()
             .map(|definition| definition.ability_path.clone())
@@ -129,7 +129,7 @@ impl GameEngine {
     pub(super) fn active_static_abilities(
         &self,
         oid: ObjectId,
-    ) -> Vec<tricerules_cards::IdentifiedStaticAbility> {
+    ) -> Vec<tricerules_card_model::IdentifiedStaticAbility> {
         let Some(_object) = self
             .state
             .objects
@@ -367,8 +367,8 @@ impl GameEngine {
                 .iter()
                 .any(|ability| {
                 match ability {
-                    StaticAbilityDef::ProhibitCounters { affected: tricerules_cards::primitives::CounterPlacementAffected::Self_ } => source == target,
-                    StaticAbilityDef::ProhibitCounters { affected: tricerules_cards::primitives::CounterPlacementAffected::AttachedPermanent } => object.attached_to == Some(AttachmentRecipient::Object(target)),
+                    StaticAbilityDef::ProhibitCounters { affected: tricerules_card_model::primitives::CounterPlacementAffected::Self_ } => source == target,
+                    StaticAbilityDef::ProhibitCounters { affected: tricerules_card_model::primitives::CounterPlacementAffected::AttachedPermanent } => object.attached_to == Some(AttachmentRecipient::Object(target)),
                     _ => false,
                 }
             })
@@ -1978,9 +1978,18 @@ mod issue_461_activation_prohibition_tests {
             spell_effect: [AuraAttach(target: (kind: Creature))],
             static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ProhibitActivatedAbilitiesOfAttachedPermanent)],
         )"#;
-        let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(&[target, aura], &[])
-            .expect("Aura prohibition fixture");
-        let mut engine = GameEngine::new(461_001, &[0, 1], 20, None, true).expect("new engine");
+        let registry =
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(&[target, aura], &[])
+                .expect("Aura prohibition fixture");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            461_001,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new engine");
         engine.registry = Box::leak(Box::new(registry));
 
         let target_id = 20;
@@ -2025,7 +2034,9 @@ mod issue_461_activation_prohibition_tests {
 #[cfg(test)]
 mod static_permanent_keyword_grant_tests {
     use super::*;
-    use tricerules_cards::primitives::{BasicLandType, RelativePlayerSet, TargetObjectExclusion};
+    use tricerules_card_model::primitives::{
+        BasicLandType, RelativePlayerSet, TargetObjectExclusion,
+    };
 
     fn fixture(engine: &mut GameEngine, card: &str) -> ObjectId {
         let id = engine.state.next_object_id;
@@ -2054,7 +2065,15 @@ mod static_permanent_keyword_grant_tests {
 
     #[test]
     fn sword_condition_groups_attached_protection_with_pt() {
-        let mut engine = GameEngine::new(49940, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            49940,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let host = fixture(&mut engine, "grizzly_bears");
         let sword = fixture(&mut engine, "sword_of_war_and_peace");
         engine.state.objects.get_mut(&sword).unwrap().attached_to =
@@ -2102,7 +2121,7 @@ mod static_permanent_keyword_grant_tests {
             .primary_face()
             .static_abilities[0]
             .clone();
-        sibling.ability_id = tricerules_cards::AbilityId::new("static_02").unwrap();
+        sibling.ability_id = tricerules_card_model::AbilityId::new("static_02").unwrap();
         values.face.static_abilities.push(sibling);
         engine.state.objects.get_mut(&aura).unwrap().copiable_values = Some(values);
         engine.refresh_source_static_abilities(aura);
@@ -2111,7 +2130,15 @@ mod static_permanent_keyword_grant_tests {
 
     #[test]
     fn static_keyword_grant_started_group_does_not_authorize_unstarted_sibling_after_refresh() {
-        let mut engine = GameEngine::new(613_806, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_806,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let host = fixture(&mut engine, "grizzly_bears");
         let aura = witness_with_sibling(&mut engine, host);
         assert!(grant(&engine, host));
@@ -2142,7 +2169,15 @@ mod static_permanent_keyword_grant_tests {
 
     #[test]
     fn static_keyword_grant_false_early_condition_and_unattached_scope_create_no_start() {
-        let mut engine = GameEngine::new(613_807, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_807,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let host = fixture(&mut engine, "grizzly_bears");
         let aura = witness_with_sibling(&mut engine, host);
         let values = engine
@@ -2175,7 +2210,15 @@ mod static_permanent_keyword_grant_tests {
 
     #[test]
     fn static_keyword_grant_started_recipient_and_incarnation_are_not_reused() {
-        let mut engine = GameEngine::new(613_808, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_808,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let first = fixture(&mut engine, "grizzly_bears");
         let second = fixture(&mut engine, "grizzly_bears");
         let aura = witness_with_sibling(&mut engine, first);
@@ -2198,7 +2241,15 @@ mod static_permanent_keyword_grant_tests {
 
     #[test]
     fn static_keyword_grant_started_layer_six_grants_keep_nested_ability_identity() {
-        let mut engine = GameEngine::new(613_809, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_809,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let host = fixture(&mut engine, "grizzly_bears");
         let aura = witness_with_sibling(&mut engine, host);
         let activated = engine
@@ -2270,7 +2321,15 @@ mod static_permanent_keyword_grant_tests {
 
     #[test]
     fn static_keyword_grant_layer_continuation_does_not_preserve_direct_rule_effects() {
-        let mut engine = GameEngine::new(613_810, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_810,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let host = fixture(&mut engine, "grizzly_bears");
         let aura = witness_with_sibling(&mut engine, host);
         let values = engine
@@ -2342,7 +2401,15 @@ mod static_permanent_keyword_grant_tests {
 
     #[test]
     fn static_keyword_grant_started_condition_is_not_rechecked_after_its_name_change() {
-        let mut engine = GameEngine::new(613_811, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_811,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let host = fixture(&mut engine, "grizzly_bears");
         let aura = witness_with_sibling(&mut engine, host);
         let values = engine
@@ -2389,7 +2456,15 @@ mod static_permanent_keyword_grant_tests {
 
     #[test]
     fn static_keyword_grant_copied_aura_group_uses_copy_identity_and_survives_donor_departure() {
-        let mut engine = GameEngine::new(613_812, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_812,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let host = fixture(&mut engine, "grizzly_bears");
         let donor = witness_with_sibling(&mut engine, host);
         let copy = fixture(&mut engine, "mirrormade");
@@ -2423,7 +2498,15 @@ mod static_permanent_keyword_grant_tests {
 
     #[test]
     fn static_keyword_grant_refresh_while_suppressed_retains_one_inert_record_and_restores() {
-        let mut engine = GameEngine::new(613_801, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_801,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = fixture(&mut engine, "darksteel_forge");
         let ring = fixture(&mut engine, "sol_ring");
         remove(&mut engine, source);
@@ -2461,7 +2544,15 @@ mod static_permanent_keyword_grant_tests {
 
     #[test]
     fn static_keyword_grant_requires_current_copied_face_and_face_up_source() {
-        let mut engine = GameEngine::new(613_802, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_802,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = fixture(&mut engine, "darksteel_forge");
         let ring = fixture(&mut engine, "sol_ring");
         let values = engine.copiable_values_for(ring).unwrap();
@@ -2490,7 +2581,15 @@ mod static_permanent_keyword_grant_tests {
 
     #[test]
     fn static_keyword_grant_other_permanents_scope_excludes_its_own_source() {
-        let mut engine = GameEngine::new(613_803, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_803,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = fixture(&mut engine, "darksteel_forge");
         let ring = fixture(&mut engine, "sol_ring");
         let mut values = engine.copiable_values_for(source).unwrap();
@@ -2536,7 +2635,7 @@ mod static_permanent_keyword_grant_tests {
                     timing: SorcerySpeed),
             )],
         )"#;
-        let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(
+        let registry = tricerules_card_model::CardRegistry::from_chunks_and_tokens(
             &[
                 class,
                 include_str!("../../../tricerules-cards/data/sol_ring.ron"),
@@ -2544,7 +2643,15 @@ mod static_permanent_keyword_grant_tests {
             &[],
         )
         .unwrap();
-        let mut engine = GameEngine::new(613_813, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_813,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.registry = Box::leak(Box::new(registry));
         let source = fixture(&mut engine, "class_keyword_fixture");
         let ring = fixture(&mut engine, "sol_ring");
@@ -2591,7 +2698,7 @@ mod static_permanent_keyword_grant_tests {
                     timing: SorcerySpeed),
             )],
         )"#;
-        let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(
+        let registry = tricerules_card_model::CardRegistry::from_chunks_and_tokens(
             &[
                 class,
                 include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
@@ -2599,7 +2706,15 @@ mod static_permanent_keyword_grant_tests {
             &[],
         )
         .unwrap();
-        let mut engine = GameEngine::new(613_814, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_814,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.registry = Box::leak(Box::new(registry));
         engine.state.command_index = 11;
         let source = fixture(&mut engine, "class_timestamp_fixture");
@@ -2687,7 +2802,15 @@ mod static_permanent_keyword_grant_tests {
 
     #[test]
     fn static_keyword_grant_ignores_false_conditional_and_unattached_removal() {
-        let mut engine = GameEngine::new(613_804, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_804,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = fixture(&mut engine, "darksteel_forge");
         let ring = fixture(&mut engine, "sol_ring");
         remove(&mut engine, source);
@@ -2702,9 +2825,11 @@ mod static_permanent_keyword_grant_tests {
             .continuous_effects
             .last_mut()
             .unwrap()
-            .condition = Some(tricerules_cards::primitives::GameCondition::ActivePlayer {
-            players: RelativePlayerSet::Opponents,
-        });
+            .condition = Some(
+            tricerules_card_model::primitives::GameCondition::ActivePlayer {
+                players: RelativePlayerSet::Opponents,
+            },
+        );
         assert!(grant(&engine, ring));
         engine.state.active_player_idx = 1;
         assert!(!grant(&engine, ring));
@@ -2725,7 +2850,15 @@ mod static_permanent_keyword_grant_tests {
 
     #[test]
     fn static_keyword_grant_basic_land_setting_suppresses_rules_text_and_expiry_restores() {
-        let mut engine = GameEngine::new(613_805, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_805,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = fixture(&mut engine, "darksteel_forge");
         let ring = fixture(&mut engine, "sol_ring");
         engine.state.continuous_effects.push(ContinuousEffect {
@@ -2733,11 +2866,13 @@ mod static_permanent_keyword_grant_tests {
             source_id: None,
             affected: AffectedScope::Single(source),
             // The artifact first becomes a land; CR 305.7 subtype-only setting requires Land.
-            kind: ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
-                card_types: vec![PermanentTypeFilter::Land],
-                creature_types: Vec::new(),
-                land_types: vec![BasicLandType::Forest],
-            }),
+            kind: ContinuousEffectKind::Layer4SetTypeLine(
+                tricerules_card_model::TypeLineReplacement {
+                    card_types: vec![PermanentTypeFilter::Land],
+                    creature_types: Vec::new(),
+                    land_types: vec![BasicLandType::Forest],
+                },
+            ),
             condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 1000,
@@ -2800,11 +2935,13 @@ mod issue_499_effect_counter_replacement_tests {
                 definition: DoubleEffectCountersPlacedOnPermanentsYouControl,
             )],
         )"#;
-        let registry =
-            tricerules_cards::CardRegistry::from_chunks_and_tokens(&[target, replacement], &[])
-                .expect("typed replacement fixture");
+        let registry = tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[target, replacement],
+            &[],
+        )
+        .expect("typed replacement fixture");
 
-        let registry: &'static tricerules_cards::CardRegistry = Box::leak(Box::new(registry));
+        let registry: &'static tricerules_card_model::CardRegistry = Box::leak(Box::new(registry));
         // Entry counters use replace_entry_counter_events after entry choices finalize; this
         // low-level placement funnel must leave Entry unchanged, like costs and turn-based actions.
         for (index, (origin, expected)) in [
@@ -2817,8 +2954,15 @@ mod issue_499_effect_counter_replacement_tests {
         .into_iter()
         .enumerate()
         {
-            let mut engine = GameEngine::new(499_100 + index as u64, &[0, 1], 20, None, true)
-                .expect("new engine");
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                499_100 + index as u64,
+                &[0, 1],
+                20,
+                None,
+                true,
+            )
+            .expect("new engine");
             engine.registry = registry;
             let target_id = 20;
             let replacement_id = 21;
@@ -2854,7 +2998,15 @@ mod graveyard_keyword_grant_tests {
 
     #[test]
     fn anger_same_graveyard_move_replaces_source_incarnation_and_token_origin_survives_commit() {
-        let mut engine = GameEngine::new(613_813, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_813,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = *engine.state.objects.keys().next().unwrap();
         engine.state.objects.get_mut(&source).unwrap().card_id = "anger".into();
         super::super::resolution::move_object_to_zone(

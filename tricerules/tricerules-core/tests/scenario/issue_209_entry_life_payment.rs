@@ -26,8 +26,15 @@ fn watery_grave_engine(starting_life: i32) -> GameEngine {
         vec!["watery_grave".into(); 7],
         vec!["forest".into(); 7],
     ]);
-    let mut engine =
-        GameEngine::new(209_001, &[0, 1], starting_life, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        209_001,
+        &[0, 1],
+        starting_life,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -191,7 +198,15 @@ fn an_entry_copy_rechecks_the_copied_watery_grave_ability() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut engine = GameEngine::new(209_002, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        209_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let watery_index = hand_index_for_card(&engine, 0, "watery_grave");

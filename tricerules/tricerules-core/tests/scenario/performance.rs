@@ -14,7 +14,15 @@ fn big_board_characteristics_full_turn_stays_bounded() {
     const CREATURES_PER_PLAYER: usize = 100;
     const ANTHEM_PAIRS: usize = 10;
 
-    let mut engine = GameEngine::new(0x613_0704, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        0x613_0704,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let attackers: Vec<u32> = (0..CREATURES_PER_PLAYER)
@@ -111,7 +119,15 @@ fn early_layer_board_characteristics_stays_bounded() {
         BasicLandType, PermanentTypeFilter, TargetFilter, TargetKind, TypeLineAddition,
         TypeLineReplacement,
     };
-    let mut engine = GameEngine::new(0x305_6138, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        0x305_6138,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     let creatures = (0..24)
         .map(|index| inject_creature_on_battlefield(&mut engine, index % 2, "grizzly_bears"))
         .collect::<Vec<_>>();

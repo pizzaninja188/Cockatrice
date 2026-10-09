@@ -1,13 +1,21 @@
 //! Exact paid Scrap Mastery: three simultaneous phases and retained post-exile incarnations.
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, ContinuousEffectKind, EffectDuration};
+use tricerules_cards::{ContinuousEffectKind, EffectDuration};
 use tricerules_core::Zone;
 use tricerules_core::{AffectedScope, ContinuousEffect};
 use tricerules_proto::ruled::v1::ChoiceKind;
 
 fn setup() -> GameEngine {
     let deck = deck_with("mountain", &["scrap_mastery"]);
-    let mut engine = GameEngine::new(509_100, &[4, 9, 27], 20, Some(vec![deck; 3]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        509_100,
+        &[4, 9, 27],
+        20,
+        Some(vec![deck; 3]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "scrap_mastery");
     engine
@@ -399,7 +407,7 @@ fn scrap_mastery_last_order_departure_flushes_surviving_committed_departure_trig
     use tricerules_cards::{CastTriggerPlayer, TriggerCondition};
     let mut engine = setup();
     let observer = inject_creature_on_battlefield(&mut engine, 2, "grizzly_bears");
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("ajanis_pridemate")
         .unwrap()
         .primary_face()
@@ -544,8 +552,15 @@ fn scrap_mastery_owed_aura_owner_departure_skips_it_and_resumes_survivors() {
 #[test]
 fn scrap_mastery_detached_synthetic_entry_owner_departure_preserves_independent_queue() {
     let deck = deck_with("mountain", &["scrap_mastery"]);
-    let mut engine =
-        GameEngine::new(509_104, &[4, 9, 27, 42], 20, Some(vec![deck; 4]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        509_104,
+        &[4, 9, 27, 42],
+        20,
+        Some(vec![deck; 4]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "scrap_mastery");
     let original = inject_graveyard_card(&mut engine, 2, "sol_ring");

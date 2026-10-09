@@ -31,7 +31,15 @@ fn leave_battlefield_to_hand(engine: &mut GameEngine, player: usize, object_id: 
 
 #[test]
 fn generated_power_damage_publishes_and_resolves_against_a_planeswalker() {
-    let mut engine = GameEngine::new(276_001, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        276_001,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     give_mana(
         &mut engine,
@@ -79,7 +87,15 @@ fn generated_power_damage_publishes_and_resolves_against_a_planeswalker() {
 
 #[test]
 fn generated_instant_power_damage_publishes_and_resolves_against_a_planeswalker() {
-    let mut engine = GameEngine::new(276_002, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        276_002,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     give_mana(
         &mut engine,
@@ -123,7 +139,15 @@ fn generated_instant_power_damage_publishes_and_resolves_against_a_planeswalker(
 
 #[test]
 fn generated_power_damage_rejects_forged_roles_and_fizzles_on_stale_target() {
-    let mut forged = GameEngine::new(276_003, &[0, 1], 20, None, true).expect("engine");
+    let mut forged = GameEngine::new(
+        tricerules_cards::registry::global(),
+        276_003,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut forged);
     give_mana(
         &mut forged,

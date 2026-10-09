@@ -14,7 +14,15 @@ const BIRD_TOKEN: &str = "bird_u_2_2_flying";
 
 fn swan_song_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("island", &[]), deck_with("island", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new Swan Song game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new Swan Song game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

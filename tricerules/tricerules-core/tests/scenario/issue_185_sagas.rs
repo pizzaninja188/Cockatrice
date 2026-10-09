@@ -33,7 +33,15 @@ fn saga_entry_places_lore_and_stages_the_crossed_chapter() {
         deck_with("mountain", &["burn,_burn,_tree_and_fern"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(185_001, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        185_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
 
@@ -65,7 +73,15 @@ fn chapter_two_targets_and_destroys_an_opponents_artifact() {
         deck_with("mountain", &["burn,_burn,_tree_and_fern"]),
         deck_with("forest", &["bonesplitter"]),
     ]);
-    let mut engine = GameEngine::new(185_009, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        185_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let saga = relocate_to_battlefield(&mut engine, 0, "burn,_burn,_tree_and_fern", false);
     engine
@@ -97,7 +113,15 @@ fn precombat_lore_waits_for_the_final_chapter_then_sacrifices_the_saga() {
         deck_with("mountain", &["burn,_burn,_tree_and_fern"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(185_002, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        185_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let saga = relocate_to_battlefield(&mut engine, 0, "burn,_burn,_tree_and_fern", false);
     engine
@@ -134,7 +158,15 @@ fn read_ahead_uses_a_logged_branch_and_suppresses_skipped_chapters() {
         deck_with("mountain", &["burn,_burn,_tree_and_fern"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(185_003, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        185_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let saga = engine
         .state
@@ -146,7 +178,7 @@ fn read_ahead_uses_a_logged_branch_and_suppresses_skipped_chapters() {
         })
         .expect("Saga in a player-owned zone");
     let starting_zone = engine.state.objects[&saga].zone;
-    let mut face = tricerules_cards::CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("burn,_burn,_tree_and_fern")
         .expect("Burn")
         .primary_face()
@@ -233,7 +265,15 @@ fn countering_the_final_chapter_allows_the_next_sba_to_sacrifice() {
         deck_with("mountain", &["burn,_burn,_tree_and_fern"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(185_004, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        185_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let saga = relocate_to_battlefield(&mut engine, 0, "burn,_burn,_tree_and_fern", false);
     engine
@@ -261,7 +301,15 @@ fn removing_lore_before_the_final_chapter_leaves_the_stack_prevents_sacrifice() 
         deck_with("mountain", &["burn,_burn,_tree_and_fern"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(185_005, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        185_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let saga = relocate_to_battlefield(&mut engine, 0, "burn,_burn,_tree_and_fern", false);
     engine
@@ -295,7 +343,15 @@ fn chapter_controller_is_locked_at_trigger_time_but_the_current_controller_sacri
         deck_with("mountain", &["burn,_burn,_tree_and_fern"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(185_006, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        185_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let saga = relocate_to_battlefield(&mut engine, 0, "burn,_burn,_tree_and_fern", false);
     {
@@ -338,7 +394,15 @@ fn saga_leave_and_reentry_starts_a_fresh_generation_at_chapter_one() {
         deck_with("mountain", &["burn,_burn,_tree_and_fern"]),
         deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(185_007, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        185_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let first_target = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let second_target = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -410,7 +474,15 @@ fn precombat_lore_is_controller_scoped_and_final_triggers_wait_in_ordering() {
             &["burn,_burn,_tree_and_fern", "burn,_burn,_tree_and_fern"],
         ),
     ]);
-    let mut engine = GameEngine::new(185_008, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        185_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     let inactive = relocate_to_battlefield(&mut engine, 0, "burn,_burn,_tree_and_fern", false);
     let active_first = relocate_to_battlefield(&mut engine, 1, "burn,_burn,_tree_and_fern", false);
     let active_second = relocate_to_battlefield(&mut engine, 1, "burn,_burn,_tree_and_fern", false);

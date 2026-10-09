@@ -49,7 +49,15 @@ mod tests {
             loss_delta(i32::MAX as u32 + 2),
             Err(EngineError::LifeNumericRange(_))
         ));
-        let mut engine = GameEngine::new(104_821, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            104_821,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         history::commit_life_change_checked(&mut engine.state, 0, i32::MIN).unwrap();
         assert_eq!(engine.state.players[0].life, i32::MIN + 20);
         assert_eq!(
@@ -60,7 +68,15 @@ mod tests {
 
     #[test]
     fn archive_lifelink_source_sum_overflow_is_typed_before_any_gain() {
-        let mut engine = GameEngine::new(104_822, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            104_822,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = engine.state.players[0].hand[0];
         engine.state.objects.get_mut(&source).unwrap().card_id = "vampire_nighthawk".into();
         resolution::move_object_to_zone(
@@ -118,7 +134,15 @@ mod tests {
     #[test]
     fn archive_mana_damage_failure_restores_private_pending_payment_transactions() {
         for ability_payment in [false, true] {
-            let mut engine = GameEngine::new(104_819, &[0, 1], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                104_819,
+                &[0, 1],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             engine.state.opening = None;
             engine.state.turn_step = TurnStep::Main1;
             engine.state.active_player_idx = 0;
@@ -313,7 +337,15 @@ mod tests {
             cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
         };
         for objects in [120, 400, 1000] {
-            let mut engine = GameEngine::new(104_817, &[0, 1], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                104_817,
+                &[0, 1],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             engine.state.opening = None;
             engine.state.turn_step = TurnStep::Main1;
             engine.state.active_player_idx = 0;

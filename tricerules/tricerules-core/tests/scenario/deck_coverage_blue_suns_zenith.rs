@@ -1,15 +1,17 @@
 use super::helpers::*;
-use tricerules_cards::CardRegistry;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1 as rv1;
 
 fn setup() -> GameEngine {
     assert!(
-        CardRegistry::global().get("blue_suns_zenith").is_some(),
+        tricerules_cards::registry::global()
+            .get("blue_suns_zenith")
+            .is_some(),
         "complete Blue Sun definition"
     );
     let deck = deck_with("island", &[]);
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         504_001,
         &[0, 1, 2],
         20,

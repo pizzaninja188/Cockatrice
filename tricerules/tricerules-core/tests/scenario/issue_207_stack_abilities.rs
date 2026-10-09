@@ -38,7 +38,15 @@ fn setup_tidebinder_over_hellhound(seed: u64) -> (GameEngine, u32, u32, u32) {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let hellhound = relocate_to_battlefield(&mut engine, 0, "fiery_hellhound", false);
     ensure_in_hand(&mut engine, 0, "tishanas_tidebinder");
@@ -182,7 +190,15 @@ fn setup_wasp(seed: u64) -> (GameEngine, u32, u32) {
         deck_with("island", &["the_wondrous_wasp", "unsummon"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let target = inject_creature_on_battlefield(&mut engine, 0, "fiery_hellhound");
     ensure_in_hand(&mut engine, 0, "the_wondrous_wasp");
@@ -266,7 +282,15 @@ fn issue_207_tidebinder_can_counter_a_triggered_ability_and_affect_its_source() 
         deck_with("island", &["the_wondrous_wasp", "tishanas_tidebinder"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(207_020, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        207_020,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let target = inject_creature_on_battlefield(&mut engine, 0, "fiery_hellhound");
     ensure_in_hand(&mut engine, 0, "the_wondrous_wasp");

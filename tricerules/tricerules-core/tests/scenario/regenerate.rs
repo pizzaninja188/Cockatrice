@@ -14,7 +14,15 @@ fn regen_engine() -> GameEngine {
         deck_with("forest", &["cudgel_troll", "forest"]),
         deck_with("swamp", &["drudge_skeletons"]),
     ]);
-    let mut e = GameEngine::new(42, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        42,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     e
 }
@@ -151,7 +159,15 @@ fn wrath_bypasses_regen_shields() {
         deck_with("plains", &["wrath_of_god"]),
         deck_with("swamp", &["drudge_skeletons"]),
     ]);
-    let mut e = GameEngine::new(43, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        43,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let skeletons = relocate_to_battlefield(&mut e, 1, "drudge_skeletons", false);
     if let Some(o) = e.state.objects.get_mut(&skeletons) {

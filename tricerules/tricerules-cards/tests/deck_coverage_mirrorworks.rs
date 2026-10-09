@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     Amount, CastTriggerPlayer, PermanentTypeFilter, PlayerRecipient, ResolutionCost,
     SpellEffectKind, TokenCopySource, TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout, ManaCost};
+use tricerules_cards::{AbilityPresentation, Layout, ManaCost};
 
 #[test]
 fn mirrorworks_is_registered_as_a_complete_card() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("mirrorworks")
         .expect("Mirrorworks needs a complete definition");
     assert_eq!(card.name, "Mirrorworks");

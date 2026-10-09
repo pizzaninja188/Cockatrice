@@ -13,6 +13,7 @@ const GARRUKS_PACKLEADER: &str = "garruks_packleader";
 
 fn engine(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,

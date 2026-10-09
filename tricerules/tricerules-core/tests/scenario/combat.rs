@@ -2,7 +2,15 @@ use crate::helpers::*;
 
 #[test]
 fn two_player_passes_empty_stack_advances_toward_combat() {
-    let mut e = GameEngine::new(99, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        99,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
     e.apply_command(0, &pass()).expect("p0");
     e.apply_command(1, &pass()).expect("p1");
@@ -34,7 +42,15 @@ fn declare_attackers_handoff_emits_defender_priority() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(66, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        66,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     // Put one creature and two forests on battlefield for attacker.
     for card in ["forest", "forest", "grizzly_bears"] {
@@ -103,7 +119,15 @@ fn declare_attackers_handoff_emits_defender_priority() {
 #[test]
 fn no_attackers_skip_to_end_combat_emits_active_priority() {
     // No creatures on battlefield → BeginCombat auto-skips to EndCombat.
-    let mut e = GameEngine::new(67, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        67,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin combat");
@@ -148,7 +172,15 @@ fn blockers_to_combat_damage_emits_priority_stop() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(68, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        68,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     for card in ["forest", "grizzly_bears"] {
         let idx = hand_index_for_card(&e, 0, card);
@@ -215,7 +247,15 @@ fn duplicate_attacker_ids_are_rejected() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(101, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        101,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     for card in ["forest", "grizzly_bears"] {
         let idx = hand_index_for_card(&e, 0, card);
@@ -261,7 +301,15 @@ fn same_blocker_cannot_block_two_attackers() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(202, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     for card in ["forest", "forest", "grizzly_bears", "grizzly_bears"] {
@@ -334,7 +382,15 @@ fn same_blocker_cannot_block_two_attackers() {
 
 #[test]
 fn declare_attackers_emits_attackers_declared_event() {
-    let mut e = GameEngine::new(505, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        505,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let bears = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let b = e
@@ -355,7 +411,15 @@ fn declare_attackers_emits_attackers_declared_event() {
 
 #[test]
 fn preview_declare_attackers_is_rejected_by_engine() {
-    let mut e = GameEngine::new(508, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        508,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let idx_before = e.state.command_index;
     let cmd = RuledCommand {
@@ -372,7 +436,15 @@ fn preview_declare_attackers_is_rejected_by_engine() {
 
 #[test]
 fn preview_declare_blockers_is_rejected_by_engine() {
-    let mut e = GameEngine::new(507, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        507,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let idx_before = e.state.command_index;
     let cmd = RuledCommand {
@@ -412,7 +484,15 @@ fn declare_blockers_emits_blockers_declared_event() {
             "grizzly_bears".into(),
         ],
     ]);
-    let mut e = GameEngine::new(506, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        506,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let atk = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let blk = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -440,7 +520,15 @@ fn declare_blockers_emits_blockers_declared_event() {
 
 #[test]
 fn unblocked_combat_damage_emits_life_changed() {
-    let mut e = GameEngine::new(606, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        606,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let bears_a = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let bears_b = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -486,7 +574,15 @@ fn blocked_combat_kills_blocker_and_emits_permanent_moved() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(707, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        707,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     // Defender needs a creature on the battlefield to block. Put a 2/2 too -> mutual destruction.
@@ -558,7 +654,15 @@ fn full_combat_2v1_trade_and_life_loss() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(808, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        808,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker_a = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let attacker_b = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -708,7 +812,15 @@ fn giant_growth_changes_combat_outcome() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(902, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        902,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let p0_bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -792,7 +904,15 @@ fn giant_growth_changes_combat_outcome() {
 
 #[test]
 fn cannot_cast_spell_until_attackers_declared() {
-    let mut e = GameEngine::new(9200, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9200,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let _bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     while !e.state.players[0]
@@ -847,7 +967,15 @@ fn cannot_cast_spell_until_attackers_declared() {
 
 #[test]
 fn cannot_cast_spell_until_blockers_declared() {
-    let mut e = GameEngine::new(9300, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9300,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     // Inject an eligible blocker for the defender so the engine prompts them in DeclareBlockers.
@@ -947,7 +1075,15 @@ fn two_blockers_damage_order_required_and_resolves() {
             d
         },
     ]);
-    let mut e = GameEngine::new(901, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        901,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     ensure_in_hand(&mut e, 0, "grizzly_bears");
     ensure_in_hand(&mut e, 1, "savannah_lions");
@@ -1054,7 +1190,15 @@ fn two_blockers_insufficient_power_kills_only_first_in_order() {
             d
         },
     ]);
-    let mut e = GameEngine::new(902, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        902,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     ensure_in_hand(&mut e, 0, "savannah_lions");
     ensure_in_hand(&mut e, 1, "coral_merfolk");
@@ -1124,7 +1268,15 @@ fn single_blocker_no_damage_order_needed() {
         std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
         std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
     ]);
-    let mut e = GameEngine::new(903, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        903,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let blocker = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -1187,7 +1339,15 @@ fn assign_combat_damage_accepts_split_with_two_nonlethal_hits() {
         std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
         std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
     ]);
-    let mut e = GameEngine::new(911, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        911,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     ensure_in_hand(&mut e, 0, "grizzly_bears");
     ensure_in_hand(&mut e, 1, "grizzly_bears");
@@ -1281,7 +1441,15 @@ fn assign_combat_damage_three_blockers_split_one_each() {
         std::iter::repeat_n("balduvian_barbarians".to_string(), 10).collect::<Vec<_>>(),
         std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
     ]);
-    let mut e = GameEngine::new(915, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        915,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     ensure_in_hand(&mut e, 0, "balduvian_barbarians");
     ensure_in_hand(&mut e, 1, "grizzly_bears");
@@ -1376,7 +1544,15 @@ fn assign_combat_damage_two_multi_blocked_attackers_requires_both() {
         std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
         std::iter::repeat_n("coral_merfolk".to_string(), 10).collect::<Vec<_>>(),
     ]);
-    let mut e = GameEngine::new(916, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        916,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     ensure_in_hand(&mut e, 0, "grizzly_bears");
     ensure_in_hand(&mut e, 1, "coral_merfolk");
@@ -1469,7 +1645,15 @@ fn assign_combat_damage_two_multi_blocked_attackers_requires_both() {
 fn begin_combat_skips_when_no_eligible_attackers() {
     // Default deck has no creatures on the battlefield.
     // BeginCombat must auto-skip directly to EndCombat.
-    let mut e = GameEngine::new(4001, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4001,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin_combat");
@@ -1488,7 +1672,15 @@ fn begin_combat_skips_when_no_eligible_attackers() {
 
 #[test]
 fn begin_combat_skips_when_all_creatures_summoning_sick() {
-    let mut e = GameEngine::new(4002, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4002,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin_combat");
@@ -1508,7 +1700,15 @@ fn begin_combat_skips_when_all_creatures_summoning_sick() {
 
 #[test]
 fn begin_combat_skips_when_all_creatures_tapped() {
-    let mut e = GameEngine::new(4003, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4003,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin_combat");
@@ -1528,7 +1728,15 @@ fn begin_combat_skips_when_all_creatures_tapped() {
 
 #[test]
 fn begin_combat_enters_declare_attackers_when_eligible_attacker_exists() {
-    let mut e = GameEngine::new(4004, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4004,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin_combat");
@@ -1546,7 +1754,15 @@ fn begin_combat_enters_declare_attackers_when_eligible_attacker_exists() {
 fn declare_attackers_skips_blockers_when_no_eligible_blockers() {
     // Active player has an attacker; defending player has no creatures.
     // After both pass priority in DeclareAttackers, engine auto-declares empty blockers.
-    let mut e = GameEngine::new(4005, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4005,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin_combat");
@@ -1587,7 +1803,15 @@ fn issue_464_combat_damage_records_the_source_incarnation() {
         vec!["grizzly_bears".into(); 7],
         vec!["island".into(); 7],
     ]);
-    let mut engine = GameEngine::new(464_005, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        464_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let attacker = put_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let generation = engine
@@ -1624,7 +1848,15 @@ fn issue_464_combat_damage_records_the_source_incarnation() {
 
 #[test]
 fn cannot_add_mana_while_declaring_attackers() {
-    let mut e = GameEngine::new(4010, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4010,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     // Priority is locked until the active player declares attackers, so a mana ability (a
     // tapped land) cannot be activated yet (CR 605.3a; the engine rejects it).
@@ -1644,7 +1876,15 @@ fn cannot_add_mana_while_declaring_attackers() {
 
 #[test]
 fn declared_attackers_keep_mana_until_declare_attackers_step_ends() {
-    let mut e = GameEngine::new(4012, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4012,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
 
@@ -1671,7 +1911,15 @@ fn declared_attackers_keep_mana_until_declare_attackers_step_ends() {
 
 #[test]
 fn propaganda_tax_is_cumulative_for_each_creature_attacking_a_player() {
-    let mut e = GameEngine::new(4022, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4022,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let first_attacker = e.state.players[0].battlefield[0];
     let second_attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -1693,7 +1941,15 @@ fn propaganda_tax_is_cumulative_for_each_creature_attacking_a_player() {
 
 #[test]
 fn propaganda_does_not_tax_a_creature_attacking_its_controllers_planeswalker() {
-    let mut e = GameEngine::new(4023, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4023,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     let planeswalker = inject_permanent_on_battlefield(&mut e, 1, "jace_beleren");
@@ -1742,7 +1998,15 @@ fn propaganda_does_not_tax_a_creature_attacking_its_controllers_planeswalker() {
 
 #[test]
 fn propaganda_tax_uses_each_directly_attacked_player_in_multiplayer() {
-    let mut e = GameEngine::new(4024, &[0, 1, 2], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4024,
+        &[0, 1, 2],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main phase to begin combat");
@@ -1805,7 +2069,15 @@ fn propaganda_tax_uses_each_directly_attacked_player_in_multiplayer() {
 
 #[test]
 fn propaganda_attack_declaration_waits_for_attack_tax_payment() {
-    let mut e = GameEngine::new(4013, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4013,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
@@ -1931,7 +2203,15 @@ fn propaganda_attack_declaration_waits_for_attack_tax_payment() {
 
 #[test]
 fn propaganda_rejects_stale_or_wrong_payer_commits_without_spending_mana() {
-    let mut e = GameEngine::new(4029, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4029,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
@@ -2025,7 +2305,15 @@ fn propaganda_rejects_stale_or_wrong_payer_commits_without_spending_mana() {
 
 #[test]
 fn propaganda_commit_omits_an_attacker_that_left_and_returned_during_payment() {
-    let mut e = GameEngine::new(4030, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4030,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
@@ -2103,7 +2391,15 @@ fn propaganda_commit_omits_an_attacker_that_left_and_returned_during_payment() {
 #[test]
 fn propaganda_attack_payment_commands_replay_identically() {
     fn prepared() -> (GameEngine, u32, [u32; 3]) {
-        let mut e = GameEngine::new(4031, &[0, 1], 20, None, true).expect("new");
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            4031,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
         advance_to_declare_attackers(&mut e);
         let attacker = e.state.players[0].battlefield[0];
         let forests = [
@@ -2337,7 +2633,15 @@ fn grant_lifelink(engine: &mut GameEngine, source: u32) {
 
 #[test]
 fn propaganda_reapply_does_not_collect_a_newly_restored_death_observer() {
-    let mut e = GameEngine::new(4026, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4026,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     let observer = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -2387,7 +2691,15 @@ fn propaganda_reapply_does_not_collect_a_newly_restored_death_observer() {
 
 #[test]
 fn propaganda_reapply_preserves_event_time_lifelink_triggers() {
-    let mut e = GameEngine::new(4028, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4028,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     let petal = inject_permanent_on_battlefield(&mut e, 0, "lotus_petal");
@@ -2474,7 +2786,15 @@ fn propaganda_reapply_preserves_event_time_lifelink_triggers() {
 
 #[test]
 fn propaganda_attack_tap_reserves_once_per_turn_trigger_before_payment_mana_abilities() {
-    let mut e = GameEngine::new(4025, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4025,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     let mana_creature = inject_creature_on_battlefield(&mut e, 0, "llanowar_elves");
@@ -2510,7 +2830,15 @@ fn propaganda_attack_tap_reserves_once_per_turn_trigger_before_payment_mana_abil
 
 #[test]
 fn propaganda_payer_concession_clears_pending_attack_for_survivors() {
-    let mut e = GameEngine::new(4027, &[0, 1, 2], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4027,
+        &[0, 1, 2],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
@@ -2561,7 +2889,15 @@ fn propaganda_payer_concession_clears_pending_attack_for_survivors() {
 
 #[test]
 fn propaganda_mana_receipt_reports_later_spend_dependency() {
-    let mut e = GameEngine::new(4020, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4020,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     let forest = inject_permanent_on_battlefield(&mut e, 0, "forest");
@@ -2629,7 +2965,15 @@ fn propaganda_mana_receipt_reports_later_spend_dependency() {
 
 #[test]
 fn propaganda_background_mana_is_attributed_before_receipt_mana() {
-    let mut e = GameEngine::new(4021, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4021,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     let forest = inject_permanent_on_battlefield(&mut e, 0, "forest");
@@ -2695,7 +3039,15 @@ fn propaganda_background_mana_is_attributed_before_receipt_mana() {
 
 #[test]
 fn propaganda_rebases_mana_lineage_after_undoing_an_intermediate_receipt() {
-    let mut e = GameEngine::new(4032, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4032,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     let forest = inject_permanent_on_battlefield(&mut e, 0, "forest");
@@ -2837,7 +3189,15 @@ fn propaganda_rebases_mana_lineage_after_undoing_an_intermediate_receipt() {
 
 #[test]
 fn propaganda_attack_payment_allows_and_undoes_mana_ability() {
-    let mut e = GameEngine::new(4014, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4014,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     let forest = inject_permanent_on_battlefield(&mut e, 0, "forest");
@@ -2892,7 +3252,15 @@ fn propaganda_attack_payment_allows_and_undoes_mana_ability() {
 
 #[test]
 fn propaganda_undoes_earlier_cost_triggering_mana_ability_and_keeps_later_float() {
-    let mut e = GameEngine::new(4016, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4016,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     let petal = inject_permanent_on_battlefield(&mut e, 0, "lotus_petal");
@@ -2967,7 +3335,15 @@ fn propaganda_undoes_earlier_cost_triggering_mana_ability_and_keeps_later_float(
 
 #[test]
 fn propaganda_undoes_earlier_sacrifice_mana_ability_and_keeps_later_sacrifice_activation() {
-    let mut e = GameEngine::new(4017, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4017,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     let first_petal = inject_permanent_on_battlefield(&mut e, 0, "lotus_petal");
@@ -3047,7 +3423,15 @@ fn propaganda_undoes_earlier_sacrifice_mana_ability_and_keeps_later_sacrifice_ac
 
 #[test]
 fn propaganda_undo_preserves_later_mana_ability_damage_prevention_result() {
-    let mut e = GameEngine::new(4018, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4018,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     let first_coast = inject_permanent_on_battlefield(&mut e, 0, "yavimaya_coast");
@@ -3130,7 +3514,15 @@ fn propaganda_undo_preserves_later_mana_ability_damage_prevention_result() {
 
 #[test]
 fn propaganda_undo_reuses_later_prevention_choice_and_finite_shield_receipt() {
-    let mut e = GameEngine::new(4019, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4019,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     let first_coast = inject_permanent_on_battlefield(&mut e, 0, "yavimaya_coast");
@@ -3283,7 +3675,15 @@ fn propaganda_undo_reuses_later_prevention_choice_and_finite_shield_receipt() {
 
 #[test]
 fn propaganda_cancellation_reverses_attack_tap_but_keeps_mana_ability() {
-    let mut e = GameEngine::new(4015, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4015,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     let mana_creature = inject_creature_on_battlefield(&mut e, 0, "llanowar_elves");
@@ -3349,7 +3749,15 @@ fn propaganda_cancellation_reverses_attack_tap_but_keeps_mana_ability() {
 
 #[test]
 fn cannot_add_mana_while_declaring_blockers() {
-    let mut e = GameEngine::new(4011, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4011,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -3390,7 +3798,15 @@ fn cannot_add_mana_while_declaring_blockers() {
 /// "First Strike Damage" pass-priority button label.
 #[test]
 fn zone_view_signals_first_strike_step_pending() {
-    let mut e = GameEngine::new(11_006, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11_006,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let goblin = inject_creature_with_stats(&mut e, 0, "goblin_striker", 1, 1);
 
@@ -3416,7 +3832,15 @@ fn zone_view_signals_first_strike_step_pending() {
 /// "First Strike Damage" up until the substep actually resolves.
 #[test]
 fn zone_view_signals_pending_after_blockers_declared() {
-    let mut e = GameEngine::new(11_007, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11_007,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let goblin = inject_creature_with_stats(&mut e, 0, "goblin_striker", 1, 1);
     let corpse = inject_creature_with_stats(&mut e, 1, "walking_corpse", 2, 2);
@@ -3467,7 +3891,15 @@ fn zone_view_signals_pending_after_blockers_declared() {
 /// CR 510.4: when no FS/DS creature is in combat, `first_strike_step_pending` is never true.
 #[test]
 fn zone_view_does_not_signal_pending_for_vanilla_combat() {
-    let mut e = GameEngine::new(11_008, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11_008,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let bears = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 2, 2);
     let b = e
@@ -3511,7 +3943,15 @@ fn divine_verdict_targets_only_combatants() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(5008, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin combat");
@@ -3585,7 +4025,15 @@ fn divine_verdict_targets_only_combatants() {
 /// Happy path: a must-attack creature (Crazed Goblin) declared as an attacker is accepted.
 #[test]
 fn must_attack_creature_declared_as_attacker_is_legal() {
-    let mut e = GameEngine::new(5500, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5500,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     // Inject a must-attack creature (mirrors Crazed Goblin — attacks each combat if able).
     let goblin = inject_creature_on_battlefield(&mut e, 0, "crazed_goblin");
@@ -3606,7 +4054,15 @@ fn must_attack_creature_declared_as_attacker_is_legal() {
 /// Illegal path: omitting a must-attack creature when it could legally attack returns Illegal.
 #[test]
 fn must_attack_creature_omitted_from_attackers_is_illegal() {
-    let mut e = GameEngine::new(5501, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5501,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     // Inject a must-attack creature.
     let goblin = inject_creature_on_battlefield(&mut e, 0, "crazed_goblin");
@@ -3629,7 +4085,15 @@ fn must_attack_creature_omitted_from_attackers_is_illegal() {
 /// requirement when every legal attack edge requires that payment.
 #[test]
 fn must_attack_creature_with_only_taxed_attack_edge_may_skip() {
-    let mut e = GameEngine::new(5505, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5505,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let goblin = inject_creature_on_battlefield(&mut e, 0, "crazed_goblin");
     e.state
@@ -3647,7 +4111,15 @@ fn must_attack_creature_with_only_taxed_attack_edge_may_skip() {
 /// CR 508.1d "if able": a must-attack creature that is summoning-sick is NOT required to attack.
 #[test]
 fn must_attack_creature_summoning_sick_may_skip() {
-    let mut e = GameEngine::new(5502, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5502,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     // Inject a must-attack creature that is summoning-sick — it is not a legal attacker.
     let goblin = inject_creature_on_battlefield(&mut e, 0, "crazed_goblin");
@@ -3665,7 +4137,15 @@ fn must_attack_creature_summoning_sick_may_skip() {
 /// CR 508.1d "if able": a must-attack creature that is tapped cannot legally attack, so skip is OK.
 #[test]
 fn must_attack_creature_tapped_may_skip() {
-    let mut e = GameEngine::new(5503, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5503,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     // Inject a must-attack creature that is tapped — it is not a legal attacker.
     let goblin = inject_creature_on_battlefield(&mut e, 0, "crazed_goblin");
@@ -3681,7 +4161,15 @@ fn must_attack_creature_tapped_may_skip() {
 /// CR 509.1c: a must-block creature that omits a legal block returns Illegal.
 #[test]
 fn must_block_creature_omitted_from_blockers_is_illegal() {
-    let mut e = GameEngine::new(5504, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5504,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     // The grizzly_bears from advance_to_declare_attackers is the attacker.
     let attacker = battlefield_object_for_card(&e, 0, "grizzly_bears");
@@ -3713,7 +4201,15 @@ fn must_block_creature_omitted_from_blockers_is_illegal() {
 /// client can gate its confirm-attackers control identically to the engine's set_attackers check.
 #[test]
 fn legal_actions_surface_required_attacker_to_active_player() {
-    let mut e = GameEngine::new(5510, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5510,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin combat");
@@ -3749,7 +4245,15 @@ fn legal_actions_surface_required_attacker_to_active_player() {
 /// client can gate its confirm-blockers control identically to the engine's set_blockers check.
 #[test]
 fn legal_actions_surface_required_blocker_to_defender() {
-    let mut e = GameEngine::new(5511, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5511,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = battlefield_object_for_card(&e, 0, "grizzly_bears");
     let blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -3797,7 +4301,15 @@ fn prevented_lifelink_blocker_damage_gains_no_life() {
             d
         },
     ]);
-    let mut e = GameEngine::new(9401, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9401,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     ensure_in_hand(&mut e, 0, "grizzly_bears");
     ensure_in_hand(&mut e, 1, "child_of_night");
@@ -3871,7 +4383,15 @@ fn prevented_lifelink_blocker_damage_gains_no_life() {
 /// change is that reaching it costs a rejected command instead of taking down the sidecar task.
 #[test]
 fn no_defending_player_once_the_opponent_has_lost() {
-    let mut e = GameEngine::new(70, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        70,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     assert_eq!(
         e.state.sole_defending_player_id(),
         Some(1),

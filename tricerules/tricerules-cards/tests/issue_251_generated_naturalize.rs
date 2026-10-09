@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     EffectSubject, PermanentTypeFilter, SpellEffectKind, TargetKind,
 };
-use tricerules_cards::{AbilityCost, AbilityPresentation, CardRegistry, Keyword};
+use tricerules_cards::{AbilityCost, AbilityPresentation, Keyword};
 
 #[test]
 fn issue_251_generated_cards_have_exact_source_data_and_typed_ability() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let cases = [
         ("cathar_commando", "{1}{W}", 3, 1, Some(Keyword::Flash), 2),
         (

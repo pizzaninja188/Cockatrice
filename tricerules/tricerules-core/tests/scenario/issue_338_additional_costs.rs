@@ -85,7 +85,15 @@ fn corrupted_conviction_requires_a_creature_sacrifice_and_draws_two() {
         deck_with("swamp", &["corrupted_conviction", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(338_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let fodder = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     ensure_card_in_hand(&mut engine, 0, "corrupted_conviction");
@@ -140,7 +148,15 @@ fn pumpkin_bombardment_supports_the_mana_and_discard_options() {
         deck_with("mountain", &["pumpkin_bombardment", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(338_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     ensure_card_in_hand(&mut engine, 0, "pumpkin_bombardment");
@@ -178,7 +194,15 @@ fn pumpkin_bombardment_supports_the_mana_and_discard_options() {
         deck_with("mountain", &["pumpkin_bombardment", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(338_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     ensure_card_in_hand(&mut engine, 0, "pumpkin_bombardment");
@@ -215,7 +239,15 @@ fn guardian_of_the_great_door_taps_exactly_four_permanents() {
         deck_with("plains", &["guardian_of_the_great_door", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(338_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let creatures: Vec<u32> = (0..3)
         .map(|_| inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears"))
@@ -270,7 +302,15 @@ fn bogslithers_embrace_blights_a_creature_instead_of_paying_mana() {
         deck_with("swamp", &["bogslithers_embrace", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(338_005, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let blighted = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -321,7 +361,15 @@ fn deadly_precision_pays_four_mana_or_sacrifices() {
         deck_with("swamp", &["deadly_precision", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(338_006, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     ensure_card_in_hand(&mut engine, 0, "deadly_precision");
@@ -359,7 +407,15 @@ fn deadly_precision_pays_four_mana_or_sacrifices() {
         deck_with("swamp", &["deadly_precision", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(338_007, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let fodder = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -394,7 +450,15 @@ fn kinsbaile_aspirant_beholds_a_kithkin_permanent() {
         deck_with("plains", &["kinsbaile_aspirant", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(338_008, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let kithkin = inject_creature_on_battlefield(&mut engine, 0, "kinsbaile_aspirant");
     let non_kithkin = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -466,7 +530,15 @@ fn demand_answers_sacrifices_an_artifact_or_discards_a_card() {
         deck_with("mountain", &["demand_answers", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(338_009, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let artifact = inject_permanent_on_battlefield(&mut engine, 0, "swiftfoot_boots");
     ensure_card_in_hand(&mut engine, 0, "demand_answers");
@@ -500,7 +572,15 @@ fn demand_answers_sacrifices_an_artifact_or_discards_a_card() {
         deck_with("mountain", &["demand_answers", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(338_010, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_010,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "demand_answers");
     ensure_card_in_hand(&mut engine, 0, "grizzly_bears");
@@ -531,7 +611,15 @@ fn fear_of_exposure_taps_exactly_two_creatures_or_lands() {
         deck_with("forest", &["fear_of_exposure", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(338_011, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_011,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let creature = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let land = inject_permanent_on_battlefield(&mut engine, 0, "forest");
@@ -580,7 +668,15 @@ fn final_vengeance_sacrifices_a_creature_and_exiles_the_target() {
         deck_with("swamp", &["final_vengeance", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(338_012, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_012,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let fodder = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -615,7 +711,15 @@ fn laughing_mad_discards_a_card_and_draws_two() {
         deck_with("mountain", &["laughing_mad", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(338_013, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_013,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "laughing_mad");
     ensure_card_in_hand(&mut engine, 0, "grizzly_bears");

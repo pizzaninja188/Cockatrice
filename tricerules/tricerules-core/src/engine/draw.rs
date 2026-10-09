@@ -4,7 +4,7 @@ use super::events::{ev_log, ev_priority_changed, finish_with_events};
 use super::replacement::PendingReplacementEvent;
 use super::triggers::ability_definition_from;
 use super::*;
-use tricerules_cards::primitives::{DrawReplacementCondition, LibraryDrawReplacement};
+use tricerules_card_model::primitives::{DrawReplacementCondition, LibraryDrawReplacement};
 mod library_actions;
 
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
@@ -29,6 +29,7 @@ mod library_replacement_tests {
             &source,
         ], &[]).expect("admit the real draw replacement operation");
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             12106,
             &[0, 1, 2],
             20,
@@ -539,6 +540,7 @@ mod zurs_weirding_tests {
 
     fn fixture(players: &[PlayerId], drawer: PlayerId) -> GameEngine {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             801204,
             players,
             20,
@@ -546,7 +548,7 @@ mod zurs_weirding_tests {
             true,
         )
         .unwrap();
-        engine.registry = CardRegistry::global();
+        engine.registry = tricerules_cards::registry::global();
         engine.state.opening = None;
 
         let source_owner = players[0];

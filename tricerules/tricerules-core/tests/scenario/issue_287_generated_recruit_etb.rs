@@ -17,7 +17,15 @@ fn park_recruit_choice(card_id: &str, seed: u64) -> (GameEngine, u32) {
         deck_with("plains", &[card_id, "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("recruit engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("recruit engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "grizzly_bears");
     let discard = hand_object_for_card(&engine, 0, "grizzly_bears");
@@ -77,7 +85,15 @@ fn issue_287_land_discard_creates_no_recruit_soldier() {
             deck_with("plains", &[card_id, "grizzly_bears"]),
             deck_with("forest", &[]),
         ]);
-        let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("recruit engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("recruit engine");
         advance_to_main1_from_game_start(&mut engine);
         ensure_in_hand(&mut engine, 0, "plains");
         let land = hand_object_for_card(&engine, 0, "plains");
@@ -155,7 +171,15 @@ fn issue_287_empty_library_and_hand_discards_nothing_and_creates_no_soldier() {
         deck_with("plains", &["long_lake_nuisance"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(287_006, &[0, 1], 20, decks, true).expect("recruit engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        287_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("recruit engine");
     advance_to_main1_from_game_start(&mut engine);
     move_ready_to_battlefield(&mut engine, 0, "long_lake_nuisance");
     while let Some(oid) = engine.state.players[0].hand.pop() {
@@ -195,7 +219,15 @@ fn issue_287_library_of_leng_replacement_observes_the_committed_discard_destinat
             deck_with("plains", &["long_lake_nuisance", "grizzly_bears"]),
             deck_with("forest", &[]),
         ]);
-        let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("recruit engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("recruit engine");
         advance_to_main1_from_game_start(&mut engine);
         inject_permanent_on_battlefield(&mut engine, 0, "library_of_leng");
         ensure_in_hand(&mut engine, 0, "grizzly_bears");
@@ -286,8 +318,15 @@ fn issue_287_choice_and_conditional_token_replay_deterministically() {
             deck_with("plains", &["long_lake_nuisance", "grizzly_bears"]),
             deck_with("forest", &[]),
         ]);
-        let mut engine =
-            GameEngine::new(287_007, &[0, 1], 20, decks, true).expect("recruit engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            287_007,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("recruit engine");
         advance_to_main1_from_game_start(&mut engine);
         engine
     }

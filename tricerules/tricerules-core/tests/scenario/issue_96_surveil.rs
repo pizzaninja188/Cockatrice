@@ -4,7 +4,6 @@ use crate::helpers::*;
 use tricerules_cards::primitives::{
     CastTriggerPlayer, ContinuousEffectKind, EffectDuration, SpellEffectKind, TriggerCondition,
 };
-use tricerules_cards::CardRegistry;
 use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{permanent_moved, ChoiceKind};
 
@@ -54,7 +53,7 @@ fn move_graveyard_to_library(e: &mut GameEngine, player: usize, object_id: u32) 
 }
 
 fn grant_surveil_trigger(e: &mut GameEngine, observer: u32) {
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("audacious_thief")
         .expect("Audacious Thief definition")
         .primary_face()
@@ -106,8 +105,15 @@ fn resolve_top_stack(e: &mut GameEngine) -> RuledEventBatch {
 
 #[test]
 fn issue_96_cruel_truths_moves_the_chosen_card_then_resumes_its_tail() {
-    let mut e = GameEngine::new(96_001, &[0, 1], 20, black_deck_with("cruel_truths"), true)
-        .expect("new engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        96_001,
+        &[0, 1],
+        20,
+        black_deck_with("cruel_truths"),
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "cruel_truths");
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow", "hill_giant"]);
@@ -172,8 +178,15 @@ fn issue_96_cruel_truths_moves_the_chosen_card_then_resumes_its_tail() {
 
 #[test]
 fn issue_96_surveillance_waits_for_top_order_before_later_effects() {
-    let mut e = GameEngine::new(96_002, &[0, 1], 20, black_deck_with("cruel_truths"), true)
-        .expect("new engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        96_002,
+        &[0, 1],
+        20,
+        black_deck_with("cruel_truths"),
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "cruel_truths");
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow", "hill_giant"]);
@@ -205,8 +218,15 @@ fn issue_96_surveillance_waits_for_top_order_before_later_effects() {
 
 #[test]
 fn issue_96_surveil_rejects_illegal_submissions_atomically() {
-    let mut e = GameEngine::new(96_003, &[0, 1], 20, black_deck_with("cruel_truths"), true)
-        .expect("new engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        96_003,
+        &[0, 1],
+        20,
+        black_deck_with("cruel_truths"),
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "cruel_truths");
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow", "hill_giant"]);
@@ -267,8 +287,15 @@ fn issue_96_surveil_rejects_illegal_submissions_atomically() {
 
 #[test]
 fn issue_96_surveillance_rejects_a_stale_choose_destination_without_consuming_the_choice() {
-    let mut e = GameEngine::new(96_007, &[0, 1], 20, black_deck_with("cruel_truths"), true)
-        .expect("new engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        96_007,
+        &[0, 1],
+        20,
+        black_deck_with("cruel_truths"),
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "cruel_truths");
     let stale = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"])[0];
@@ -305,8 +332,15 @@ fn issue_96_surveillance_rejects_a_stale_choose_destination_without_consuming_th
 
 #[test]
 fn issue_96_surveil_trigger_fires_only_after_the_complete_action() {
-    let mut e = GameEngine::new(96_004, &[0, 1], 20, black_deck_with("cruel_truths"), true)
-        .expect("new engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        96_004,
+        &[0, 1],
+        20,
+        black_deck_with("cruel_truths"),
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "cruel_truths");
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);
@@ -340,8 +374,15 @@ fn issue_96_surveil_trigger_fires_only_after_the_complete_action() {
 #[test]
 fn issue_96_surveillance_rejects_stale_order_top_before_trigger_and_valid_flow_completes() {
     fn prepared(seed: u64) -> (GameEngine, Vec<u32>, u32) {
-        let mut e = GameEngine::new(seed, &[0, 1], 20, black_deck_with("cruel_truths"), true)
-            .expect("new engine");
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            black_deck_with("cruel_truths"),
+            true,
+        )
+        .expect("new engine");
         advance_to_main1_from_game_start(&mut e);
         ensure_in_hand(&mut e, 0, "cruel_truths");
         let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);
@@ -416,6 +457,7 @@ fn issue_96_surveillance_rejects_stale_order_top_before_trigger_and_valid_flow_c
 #[test]
 fn issue_96_gutless_plunderer_requires_raid_and_handles_a_short_library() {
     let mut no_raid = GameEngine::new(
+        tricerules_cards::registry::global(),
         96_005,
         &[0, 1],
         20,
@@ -432,6 +474,7 @@ fn issue_96_gutless_plunderer_requires_raid_and_handles_a_short_library() {
     assert!(no_raid.state.pending_resolution.is_none());
 
     let mut raid = GameEngine::new(
+        tricerules_cards::registry::global(),
         96_006,
         &[0, 1],
         20,
@@ -467,6 +510,7 @@ fn issue_96_gutless_plunderer_requires_raid_and_handles_a_short_library() {
 fn issue_96_wary_creatures_surveil_on_entry() {
     for (offset, card_id) in ["wary_thespian", "wary_watchdog"].into_iter().enumerate() {
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             96_010 + offset as u64,
             &[0, 1],
             20,
@@ -502,8 +546,15 @@ fn issue_96_surveillance_creatures_surveil_when_they_attack() {
         .into_iter()
         .enumerate()
     {
-        let mut e =
-            GameEngine::new(96_020 + offset as u64, &[0, 1], 20, None, true).expect("new engine");
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            96_020 + offset as u64,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new engine");
         advance_to_declare_attackers(&mut e);
         let source = inject_creature_on_battlefield(&mut e, 0, card_id);
         let top = seat_on_top(&mut e, 0, &["storm_crow"])[0];
@@ -525,7 +576,7 @@ fn issue_96_surveillance_creatures_surveil_when_they_attack() {
 
 #[test]
 fn issue_96_registers_the_complete_surveil_card_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for card_id in [
         "wary_thespian",
         "wary_watchdog",

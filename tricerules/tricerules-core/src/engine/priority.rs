@@ -990,7 +990,7 @@ impl GameEngine {
                 let multiblock_missing = c.blockers.iter().any(|(atk, blks)| {
                     // Trample with 1+ blockers also requires explicit damage assignment (CR 702.19).
                     let has_trample =
-                        self.effective_has_keyword(*atk, tricerules_cards::Keyword::Trample);
+                        self.effective_has_keyword(*atk, tricerules_card_model::Keyword::Trample);
                     let needs_assign = blks.len() > 1 || (blks.len() == 1 && has_trample);
                     needs_assign && !c.damage_assignments.contains_key(atk)
                 });

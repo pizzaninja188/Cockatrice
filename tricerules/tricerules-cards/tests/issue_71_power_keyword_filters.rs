@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{EffectSubject, PowerComparison, SpellEffectKind, TargetKind};
-use tricerules_cards::{CardRegistry, Keyword};
+use tricerules_cards::Keyword;
 
 #[test]
 fn issue_71_cards_use_shared_power_and_keyword_filters() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let judgment_definition = registry
         .get("legions_judgment")

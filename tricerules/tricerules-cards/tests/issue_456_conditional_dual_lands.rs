@@ -18,7 +18,7 @@ use tricerules_cards::primitives::{
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef, ActivationTiming,
-    CardFace, CardRegistry, ManaAmount, RelativePlayerSet, SpellEffectKind,
+    CardFace, ManaAmount, RelativePlayerSet, SpellEffectKind,
 };
 
 type ManaOption = (u32, u32, u32, u32, u32, u32);
@@ -58,7 +58,7 @@ const CONDITIONAL_DUAL_LANDS: [ConditionalDualLand; 4] = [
 ];
 
 fn face(id: &str) -> &'static CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .unwrap_or_else(|| panic!("missing reviewed card {id}"))
         .primary_face()
@@ -163,7 +163,7 @@ fn assert_conditional_pair_ability(
 
 #[test]
 fn issue_456_registers_exactly_the_reviewed_four() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for land in &CONDITIONAL_DUAL_LANDS {
         assert_eq!(
             registry.id_for_name(land.name),
@@ -213,7 +213,7 @@ fn issue_456_lands_produce_colorless_or_their_conditional_pair() {
 
 #[test]
 fn issue_456_hidden_lair_keeps_its_handwritten_definition() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(registry.id_for_name("Hidden Lair"), Some("hidden_lair"));
     FaceExpectation {
         id: "hidden_lair",

@@ -15,6 +15,7 @@ fn reject(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
 
 fn blocked_maze(seed: u64) -> (GameEngine, u32, u32, u32, u32) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -290,6 +291,7 @@ fn maze_parked_damage_terminal_completion_publishes_no_priority_or_remaining_cho
 #[test]
 fn third_player_maze_targets_an_opponents_attacker_against_another_defender() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         511_009,
         &[0, 1, 2],
         20,
@@ -360,6 +362,7 @@ fn third_player_maze_targets_an_opponents_attacker_against_another_defender() {
 fn combat_damage_settles_player_departure_before_creature_deaths_and_targeted_triggers() {
     for (parked, automatic) in [(false, false), (true, false), (false, true), (true, true)] {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             511_010,
             &[0, 1, 2],
             20,

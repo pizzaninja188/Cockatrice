@@ -1,7 +1,7 @@
 //! Exact Thassa's Oracle identity and rules behavior.
 
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, ManaCost};
+use tricerules_cards::ManaCost;
 use tricerules_core::state::GameOutcome;
 use tricerules_core::{GameEngine, Zone};
 use tricerules_proto::ruled::v1::{ruled_command::Cmd, ChoiceKind, SubmitResolutionChoice};
@@ -12,6 +12,7 @@ fn game(seed: u64, library_size: usize, extras: &[&str]) -> GameEngine {
     let mut specials = vec![THASSAS_ORACLE];
     specials.extend_from_slice(extras);
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -83,7 +84,7 @@ fn choose_cards(cards: Vec<u32>) -> RuledCommand {
 
 #[test]
 fn thassa_oracle_has_a_complete_card_definition() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get(THASSAS_ORACLE)
         .expect("Thassa's Oracle needs a complete definition");
     assert_eq!(card.face_count(), 1);

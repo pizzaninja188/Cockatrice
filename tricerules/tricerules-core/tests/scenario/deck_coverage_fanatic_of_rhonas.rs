@@ -1,5 +1,5 @@
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, Color, CounterKind};
+use tricerules_cards::{Color, CounterKind};
 use tricerules_core::{GameEngine, TurnStep, Zone};
 
 const FANATIC: &str = "fanatic_of_rhonas";
@@ -17,6 +17,7 @@ fn eternalize_command(e: &GameEngine, source: u32) -> RuledCommand {
 
 fn game(seed: u64) -> GameEngine {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -97,7 +98,7 @@ fn assert_token_values(e: &GameEngine, id: u32) {
 
 #[test]
 fn exact_source_and_token_preserve_all_three_copiable_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get(FANATIC).expect("exact Fanatic registered");
     assert_eq!(card.name, "Fanatic of Rhonas");
     assert_eq!(card.face_count(), 1);

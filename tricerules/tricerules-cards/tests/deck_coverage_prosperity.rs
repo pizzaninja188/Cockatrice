@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{Amount, PlayerRecipient, SpellEffectKind};
-use tricerules_cards::{CardRegistry, Layout};
+use tricerules_cards::Layout;
 
 #[test]
 fn prosperity_registers_its_variable_all_player_draw() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("prosperity")
         .expect("Prosperity registry definition");

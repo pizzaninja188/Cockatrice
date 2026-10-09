@@ -57,7 +57,15 @@ fn resolve_entire_stack_three_player(engine: &mut GameEngine) {
 }
 
 fn stage_equipment_attack_trigger(seed: u64) -> (GameEngine, u32, u32, u32, u32) {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut engine);
 
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");

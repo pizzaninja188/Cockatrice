@@ -20,7 +20,15 @@ fn issue_engine() -> GameEngine {
         vec!["forest".to_string(); 20],
         vec!["forest".to_string(); 20],
     ]);
-    let mut engine = GameEngine::new(21401, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        21401,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     engine.enable_dev_commands();
     advance_to_main1_from_game_start(&mut engine);
     engine

@@ -8,7 +8,15 @@ fn setup_mobilize_with_planeswalker(seed: u64) -> (GameEngine, u32, u32) {
         deck_with("mountain", &["shock_brigade"]),
         deck_with("island", &["jace_beleren"]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut engine);
     let shock = relocate_to_battlefield(&mut engine, 0, "shock_brigade", false);
     let jace = relocate_to_battlefield(&mut engine, 1, "jace_beleren", false);

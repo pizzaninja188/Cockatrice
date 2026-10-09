@@ -10,10 +10,10 @@ use tricerules_cards::primitives::{
     Amount, CardTypeFilter, PlayerRecipient, SearchDestination, SearchZoneSelection,
     SpellEffectKind, ZoneCardFilter,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, ModalDef};
+use tricerules_cards::{AbilityPresentation, ModalDef};
 
 fn modal(card_id: &str) -> ModalDef {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("{card_id} is registered"));
     let face = definition.primary_face();
@@ -32,7 +32,7 @@ fn modal(card_id: &str) -> ModalDef {
 
 #[test]
 fn issue_428_registers_return_from_the_wilds_and_keeps_unfinished_commands_out() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let definition = registry
         .get("return_from_the_wilds")
         .expect("Return from the Wilds is registered");
@@ -138,7 +138,7 @@ fn issue_428_human_and_food_modes_create_their_exact_registered_tokens() {
         }]
     );
 
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert!(registry.is_token("human_w_1_1"));
     let human = registry.get("human_w_1_1").expect("human token definition");
     assert_eq!(human.name, "Human");

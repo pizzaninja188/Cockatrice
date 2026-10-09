@@ -12,7 +12,15 @@ const TOKEN: &str = "squid_u_1_1_islandwalk";
 
 fn setup(seed: u64) -> GameEngine {
     let deck = deck_with("forest", &[]);
-    let mut e = GameEngine::new(seed, &[10, 20, 30], 20, Some(vec![deck; 3]), true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[10, 20, 30],
+        20,
+        Some(vec![deck; 3]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     e.enable_dev_commands();
     e

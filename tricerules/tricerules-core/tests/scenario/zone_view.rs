@@ -153,7 +153,15 @@ fn land_deck() -> Option<Vec<Vec<String>>> {
 /// omission — the cache starts empty precisely to guarantee that.
 #[test]
 fn first_zone_view_of_a_session_is_full() {
-    let mut e = GameEngine::new(99, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        99,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     let initial = e.initial_response_batch();
     let view = last_zone_view(&initial);
     for player in [0, 1] {
@@ -171,7 +179,15 @@ fn first_zone_view_of_a_session_is_full() {
 /// concealed zone, so neither player's hand or library is re-sent.
 #[test]
 fn priority_pass_omits_both_players_concealed_zones() {
-    let mut e = GameEngine::new(99, &[0, 1], 20, land_deck(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        99,
+        &[0, 1],
+        20,
+        land_deck(),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let b = e.apply_command(0, &pass()).expect("p0 passes in main1");
@@ -200,7 +216,15 @@ fn priority_pass_omits_both_players_concealed_zones() {
 /// opponent untouched, so only the player who acted is re-sent.
 #[test]
 fn playing_a_land_resends_only_that_player() {
-    let mut e = GameEngine::new(99, &[0, 1], 20, land_deck(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        99,
+        &[0, 1],
+        20,
+        land_deck(),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let idx = hand_index_for_card(&e, 0, "mountain");
 
@@ -238,7 +262,15 @@ fn playing_a_land_resends_only_that_player() {
 /// A draw is the other half of that: the drawing player is re-sent, their opponent is not.
 #[test]
 fn a_turn_roll_resends_only_the_player_who_drew() {
-    let mut e = GameEngine::new(99, &[0, 1], 20, land_deck(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        99,
+        &[0, 1],
+        20,
+        land_deck(),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Roll to P1's turn: P1 draws for the turn (CR 103.8 only exempts the starting player's
@@ -309,7 +341,15 @@ fn a_turn_roll_resends_only_the_player_who_drew() {
 /// otherwise the dev console would hand a player a card Servatrice never learns about.
 #[test]
 fn dev_conjure_into_hand_resends_that_player() {
-    let mut e = GameEngine::new(99, &[0, 1], 20, land_deck(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        99,
+        &[0, 1],
+        20,
+        land_deck(),
+        true,
+    )
+    .expect("new");
     e.enable_dev_commands();
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &pass()).expect("prime the cache");
@@ -354,7 +394,15 @@ fn a_contract_following_receiver_never_drifts_from_the_engine() {
             d
         },
     ]);
-    let mut e = GameEngine::new(7, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     let mut mirror = ZoneMirror::default();
     mirror.apply(last_zone_view(&e.initial_response_batch()));
     mirror.assert_matches(&mut e, "initial batch");

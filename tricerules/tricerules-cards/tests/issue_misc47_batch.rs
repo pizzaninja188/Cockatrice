@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     Amount, EffectSubject, GameCondition, PermanentTypeFilter, RelativePlayerSet,
     SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry};
+use tricerules_cards::AbilityPresentation;
 
 #[test]
 fn issue_misc47_uncounterable_removal_cards_are_registered() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, types) in [
         ("long_goodbye", "Long Goodbye", "{1}{B}", &["Instant"][..]),
         (
@@ -36,7 +36,7 @@ fn issue_misc47_uncounterable_removal_cards_are_registered() {
 
 #[test]
 fn issue_misc47_maps_each_uncounterable_spell_to_its_complete_effect() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let long_goodbye = registry
         .get("long_goodbye")

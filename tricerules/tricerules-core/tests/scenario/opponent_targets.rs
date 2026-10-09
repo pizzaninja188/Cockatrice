@@ -62,7 +62,15 @@ fn cast_rambunctious_mutt(e: &mut GameEngine) {
 
 fn opponent_target_engine(seed: u64, card: &str) -> GameEngine {
     let decks = Some(vec![deck_with("plains", &[card]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

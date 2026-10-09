@@ -13,8 +13,8 @@ use tricerules_cards::primitives::{
     TargetFilter, TargetGroupDef, TargetingDef,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, Amount, CardRegistry, Color, CounterKind, Keyword, Layout,
-    ManaCost, TriggerCondition,
+    AbilityCost, AbilityPresentation, Amount, Color, CounterKind, Keyword, Layout, ManaCost,
+    TriggerCondition,
 };
 
 fn single_group(targeting: &TargetingDef) -> &TargetGroupDef {
@@ -26,7 +26,7 @@ fn single_group(targeting: &TargetingDef) -> &TargetGroupDef {
 
 #[test]
 fn issue_327_registers_the_eight_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_count, layout) in [
         ("honor", "Honor", 1, Layout::Normal),
         ("shivan_dragon", "Shivan Dragon", 1, Layout::Normal),
@@ -54,7 +54,9 @@ fn issue_327_registers_the_eight_reviewed_identities() {
 
 #[test]
 fn issue_327_honor_counters_one_target_and_draws() {
-    let definition = CardRegistry::global().get("honor").expect("Honor");
+    let definition = tricerules_cards::registry::global()
+        .get("honor")
+        .expect("Honor");
     let face = definition.primary_face();
     assert_eq!(face.face_id.as_str(), "honor");
     assert_eq!(face.mana_cost.to_string(), "{W}");
@@ -88,7 +90,7 @@ fn issue_327_honor_counters_one_target_and_draws() {
 
 #[test]
 fn issue_327_shivan_dragon_keeps_flying_and_single_red_self_pump() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("shivan_dragon")
         .expect("Shivan Dragon");
     let face = definition.primary_face();
@@ -127,7 +129,9 @@ fn issue_327_shivan_dragon_keeps_flying_and_single_red_self_pump() {
 
 #[test]
 fn issue_327_dark_deed_pumps_minus_four_minus_four() {
-    let definition = CardRegistry::global().get("dark_deed").expect("Dark Deed");
+    let definition = tricerules_cards::registry::global()
+        .get("dark_deed")
+        .expect("Dark Deed");
     let face = definition.primary_face();
     assert_eq!(face.face_id.as_str(), "dark_deed");
     assert_eq!(face.mana_cost.to_string(), "{1}{B}");
@@ -147,7 +151,7 @@ fn issue_327_dark_deed_pumps_minus_four_minus_four() {
 
 #[test]
 fn issue_327_goblin_oriflamme_anthems_attacking_creatures_only() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("goblin_oriflamme")
         .expect("Goblin Oriflamme");
     let face = definition.primary_face();
@@ -181,7 +185,7 @@ fn issue_327_goblin_oriflamme_anthems_attacking_creatures_only() {
 
 #[test]
 fn issue_327_ball_lightning_sacrifices_itself_at_the_end_step() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("ball_lightning")
         .expect("Ball Lightning");
     let face = definition.primary_face();
@@ -217,7 +221,7 @@ fn issue_327_ball_lightning_sacrifices_itself_at_the_end_step() {
 
 #[test]
 fn issue_327_charging_strifeknight_taps_and_discards_for_a_card() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("charging_strifeknight")
         .expect("Charging Strifeknight");
     let face = definition.primary_face();
@@ -249,7 +253,7 @@ fn issue_327_charging_strifeknight_taps_and_discards_for_a_card() {
 
 #[test]
 fn issue_327_web_warriors_counters_each_other_controlled_creature() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("web-warriors")
         .expect("Web-Warriors");
     let face = definition.primary_face();
@@ -289,7 +293,7 @@ fn issue_327_web_warriors_counters_each_other_controlled_creature() {
 
 #[test]
 fn issue_327_voracious_vermin_keeps_the_rat_etb_and_dies_counter() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("voracious_vermin")
         .expect("Voracious Vermin");
     let face = definition.primary_face();
@@ -343,7 +347,7 @@ fn issue_327_voracious_vermin_keeps_the_rat_etb_and_dies_counter() {
 
 #[test]
 fn issue_327_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let cases: &[(&str, &str, &str, &str)] = &[
         ("honor", "honor", "Honor", "Honor"),
         (

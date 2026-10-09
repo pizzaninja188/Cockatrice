@@ -1,6 +1,6 @@
 //! Exact-card cost reductions and opponent draw ordinals.
 use super::helpers::*;
-use tricerules_cards::{AbilityPresentation, CardRegistry, Keyword, Layout};
+use tricerules_cards::{AbilityPresentation, Keyword, Layout};
 use tricerules_core::TurnStep;
 
 fn pass_round(engine: &mut GameEngine) {
@@ -14,7 +14,7 @@ fn pass_round(engine: &mut GameEngine) {
 
 #[test]
 fn exact_characteristics_and_presentation() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let goblin = registry
         .get("goblin_anarchomancer")
         .expect("registered Goblin");
@@ -66,6 +66,7 @@ fn reduction(engine: &mut GameEngine, player: usize, card: &str) -> u32 {
 #[test]
 fn anarchomancer_matches_each_color_once_only_for_its_controller_and_preserves_pips() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         202609321,
         &[0, 1],
         20,
@@ -137,6 +138,7 @@ fn anarchomancer_matches_each_color_once_only_for_its_controller_and_preserves_p
 #[test]
 fn mastermind_enters_after_first_draw_and_tracks_each_opponents_second_not_third() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         202609322,
         &[0, 1, 2],
         20,
@@ -236,6 +238,7 @@ fn mastermind_enters_after_first_draw_and_tracks_each_opponents_second_not_third
 #[test]
 fn mastermind_flash_casts_on_opponent_turn_and_draw_history_resets() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         202609323,
         &[0, 1],
         20,

@@ -3,8 +3,7 @@ use tricerules_cards::primitives::{
     SpellManaSpentComparison,
 };
 use tricerules_cards::{
-    AbilityPresentation, Amount, CardRegistry, CounterKind, Keyword, SpellEffectKind,
-    TriggerCondition,
+    AbilityPresentation, Amount, CounterKind, Keyword, SpellEffectKind, TriggerCondition,
 };
 
 fn assert_increment(ability: &tricerules_cards::TriggeredAbilityDef, oracle_line: u16) {
@@ -40,7 +39,7 @@ fn assert_increment(ability: &tricerules_cards::TriggeredAbilityDef, oracle_line
 
 #[test]
 fn issue_280_registers_the_complete_increment_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let cuboid = registry
         .get("cuboid_colony")

@@ -30,7 +30,15 @@ fn lava_coil_exiles_its_lethally_damaged_target() {
         deck_with("mountain", &["lava_coil"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(12_501, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12_501,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let target = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -46,7 +54,15 @@ fn prevented_damage_still_exiles_a_later_sacrifice_without_a_dies_event() {
         deck_with("mountain", &["lava_coil", "village_rites", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(12_502, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12_502,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     engine.state.add_damage_prevention_shield(target, 4);
@@ -90,7 +106,15 @@ fn regeneration_replaces_the_first_destruction_but_not_a_later_death() {
         deck_with("mountain", &["scorching_dragonfire"]),
         deck_with("forest", &["cudgel_troll"]),
     ]);
-    let mut engine = GameEngine::new(12_503, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12_503,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 1, "cudgel_troll", false);
     engine
@@ -118,7 +142,15 @@ fn toughness_zero_and_simultaneous_unmarked_death_use_the_actual_destinations() 
         deck_with("mountain", &["scorching_dragonfire", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(12_504, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12_504,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let marked = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let ordinary = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -154,7 +186,15 @@ fn zone_change_generation_and_cleanup_each_end_the_replacement() {
         ),
         deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(12_505, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12_505,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let bounced = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);

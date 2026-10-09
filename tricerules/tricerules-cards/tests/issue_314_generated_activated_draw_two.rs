@@ -3,7 +3,7 @@
 use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivationTiming, Amount, PlayerRecipient, SpellEffectKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Color, ManaCost};
+use tricerules_cards::{AbilityPresentation, Color, ManaCost};
 
 #[derive(Clone, Copy)]
 struct CohortFixture {
@@ -42,7 +42,7 @@ const COHORT: [CohortFixture; 2] = [
 
 #[test]
 fn issue_314_registry_contains_exactly_the_reviewed_creature_draw_two_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for card in COHORT {
         let CohortFixture {
             id,

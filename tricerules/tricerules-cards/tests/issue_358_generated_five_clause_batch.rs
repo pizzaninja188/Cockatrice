@@ -14,14 +14,14 @@ use tricerules_cards::primitives::{
     ZoneEventDestination,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount, CardRegistry,
+    AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount,
     CastTriggerPlayer, Color, CounterKind, Keyword, LibraryPartitionKind, ManaCost,
     PermanentTypeFilter, SpellCostModifier, SpellEffectKind, TriggerCondition,
 };
 
 #[test]
 fn issue_358_registers_the_five_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id) in [
         (
             "frilled_sparkshooter",
@@ -62,7 +62,7 @@ fn issue_358_registers_the_five_reviewed_identities() {
 
 #[test]
 fn issue_358_frilled_sparkshooter_keeps_keywords_and_opponent_life_counter() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("frilled_sparkshooter")
         .expect("Frilled Sparkshooter");
     let face = definition.primary_face();
@@ -101,7 +101,7 @@ fn issue_358_frilled_sparkshooter_keeps_keywords_and_opponent_life_counter() {
 
 #[test]
 fn issue_358_desolation_prowler_pays_two_life_once_per_turn_to_pump_itself() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("desolation_prowler")
         .expect("Desolation Prowler");
     let face = definition.primary_face();
@@ -137,7 +137,7 @@ fn issue_358_desolation_prowler_pays_two_life_once_per_turn_to_pump_itself() {
 
 #[test]
 fn issue_358_dreaded_bat_cloud_reduces_its_cost_after_a_creature_death() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("dreaded_bat-cloud")
         .expect("Dreaded Bat-Cloud");
     let face = definition.primary_face();
@@ -160,7 +160,7 @@ fn issue_358_dreaded_bat_cloud_reduces_its_cost_after_a_creature_death() {
 
 #[test]
 fn issue_358_faerie_dreamthief_surveils_then_exiles_itself_to_draw_and_lose() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("faerie_dreamthief")
         .expect("Faerie Dreamthief");
     let face = definition.primary_face();
@@ -222,7 +222,7 @@ fn issue_358_faerie_dreamthief_surveils_then_exiles_itself_to_draw_and_lose() {
 
 #[test]
 fn issue_358_susurian_voidborn_drains_when_self_creature_or_artifact_dies() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("susurian_voidborn")
         .expect("Susurian Voidborn");
     let face = definition.primary_face();
@@ -289,7 +289,7 @@ fn issue_358_susurian_voidborn_drains_when_self_creature_or_artifact_dies() {
 
 #[test]
 fn issue_358_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     for (id, face_id) in [
         ("frilled_sparkshooter", "frilled_sparkshooter"),

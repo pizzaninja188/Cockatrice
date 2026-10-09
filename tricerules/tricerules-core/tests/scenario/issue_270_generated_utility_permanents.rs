@@ -53,7 +53,15 @@ fn candy_trail_scry_is_private_then_sacrifice_gains_and_draws_in_order() {
         deck_with("island", &["candy_trail"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(270_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        270_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let top = seat_on_top(&mut engine, 0, &["storm_crow", "grizzly_bears"]);
 
@@ -180,7 +188,15 @@ fn hot_dog_cart_and_omni_cheese_use_tokens_and_selectable_mana_paths() {
         deck_with("mountain", &["hot_dog_cart", "omni-cheese_pizza"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(270_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        270_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let cart = move_ready_to_battlefield(&mut engine, 0, "hot_dog_cart");

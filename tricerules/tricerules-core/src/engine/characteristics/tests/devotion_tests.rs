@@ -6,7 +6,15 @@ fn compound_devotion_engine(support: &str, support_id: &str) -> (GameEngine, Obj
         "/../tricerules-cards/data/nylea_god_of_the_hunt.ron"
     ));
     let registry = CardRegistry::from_chunks_and_tokens(&[god, support], &[]).unwrap();
-    let mut engine = GameEngine::new(700_506, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        700_506,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     engine.registry = Box::leak(Box::new(registry));
     engine.state.opening = None;
     engine.state.turn_step = TurnStep::DeclareBlockers;
@@ -293,7 +301,13 @@ fn devotion_committed_cohort_registers_all_statics_before_reconciling_combat() {
 
 #[test]
 fn devotion_removed_blocker_invalidates_assignments_and_recomputes_remaining_trample_choice() {
-    let mut engine = GameEngine::new_with_default_decks(700_505, &[0, 1], 20).unwrap();
+    let mut engine = GameEngine::new_with_default_decks(
+        tricerules_cards::registry::global(),
+        700_505,
+        &[0, 1],
+        20,
+    )
+    .unwrap();
     let attacker = insert_fixture(&mut engine, 0, "aggressive_mammoth", Zone::Battlefield);
     let first = insert_fixture(&mut engine, 1, "grizzly_bears", Zone::Battlefield);
     let second = insert_fixture(&mut engine, 1, "grizzly_bears", Zone::Battlefield);
@@ -331,7 +345,15 @@ fn devotion_engine() -> (GameEngine, ObjectId) {
     )"#;
     let registry = CardRegistry::from_chunks_and_tokens(&[source, support], &[])
         .expect("devotion fixture must be admitted");
-    let mut engine = GameEngine::new(700_501, &[0, 1, 2, 3], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        700_501,
+        &[0, 1, 2, 3],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     engine.registry = Box::leak(Box::new(registry));
     let source = insert_fixture(&mut engine, 0, "devotion_source", Zone::Battlefield);
     engine.emit_static_abilities_on_enter(source);
@@ -345,7 +367,7 @@ fn copy_cost(engine: &mut GameEngine, oid: ObjectId, cost: &str, token: bool) {
         .unwrap()
         .primary_face()
         .clone();
-    face.mana_cost = tricerules_cards::ManaCost::parse(cost).unwrap();
+    face.mana_cost = tricerules_card_model::ManaCost::parse(cost).unwrap();
     let values = CopiableValues {
         source_card_id: "devotion_support".into(),
         source_face_index: 0,
@@ -469,7 +491,15 @@ fn devotion_remove_creature_preserves_artifact_and_legendary_in_both_timestamp_o
                     remove_creature: true, add_types: (card_types: [Artifact])))],
         )"#;
         let registry = CardRegistry::from_chunks_and_tokens(&[source], &[]).unwrap();
-        let mut engine = GameEngine::new(700_502, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            700_502,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.registry = Box::leak(Box::new(registry));
         let source = insert_fixture(&mut engine, 0, "devotion_god", Zone::Battlefield);
         engine.state.command_index = removal_time;
@@ -654,7 +684,7 @@ fn devotion_payment_removes_god_before_cost_triggers_or_payment_continuation() {
         object_id: id,
         zone_change_generation: 0,
     };
-    let cost = tricerules_cards::primitives::ResolutionCost::SacrificePermanent {
+    let cost = tricerules_card_model::primitives::ResolutionCost::SacrificePermanent {
         filter: TargetFilter {
             kind: TargetKind::AnyPermanent,
             ..Default::default()
@@ -716,7 +746,13 @@ fn devotion_regeneration_prunes_first_strike_and_damage_assignment_state() {
 
 #[test]
 fn devotion_transform_flip_room_and_copied_room_use_costs_rather_than_mana_value() {
-    let mut engine = GameEngine::new_with_default_decks(700_503, &[0, 1], 20).unwrap();
+    let mut engine = GameEngine::new_with_default_decks(
+        tricerules_cards::registry::global(),
+        700_503,
+        &[0, 1],
+        20,
+    )
+    .unwrap();
     let transform = insert_fixture(
         &mut engine,
         0,
@@ -789,7 +825,15 @@ fn devotion_mdfc_uses_active_cost_and_queries_the_current_source_controller() {
         faces: [(name: "Devotion Front", face_id: "devotion_front", mana_cost: "{G}{G}{G}", types: ["Creature"], power: Some(3), toughness: Some(3)),
                 (name: "Devotion Back", face_id: "devotion_back", mana_cost: "{R}{R}", types: ["Creature"], power: Some(2), toughness: Some(2))])"#;
     let registry = CardRegistry::from_chunks_and_tokens(&[card], &[]).unwrap();
-    let mut engine = GameEngine::new(700_504, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        700_504,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     engine.registry = Box::leak(Box::new(registry));
     let oid = insert_fixture(
         &mut engine,
@@ -860,7 +904,7 @@ fn devotion_independent_creature_addition_respects_timestamps_and_earlier_text_r
         .continuous_effects
         .push(early_layer_type_effect(
             AffectedScope::Single(god),
-            ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+            ContinuousEffectKind::Layer4SetTypeLine(tricerules_card_model::TypeLineReplacement {
                 card_types: vec![PermanentTypeFilter::Land],
                 land_types: vec![BasicLandType::Forest],
                 creature_types: vec![],

@@ -15,7 +15,15 @@ const COUNTER_REPLACEMENT_FIXTURE_ID: &str = "issue_500_double_counters_fixture"
 
 fn cohort_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("forest", &[]), deck_with("island", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("cohort engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("cohort engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -144,7 +152,7 @@ fn evolution_sage_triggers_on_a_land_entry_and_proliferates_each_existing_counte
 fn atraxa_triggers_at_its_controllers_end_step() {
     let mut engine = cohort_engine(500_002);
     let atraxa = inject_creature_on_battlefield(&mut engine, 0, "atraxa,_praetors_voice");
-    let atraxa_face = CardRegistry::global()
+    let atraxa_face = tricerules_cards::registry::global()
         .get("atraxa,_praetors_voice")
         .expect("Atraxa definition")
         .primary_face();

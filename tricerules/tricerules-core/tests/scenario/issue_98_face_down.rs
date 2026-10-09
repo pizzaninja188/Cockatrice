@@ -24,7 +24,15 @@ fn manifested_permanent_has_public_face_down_characteristics() {
         deck_with("forest", &["serra_angel"]),
         deck_with("swamp", &[]),
     ]);
-    let mut engine = GameEngine::new(98_001, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        98_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let angel = relocate_to_battlefield(&mut engine, 0, "serra_angel", false);
     engine
@@ -51,7 +59,15 @@ fn controller_gets_generation_bound_turn_face_up_action_and_keeps_priority() {
         deck_with("plains", &["serra_angel", "flight"]),
         deck_with("swamp", &[]),
     ]);
-    let mut engine = GameEngine::new(98_002, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        98_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let angel = relocate_to_battlefield(&mut engine, 0, "serra_angel", false);
     engine
@@ -219,7 +235,15 @@ fn manifest_dread_completes_with_one_or_zero_cards_without_a_choice() {
             deck_with("forest", &["manifest_dread"]),
             deck_with("swamp", &[]),
         ]);
-        let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new game");
         advance_to_main1_from_game_start(&mut engine);
         ensure_card_in_hand(&mut engine, 0, "manifest_dread");
         let kept = (remaining == 1).then(|| inject_library_card(&mut engine, 0, "serra_angel"));
@@ -275,7 +299,15 @@ fn leaving_the_battlefield_resets_face_down_and_changes_generation() {
         deck_with("swamp", &["murder", "serra_angel"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(98_009, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        98_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let angel = relocate_to_battlefield(&mut engine, 0, "serra_angel", false);
     engine
@@ -317,7 +349,15 @@ fn stale_or_noncreature_turn_face_up_action_is_not_legal() {
         deck_with("mountain", &["lightning_bolt"]),
         deck_with("swamp", &[]),
     ]);
-    let mut engine = GameEngine::new(98_003, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        98_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let bolt = relocate_to_battlefield(&mut engine, 0, "lightning_bolt", false);
     engine.state.objects.get_mut(&bolt).expect("bolt").face_down = true;
@@ -350,7 +390,15 @@ fn manifest_dread_privately_chooses_one_top_card_and_moves_both_exact_objects() 
         deck_with("forest", &["manifest_dread"]),
         deck_with("swamp", &[]),
     ]);
-    let mut engine = GameEngine::new(98_004, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        98_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "manifest_dread");
     let top = seat_on_top(&mut engine, 0, &["grizzly_bears", "lightning_bolt"]);
@@ -422,7 +470,15 @@ fn unable_to_scream_applies_layers_and_prohibits_turn_face_up_until_it_leaves() 
         deck_with("island", &["unable_to_scream", "serra_angel"]),
         deck_with("swamp", &[]),
     ]);
-    let mut engine = GameEngine::new(98_005, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        98_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "unable_to_scream");
     let angel = relocate_to_battlefield(&mut engine, 0, "serra_angel", false);
@@ -479,7 +535,15 @@ fn turn_inside_out_watches_the_exact_generation_once() {
         deck_with("mountain", &["turn_inside_out", "murder", "grizzly_bears"]),
         deck_with("swamp", &[]),
     ]);
-    let mut engine = GameEngine::new(98_006, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        98_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     ensure_card_in_hand(&mut engine, 0, "turn_inside_out");
@@ -542,7 +606,15 @@ fn bashful_beastie_and_innocuous_rat_death_triggers_manifest_dread() {
             deck_with(basic, &[creature_id, "murder"]),
             deck_with("plains", &[]),
         ]);
-        let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new game");
         advance_to_main1_from_game_start(&mut engine);
         let creature = relocate_to_battlefield(&mut engine, 0, creature_id, false);
         let top = seat_on_top(&mut engine, 0, &["serra_angel", "lightning_bolt"]);
@@ -583,7 +655,15 @@ fn twist_reality_supports_both_counter_and_manifest_modes() {
         deck_with("mountain", &["lightning_bolt"]),
         deck_with("island", &["twist_reality"]),
     ]);
-    let mut engine = GameEngine::new(98_012, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        98_012,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "lightning_bolt");
     ensure_card_in_hand(&mut engine, 1, "twist_reality");
@@ -625,7 +705,15 @@ fn twist_reality_supports_both_counter_and_manifest_modes() {
         deck_with("island", &["twist_reality"]),
         deck_with("plains", &[]),
     ]);
-    let mut engine = GameEngine::new(98_013, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        98_013,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "twist_reality");
     let top = seat_on_top(&mut engine, 0, &["serra_angel", "lightning_bolt"]);

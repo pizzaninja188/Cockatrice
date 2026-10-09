@@ -59,6 +59,7 @@ pub(crate) fn accepted(
 
 pub(crate) fn main_phase(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,

@@ -28,7 +28,7 @@ fn select_branch(index: u32) -> RuledCommand {
 
 #[test]
 fn heated_argument_is_registered_in_the_current_standard_audit() {
-    let definition = tricerules_cards::CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("heated_argument")
         .expect("Heated Argument is in the current-Standard coverage cohort");
     assert_eq!(definition.name, "Heated Argument");
@@ -42,7 +42,7 @@ fn hand_bottom_damage_spells_share_the_resolution_cost_primitive() {
         ("fire_prophecy", 1),
         ("volcanic_spite", 3),
     ] {
-        let definition = tricerules_cards::CardRegistry::global()
+        let definition = tricerules_cards::registry::global()
             .get(card_id)
             .unwrap_or_else(|| panic!("{card_id} is registered"));
         let face = definition.primary_face();
@@ -77,7 +77,15 @@ fn environmental_scientist_search_is_optional_private_and_basic_only() {
         deck_with("forest", &["environmental_scientist"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(910_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        910_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "environmental_scientist");
     give_mana(
@@ -128,7 +136,15 @@ fn hire_a_crew_pumps_its_token_and_only_controlled_creatures() {
         deck_with("mountain", &["hire_a_crew", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(910_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        910_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let friendly = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let opposing = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -167,7 +183,15 @@ fn front_porch_sentries_rejects_friendly_target_and_uses_death_lki() {
         ),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(910_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        910_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let sentries = relocate_to_battlefield(&mut engine, 0, "front_porch_sentries", false);
     let friendly = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -208,6 +232,7 @@ fn mountain_kings_return_recruit_creates_a_token_only_for_a_nonland_discard() {
             deck_with("forest", &[]),
         ]);
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             910_010 + u64::from(discard_nonland),
             &[0, 1],
             20,

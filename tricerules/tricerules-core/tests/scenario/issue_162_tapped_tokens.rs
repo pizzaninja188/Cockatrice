@@ -19,7 +19,15 @@ fn gravpack_monoist_death_trigger_creates_a_tapped_robot() {
         deck_with("swamp", &["gravpack_monoist", "lightning_bolt"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(162_001, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        162_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let monoist = relocate_to_battlefield(&mut engine, 0, "gravpack_monoist", false);
     ensure_in_hand(&mut engine, 0, "lightning_bolt");
@@ -49,7 +57,15 @@ fn melded_moxite_sacrifices_then_creates_a_tapped_robot() {
         deck_with("mountain", &["melded_moxite"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(162_002, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        162_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let moxite = relocate_to_battlefield(&mut engine, 0, "melded_moxite", false);
     give_mana(
@@ -87,7 +103,15 @@ fn melded_moxite_cannot_be_sacrificed_when_its_mana_cost_is_unaffordable() {
         deck_with("mountain", &["melded_moxite"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(162_003, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        162_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let moxite = relocate_to_battlefield(&mut engine, 0, "melded_moxite", false);
 

@@ -2,11 +2,10 @@ use tricerules_cards::primitives::{
     AbilityCost, CounterKind, CreatureScopeController, CreatureScopeFilter, EffectSubject, Keyword,
     SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TriggerCondition,
 };
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn issue_79_cards_use_shared_name_and_counter_scope_predicates() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let mastiff = registry
         .get("pack_mastiff")

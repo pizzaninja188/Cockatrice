@@ -1,7 +1,7 @@
 use tricerules_cards::primitives::{
     EffectContext, LibraryBottomOrder, SpellEffectKind, ZoneCardFilter,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry};
+use tricerules_cards::AbilityPresentation;
 
 #[test]
 fn issue_228_bounds_and_unfiltered_selection_are_validated() {
@@ -34,7 +34,7 @@ fn issue_228_bounds_and_unfiltered_selection_are_validated() {
 
 #[test]
 fn issue_228_cards_and_existing_revealed_consumers_are_complete() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana) in [
         ("sleight_of_hand", "Sleight of Hand", "{U}"),
         ("flow_state", "Flow State", "{1}{U}"),

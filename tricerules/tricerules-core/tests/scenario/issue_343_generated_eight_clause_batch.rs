@@ -20,7 +20,15 @@ fn deck_engine(seed: u64, own: &[&str], opposing: &[&str]) -> GameEngine {
         deck_with("island", own),
         deck_with("forest", opposing),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -299,7 +307,15 @@ fn issue_343_white_auracite_linked_exiles_until_it_leaves() {
         deck_with("plains", &["white_auracite"]),
         deck_with("forest", &["broken_wings", "broken_wings"]),
     ]);
-    let mut engine = GameEngine::new(343_007, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        343_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let victim = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let land = inject_permanent_on_battlefield(&mut engine, 1, "forest");

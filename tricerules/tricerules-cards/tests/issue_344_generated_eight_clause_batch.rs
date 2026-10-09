@@ -13,13 +13,12 @@ use tricerules_cards::primitives::{
     StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
 };
 use tricerules_cards::{
-    AbilityPresentation, Amount, CardRegistry, Color, CounterKind, Keyword, SpellEffectKind,
-    TriggerCondition,
+    AbilityPresentation, Amount, Color, CounterKind, Keyword, SpellEffectKind, TriggerCondition,
 };
 
 #[test]
 fn issue_344_registers_the_eight_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name) in [
         ("goblin_boarders", "Goblin Boarders"),
         ("gorehorn_raider", "Gorehorn Raider"),
@@ -40,7 +39,7 @@ fn issue_344_registers_the_eight_reviewed_identities() {
 
 #[test]
 fn issue_344_illvoi_operative_counts_the_second_spell() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("illvoi_operative")
         .expect("Illvoi Operative");
     let face = definition.primary_face();
@@ -78,7 +77,7 @@ fn issue_344_illvoi_operative_counts_the_second_spell() {
 
 #[test]
 fn issue_344_icecave_crasher_keeps_trample_and_landfall() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("icecave_crasher")
         .expect("Icecave Crasher");
     let face = definition.primary_face();
@@ -120,7 +119,9 @@ fn issue_344_icecave_crasher_keeps_trample_and_landfall() {
 
 #[test]
 fn issue_344_refute_counters_then_loots() {
-    let definition = CardRegistry::global().get("refute").expect("Refute");
+    let definition = tricerules_cards::registry::global()
+        .get("refute")
+        .expect("Refute");
     let face = definition.primary_face();
     assert_eq!(face.mana_cost.to_string(), "{1}{U}{U}");
     assert_eq!(face.types, ["Instant"]);
@@ -150,7 +151,7 @@ fn issue_344_refute_counters_then_loots() {
 
 #[test]
 fn issue_344_romantic_rendezvous_discards_then_draws_two() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("romantic_rendezvous")
         .expect("Romantic Rendezvous");
     let face = definition.primary_face();
@@ -172,7 +173,7 @@ fn issue_344_romantic_rendezvous_discards_then_draws_two() {
 
 #[test]
 fn issue_344_kyoshi_battle_fan_creates_and_attaches_an_ally() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("kyoshi_battle_fan")
         .expect("Kyoshi Battle Fan");
     let face = definition.primary_face();
@@ -253,7 +254,7 @@ fn issue_344_kyoshi_battle_fan_creates_and_attaches_an_ally() {
 
 #[test]
 fn issue_344_goblin_boarders_enters_with_a_conditional_counter() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("goblin_boarders")
         .expect("Goblin Boarders");
     let face = definition.primary_face();
@@ -288,7 +289,7 @@ fn issue_344_goblin_boarders_enters_with_a_conditional_counter() {
 
 #[test]
 fn issue_344_gorehorn_raider_deals_two_only_after_attacking() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("gorehorn_raider")
         .expect("Gorehorn Raider");
     let face = definition.primary_face();
@@ -332,7 +333,7 @@ fn issue_344_gorehorn_raider_deals_two_only_after_attacking() {
 
 #[test]
 fn issue_344_pitiless_fists_fights_up_to_one() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("pitiless_fists")
         .expect("Pitiless Fists");
     let face = definition.primary_face();
@@ -403,7 +404,7 @@ fn issue_344_pitiless_fists_fights_up_to_one() {
 
 #[test]
 fn issue_344_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     for (id, face_id) in [
         ("goblin_boarders", "goblin_boarders"),

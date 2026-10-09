@@ -26,7 +26,15 @@ fn ability_logs_cover_activated_mana_sacrifice_and_targeted_abilities() {
         ),
         ("treasure", "Treasure", vec![], true, true),
     ] {
-        let mut engine = GameEngine::new(207_001, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            207_001,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         advance_to_main1_from_game_start(&mut engine);
         let source = inject_permanent_on_battlefield(&mut engine, 0, card_id);
         let batch = engine
@@ -78,7 +86,15 @@ fn ability_logs_cover_activated_mana_sacrifice_and_targeted_abilities() {
 
 #[test]
 fn ability_logs_preserve_optional_targeted_trigger_presentation_through_decline() {
-    let mut engine = GameEngine::new(207_002, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        207_002,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let graveyard_card = inject_graveyard_card(&mut engine, 0, "grizzly_bears");
     inject_card_into_hand(&mut engine, 0, "gravedigger");

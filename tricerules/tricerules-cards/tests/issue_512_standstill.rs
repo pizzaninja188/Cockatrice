@@ -3,7 +3,7 @@ use tricerules_cards::{AbilityPresentation, CardRegistry};
 
 #[test]
 fn standstill_is_complete_one_face_enchantment_with_automatic_sacrifice_gated_opponent_draw() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(registry.id_for_name("Standstill"), Some("standstill"));
     let card = registry.get("standstill").unwrap();
     assert_eq!(card.face_count(), 1);

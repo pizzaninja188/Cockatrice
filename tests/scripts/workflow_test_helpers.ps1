@@ -16,14 +16,16 @@ function New-WorkflowFixture {
         $source = Join-Path $sourceRepo "scripts\$name"
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $root "scripts\$name") }
     }
+    New-Item -ItemType Directory -Path (Join-Path $root 'tests/scripts') -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $root 'tests/scripts/card_data_boundary_test.ps1') -Value "Write-Output 'fixture dependency boundary'"
     Copy-Item -LiteralPath (Join-Path $sourceRepo 'tricerules/Cargo.toml') -Destination (Join-Path $root 'tricerules/Cargo.toml')
-    foreach ($package in @('tricerules-proto', 'tricerules-core', 'tricerules-cards', 'tricerules-server')) {
+    foreach ($package in @('tricerules-proto', 'tricerules-core', 'tricerules-card-model', 'tricerules-cards', 'tricerules-server')) {
         $packageRoot = Join-Path $root "tricerules/$package"
         New-Item -ItemType Directory -Path $packageRoot | Out-Null
         Copy-Item -LiteralPath (Join-Path $sourceRepo "tricerules/$package/Cargo.toml") -Destination (Join-Path $packageRoot 'Cargo.toml')
     }
     $formatPackages = @()
-    foreach ($package in @('tricerules-proto', 'tricerules-core', 'tricerules-cards', 'tricerules-server')) {
+    foreach ($package in @('tricerules-proto', 'tricerules-core', 'tricerules-card-model', 'tricerules-cards', 'tricerules-server')) {
         $sourcePath = Join-Path $root "tricerules/$package/lib.rs"
         [IO.File]::WriteAllText($sourcePath, "fn main() {}`n")
         $formatPackages += @{ name = $package; targets = @(@{ src_path = $sourcePath; edition = '2021' }) }

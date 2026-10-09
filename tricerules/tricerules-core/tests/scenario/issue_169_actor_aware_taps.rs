@@ -4,7 +4,7 @@ use tricerules_cards::primitives::{
     CastTriggerPlayer, ContinuousEffectKind, EffectDuration, RelativePlayerSet,
     TapTriggerCardinality, TriggerCondition,
 };
-use tricerules_cards::{CardRegistry, CounterKind};
+use tricerules_cards::CounterKind;
 use tricerules_core::{AffectedScope, ContinuousEffect};
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ChooseTriggerTarget, ResolutionChoiceDecision, SubmitResolutionChoice,
@@ -21,14 +21,22 @@ fn choose_target(oid: u32) -> RuledCommand {
 }
 
 fn setup() -> GameEngine {
-    let mut engine = GameEngine::new(169020, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        169020,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
 
 fn cast_card(engine: &mut GameEngine, card: &str) {
     assert!(
-        CardRegistry::global().get(card).is_some(),
+        tricerules_cards::registry::global().get(card).is_some(),
         "issue #169 card is authored: {card}"
     );
     inject_card_into_hand(engine, 0, card);
@@ -169,7 +177,7 @@ fn icewrought_payment_precedes_reflexive_targeting_and_tap_precedes_pump() {
 }
 
 fn grant_tap_counter(engine: &mut GameEngine, source: u32, cardinality: TapTriggerCardinality) {
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("ajanis_pridemate")
         .unwrap()
         .primary_face()
@@ -220,7 +228,15 @@ fn each_creature_and_one_or_more_are_distinct_without_a_turn_cap() {
         deck_with("island", &["frost_breath"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(169001, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        169001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let each = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let grouped = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -249,7 +265,15 @@ fn no_op_and_own_creature_taps_do_not_qualify() {
         deck_with("island", &["frost_breath"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(169002, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        169002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     grant_tap_counter(&mut engine, source, TapTriggerCardinality::EachObject);
@@ -401,7 +425,15 @@ fn accepted_targeted_and_mass_tap_commands_replay_with_identical_batches_and_act
         dev_command::Dev, DevAddMana, DevCommand, DevPutCardInZone, DevZone,
     };
     fn fresh() -> GameEngine {
-        let mut engine = GameEngine::new(169099, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            169099,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.enable_dev_commands();
         engine
     }

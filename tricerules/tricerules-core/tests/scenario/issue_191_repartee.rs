@@ -27,7 +27,15 @@ fn repartee_engine(seed: u64, card: &str) -> GameEngine {
         ),
         deck_with("island", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -128,7 +136,15 @@ fn forum_necroscribe_ward_uses_the_existing_private_discard_payment() {
         deck_with("island", &["unsummon", "grizzly_bears"]),
         deck_with("swamp", &["forum_necroscribe"]),
     ]);
-    let mut engine = GameEngine::new(191_003, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        191_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let forum = relocate_to_battlefield(&mut engine, 1, "forum_necroscribe", false);
     let discard = relocate_to_hand(&mut engine, 0, "grizzly_bears");

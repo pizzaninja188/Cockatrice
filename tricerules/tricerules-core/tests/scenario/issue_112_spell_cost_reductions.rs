@@ -4,6 +4,7 @@ use tricerules_core::GameEngine;
 #[test]
 fn issue_165_witchstalker_reduction_is_published_and_cannot_pay_colored_mana() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         165_201,
         &[0, 1],
         20,
@@ -79,7 +80,15 @@ fn tapped_target_reduction_is_authoritative_and_untapped_target_is_not_reduced()
         deck_with("plains", &["luminous_rebuke", "seized_from_slumber"]),
         deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(112_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        112_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "luminous_rebuke");
     ensure_in_hand(&mut engine, 0, "seized_from_slumber");
@@ -148,7 +157,15 @@ fn battlefield_sources_filter_and_stack_their_reductions() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(112_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        112_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "unending_whisper");
     ensure_in_hand(&mut engine, 0, "divination");
@@ -203,7 +220,15 @@ fn affinity_counts_controlled_creatures_and_packbeast_draws_on_entry() {
         ),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(112_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        112_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "salt_road_packbeast");
     relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);

@@ -39,7 +39,15 @@ fn issue_205_exact_and_minimum_filters_publish_and_enforce_the_same_targets() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(205_001, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        205_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     give_mana(
         &mut e,
@@ -135,7 +143,15 @@ fn issue_205_resolution_rejects_a_stale_stack_target_generation() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(205_002, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        205_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     give_mana(
         &mut e,

@@ -8,8 +8,7 @@ use tricerules_cards::primitives::{
     ContinuousEffectKind, EffectDuration, PermanentTypeFilter, TypeLineAddition,
 };
 use tricerules_cards::{
-    AbilityCost, CardRegistry, CharacteristicDefiningAbility, ObjectContributionKind,
-    ObjectPaymentConstraint,
+    AbilityCost, CharacteristicDefiningAbility, ObjectContributionKind, ObjectPaymentConstraint,
 };
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
 use tricerules_proto::ruled::v1::{
@@ -54,6 +53,7 @@ fn activate_crew(engine: &GameEngine, wagon: u32, objects: &[u32]) -> RuledComma
 
 fn engine_with_worldwagon(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -106,7 +106,7 @@ fn resolve_top_to_choice(engine: &mut GameEngine) -> tricerules_proto::ruled::v1
 
 #[test]
 fn issue_215_worldwagon_has_exact_cda_crew_and_trigger_shapes() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("lumbering_worldwagon")
         .expect("Lumbering Worldwagon is registered")
         .primary_face();

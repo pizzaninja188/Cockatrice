@@ -46,7 +46,15 @@ fn grant(
 }
 
 fn fixture(cardinality: TapTriggerCardinality) -> (GameEngine, ObjectId, ObjectId, ObjectId) {
-    let mut engine = GameEngine::new(169010, &[7, 19], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        169010,
+        &[7, 19],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     engine.state.players.push(PlayerState::new(42, 20));
     let source = permanent(&mut engine, 0, "grizzly_bears");
     let first = permanent(&mut engine, 1, "grizzly_bears");
@@ -192,7 +200,7 @@ fn animated_nontokens_and_tokens_use_derived_event_time_types() {
             trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(first),
-            kind: ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+            kind: ContinuousEffectKind::Layer4AddTypes(tricerules_card_model::TypeLineAddition {
                 land_types: Vec::new(),
                 card_types: vec![PermanentTypeFilter::Creature],
                 creature_types: vec![],

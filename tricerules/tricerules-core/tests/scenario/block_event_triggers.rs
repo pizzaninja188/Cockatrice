@@ -7,7 +7,15 @@ fn setup_block(attacker_card: &str, blocker_card: &str, seed: u64) -> (GameEngin
         deck_with("swamp", &[attacker_card]),
         deck_with("forest", &[blocker_card]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut engine);
     let attacker = relocate_to_battlefield(&mut engine, 0, attacker_card, false);
     let blocker = relocate_to_battlefield(&mut engine, 1, blocker_card, false);
@@ -93,7 +101,15 @@ fn gloom_sower_triggers_once_for_each_blocking_creature() {
         deck_with("swamp", &["gloom_sower"]),
         deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(6204, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6204,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut engine);
     let attacker = relocate_to_battlefield(&mut engine, 0, "gloom_sower", false);
     let first_blocker = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);

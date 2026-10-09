@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     AbilityCost, EffectSubject, PermanentTypeFilter, SpellEffectKind, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
+use tricerules_cards::{AbilityPresentation, Layout};
 
 #[test]
 fn voltaic_key_registers_its_targeted_artifact_untap_ability() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("voltaic_key")
         .expect("Voltaic Key registry definition");

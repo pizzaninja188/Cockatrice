@@ -1,9 +1,11 @@
 use tricerules_cards::primitives::{DrawReplacementCondition, StaticAbilityDef};
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
+use tricerules_cards::{AbilityPresentation, Layout};
 
 #[test]
 fn archive_registers_complete_two_clause_legendary_artifact() {
-    let card = CardRegistry::global().get("alhammarrets_archive").unwrap();
+    let card = tricerules_cards::registry::global()
+        .get("alhammarrets_archive")
+        .unwrap();
     assert_eq!(card.name, "Alhammarret's Archive");
     assert_eq!(card.layout, Layout::Normal);
     assert_eq!(card.face_count(), 1);

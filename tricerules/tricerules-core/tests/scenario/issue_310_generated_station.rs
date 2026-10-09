@@ -53,6 +53,7 @@ fn activate_station(engine: &GameEngine, source: u32, crew: u32) -> RuledCommand
 
 fn station_engine(seed: u64, card_id: &str) -> (GameEngine, u32, u32) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -105,7 +106,7 @@ fn move_named_card_to_hand_via_engine(engine: &mut GameEngine, player: usize, ca
     use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
 
     let player_id = engine.state.players[player].id;
-    let card_name = tricerules_cards::CardRegistry::global()
+    let card_name = tricerules_cards::registry::global()
         .get(card_id)
         .expect("known card for engine move")
         .name
@@ -316,6 +317,7 @@ fn issue_310_wedgelight_entry_creates_one_untapped_robot_and_unlocks_first_strik
 #[test]
 fn issue_310_wedgelight_etb_uses_trigger_controller_with_foreign_owner_in_multiplayer() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         310_003,
         &[0, 1],
         20,
@@ -357,6 +359,7 @@ fn issue_310_wedgelight_etb_uses_trigger_controller_with_foreign_owner_in_multip
 #[test]
 fn issue_310_wedgelight_etb_still_creates_controller_robot_after_source_leaves() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         310_004,
         &[0, 1],
         20,

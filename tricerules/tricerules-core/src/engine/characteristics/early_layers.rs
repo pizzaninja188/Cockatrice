@@ -30,8 +30,8 @@ struct EarlyLayerInputs<'a> {
 #[derive(Clone, PartialEq, Eq)]
 enum TypeInstruction {
     RemoveCreature,
-    Add(tricerules_cards::TypeLineAddition),
-    Set(tricerules_cards::TypeLineReplacement),
+    Add(tricerules_card_model::TypeLineAddition),
+    Set(tricerules_card_model::TypeLineReplacement),
     Basic(BasicLandType),
     CreatureTypes(Vec<String>),
     AllCreatureTypes,

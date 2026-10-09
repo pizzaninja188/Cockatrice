@@ -6,7 +6,15 @@ fn tranquil_cove_enters_tapped_as_initial_entry_state() {
         vec!["tranquil_cove".into(); 7],
         vec!["forest".into(); 7],
     ]);
-    let mut engine = GameEngine::new(50_001, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        50_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let cove = hand_index_for_card(&engine, 0, "tranquil_cove");
@@ -39,7 +47,15 @@ fn orb_and_intrinsic_entry_replacement_ask_for_the_next_cr_616_effect() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut engine = GameEngine::new(50_002, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        50_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
 
     give_mana(
@@ -118,7 +134,15 @@ fn reanimation_applies_intrinsic_entry_replacement_before_etb_triggers() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut engine = GameEngine::new(50_003, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        50_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let ghoul = inject_graveyard_card(&mut engine, 0, "diregraf_ghoul");
     give_mana(
@@ -168,7 +192,15 @@ fn token_batch_waits_for_every_replacement_choice_then_enters_simultaneously() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut engine = GameEngine::new(50_004, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        50_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     give_mana(
         &mut engine,
@@ -282,7 +314,15 @@ fn graveyard_owner_orders_replacements_even_when_the_permanent_enters_under_oppo
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut engine = GameEngine::new(50_005, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        50_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     give_mana(
         &mut engine,

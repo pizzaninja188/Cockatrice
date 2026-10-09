@@ -16,7 +16,7 @@ use tricerules_cards::primitives::{
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef, ActivationTiming,
-    CardFace, CardRegistry, ManaAmount, ManaCost,
+    CardFace, ManaAmount, ManaCost,
 };
 
 type ManaOption = (u32, u32, u32, u32, u32, u32);
@@ -68,7 +68,7 @@ const GUILD_LANDS: [GuildLand; 5] = [
 ];
 
 fn face(id: &str) -> &'static CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .unwrap_or_else(|| panic!("missing reviewed card {id}"))
         .primary_face()
@@ -130,7 +130,7 @@ fn assert_surveil_ability(ability: &ActivatedAbilityDef, ability_id: &str, line:
 
 #[test]
 fn issue_454_registers_exactly_the_reviewed_seven() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for land in &GUILD_LANDS {
         assert_eq!(
             registry.id_for_name(land.name),
@@ -264,7 +264,7 @@ fn issue_454_wretched_doll_is_a_black_toy_with_one_surveil_activation() {
 
 #[test]
 fn issue_454_excluded_two_mana_identities_stay_unregistered() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name) in [
         ("lunatic_pandora", "Lunatic Pandora"),
         ("coastal_bulwark", "Coastal Bulwark"),
@@ -283,7 +283,7 @@ fn issue_454_excluded_two_mana_identities_stay_unregistered() {
 
 #[test]
 fn issue_454_shipped_surveil_identities_stay_unchanged() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for id in [
         "ominous_asylum",

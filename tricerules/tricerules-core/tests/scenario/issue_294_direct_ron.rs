@@ -281,7 +281,15 @@ fn issue_294_a_copy_of_a_kicked_spell_is_kicked_without_repaying() {
             deck_with("island", &[card]),
             deck_with("island", &["twincast"]),
         ]);
-        let mut engine = GameEngine::new(seed + 50, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed + 50,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         advance_to_main1_from_game_start(&mut engine);
         ensure_card_in_hand(&mut engine, 0, card);
         ensure_card_in_hand(&mut engine, 1, "twincast");

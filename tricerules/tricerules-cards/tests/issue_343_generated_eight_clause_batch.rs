@@ -13,13 +13,12 @@ use tricerules_cards::primitives::{
     TargetController, TargetFilter, TargetKind,
 };
 use tricerules_cards::{
-    AbilityPresentation, Amount, CardRegistry, Color, CounterKind, Keyword, SpellEffectKind,
-    TriggerCondition,
+    AbilityPresentation, Amount, Color, CounterKind, Keyword, SpellEffectKind, TriggerCondition,
 };
 
 #[test]
 fn issue_343_registers_the_eight_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name) in [
         ("adventuring_gear", "Adventuring Gear"),
         ("collectors_vault", "Collector's Vault"),
@@ -40,7 +39,7 @@ fn issue_343_registers_the_eight_reviewed_identities() {
 
 #[test]
 fn issue_343_stingblade_assassin_destroys_a_damage_marked_opposing_creature() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("stingblade_assassin")
         .expect("Stingblade Assassin");
     let face = definition.primary_face();
@@ -83,7 +82,7 @@ fn issue_343_stingblade_assassin_destroys_a_damage_marked_opposing_creature() {
 
 #[test]
 fn issue_343_give_in_to_violence_pumps_and_grants_lifelink() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("give_in_to_violence")
         .expect("Give In to Violence");
     let face = definition.primary_face();
@@ -114,7 +113,7 @@ fn issue_343_give_in_to_violence_pumps_and_grants_lifelink() {
 
 #[test]
 fn issue_343_toadstool_admirer_keeps_ward_and_the_activated_counter() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("toadstool_admirer")
         .expect("Toadstool Admirer");
     let face = definition.primary_face();
@@ -161,7 +160,7 @@ fn issue_343_toadstool_admirer_keeps_ward_and_the_activated_counter() {
 
 #[test]
 fn issue_343_lurking_lizards_counts_mana_value_four_or_greater() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("lurking_lizards")
         .expect("Lurking Lizards");
     let face = definition.primary_face();
@@ -202,7 +201,7 @@ fn issue_343_lurking_lizards_counts_mana_value_four_or_greater() {
 
 #[test]
 fn issue_343_collectors_vault_loots_then_creates_a_treasure() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("collectors_vault")
         .expect("Collector's Vault");
     let face = definition.primary_face();
@@ -251,7 +250,7 @@ fn issue_343_collectors_vault_loots_then_creates_a_treasure() {
 
 #[test]
 fn issue_343_white_auracite_linked_exiles_an_opposing_nonland() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("white_auracite")
         .expect("White Auracite");
     let face = definition.primary_face();
@@ -300,7 +299,7 @@ fn issue_343_white_auracite_linked_exiles_an_opposing_nonland() {
 
 #[test]
 fn issue_343_hoverstone_pilgrim_keeps_flying_ward_and_any_graveyard_bottom() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("hoverstone_pilgrim")
         .expect("Hoverstone Pilgrim");
     let face = definition.primary_face();
@@ -352,7 +351,7 @@ fn issue_343_hoverstone_pilgrim_keeps_flying_ward_and_any_graveyard_bottom() {
 
 #[test]
 fn issue_343_adventuring_gear_keeps_equip_and_landfall_pump() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("adventuring_gear")
         .expect("Adventuring Gear");
     let face = definition.primary_face();
@@ -411,7 +410,7 @@ fn issue_343_adventuring_gear_keeps_equip_and_landfall_pump() {
 
 #[test]
 fn issue_343_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     for (id, face_id) in [
         ("adventuring_gear", "adventuring_gear"),

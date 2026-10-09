@@ -1,11 +1,10 @@
 use tricerules_cards::primitives::{
     EffectSubject, LibraryPlacement, PermanentTypeFilter, SpellEffectKind, TargetKind,
 };
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn issue_89_cards_share_the_owner_library_placement_primitive() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let totally_lost = registry.get("totally_lost").expect("Totally Lost");
     assert_eq!(totally_lost.primary_face().mana_cost.to_string(), "{4}{U}");

@@ -21,7 +21,7 @@ use tricerules_cards::primitives::{
     RelativePlayerSet, SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind,
     TypeLineAddition,
 };
-use tricerules_cards::{AbilityPresentation, Amount, CardFace, CardRegistry};
+use tricerules_cards::{AbilityPresentation, Amount, CardFace};
 
 struct PumpLifeCase {
     id: &'static str,
@@ -89,7 +89,7 @@ const SEVEN_LANDS_CASES: [SevenLandsCase; 2] = [
 ];
 
 fn face(id: &str) -> &'static CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .unwrap_or_else(|| panic!("missing reviewed card {id}"))
         .primary_face()
@@ -135,7 +135,7 @@ fn seven_lands_definition(delta_power: i32, delta_toughness: i32) -> StaticAbili
 
 #[test]
 fn issue_458_registers_the_four_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for case in &PUMP_LIFE_CASES {
         assert_eq!(
             registry.id_for_name(case.name),

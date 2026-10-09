@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     ActivationLimit, DrawDiscardOrder, EffectSubject, GameCondition, RelativePlayerSet,
     SpellCostModifier, SpellEffectKind,
 };
-use tricerules_cards::{AbilityCost, CardRegistry, CastTriggerPlayer, TriggerCondition};
+use tricerules_cards::{AbilityCost, CastTriggerPlayer, TriggerCondition};
 
 #[test]
 fn second_event_cards_use_shared_ordinal_triggers() {
-    let erudite = CardRegistry::global()
+    let erudite = tricerules_cards::registry::global()
         .get("erudite_wizard")
         .expect("Erudite Wizard must be registered")
         .primary_face();
@@ -30,7 +30,7 @@ fn second_event_cards_use_shared_ordinal_triggers() {
         }]
     ));
 
-    let poised = CardRegistry::global()
+    let poised = tricerules_cards::registry::global()
         .get("poised_practitioner")
         .expect("Poised Practitioner must be registered")
         .primary_face();
@@ -59,7 +59,7 @@ fn second_event_cards_use_shared_ordinal_triggers() {
         ]
     ));
 
-    let jeskai = CardRegistry::global()
+    let jeskai = tricerules_cards::registry::global()
         .get("jeskai_devotee")
         .expect("Jeskai Devotee must be registered")
         .primary_face();
@@ -108,7 +108,7 @@ fn second_event_cards_use_shared_ordinal_triggers() {
 
 #[test]
 fn focus_the_mind_uses_per_player_cast_history_for_its_complete_effect() {
-    let focus = CardRegistry::global()
+    let focus = tricerules_cards::registry::global()
         .get("focus_the_mind")
         .expect("Focus the Mind must be registered")
         .primary_face();

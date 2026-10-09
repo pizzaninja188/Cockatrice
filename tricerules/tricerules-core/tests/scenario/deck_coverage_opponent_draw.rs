@@ -5,7 +5,7 @@
 //! each resolution, while Mind's Eye independently offers one generic mana for each draw.
 
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, Color, Keyword, Layout};
+use tricerules_cards::{Color, Keyword, Layout};
 use tricerules_core::{GameEngine, TurnStep};
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
@@ -97,7 +97,15 @@ fn opponent_divination_engine(seed: u64, permanent: &str) -> (GameEngine, usize,
         deck_with("island", &[permanent]),
         deck_with("island", &["divination"]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     end_active_turn(&mut engine, 0);
@@ -138,7 +146,15 @@ fn scrawling_crawler_upkeep_draws_for_each_player_and_each_opponent_loses_one_li
         deck_with("island", &["scrawling_crawler"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(202_609_271, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_609_271,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     relocate_to_battlefield(&mut engine, 0, "scrawling_crawler", false);
 
@@ -305,7 +321,7 @@ fn minds_eye_pays_once_for_two_opponent_draw_triggers() {
 
 #[test]
 fn opponent_draw_cards_have_reviewed_registry_identity_and_printed_characteristics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let crawler = registry
         .get("scrawling_crawler")

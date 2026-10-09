@@ -3,7 +3,15 @@ use crate::helpers::*;
 #[test]
 fn new_with_custom_deck_length() {
     let decks = Some(vec![vec!["mountain".into(); 30], vec!["forest".into(); 30]]);
-    let e = GameEngine::new(1, &[0, 1], 20, decks, true).expect("new");
+    let e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     assert_eq!(
         e.state.players[0].library.len() + e.state.players[0].hand.len(),
         30
@@ -13,7 +21,15 @@ fn new_with_custom_deck_length() {
 #[test]
 fn play_land_moves_card_from_hand_to_battlefield() {
     let decks = Some(vec![vec!["mountain".into(); 7], vec!["forest".into(); 7]]);
-    let mut e = GameEngine::new(7, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let hand_before = e.state.players[0].hand.len();
     let battlefield_before = e.state.players[0].battlefield.len();
@@ -51,7 +67,15 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(13, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        13,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
@@ -118,7 +142,15 @@ fn blaze_deals_chosen_x_damage_to_target() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(13, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        13,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
@@ -178,7 +210,15 @@ fn blaze_x_zero_deals_no_damage() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(13, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        13,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
@@ -228,7 +268,15 @@ fn x_value_on_non_x_spell_rejected() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(13, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        13,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
@@ -272,7 +320,15 @@ fn casting_spell_keeps_priority_with_caster() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(13, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        13,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(mountain_idx))
@@ -317,7 +373,15 @@ fn caster_can_cast_second_spell_before_passing_priority() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(333, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        333,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_a = hand_index_for_card(&e, 0, "mountain");
@@ -371,7 +435,15 @@ fn caster_can_cast_second_spell_before_passing_priority() {
 #[test]
 fn nonactive_player_cannot_play_land_in_opponents_main() {
     let decks = Some(vec![vec!["mountain".into(); 10], vec!["forest".into(); 10]]);
-    let mut e = GameEngine::new(905, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        905,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &pass()).expect("active passes");
     assert_eq!(e.state.priority_player_id(), 1);
@@ -407,7 +479,15 @@ fn can_cast_new_vanilla_creature_with_swamp() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(905, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        905,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let seeded_swamp_idx = hand_index_for_card(&e, 0, "swamp");
@@ -461,7 +541,15 @@ fn exploration_allows_second_land_per_turn() {
         ],
         vec!["island".into(); 7],
     ]);
-    let mut e = GameEngine::new(42, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        42,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Cast and resolve Exploration ({G}).
@@ -509,7 +597,15 @@ fn exploration_allows_second_land_per_turn() {
 #[test]
 fn without_exploration_second_land_is_rejected() {
     let decks = Some(vec![vec!["forest".into(); 7], vec!["island".into(); 7]]);
-    let mut e = GameEngine::new(43, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        43,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let f1 = hand_index_for_card(&e, 0, "forest");
@@ -539,7 +635,15 @@ fn exploration_leaving_revokes_extra_land_play() {
         ],
         vec!["island".into(); 7],
     ]);
-    let mut e = GameEngine::new(44, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        44,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Cast Exploration.
@@ -624,7 +728,15 @@ fn two_explorations_allow_three_lands_per_turn() {
         ],
         vec!["island".into(); 7],
     ]);
-    let mut e = GameEngine::new(45, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        45,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Cast both Explorations.
@@ -675,7 +787,15 @@ fn noncreature_artifact_can_tap_the_turn_it_resolves() {
         deck_with("island", &["jayemdae_tome"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(1710, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1710,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     ensure_in_hand(&mut e, 0, "jayemdae_tome");
@@ -722,7 +842,15 @@ fn tap_ability_activatability_tracks_the_tap_cost() {
         deck_with("island", &["jayemdae_tome", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(1711, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1711,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     ensure_in_hand(&mut e, 0, "jayemdae_tome");

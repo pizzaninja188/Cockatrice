@@ -1,8 +1,8 @@
-use tricerules_cards::{CardRegistry, Layout};
+use tricerules_cards::Layout;
 
 #[test]
 fn issue_misc46_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, types) in [
         (
             "requisition_raid",

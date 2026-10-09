@@ -19,7 +19,15 @@ fn engine_with_zur(seed: u64) -> GameEngine {
         deck_with("island", &["zurs_weirding"]),
         deck_with("island", &["divination"]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     relocate_to_battlefield(&mut engine, 0, "zurs_weirding", false);
     engine
@@ -179,7 +187,15 @@ fn zurs_weirding_collects_four_player_apnap_choices_before_debiting_life() {
         deck_with("island", &[]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(20_261_009, &[0, 1, 2, 3], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_261_009,
+        &[0, 1, 2, 3],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     relocate_to_battlefield(&mut engine, 0, "zurs_weirding", false);
     ensure_in_hand(&mut engine, 0, "divination");
@@ -308,7 +324,15 @@ fn song_of_the_dryads_removes_zurs_weirding_public_hand_and_draw_replacement() {
         deck_with("island", &["zurs_weirding", "song_of_the_dryads"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(20_261_010, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_261_010,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let zur = relocate_to_battlefield(&mut engine, 0, "zurs_weirding", false);
     let before = engine.initial_response_batch();

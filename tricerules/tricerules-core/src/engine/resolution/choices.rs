@@ -13,7 +13,7 @@ use crate::state::{
 };
 use crate::Zone;
 use crate::{GameEngine, ObjectId, PlayerId};
-use tricerules_cards::primitives::{
+use tricerules_card_model::primitives::{
     Amount, PermanentChoiceConstraint, PlayerRecipient, ResolutionBranchDef,
     ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SpellEffectKind,
     TargetController, TargetFilter, TargetKind, TriggerCondition, TriggeredAbilityDef,
@@ -223,7 +223,7 @@ fn permanent_choice_prompt(filter: &TargetFilter, min: u32, max: u32) -> String 
         ("creature", "creatures")
     } else if filter.any_of.is_none()
         && filter.kind == TargetKind::AnyPermanent
-        && filter.permanent_types == [tricerules_cards::primitives::PermanentTypeFilter::Land]
+        && filter.permanent_types == [tricerules_card_model::primitives::PermanentTypeFilter::Land]
     {
         ("land", "lands")
     } else {
@@ -767,9 +767,9 @@ fn previous_result_receipt_matches(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
     previous_result: &crate::state::EffectResult,
-    condition: &tricerules_cards::primitives::ResolutionReceiptCondition,
+    condition: &tricerules_card_model::primitives::ResolutionReceiptCondition,
 ) -> bool {
-    use tricerules_cards::primitives::ResolutionReceiptCondition;
+    use tricerules_card_model::primitives::ResolutionReceiptCondition;
 
     match condition {
         ResolutionReceiptCondition::CounterUnlessPaid { paid: expected } => matches!(
@@ -807,7 +807,7 @@ pub(in crate::engine) fn card_result_count(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
     previous_result: &crate::state::EffectResult,
-    filter: &tricerules_cards::primitives::CardResultFilter,
+    filter: &tricerules_card_model::primitives::CardResultFilter,
 ) -> u32 {
     card_result_count_from_cohorts(
         &engine.state,
@@ -822,7 +822,7 @@ pub(in crate::engine) fn card_result_count_for_player(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
     previous_result: &crate::state::EffectResult,
-    filter: &tricerules_cards::primitives::CardResultFilter,
+    filter: &tricerules_card_model::primitives::CardResultFilter,
     player: crate::state::PlayerId,
 ) -> u32 {
     matching_card_result_entries(
@@ -840,7 +840,7 @@ pub(in crate::engine) fn card_result_maximum(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
     previous_result: &crate::state::EffectResult,
-    filter: &tricerules_cards::primitives::CardResultFilter,
+    filter: &tricerules_card_model::primitives::CardResultFilter,
 ) -> u32 {
     card_result_maximum_from_cohorts(
         &engine.state,
@@ -856,7 +856,7 @@ fn card_result_maximum_from_cohorts(
     controller: i32,
     payment_result: &crate::state::CardResultCohort,
     previous_result: &crate::state::EffectResult,
-    filter: &tricerules_cards::primitives::CardResultFilter,
+    filter: &tricerules_card_model::primitives::CardResultFilter,
 ) -> u32 {
     let mut counts = std::collections::BTreeMap::<i32, u32>::new();
     for entry in
@@ -872,8 +872,8 @@ pub(in crate::engine) fn card_result_characteristic_sum(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
     previous_result: &crate::state::EffectResult,
-    filter: &tricerules_cards::primitives::CardResultFilter,
-    characteristic: tricerules_cards::primitives::PowerToughnessCharacteristic,
+    filter: &tricerules_card_model::primitives::CardResultFilter,
+    characteristic: tricerules_card_model::primitives::PowerToughnessCharacteristic,
 ) -> i64 {
     matching_card_result_entries(
         &engine.state,
@@ -886,8 +886,8 @@ pub(in crate::engine) fn card_result_characteristic_sum(
         let (power, toughness) =
             engine.object_power_toughness(entry.object_id, engine.card_result_generation(entry));
         let value = match characteristic {
-            tricerules_cards::primitives::PowerToughnessCharacteristic::Power => power,
-            tricerules_cards::primitives::PowerToughnessCharacteristic::Toughness => toughness,
+            tricerules_card_model::primitives::PowerToughnessCharacteristic::Power => power,
+            tricerules_card_model::primitives::PowerToughnessCharacteristic::Toughness => toughness,
         };
         sum.saturating_add(value)
     })
@@ -903,7 +903,7 @@ pub(in crate::engine) fn card_result_mana_value_sum(
         .cards
         .iter()
         .filter(|entry| {
-            entry.action == tricerules_cards::primitives::CardResultAction::Mill
+            entry.action == tricerules_card_model::primitives::CardResultAction::Mill
                 && entry.affected_player == top.controller
                 && seen.insert((entry.object_id, entry.zone_change_generation))
         })
@@ -929,7 +929,7 @@ fn card_result_count_from_cohorts(
     controller: i32,
     payment_result: &crate::state::CardResultCohort,
     previous_result: &crate::state::EffectResult,
-    filter: &tricerules_cards::primitives::CardResultFilter,
+    filter: &tricerules_card_model::primitives::CardResultFilter,
 ) -> u32 {
     matching_card_result_entries(state, controller, payment_result, previous_result, filter)
         .count()
@@ -941,11 +941,13 @@ fn matching_card_result_entries<'a>(
     controller: i32,
     payment_result: &'a crate::state::CardResultCohort,
     previous_result: &'a crate::state::EffectResult,
-    filter: &'a tricerules_cards::primitives::CardResultFilter,
+    filter: &'a tricerules_card_model::primitives::CardResultFilter,
 ) -> impl Iterator<Item = &'a crate::state::CardResultEntry> + 'a {
     let cards = match filter.source {
-        tricerules_cards::primitives::CardResultSource::Payment => &payment_result.cards,
-        tricerules_cards::primitives::CardResultSource::PreviousEffect => &previous_result.cards,
+        tricerules_card_model::primitives::CardResultSource::Payment => &payment_result.cards,
+        tricerules_card_model::primitives::CardResultSource::PreviousEffect => {
+            &previous_result.cards
+        }
     };
     let mut seen = std::collections::BTreeSet::new();
     cards
@@ -970,11 +972,11 @@ fn matching_card_result_entries<'a>(
 pub(super) fn park_resolution_branches(
     cx: &mut EffectCx<'_>,
     optional: bool,
-    branches: Vec<tricerules_cards::primitives::ResolutionBranchDef>,
+    branches: Vec<tricerules_card_model::primitives::ResolutionBranchDef>,
 ) -> Result<EffectOutcome, EngineError> {
     park_resolution_branches_for(
         cx,
-        tricerules_cards::primitives::PlayerRecipient::Controller,
+        tricerules_card_model::primitives::PlayerRecipient::Controller,
         optional,
         branches,
     )
@@ -984,7 +986,7 @@ fn park_resolution_branches_for(
     cx: &mut EffectCx<'_>,
     chooser: PlayerRecipient,
     optional: bool,
-    branches: Vec<tricerules_cards::primitives::ResolutionBranchDef>,
+    branches: Vec<tricerules_card_model::primitives::ResolutionBranchDef>,
 ) -> Result<EffectOutcome, EngineError> {
     let recipients = super::player_recipients(cx, chooser);
     let [deciding_player] = recipients.as_slice() else {
@@ -1515,13 +1517,21 @@ pub(super) fn create_reflexive_trigger(
 mod result_count_tests {
     use super::*;
     use crate::state::{CardResultCohort, CardResultEntry};
-    use tricerules_cards::primitives::{
+    use tricerules_card_model::primitives::{
         CardResultAction, CardResultFilter, CardResultSource, CardTypeFilter, RelativePlayerSet,
     };
 
     #[test]
     fn windfall_grouped_maximum_filters_receipts_and_deduplicates_generations() {
-        let engine = crate::engine::GameEngine::new(505_060, &[4, 9, 27], 20, None, true).unwrap();
+        let engine = crate::engine::GameEngine::new(
+            tricerules_cards::registry::global(),
+            505_060,
+            &[4, 9, 27],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let entry = |player, oid, generation, action, kind| CardResultEntry {
             affected_player: player,
             object_id: oid,
@@ -1591,7 +1601,15 @@ mod result_count_tests {
 
     #[test]
     fn opponent_filter_is_player_set_generic() {
-        let engine = crate::engine::GameEngine::new(122_009, &[0, 1], 20, None, true).unwrap();
+        let engine = crate::engine::GameEngine::new(
+            tricerules_cards::registry::global(),
+            122_009,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let previous_result: crate::state::EffectResult = CardResultCohort {
             cards: vec![
                 CardResultEntry {

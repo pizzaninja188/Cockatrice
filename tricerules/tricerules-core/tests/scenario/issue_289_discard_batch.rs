@@ -12,7 +12,6 @@ use tricerules_cards::primitives::{
     Amount, CastTriggerPlayer, ContinuousEffectKind, CounterKind, EffectDuration, EffectSubject,
     SpellEffectKind, TriggerCondition,
 };
-use tricerules_cards::CardRegistry;
 use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine, Zone};
 use tricerules_proto::ruled::v1::{
     dev_command, ruled_command::Cmd, AbilitySourceZone, ActivateAbility, DevCommand, DevMoveCard,
@@ -33,7 +32,7 @@ fn dev_move(player: i32, card_name: &str, zone: DevZone) -> RuledCommand {
 }
 
 fn grant_discard_batch_counter(engine: &mut GameEngine, source: u32) {
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("ajanis_pridemate")
         .unwrap()
         .primary_face()
@@ -60,6 +59,7 @@ fn grant_discard_batch_counter(engine: &mut GameEngine, source: u32) {
 
 fn discard_batch_setup(seed: u64, source_player: usize, source_card: &str) -> (GameEngine, u32) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -343,7 +343,15 @@ fn issue_289_generated_skyray_cycling_is_one_discard_event() {
         deck_with("island", &["scrounging_skyray", "scrounging_skyray"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(289_009, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        289_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let on_battlefield = move_ready_to_battlefield(&mut engine, 0, "scrounging_skyray");
     let in_hand = relocate_to_hand(&mut engine, 0, "scrounging_skyray");
@@ -408,7 +416,15 @@ fn issue_289_ward_discard_cost_is_one_event() {
         deck_with("island", &["unsummon", "grizzly_bears"]),
         deck_with("swamp", &["spectral_snatcher"]),
     ]);
-    let mut engine = GameEngine::new(289_011, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        289_011,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let observer = inject_creature_on_battlefield(&mut engine, 0, "silvercoat_lion");
     grant_discard_batch_counter(&mut engine, observer);
@@ -450,7 +466,15 @@ fn issue_289_ward_discard_exiles_a_madness_card_and_still_counts_it() {
         deck_with("island", &["unsummon", "fiery_temper"]),
         deck_with("swamp", &["spectral_snatcher"]),
     ]);
-    let mut engine = GameEngine::new(289_015, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        289_015,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let observer = inject_creature_on_battlefield(&mut engine, 0, "silvercoat_lion");
     grant_discard_batch_counter(&mut engine, observer);
@@ -514,7 +538,15 @@ fn issue_289_generated_mako_groups_a_two_card_instruction() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(289_010, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        289_010,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let mako = move_ready_to_battlefield(&mut engine, 0, "marauding_mako");
     clear_hand(&mut engine, 0);
@@ -574,7 +606,15 @@ fn issue_289_whole_hand_discard_is_one_event_with_every_card_counted() {
         deck_with("mountain", &["hearth_elemental_stoke_genius"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(289_012, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        289_012,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let observer = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     grant_discard_batch_counter(&mut engine, observer);
@@ -619,7 +659,15 @@ fn issue_289_simultaneous_multiplayer_discard_fires_once_per_player() {
         deck_with("swamp", &["fanatic_of_the_harrowing"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(289_013, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        289_013,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let first_observer = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let second_observer = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -695,7 +743,15 @@ fn issue_289_random_multi_card_discard_is_one_event() {
         deck_with("swamp", &["hymn_to_tourach"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(289_014, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        289_014,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let observer = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     grant_discard_batch_counter(&mut engine, observer);

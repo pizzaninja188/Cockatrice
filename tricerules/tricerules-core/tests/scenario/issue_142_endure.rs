@@ -1,5 +1,5 @@
 use super::helpers::*;
-use tricerules_cards::{primitives::CounterKind, CardRegistry};
+use tricerules_cards::primitives::CounterKind;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
 };
@@ -9,7 +9,15 @@ fn engine(seed: u64) -> GameEngine {
         std::iter::repeat_n("forest".to_string(), 20).collect(),
         std::iter::repeat_n("mountain".to_string(), 20).collect(),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -56,7 +64,7 @@ fn transfer_control(engine: &mut GameEngine, object_id: u32, to_player: usize) {
 
 #[test]
 fn issue_142_endure_cards_are_registered() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for card_id in [
         "kin-tree_nurturer",

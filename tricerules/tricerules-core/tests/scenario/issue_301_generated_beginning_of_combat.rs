@@ -12,7 +12,15 @@ use tricerules_proto::ruled::v1::{
 };
 
 fn issue_301_engine(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

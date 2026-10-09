@@ -23,8 +23,7 @@ use tricerules_cards::primitives::{
     ZoneEventCardinality, ZoneEventDestination,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, CardRegistry, CastTriggerPlayer, Keyword, Layout, ManaAmount,
-    ManaCost,
+    AbilityCost, AbilityPresentation, CastTriggerPlayer, Keyword, Layout, ManaAmount, ManaCost,
 };
 
 struct CohortEntry {
@@ -307,14 +306,14 @@ const COHORT: [CohortEntry; 24] = [
 ];
 
 fn face(id: &str) -> &'static tricerules_cards::CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .unwrap_or_else(|| panic!("missing reviewed card {id}"))
         .primary_face()
 }
 
 fn adventure_face(id: &str, index: usize) -> &'static tricerules_cards::CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .unwrap_or_else(|| panic!("missing reviewed card {id}"))
         .face(index)
@@ -338,7 +337,7 @@ fn mana_options(
 
 #[test]
 fn issue_453_registers_exactly_the_reviewed_twenty_four() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for card in &COHORT {
         let definition = registry
             .get(card.id)
@@ -367,7 +366,7 @@ fn issue_453_registers_exactly_the_reviewed_twenty_four() {
 
 #[test]
 fn issue_453_destroy_spells_keep_exact_target_classes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for id in ["bilbos_deadly_slice", "vote_out"] {
         let face = face(id);
@@ -478,7 +477,7 @@ fn issue_453_huatli_final_strike_pumps_then_deals_the_pumped_power() {
 
 #[test]
 fn issue_453_lands_keep_entry_replacements_and_mana_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (id, line) in [("bloodfell_caves", 1), ("rabanastre,_royal_city", 1)] {
         let face = face(id);
@@ -711,7 +710,7 @@ fn issue_453_landcycling_abilities_search_a_revealed_basic_land_to_hand() {
 
 #[test]
 fn issue_453_etb_triggers_keep_exact_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let salvagers = face("al_bhed_salvagers");
     let [drain] = salvagers.triggered_abilities.as_slice() else {
@@ -956,7 +955,7 @@ fn issue_453_bestial_bloodline_keeps_aura_modifier_and_graveyard_return() {
 
 #[test]
 fn issue_453_adventure_faces_keep_printed_characteristics_and_effects() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let minecart = adventure_face("minecart_daredevil_ride_the_rails", 1);
     assert_eq!(minecart.name, "Ride the Rails");
@@ -1028,7 +1027,7 @@ fn issue_453_vanilla_bears_keep_only_printed_keywords() {
 
 #[test]
 fn issue_453_unreviewed_damage_amounts_stay_unregistered() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for excluded in ["breath_of_fire", "fiery_finish"] {
         assert!(
             registry.get(excluded).is_none(),

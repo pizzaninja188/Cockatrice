@@ -39,7 +39,15 @@ fn copperline_engine(seed: u64, controller_lands: usize) -> (GameEngine, u32) {
         deck_with("island", &["copperline_gorge"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     for _ in 0..controller_lands {
@@ -61,7 +69,15 @@ fn prismatic_engine(seed: u64) -> (GameEngine, u32) {
         deck_with("island", &["prismatic_lens"]),
         deck_with("mountain", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let lens = relocate_to_battlefield(&mut engine, 0, "prismatic_lens", false);
     (engine, lens)

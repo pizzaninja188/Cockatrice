@@ -1,10 +1,10 @@
 //! Exact-card artifact threshold and search coverage; copy-card admission is held pending Aura entry support.
 use super::helpers::*;
-use tricerules_cards::CardRegistry;
 use tricerules_core::Zone;
 
 fn game(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -27,7 +27,7 @@ fn remove_artifact(engine: &mut GameEngine, object: u32) {
 
 #[test]
 fn fair_exact_land_and_mana_ability() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("inventors_fair")
         .expect("Fair registered");
     assert_eq!(card.name, "Inventors' Fair");

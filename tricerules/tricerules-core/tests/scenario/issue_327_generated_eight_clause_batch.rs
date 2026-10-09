@@ -13,7 +13,15 @@ use tricerules_cards::CounterKind;
 use tricerules_core::{TurnStep, Zone};
 
 fn main1_engine(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -23,7 +31,15 @@ fn spell_engine(seed: u64, own: &[&str], opposing: &[&str]) -> GameEngine {
         deck_with("forest", own),
         deck_with("island", opposing),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

@@ -2,7 +2,7 @@
 //! ordered delayed triggers at the next actual turn's upkeep.
 use crate::helpers::*;
 use tricerules_cards::primitives::{PlayerRecipient, SpellEffectKind, TriggerCondition};
-use tricerules_cards::{AbilityPresentation, CardRegistry};
+use tricerules_cards::AbilityPresentation;
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ChoiceKind, ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
@@ -54,7 +54,15 @@ fn prepare_arcane_denial_against_opt_with_players(
     player_ids: &[i32],
 ) -> (GameEngine, u32) {
     let decks = Some(vec![vec!["island".into(); 20]; player_ids.len()]);
-    let mut engine = GameEngine::new(seed, player_ids, 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        player_ids,
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     inject_card_into_hand(&mut engine, 1, "opt");
@@ -119,7 +127,15 @@ fn cast_arcane_denial_against_opt_with_players(seed: u64, player_ids: &[i32]) ->
 
 fn resolve_arcane_denial_against_uncounterable_eject(seed: u64) -> (GameEngine, u32) {
     let decks = Some(vec![vec!["island".into(); 20]; PLAYER_IDS.len()]);
-    let mut engine = GameEngine::new(seed, &PLAYER_IDS, 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &PLAYER_IDS,
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let creature = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     inject_card_into_hand(&mut engine, 1, "eject");
@@ -281,7 +297,7 @@ fn resolve_arcane_delayed_triggers(
 
 #[test]
 fn arcane_denial_is_admitted_with_both_delayed_effects_and_exact_choice_ownership() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("arcane_denial")
         .expect("Arcane Denial is admitted as a complete card")
         .primary_face();

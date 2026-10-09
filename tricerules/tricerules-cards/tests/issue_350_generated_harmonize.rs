@@ -5,11 +5,11 @@
 //! sorcery face, plus the preserved basic-land search and return-target-creature effects.
 
 use tricerules_cards::primitives::{CardTypeFilter, SearchDestination};
-use tricerules_cards::{CardRegistry, Color, Layout, SpellEffectKind};
+use tricerules_cards::{Color, Layout, SpellEffectKind};
 
 #[test]
 fn issue_350_registers_the_two_completed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id) in [
         ("roamers_routine", "Roamer's Routine", "roamer_s_routine"),
         ("urenis_rebuff", "Ureni's Rebuff", "ureni_s_rebuff"),
@@ -27,7 +27,7 @@ fn issue_350_registers_the_two_completed_identities() {
 
 #[test]
 fn issue_350_roamers_routine_keeps_the_basic_land_search_and_harmonize_cost() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("roamers_routine")
         .expect("Roamer's Routine");
     let face = definition.primary_face();
@@ -71,7 +71,7 @@ fn issue_350_roamers_routine_keeps_the_basic_land_search_and_harmonize_cost() {
 
 #[test]
 fn issue_350_urenis_rebuff_keeps_the_return_effect_and_harmonize_cost() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("urenis_rebuff")
         .expect("Ureni's Rebuff");
     let face = definition.primary_face();
@@ -98,7 +98,7 @@ fn issue_350_urenis_rebuff_keeps_the_return_effect_and_harmonize_cost() {
 
 #[test]
 fn issue_350_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let cases: &[(&str, &str, &str, &str)] = &[
         (
             "roamers_routine",

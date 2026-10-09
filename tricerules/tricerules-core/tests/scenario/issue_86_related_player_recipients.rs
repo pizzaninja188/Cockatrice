@@ -13,7 +13,15 @@ fn chandras_outrage_damages_the_creature_and_its_controller() {
         deck_with("mountain", &["chandras_outrage"]),
         deck_with("forest", &["colossal_dreadmaw"]),
     ]);
-    let mut engine = GameEngine::new(86_100, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        86_100,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);
     ensure_in_hand(&mut engine, 0, "chandras_outrage");
@@ -42,7 +50,15 @@ fn chandras_outrage_uses_the_targets_current_controller() {
         deck_with("mountain", &["chandras_outrage"]),
         deck_with("forest", &["colossal_dreadmaw"]),
     ]);
-    let mut engine = GameEngine::new(86_105, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        86_105,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);
     ensure_in_hand(&mut engine, 0, "chandras_outrage");
@@ -78,7 +94,15 @@ fn chandras_outrage_does_no_player_damage_when_its_target_is_illegal() {
         deck_with("mountain", &["chandras_outrage"]),
         deck_with("forest", &["colossal_dreadmaw"]),
     ]);
-    let mut engine = GameEngine::new(86_106, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        86_106,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);
     ensure_in_hand(&mut engine, 0, "chandras_outrage");
@@ -116,7 +140,15 @@ fn scorch_spitter_keeps_the_event_time_defender_after_its_source_leaves() {
         deck_with("mountain", &["scorch_spitter"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(86_101, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        86_101,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut engine);
     let spitter = relocate_to_battlefield(&mut engine, 0, "scorch_spitter", false);
 
@@ -160,7 +192,15 @@ fn curse_of_opulence_triggers_once_for_multiple_attackers_and_gives_both_rewards
         deck_with("mountain", &["curse_of_opulence"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(86_102, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        86_102,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut engine);
     attach_curse_to_player(&mut engine, "curse_of_opulence", 1);
     let mut attackers = engine.state.players[0]
@@ -225,7 +265,15 @@ fn curse_attacking_reward_is_skipped_when_no_attacker_remains() {
         deck_with("mountain", &["curse_of_opulence"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(86_103, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        86_103,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut engine);
     attach_curse_to_player(&mut engine, "curse_of_opulence", 1);
     let attacker = engine.state.players[0]
@@ -260,7 +308,15 @@ fn curse_of_disturbance_uses_the_same_two_recipient_rewards() {
         deck_with("swamp", &["curse_of_disturbance"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(86_104, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        86_104,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut engine);
     attach_curse_to_player(&mut engine, "curse_of_disturbance", 1);
     let attacker = engine.state.players[0]

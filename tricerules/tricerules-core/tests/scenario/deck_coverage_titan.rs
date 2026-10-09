@@ -1,18 +1,26 @@
 //! Triplicate Titan: exact Golem token identities and death controller.
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, Keyword};
+use tricerules_cards::Keyword;
 use tricerules_core::Zone;
 
 fn game(seed: u64) -> GameEngine {
     let deck = deck_with("forest", &[]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, Some(vec![deck; 2]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![deck; 2]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
 
 fn cast_creature(engine: &mut GameEngine, card: &str, cost: u32) -> u32 {
     assert!(
-        CardRegistry::global().get(card).is_some(),
+        tricerules_cards::registry::global().get(card).is_some(),
         "missing exact {card}"
     );
     let source = inject_card_into_hand(engine, 0, card);
@@ -58,8 +66,15 @@ fn resolve_one(engine: &mut GameEngine) -> RuledEventBatch {
 #[test]
 fn titan_real_death_creates_three_distinct_exact_tokens_for_death_controller() {
     let deck = deck_with("forest", &[]);
-    let mut engine =
-        GameEngine::new(2026100112, &[10, 20, 30], 20, Some(vec![deck; 3]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2026100112,
+        &[10, 20, 30],
+        20,
+        Some(vec![deck; 3]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     // Fixture: a Titan owned by 10 is currently controlled by 20. Death is a real spell.
     let source = inject_permanent_on_battlefield(&mut engine, 1, "triplicate_titan");
@@ -193,7 +208,7 @@ fn titan_heterogeneous_tokens_enter_as_one_simultaneous_cohort() {
     let source = inject_permanent_on_battlefield(&mut engine, 0, "triplicate_titan");
     // Fixture: every creature has Soul Warden's printed entry observer. Each of the three
     // simultaneous entrants must observe the other two entries: six triggers, not 0+1+2.
-    let observer = CardRegistry::global()
+    let observer = tricerules_cards::registry::global()
         .get("soul_warden")
         .unwrap()
         .primary_face()

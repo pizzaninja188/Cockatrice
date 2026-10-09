@@ -1,11 +1,13 @@
 use tricerules_cards::primitives::{
     AbilityCost, Amount, DrawReplacementCondition, SpellEffectKind, StaticAbilityDef, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Color, GameCondition};
+use tricerules_cards::{AbilityPresentation, Color, GameCondition};
 
 #[test]
 fn thought_reflection_exact_printed_identity_and_mandatory_controller_draw_replacement() {
-    let card = CardRegistry::global().get("thought_reflection").unwrap();
+    let card = tricerules_cards::registry::global()
+        .get("thought_reflection")
+        .unwrap();
     let face = card.primary_face();
     assert_eq!(card.name, "Thought Reflection");
     assert_eq!(face.mana_cost.to_string(), "{4}{U}{U}{U}");
@@ -28,7 +30,7 @@ fn thought_reflection_exact_printed_identity_and_mandatory_controller_draw_repla
 
 #[test]
 fn insight_exact_legendary_identity_and_first_successful_own_draw_step_exception() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("teferis_ageless_insight")
         .unwrap();
     let face = card.primary_face();
@@ -53,7 +55,7 @@ fn insight_exact_legendary_identity_and_first_successful_own_draw_step_exception
 
 #[test]
 fn laboratory_maniac_exact_identity_and_empty_library_replacement() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("laboratory_maniac").unwrap();
     assert_eq!(
         registry.id_for_name("Laboratory Maniac"),
@@ -83,7 +85,7 @@ fn laboratory_maniac_exact_identity_and_empty_library_replacement() {
 
 #[test]
 fn jace_wielder_exact_identity_loyalty_target_mill_draw_and_final_win() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("jace,_wielder_of_mysteries").unwrap();
     assert_eq!(
         registry.id_for_name("Jace, Wielder of Mysteries"),

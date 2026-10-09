@@ -18,7 +18,15 @@ fn deck_engine(seed: u64, own: &[&str], opposing: &[&str]) -> GameEngine {
         deck_with("mountain", own),
         deck_with("mountain", opposing),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -65,7 +73,15 @@ fn three_player_engine(seed: u64) -> GameEngine {
         deck_with("mountain", &["lightning_bolt"]),
         deck_with("mountain", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     engine
         .state
         .players

@@ -165,7 +165,15 @@ fn attached_activation_prohibition_preserves_keywords_static_and_triggered_abili
         deck_with("mountain", &["glimmerlight", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(5406, &[0, 1], 20, decks, true).expect("new engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5406,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut e);
     let equipment = move_ready_to_battlefield(&mut e, 0, "glimmerlight");
     resolve_entire_stack_two_player(&mut e);
@@ -206,7 +214,7 @@ fn attached_activation_prohibition_preserves_keywords_static_and_triggered_abili
         duration: EffectDuration::UntilEndOfTurn,
         timestamp: e.state.command_index,
     });
-    let granted_ability = tricerules_cards::CardRegistry::global()
+    let granted_ability = tricerules_cards::registry::global()
         .get("llanowar_elves")
         .expect("Llanowar Elves definition")
         .primary_face()
@@ -222,7 +230,7 @@ fn attached_activation_prohibition_preserves_keywords_static_and_triggered_abili
         timestamp: e.state.command_index,
     });
     e.initial_response_batch();
-    let granted_trigger = tricerules_cards::CardRegistry::global()
+    let granted_trigger = tricerules_cards::registry::global()
         .get("soul_warden")
         .expect("Soul Warden definition")
         .primary_face()

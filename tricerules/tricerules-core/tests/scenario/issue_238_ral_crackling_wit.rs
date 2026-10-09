@@ -1,5 +1,5 @@
 use super::helpers::*;
-use tricerules_cards::{primitives::CounterKind, CardRegistry, SpellKeyword, StaticEmblemEffect};
+use tricerules_cards::{primitives::CounterKind, SpellKeyword, StaticEmblemEffect};
 use tricerules_proto::ruled::v1::{ruled_event::Ev, ChoiceKind};
 
 fn setup_ral(seed: u64) -> (GameEngine, u32) {
@@ -16,7 +16,15 @@ fn setup_ral(seed: u64) -> (GameEngine, u32) {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let ral = move_ready_to_battlefield(&mut engine, 0, "ral,_crackling_wit");
     (engine, ral)
@@ -24,7 +32,7 @@ fn setup_ral(seed: u64) -> (GameEngine, u32) {
 
 #[test]
 fn issue_238_ral_has_complete_oracle_presentations_and_cast_trigger_timing() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("ral,_crackling_wit")
         .expect("Ral registered");
     let face = definition.primary_face();

@@ -44,14 +44,14 @@ pub(super) fn derived_intrinsic_land_mana(
     let ability_id = anchor
         .map(|(_, ability)| ability.ability_id.clone())
         .unwrap_or_else(|| {
-            tricerules_cards::AbilityId::new("basic_land_mana").expect("constant ability id")
+            tricerules_card_model::AbilityId::new("basic_land_mana").expect("constant ability id")
         });
     Some((
         index,
         ActivatedAbilityDef {
             intrinsic_land_mana: true,
             ability_id,
-            presentation: tricerules_cards::AbilityPresentation::Fallback,
+            presentation: tricerules_card_model::AbilityPresentation::Fallback,
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![AbilityCost::Tap],
             cost_modifiers: Vec::new(),

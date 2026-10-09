@@ -1,12 +1,11 @@
 use tricerules_cards::primitives::{GameCondition, PlayerRecipient, RelativePlayerSet};
 use tricerules_cards::{
-    AbilityPresentation, Amount, CardRegistry, SpellEffectKind, TriggerCondition,
-    TriggeredAbilityDef,
+    AbilityPresentation, Amount, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 #[test]
 fn issue_278_raid_cards_have_exact_registry_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let storm_fleet_spy = registry
         .get("storm_fleet_spy")

@@ -4,7 +4,7 @@ use tricerules_core::{GameEngine, Zone};
 
 #[test]
 fn exact_single_face_characteristics_and_complete_ability_counts() {
-    let registry = tricerules_cards::CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let beacon = registry.get("interplanar_beacon").unwrap();
     assert_eq!(beacon.name, "Interplanar Beacon");
     assert_eq!(beacon.face_count(), 1);
@@ -43,6 +43,7 @@ const PAIRS: [Mana; 10] = [
 
 fn engine(seed: u64) -> GameEngine {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,

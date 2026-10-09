@@ -11,6 +11,7 @@ const FLUSTERSTORM: &str = "flusterstorm";
 
 fn flusterstorm_engine(seed: u64, p0_cards: &[&str]) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,

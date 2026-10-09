@@ -1,9 +1,11 @@
 use tricerules_cards::primitives::{EffectContext, SpellEffectKind, TargetFilter, TargetKind};
-use tricerules_cards::{CardRegistry, Color};
+use tricerules_cards::Color;
 
 #[test]
 fn farewell_exact_white_sorcery_identity_and_one_to_four_printed_order_modes() {
-    let card = CardRegistry::global().get("farewell").unwrap();
+    let card = tricerules_cards::registry::global()
+        .get("farewell")
+        .unwrap();
     let face = card.primary_face();
     assert_eq!(card.name, "Farewell");
     assert_eq!(face.mana_cost.to_string(), "{4}{W}{W}");

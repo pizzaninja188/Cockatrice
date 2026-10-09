@@ -33,7 +33,15 @@ fn issue_127_entry_counters_are_included_in_the_trigger_power_check() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(127_001, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        127_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     relocate_to_battlefield(&mut engine, 0, "vicious_clown", false);
     ensure_in_hand(&mut engine, 0, "endless_one");
@@ -83,7 +91,15 @@ fn issue_127_continuous_effects_are_included_in_the_entry_power_check() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(127_002, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        127_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let clown = relocate_to_battlefield(&mut engine, 0, "vicious_clown", false);
     ensure_in_hand(&mut engine, 0, "glorious_anthem");
@@ -114,7 +130,15 @@ fn issue_127_a_collected_trigger_is_not_rechecked_after_entry() {
         deck_with("forest", &["vicious_clown", "endless_one", "giant_growth"]),
         deck_with("mountain", &[]),
     ]);
-    let mut engine = GameEngine::new(127_003, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        127_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let clown = relocate_to_battlefield(&mut engine, 0, "vicious_clown", false);
     ensure_in_hand(&mut engine, 0, "endless_one");
@@ -147,7 +171,15 @@ fn issue_127_each_simultaneous_eligible_entrant_triggers_once() {
         deck_with("plains", &["vicious_clown", "raise_the_alarm"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(127_004, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        127_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let clown = relocate_to_battlefield(&mut engine, 0, "vicious_clown", false);
     ensure_in_hand(&mut engine, 0, "raise_the_alarm");
@@ -176,7 +208,15 @@ fn issue_127_another_and_controller_restrictions_are_enforced() {
         deck_with("mountain", &["vicious_clown"]),
         deck_with("plains", &["savannah_lions"]),
     ]);
-    let mut engine = GameEngine::new(127_005, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        127_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "vicious_clown");
     grant_pool(&mut engine, 0);
@@ -212,7 +252,15 @@ fn issue_127_mentor_optional_payment_draws_exactly_one_card() {
         deck_with("plains", &["mentor_of_the_meek", "savannah_lions"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(127_006, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        127_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     relocate_to_battlefield(&mut engine, 0, "mentor_of_the_meek", false);
     ensure_in_hand(&mut engine, 0, "savannah_lions");

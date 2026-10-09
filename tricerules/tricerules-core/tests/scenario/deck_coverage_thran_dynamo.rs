@@ -10,6 +10,7 @@ use tricerules_core::GameEngine;
 #[test]
 fn thran_dynamo_casts_then_adds_three_colorless_mana_without_using_the_stack() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         20_260_943,
         &[0, 1],
         20,

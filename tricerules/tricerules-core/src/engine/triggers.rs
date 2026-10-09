@@ -42,7 +42,7 @@ pub(super) struct CollectedTrigger {
 fn trigger_ability_path(
     origin: &TriggerAbilityOrigin,
     ability: &TriggeredAbilityDef,
-) -> Vec<tricerules_cards::AbilityId> {
+) -> Vec<tricerules_card_model::AbilityId> {
     match origin {
         TriggerAbilityOrigin::Printed(definition)
         | TriggerAbilityOrigin::StaticGrant { definition, .. } => definition.ability_path.clone(),
@@ -253,9 +253,9 @@ impl GameEngine {
             return;
         }
         let ability = TriggeredAbilityDef {
-            ability_id: tricerules_cards::AbilityId::new("siege_defeat")
+            ability_id: tricerules_card_model::AbilityId::new("siege_defeat")
                 .expect("intrinsic ability id"),
-            presentation: tricerules_cards::AbilityPresentation::Fallback,
+            presentation: tricerules_card_model::AbilityPresentation::Fallback,
             trigger: TriggerCondition::WhenSelfDies,
             effect: vec![SpellEffectKind::SiegeDefeat],
             modal: None,
@@ -2347,7 +2347,7 @@ impl GameEngine {
         &self,
         source_id: ObjectId,
         face_index: usize,
-        ability_path: Vec<tricerules_cards::AbilityId>,
+        ability_path: Vec<tricerules_card_model::AbilityId>,
     ) -> AbilityDefinitionId {
         ability_definition_from(
             &self.state,
@@ -2964,7 +2964,7 @@ pub(super) fn ability_definition_from(
     registry: &'static CardRegistry,
     source_id: ObjectId,
     face_index: usize,
-    ability_path: Vec<tricerules_cards::AbilityId>,
+    ability_path: Vec<tricerules_card_model::AbilityId>,
 ) -> AbilityDefinitionId {
     let object = &state.objects[&source_id];
     let values = object
@@ -3025,8 +3025,16 @@ mod tests {
             )],
         )"#;
         let registry =
-            tricerules_cards::CardRegistry::from_chunks_and_tokens(&[class], &[]).unwrap();
-        let mut engine = GameEngine::new(716_202, &[0, 1], 20, None, true).unwrap();
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(&[class], &[]).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            716_202,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.registry = Box::leak(Box::new(registry));
         let source = engine.state.players[0].hand[0];
         engine.state.objects.get_mut(&source).unwrap().card_id = "class_trigger_fixture".into();
@@ -3097,7 +3105,13 @@ mod tests {
 
     #[test]
     fn issue_296_every_draw_matches_each_drawer_in_a_multiplayer_event_batch() {
-        let mut engine = GameEngine::new_with_default_decks(296_201, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            296_201,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         engine
             .state
             .players
@@ -3161,7 +3175,7 @@ mod tests {
         );
     }
     use crate::state::DiscardBatch;
-    use tricerules_cards::{AbilityId, AbilityPresentation, CardFaceId, IdentifiedAbility};
+    use tricerules_card_model::{AbilityId, AbilityPresentation, CardFaceId, IdentifiedAbility};
 
     #[test]
     fn issue_208_own_library_search_keeps_searcher_and_owner_distinct() {
@@ -3377,7 +3391,15 @@ mod tests {
     }
 
     fn trigger_limit_source() -> (GameEngine, ObjectId) {
-        let mut engine = GameEngine::new(164_001, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            164_001,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = engine.state.players[0].hand[0];
         engine.state.objects.get_mut(&source).unwrap().card_id = "grizzly_bears".into();
         move_object_to_zone(
@@ -3393,7 +3415,15 @@ mod tests {
 
     #[test]
     fn intervening_if_for_observed_entry_excludes_that_mountain_from_the_other_count() {
-        let mut engine = GameEngine::new(164_002, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            164_002,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let mut mountains = Vec::new();
         for _ in 0..5 {
             let object_id = engine.state.players[0].hand[0];
@@ -3707,7 +3737,7 @@ mod tests {
                 },
                 remove_creature: false,
                 set_types: None,
-                add_types: tricerules_cards::primitives::TypeLineAddition::default(),
+                add_types: tricerules_card_model::primitives::TypeLineAddition::default(),
                 base_power: None,
                 base_toughness: None,
                 delta_power: 0,
@@ -3853,7 +3883,15 @@ mod tests {
 
     #[test]
     fn issue_172_thresholds_overshoot_and_relative_players_share_snapshot_matching() {
-        let mut engine = GameEngine::new(172012, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            172012,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.state.players.push(PlayerState::new(2, 20));
         let ability = engine
             .registry
@@ -3946,7 +3984,15 @@ mod tests {
 
     #[test]
     fn issue_200_combat_damage_observer_uses_event_time_types_and_relative_players() {
-        let mut engine = GameEngine::new(200_010, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            200_010,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.state.players.push(PlayerState::new(2, 20));
         let ability = engine
             .registry
@@ -4091,7 +4137,15 @@ mod tests {
         target_id: ObjectId,
         target_controller: PlayerId,
     ) -> Option<Option<PermanentTypeFilter>> {
-        let engine = GameEngine::new(96907, &[0, 1], 20, None, true).expect("new");
+        let engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            96907,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
         engine.target_trigger_permanent_filter(
             condition,
             targeting_source,
@@ -4183,7 +4237,15 @@ mod tests {
 
     #[test]
     fn spell_target_filter_accepts_opponent_abilities_only_for_controlled_spells() {
-        let engine = GameEngine::new(219_007, &[0, 1], 20, None, true).expect("new");
+        let engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            219_007,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
         let condition = TriggerCondition::WheneverSpellBecomesTarget {
             source: TargetingSourceFilter::SpellOrAbility,
             source_controller: CastTriggerPlayer::Opponent,
@@ -4261,7 +4323,15 @@ mod tests {
             ],
             vec!["island".into(); 7],
         ]);
-        let mut engine = GameEngine::new(219_009, &[0, 1], 20, decks, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            219_009,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
         let surrak = engine
             .state
             .objects
@@ -4385,7 +4455,15 @@ mod tests {
             ],
             vec!["forest".into(); 8],
         ]);
-        let mut engine = GameEngine::new(94702, &[0, 1], 20, decks, true).expect("new engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            94702,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new engine");
         let mut giants: Vec<ObjectId> = engine
             .state
             .objects
@@ -4456,7 +4534,15 @@ mod tests {
 
     #[test]
     fn attached_player_attack_trigger_fires_once_for_the_declaration_group() {
-        let engine = GameEngine::new(6303, &[0, 1], 20, None, true).expect("engine");
+        let engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            6303,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("engine");
         let source = TriggerSourceSnapshot {
             source_concealed: false,
             copy_snapshot: None,
@@ -4556,7 +4642,15 @@ mod tests {
             ],
             vec!["forest".into(); 8],
         ]);
-        let mut engine = GameEngine::new(6036, &[0, 1], 20, decks, true).expect("new engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            6036,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new engine");
         let wardens: Vec<ObjectId> = engine
             .state
             .objects
@@ -4678,7 +4772,7 @@ mod tests {
 
     #[test]
     fn issue_168_group_observer_has_no_arbitrary_trigger_object() {
-        use tricerules_cards::primitives::ZoneEventCardinality;
+        use tricerules_card_model::primitives::ZoneEventCardinality;
         let (mut engine, source) = trigger_limit_source();
         add_limited_grant(
             &mut engine,
@@ -4801,7 +4895,7 @@ mod tests {
 
     #[test]
     fn issue_168_slagstone_filter_keeps_self_token_exception_and_old_generation() {
-        use tricerules_cards::primitives::{EventZone, ZoneEventDestination};
+        use tricerules_card_model::primitives::{EventZone, ZoneEventDestination};
         let (mut engine, source) = trigger_limit_source();
         engine.state.objects.get_mut(&source).unwrap().card_id = "bonesplitter".into();
         let copy = engine.copiable_values_for(source).unwrap();
@@ -4884,7 +4978,7 @@ mod tests {
 
     #[test]
     fn issue_168_mortipede_groups_printed_graveyard_creatures_per_instruction() {
-        use tricerules_cards::primitives::ZoneEventCardinality;
+        use tricerules_card_model::primitives::ZoneEventCardinality;
         let (mut engine, source) = trigger_limit_source();
         add_limited_grant(
             &mut engine,
@@ -4947,7 +5041,7 @@ mod tests {
 
     #[test]
     fn issue_168_departure_controller_and_owner_are_distinct_snapshots() {
-        use tricerules_cards::primitives::{EventZone, ZoneEventDestination};
+        use tricerules_card_model::primitives::{EventZone, ZoneEventDestination};
         let (mut engine, source) = trigger_limit_source();
         add_limited_grant(
             &mut engine,

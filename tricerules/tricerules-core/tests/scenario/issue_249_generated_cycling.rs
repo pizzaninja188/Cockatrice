@@ -34,7 +34,15 @@ fn generated_lightshield_parry_cycles_atomically_from_hand_and_draws() {
         deck_with("plains", &["lightshield_parry"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(249_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        249_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "lightshield_parry");
     let source = engine.state.players[0].hand[hand_index_for_card(&engine, 0, "lightshield_parry")];
@@ -80,7 +88,15 @@ fn generated_bedhead_beastie_searches_exact_mountains_reveals_and_shuffles() {
         deck_with("forest", &["bedhead_beastie"]),
         deck_with("plains", &[]),
     ]);
-    let mut engine = GameEngine::new(249_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        249_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "bedhead_beastie");
     let source = engine.state.players[0].hand[hand_index_for_card(&engine, 0, "bedhead_beastie")];

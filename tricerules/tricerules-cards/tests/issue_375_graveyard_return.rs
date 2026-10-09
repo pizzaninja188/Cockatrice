@@ -12,9 +12,7 @@ use tricerules_cards::primitives::{
     GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner, PermanentTypeFilter,
     RelativePlayerSet, TargetKind, TargetObjectExclusion, ZoneCardFilter,
 };
-use tricerules_cards::{
-    Amount, CardRegistry, GameCondition, Keyword, SpellEffectKind, TriggerCondition,
-};
+use tricerules_cards::{Amount, GameCondition, Keyword, SpellEffectKind, TriggerCondition};
 
 fn permanent_card_filter() -> ZoneCardFilter {
     ZoneCardFilter {
@@ -39,7 +37,7 @@ fn graveyard_gate(
 
 #[test]
 fn issue_375_registers_the_four_completed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id, mana_cost, types, stats, keywords) in [
         (
             "avenger_of_the_fallen",
@@ -94,7 +92,7 @@ fn issue_375_registers_the_four_completed_identities() {
 
 #[test]
 fn issue_375_excludes_the_eleven_blocked_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for name in [
         "Brilliance Unleashed",
         "Emet-Selch, Unsundered // Hades, Sorcerer of Eld",
@@ -118,7 +116,7 @@ fn issue_375_excludes_the_eleven_blocked_identities() {
 
 #[test]
 fn issue_375_coati_payload_is_exact() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("coati_scavenger")
         .expect("Coati Scavenger")
         .primary_face();
@@ -161,7 +159,7 @@ fn issue_375_coati_payload_is_exact() {
 
 #[test]
 fn issue_375_bounce_payloads_are_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let council = registry
         .get("council_of_echoes")
@@ -239,7 +237,7 @@ fn issue_375_bounce_payloads_are_exact() {
 
 #[test]
 fn issue_375_avenger_mobilize_payload_and_token_are_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let face = registry
         .get("avenger_of_the_fallen")
         .expect("Avenger of the Fallen")
@@ -289,7 +287,7 @@ fn issue_375_avenger_mobilize_payload_and_token_are_exact() {
 
 #[test]
 fn issue_375_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     for (id, face_id) in [
         ("avenger_of_the_fallen", "avenger_of_the_fallen"),

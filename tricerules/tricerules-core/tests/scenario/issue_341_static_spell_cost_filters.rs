@@ -44,7 +44,15 @@ fn issue_341_ballyrush_matches_subtype_or_once_per_source_and_casts_at_zero_gene
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(341_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        341_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     for card in [
         "crossroads_watcher",
@@ -98,7 +106,15 @@ fn issue_341_dragonlords_servant_matches_dragon_types_and_changeling_in_hand() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(341_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        341_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     for card in ["adult_gold_dragon", "firdoch_core", "airbending_lesson"] {
         ensure_in_hand(&mut engine, 0, card);
@@ -137,7 +153,15 @@ fn issue_341_geyser_drake_uses_the_active_players_opponent_set() {
         deck_with("island", &["geyser_drake", "airbending_lesson"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(341_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        341_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     engine.state.turn_step = TurnStep::Main1;
     ensure_in_hand(&mut engine, 0, "airbending_lesson");
     relocate_to_battlefield(&mut engine, 0, "geyser_drake", false);
@@ -167,7 +191,15 @@ fn issue_341_voyager_quickwelder_reduces_artifact_spells_only() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(341_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        341_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "firdoch_core");
     ensure_in_hand(&mut engine, 0, "crossroads_watcher");
@@ -194,7 +226,15 @@ fn issue_341_static_reduction_applies_to_a_flashback_alternative_cost() {
         deck_with("island", &["mocking_sprite", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(341_006, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        341_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     relocate_to_battlefield(&mut engine, 0, "mocking_sprite", false);
     let target = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -241,7 +281,15 @@ fn issue_341_uncle_iroh_reduces_lessons_and_firebending_adds_combat_mana() {
         ),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(341_005, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        341_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "airbending_lesson");
     ensure_in_hand(&mut engine, 0, "crossroads_watcher");
@@ -286,7 +334,15 @@ fn issue_341_reducers_stop_working_when_their_source_loses_abilities() {
         deck_with("plains", &["ballyrush_banneret", "crossroads_watcher"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(341_007, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        341_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "crossroads_watcher");
     let reducer = relocate_to_battlefield(&mut engine, 0, "ballyrush_banneret", false);

@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{SpellEffectKind, TargetController, TargetKind};
-use tricerules_cards::{AbilityCost, Amount, CardRegistry, Keyword};
+use tricerules_cards::{AbilityCost, Amount, Keyword};
 
 #[test]
 fn issue_52_cards_have_complete_composite_cost_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, mana, damage, target_kind) in [
         ("explosive_apparatus", "{3}", 2, TargetKind::AnyTarget),
         ("vial_of_dragonfire", "{2}", 2, TargetKind::Creature),

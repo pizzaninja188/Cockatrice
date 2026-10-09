@@ -3,7 +3,6 @@ use tricerules_cards::primitives::{
     PlayerRecipient, PtScale, PtScaleBasis, RelativePlayerSet, SpellEffectKind, TargetFilter,
     TargetKind, TriggerCondition,
 };
-use tricerules_cards::CardRegistry;
 
 fn creature_target() -> TargetFilter {
     TargetFilter {
@@ -14,7 +13,7 @@ fn creature_target() -> TargetFilter {
 
 #[test]
 fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana_cost, types, power, toughness) in [
         (
             "aerial_assault",

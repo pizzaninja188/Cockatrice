@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{Amount, PlayerRecipient, SpellEffectKind};
-use tricerules_cards::{CardRegistry, Layout};
+use tricerules_cards::Layout;
 
 #[test]
 fn words_of_wisdom_registers_its_ordered_player_draws() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("words_of_wisdom")
         .expect("Words of Wisdom registry definition");

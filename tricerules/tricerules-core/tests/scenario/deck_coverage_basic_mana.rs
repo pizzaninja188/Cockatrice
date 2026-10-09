@@ -1,6 +1,5 @@
 //! Exact scoped basic lands: printed characteristics and immediate colored mana.
 use super::helpers::*;
-use tricerules_cards::CardRegistry;
 use tricerules_core::GameEngine;
 
 #[test]
@@ -11,7 +10,7 @@ fn scoped_basic_lands_tap_for_only_their_printed_color_and_reject_invalid_actors
         ("plains", "Plains", "Plains", (1, 0, 0, 0, 0, 0)),
         ("swamp", "Swamp", "Swamp", (0, 0, 1, 0, 0, 0)),
     ] {
-        let card = CardRegistry::global()
+        let card = tricerules_cards::registry::global()
             .get(card_id)
             .expect("exact basic land registered");
         assert_eq!(card.name, name);
@@ -22,7 +21,15 @@ fn scoped_basic_lands_tap_for_only_their_printed_color_and_reject_invalid_actors
         assert_eq!(face.supertypes, ["Basic"]);
         assert_eq!(face.activated_abilities.len(), 1);
         let decks = Some(vec![vec![card_id.to_owned(); 12], forest_only_deck()]);
-        let mut engine = GameEngine::new(2026093006, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            2026093006,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         advance_to_main1_from_game_start(&mut engine);
         let hand_index = hand_index_for_card(&engine, 0, card_id);
         engine.apply_command(0, &play_land(hand_index)).unwrap();

@@ -11,7 +11,7 @@ use tricerules_cards::primitives::{
     Amount, CardTypeFilter, EffectSubject, LibraryBottomOrder, PermanentTypeFilter,
     SpellEffectKind, TargetController, TargetFilter, TargetKind, TriggerCondition, ZoneCardFilter,
 };
-use tricerules_cards::{CardRegistry, Keyword, Layout};
+use tricerules_cards::{Keyword, Layout};
 
 fn creature_you() -> EffectSubject {
     EffectSubject::Chosen(Box::new(TargetFilter {
@@ -74,7 +74,7 @@ fn subtype_any(subtypes: &[&str]) -> ZoneCardFilter {
 
 #[test]
 fn issue_look_batch_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (id, expected_count, mana, types, power, toughness) in [
         (

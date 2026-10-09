@@ -75,8 +75,8 @@ fn run() -> Result<Value, String> {
         {
             return Err("inspect requires resolved scaffold sentinels".into());
         }
-        let registry = tricerules_cards::CardRegistry::from_authoring_draft(&draft)
-            .map_err(|e| e.to_string())?;
+        let registry =
+            tricerules_cards::registry::from_authoring_draft(&draft).map_err(|e| e.to_string())?;
         let definitions = registry.definitions().collect::<Vec<_>>();
         let [definition] = definitions.as_slice() else {
             return Err("inspect requires exactly one definition".into());

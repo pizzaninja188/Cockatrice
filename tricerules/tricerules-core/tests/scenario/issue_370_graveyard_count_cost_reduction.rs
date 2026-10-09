@@ -36,7 +36,15 @@ fn issue_370_chitin_gravestalker_counts_own_artifact_or_creature_cards_only() {
         deck_with("swamp", &["chitin_gravestalker"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(370_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        370_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "chitin_gravestalker");
 
@@ -70,7 +78,15 @@ fn issue_370_gargantuan_leech_sums_caves_you_control_and_cave_cards_in_graveyard
         deck_with("swamp", &["gargantuan_leech"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(370_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        370_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "gargantuan_leech");
 
@@ -105,7 +121,15 @@ fn issue_370_tolarian_terror_counts_instant_and_sorcery_cards_and_not_itself() {
         deck_with("island", &["tolarian_terror"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(370_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        370_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "tolarian_terror");
 

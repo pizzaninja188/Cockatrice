@@ -1,10 +1,10 @@
 //! Actual-card payment, private selection, and zone-incarnation coverage.
 use super::helpers::*;
-use tricerules_cards::CardRegistry;
 use tricerules_core::Zone;
 
 fn game(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -18,7 +18,7 @@ fn game(seed: u64) -> GameEngine {
 
 #[test]
 fn exact_characteristics_and_ability_counts() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, cost, types, power, toughness, abilities) in [
         (
             "terrain_generator",

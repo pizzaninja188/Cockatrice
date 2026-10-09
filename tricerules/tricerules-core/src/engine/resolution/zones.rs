@@ -434,13 +434,13 @@ pub(super) fn discard(
         };
         let hand = cx.engine.state.players[player_index].hand.clone();
         let required = match &quantity {
-            tricerules_cards::primitives::DiscardQuantity::Exact(count)
-            | tricerules_cards::primitives::DiscardQuantity::UpTo(count)
-            | tricerules_cards::primitives::DiscardQuantity::UnlessOne { count, .. } => {
+            tricerules_card_model::primitives::DiscardQuantity::Exact(count)
+            | tricerules_card_model::primitives::DiscardQuantity::UpTo(count)
+            | tricerules_card_model::primitives::DiscardQuantity::UnlessOne { count, .. } => {
                 (*count).min(hand.len() as u32)
             }
-            tricerules_cards::primitives::DiscardQuantity::All
-            | tricerules_cards::primitives::DiscardQuantity::AnyNumber => hand.len() as u32,
+            tricerules_card_model::primitives::DiscardQuantity::All
+            | tricerules_card_model::primitives::DiscardQuantity::AnyNumber => hand.len() as u32,
         };
         if required == 0 {
             cx.events.push(ev_log(format!(
@@ -450,7 +450,7 @@ pub(super) fn discard(
             continue;
         }
         let alternative_filter = match &quantity {
-            tricerules_cards::primitives::DiscardQuantity::UnlessOne { filter, .. } => {
+            tricerules_card_model::primitives::DiscardQuantity::UnlessOne { filter, .. } => {
                 Some(filter.clone())
             }
             _ => None,
@@ -490,8 +490,8 @@ pub(super) fn discard(
             required,
             variable: matches!(
                 quantity,
-                tricerules_cards::primitives::DiscardQuantity::UpTo(_)
-                    | tricerules_cards::primitives::DiscardQuantity::AnyNumber
+                tricerules_card_model::primitives::DiscardQuantity::UpTo(_)
+                    | tricerules_card_model::primitives::DiscardQuantity::AnyNumber
             ),
             alternative_filter,
             alternative_candidates,
@@ -501,7 +501,7 @@ pub(super) fn discard(
         return Ok(EffectOutcome::Continue);
     }
 
-    if quantity == tricerules_cards::primitives::DiscardQuantity::All {
+    if quantity == tricerules_card_model::primitives::DiscardQuantity::All {
         let selections = choices
             .iter()
             .map(|choice| {
@@ -589,8 +589,8 @@ pub(in crate::engine) fn park_player_set_discard_choice(
             .as_ref()
             .and_then(|filter| filter.card_type)
         {
-            Some(tricerules_cards::primitives::CardTypeFilter::Creature) => "creature",
-            Some(tricerules_cards::primitives::CardTypeFilter::Artifact) => "artifact",
+            Some(tricerules_card_model::primitives::CardTypeFilter::Creature) => "creature",
+            Some(tricerules_card_model::primitives::CardTypeFilter::Artifact) => "artifact",
             _ => "matching",
         };
         format!(
@@ -2372,7 +2372,7 @@ pub(super) fn exile_graveyards(
     cx: &mut EffectCx<'_>,
     players: RelativePlayerSet,
     filter: Option<&ZoneCardFilter>,
-    capture_exile_cohort: Option<tricerules_cards::ExiledCohortId>,
+    capture_exile_cohort: Option<tricerules_card_model::ExiledCohortId>,
 ) -> Result<EffectOutcome, EngineError> {
     if capture_exile_cohort
         .as_ref()
@@ -2427,7 +2427,7 @@ pub(super) fn exile_graveyards(
 
 pub(super) fn return_exiled_cohort_to_owners_battlefield(
     cx: &mut EffectCx<'_>,
-    id: &tricerules_cards::ExiledCohortId,
+    id: &tricerules_card_model::ExiledCohortId,
 ) -> Result<EffectOutcome, EngineError> {
     let cohort = cx.top.exiled_cohorts.get(id).ok_or(EngineError::Illegal(
         "retained exile cohort was not captured",
@@ -2741,7 +2741,7 @@ pub(super) fn move_graveyard_cards(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    use tricerules_cards::primitives::GraveyardDestination;
+    use tricerules_card_model::primitives::GraveyardDestination;
     let targets: Vec<_> = cx
         .targets
         .iter()
@@ -2991,8 +2991,8 @@ pub(super) fn return_triggered_card(
         return Ok(EffectOutcome::Continue);
     };
     let origin = match object.zone {
-        Zone::Graveyard => tricerules_cards::primitives::EventZone::Graveyard,
-        Zone::Exile => tricerules_cards::primitives::EventZone::Exile,
+        Zone::Graveyard => tricerules_card_model::primitives::EventZone::Graveyard,
+        Zone::Exile => tricerules_card_model::primitives::EventZone::Exile,
         _ => return Ok(EffectOutcome::Continue),
     };
     let expected_generation = match reference {
@@ -3006,7 +3006,7 @@ pub(super) fn return_triggered_card(
     }
 
     let owner = object.owner;
-    if destination == tricerules_cards::primitives::TriggeredCardDestination::Hand {
+    if destination == tricerules_card_model::primitives::TriggeredCardDestination::Hand {
         if object.is_token() {
             return Ok(EffectOutcome::Continue);
         }
@@ -3074,8 +3074,8 @@ pub(super) fn return_triggered_card(
             spell_label: cx.spell_label.to_string(),
             object_label: object_label.clone(),
             from_zone: match origin {
-                tricerules_cards::primitives::EventZone::Graveyard => Zone::Graveyard,
-                tricerules_cards::primitives::EventZone::Exile => Zone::Exile,
+                tricerules_card_model::primitives::EventZone::Graveyard => Zone::Graveyard,
+                tricerules_card_model::primitives::EventZone::Exile => Zone::Exile,
                 _ => unreachable!("return source was restricted above"),
             },
         },
@@ -3782,7 +3782,7 @@ pub(super) fn thassa_oracle(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engi
         &engine.state,
         engine.registry,
         controller,
-        tricerules_cards::primitives::Color::Blue,
+        tricerules_card_model::primitives::Color::Blue,
         None,
     );
     let library_len = engine.state.players[player_idx].library.len();
@@ -4204,7 +4204,7 @@ fn look_choose_battlefield(
     cx: &mut EffectCx<'_>,
     stage: PendingLibraryLookStage,
 ) -> Result<EffectOutcome, EngineError> {
-    use tricerules_cards::primitives::CardTypeFilter;
+    use tricerules_card_model::primitives::CardTypeFilter;
     let (count, card_type, limit, prompt) = match stage {
         PendingLibraryLookStage::IntoTheWilds => (1, CardTypeFilter::Land, 1,
             "Look at the top card. You may put it onto the battlefield if it is a land."),
@@ -4517,11 +4517,11 @@ fn searched_land_types(engine: &GameEngine, oid: ObjectId) -> Vec<String> {
 pub(in crate::engine) fn search_selection_constraint_holds(
     engine: &GameEngine,
     selected: &[ObjectId],
-    constraint: Option<tricerules_cards::primitives::SearchSelectionConstraint>,
+    constraint: Option<tricerules_card_model::primitives::SearchSelectionConstraint>,
 ) -> bool {
     match constraint {
         None => true,
-        Some(tricerules_cards::primitives::SearchSelectionConstraint::SharedLandType) => {
+        Some(tricerules_card_model::primitives::SearchSelectionConstraint::SharedLandType) => {
             if selected.len() <= 1 {
                 return true;
             }
@@ -4536,7 +4536,7 @@ pub(in crate::engine) fn search_selection_constraint_holds(
 fn shared_land_search_alternatives(
     engine: &GameEngine,
     candidates: &[ObjectId],
-    constraint: Option<tricerules_cards::primitives::SearchSelectionConstraint>,
+    constraint: Option<tricerules_card_model::primitives::SearchSelectionConstraint>,
 ) -> Vec<rv1::ResolutionSelectionAlternative> {
     if constraint.is_none() || candidates.is_empty() {
         return Vec::new();
@@ -4571,27 +4571,27 @@ fn shared_land_search_alternatives(
 pub(in crate::engine) struct ZoneSearchRequest {
     pub count: u32,
     pub filter: Option<ZoneCardFilter>,
-    pub selection_constraint: Option<tricerules_cards::primitives::SearchSelectionConstraint>,
+    pub selection_constraint: Option<tricerules_card_model::primitives::SearchSelectionConstraint>,
     pub slots: Vec<SearchSelectionSlot>,
     pub zones: Vec<CardSearchZone>,
     pub destination: SearchDestination,
     pub conditional_destination: Option<ConditionalSearchDestination>,
     pub shuffle: bool,
     pub reveal: bool,
-    pub result_id: Option<tricerules_cards::SearchResultId>,
+    pub result_id: Option<tricerules_card_model::SearchResultId>,
 }
 
 pub(in crate::engine) struct SearchRequest {
     pub count: u32,
     pub filter: Option<ZoneCardFilter>,
-    pub selection_constraint: Option<tricerules_cards::primitives::SearchSelectionConstraint>,
+    pub selection_constraint: Option<tricerules_card_model::primitives::SearchSelectionConstraint>,
     pub slots: Vec<SearchSelectionSlot>,
     pub zones: SearchZoneSelection,
     pub destination: SearchDestination,
     pub conditional_destination: Option<ConditionalSearchDestination>,
     pub shuffle: bool,
     pub reveal: bool,
-    pub result_id: Option<tricerules_cards::SearchResultId>,
+    pub result_id: Option<tricerules_card_model::SearchResultId>,
 }
 
 pub(in crate::engine) fn park_zone_search_choice(
@@ -5080,7 +5080,7 @@ mod tests {
 
     #[test]
     fn shared_search_uses_all_actual_land_types_and_excludes_other_type_categories() {
-        use tricerules_cards::primitives::SearchSelectionConstraint::SharedLandType;
+        use tricerules_card_model::primitives::SearchSelectionConstraint::SharedLandType;
         let cases = [
             (vec!["Land", "Forest"], vec!["Land", "Forest"], true),
             (
@@ -5176,7 +5176,15 @@ mod tests {
             vec!["forest".to_string(); 12],
             vec!["forest".to_string(); 12],
         ]);
-        let mut engine = GameEngine::new(8906, &[0, 1], 20, decks, true).expect("new game");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            8906,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new game");
         let target = engine.state.players[1]
             .library
             .front()
@@ -5218,8 +5226,15 @@ mod tests {
                 vec!["forest".to_string(); 12],
                 vec!["forest".to_string(); 12],
             ]);
-            let mut engine = GameEngine::new(159_012 + retained_cards, &[0, 1], 20, decks, true)
-                .expect("new game");
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                159_012 + retained_cards,
+                &[0, 1],
+                20,
+                decks,
+                true,
+            )
+            .expect("new game");
             let target = engine.state.players[1]
                 .library
                 .pop_front()

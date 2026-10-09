@@ -2,7 +2,7 @@ use tricerules_cards::primitives::{
     CardTypeFilter, PlayerRecipient, ResolutionBranchRequirement, ResolutionBranchSelection,
     ResolutionCost, SearchDestination, SearchZoneSelection, SpellEffectKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Keyword, TriggerCondition};
+use tricerules_cards::{AbilityPresentation, Keyword, TriggerCondition};
 
 fn assert_optional_basic_land_to_top(
     id: &str,
@@ -13,7 +13,7 @@ fn assert_optional_basic_land_to_top(
     oracle_line: u16,
     fingerprint: &str,
 ) {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let definition = registry
         .get(id)
         .unwrap_or_else(|| panic!("missing issue #284 card {id}"));

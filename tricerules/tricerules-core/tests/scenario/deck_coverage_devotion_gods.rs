@@ -8,6 +8,7 @@ use tricerules_proto::ruled::v1::{
 
 fn setup() -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         700_510,
         &[0, 1, 2],
         20,

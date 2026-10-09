@@ -1,7 +1,7 @@
 //! Actual Summoning Station, exact nonartifact Pincher and artifact-death untap evidence.
 
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, ContinuousEffectKind, CounterKind, EffectDuration};
+use tricerules_cards::{ContinuousEffectKind, CounterKind, EffectDuration};
 use tricerules_core::state::{ActiveDeathReplacement, AffectedScope, ContinuousEffect};
 use tricerules_core::{GameEngine, Zone};
 use tricerules_proto::ruled::v1::{
@@ -15,6 +15,7 @@ const PINCHER: &str = "pincher_c_2_2";
 fn setup() -> (GameEngine, u32) {
     let deck = deck_with("mountain", &[]);
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         26_100_701,
         &[10, 20, 30],
         20,
@@ -42,7 +43,7 @@ fn setup() -> (GameEngine, u32) {
 
 #[test]
 fn summoning_station_paid_cast_tap_and_exact_pincher() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get(STATION)
         .expect("exact Summoning Station registered");
     assert_eq!(card.name, "Summoning Station");

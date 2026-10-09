@@ -17,7 +17,15 @@ use tricerules_core::Zone;
 #[test]
 fn foreign_controlled_creature_attacks_for_its_controller_not_its_owner() {
     let decks = Some(vec![forest_only_deck(), island_only_deck()]);
-    let mut e = GameEngine::new(4000, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4000,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
 
     // P1 owns the bear; P0 controls it — what Reanimate produces.
     let bear = inject_creature_under_foreign_control(&mut e, 1, 0, "grizzly_bears");
@@ -54,7 +62,15 @@ fn foreign_controlled_creature_attacks_for_its_controller_not_its_owner() {
 #[test]
 fn foreign_controlled_creature_blocks_for_its_controller() {
     let decks = Some(vec![forest_only_deck(), island_only_deck()]);
-    let mut e = GameEngine::new(4001, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
 
     // P0 attacks with a creature of their own; P1 blocks with a creature P0 owns but P1 controls.
     let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -82,7 +98,15 @@ fn foreign_controlled_creature_blocks_for_its_controller() {
 #[test]
 fn foreign_controlled_permanent_untaps_on_its_controllers_turn() {
     let decks = Some(vec![forest_only_deck(), island_only_deck()]);
-    let mut e = GameEngine::new(4002, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // P1 owns it, P0 controls it; tapped and summoning sick, as if just reanimated.
@@ -132,7 +156,15 @@ fn foreign_controlled_creature_dies_to_its_owners_graveyard() {
         deck_with("mountain", &["lightning_bolt"]),
         island_only_deck(),
     ]);
-    let mut e = GameEngine::new(4003, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // P1 owns the bear; P0 controls it. P0 then bolts their own borrowed creature.
@@ -194,7 +226,15 @@ fn reanimate_takes_an_opponents_creature_under_your_control() {
         deck_with("swamp", &["reanimate"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(4100, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4100,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Hill Giant ({3}{R}, mana value 4) sits in the OPPONENT's graveyard.
@@ -260,7 +300,15 @@ fn reanimated_creature_dies_back_to_its_owners_graveyard() {
         deck_with("swamp", &["reanimate", "lightning_bolt"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(4101, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4101,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bears = inject_graveyard_card(&mut e, 1, "grizzly_bears");
@@ -331,7 +379,15 @@ fn reanimated_static_ability_serves_its_new_controller() {
         deck_with("swamp", &["reanimate"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(4102, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4102,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // A Soldier on each side (Fencing Ace is a 1/1 Human Soldier).
@@ -404,7 +460,15 @@ fn reanimate_cannot_target_a_noncreature_card() {
         deck_with("swamp", &["reanimate"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(4103, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4103,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let anthem = inject_graveyard_card(&mut e, 1, "glorious_anthem");
@@ -442,7 +506,15 @@ fn mind_control_tracks_its_auras_controller_and_restores_control_when_bounced() 
         deck_with("island", &["mind_control"]),
         deck_with("island", &["boomerang"]),
     ]);
-    let mut e = GameEngine::new(4200, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4200,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     relocate_to_hand(&mut e, 0, "mind_control");
@@ -517,7 +589,15 @@ fn act_of_treason_untaps_grants_haste_and_returns_control_at_cleanup() {
         deck_with("mountain", &["act_of_treason"]),
         island_only_deck(),
     ]);
-    let mut e = GameEngine::new(4201, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4201,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     e.state.objects.get_mut(&bear).expect("bear").tapped = true;
@@ -565,7 +645,15 @@ fn stolen_static_ability_serves_the_current_controller() {
         deck_with("plains", &["captain_of_the_watch"]),
         deck_with("mountain", &["act_of_treason"]),
     ]);
-    let mut e = GameEngine::new(4205, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4205,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let p0_soldier = inject_creature_on_battlefield(&mut e, 0, "fencing_ace");
     let p1_soldier = inject_creature_on_battlefield(&mut e, 1, "fencing_ace");
@@ -633,7 +721,15 @@ fn controller_restricted_aura_goes_to_graveyard_when_creature_is_stolen() {
         deck_with("island", &["cartouche_of_knowledge"]),
         deck_with("mountain", &["act_of_treason"]),
     ]);
-    let mut e = GameEngine::new(4202, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4202,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     relocate_to_hand(&mut e, 0, "cartouche_of_knowledge");
@@ -706,7 +802,15 @@ fn unrestricted_aura_stays_attached_when_creature_is_stolen() {
         deck_with("island", &["flight"]),
         deck_with("mountain", &["act_of_treason"]),
     ]);
-    let mut e = GameEngine::new(4203, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4203,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     relocate_to_hand(&mut e, 0, "flight");
@@ -777,7 +881,15 @@ fn equipment_stays_attached_when_equipped_creature_is_stolen() {
         deck_with("mountain", &["bonesplitter"]),
         deck_with("mountain", &["act_of_treason"]),
     ]);
-    let mut e = GameEngine::new(4204, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4204,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     relocate_to_hand(&mut e, 0, "bonesplitter");

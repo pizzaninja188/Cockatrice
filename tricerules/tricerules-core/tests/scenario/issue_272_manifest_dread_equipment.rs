@@ -3,7 +3,7 @@
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{AbilityCost, EffectSubject};
-use tricerules_cards::{AbilityPresentation, CardRegistry, Keyword, SpellEffectKind};
+use tricerules_cards::{AbilityPresentation, Keyword, SpellEffectKind};
 use tricerules_core::{AttachmentRecipient, Zone};
 use tricerules_proto::ruled::v1::{ruled_event::Ev, ChoiceKind, RuledEventBatch};
 
@@ -22,7 +22,15 @@ fn seat_on_top(engine: &mut GameEngine, card_ids: &[&str]) -> Vec<u32> {
 }
 
 fn engine(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     give_mana(
         &mut engine,
@@ -58,7 +66,7 @@ fn reach_manifest_choice(engine: &mut GameEngine) -> RuledEventBatch {
 
 #[test]
 fn equipment_manifest_dread_recipes_have_exact_registry_semantics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, equip_cost) in [
         ("conductive_machete", "{4}"),
         ("cursed_windbreaker", "{3}"),

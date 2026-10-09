@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{EffectSubject, PlayerRecipient, SpellEffectKind, TargetKind};
-use tricerules_cards::{Amount, CardRegistry, Color, Layout};
+use tricerules_cards::{Amount, Color, Layout};
 
 #[test]
 fn pongify_has_exact_identity_target_and_ape_token_contract() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(registry.id_for_name("Pongify"), Some("pongify"));
     let card = registry.get("pongify").expect("Pongify");
     assert_eq!(card.name, "Pongify");

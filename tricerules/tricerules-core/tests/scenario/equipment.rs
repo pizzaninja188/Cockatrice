@@ -38,7 +38,15 @@ fn bonesplitter_equip_adds_bonus() {
         equipment_deck("bonesplitter"),
         equipment_deck("grizzly_bears"),
     ]);
-    let mut e = GameEngine::new(5001, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Cast Bonesplitter ({1}) so emit_static_abilities_on_enter fires.
@@ -98,7 +106,15 @@ fn bonesplitter_publishes_controlled_merfolk_as_equip_target() {
         deck_with("island", &["bonesplitter", "merfolk_of_the_pearl_trident"]),
         deck_with("island", &["merfolk_of_the_pearl_trident"]),
     ]);
-    let mut e = GameEngine::new(5009, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let splitter = cast_and_resolve_equipment(
@@ -157,7 +173,15 @@ fn bonesplitter_reequip_shifts_bonus() {
         equipment_deck("bonesplitter"),
         equipment_deck("grizzly_bears"),
     ]);
-    let mut e = GameEngine::new(5002, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let splitter = cast_and_resolve_equipment(
@@ -220,7 +244,15 @@ fn equipment_falls_off_when_creature_dies() {
         equipment_deck("bonesplitter"),
         equipment_deck("grizzly_bears"),
     ]);
-    let mut e = GameEngine::new(5003, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let splitter = cast_and_resolve_equipment(
@@ -288,7 +320,15 @@ fn equip_cannot_target_opponent_creature() {
         equipment_deck("bonesplitter"),
         equipment_deck("grizzly_bears"),
     ]);
-    let mut e = GameEngine::new(5004, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let splitter = cast_and_resolve_equipment(
@@ -328,7 +368,15 @@ fn vulshok_morningstar_adds_power_and_toughness() {
         equipment_deck("vulshok_morningstar"),
         equipment_deck("grizzly_bears"),
     ]);
-    let mut e = GameEngine::new(5005, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let star = cast_and_resolve_equipment(
@@ -378,7 +426,15 @@ fn equip_is_rejected_at_instant_speed() {
         equipment_deck("bonesplitter"),
         equipment_deck("grizzly_bears"),
     ]);
-    let mut e = GameEngine::new(5099, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5099,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let splitter = cast_and_resolve_equipment(
@@ -427,7 +483,15 @@ fn equip_is_reported_unactivatable_at_instant_speed() {
         equipment_deck("bonesplitter"),
         equipment_deck("grizzly_bears"),
     ]);
-    let mut e = GameEngine::new(5098, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5098,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let splitter = cast_and_resolve_equipment(
         &mut e,
@@ -463,7 +527,15 @@ fn swiftfoot_boots_moves_both_keywords_on_reequip() {
         equipment_deck("swiftfoot_boots"),
         equipment_deck("grizzly_bears"),
     ]);
-    let mut e = GameEngine::new(5010, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5010,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let boots = cast_and_resolve_equipment(
         &mut e,
@@ -532,7 +604,15 @@ fn equipment_unattaches_when_host_stops_being_a_creature() {
         equipment_deck("bonesplitter"),
         equipment_deck("grizzly_bears"),
     ]);
-    let mut e = GameEngine::new(5011, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5011,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let splitter = cast_and_resolve_equipment(
         &mut e,
@@ -577,7 +657,15 @@ fn short_sword_grants_its_printed_pt_bonus() {
         equipment_deck("short_sword"),
         equipment_deck("grizzly_bears"),
     ]);
-    let mut e = GameEngine::new(5012, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5012,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let sword = cast_and_resolve_equipment(
         &mut e,

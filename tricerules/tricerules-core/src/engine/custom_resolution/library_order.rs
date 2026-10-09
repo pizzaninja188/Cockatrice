@@ -385,23 +385,22 @@ impl GameEngine {
                         .copied())
                 && stack.item.controller == controller;
             let legal_accept = chosen.is_empty()
-                || (chosen.len() <= if deploy { 2 } else { 1 }
-                    && chosen.iter().all(|oid| {
-                        candidates.iter().any(|(candidate, _)| candidate == oid)
-                            && zone_card_matches_filter(
-                                &self.state,
-                                self.registry,
-                                *oid,
-                                Some(&ZoneCardFilter {
-                                    card_type: Some(if deploy {
-                                        tricerules_cards::primitives::CardTypeFilter::Planeswalker
-                                    } else {
-                                        tricerules_cards::primitives::CardTypeFilter::Land
-                                    }),
-                                    ..Default::default()
+                || (chosen.len() <= if deploy { 2 } else { 1 } && chosen.iter().all(|oid| {
+                    candidates.iter().any(|(candidate, _)| candidate == oid)
+                        && zone_card_matches_filter(
+                            &self.state,
+                            self.registry,
+                            *oid,
+                            Some(&ZoneCardFilter {
+                                card_type: Some(if deploy {
+                                    tricerules_card_model::primitives::CardTypeFilter::Planeswalker
+                                } else {
+                                    tricerules_card_model::primitives::CardTypeFilter::Land
                                 }),
-                            )
-                    }));
+                                ..Default::default()
+                            }),
+                        )
+                }));
             if !current_top || !legal_accept {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal(
@@ -612,7 +611,15 @@ mod into_the_wilds_tests {
     #[test]
     fn deploy_private_fixture_preserves_previous_result_and_tail_once_across_all_entry_choices() {
         for count in 0..=2 {
-            let mut engine = GameEngine::new(90_210, &[0, 1], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                90_210,
+                &[0, 1],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             engine.state.turn_step = TurnStep::Main1;
             battlefield_card(&mut engine, "orb_of_dreams");
             battlefield_card(&mut engine, "orb_of_dreams");
@@ -637,14 +644,14 @@ mod into_the_wilds_tests {
             let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &mut tail else {
                 unreachable!()
             };
-            let tricerules_cards::primitives::ResolutionBranchRequirement::CardResultCount {
+            let tricerules_card_model::primitives::ResolutionBranchRequirement::CardResultCount {
                 filter,
                 ..
             } = &mut branches[0].requirement
             else {
                 unreachable!()
             };
-            filter.action = tricerules_cards::primitives::CardResultAction::Mill;
+            filter.action = tricerules_card_model::primitives::CardResultAction::Mill;
             branches[0].effects = vec![SpellEffectKind::GainLife {
                 amount: Amount::Fixed(3),
             }];
@@ -667,7 +674,7 @@ mod into_the_wilds_tests {
                 .previous_result
                 .cards
                 .push(crate::state::CardResultEntry {
-                    action: tricerules_cards::primitives::CardResultAction::Mill,
+                    action: tricerules_card_model::primitives::CardResultAction::Mill,
                     affected_player: 0,
                     object_id: rest,
                     zone_change_generation: 0,
@@ -821,7 +828,15 @@ mod into_the_wilds_tests {
     #[test]
     fn optional_land_entry_preserves_saved_previous_result_and_runs_tail_once() {
         for accept in [false, true] {
-            let mut engine = GameEngine::new(90_200, &[0, 1], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                90_200,
+                &[0, 1],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             engine.state.turn_step = TurnStep::Upkeep;
             battlefield_card(&mut engine, "orb_of_dreams");
             battlefield_card(&mut engine, "orb_of_dreams");
@@ -839,14 +854,14 @@ mod into_the_wilds_tests {
             let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &mut tail else {
                 unreachable!()
             };
-            let tricerules_cards::primitives::ResolutionBranchRequirement::CardResultCount {
+            let tricerules_card_model::primitives::ResolutionBranchRequirement::CardResultCount {
                 filter,
                 ..
             } = &mut branches[0].requirement
             else {
                 unreachable!()
             };
-            filter.action = tricerules_cards::primitives::CardResultAction::Mill;
+            filter.action = tricerules_card_model::primitives::CardResultAction::Mill;
             branches[0].effects = vec![SpellEffectKind::GainLife {
                 amount: Amount::Fixed(3),
             }];
@@ -869,7 +884,7 @@ mod into_the_wilds_tests {
                 .previous_result
                 .cards
                 .push(crate::state::CardResultEntry {
-                    action: tricerules_cards::primitives::CardResultAction::Mill,
+                    action: tricerules_card_model::primitives::CardResultAction::Mill,
                     affected_player: 0,
                     object_id: forest,
                     zone_change_generation: 0,

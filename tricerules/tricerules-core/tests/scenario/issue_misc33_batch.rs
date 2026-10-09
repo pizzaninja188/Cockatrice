@@ -7,7 +7,15 @@ use tricerules_core::Zone;
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
     grant_pool(&mut e, 0);
     e
@@ -40,7 +48,15 @@ fn issue_misc33_feed_the_flames_semantics() {
 #[test]
 fn issue_misc33_elspeths_smite_semantics() {
     let decks = Some(vec![deck_with("plains", &[]), deck_with("forest", &[])]);
-    let mut e = GameEngine::new(833_010, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        833_010,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut e);
     grant_pool(&mut e, 0);
     let attacker = battlefield_object_for_card(&e, 0, "grizzly_bears");

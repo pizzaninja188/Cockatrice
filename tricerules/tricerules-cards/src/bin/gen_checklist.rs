@@ -15,8 +15,6 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::process::ExitCode;
 
-use tricerules_cards::CardRegistry;
-
 /// A date string that sorts after any real release date (used when a set has no releasedate).
 const FAR_FUTURE: &str = "9999-99-99";
 /// Synthetic bucket for cards with no usable printing.
@@ -158,7 +156,7 @@ fn main() -> ExitCode {
     };
 
     // --- Implemented set (source of truth: tricerules registry) ---
-    let registry = match CardRegistry::from_embedded() {
+    let registry = match tricerules_cards::registry::from_embedded() {
         Ok(r) => r,
         Err(e) => {
             eprintln!("error: failed to load embedded card registry: {e}");

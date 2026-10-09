@@ -1,6 +1,6 @@
 //! CR 115.10 / 608.2h / 613 / 701.26: shared untargeted selection, separate tap/untap actions.
 use super::*;
-use tricerules_cards::primitives::{
+use tricerules_card_model::primitives::{
     Color, ControllerReference, CounterKind, CreatureScopeController, CreatureScopeFilter,
     PermanentTypeFilter, TypeLineAddition,
 };
@@ -12,8 +12,15 @@ fn setup() -> GameEngine {
         .take(20)
         .map(str::to_string)
         .collect::<Vec<_>>();
-    let mut engine = GameEngine::new(225_001, &[3, 11], 20, Some(vec![deck.clone(), deck]), true)
-        .expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        225_001,
+        &[3, 11],
+        20,
+        Some(vec![deck.clone(), deck]),
+        true,
+    )
+    .expect("engine");
     // Session admission is still two-player; exercise the generic resolver below that boundary.
     // Keep the extra player ID above the fixture's existing object IDs.
     engine.state.players.push(PlayerState::new(299, 20));

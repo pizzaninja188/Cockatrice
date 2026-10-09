@@ -8,7 +8,7 @@ use crate::helpers::*;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, EffectDuration, PermanentTypeFilter, TypeLineAddition,
 };
-use tricerules_cards::{CardRegistry, Color, CounterKind, Keyword};
+use tricerules_cards::{Color, CounterKind, Keyword};
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::dev_command::Dev;
@@ -18,7 +18,15 @@ use tricerules_proto::ruled::v1::{
 
 fn engine_with_card(seed: u64, card_id: &str) -> GameEngine {
     let decks = Some(vec![deck_with("forest", &[card_id]), island_only_deck()]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -84,7 +92,7 @@ fn add_external_creature_form(engine: &mut GameEngine, oid: u32) {
 
 fn move_same_object_through_hand(engine: &mut GameEngine, player: usize, oid: u32) {
     let player_id = engine.state.players[player].id;
-    let card_name = CardRegistry::global()
+    let card_name = tricerules_cards::registry::global()
         .get(&engine.state.objects[&oid].card_id)
         .expect("registered card")
         .name
@@ -112,7 +120,7 @@ fn move_same_object_through_hand(engine: &mut GameEngine, player: usize, oid: u3
 
 #[test]
 fn land_self_animation_cards_are_registered() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for card_id in ["restless_reef", "soulstone_sanctuary"] {
         assert!(
             registry.get(card_id).is_some(),

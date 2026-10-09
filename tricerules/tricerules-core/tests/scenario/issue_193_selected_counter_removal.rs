@@ -28,7 +28,15 @@ fn issue_193_ray_fillet_publishes_and_pays_from_a_selected_controlled_creature()
         deck_with("island", &["ray_fillet,_man_ray", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(193_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        193_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let ray = relocate_to_battlefield(&mut engine, 0, "ray_fillet,_man_ray", false);
     let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -99,7 +107,15 @@ fn issue_193_illegal_or_stale_counter_sources_reject_without_partial_payment() {
         ),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(193_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        193_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let ray = relocate_to_battlefield(&mut engine, 0, "ray_fillet,_man_ray", false);
     let funded = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -191,7 +207,15 @@ fn issue_193_sage_of_fables_supplies_a_counter_then_spends_it_from_the_other_wiz
         deck_with("island", &["sage_of_fables", "fugitive_wizard"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(193_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        193_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let sage = relocate_to_battlefield(&mut engine, 0, "sage_of_fables", false);
     let initial = engine.initial_response_batch();
@@ -280,7 +304,15 @@ fn issue_193_ability_payment_preview_does_not_offer_spell_only_convoke() {
         deck_with("island", &["sage_of_fables", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(193_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        193_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let sage = relocate_to_battlefield(&mut engine, 0, "sage_of_fables", false);
     let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);

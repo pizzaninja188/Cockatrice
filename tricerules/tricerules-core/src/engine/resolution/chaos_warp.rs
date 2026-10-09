@@ -25,7 +25,7 @@ pub(super) fn chaos_warp(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineE
     let Some(target) = cx.targets.first().copied().filter(|target| {
         target_filter_legal_at_resolution(
             cx.engine,
-            tricerules_cards::primitives::chaos_warp_target_filter(),
+            tricerules_card_model::primitives::chaos_warp_target_filter(),
             *target,
             cx.controller,
             TargetSourceIdentity::for_stack_item(cx.engine, cx.top),

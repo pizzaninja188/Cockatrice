@@ -1,48 +1,14 @@
-//! Card definitions, data-driven registry, and effect primitives.
-
+//! Embedded card data and offline authoring tools.
 #[cfg(feature = "authoring")]
 pub mod authoring;
 pub mod authoring_schema;
-pub mod card_def;
-pub mod identity;
-pub mod mana;
-pub mod presentation;
-pub mod primitives;
 pub mod registry;
-pub mod slug;
-pub mod token_def;
 
-pub use card_def::{
-    is_creature_type, CardDefinition, CardFace, CharacteristicDefiningAbility, ClassLevelBar,
-    FaceRef, IdentifiedStaticAbility, Layout, ModalDef, ModeDef, TriggerModeSelectionRestriction,
+// Data consumers use the same model types as the engine.
+pub use tricerules_card_model::*;
+pub use tricerules_card_model::{
+    card_def, identity, mana, presentation, primitives, slug, token_def,
 };
-pub use identity::{
-    ability_fallback, choice_fallback, external_oracle_lines, mode_fallback,
-    resolve_external_presentation, AbilityId, AbilityLinkId, AbilityPresentation, CardFaceId,
-    ChoiceId, ExiledCohortId, IdentifiedAbility, ModeId, SearchResultId,
-};
-pub use mana::{ColorPip, ManaCost, ManaSymbol};
-pub use presentation::PresentationFaceMetadata;
-pub use primitives::{
-    AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivationTiming, AdditionalCost, Amount,
-    BasePowerToughnessValue, BasicLandType, BattlefieldAggregate, BattlefieldCreatureCountFilter,
-    BattlefieldPermanentFilter, BattlefieldQuantityCharacteristic, CardResultAction,
-    CardResultFilter, CardResultSource, CardSearchZone, CastCostConditionalAmount,
-    CastCostGroupDef, CastCostOptionDef, CastCostOptionRef, CastCostReceiptCondition,
-    CastOrdinalScope, CastTriggerPlayer, Color, CombatDamageTriggerCardinality, CombatRole,
-    ConditionalManaOutput, ConditionalSearchDestination, ContinuousEffectKind, ControllerReference,
-    CountExpression, CounterKind, CounterRemovalPaymentSource, CreatureTypeChange,
-    DelayedTokenSacrificeTiming, EffectContext, EffectDuration, Evasion, GainControlDuration,
-    GameCondition, GraveyardAggregate, Keyword, LibraryPartitionKind, ManaAmount, ManaSpendFilter,
-    ManaSpendingEffect, ManaSpendingRestriction, MassPlayerSet, ObjectCastCostKind,
-    ObjectContributionKind, ObjectPaymentConstraint, PermanentChoiceConstraint,
-    PermanentTypeFilter, PlayerComparisonMetric, PowerComparison, PowerToughnessCharacteristic,
-    PtScale, PtScaleBasis, QuantityTerm, RelativePlayerSet, ResolvingEffectDuration,
-    ResolvingPermanentModifier, SearchDestination, SearchZoneSelection, SpecialActionManaPurpose,
-    SpellCastFilter, SpellCastOrigin, SpellCostModifier, SpellEffectKind, SpellKeyword,
-    StaticEmblemEffect, TargetMatchFilter, TargetObjectExclusion, TriggerCondition,
-    TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement, ZoneCardFilter,
-};
-pub use registry::CardRegistry;
-pub use slug::slugify;
-pub use token_def::TokenDefinition;
+
+#[cfg(test)]
+mod model_corpus_tests;

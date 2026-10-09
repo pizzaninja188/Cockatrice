@@ -7,7 +7,15 @@ fn opening_choose_first_london_mulligan_then_start() {
         ChooseStartingPlayer, MulliganDecision, PutOpeningHandOnBottom, RuledCommand,
     };
     // seed 100 → chooser is player_ids[0] == 5
-    let mut e = GameEngine::new(100, &[5, 6], 20, None, false).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        100,
+        &[5, 6],
+        20,
+        None,
+        false,
+    )
+    .expect("new");
     let chooser = e.state.opening.as_ref().expect("opening").chooser;
     assert_eq!(chooser, 5);
     e.apply_command(
@@ -79,7 +87,15 @@ fn opening_mulligan_to_zero_auto_keeps_and_enters_bottom_phase() {
     use tricerules_proto::ruled::v1::{
         ChooseStartingPlayer, MulliganDecision, PutOpeningHandOnBottom, RuledCommand,
     };
-    let mut e = GameEngine::new(100, &[5, 6], 20, None, false).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        100,
+        &[5, 6],
+        20,
+        None,
+        false,
+    )
+    .expect("new");
     let chooser = e.state.opening.as_ref().unwrap().chooser;
     e.apply_command(
         chooser,
@@ -152,7 +168,15 @@ fn opening_mulligan_to_zero_auto_keeps_and_enters_bottom_phase() {
 fn opening_mulligan_to_zero_cannot_mulligan_further() {
     use tricerules_proto::ruled::v1::ruled_command::Cmd;
     use tricerules_proto::ruled::v1::{ChooseStartingPlayer, MulliganDecision, RuledCommand};
-    let mut e = GameEngine::new(100, &[5, 6], 20, None, false).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        100,
+        &[5, 6],
+        20,
+        None,
+        false,
+    )
+    .expect("new");
     let chooser = e.state.opening.as_ref().unwrap().chooser;
     e.apply_command(
         chooser,
@@ -211,7 +235,15 @@ fn concede_is_legal_during_opening_sequence() {
     // CR 104.3a: a player may concede at any time. Regression: during the choose-first / mulligan
     // opening sequence every non-opening command (including Concede) was rejected, so a player
     // could not bail out before the first turn.
-    let mut e = GameEngine::new(11, &[0, 1], 20, None, false).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11,
+        &[0, 1],
+        20,
+        None,
+        false,
+    )
+    .expect("new");
     assert!(
         e.state.opening.is_some(),
         "engine is still in the opening/mulligan sequence"
@@ -255,9 +287,16 @@ fn concede_is_legal_during_opening_sequence() {
 #[test]
 fn engine_accepts_up_to_four_player_free_for_all() {
     for player_ids in [vec![], vec![5], vec![5, 6, 7, 8, 9]] {
-        let err = GameEngine::new(1, &player_ids, 20, None, true)
-            .err()
-            .unwrap_or_else(|| panic!("{} players must be rejected", player_ids.len()));
+        let err = GameEngine::new(
+            tricerules_cards::registry::global(),
+            1,
+            &player_ids,
+            20,
+            None,
+            true,
+        )
+        .err()
+        .unwrap_or_else(|| panic!("{} players must be rejected", player_ids.len()));
         assert!(
             format!("{err:?}").contains("requires 2 to 4 players"),
             "unexpected error for {} players: {err:?}",
@@ -265,15 +304,39 @@ fn engine_accepts_up_to_four_player_free_for_all() {
         );
     }
     assert!(
-        GameEngine::new(1, &[5, 6], 20, None, true).is_ok(),
+        GameEngine::new(
+            tricerules_cards::registry::global(),
+            1,
+            &[5, 6],
+            20,
+            None,
+            true
+        )
+        .is_ok(),
         "two players is still accepted"
     );
     assert!(
-        GameEngine::new(1, &[5, 6, 7], 20, None, true).is_ok(),
+        GameEngine::new(
+            tricerules_cards::registry::global(),
+            1,
+            &[5, 6, 7],
+            20,
+            None,
+            true
+        )
+        .is_ok(),
         "three-player free-for-all must construct normally"
     );
     assert!(
-        GameEngine::new(1, &[5, 6, 7, 8], 20, None, true).is_ok(),
+        GameEngine::new(
+            tricerules_cards::registry::global(),
+            1,
+            &[5, 6, 7, 8],
+            20,
+            None,
+            true
+        )
+        .is_ok(),
         "four-player free-for-all must construct normally"
     );
 }
@@ -284,7 +347,15 @@ fn structured_opening_actions_follow_authority_and_remaining_progress() {
         ruled_command::Cmd, ChooseStartingPlayer, MulliganDecision, OpeningStage,
         PutOpeningHandOnBottom, RuledCommand,
     };
-    let mut e = GameEngine::new(100, &[7, 19], 20, None, false).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        100,
+        &[7, 19],
+        20,
+        None,
+        false,
+    )
+    .unwrap();
     let chooser = e.state.opening.as_ref().unwrap().chooser;
     let other = if chooser == 7 { 19 } else { 7 };
     let initial = e.initial_response_batch();

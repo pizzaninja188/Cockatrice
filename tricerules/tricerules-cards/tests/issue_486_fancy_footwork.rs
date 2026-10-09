@@ -1,8 +1,10 @@
-use tricerules_cards::{CardRegistry, Layout, SpellEffectKind};
+use tricerules_cards::{Layout, SpellEffectKind};
 
 #[test]
 fn issue_486_fancy_footwork_identity() {
-    let card = CardRegistry::global().get("fancy_footwork").expect("card");
+    let card = tricerules_cards::registry::global()
+        .get("fancy_footwork")
+        .expect("card");
     assert_eq!(card.layout, Layout::Normal);
     let face = card.primary_face();
     assert_eq!(face.name, "Fancy Footwork");

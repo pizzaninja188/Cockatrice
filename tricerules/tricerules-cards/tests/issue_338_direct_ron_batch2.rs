@@ -19,9 +19,7 @@ use tricerules_cards::primitives::{
     TargetController, TargetFilter, TargetGroupDef, TargetKind, TargetingDef,
     TargetingSourceFilter, TriggerCondition, ZoneCardFilter,
 };
-use tricerules_cards::{
-    AbilityPresentation, CardRegistry, CastTriggerPlayer, ChoiceId, Color, Layout,
-};
+use tricerules_cards::{AbilityPresentation, CastTriggerPlayer, ChoiceId, Color, Layout};
 
 const FANATICAL_OFFERING_FINGERPRINT: &str =
     "ee269ff8f501988afe34a6477933bdaac72133a43de77710ea07ce30565cd210";
@@ -111,7 +109,7 @@ fn behold_option(
 
 #[test]
 fn issue_338_direct_ron_batch2_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     // Fanatical Offering: sacrifice an artifact or creature, then draw two and make a Map.
     let offering = registry.get("fanatical_offering").expect("registered");

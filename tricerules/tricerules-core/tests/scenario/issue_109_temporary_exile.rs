@@ -19,8 +19,15 @@ fn setup_banishing_light() -> (GameEngine, u32) {
         deck_with("plains", &["banishing_light"]),
         deck_with("forest", &["broken_wings"]),
     ]);
-    let mut engine =
-        GameEngine::new(10901, &[0, 1], 20, decks, true).expect("Issue #109 cards must validate");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        10901,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("Issue #109 cards must validate");
     advance_to_main1_from_game_start(&mut engine);
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     ensure_card_in_hand(&mut engine, 0, "banishing_light");
@@ -151,7 +158,15 @@ fn returning_aura_owner_chooses_a_legal_permanent_to_enchant() {
         deck_with("plains", &["banishing_light"]),
         deck_with("forest", &["broken_wings"]),
     ]);
-    let mut engine = GameEngine::new(10902, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        10902,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let first_creature = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let chosen_creature = inject_creature_on_battlefield(&mut engine, 1, "hill_giant");
@@ -245,7 +260,15 @@ fn exiled_token_ceases_to_exist_and_never_returns() {
         deck_with("plains", &["banishing_light"]),
         deck_with("forest", &["broken_wings"]),
     ]);
-    let mut engine = GameEngine::new(10903, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        10903,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let token = inject_creature_on_battlefield(&mut engine, 1, "soldier_w_1_1");
     ensure_card_in_hand(&mut engine, 0, "banishing_light");
@@ -299,7 +322,15 @@ fn returning_aura_with_no_legal_recipient_stays_in_exile() {
         deck_with("plains", &["banishing_light"]),
         deck_with("forest", &["broken_wings"]),
     ]);
-    let mut engine = GameEngine::new(10904, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        10904,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let first_creature = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let second_creature = inject_creature_on_battlefield(&mut engine, 1, "hill_giant");
@@ -356,7 +387,15 @@ fn returning_player_aura_uses_the_typed_player_choice_surface() {
         deck_with("plains", &["banishing_light"]),
         deck_with("forest", &["broken_wings"]),
     ]);
-    let mut engine = GameEngine::new(10905, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        10905,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let aura = inject_permanent_on_battlefield(&mut engine, 1, "curse_of_disturbance");
     engine.state.objects.get_mut(&aura).unwrap().attached_to =
@@ -423,7 +462,15 @@ fn two_sources_destroyed_together_return_both_linked_cards() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(10906, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        10906,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let first_target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let second_target = inject_creature_on_battlefield(&mut engine, 1, "hill_giant");

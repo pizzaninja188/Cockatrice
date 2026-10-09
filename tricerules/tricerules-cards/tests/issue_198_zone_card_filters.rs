@@ -117,7 +117,7 @@ fn issue_198_multiface_names_use_only_the_names_the_card_has_outside_the_stack()
         ("akki_lavarunner_tok-tok,_volcano_born", false),
         ("sagu_wildling_roost_seek", false),
     ] {
-        let definition = CardRegistry::global().get(id).expect(id);
+        let definition = tricerules_cards::registry::global().get(id).expect(id);
         for (name, expected) in [
             (definition.face(0).unwrap().name.as_str(), true),
             (definition.face(1).unwrap().name.as_str(), both_names),
@@ -156,7 +156,7 @@ fn issue_198_printed_characteristics_preserve_multiface_and_changeling_semantics
         ("changeling_wayfinder", "(required_subtypes: [\"Forest\"])", false),
         ("forest", "(printed_power: Some(AtMost(0)))", false),
     ] {
-        let definition = CardRegistry::global().get(id).expect(id);
+        let definition = tricerules_cards::registry::global().get(id).expect(id);
         let filter: ZoneCardFilter = ron::from_str(predicate).unwrap();
         filter.validate().unwrap();
         assert_eq!(definition.matches_zone_card_filter(&filter), expected, "{id}: {predicate}");

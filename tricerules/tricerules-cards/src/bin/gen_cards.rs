@@ -811,7 +811,7 @@ fn mode_has_only_independent_controller_effects(mode: &ModeDef) -> bool {
             who: PlayerRecipient::Controller,
             tapped: false,
             sacrifice_timing: None,
-        } => *count > 0 && CardRegistry::global().is_token(token),
+        } => *count > 0 && tricerules_cards::registry::global().is_token(token),
         _ => false,
     })
 }
@@ -3042,7 +3042,7 @@ fn run(args: Args) -> ExitCode {
             eprintln!("error: failed to read {}: {error}", args.input);
             return ExitCode::FAILURE;
         }
-        let registry = match CardRegistry::from_embedded() {
+        let registry = match tricerules_cards::registry::from_embedded() {
             Ok(registry) => registry,
             Err(error) => {
                 eprintln!("error: failed to load embedded card registry: {error}");
@@ -3158,7 +3158,7 @@ fn run(args: Args) -> ExitCode {
 
     // Existing handwritten corpus (the registry is embedded from current data/ at build time).
     // Valid generated provenance is the only authority that permits refresh to replace a file.
-    let registry = match CardRegistry::from_embedded() {
+    let registry = match tricerules_cards::registry::from_embedded() {
         Ok(r) => r,
         Err(e) => {
             eprintln!("error: failed to load embedded card registry: {e}");
@@ -6296,7 +6296,7 @@ mod tests {
                         },
                         SpellEffectKind::DamageAll {
                             amount: Amount::Fixed(4),
-                            players: RelativePlayerSet::All,
+                            players: tricerules_cards::MassPlayerSet::All,
                             kind: TargetFilter::default_creature(),
                         },
                     ]
@@ -14970,7 +14970,7 @@ mod tests {
 
     #[test]
     fn issue_450_registered_draw_wrappers_keep_their_typed_payloads() {
-        let registry = CardRegistry::global();
+        let registry = tricerules_cards::registry::global();
 
         let divination = registry
             .get("divination")

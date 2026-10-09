@@ -2,11 +2,10 @@ use tricerules_cards::primitives::{
     GameCondition, GraveyardDestination, GraveyardOwner, SpellEffectKind, TargetSchema,
     TriggerCondition,
 };
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn anti_venom_has_the_complete_cast_conditioned_graveyard_return() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("anti-venom,_horrifying_healer")
         .expect("Anti-Venom, Horrifying Healer is registered")
         .primary_face();

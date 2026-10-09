@@ -2,10 +2,10 @@ use tricerules_cards::primitives::{
     EffectSubject, SpellEffectKind, TargetController, TargetFilter, TargetKind,
     TargetObjectExclusion,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Keyword, TriggerCondition};
+use tricerules_cards::{AbilityPresentation, Keyword, TriggerCondition};
 
 fn assert_attack_pump_and_indestructible(id: &str, name: &str, mana_cost: &str, types: &[&str]) {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let definition = registry
         .get(id)
         .unwrap_or_else(|| panic!("missing issue #285 card {id}"));

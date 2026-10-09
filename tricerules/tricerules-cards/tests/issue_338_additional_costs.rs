@@ -20,10 +20,10 @@ use tricerules_cards::primitives::{
     ObjectPaymentConstraint, PermanentTypeFilter, TargetController, TargetFilter, TargetKind,
     ZoneCardFilter,
 };
-use tricerules_cards::{AbilityPresentation, CardFace, CardRegistry, ChoiceId, Keyword, ManaCost};
+use tricerules_cards::{AbilityPresentation, CardFace, ChoiceId, Keyword, ManaCost};
 
 fn face(id: &str) -> &'static CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .unwrap_or_else(|| panic!("missing reviewed card {id}"))
         .primary_face()
@@ -107,7 +107,7 @@ fn tap(option_id: &str, count: u32, filter: TargetFilter) -> CastCostOptionDef {
 
 #[test]
 fn issue_338_registers_exactly_the_reviewed_eleven() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id, mana_cost, types, keywords, power_toughness) in [
         (
             "bogslithers_embrace",
@@ -225,7 +225,7 @@ fn issue_338_registers_exactly_the_reviewed_eleven() {
 
 #[test]
 fn issue_338_excluded_additional_cost_forms_stay_unregistered() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name) in [
         ("feed_the_cycle", "Feed the Cycle"),
         ("fear_of_isolation", "Fear of Isolation"),

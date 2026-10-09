@@ -6,6 +6,7 @@ use tricerules_proto::ruled::v1 as rv1;
 fn setup(seed: u64) -> GameEngine {
     let deck = deck_with("island", &["laboratory_maniac"]);
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[4, 9, 27],
         20,
@@ -444,7 +445,7 @@ fn serialized_terminal_draw_choices_use_fresh_handles_and_replay_exact_batches()
 #[test]
 fn winning_draw_static_uses_copied_face_and_current_control_or_suppression() {
     use tricerules_cards::primitives::{BasicLandType, ControllerReference};
-    use tricerules_cards::{CardRegistry, ContinuousEffectKind, EffectDuration};
+    use tricerules_cards::{ContinuousEffectKind, EffectDuration};
     use tricerules_core::{AffectedScope, ContinuousEffect};
     for mode in 0..5 {
         let mut engine = setup(507_061);
@@ -480,7 +481,7 @@ fn winning_draw_static_uses_copied_face_and_current_control_or_suppression() {
                 timestamp: engine.state.command_index,
             });
         } else if mode == 4 {
-            let face = CardRegistry::global()
+            let face = tricerules_cards::registry::global()
                 .get("laboratory_maniac")
                 .unwrap()
                 .primary_face()
@@ -514,7 +515,7 @@ fn winning_draw_static_uses_copied_face_and_current_control_or_suppression() {
 #[test]
 fn parked_empty_draw_win_revalidates_face_control_suppression_copy_and_library() {
     use tricerules_cards::primitives::ControllerReference;
-    use tricerules_cards::{CardRegistry, ContinuousEffectKind, EffectDuration};
+    use tricerules_cards::{ContinuousEffectKind, EffectDuration};
     use tricerules_core::{AffectedScope, ContinuousEffect};
     for mode in 0..5 {
         let mut engine = setup(507_070 + mode);
@@ -550,7 +551,7 @@ fn parked_empty_draw_win_revalidates_face_control_suppression_copy_and_library()
                 timestamp: engine.state.command_index,
             }),
             3 => {
-                let face = CardRegistry::global()
+                let face = tricerules_cards::registry::global()
                     .get("jace,_wielder_of_mysteries")
                     .unwrap()
                     .primary_face()
@@ -654,7 +655,15 @@ fn discard_destination_commits_before_empty_draw_win_with_library_of_leng() {
 
 #[test]
 fn final_concession_publishes_one_terminal_result() {
-    let mut engine = GameEngine::new(507_090, &[4, 9], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        507_090,
+        &[4, 9],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     let batch = engine.apply_command(9, &concede()).unwrap();
     assert_eq!(engine.state.winner(), Some(4));
     assert_eq!(
@@ -673,8 +682,15 @@ fn final_concession_publishes_one_terminal_result() {
 #[test]
 fn failed_draw_terminal_loss_does_not_flush_survivors_staged_triggers() {
     let deck = deck_with("island", &["divination"]);
-    let mut engine =
-        GameEngine::new(507_091, &[4, 9], 20, Some(vec![deck.clone(), deck]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        507_091,
+        &[4, 9],
+        20,
+        Some(vec![deck.clone(), deck]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 1, "consecrated_sphinx");
     engine.state.players[0].library.truncate(1);

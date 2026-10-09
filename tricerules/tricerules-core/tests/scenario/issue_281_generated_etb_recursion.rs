@@ -7,6 +7,7 @@ use tricerules_proto::ruled::v1::TargetRefKind;
 
 fn engine_with_shipwreck(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,

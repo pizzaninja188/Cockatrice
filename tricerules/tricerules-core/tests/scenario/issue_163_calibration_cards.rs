@@ -46,7 +46,15 @@ fn issue_163_conditional_static_and_cost_reduction_track_controller_state() {
         ),
         deck_with("forest", &["kithkin_billyrider"]),
     ]);
-    let mut engine = GameEngine::new(163_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        163_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "mistmeadow_council");
     ensure_in_hand(&mut engine, 0, "cloudsculpt_technician");
@@ -91,7 +99,15 @@ fn issue_163_galactic_wayfarer_creates_the_registry_lander_token() {
         deck_with("forest", &["galactic_wayfarer"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(163_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        163_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "galactic_wayfarer");
     give_mana(
@@ -117,7 +133,15 @@ fn issue_163_mongoose_lizard_mountaincycling_is_private_and_generation_bound() {
         deck_with("mountain", &["mongoose_lizard"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(163_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        163_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "mongoose_lizard");
     let mongoose = engine.state.players[0].hand[hand_index_for_card(&engine, 0, "mongoose_lizard")];
@@ -160,7 +184,15 @@ fn issue_163_azula_one_or_both_applies_each_modes_own_target() {
         deck_with("swamp", &["azula_always_lies"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(163_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        163_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "azula_always_lies");
     let shrink = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -199,7 +231,15 @@ fn issue_163_otter_penguin_triggers_only_on_the_second_draw() {
         deck_with("island", &["otter-penguin", "divination"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(163_005, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        163_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let otter = relocate_to_battlefield(&mut engine, 0, "otter-penguin", false);
     ensure_in_hand(&mut engine, 0, "divination");

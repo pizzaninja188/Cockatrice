@@ -13,6 +13,7 @@ const GREATER_GOOD: &str = "greater_good";
 
 fn greater_good_engine(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -122,6 +123,7 @@ fn greater_good_rejects_an_opponents_creature_or_a_noncreature_as_its_cost() {
 #[test]
 fn greater_good_with_zero_power_draws_zero_and_discards_a_smaller_hand() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         20_260_932,
         &[0, 1],
         20,

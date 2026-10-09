@@ -6,6 +6,7 @@ use tricerules_proto::ruled::v1::FlexPipPayment;
 
 fn setup(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -36,7 +37,7 @@ fn cast_copy(engine: &mut GameEngine, card: &str) -> u32 {
 
 #[test]
 fn phyrexian_metamorph_complete_registry_identity_exists() {
-    let registry = tricerules_cards::CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let definition = registry
         .get("phyrexian_metamorph")
         .expect("complete Phyrexian Metamorph definition");
@@ -634,6 +635,7 @@ fn phyrexian_metamorph_serialized_accepted_commands_replay_identically() {
 #[test]
 fn phyrexian_metamorph_four_nonconsecutive_seats_keep_copy_choice_with_its_controller() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         49615,
         &[3, 7, 11, 19],
         20,

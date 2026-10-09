@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{ActivationLimit, SpellEffectKind};
-use tricerules_cards::{AbilityCost, CardRegistry, Keyword, ManaAmount, TriggerCondition};
+use tricerules_cards::{AbilityCost, Keyword, ManaAmount, TriggerCondition};
 
 struct ExpectedDevotee {
     id: &'static str,
@@ -123,7 +123,7 @@ const DEVOTEES: &[ExpectedDevotee] = &[
 #[test]
 fn devotee_card_data_matches_oracle() {
     for expected in DEVOTEES {
-        let definition = CardRegistry::global()
+        let definition = tricerules_cards::registry::global()
             .get(expected.id)
             .unwrap_or_else(|| panic!("{} must be registered", expected.id));
         assert_eq!(definition.name, expected.name);
@@ -160,7 +160,7 @@ fn devotee_card_data_matches_oracle() {
 
 #[test]
 fn mardu_devotee_reuses_the_generic_scry_trigger() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("mardu_devotee")
         .expect("Mardu Devotee must be registered")
         .primary_face();

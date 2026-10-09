@@ -46,7 +46,15 @@ fn either_room_door_casts_and_only_that_door_unlocks() {
         deck_with("mountain", &["glassworks_shattered_yard"]),
         vec!["forest".into(); 20],
     ]);
-    let mut engine = GameEngine::new(99_001, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        99_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let room = relocate_to_hand(&mut engine, 0, "glassworks_shattered_yard");
     let hand_index = engine.state.players[0]
@@ -92,7 +100,15 @@ fn unlocking_is_atomic_retains_priority_and_refreshes_public_room_state() {
         deck_with("mountain", &["glassworks_shattered_yard"]),
         vec!["forest".into(); 20],
     ]);
-    let mut engine = GameEngine::new(99_002, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        99_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine.enable_dev_commands();
     engine
@@ -180,7 +196,15 @@ fn unlock_revalidates_controller_timing_stack_payment_and_door_state() {
         deck_with("forest", &["giant_growth"]),
         vec!["forest".into(); 20],
     ]);
-    let mut engine = GameEngine::new(99_006, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        99_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine.enable_dev_commands();
     let room = conjure_room(
@@ -260,7 +284,13 @@ fn unlock_revalidates_controller_timing_stack_payment_and_door_state() {
 
 #[test]
 fn noncast_entry_and_zone_change_start_room_fully_locked() {
-    let mut engine = GameEngine::new_with_default_decks(99_003, &[0, 1], 20).expect("new game");
+    let mut engine = GameEngine::new_with_default_decks(
+        tricerules_cards::registry::global(),
+        99_003,
+        &[0, 1],
+        20,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine.enable_dev_commands();
     let command = |dev| RuledCommand {
@@ -308,7 +338,13 @@ fn noncast_entry_and_zone_change_start_room_fully_locked() {
 
 #[test]
 fn fully_unlock_edge_shares_trigger_ordering_and_updates_door_count_power() {
-    let mut engine = GameEngine::new_with_default_decks(99_004, &[0, 1], 20).expect("new game");
+    let mut engine = GameEngine::new_with_default_decks(
+        tricerules_cards::registry::global(),
+        99_004,
+        &[0, 1],
+        20,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine.enable_dev_commands();
     let room = conjure_room(
@@ -356,7 +392,13 @@ fn fully_unlock_edge_shares_trigger_ordering_and_updates_door_count_power() {
 
 #[test]
 fn room_attack_triggers_use_the_declared_attacker_cohort() {
-    let mut engine = GameEngine::new_with_default_decks(99_005, &[0, 1], 20).expect("new game");
+    let mut engine = GameEngine::new_with_default_decks(
+        tricerules_cards::registry::global(),
+        99_005,
+        &[0, 1],
+        20,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine.enable_dev_commands();
     let room = conjure_room(
@@ -396,7 +438,13 @@ fn room_attack_triggers_use_the_declared_attacker_cohort() {
 
 #[test]
 fn widows_walk_binds_the_only_declared_attacker() {
-    let mut engine = GameEngine::new_with_default_decks(99_007, &[0, 1], 20).expect("new game");
+    let mut engine = GameEngine::new_with_default_decks(
+        tricerules_cards::registry::global(),
+        99_007,
+        &[0, 1],
+        20,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine.enable_dev_commands();
     let room = conjure_room(
@@ -433,7 +481,13 @@ fn widows_walk_binds_the_only_declared_attacker() {
 
 #[test]
 fn room_trigger_stack_card_uses_the_physical_double_sided_name() {
-    let mut engine = GameEngine::new_with_default_decks(99_008, &[0, 1], 20).expect("new game");
+    let mut engine = GameEngine::new_with_default_decks(
+        tricerules_cards::registry::global(),
+        99_008,
+        &[0, 1],
+        20,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine.enable_dev_commands();
     let room = conjure_room(

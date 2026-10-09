@@ -20,6 +20,7 @@ fn issue_166_cast(e: &mut GameEngine, player: usize, card: &str, targets: Vec<Ta
 #[test]
 fn issue_166_magebane_counts_earlier_casts_responses_and_keeps_caster_after_departure() {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         166001,
         &[0, 1],
         20,
@@ -67,6 +68,7 @@ fn issue_166_magebane_counts_earlier_casts_responses_and_keeps_caster_after_depa
 fn issue_166_thunder_salvo_copies_exclude_only_their_own_actual_cast() {
     for copier in [0, 1] {
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             166002,
             &[0, 1],
             20,
@@ -107,6 +109,7 @@ fn issue_166_thunder_salvo_copies_exclude_only_their_own_actual_cast() {
 #[test]
 fn issue_166_countered_casts_still_count_and_illegal_targets_do_not() {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         166003,
         &[0, 1],
         20,
@@ -161,6 +164,7 @@ fn issue_166_cast_history_replays_accepted_commands_and_rolls_at_turn_boundary()
     };
     fn engine() -> GameEngine {
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             166004,
             &[0, 1],
             20,
@@ -332,6 +336,7 @@ fn issue_166_cast_history_replays_accepted_commands_and_rolls_at_turn_boundary()
 
 fn issue_170_engine() -> GameEngine {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         170010,
         &[0, 1],
         20,
@@ -615,6 +620,7 @@ fn issue_170_gecko_uses_a_respondable_trigger_and_atomic_discard_payment() {
 
 fn issue_172_engine(cards: &[&str]) -> GameEngine {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         172020,
         &[0, 1],
         20,
@@ -1184,6 +1190,7 @@ fn issue_172_control_change_uses_new_controllers_spending_not_an_object_cap() {
 #[test]
 fn issue_172_expend_crosses_once_and_reuses_ordinary_trigger_effects() {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         172002,
         &[0, 1],
         20,
@@ -1276,6 +1283,7 @@ fn issue_172_expend_crosses_once_and_reuses_ordinary_trigger_effects() {
 #[test]
 fn issue_172_only_successful_casts_record_actual_mana_spending() {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         172001,
         &[0, 1],
         20,
@@ -1343,7 +1351,15 @@ fn life_goes_on_gains_eight_after_a_creature_dies() {
         deck_with("forest", &["life_goes_on", "murder"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut e = GameEngine::new(6101, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6101,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     ensure_in_hand(&mut e, 0, "murder");
     ensure_in_hand(&mut e, 0, "life_goes_on");
     let bear = relocate_to_battlefield(&mut e, 1, "grizzly_bears", false);
@@ -1399,7 +1415,15 @@ fn life_goes_on_gains_four_when_no_creature_died() {
         deck_with("forest", &["life_goes_on"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(6102, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6102,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     ensure_in_hand(&mut e, 0, "life_goes_on");
     give_mana(
         &mut e,
@@ -1425,7 +1449,15 @@ fn conditional_amount_is_evaluated_when_the_effect_resolves() {
         deck_with("forest", &["life_goes_on"]),
         deck_with("swamp", &["murder", "grizzly_bears"]),
     ]);
-    let mut e = GameEngine::new(6103, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6103,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     ensure_in_hand(&mut e, 0, "life_goes_on");
     ensure_in_hand(&mut e, 1, "murder");
     let bear = relocate_to_battlefield(&mut e, 1, "grizzly_bears", false);
@@ -1477,7 +1509,15 @@ fn the_same_creature_can_die_more_than_once_in_a_turn() {
         deck_with("swamp", &["murder", "reanimate", "murder"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut e = GameEngine::new(6104, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6104,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = relocate_to_battlefield(&mut e, 1, "grizzly_bears", false);
     ensure_in_hand(&mut e, 0, "murder");
@@ -1550,7 +1590,15 @@ fn noncreature_deaths_do_not_increment_the_creature_count() {
         deck_with("mountain", &["shatterstorm", "short_sword"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(6105, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6105,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     relocate_to_battlefield(&mut e, 0, "short_sword", false);
     ensure_in_hand(&mut e, 0, "shatterstorm");
@@ -1578,7 +1626,15 @@ fn cleanup_rolls_current_history_to_previous_and_resets_current() {
         deck_with("swamp", &["murder"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut e = GameEngine::new(6106, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6106,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "murder");
     let bear = relocate_to_battlefield(&mut e, 1, "grizzly_bears", false);
@@ -1625,7 +1681,15 @@ fn rejected_casts_do_not_enter_turn_history() {
         deck_with("forest", &["life_goes_on"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(6107, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6107,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     ensure_in_hand(&mut e, 0, "life_goes_on");
     let life_goes_on = hand_index_for_card(&e, 0, "life_goes_on");
 

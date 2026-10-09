@@ -20,7 +20,15 @@ fn deck_engine(seed: u64, own: &[&str], opposing: &[&str]) -> GameEngine {
         deck_with("island", own),
         deck_with("forest", opposing),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -119,7 +127,15 @@ fn issue_337_depower_reduces_only_for_an_attacking_target() {
         deck_with("island", &["depower", "depower", "depower"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(337_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        337_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let idle = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -297,7 +313,15 @@ fn issue_337_super_villain_lockup_linked_exiles_until_it_leaves() {
         deck_with("plains", &["super_villain_lockup"]),
         deck_with("forest", &["broken_wings", "broken_wings"]),
     ]);
-    let mut engine = GameEngine::new(337_008, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        337_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let tapped = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     engine.state.objects.get_mut(&tapped).expect("bear").tapped = true;

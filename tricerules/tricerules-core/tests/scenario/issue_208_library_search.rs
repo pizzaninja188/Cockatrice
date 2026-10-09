@@ -21,7 +21,15 @@ fn engine_with_wan(seed: u64, controller: usize, search_cards: &[&str]) -> (Game
             deck_with("island", &["wan_shi_tong,_librarian"]),
         ])
     };
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let wan = move_ready_to_battlefield(&mut engine, controller, "wan_shi_tong,_librarian");
     assert_eq!(engine.state.stack.len(), 1, "Wan's X=0 ETB trigger");
@@ -81,6 +89,7 @@ fn activate_say_its_name_search(
 #[test]
 fn wan_etb_retains_cast_x_until_its_trigger_resolves() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         208_001,
         &[0, 1],
         20,
@@ -126,6 +135,7 @@ fn wan_etb_retains_cast_x_until_its_trigger_resolves() {
 #[test]
 fn wan_etb_draw_keeps_x_if_the_source_leaves_before_resolution() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         208_002,
         &[0, 1],
         20,

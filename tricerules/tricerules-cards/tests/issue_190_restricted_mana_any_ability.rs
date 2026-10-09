@@ -1,7 +1,7 @@
 use tricerules_cards::primitives::CardTypeFilter;
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, CardFace, CardRegistry, Keyword, ManaAmount,
-    ManaSpendingRestriction, SpellEffectKind,
+    AbilityCost, AbilityPresentation, CardFace, Keyword, ManaAmount, ManaSpendingRestriction,
+    SpellEffectKind,
 };
 
 fn mana_restriction(face: &CardFace, expected: ManaAmount) -> &ManaSpendingRestriction {
@@ -22,7 +22,7 @@ fn mana_restriction(face: &CardFace, expected: ManaAmount) -> &ManaSpendingRestr
 
 #[test]
 fn issue_190_cards_are_authored_with_exact_characteristics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let punks = registry
         .get("purple_dragon_punks")

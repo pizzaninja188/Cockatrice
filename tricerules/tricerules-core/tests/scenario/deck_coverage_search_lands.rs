@@ -14,7 +14,15 @@ fn natures_lore_finds_a_nonbasic_forest_and_puts_it_onto_the_battlefield_untappe
         deck_with("forest", &["natures_lore"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(202_609_251, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_609_251,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let taiga = inject_library_card(&mut engine, 0, "taiga");
@@ -85,7 +93,15 @@ fn three_visits_finds_a_nonbasic_forest_and_puts_it_onto_the_battlefield_untappe
         deck_with("forest", &["three_visits"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(202_609_254, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_609_254,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let taiga = inject_library_card(&mut engine, 0, "taiga");
@@ -146,7 +162,15 @@ fn rampant_growth_rejects_a_nonbasic_land_and_puts_a_basic_onto_the_battlefield_
         deck_with("forest", &["rampant_growth"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(202_609_252, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_609_252,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let forest = inject_library_card(&mut engine, 0, "forest");
@@ -201,7 +225,15 @@ fn farseek_accepts_each_listed_subtype_including_a_nonbasic_land_and_enters_tapp
         deck_with("forest", &["farseek"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(202_609_253, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_609_253,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let plains = inject_library_card(&mut engine, 0, "plains");

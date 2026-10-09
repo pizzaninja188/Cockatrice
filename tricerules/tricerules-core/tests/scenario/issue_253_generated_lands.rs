@@ -13,7 +13,15 @@ fn generated_guildgate_enters_tapped_and_cannot_activate_immediately() {
         vec!["rakdos_guildgate".into(); 7],
         vec!["forest".into(); 7],
     ]);
-    let mut engine = GameEngine::new(253_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        253_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let hand_index = hand_index_for_card(&engine, 0, "rakdos_guildgate");
@@ -39,7 +47,15 @@ fn generated_two_and_three_color_lands_offer_each_printed_option_in_order() {
         (253_103, "nomad_outpost", 1, (0, 0, 1, 0, 0)),
         (253_104, "nomad_outpost", 2, (1, 0, 0, 0, 0)),
     ] {
-        let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("engine");
         advance_to_main1_from_game_start(&mut engine);
         let land = inject_permanent_on_battlefield(&mut engine, 0, card_id);
         let mut command = activate_ability_for(&engine, land, 0, vec![]);

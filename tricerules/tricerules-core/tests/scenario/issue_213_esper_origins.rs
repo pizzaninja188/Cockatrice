@@ -1,5 +1,5 @@
 use super::helpers::*;
-use tricerules_cards::{primitives::CounterKind, CardRegistry, Keyword};
+use tricerules_cards::{primitives::CounterKind, Keyword};
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     self as rv1, dev_command, ruled_command::Cmd, ruled_event::Ev, CastMethod, CastSpell,
@@ -10,6 +10,7 @@ const ESPER: &str = "esper_origins_summon:_esper_maduin";
 
 fn engine(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -335,7 +336,15 @@ fn issue_213_finality_applies_to_noncreatures_but_not_to_bounce() {
 #[test]
 fn issue_213_chapter_two_uses_the_stack_and_adds_green_mana() {
     let decks = Some(vec![deck_with("forest", &[ESPER]), forest_only_deck()]);
-    let mut engine = GameEngine::new(213_008, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        213_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let saga = relocate_to_battlefield(&mut engine, 0, ESPER, false);
     {
@@ -365,7 +374,15 @@ fn issue_213_chapter_three_buffs_only_other_controlled_creatures_then_finality_e
         deck_with("forest", &[ESPER, "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(213_009, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        213_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let saga = relocate_to_battlefield(&mut engine, 0, ESPER, false);
     let ours = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -398,7 +415,7 @@ fn issue_213_chapter_three_buffs_only_other_controlled_creatures_then_finality_e
 
 #[test]
 fn issue_213_esper_origins_is_fully_registered() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get(ESPER)
         .expect("Esper Origins // Summon: Esper Maduin must be supported");
     assert_eq!(card.faces.len(), 2);

@@ -35,7 +35,15 @@ fn choose_trigger_target(object_id: u32) -> RuledCommand {
 /// object under test is the one cast or targeted.
 fn saboteur_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("island", &[]), deck_with("swamp", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     grant_pool(&mut engine, 0);
     grant_pool(&mut engine, 1);
@@ -45,7 +53,15 @@ fn saboteur_engine(seed: u64) -> GameEngine {
 /// A two-player game advanced to the declare-attackers step with both pools refilled.
 fn combat_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("island", &[]), deck_with("swamp", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut engine);
     grant_pool(&mut engine, 0);
     grant_pool(&mut engine, 1);

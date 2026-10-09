@@ -4,6 +4,7 @@ use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone}
 
 fn stallion_game() -> (GameEngine, u32) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         237_001,
         &[0, 1],
         20,
@@ -114,6 +115,7 @@ fn issue_237_stallion_uses_departed_generation_without_pumping_returned_source()
 #[test]
 fn issue_237_double_faced_permanent_spell_copy_becomes_double_faced_token() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         237_002,
         &[0, 1],
         20,
@@ -206,7 +208,7 @@ fn issue_237_stallion_copy_uses_current_values_or_the_last_values_before_departu
     for departed in [false, true] {
         let (mut engine, source) = stallion_game();
         cast_five(&mut engine);
-        let face = tricerules_cards::CardRegistry::global()
+        let face = tricerules_cards::registry::global()
             .get("grizzly_bears")
             .unwrap()
             .primary_face()
@@ -399,7 +401,7 @@ fn issue_237_source_copy_command_replay_and_three_seat_ownership() {
 #[test]
 fn issue_237_departed_token_source_survives_cessation_as_last_known_values() {
     let (mut engine, source) = stallion_game();
-    let face = tricerules_cards::CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("colorstorm_stallion")
         .unwrap()
         .primary_face()

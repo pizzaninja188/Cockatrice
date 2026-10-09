@@ -2,7 +2,7 @@
 
 use super::helpers::*;
 use tricerules_cards::primitives::SpellEffectKind;
-use tricerules_cards::{CardRegistry, CounterKind, Keyword, ManaCost};
+use tricerules_cards::{CounterKind, Keyword, ManaCost};
 use tricerules_core::state::DamagePreventionScope;
 use tricerules_core::{GameEngine, Zone};
 use tricerules_proto::ruled::v1::{ruled_command::Cmd, ChoiceKind, SubmitResolutionChoice};
@@ -36,7 +36,7 @@ fn set_fixture_controller(engine: &mut GameEngine, object_id: u32, from: usize, 
 
 #[test]
 fn mutational_advantage_has_a_complete_card_definition() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get(MUTATIONAL_ADVANTAGE)
         .expect("Mutational Advantage needs a complete definition");
     assert_eq!(card.face_count(), 1);
@@ -54,6 +54,7 @@ fn mutational_advantage_has_a_complete_card_definition() {
 #[test]
 fn protection_uses_one_resolution_snapshot_before_proliferate_then_prevents_later_damage() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         20_261_006,
         &[0, 1],
         20,

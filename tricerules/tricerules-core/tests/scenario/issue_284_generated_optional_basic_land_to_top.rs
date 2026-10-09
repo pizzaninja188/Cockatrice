@@ -14,7 +14,15 @@ use tricerules_proto::ruled::v1::{
 
 fn issue_284_engine(seed: u64, card_id: &str, basic: &str) -> GameEngine {
     let decks = Some(vec![deck_with(basic, &[card_id]), deck_with("island", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("issue #284 engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("issue #284 engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

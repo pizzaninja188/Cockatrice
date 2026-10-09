@@ -61,7 +61,15 @@ fn blue_mana() -> ManaGift {
 
 #[test]
 fn opt_bottoming_the_scried_card_draws_the_next_one() {
-    let mut e = GameEngine::new(7001, &[0, 1], 20, island_deck_with("opt"), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7001,
+        &[0, 1],
+        20,
+        island_deck_with("opt"),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "opt");
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);
@@ -120,7 +128,15 @@ fn opt_bottoming_the_scried_card_draws_the_next_one() {
 
 #[test]
 fn opt_keeping_the_scried_card_on_top_draws_it() {
-    let mut e = GameEngine::new(7002, &[0, 1], 20, island_deck_with("opt"), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7002,
+        &[0, 1],
+        20,
+        island_deck_with("opt"),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "opt");
     let scried = seat_on_top(&mut e, 0, &["grizzly_bears"])[0];
@@ -142,8 +158,15 @@ fn opt_keeping_the_scried_card_on_top_draws_it() {
 
 #[test]
 fn preordain_bottoming_both_skips_the_ordering_step() {
-    let mut e =
-        GameEngine::new(7003, &[0, 1], 20, island_deck_with("preordain"), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7003,
+        &[0, 1],
+        20,
+        island_deck_with("preordain"),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "preordain");
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow", "hill_giant"]);
@@ -175,8 +198,15 @@ fn preordain_bottoming_both_skips_the_ordering_step() {
 
 #[test]
 fn preordain_keeping_both_asks_for_an_order_then_draws_the_new_top() {
-    let mut e =
-        GameEngine::new(7004, &[0, 1], 20, island_deck_with("preordain"), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7004,
+        &[0, 1],
+        20,
+        island_deck_with("preordain"),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "preordain");
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);
@@ -229,8 +259,15 @@ fn preordain_keeping_both_asks_for_an_order_then_draws_the_new_top() {
 
 #[test]
 fn preordain_bottoming_one_of_two_skips_the_ordering_step() {
-    let mut e =
-        GameEngine::new(7005, &[0, 1], 20, island_deck_with("preordain"), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7005,
+        &[0, 1],
+        20,
+        island_deck_with("preordain"),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "preordain");
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);
@@ -256,7 +293,15 @@ fn preordain_bottoming_one_of_two_skips_the_ordering_step() {
 
 #[test]
 fn scry_with_an_empty_library_does_not_park_and_the_draw_still_runs() {
-    let mut e = GameEngine::new(7006, &[0, 1], 20, island_deck_with("opt"), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7006,
+        &[0, 1],
+        20,
+        island_deck_with("opt"),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "opt");
     e.state.players[0].library.clear();
@@ -282,8 +327,15 @@ fn scry_with_an_empty_library_does_not_park_and_the_draw_still_runs() {
 
 #[test]
 fn scry_rejects_illegal_submissions_without_mutating_the_library() {
-    let mut e =
-        GameEngine::new(7007, &[0, 1], 20, island_deck_with("preordain"), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7007,
+        &[0, 1],
+        20,
+        island_deck_with("preordain"),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "preordain");
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow", "hill_giant"]);
@@ -326,7 +378,15 @@ fn scry_rejects_illegal_submissions_without_mutating_the_library() {
 
 #[test]
 fn scry_rejects_a_stale_choose_destination_without_consuming_the_choice() {
-    let mut e = GameEngine::new(7009, &[0, 1], 20, island_deck_with("opt"), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7009,
+        &[0, 1],
+        20,
+        island_deck_with("opt"),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "opt");
     let scried = seat_on_top(&mut e, 0, &["grizzly_bears"])[0];
@@ -362,8 +422,15 @@ fn scry_rejects_a_stale_choose_destination_without_consuming_the_choice() {
 
 #[test]
 fn preordain_rejects_a_stale_order_top_without_consuming_the_choice() {
-    let mut e =
-        GameEngine::new(7010, &[0, 1], 20, island_deck_with("preordain"), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7010,
+        &[0, 1],
+        20,
+        island_deck_with("preordain"),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "preordain");
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);
@@ -414,8 +481,15 @@ fn preordain_rejects_a_stale_order_top_without_consuming_the_choice() {
 #[test]
 fn scry_is_deterministic_for_the_same_seed_and_choices() {
     fn play() -> Vec<u32> {
-        let mut e =
-            GameEngine::new(7008, &[0, 1], 20, island_deck_with("preordain"), true).expect("new");
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            7008,
+            &[0, 1],
+            20,
+            island_deck_with("preordain"),
+            true,
+        )
+        .expect("new");
         advance_to_main1_from_game_start(&mut e);
         ensure_in_hand(&mut e, 0, "preordain");
         let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);

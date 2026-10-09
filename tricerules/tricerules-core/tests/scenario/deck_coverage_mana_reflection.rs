@@ -13,7 +13,7 @@
 
 use super::helpers::*;
 use tricerules_cards::primitives::StaticAbilityDef;
-use tricerules_cards::{AbilityPresentation, CardRegistry, Color, Keyword, Layout};
+use tricerules_cards::{AbilityPresentation, Color, Keyword, Layout};
 use tricerules_core::{GameEngine, Zone};
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 
@@ -82,7 +82,7 @@ fn main_with_mana_reflections(seed: u64, copies: u32) -> (GameEngine, Vec<u32>) 
 
 #[test]
 fn mana_reflection_has_the_reviewed_identity_characteristics_and_static_multiplier() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("mana_reflection")
         .expect("Mana Reflection is registered");
     assert_eq!(card.id, "mana_reflection");
@@ -159,7 +159,15 @@ fn an_opponents_mana_reflection_does_not_change_the_active_players_forest_mana()
         deck_with("forest", &[]),
         deck_with("forest", &["mana_reflection"]),
     ]);
-    let mut engine = GameEngine::new(342_103, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        342_103,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let opponents_reflection = move_ready_to_battlefield(&mut engine, 1, "mana_reflection");
     let forest = inject_permanent_on_battlefield(&mut engine, 0, "forest");

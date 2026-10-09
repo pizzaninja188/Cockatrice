@@ -12,7 +12,7 @@ use tricerules_cards::primitives::{
     TargetGroupDef, TargetKind, TargetingDef, TargetingSourceFilter, TriggerCondition,
 };
 use tricerules_cards::{
-    AbilityPresentation, CardRegistry, CastTriggerPlayer, Color, CounterKind, Keyword, Layout,
+    AbilityPresentation, CastTriggerPlayer, Color, CounterKind, Keyword, Layout,
 };
 
 const FINGERPRINT: &str = "563a00b9247ebe4736401ad582cc90e2e9be66d2621dd3fcf04364aafb92a308";
@@ -26,7 +26,7 @@ fn single_group(targeting: &TargetingDef) -> &TargetGroupDef {
 
 #[test]
 fn issue_430_sunset_saboteur_maps_menace_ward_and_attack_trigger() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let definition = registry.get("sunset_saboteur").expect("registered");
     assert_eq!(definition.name, "Sunset Saboteur");
     assert_eq!(

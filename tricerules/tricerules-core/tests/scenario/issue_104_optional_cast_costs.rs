@@ -24,7 +24,15 @@ fn grow_from_the_ashes_publishes_and_records_kicker_as_part_of_total_cost() {
         deck_with("forest", &["grow_from_the_ashes"]),
         deck_with("mountain", &[]),
     ]);
-    let mut e = GameEngine::new(104_001, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        104_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "grow_from_the_ashes");
     let forest = relocate_to_battlefield(&mut e, 0, "forest", false);
@@ -143,7 +151,15 @@ fn behold_reveals_only_the_selected_dragon_until_the_spell_leaves_the_stack() {
         ),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut e = GameEngine::new(104_002, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        104_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "caustic_exhale");
     ensure_card_in_hand(&mut e, 0, "adult_gold_dragon");
@@ -207,7 +223,15 @@ fn stale_behold_permanent_rejects_the_atomic_cast_without_spending_mana() {
         deck_with("swamp", &["caustic_exhale", "adult_gold_dragon"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut e = GameEngine::new(104_003, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        104_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "caustic_exhale");
     let dragon = relocate_to_battlefield(&mut e, 0, "adult_gold_dragon", false);
@@ -255,7 +279,15 @@ fn kicked_gnarlid_colony_enters_with_counters_and_grants_trample() {
         deck_with("forest", &["gnarlid_colony"]),
         deck_with("mountain", &[]),
     ]);
-    let mut e = GameEngine::new(104_004, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        104_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "gnarlid_colony");
     e.state.players[0].mana_pool.green = 2;
@@ -283,7 +315,15 @@ fn osseous_exhale_uses_the_behold_receipt_after_the_revealed_card_is_unrelated_t
         deck_with("forest", &["grizzly_bears"]),
         deck_with("plains", &["osseous_exhale", "adult_gold_dragon"]),
     ]);
-    let mut e = GameEngine::new(104_005, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        104_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_declare_attackers(&mut e);
     let attacker = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
     ensure_card_in_hand(&mut e, 1, "osseous_exhale");
@@ -322,7 +362,15 @@ fn dispelling_exhale_payment_cost(behold: bool, seed: u64) -> u32 {
         deck_with("forest", &["grizzly_bears"]),
         deck_with("island", &["dispelling_exhale", "adult_gold_dragon"]),
     ]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "grizzly_bears");
     ensure_card_in_hand(&mut e, 1, "dispelling_exhale");

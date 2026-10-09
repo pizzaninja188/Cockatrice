@@ -30,7 +30,15 @@ fn pack_mastiff_matches_copiable_names_and_snapshots_objects() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut engine = GameEngine::new(79_001, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        79_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let mastiff = inject_creature_on_battlefield(&mut engine, 0, "pack_mastiff");
@@ -119,7 +127,15 @@ fn pridemalkin_rechecks_controller_and_counter_presence_continuously() {
         ],
         vec!["mountain".into(); 7],
     ]);
-    let mut engine = GameEngine::new(79_002, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        79_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let ally = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let opponent = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");

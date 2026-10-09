@@ -15,8 +15,15 @@ fn cast_myr() -> (GameEngine, u32, Vec<u32>) {
 fn cast_myr_players(players: &[i32]) -> (GameEngine, u32, Vec<u32>) {
     let mut decks = vec![deck_with("forest", &["myr_battlesphere"])];
     decks.extend(players.iter().skip(1).map(|_| deck_with("forest", &[])));
-    let mut engine = GameEngine::new(513_001, players, 20, Some(decks), true)
-        .expect("complete Myr Battlesphere registration");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        513_001,
+        players,
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("complete Myr Battlesphere registration");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "myr_battlesphere");
     give_mana(

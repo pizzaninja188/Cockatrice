@@ -1,7 +1,7 @@
 //! Exact-card scenarios for the Kami maximum-hand-size cohort.
 
 use super::helpers::*;
-use tricerules_cards::{primitives::CounterKind, CardRegistry};
+use tricerules_cards::primitives::CounterKind;
 use tricerules_core::{GameEngine, TurnStep};
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ExecutePermanentAction, PermanentActionKind, RuledCommand,
@@ -14,7 +14,15 @@ fn folio_pays_double_x_draws_every_player_and_mills_each_opponents_own_hand() {
         deck_with("forest", &[]),
         deck_with("plains", &[]),
     ]);
-    let mut engine = GameEngine::new(20_260_935, &[0, 1, 2], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_935,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     engine.state.turn_step = TurnStep::Main1;
     let folio = inject_permanent_on_battlefield(&mut engine, 0, "folio_of_fancies");
     let before = [0, 1, 2].map(|player| engine.state.players[player].hand.len());
@@ -75,7 +83,15 @@ fn folio_draws_full_x_then_an_opponent_with_too_few_library_cards_loses() {
         deck_with("forest", &[]),
         deck_with("plains", &[]),
     ]);
-    let mut engine = GameEngine::new(20_260_956, &[0, 1, 2], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_956,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     engine.state.turn_step = TurnStep::Main1;
     let folio = inject_permanent_on_battlefield(&mut engine, 0, "folio_of_fancies");
     engine.state.players[1].library.clear();
@@ -108,6 +124,7 @@ fn folio_and_toad_apply_the_later_hand_limit_only_during_cleanup() {
             deck_with("forest", &[]),
         ]);
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             20_260_936 + folio_enters_last as u64,
             &[0, 1],
             20,
@@ -154,7 +171,15 @@ fn turning_toad_face_up_gives_its_hand_limit_a_new_timestamp() {
         deck_with("island", &["twenty-toed_toad", "folio_of_fancies"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(20_260_957, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_957,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let toad = move_ready_to_battlefield(&mut engine, 0, "twenty-toed_toad");
     engine.state.objects.get_mut(&toad).unwrap().face_down = true;
@@ -198,8 +223,15 @@ fn turning_toad_face_up_gives_its_hand_limit_a_new_timestamp() {
 fn triskaidekaphile_checks_thirteen_at_upkeep_start_and_again_on_resolution() {
     for starting_hand in [12, 13] {
         let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-        let mut engine = GameEngine::new(20_260_938 + starting_hand, &[0, 1], 20, decks, true)
-            .expect("new game");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            20_260_938 + starting_hand,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new game");
         advance_to_main1_from_game_start(&mut engine);
         inject_permanent_on_battlefield(&mut engine, 0, "triskaidekaphile");
         while engine.state.players[0].hand.len() < starting_hand as usize {
@@ -226,7 +258,15 @@ fn triskaidekaphile_checks_thirteen_at_upkeep_start_and_again_on_resolution() {
     }
 
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(20_260_952, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_952,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let triska = inject_permanent_on_battlefield(&mut engine, 0, "triskaidekaphile");
     engine.state.players[0].mana_pool.colorless = 3;
@@ -240,7 +280,15 @@ fn triskaidekaphile_checks_thirteen_at_upkeep_start_and_again_on_resolution() {
 #[test]
 fn toad_two_attacker_trigger_adds_counter_and_draws_without_winning() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(20_260_953, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_953,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut engine);
     let bear = *engine.state.players[0]
         .battlefield
@@ -267,8 +315,15 @@ fn toad_two_attacker_trigger_adds_counter_and_draws_without_winning() {
 fn toad_self_attack_win_uses_all_counter_kinds_or_resolution_time_hand_count() {
     for win_by_hand in [false, true] {
         let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-        let mut engine = GameEngine::new(20_260_954 + win_by_hand as u64, &[0, 1], 20, decks, true)
-            .expect("new game");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            20_260_954 + win_by_hand as u64,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new game");
         advance_to_declare_attackers(&mut engine);
         let toad = inject_permanent_on_battlefield(&mut engine, 0, "twenty-toed_toad");
         if win_by_hand {
@@ -303,7 +358,7 @@ fn maximum_hand_cohort_registry_preserves_exact_faces_and_clauses() {
         ("triskaidekaphile", "triskaidekaphile", 1, 1, 1),
         ("twenty-toed_toad", "twenty_toed_toad", 1, 2, 0),
     ] {
-        let card = CardRegistry::global()
+        let card = tricerules_cards::registry::global()
             .get(card_id)
             .expect("exact card registered");
         let face = card.primary_face();

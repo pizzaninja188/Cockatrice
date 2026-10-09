@@ -8,8 +8,8 @@
 use super::helpers::*;
 use tricerules_cards::primitives::{EntersWithCountersAffected, StaticAbilityDef};
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CardRegistry, CounterKind, Layout,
-    ManaAmount, SpellEffectKind,
+    AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CounterKind, Layout, ManaAmount,
+    SpellEffectKind,
 };
 use tricerules_core::{GameEngine, Zone};
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
@@ -30,7 +30,15 @@ fn mana_pool(engine: &GameEngine) -> ManaPool {
 
 fn cornucopia_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -99,7 +107,7 @@ fn activate_with_mana_option(engine: &GameEngine, source: u32, option: u32) -> R
 
 #[test]
 fn astral_cornucopia_registers_exact_identity_and_typed_abilities() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("astral_cornucopia")
         .expect("reviewed Astral Cornucopia definition");
     assert_eq!(card.id, "astral_cornucopia");

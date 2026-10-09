@@ -26,7 +26,15 @@ fn permanent_target(object_id: u32, group_index: u32) -> TargetRef {
 }
 
 fn bridgeworks_engine(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -68,7 +76,15 @@ fn leave_battlefield_to_hand(engine: &mut GameEngine, player: usize, object_id: 
 }
 
 fn land_engine(seed: u64, starting_life: i32) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], starting_life, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        starting_life,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -273,7 +289,15 @@ fn both_mh3_land_faces_offer_three_life_and_produce_their_exact_color() {
 }
 
 fn sundering_engine(seed: u64, target_card: &str) -> (GameEngine, u32) {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let target = inject_permanent_on_battlefield(&mut engine, 1, target_card);
     (engine, target)

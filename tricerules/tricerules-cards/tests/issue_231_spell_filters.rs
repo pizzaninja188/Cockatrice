@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{EffectSubject, SpellEffectKind, TargetOwner};
-use tricerules_cards::{AbilityPresentation, CardRegistry};
+use tricerules_cards::AbilityPresentation;
 
 #[test]
 fn issue_231_all_three_cards_are_complete_with_stable_modal_presentation() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana) in [
         ("annul", "Annul", "{U}"),
         ("flashfreeze", "Flashfreeze", "{1}{U}"),

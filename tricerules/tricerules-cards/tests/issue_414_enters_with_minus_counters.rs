@@ -14,8 +14,8 @@ use tricerules_cards::primitives::{
     TargetController, TargetFilter, TargetKind, TargetObjectExclusion, ZoneCardFilter,
 };
 use tricerules_cards::{
-    AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CardRegistry, CounterKind, Keyword,
-    ManaCost, SpellEffectKind,
+    AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CounterKind, Keyword, ManaCost,
+    SpellEffectKind,
 };
 
 fn another_creature_you_control() -> TargetFilter {
@@ -46,7 +46,7 @@ fn remove_two_counters_from_source() -> [AbilityCost; 2] {
 
 #[test]
 fn issue_414_registers_the_five_completed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana_cost, types, stats, keywords) in [
         (
             "burdened_stoneback",
@@ -105,7 +105,7 @@ fn issue_414_registers_the_five_completed_identities() {
 
 #[test]
 fn issue_414_excludes_the_unmapped_siblings() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for name in [
         "Flitterwing Nuisance",
         "Glen Elendra Guardian",
@@ -121,7 +121,7 @@ fn issue_414_excludes_the_unmapped_siblings() {
 
 #[test]
 fn issue_414_entry_replacement_payloads_are_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, expected_amount) in [
         ("burdened_stoneback", 2),
         ("gnarlbark_elm", 2),
@@ -151,7 +151,7 @@ fn issue_414_entry_replacement_payloads_are_exact() {
 
 #[test]
 fn issue_414_burdened_stoneback_activation_payload_is_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let face = registry
         .get("burdened_stoneback")
         .expect("Burdened Stoneback")
@@ -186,7 +186,7 @@ fn issue_414_burdened_stoneback_activation_payload_is_exact() {
 
 #[test]
 fn issue_414_moonlit_lamenter_activation_payload_is_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let face = registry
         .get("moonlit_lamenter")
         .expect("Moonlit Lamenter")
@@ -215,7 +215,7 @@ fn issue_414_moonlit_lamenter_activation_payload_is_exact() {
 
 #[test]
 fn issue_414_hovel_hurler_activation_payload_is_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let face = registry
         .get("hovel_hurler")
         .expect("Hovel Hurler")
@@ -259,7 +259,7 @@ fn issue_414_hovel_hurler_activation_payload_is_exact() {
 
 #[test]
 fn issue_414_gnarlbark_elm_activation_payload_is_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let face = registry
         .get("gnarlbark_elm")
         .expect("Gnarlbark Elm")
@@ -292,7 +292,7 @@ fn issue_414_gnarlbark_elm_activation_payload_is_exact() {
 
 #[test]
 fn issue_414_reaping_willow_activation_payload_is_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let face = registry
         .get("reaping_willow")
         .expect("Reaping Willow")
@@ -335,7 +335,7 @@ fn issue_414_reaping_willow_activation_payload_is_exact() {
 
 #[test]
 fn issue_414_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     for (id, face_id) in [
         ("burdened_stoneback", "burdened_stoneback"),
@@ -364,7 +364,7 @@ fn issue_414_fingerprint_rows_match_the_presentation_registry() {
 #[test]
 fn issue_414_retained_identities_stay_creature_sources() {
     // Guard the exact printed type line: a mis-typed face would change creature-context recipes.
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for id in [
         "burdened_stoneback",
         "gnarlbark_elm",

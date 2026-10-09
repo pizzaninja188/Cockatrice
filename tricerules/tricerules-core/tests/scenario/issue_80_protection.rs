@@ -41,7 +41,15 @@ fn protection_from_red_prevents_pyroclasm_damage() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(8001, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let knight = relocate_to_battlefield(&mut engine, 0, "white_knight", false);
 
@@ -141,7 +149,15 @@ fn protection_from_black_rejects_black_spell_targeting() {
         deck_with("swamp", &["murder"]),
         deck_with("plains", &["white_knight"]),
     ]);
-    let mut engine = GameEngine::new(8002, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let knight = relocate_to_battlefield(&mut engine, 1, "white_knight", false);
     ensure_in_hand(&mut engine, 0, "murder");
@@ -164,7 +180,15 @@ fn protection_from_black_rejects_black_spell_targeting() {
 
 #[test]
 fn protection_from_creatures_rejects_creature_blockers() {
-    let mut engine = GameEngine::new(8003, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8003,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let chaplain = inject_creature_on_battlefield(&mut engine, 0, "beloved_chaplain");
     let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -191,7 +215,15 @@ fn protection_granted_after_blockers_keeps_the_block_and_prevents_damage() {
         deck_with("plains", &["feat_of_resistance", "white_knight"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(8005, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let knight = relocate_to_battlefield(&mut engine, 0, "white_knight", false);
     let blocker = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -250,7 +282,15 @@ fn protection_from_artifacts_detaches_equipment() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(8004, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let creature = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
 

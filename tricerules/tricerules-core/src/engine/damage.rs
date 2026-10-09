@@ -1730,7 +1730,15 @@ mod tests {
             vec!["grizzly_bears".into(); 7],
             vec!["island".into(); 7],
         ]);
-        let mut engine = GameEngine::new(305_513, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_513,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         let source = move_bear_to_battlefield(&mut engine);
         let id = engine.add_damage_prevention(
             None,
@@ -1927,7 +1935,15 @@ mod tests {
 
     fn parked_departure_combat(blocker_owner: usize, shield_attacker: bool) -> GameEngine {
         let decks = Some(vec![vec!["grizzly_bears".into(); 7]; 3]);
-        let mut engine = GameEngine::new(305_512, &[0, 1, 2], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_512,
+            &[0, 1, 2],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         engine.state.opening = None;
         engine.state.turn_step = TurnStep::CombatDamage;
         let mut move_card = |owner: usize, controller: usize| {
@@ -2250,7 +2266,15 @@ mod tests {
     #[test]
     fn simultaneous_prevention_choices_follow_apnap_and_allow_own_event_order() {
         let decks = Some(vec![vec!["grizzly_bears".into(); 7]; 3]);
-        let mut engine = GameEngine::new(305_511, &[7, 13, 29], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_511,
+            &[7, 13, 29],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         let mut move_card = |player_index: usize| {
             let oid = engine.state.players[player_index].hand.remove(0);
             engine.state.players[player_index].battlefield.push(oid);
@@ -2377,7 +2401,15 @@ mod tests {
             vec!["anti-venom,_horrifying_healer".into(); 7],
             vec!["island".into(); 7],
         ]);
-        let mut engine = GameEngine::new(305_010, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_010,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         let source = move_bear_to_battlefield(&mut engine);
         engine.emit_static_abilities_on_enter(source);
         let shield = engine.add_damage_prevention(
@@ -2393,11 +2425,13 @@ mod tests {
             trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(source),
-            kind: ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
-                card_types: vec![PermanentTypeFilter::Land],
-                creature_types: Vec::new(),
-                land_types: vec![BasicLandType::Forest],
-            }),
+            kind: ContinuousEffectKind::Layer4SetTypeLine(
+                tricerules_card_model::TypeLineReplacement {
+                    card_types: vec![PermanentTypeFilter::Land],
+                    creature_types: Vec::new(),
+                    land_types: vec![BasicLandType::Forest],
+                },
+            ),
             condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 5,
@@ -2431,7 +2465,15 @@ mod tests {
             vec!["grizzly_bears".into(); 7],
             vec!["island".into(); 7],
         ]);
-        let mut engine = GameEngine::new(464_003, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            464_003,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         let source = move_bear_to_battlefield(&mut engine);
         let generation = engine
             .state

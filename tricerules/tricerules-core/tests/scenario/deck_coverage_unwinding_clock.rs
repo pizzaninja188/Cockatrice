@@ -1,7 +1,6 @@
 //! Unwinding Clock: simultaneous, mandatory controlled-artifact untap on other players' turns.
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
-use tricerules_cards::CardRegistry;
 use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
 
@@ -10,11 +9,19 @@ const CLOCK: &str = "unwinding_clock";
 #[test]
 fn clock_actual_cast_untaps_only_its_controllers_artifacts_on_another_players_turn() {
     assert!(
-        CardRegistry::global().get(CLOCK).is_some(),
+        tricerules_cards::registry::global().get(CLOCK).is_some(),
         "missing exact Unwinding Clock"
     );
     let deck = deck_with("forest", &["sol_ring", "grizzly_bears"]);
-    let mut engine = GameEngine::new(2026093101, &[0, 1], 20, Some(vec![deck; 2]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2026093101,
+        &[0, 1],
+        20,
+        Some(vec![deck; 2]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let ring = move_ready_to_battlefield(&mut engine, 0, "sol_ring");
     let bear = move_ready_to_battlefield(&mut engine, 0, "grizzly_bears");
@@ -102,8 +109,15 @@ fn clock_engine(seed: u64, players: &[i32]) -> GameEngine {
             "sculpting_steel",
         ],
     );
-    let mut engine =
-        GameEngine::new(seed, players, 20, Some(vec![deck; players.len()]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        players,
+        20,
+        Some(vec![deck; players.len()]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -300,7 +314,15 @@ fn clock_logged_real_mana_activation_and_turn_boundary_replay_identically() {
     use tricerules_proto::ruled::v1::DevPutCardInZone;
     fn fresh() -> GameEngine {
         let deck = deck_with("forest", &[]);
-        let mut engine = GameEngine::new(502_326, &[0, 1], 20, Some(vec![deck; 2]), true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            502_326,
+            &[0, 1],
+            20,
+            Some(vec![deck; 2]),
+            true,
+        )
+        .unwrap();
         engine.enable_dev_commands();
         engine
     }

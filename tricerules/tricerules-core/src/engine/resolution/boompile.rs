@@ -2,7 +2,7 @@ use super::events::ev_log;
 use super::{mass, EffectCx, EffectOutcome};
 use crate::EngineError;
 use rand::{Rng, SeedableRng};
-use tricerules_cards::primitives::{
+use tricerules_card_model::primitives::{
     PermanentTypeFilter, SpellEffectKind, TargetFilter, TargetKind,
 };
 

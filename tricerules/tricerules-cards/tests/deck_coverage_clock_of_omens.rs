@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, EffectSubject, ObjectPaymentConstraint, PermanentTypeFilter,
     SpellEffectKind, TargetController, TargetFilter, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
+use tricerules_cards::{AbilityPresentation, Layout};
 
 #[test]
 fn clock_of_omens_registers_its_complete_artifact_untap_ability() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("clock_of_omens")
         .expect("Clock of Omens registry definition");

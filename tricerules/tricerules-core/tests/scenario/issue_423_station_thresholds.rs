@@ -95,6 +95,7 @@ fn select_branch(index: u32) -> RuledCommand {
 
 fn issue_423_engine(seed: u64, card_id: &str) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,

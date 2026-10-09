@@ -8,7 +8,15 @@ fn omen_normal_and_alternative_faces_are_published_for_one_hand_object() {
         deck_with("island", &["dirgur_island_dragon_skimming_strike"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(100_001, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        100_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let oid = relocate_to_hand(&mut e, 0, "dirgur_island_dragon_skimming_strike");
     let slot = e.state.players[0]
@@ -50,7 +58,15 @@ fn omen_with_no_chosen_target_resolves_then_shuffles_into_owners_library() {
         deck_with("island", &["dirgur_island_dragon_skimming_strike"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(100_002, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        100_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let oid = relocate_to_hand(&mut e, 0, "dirgur_island_dragon_skimming_strike");
     let slot = e.state.players[0]
@@ -108,7 +124,15 @@ fn omen_shuffle_is_replay_identical_for_the_same_seed_and_commands() {
             deck_with("island", &["dirgur_island_dragon_skimming_strike"]),
             vec!["forest".into(); 20],
         ]);
-        let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
         advance_to_main1_from_game_start(&mut e);
         let oid = relocate_to_hand(&mut e, 0, "dirgur_island_dragon_skimming_strike");
         let slot = e.state.players[0]
@@ -146,7 +170,15 @@ fn omen_normal_face_resolves_as_the_permanent_face() {
         deck_with("forest", &["sagu_wildling_roost_seek"]),
         vec!["island".into(); 20],
     ]);
-    let mut e = GameEngine::new(100_003, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        100_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let oid = relocate_to_hand(&mut e, 0, "sagu_wildling_roost_seek");
     let slot = e.state.players[0]
@@ -184,7 +216,15 @@ fn chosen_target_becoming_illegal_fizzles_omen_to_graveyard_without_drawing() {
         ),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(100_004, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        100_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let omen = relocate_to_hand(&mut e, 0, "dirgur_island_dragon_skimming_strike");
     relocate_to_hand(&mut e, 0, "lightning_bolt");
@@ -227,7 +267,15 @@ fn countered_omen_uses_the_ordinary_graveyard_path() {
         deck_with("island", &["dirgur_island_dragon_skimming_strike"]),
         deck_with("island", &["counterspell"]),
     ]);
-    let mut e = GameEngine::new(100_005, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        100_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let omen = relocate_to_hand(&mut e, 0, "dirgur_island_dragon_skimming_strike");
     relocate_to_hand(&mut e, 1, "counterspell");
@@ -271,7 +319,15 @@ fn parked_library_search_finishes_before_the_physical_omen_is_shuffled() {
         deck_with("forest", &["sagu_wildling_roost_seek"]),
         vec!["island".into(); 20],
     ]);
-    let mut e = GameEngine::new(100_006, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        100_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let omen = relocate_to_hand(&mut e, 0, "sagu_wildling_roost_seek");
     let forest = inject_library_card(&mut e, 0, "forest");
@@ -320,7 +376,15 @@ fn successfully_resolving_omen_copy_shuffles_without_creating_a_library_object()
         deck_with("plains", &["riling_dawnbreaker_signaling_roar"]),
         vec!["island".into(); 20],
     ]);
-    let mut e = GameEngine::new(100_007, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        100_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let omen = relocate_to_hand(&mut e, 0, "riling_dawnbreaker_signaling_roar");
     give_mana(

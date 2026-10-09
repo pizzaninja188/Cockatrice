@@ -10,13 +10,13 @@ use tricerules_cards::primitives::{
     EntryCost, PlayerRecipient, SearchDestination, SpellEffectKind, StaticAbilityDef,
     TargetController, TargetFilter, TargetKind, TargetSchema,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Color, Keyword, Layout};
+use tricerules_cards::{AbilityPresentation, Color, Keyword, Layout};
 
 const BRIDGEWORKS: &str = "bridgeworks_battle_tanglespan_bridgeworks";
 const SUNDERING: &str = "sundering_eruption_volcanic_fissure";
 
 fn assert_land_back(card_id: &str, face_id: &str, name: &str) {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get(card_id)
         .expect("registered MDFC");
     assert_eq!(definition.layout, Layout::ModalDfc, "{card_id}");
@@ -58,7 +58,7 @@ fn assert_land_back(card_id: &str, face_id: &str, name: &str) {
 
 #[test]
 fn pilot3_registers_both_complete_mdfc_identities_and_land_faces() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, front, cost, color) in [
         (
             BRIDGEWORKS,
@@ -111,7 +111,7 @@ fn pilot3_registers_both_complete_mdfc_identities_and_land_faces() {
 
 #[test]
 fn bridgeworks_front_requires_its_controller_target_and_keeps_fight_optional() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get(BRIDGEWORKS)
         .expect("Bridgeworks Battle")
         .primary_face();
@@ -161,7 +161,7 @@ fn bridgeworks_front_requires_its_controller_target_and_keeps_fight_optional() {
 
 #[test]
 fn sundering_front_keeps_target_controller_search_and_dynamic_restriction_ordered() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get(SUNDERING)
         .expect("Sundering Eruption")
         .primary_face();

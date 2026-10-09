@@ -66,7 +66,15 @@ fn issue_192_zog_mountaincycling_is_private_and_generation_bound() {
         deck_with("mountain", &["zog,_triceraton_castaway"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(192_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        192_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "zog,_triceraton_castaway");
     let zog =
@@ -110,7 +118,15 @@ fn issue_192_return_to_sewers_uses_owner_choice_then_creates_working_mutagen() {
         deck_with("island", &["return_to_the_sewers", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(192_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        192_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "return_to_the_sewers");
     let target = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -174,7 +190,15 @@ fn issue_192_alliance_triggers_only_for_another_controlled_creature() {
         ),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(192_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        192_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let musicians = relocate_to_battlefield(&mut engine, 0, "mutant_town_musicians", false);
     let squad = relocate_to_battlefield(&mut engine, 0, "epf_point_squad", false);
@@ -212,7 +236,15 @@ fn issue_192_punk_frogs_ward_counters_the_exact_targeting_spell() {
         deck_with("island", &["unsummon"]),
         deck_with("forest", &["punk_frogs"]),
     ]);
-    let mut engine = GameEngine::new(192_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        192_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let frogs = relocate_to_battlefield(&mut engine, 1, "punk_frogs", false);
     ensure_in_hand(&mut engine, 0, "unsummon");
@@ -256,7 +288,15 @@ fn issue_192_april_rejects_blockers_with_power_three_or_greater() {
         deck_with("plains", &["april_oneil,_kunoichi_trainee"]),
         deck_with("forest", &["grizzly_bears", "hill_giant"]),
     ]);
-    let mut engine = GameEngine::new(192_005, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        192_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let april = move_ready_to_battlefield(&mut engine, 0, "april_oneil,_kunoichi_trainee");
     pass_both_players(&mut engine);
@@ -307,7 +347,15 @@ fn issue_192_featherbrained_filcher_leaves_and_creates_working_food() {
         deck_with("island", &["featherbrained_filcher", "unsummon"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(192_006, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        192_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let filcher = relocate_to_battlefield(&mut engine, 0, "featherbrained_filcher", false);
     ensure_in_hand(&mut engine, 0, "unsummon");
@@ -353,7 +401,15 @@ fn issue_192_tenderize_and_bot_bashing_use_shared_damage_and_exile_pipelines() {
         ),
         deck_with("forest", &["colossal_dreadmaw", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(192_007, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        192_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let recipient = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);
@@ -405,7 +461,15 @@ fn issue_192_skateboard_taps_then_attaches_power_and_haste() {
         deck_with("mountain", &["skateboard", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(192_008, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        192_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let creature = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     engine

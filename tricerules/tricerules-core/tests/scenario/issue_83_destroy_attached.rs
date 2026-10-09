@@ -39,7 +39,15 @@ fn turn_to_slag_destroys_equipment_but_not_auras_attached_to_its_target() {
         ),
         deck_with("forest", &["colossal_dreadmaw", "bonesplitter"]),
     ]);
-    let mut engine = GameEngine::new(8301, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8301,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
 
     let target = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);
@@ -81,7 +89,15 @@ fn turn_to_slag_allows_a_target_with_no_equipment() {
         deck_with("mountain", &["turn_to_slag"]),
         deck_with("forest", &["colossal_dreadmaw"]),
     ]);
-    let mut engine = GameEngine::new(8302, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8302,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);
 
@@ -98,7 +114,15 @@ fn illegal_turn_to_slag_target_fizzles_without_destroying_equipment() {
         deck_with("mountain", &["turn_to_slag"]),
         deck_with("forest", &["colossal_dreadmaw", "bonesplitter"]),
     ]);
-    let mut engine = GameEngine::new(8303, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8303,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);
     let equipment = relocate_to_battlefield(&mut engine, 1, "bonesplitter", false);
@@ -130,7 +154,15 @@ fn attachment_cohort_is_recomputed_when_turn_to_slag_resolves() {
             &["colossal_dreadmaw", "grizzly_bears", "bonesplitter"],
         ),
     ]);
-    let mut engine = GameEngine::new(8304, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8304,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);
     let other = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -154,7 +186,15 @@ fn destroy_attached_honors_indestructible_and_regeneration() {
         deck_with("mountain", &["turn_to_slag", "short_sword"]),
         deck_with("forest", &["colossal_dreadmaw", "bonesplitter"]),
     ]);
-    let mut engine = GameEngine::new(8305, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8305,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);
     let indestructible = relocate_to_battlefield(&mut engine, 1, "bonesplitter", false);
@@ -195,7 +235,15 @@ fn lethal_damage_does_not_detach_equipment_before_turn_to_slag_destroys_it() {
         deck_with("mountain", &["turn_to_slag"]),
         deck_with("forest", &["grizzly_bears", "bonesplitter"]),
     ]);
-    let mut engine = GameEngine::new(8306, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8306,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let equipment = relocate_to_battlefield(&mut engine, 1, "bonesplitter", false);

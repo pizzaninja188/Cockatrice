@@ -1,13 +1,11 @@
 use tricerules_cards::primitives::{
     AbilitySourceZone, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
 };
-use tricerules_cards::{
-    AbilityCost, AbilityPresentation, CardRegistry, Keyword, ManaCost, TriggerCondition,
-};
+use tricerules_cards::{AbilityCost, AbilityPresentation, Keyword, ManaCost, TriggerCondition};
 
 #[test]
 fn mithril_coat_registers_its_legendary_etb_and_any_creature_equip() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("mithril_coat")
         .expect("Mithril Coat is registered");
     let face = card.primary_face();

@@ -36,8 +36,24 @@ mod tests {
 
     #[test]
     fn snapshot_is_complete_lossless_and_deterministic() {
-        let mut a = GameEngine::new(u64::MAX, &[17, 29], 20, None, false).unwrap();
-        let b = GameEngine::new(u64::MAX, &[17, 29], 20, None, false).unwrap();
+        let mut a = GameEngine::new(
+            tricerules_cards::registry::global(),
+            u64::MAX,
+            &[17, 29],
+            20,
+            None,
+            false,
+        )
+        .unwrap();
+        let b = GameEngine::new(
+            tricerules_cards::registry::global(),
+            u64::MAX,
+            &[17, 29],
+            20,
+            None,
+            false,
+        )
+        .unwrap();
         let first = a.diagnostic_snapshot().unwrap();
         assert_eq!(first["state"]["seed"], u64::MAX.to_string());
         assert_eq!(first["state"]["players"][0]["id"], 17);

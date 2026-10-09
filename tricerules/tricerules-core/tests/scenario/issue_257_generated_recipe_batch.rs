@@ -43,6 +43,7 @@ fn crew_command(engine: &GameEngine, vehicle: u32, creatures: &[u32]) -> RuledCo
 
 fn engine_with_caravan(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -129,6 +130,7 @@ fn issue_257_generated_crew_uses_current_power_and_generation_bound_atomic_payme
 
 fn ward_engine(seed: u64) -> (GameEngine, u32) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -205,6 +207,7 @@ fn issue_257_generated_ward_handles_opponent_spells_and_abilities_but_not_own_sp
     )));
 
     let mut own = GameEngine::new(
+        tricerules_cards::registry::global(),
         257_004,
         &[0, 1],
         20,
@@ -240,6 +243,7 @@ fn issue_257_generated_ward_handles_opponent_spells_and_abilities_but_not_own_sp
 #[test]
 fn issue_257_generated_changeling_supplies_all_creature_types_in_every_zone() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         257_005,
         &[0, 1],
         20,
@@ -278,6 +282,7 @@ fn counter_creature_spell(
     colorless: u32,
 ) -> (GameEngine, u32) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,

@@ -1756,23 +1756,6 @@ mod tests {
     }
 
     #[test]
-    fn commander_color_identity_counts_mana_symbols_but_not_any_color_output() {
-        let registry = crate::CardRegistry::global();
-        assert_eq!(
-            registry
-                .get("talisman_of_impulse")
-                .expect("Talisman of Impulse")
-                .color_identity(),
-            vec![Color::Red, Color::Green]
-        );
-        assert!(registry
-            .get("decanter_of_endless_water")
-            .expect("Decanter of Endless Water")
-            .color_identity()
-            .is_empty());
-    }
-
-    #[test]
     fn commander_color_identity_visits_abilities_nested_in_static_modifiers() {
         let mut face = face(&["Enchantment"]);
         face.mana_cost = ManaCost::parse("{3}").unwrap();

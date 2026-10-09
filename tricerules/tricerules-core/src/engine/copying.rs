@@ -163,7 +163,7 @@ mod tests {
     use crate::state::{CopiableValues, TokenCopySnapshot, TriggerObjectRef};
 
     fn snapshot(card_id: &str) -> TokenCopySnapshot {
-        let definition = CardRegistry::global()
+        let definition = tricerules_cards::registry::global()
             .get(card_id)
             .expect("copy snapshot fixture is registered");
         TokenCopySnapshot {
@@ -182,7 +182,15 @@ mod tests {
 
     #[test]
     fn observed_copy_lookup_never_substitutes_a_later_object_generation() {
-        let mut engine = GameEngine::new(70_701, &[0, 1], 20, None, true).expect("new game");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            70_701,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new game");
         let object_id = engine.state.players[0]
             .library
             .front()

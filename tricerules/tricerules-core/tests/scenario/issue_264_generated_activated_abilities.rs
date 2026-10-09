@@ -29,7 +29,15 @@ fn generated_terramorphic_expanse_pays_atomically_and_searches_with_exact_identi
         deck_with("forest", &["terramorphic_expanse", "vibrant_cityscape"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(264_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        264_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let wrong_zone = inject_card_into_hand(&mut engine, 0, "vibrant_cityscape");

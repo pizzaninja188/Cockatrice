@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     AbilityCost, EffectSubject, PermanentTypeFilter, SpellEffectKind,
 };
-use tricerules_cards::{AbilityPresentation, AbilitySourceZone, CardRegistry};
+use tricerules_cards::{AbilityPresentation, AbilitySourceZone};
 
 #[test]
 fn liquimetal_torque_registers_both_activated_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("liquimetal_torque")
         .expect("Liquimetal Torque registry definition");

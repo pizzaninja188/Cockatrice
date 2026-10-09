@@ -7,7 +7,15 @@ use crate::helpers::*;
 
 #[test]
 fn per_target_prismari_charm_damages_both_players_without_allocation() {
-    let mut e = GameEngine::new(232_001, &[0, 1], 20, None, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        232_001,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     inject_card_into_hand(&mut e, 0, "prismari_charm");
     give_mana(
@@ -32,7 +40,15 @@ fn per_target_prismari_charm_damages_both_players_without_allocation() {
 
 #[test]
 fn per_target_dual_shot_allows_zero_targets() {
-    let mut e = GameEngine::new(232_002, &[0, 1], 20, None, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        232_002,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     inject_card_into_hand(&mut e, 0, "dual_shot");
     give_mana(
@@ -67,7 +83,15 @@ fn fireball_deck() -> Option<Vec<Vec<String>>> {
 /// Fireball with X=5 and one target deals all 5 damage to that target.
 #[test]
 fn fireball_single_target_all_damage() {
-    let mut e = GameEngine::new(1601, &[0, 1], 20, fireball_deck(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1601,
+        &[0, 1],
+        20,
+        fireball_deck(),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     give_mana(
         &mut e,
@@ -109,7 +133,15 @@ fn fireball_single_target_all_damage() {
 /// Costs {1} extra for the second target: total mana = {X=5}{R}{1} = 7.
 #[test]
 fn fireball_split_between_two_targets() {
-    let mut e = GameEngine::new(1602, &[0, 1], 20, fireball_deck(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1602,
+        &[0, 1],
+        20,
+        fireball_deck(),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     give_mana(
         &mut e,
@@ -159,7 +191,15 @@ fn fireball_split_between_two_targets() {
 /// Fireball ignores caller-supplied allocation amounts because division happens on resolution.
 #[test]
 fn fireball_does_not_accept_cast_time_allocation() {
-    let mut e = GameEngine::new(1603, &[0, 1], 20, fireball_deck(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1603,
+        &[0, 1],
+        20,
+        fireball_deck(),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     give_mana(
         &mut e,
@@ -203,7 +243,15 @@ fn fireball_does_not_accept_cast_time_allocation() {
 /// Current Fireball rulings allow a zero-target cast; it simply deals no damage.
 #[test]
 fn fireball_allows_zero_targets() {
-    let mut e = GameEngine::new(1604, &[0, 1], 20, fireball_deck(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1604,
+        &[0, 1],
+        20,
+        fireball_deck(),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     give_mana(
         &mut e,
@@ -234,7 +282,15 @@ fn fire_single_target_deals_two() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(1605, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1605,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     give_mana(
         &mut e,
@@ -271,7 +327,15 @@ fn fire_split_between_two_targets() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(1606, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1606,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     give_mana(
         &mut e,
@@ -300,7 +364,15 @@ fn fire_split_between_two_targets() {
 /// Fireball extra-target surcharge is enforced: two targets need 1 extra mana.
 #[test]
 fn fireball_insufficient_mana_for_surcharge_rejected() {
-    let mut e = GameEngine::new(1607, &[0, 1], 20, fireball_deck(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1607,
+        &[0, 1],
+        20,
+        fireball_deck(),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     // X=3 + {R} + 1 surcharge = 5 total; only 5 paid but pattern is {X}{R} + 1 = 6 needed.
     // Give only 5: {X=3}{R} = 4 for the base + need 1 more for second target = 5 total.
@@ -355,7 +427,15 @@ fn fireball_divides_evenly_among_targets_still_legal_at_resolution() {
         deck_with("mountain", &["fireball", "lightning_bolt"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(1610, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1610,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -421,7 +501,15 @@ fn fireball_divides_evenly_among_targets_still_legal_at_resolution() {
 /// rounds down to 0 each.
 #[test]
 fn fireball_with_more_targets_than_damage_deals_nothing() {
-    let mut e = GameEngine::new(1611, &[0, 1], 20, fireball_deck(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1611,
+        &[0, 1],
+        20,
+        fireball_deck(),
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     give_mana(
         &mut e,
@@ -454,7 +542,15 @@ fn fireball_with_more_targets_than_damage_deals_nothing() {
 }
 
 fn per_target_engine(card: &str) -> GameEngine {
-    let mut e = GameEngine::new(232_010, &[0, 1], 20, None, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        232_010,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     inject_card_into_hand(&mut e, 0, card);
     give_mana(

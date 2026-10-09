@@ -52,7 +52,15 @@ fn wingspan_stride_returns_itself_and_removes_its_modifier() {
         deck_with("island", &["wingspan_stride", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(4220, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4220,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
     let aura = cast_and_resolve_aura(
@@ -102,7 +110,15 @@ fn wingspan_stride_does_not_return_a_new_source_generation() {
         deck_with("island", &["wingspan_stride", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(4221, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4221,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
     let aura = cast_and_resolve_aura(
@@ -141,7 +157,15 @@ fn wingspan_stride_in_graveyard_is_not_returned_by_its_old_ability() {
         deck_with("island", &["wingspan_stride", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(4222, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4222,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
     let aura = cast_and_resolve_aura(
@@ -203,8 +227,15 @@ fn curse_of_disturbance_can_target_a_player() {
         deck_with("swamp", &["curse_of_disturbance"]),
         vec!["swamp".into(); 20],
     ]);
-    let mut e = GameEngine::new(4219, &[0, 1], 20, decks, true)
-        .expect("player-enchanting Aura card data must validate");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4219,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("player-enchanting Aura card data must validate");
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "curse_of_disturbance");
     give_mana(
@@ -265,7 +296,15 @@ fn curse_of_opulence_can_enchant_its_controller() {
         aura_deck("curse_of_opulence"),
         aura_deck("curse_of_opulence"),
     ]);
-    let mut e = GameEngine::new(4220, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4220,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let (curse, _) = cast_and_resolve_player_aura(
         &mut e,
@@ -288,7 +327,15 @@ fn player_aura_rejects_a_forged_permanent_target() {
         aura_deck("curse_of_opulence"),
         aura_deck("curse_of_opulence"),
     ]);
-    let mut e = GameEngine::new(4221, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4221,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     ensure_card_in_hand(&mut e, 0, "curse_of_opulence");
@@ -325,7 +372,15 @@ fn player_aura_sba_cleans_up_a_lost_recipient() {
         aura_deck("curse_of_opulence"),
         aura_deck("curse_of_opulence"),
     ]);
-    let mut e = GameEngine::new(4223, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4223,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let (curse, _) = cast_and_resolve_player_aura(
         &mut e,
@@ -351,7 +406,15 @@ fn player_aura_survives_control_change_and_clears_on_zone_change() {
         deck_with("swamp", &["curse_of_disturbance"]),
         vec!["swamp".into(); 20],
     ]);
-    let mut e = GameEngine::new(4224, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4224,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     e.enable_dev_commands();
     advance_to_main1_from_game_start(&mut e);
     let (curse, _) = cast_and_resolve_player_aura(
@@ -406,7 +469,15 @@ fn holy_strength_buffs_enchanted_creature() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(4201, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4201,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -472,7 +543,15 @@ fn unholy_strength_buffs_enchanted_creature() {
         ],
         vec!["swamp".into(); 7],
     ]);
-    let mut e = GameEngine::new(4202, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4202,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let corpse = inject_creature_on_battlefield(&mut e, 0, "walking_corpse");
@@ -521,7 +600,15 @@ fn aura_pt_buff_removed_when_aura_leaves_battlefield() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(4205, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4205,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -595,7 +682,15 @@ fn aura_dies_when_enchanted_creature_dies_sba() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(4203, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4203,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -666,7 +761,15 @@ fn aura_spell_fizzles_when_target_leaves_before_resolution() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(4204, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4204,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -728,7 +831,15 @@ fn aura_spell_fizzles_when_target_leaves_before_resolution() {
 #[test]
 fn flight_grants_flying_only_while_attached() {
     let decks = Some(vec![aura_deck("flight"), aura_deck("flight")]);
-    let mut e = GameEngine::new(4210, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4210,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let flight = cast_and_resolve_aura(
@@ -761,7 +872,15 @@ fn flight_grants_flying_only_while_attached() {
 #[test]
 fn pacifism_restriction_overrides_must_attack() {
     let decks = Some(vec![aura_deck("pacifism"), aura_deck("pacifism")]);
-    let mut e = GameEngine::new(4211, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4211,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let goblin = inject_creature_on_battlefield(&mut e, 0, "crazed_goblin");
     e.state
@@ -816,7 +935,15 @@ fn pacifism_restriction_overrides_must_attack() {
 #[test]
 fn pacifism_prevents_blocking() {
     let decks = Some(vec![aura_deck("pacifism"), aura_deck("pacifism")]);
-    let mut e = GameEngine::new(4214, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4214,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -872,7 +999,15 @@ fn pacifism_prevents_blocking() {
 #[test]
 fn aura_dies_when_host_stops_matching_enchant_filter() {
     let decks = Some(vec![aura_deck("flight"), aura_deck("flight")]);
-    let mut e = GameEngine::new(4212, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4212,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let flight = cast_and_resolve_aura(
@@ -897,7 +1032,15 @@ fn aura_dies_when_host_stops_matching_enchant_filter() {
 #[test]
 fn existing_aura_ignores_shroud_gained_after_resolution() {
     let decks = Some(vec![aura_deck("flight"), aura_deck("flight")]);
-    let mut e = GameEngine::new(4218, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4218,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let flight = cast_and_resolve_aura(
@@ -929,7 +1072,15 @@ fn indestructibility_can_enchant_a_land() {
             .collect(),
         vec!["plains".into(); 60],
     ]);
-    let mut e = GameEngine::new(4213, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4213,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let land = relocate_to_battlefield(&mut e, 0, "plains", false);
     cast_and_resolve_aura(
@@ -948,7 +1099,15 @@ fn indestructibility_can_enchant_a_land() {
 #[test]
 fn oakenform_grants_its_printed_pt_bonus() {
     let decks = Some(vec![aura_deck("oakenform"), aura_deck("oakenform")]);
-    let mut e = GameEngine::new(4215, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4215,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     cast_and_resolve_aura(
@@ -968,7 +1127,15 @@ fn oakenform_grants_its_printed_pt_bonus() {
 #[test]
 fn guard_duty_grants_defender() {
     let decks = Some(vec![aura_deck("guard_duty"), aura_deck("guard_duty")]);
-    let mut e = GameEngine::new(4216, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4216,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     cast_and_resolve_aura(
@@ -986,7 +1153,15 @@ fn guard_duty_grants_defender() {
 #[test]
 fn indestructibility_prevents_destroy_effects() {
     let decks = Some(vec![aura_deck("indestructibility"), aura_deck("murder")]);
-    let mut e = GameEngine::new(4217, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4217,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     cast_and_resolve_aura(

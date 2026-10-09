@@ -6,8 +6,15 @@ use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone}
 
 fn setup() -> GameEngine {
     let deck = deck_with("forest", &[]);
-    let mut engine =
-        GameEngine::new(26_100_802, &[0, 1, 2], 20, Some(vec![deck; 3]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        26_100_802,
+        &[0, 1, 2],
+        20,
+        Some(vec![deck; 3]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine.enable_dev_commands();
     engine
@@ -416,7 +423,7 @@ fn anger_clone_loses_copied_static_but_physical_anger_recovers_its_own_after_dea
         !haste(&engine, bear),
         "physical Clone has no graveyard anthem"
     );
-    let face = tricerules_cards::CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("grizzly_bears")
         .unwrap()
         .primary_face()

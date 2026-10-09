@@ -22,8 +22,15 @@ fn transformation_engine(seed: u64) -> GameEngine {
             "forest",
         ],
     );
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, Some(vec![deck.clone(), deck]), true)
-        .expect("new Kenrith's Transformation game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![deck.clone(), deck]),
+        true,
+    )
+    .expect("new Kenrith's Transformation game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

@@ -8,6 +8,7 @@ use tricerules_proto::ruled::v1::{
 #[test]
 fn waterbend_vinebender_all_mana_activation_adds_one_counter() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         146001,
         &[0, 1],
         20,
@@ -73,6 +74,7 @@ fn waterbend_ref(engine: &GameEngine, object_id: u32) -> CostObjectRef {
 #[test]
 fn waterbend_payload_cannot_be_silently_ignored_by_a_mana_ability() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         146010,
         &[0, 1],
         20,
@@ -97,6 +99,7 @@ fn waterbend_own_turn_timing_and_serialized_replay_ignore_preview_queries() {
     use prost::Message;
     fn run(previews: bool) -> (Vec<rv1::RuledEventBatch>, String) {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             146012,
             &[0, 1],
             20,
@@ -172,6 +175,7 @@ fn waterbend_own_turn_timing_and_serialized_replay_ignore_preview_queries() {
 fn waterbend_lesson_draws_before_payment_and_resumes_once() {
     for taps in 0..=2 {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             146003,
             &[0, 1],
             20,
@@ -263,6 +267,7 @@ fn waterbend_lesson_draws_before_payment_and_resumes_once() {
 #[test]
 fn waterbend_lesson_decline_restores_branch_without_drawing_again() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         146011,
         &[0, 1],
         20,
@@ -330,6 +335,7 @@ fn waterbend_lesson_decline_restores_branch_without_drawing_again() {
 fn waterbend_preview_and_commit_share_exact_mixed_payment_and_reject_stale_input() {
     for tap_count in 0..=5 {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             146002,
             &[0, 1],
             20,
@@ -444,7 +450,15 @@ fn gene_pollinator_publishes_and_atomically_pays_another_untapped_permanent() {
         deck_with("forest", &["gene_pollinator", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(144_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        144_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let gene = relocate_to_battlefield(&mut engine, 0, "gene_pollinator", false);
     let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -497,7 +511,15 @@ fn stale_or_duplicate_tap_selection_rejects_without_partial_taps() {
         deck_with("forest", &["gene_pollinator", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(144_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        144_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let gene = relocate_to_battlefield(&mut engine, 0, "gene_pollinator", false);
     let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -540,7 +562,15 @@ fn gravelgill_scoundrel_uses_a_private_generation_bound_resolution_payment() {
         deck_with("island", &["gravelgill_scoundrel", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(144_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        144_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let scoundrel = relocate_to_battlefield(&mut engine, 0, "gravelgill_scoundrel", false);
     let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -596,7 +626,15 @@ fn command_bridge_taps_a_physical_permanent_or_sacrifices_itself() {
         deck_with("forest", &["command_bridge", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(144_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        144_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     engine.state.objects.get_mut(&bear).unwrap().summoning_sick = true;
@@ -631,7 +669,15 @@ fn command_bridge_taps_a_physical_permanent_or_sacrifices_itself() {
         deck_with("forest", &["command_bridge"]),
         deck_with("forest", &[]),
     ]);
-    let mut fallback = GameEngine::new(144_005, &[0, 1], 20, decks, true).expect("engine");
+    let mut fallback = GameEngine::new(
+        tricerules_cards::registry::global(),
+        144_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut fallback);
     ensure_in_hand(&mut fallback, 0, "command_bridge");
     let slot = hand_index_for_card(&fallback, 0, "command_bridge");
@@ -658,7 +704,15 @@ fn untapped_command_bridge_can_pay_for_itself_or_remain_untapped() {
             deck_with("forest", &["command_bridge", "grizzly_bears"]),
             deck_with("forest", &[]),
         ]);
-        let mut engine = GameEngine::new(144_006, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            144_006,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         advance_to_main1_from_game_start(&mut engine);
         let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
         ensure_in_hand(&mut engine, 0, "command_bridge");

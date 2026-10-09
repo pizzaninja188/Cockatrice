@@ -1,11 +1,14 @@
 use tricerules_cards::primitives::{
     PermanentTypeFilter, SpellEffectKind, TargetController, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, TriggerCondition};
+use tricerules_cards::{AbilityPresentation, TriggerCondition};
 
 #[test]
 fn issue_273_web_up_is_registered_with_mandatory_opponent_nonland_targeting() {
-    let face = CardRegistry::global().get("web_up").unwrap().primary_face();
+    let face = tricerules_cards::registry::global()
+        .get("web_up")
+        .unwrap()
+        .primary_face();
     let [ability] = face.triggered_abilities.as_slice() else {
         panic!("Web Up must have one ETB ability");
     };

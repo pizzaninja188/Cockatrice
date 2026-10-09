@@ -13,8 +13,8 @@ use tricerules_cards::primitives::{
     PtScaleBasis, RelativePlayerSet, TargetController, TargetFilter, TargetKind, ZoneCardFilter,
 };
 use tricerules_cards::{
-    AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CardRegistry, CounterKind, Keyword,
-    ManaCost, SpellEffectKind, TriggerCondition,
+    AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CounterKind, Keyword, ManaCost,
+    SpellEffectKind, TriggerCondition,
 };
 
 fn permanent_card_filter() -> ZoneCardFilter {
@@ -26,7 +26,7 @@ fn permanent_card_filter() -> ZoneCardFilter {
 
 #[test]
 fn issue_373_registers_the_thirteen_retained_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id) in [
         ("beastie_beatdown", "Beastie Beatdown", "beastie_beatdown"),
         (
@@ -80,7 +80,7 @@ fn issue_373_registers_the_thirteen_retained_identities() {
 
 #[test]
 fn issue_373_cloud_of_darkness_scales_the_pump_from_the_graveyard() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("cloud_of_darkness")
         .expect("Cloud of Darkness");
     let face = definition.primary_face();
@@ -128,7 +128,7 @@ fn issue_373_cloud_of_darkness_scales_the_pump_from_the_graveyard() {
 
 #[test]
 fn issue_373_combustion_technique_affine_damage_and_exile_rider() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("combustion_technique")
         .expect("Combustion Technique");
     let face = definition.primary_face();
@@ -164,7 +164,7 @@ fn issue_373_combustion_technique_affine_damage_and_exile_rider() {
 
 #[test]
 fn issue_373_frantic_firebolt_union_filter_includes_adventure() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("frantic_firebolt")
         .expect("Frantic Firebolt");
     let face = definition.primary_face();
@@ -192,7 +192,7 @@ fn issue_373_frantic_firebolt_union_filter_includes_adventure() {
 
 #[test]
 fn issue_373_gloom_ripper_shares_one_affine_count_between_two_pumps() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("gloom_ripper")
         .expect("Gloom Ripper");
     let face = definition.primary_face();
@@ -252,7 +252,7 @@ fn second_elf_graveyard_term() -> CountExpression {
 
 #[test]
 fn issue_373_gran_pulse_ochu_activation_scales_self_pump() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("gran_pulse_ochu")
         .expect("Gran Pulse Ochu");
     let face = definition.primary_face();
@@ -291,7 +291,7 @@ fn issue_373_gran_pulse_ochu_activation_scales_self_pump() {
 
 #[test]
 fn issue_373_malamet_veteran_intervening_if_gates_the_counter() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("malamet_veteran")
         .expect("Malamet Veteran");
     let face = definition.primary_face();
@@ -334,7 +334,7 @@ fn issue_373_malamet_veteran_intervening_if_gates_the_counter() {
 
 #[test]
 fn issue_373_ooze_patrol_mills_before_counting_the_graveyard() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("ooze_patrol")
         .expect("Ooze Patrol");
     let face = definition.primary_face();
@@ -381,7 +381,7 @@ fn issue_373_ooze_patrol_mills_before_counting_the_graveyard() {
 
 #[test]
 fn issue_373_swallowed_by_leviathan_surveils_before_the_soft_counter() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("swallowed_by_leviathan")
         .expect("Swallowed by Leviathan");
     let face = definition.primary_face();
@@ -417,7 +417,7 @@ fn issue_373_swallowed_by_leviathan_surveils_before_the_soft_counter() {
 
 #[test]
 fn issue_373_thought_shucker_condition_and_once_limit_are_typed() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("thought_shucker")
         .expect("Thought Shucker");
     let face = definition.primary_face();
@@ -461,7 +461,7 @@ fn issue_373_thought_shucker_condition_and_once_limit_are_typed() {
 
 #[test]
 fn issue_373_join_the_dead_uses_one_exhaustive_conditional_scale() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("join_the_dead")
         .expect("Join the Dead");
     let face = definition.primary_face();
@@ -498,7 +498,7 @@ fn issue_373_join_the_dead_uses_one_exhaustive_conditional_scale() {
 
 #[test]
 fn issue_373_lasyd_prowler_mills_per_land_and_renews_from_the_graveyard() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("lasyd_prowler")
         .expect("Lasyd Prowler");
     let face = definition.primary_face();
@@ -544,7 +544,7 @@ fn issue_373_lasyd_prowler_mills_per_land_and_renews_from_the_graveyard() {
 
 #[test]
 fn issue_373_violent_urge_shares_one_group_across_the_pump_and_grants() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("violent_urge")
         .expect("Violent Urge");
     let face = definition.primary_face();
@@ -581,7 +581,7 @@ fn issue_373_violent_urge_shares_one_group_across_the_pump_and_grants() {
 
 #[test]
 fn issue_373_beastie_beatdown_authors_conditional_counters_and_power_damage() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("beastie_beatdown")
         .expect("Beastie Beatdown");
     let face = definition.primary_face();
@@ -633,7 +633,7 @@ fn issue_373_beastie_beatdown_authors_conditional_counters_and_power_damage() {
 
 #[test]
 fn issue_373_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     for (id, face_id) in [
         ("beastie_beatdown", "beastie_beatdown"),

@@ -1,7 +1,7 @@
 //! Exact Glorious Sunrise combat modes and resolving condition/lifetime evidence.
 
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, ContinuousEffectKind, EffectDuration, Keyword};
+use tricerules_cards::{ContinuousEffectKind, EffectDuration, Keyword};
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
 use tricerules_core::{GameEngine, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
@@ -13,6 +13,7 @@ const SUNRISE: &str = "glorious_sunrise";
 fn setup() -> GameEngine {
     let deck = deck_with("mountain", &[]);
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         26_100_601,
         &[10, 20, 30],
         20,
@@ -79,7 +80,7 @@ fn mode(index: u32, targets: Vec<TargetRef>) -> RuledCommand {
 
 #[test]
 fn sunrise_complete_definition_and_actual_life_mode() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get(SUNRISE)
         .expect("exact Sunrise registered");
     assert_eq!(card.name, "Glorious Sunrise");

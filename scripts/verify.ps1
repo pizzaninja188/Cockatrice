@@ -52,6 +52,9 @@ if ($CardData) {
 }
 if ($Side -in @('Rust', 'Both')) {
     $rust = Join-Path $repo 'tricerules'
+    Add-VerificationStep 'Card data dependency boundary' $windowsPowerShell @(
+        '-NoProfile', '-File', (Join-Path $repo 'tests/scripts/card_data_boundary_test.ps1')
+    )
     Add-VerificationStep 'Rust tests' 'cargo' @('test') $rust
     Add-VerificationStep 'Rust Clippy' 'cargo' @('clippy', '--all-targets', '--', '-D', 'warnings') $rust
     . (Join-Path $PSScriptRoot 'rust-format-checks.ps1')

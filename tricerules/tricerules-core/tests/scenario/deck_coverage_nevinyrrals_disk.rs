@@ -13,6 +13,7 @@ const DISK: &str = "nevinyrrals_disk";
 
 fn disk_engine(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,

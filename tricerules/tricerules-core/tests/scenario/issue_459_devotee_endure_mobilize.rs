@@ -41,7 +41,15 @@ fn abzan_engine(seed: u64) -> GameEngine {
         deck_with("forest", &["abzan_devotee"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -222,7 +230,15 @@ fn issue_459_mobilize_three_creates_attacking_warriors_and_no_attack_watcher_fir
         ),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(459_300, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        459_300,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut engine);
     let packbeasts = relocate_to_battlefield(&mut engine, 0, "dalkovan_packbeasts", false);
     relocate_to_battlefield(&mut engine, 0, "misty_mountains_raider", false);

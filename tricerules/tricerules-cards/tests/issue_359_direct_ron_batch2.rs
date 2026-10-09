@@ -17,7 +17,7 @@ use tricerules_cards::primitives::{
     PlayerRecipient, SearchDestination, SpellEffectKind, StackSpellFilter, TargetController,
     TargetFilter, TargetKind, TokenCopySource, TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, ChoiceId, Color, Layout, ModalDef};
+use tricerules_cards::{AbilityPresentation, ChoiceId, Color, Layout, ModalDef};
 
 const THREE_STEPS_AHEAD_FINGERPRINT: &str =
     "a87a5977e3eae7b0288c2a3b5fac03b84a7e500c6bc4026dd011c39939982472";
@@ -69,7 +69,7 @@ fn counter_spell_default() -> SpellEffectKind {
 
 #[test]
 fn issue_359_direct_ron_batch2_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     // Three Steps Ahead: {U} spree; counter / copy / draw-discard linked to {1}{U}, {3}, {2}.
     let three = registry.get("three_steps_ahead").expect("registered");

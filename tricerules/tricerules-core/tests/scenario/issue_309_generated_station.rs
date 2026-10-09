@@ -51,6 +51,7 @@ fn activate_station(engine: &GameEngine, source: u32, crew: u32) -> RuledCommand
 
 fn station_engine(seed: u64, card_id: &str) -> (GameEngine, u32, u32) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -140,7 +141,7 @@ fn move_named_card_to_hand_via_engine(engine: &mut GameEngine, player: usize, ca
     use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
 
     let player_id = engine.state.players[player].id;
-    let card_name = tricerules_cards::CardRegistry::global()
+    let card_name = tricerules_cards::registry::global()
         .get(card_id)
         .expect("known card for engine move")
         .name
@@ -513,6 +514,7 @@ fn issue_309_station_old_generation_cannot_counter_a_reentered_source() {
 #[test]
 fn issue_309_uthros_enters_with_private_mandatory_draw_then_discard() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         309_010,
         &[0, 1],
         20,
@@ -584,6 +586,7 @@ fn issue_309_uthros_enters_with_private_mandatory_draw_then_discard() {
 #[test]
 fn issue_309_uthros_short_library_draws_as_much_as_possible_before_discard() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         309_011,
         &[0, 1],
         20,
@@ -627,6 +630,7 @@ fn issue_309_uthros_short_library_draws_as_much_as_possible_before_discard() {
 #[test]
 fn issue_309_debris_etb_hits_any_target_and_revalidates_a_departed_target() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         309_020,
         &[0, 1],
         20,
@@ -648,6 +652,7 @@ fn issue_309_debris_etb_hits_any_target_and_revalidates_a_departed_target() {
     assert_eq!(engine.state.players[1].life, 20);
 
     let mut stale = GameEngine::new(
+        tricerules_cards::registry::global(),
         309_021,
         &[0, 1],
         20,
@@ -681,6 +686,7 @@ fn issue_309_debris_etb_hits_any_target_and_revalidates_a_departed_target() {
 #[test]
 fn issue_309_debris_etb_accepts_a_planeswalker_and_requires_exactly_one_target() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         309_025,
         &[0, 1],
         20,
@@ -738,6 +744,7 @@ fn issue_309_debris_etb_accepts_a_planeswalker_and_requires_exactly_one_target()
 #[test]
 fn issue_309_debris_etb_can_damage_a_player_and_pump_accumulates_until_cleanup() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         309_022,
         &[0, 1],
         20,
@@ -757,6 +764,7 @@ fn issue_309_debris_etb_can_damage_a_player_and_pump_accumulates_until_cleanup()
     assert_eq!(engine.state.players[1].life, 17);
 
     let mut pump = GameEngine::new(
+        tricerules_cards::registry::global(),
         309_023,
         &[0, 1],
         20,
@@ -807,6 +815,7 @@ fn issue_309_debris_etb_can_damage_a_player_and_pump_accumulates_until_cleanup()
 #[test]
 fn issue_309_debris_pump_is_available_at_normal_timing_outside_sorcery_speed() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         309_026,
         &[0, 1],
         20,
@@ -844,6 +853,7 @@ fn issue_309_debris_pump_is_available_at_normal_timing_outside_sorcery_speed() {
 #[test]
 fn issue_309_debris_pump_old_generation_does_not_modify_the_reentered_source() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         309_024,
         &[0, 1],
         20,
@@ -884,6 +894,7 @@ fn issue_309_primitive_draw_loss_finishes_the_effect_tail_before_sweeping() {
     // only the two surveilled cards available, both draw attempts deck P0; the
     // trailing life loss must still commit before the deferred deck loss is swept.
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         309_030,
         &[0, 1],
         20,
@@ -934,6 +945,7 @@ fn issue_309_brainstorm_can_resume_after_deferred_library_loss() {
     // pending loss, but the private put-back choice remains answerable; only
     // completion of that continuation commits the loss and clears the marker.
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         309_031,
         &[0, 1],
         20,
@@ -989,6 +1001,7 @@ fn issue_309_plain_draw_commits_empty_library_loss_before_priority() {
     // therefore commits in the resolution command itself, before a new priority
     // window can be published.
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         309_032,
         &[0, 1],
         20,
@@ -1028,6 +1041,7 @@ fn issue_309_plain_draw_commits_empty_library_loss_before_priority() {
 fn issue_309_pending_library_losses_are_deterministic_for_both_players() {
     fn commit(flags: [bool; 2]) -> ([bool; 2], [bool; 2], Option<i32>) {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             309_033,
             &[0, 1],
             20,

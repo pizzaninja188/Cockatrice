@@ -1,7 +1,7 @@
 use tricerules_cards::primitives::{
     CardTypeFilter, GraveyardDestination, GraveyardOwner, TargetRole, TargetSchema,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, SpellEffectKind, TriggerCondition};
+use tricerules_cards::{AbilityPresentation, SpellEffectKind, TriggerCondition};
 
 fn assert_recursion_ability(ability: &tricerules_cards::TriggeredAbilityDef, oracle_line: u16) {
     assert_eq!(
@@ -46,7 +46,7 @@ fn assert_recursion_ability(ability: &tricerules_cards::TriggeredAbilityDef, ora
 
 #[test]
 fn issue_281_registers_exact_etb_recursion_and_preserves_prowess() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let shipwreck = registry
         .get("shipwreck_dowser")

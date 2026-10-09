@@ -15,7 +15,7 @@ use tricerules_cards::primitives::{
     StaticAbilityDef, TargetController, TargetFilter, TargetKind, TriggerCondition,
     TypeLineAddition, ZoneCardFilter,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, CounterKind, Keyword};
+use tricerules_cards::{AbilityPresentation, CounterKind, Keyword};
 
 const COHORT: [&str; 2] = ["extinguisher_battleship", "fell_gravship"];
 
@@ -73,7 +73,7 @@ fn fell_filter() -> ZoneCardFilter {
 
 #[test]
 fn issue_313_registry_contains_exactly_the_reviewed_station_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let matching = registry
         .definitions()
         .filter(|definition| {
@@ -119,7 +119,7 @@ fn issue_313_registry_contains_exactly_the_reviewed_station_cohort() {
 
 #[test]
 fn issue_313_cards_preserve_exact_faces_abilities_and_presentation_fingerprints() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, power, toughness, threshold, keywords, fingerprint) in [
         (
             "extinguisher_battleship",

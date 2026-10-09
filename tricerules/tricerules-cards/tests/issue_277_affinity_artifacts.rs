@@ -1,12 +1,11 @@
 use tricerules_cards::primitives::{CardTypeFilter, RelativePlayerSet};
 use tricerules_cards::{
-    AbilityPresentation, BattlefieldAggregate, CardRegistry, SpellCostModifier, SpellEffectKind,
-    TriggerCondition,
+    AbilityPresentation, BattlefieldAggregate, SpellCostModifier, SpellEffectKind, TriggerCondition,
 };
 
 #[test]
 fn issue_277_affinity_artifact_cards_have_exact_registry_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let memory = registry
         .get("memory_guardian")

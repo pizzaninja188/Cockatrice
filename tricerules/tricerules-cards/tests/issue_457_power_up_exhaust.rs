@@ -21,7 +21,7 @@ use tricerules_cards::primitives::{
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount, CardFace,
-    CardRegistry, CounterKind, Keyword, ManaCost,
+    CounterKind, Keyword, ManaCost,
 };
 
 struct TwoCounterCase {
@@ -95,7 +95,7 @@ const TWO_COUNTER_CASES: [TwoCounterCase; 5] = [
 ];
 
 fn face(id: &str) -> &'static CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .unwrap_or_else(|| panic!("missing reviewed card {id}"))
         .primary_face()
@@ -118,7 +118,7 @@ fn power_up_reduction() -> ActivatedCostModifier {
 
 #[test]
 fn issue_457_registers_the_five_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for case in &TWO_COUNTER_CASES {
         assert_eq!(
             registry.id_for_name(case.name),
@@ -232,7 +232,7 @@ fn issue_457_the_power_up_only_reduction_carries_the_source_entry_condition() {
 
 #[test]
 fn issue_457_near_miss_identities_stay_unregistered() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name) in [
         // `{2}{G}{G}` duplicated color symbols and an unrelated graveyard trigger.
         ("afterburner_expert", "Afterburner Expert"),

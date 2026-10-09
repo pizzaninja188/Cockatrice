@@ -2,10 +2,10 @@ use tricerules_cards::primitives::{
     BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter, GameCondition,
     PlayerRecipient, RelativePlayerSet, SpellEffectKind, TriggerCondition,
 };
-use tricerules_cards::{CardRegistry, Keyword};
+use tricerules_cards::Keyword;
 
 fn face(card_id: &str) -> &'static tricerules_cards::CardFace {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("{card_id} must be registered"));
     definition.primary_face()

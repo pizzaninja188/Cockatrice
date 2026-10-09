@@ -1,12 +1,11 @@
 use tricerules_cards::primitives::{ActivationTiming, EffectSubject, TargetController, TargetKind};
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, Amount, CardRegistry, Keyword, SpellEffectKind,
-    TriggerCondition,
+    AbilityCost, AbilityPresentation, Amount, Keyword, SpellEffectKind, TriggerCondition,
 };
 
 #[test]
 fn issue_206_map_token_has_the_exact_explore_activation() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert!(registry.is_token("map"));
     let map = registry.get("map").expect("Map token");
     let face = map.primary_face();
@@ -37,7 +36,7 @@ fn issue_206_map_token_has_the_exact_explore_activation() {
 
 #[test]
 fn issue_206_spyglass_siren_has_flying_and_creates_one_map_on_entry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let siren = registry.get("spyglass_siren").expect("Spyglass Siren");
     let face = siren.primary_face();
     assert_eq!(face.mana_cost.to_string(), "{U}");

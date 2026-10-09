@@ -7,7 +7,7 @@ use tricerules_cards::{
 
 #[test]
 fn issue_260_registers_all_ten_generated_cards_with_exact_typed_triggers() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (id, oracle_line) in [("boulderborn_dragon", 2), ("il_mheg_pixie", 2)] {
         let ability = &registry

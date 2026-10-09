@@ -22,7 +22,15 @@ fn discard_spell_is_not_legal_when_it_is_the_only_hand_card() {
         deck_with("mountain", &["thrill_of_possibility"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(5301, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5301,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     let thrill = relocate_to_hand(&mut e, 0, "thrill_of_possibility");
     let mountain = relocate_to_battlefield(&mut e, 0, "mountain", false);
@@ -44,7 +52,15 @@ fn thrill_discards_the_selected_physical_card_then_draws_two() {
         deck_with("mountain", &["thrill_of_possibility", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(5302, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5302,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "thrill_of_possibility");
     ensure_card_in_hand(&mut e, 0, "grizzly_bears");
@@ -89,7 +105,15 @@ fn bone_splinters_can_sacrifice_its_own_target_and_then_fizzle() {
         deck_with("swamp", &["bone_splinters", "grizzly_bears"]),
         deck_with("mountain", &["hill_giant"]),
     ]);
-    let mut e = GameEngine::new(5303, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5303,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "bone_splinters");
     let victim = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
@@ -117,7 +141,15 @@ fn insufficient_mana_leaves_every_nonmana_payment_uncommitted() {
         deck_with("swamp", &["village_rites", "grizzly_bears"]),
         deck_with("mountain", &[]),
     ]);
-    let mut e = GameEngine::new(5304, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5304,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "village_rites");
     let creature = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
@@ -155,7 +187,15 @@ fn tormenting_voice_and_village_rites_pay_their_authored_costs() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(5305, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5305,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
 
     ensure_card_in_hand(&mut e, 0, "tormenting_voice");
@@ -201,7 +241,15 @@ fn missing_wrong_zone_opponent_and_stale_selections_are_rejected() {
             deck_with("swamp", &["village_rites", "grizzly_bears"]),
             deck_with("mountain", &["hill_giant"]),
         ]);
-        let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).unwrap();
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         advance_to_main1_from_game_start(&mut e);
         ensure_card_in_hand(&mut e, 0, "village_rites");
         let own = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
@@ -265,7 +313,15 @@ fn command_path_rejects_discarding_the_spell_itself() {
         deck_with("mountain", &["thrill_of_possibility"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(5312, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5312,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "thrill_of_possibility");
     let slot = hand_index_for_card(&e, 0, "thrill_of_possibility");
@@ -284,7 +340,15 @@ fn sacrifice_spell_is_not_published_without_a_matching_permanent() {
         deck_with("swamp", &["village_rites"]),
         deck_with("mountain", &[]),
     ]);
-    let mut e = GameEngine::new(5313, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5313,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "village_rites");
     let swamp = relocate_to_battlefield(&mut e, 0, "swamp", false);
@@ -305,7 +369,15 @@ fn sacrifice_dies_trigger_is_stacked_above_the_new_spell_with_lki() {
         deck_with("swamp", &["village_rites", "highland_game"]),
         deck_with("mountain", &[]),
     ]);
-    let mut e = GameEngine::new(5310, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5310,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "village_rites");
     let elk = relocate_to_battlefield(&mut e, 0, "highland_game", false);

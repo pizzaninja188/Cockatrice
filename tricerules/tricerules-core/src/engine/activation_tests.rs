@@ -491,7 +491,7 @@ fn arena_staged_locks_nonzero_tax_and_conditional_reduction() {
                 .objects
                 .get_mut(&own)
                 .unwrap()
-                .set_counter(tricerules_cards::CounterKind::PlusOnePlusOne, 1);
+                .set_counter(tricerules_card_model::CounterKind::PlusOnePlusOne, 1);
             engine
                 .state
                 .objects
@@ -593,7 +593,7 @@ fn trigger_receipts(
     engine: &GameEngine,
 ) -> Vec<(
     ObjectId,
-    tricerules_cards::TriggerCondition,
+    tricerules_card_model::TriggerCondition,
     crate::state::TriggerContext,
 )> {
     let mut receipts = Vec::new();
@@ -669,13 +669,13 @@ fn arena_staged_snapshots_target_observers_repoints_allocated_id_and_commits_cri
             .any(|(source, condition, _)| *source == own
                 && matches!(
                     condition,
-                    tricerules_cards::TriggerCondition::WhenSelfLeavesBattlefield
+                    tricerules_card_model::TriggerCondition::WhenSelfLeavesBattlefield
                 )));
         assert!(trigger_receipts(&engine)
             .iter()
             .all(|(_, condition, _)| !matches!(
                 condition,
-                tricerules_cards::TriggerCondition::WheneverSelfBecomesTarget { .. }
+                tricerules_card_model::TriggerCondition::WheneverSelfBecomesTarget { .. }
             )));
         assert_eq!(
             engine
@@ -721,7 +721,7 @@ fn arena_staged_snapshots_target_observers_repoints_allocated_id_and_commits_cri
             .filter(|(_, condition, _)| {
                 matches!(
                     condition,
-                    tricerules_cards::TriggerCondition::WheneverSelfBecomesTarget { .. }
+                    tricerules_card_model::TriggerCondition::WheneverSelfBecomesTarget { .. }
                 )
             })
             .collect();
@@ -758,7 +758,7 @@ fn arena_staged_snapshots_target_observers_repoints_allocated_id_and_commits_cri
                     .filter(|(source, condition, _)| *source == watcher
                         && matches!(
                             condition,
-                            tricerules_cards::TriggerCondition::WheneverPlayerCommitsCrime { .. }
+                            tricerules_card_model::TriggerCondition::WheneverPlayerCommitsCrime { .. }
                         ))
                     .count(),
                 1
@@ -768,7 +768,7 @@ fn arena_staged_snapshots_target_observers_repoints_allocated_id_and_commits_cri
             assert!(targets.is_empty());
             assert!(receipts.iter().all(|(_, condition, _)| !matches!(
                 condition,
-                tricerules_cards::TriggerCondition::WheneverPlayerCommitsCrime { .. }
+                tricerules_card_model::TriggerCondition::WheneverPlayerCommitsCrime { .. }
             )));
             assert_eq!(engine.state.players[0].mana_pool.colorless, 3);
             assert!(!engine.state.objects[&legacy.source_object_id].tapped);

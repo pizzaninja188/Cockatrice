@@ -2,11 +2,10 @@ use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, CombatRestriction, CombatRestrictionScope, EffectSubject,
     PermanentTypeFilter, SpellEffectKind, TargetFilter, TargetKind, TargetObjectExclusion,
 };
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn manifold_key_registers_its_artifact_untap_and_unblockable_activations() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("manifold_key").expect("Manifold Key");
     let face = card.primary_face();
     assert_eq!(face.name, "Manifold Key");

@@ -48,7 +48,15 @@ fn generated_etb_explore_reveals_and_moves_a_land_to_hand() {
         deck_with("forest", &["cenote_scout"]),
         deck_with("swamp", &[]),
     ]);
-    let mut engine = GameEngine::new(25001, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        25001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let scout = resolve_cenote_scout(&mut engine);
     let land = put_on_top(&mut engine, 0, "forest");
@@ -83,7 +91,15 @@ fn generated_etb_explore_uses_source_lki_after_the_scout_dies() {
         deck_with("forest", &["cenote_scout", "storm_crow"]),
         deck_with("swamp", &["murder"]),
     ]);
-    let mut engine = GameEngine::new(25002, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        25002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let scout = resolve_cenote_scout(&mut engine);
     let nonland = put_on_top(&mut engine, 0, "storm_crow");

@@ -3,7 +3,7 @@ use tricerules_cards::{AbilityPresentation, CardRegistry, Color, TriggerConditio
 
 #[test]
 fn sword_registers_exact_single_face_and_three_clauses() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("sword_of_war_and_peace")
         .expect("the exact missing Sword of War and Peace must be implemented");
     let face = card.primary_face();

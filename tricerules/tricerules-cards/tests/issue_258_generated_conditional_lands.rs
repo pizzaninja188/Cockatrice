@@ -2,12 +2,12 @@ use tricerules_cards::primitives::{
     BattlefieldAggregate, CardTypeFilter, GameCondition, PlayerLifeAggregate, StaticAbilityDef,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, CardRegistry, LibraryPartitionKind, ManaCost,
-    RelativePlayerSet, SpellEffectKind,
+    AbilityCost, AbilityPresentation, LibraryPartitionKind, ManaCost, RelativePlayerSet,
+    SpellEffectKind,
 };
 
 fn generated_face(id: &str) -> &'static tricerules_cards::CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .unwrap_or_else(|| panic!("missing generated card {id}"))
         .primary_face()

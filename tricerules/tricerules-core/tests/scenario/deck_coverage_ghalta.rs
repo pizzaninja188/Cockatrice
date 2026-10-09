@@ -13,8 +13,15 @@ use tricerules_proto::ruled::v1::{
 
 fn setup() -> GameEngine {
     let deck = deck_with("forest", &["ghalta,_primal_hunger"]);
-    let mut engine =
-        GameEngine::new(26_100_901, &[0, 1, 2], 20, Some(vec![deck; 3]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        26_100_901,
+        &[0, 1, 2],
+        20,
+        Some(vec![deck; 3]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "ghalta,_primal_hunger");
     engine

@@ -10,7 +10,7 @@ use tricerules_cards::primitives::{
     Amount, CardTypeFilter, EffectSubject, SpellCastFilter, SpellEffectKind, TargetController,
     TargetFilter, TargetKind, TriggerCondition,
 };
-use tricerules_cards::{CardRegistry, Color, Layout};
+use tricerules_cards::{Color, Layout};
 
 fn source_pump(power: i32, toughness: i32) -> SpellEffectKind {
     SpellEffectKind::PumpTarget {
@@ -31,7 +31,7 @@ fn defending_player_creature() -> EffectSubject {
 
 #[test]
 fn issue_dies_batch_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     // Four dies triggers that make registered tokens.
     for (id, name, mana, types, power, toughness, token, count) in [

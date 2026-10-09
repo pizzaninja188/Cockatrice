@@ -9,7 +9,15 @@ fn prepared(seed: u64, card: &str) -> (GameEngine, u32) {
         deck_with("island", &[card, "divination"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = relocate_to_battlefield(&mut engine, 0, card, false);
     ensure_in_hand(&mut engine, 0, "divination");

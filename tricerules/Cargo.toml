@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "tricerules-proto",
     "tricerules-core",
+    "tricerules-card-model",
     "tricerules-cards",
     "tricerules-server",
 ]

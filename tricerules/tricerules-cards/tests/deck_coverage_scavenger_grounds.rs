@@ -2,11 +2,10 @@ use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, RelativePlayerSet, SpellEffectKind, TargetController,
     TargetKind,
 };
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn scavenger_grounds_registers_colorless_mana_and_all_graveyards_exile() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("scavenger_grounds")
         .expect("Scavenger Grounds is registered");
     let face = card.primary_face();

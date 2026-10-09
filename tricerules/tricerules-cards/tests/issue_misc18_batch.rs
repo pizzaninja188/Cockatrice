@@ -55,7 +55,7 @@ fn chosen_bounce(filter: &tricerules_cards::primitives::TargetFilter) -> bool {
 
 #[test]
 fn issue_misc18_batch_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (id, name, mana, types, power, toughness) in [
         (

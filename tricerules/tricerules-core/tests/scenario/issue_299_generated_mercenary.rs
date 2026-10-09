@@ -8,7 +8,15 @@ use super::helpers::*;
 use tricerules_core::Zone;
 
 fn three_player_main1(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     engine
         .state
         .players
@@ -42,7 +50,15 @@ fn resolve_entire_stack_three_player(engine: &mut GameEngine) {
 
 #[test]
 fn issue_299_nezumi_death_creates_one_untapped_controller_owned_mercenary_after_lki() {
-    let mut engine = GameEngine::new(299_001, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        299_001,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     // P1 owns the permanent while P0 controls it.  The death trigger must use
@@ -73,7 +89,15 @@ fn issue_299_sacrifice_death_creates_exactly_one_mercenary() {
         deck_with("swamp", &["village_rites", "nezumi_linkbreaker"]),
         deck_with("mountain", &[]),
     ]);
-    let mut engine = GameEngine::new(299_007, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        299_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "village_rites");
     let source = relocate_to_battlefield(&mut engine, 0, "nezumi_linkbreaker", false);
@@ -116,7 +140,15 @@ fn issue_299_bounce_and_exile_are_not_dies() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(299_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        299_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let first = relocate_to_battlefield(&mut engine, 0, "nezumi_linkbreaker", false);
     relocate_to_hand(&mut engine, 0, "unsummon");
@@ -170,7 +202,15 @@ fn issue_299_hand_to_graveyard_discard_is_not_dies() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(299_008, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        299_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "thrill_of_possibility");
     ensure_in_hand(&mut engine, 0, "nezumi_linkbreaker");
@@ -197,7 +237,15 @@ fn issue_299_hand_to_graveyard_discard_is_not_dies() {
 
 #[test]
 fn issue_299_simultaneous_deaths_create_one_token_per_trigger_controller() {
-    let mut engine = GameEngine::new(299_003, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        299_003,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let first = inject_creature_under_foreign_control(&mut engine, 0, 0, "nezumi_linkbreaker");
     let second = inject_creature_under_foreign_control(&mut engine, 1, 1, "nezumi_linkbreaker");
@@ -246,7 +294,15 @@ fn issue_299_mercenary_activation_is_controller_only_sorcery_speed_and_eot_limit
         deck_with("island", &["nezumi_linkbreaker", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(299_005, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        299_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = relocate_to_battlefield(&mut engine, 0, "nezumi_linkbreaker", false);
     let friendly = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -303,7 +359,15 @@ fn issue_299_mercenary_activation_is_controller_only_sorcery_speed_and_eot_limit
 #[test]
 fn issue_299_mercenary_cannot_activate_outside_controller_sorcery_window() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("mountain", &[])]);
-    let mut engine = GameEngine::new(299_006, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        299_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_under_foreign_control(&mut engine, 1, 0, "nezumi_linkbreaker");
     engine.state.objects.get_mut(&source).unwrap().damage = 1;

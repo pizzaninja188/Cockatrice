@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{CreatureScopeController, StaticAbilityDef};
-use tricerules_cards::{AbilityPresentation, CardRegistry, Color, Keyword, Layout};
+use tricerules_cards::{AbilityPresentation, Color, Keyword, Layout};
 
 #[test]
 fn gruul_war_chant_registers_its_attack_scoped_pump_and_menace_effects() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(
         registry.id_for_name("Gruul War Chant"),
         Some("gruul_war_chant")

@@ -5,11 +5,10 @@ use tricerules_cards::primitives::{
     ConditionObjectRef, EffectSubject, GameCondition, PermanentTypeFilter, SpellEffectKind,
     TargetKind,
 };
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn issue_480_registers_complete_tainted_treats() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(
         registry.id_for_name("Tainted Treats"),
         Some("tainted_treats")

@@ -1,7 +1,7 @@
 use tricerules_cards::primitives::{
     EffectSubject, PlayerRecipient, SpellEffectKind, TargetFilter, TargetKind,
 };
-use tricerules_cards::{AbilityCost, Amount, CardRegistry, Keyword, TriggerCondition};
+use tricerules_cards::{AbilityCost, Amount, Keyword, TriggerCondition};
 
 fn assert_tap_and_mana(costs: &[AbilityCost], expected: &str) {
     match costs {
@@ -12,7 +12,7 @@ fn assert_tap_and_mana(costs: &[AbilityCost], expected: &str) {
 
 #[test]
 fn pegasus_courser_has_complete_oracle_behavior() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("pegasus_courser")
         .expect("Pegasus Courser must be registered");
     let face = definition.primary_face();
@@ -45,7 +45,7 @@ fn pegasus_courser_has_complete_oracle_behavior() {
 
 #[test]
 fn legion_guildmage_has_complete_oracle_behavior() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("legion_guildmage")
         .expect("Legion Guildmage must be registered");
     let face = definition.primary_face();

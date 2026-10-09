@@ -1,5 +1,7 @@
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, ContinuousEffectKind, ControllerReference, EffectDuration};
+#[cfg(feature = "authoring")]
+use tricerules_cards::CardRegistry;
+use tricerules_cards::{ContinuousEffectKind, ControllerReference, EffectDuration};
 use tricerules_core::TurnStep;
 use tricerules_core::Zone;
 use tricerules_core::{AffectedScope, ContinuousEffect};
@@ -16,7 +18,15 @@ fn choose(index: u32) -> RuledCommand {
 }
 
 fn parked(players: &[i32]) -> (GameEngine, u32, RuledEventBatch) {
-    let mut engine = GameEngine::new(50602, players, 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        50602,
+        players,
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_card_into_hand(&mut engine, 0, "black_vise");
     give_mana(
@@ -173,7 +183,7 @@ fn black_vise_chosen_departure_keeps_designation_without_retargeting() {
 fn black_vise_acquired_copy_is_undefined_and_native_choice_restores() {
     let (mut engine, source, _) = parked(&[0, 1]);
     engine.apply_command(0, &choose(0)).unwrap();
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("black_vise")
         .unwrap()
         .primary_face()
@@ -359,7 +369,9 @@ fn black_vise_exact_single_face_and_complete_linked_damage_definition() {
         Amount, ConditionPlayerSet, CountExpression, PlayerRecipient, SpellEffectKind,
         StaticAbilityDef, TriggerCondition,
     };
-    let definition = CardRegistry::global().get("black_vise").unwrap();
+    let definition = tricerules_cards::registry::global()
+        .get("black_vise")
+        .unwrap();
     assert_eq!(definition.name, "Black Vise");
     assert_eq!(definition.layout, tricerules_cards::Layout::Normal);
     assert_eq!(definition.faces_iter().count(), 1);
@@ -407,7 +419,15 @@ fn black_vise_replays_exact_logged_paid_cast_choice_departure_and_reentry_comman
         dev_command::Dev, DevAddMana, DevCommand, DevMoveCard, DevPutCardInZone, DevZone,
     };
     fn engine() -> GameEngine {
-        let mut engine = GameEngine::new(50604, &[9, 0, 23, 41], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            50604,
+            &[9, 0, 23, 41],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.enable_dev_commands();
         engine
     }
@@ -518,9 +538,15 @@ mod copying {
             };
             3
         ];
-        let mut engine =
-            GameEngine::new_for_authoring(50603, &[0, 1, 2], 20, Some(decks), true, registry)
-                .unwrap();
+        let mut engine = GameEngine::new_with_commander_decks(
+            registry,
+            50603,
+            &[0, 1, 2],
+            20,
+            Some(decks),
+            true,
+        )
+        .unwrap();
         advance_to_main1_from_game_start(&mut engine);
         let source = inject_card_into_hand(&mut engine, 0, "black_vise");
         give_mana(

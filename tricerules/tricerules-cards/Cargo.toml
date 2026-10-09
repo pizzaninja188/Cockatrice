@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+tricerules-card-model = { path = "../tricerules-card-model" }
 serde.workspace = true
 ron.workspace = true
 thiserror.workspace = true

@@ -18,6 +18,7 @@ fn branch(index: u32) -> RuledCommand {
 fn setup() -> GameEngine {
     let deck = deck_with("island", &[]);
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         26_100_801,
         &[10, 20, 30],
         20,

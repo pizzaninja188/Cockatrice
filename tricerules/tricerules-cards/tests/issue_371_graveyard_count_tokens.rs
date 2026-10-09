@@ -12,8 +12,8 @@ use tricerules_cards::primitives::{
     ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, ZoneCardFilter,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CardRegistry, CastTriggerPlayer,
-    Color, GameCondition, GraveyardAggregate, ManaCost, RelativePlayerSet, SpellCastOrigin,
+    AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CastTriggerPlayer, Color,
+    GameCondition, GraveyardAggregate, ManaCost, RelativePlayerSet, SpellCastOrigin,
     SpellEffectKind, TriggerCondition,
 };
 
@@ -72,7 +72,7 @@ fn create_tokens(token: &str, count: Amount, tapped: bool) -> SpellEffectKind {
 
 #[test]
 fn issue_371_registers_the_eight_completed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id, mana_cost, supertypes, types, stats, keywords) in [
         (
             "aatchik,_emerald_radian",
@@ -172,7 +172,7 @@ fn issue_371_registers_the_eight_completed_identities() {
 
 #[test]
 fn issue_371_excludes_broodspinner() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert!(
         registry.get("broodspinner").is_none(),
         "Broodspinner's distinct-card-types quantity is blocker #364 and must stay unretained"
@@ -182,7 +182,7 @@ fn issue_371_excludes_broodspinner() {
 
 #[test]
 fn issue_371_aatchik_payloads_are_exact() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("aatchik,_emerald_radian")
         .expect("Aatchik, Emerald Radian")
         .primary_face();
@@ -229,7 +229,7 @@ fn issue_371_aatchik_payloads_are_exact() {
 
 #[test]
 fn issue_371_arnim_zola_activation_uses_the_shared_villain_gate() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("arnim_zola,_bio-fanatic")
         .expect("Arnim Zola, Bio-Fanatic")
         .primary_face();
@@ -268,7 +268,7 @@ fn issue_371_arnim_zola_activation_uses_the_shared_villain_gate() {
 
 #[test]
 fn issue_371_hydra_troopers_branches_villain_or_mill() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("hydra_troopers")
         .expect("HYDRA Troopers")
         .primary_face();
@@ -329,7 +329,7 @@ fn issue_371_hydra_troopers_branches_villain_or_mill() {
 
 #[test]
 fn issue_371_kiora_etb_and_threshold_attack_are_exact() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("kiora,_the_rising_tide")
         .expect("Kiora, the Rising Tide")
         .primary_face();
@@ -379,7 +379,7 @@ fn issue_371_kiora_etb_and_threshold_attack_are_exact() {
 
 #[test]
 fn issue_371_lluwen_and_morcant_payloads_are_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let lluwen = registry
         .get("lluwen,_imperfect_naturalist")
@@ -488,7 +488,7 @@ fn issue_371_lluwen_and_morcant_payloads_are_exact() {
 
 #[test]
 fn issue_371_revenge_and_final_days_payloads_are_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let revenge = registry
         .get("revenge_of_the_rats")
@@ -558,7 +558,7 @@ fn issue_371_revenge_and_final_days_payloads_are_exact() {
 
 #[test]
 fn issue_371_tokens_are_registered_with_exact_characteristics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, types, supertypes, colors, stats, keywords) in [
         (
             "insect_g_1_1",
@@ -659,7 +659,7 @@ fn issue_371_tokens_are_registered_with_exact_characteristics() {
 
 #[test]
 fn issue_371_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     for (id, face_id) in [
         ("aatchik,_emerald_radian", "aatchik_emerald_radian"),

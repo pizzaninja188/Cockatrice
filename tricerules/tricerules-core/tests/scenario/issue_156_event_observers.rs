@@ -5,13 +5,12 @@ use crate::helpers::*;
 use tricerules_cards::primitives::{
     CastTriggerPlayer, ContinuousEffectKind, EffectDuration, TriggerCondition,
 };
-use tricerules_cards::CardRegistry;
 use tricerules_core::state::ActiveDeathReplacement;
 use tricerules_core::Zone;
 use tricerules_core::{AffectedScope, ContinuousEffect};
 
 fn grant_counter_trigger(engine: &mut GameEngine, source: u32, trigger: TriggerCondition) {
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("ajanis_pridemate")
         .expect("Ajani's Pridemate definition")
         .primary_face()
@@ -31,7 +30,15 @@ fn grant_counter_trigger(engine: &mut GameEngine, source: u32, trigger: TriggerC
 
 #[test]
 fn attacking_fires_a_self_becomes_tapped_trigger() {
-    let mut engine = GameEngine::new(156_001, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        156_001,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     grant_counter_trigger(
         &mut engine,
@@ -49,7 +56,15 @@ fn attacking_fires_a_self_becomes_tapped_trigger() {
 
 #[test]
 fn sacrificing_a_source_fires_its_leaves_trigger() {
-    let mut engine = GameEngine::new(156_002, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        156_002,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let relic = inject_creature_on_battlefield(&mut engine, 0, "bottle_gnomes");
     grant_counter_trigger(
@@ -71,7 +86,15 @@ fn sacrificing_a_source_fires_its_leaves_trigger() {
 
 #[test]
 fn issue_168_filtered_departure_observes_a_committed_sacrifice() {
-    let mut engine = GameEngine::new(168010, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        168010,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let relic = inject_creature_on_battlefield(&mut engine, 0, "bottle_gnomes");
     grant_counter_trigger(
@@ -103,7 +126,15 @@ fn issue_168_soul_salvage_is_one_graveyard_departure_batch() {
         deck_with("swamp", &["soul_salvage"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(168011, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        168011,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let observer = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     grant_counter_trigger(
@@ -159,11 +190,19 @@ fn issue_168_reanimation_group_waits_for_all_replacement_choices() {
     use tricerules_proto::ruled::v1::{
         ruled_command::Cmd, ChooseTriggerTarget, RuledCommand, TargetRef, TargetRefKind,
     };
-    let mut engine = GameEngine::new(168012, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        168012,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "llanowar_elves");
     let observer = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("ajanis_pridemate")
         .unwrap()
         .primary_face()
@@ -180,7 +219,7 @@ fn issue_168_reanimation_group_waits_for_all_replacement_choices() {
             amount: Amount::Fixed(1),
         },
     ];
-    ability.targeting = CardRegistry::global()
+    ability.targeting = tricerules_cards::registry::global()
         .get("soul_salvage")
         .unwrap()
         .primary_face()
@@ -283,7 +322,15 @@ fn issue_168_reanimation_group_waits_for_all_replacement_choices() {
 
 #[test]
 fn sacrificing_another_permanent_fires_controller_observer() {
-    let mut engine = GameEngine::new(156_003, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        156_003,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let observer = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     grant_counter_trigger(
@@ -312,7 +359,15 @@ fn sacrificing_another_permanent_fires_controller_observer() {
 
 #[test]
 fn another_permanent_observer_excludes_the_sacrificed_source_generation() {
-    let mut engine = GameEngine::new(156_007, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        156_007,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "bottle_gnomes");
     grant_counter_trigger(
@@ -340,7 +395,15 @@ fn another_permanent_observer_excludes_the_sacrificed_source_generation() {
 
 #[test]
 fn chrome_companion_attacking_uses_its_authored_tap_trigger() {
-    let mut engine = GameEngine::new(156_004, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        156_004,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     let companion = inject_creature_on_battlefield(&mut engine, 0, "chrome_companion");
 
     advance_to_declare_attackers(&mut engine);
@@ -359,7 +422,15 @@ fn chrome_companion_attacking_uses_its_authored_tap_trigger() {
 
 #[test]
 fn cryoshatter_remembers_the_creature_that_became_tapped() {
-    let mut engine = GameEngine::new(156_005, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        156_005,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     let creature = inject_creature_on_battlefield(&mut engine, 0, "colossal_dreadmaw");
     let aura = inject_permanent_on_battlefield(&mut engine, 1, "cryoshatter");
     engine
@@ -395,7 +466,15 @@ fn cryoshatter_remembers_the_creature_that_became_tapped() {
 
 #[test]
 fn a_triggering_mana_ability_cannot_be_undone() {
-    let mut engine = GameEngine::new(156_006, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        156_006,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let elf = inject_creature_on_battlefield(&mut engine, 0, "llanowar_elves");
     grant_counter_trigger(
@@ -420,7 +499,15 @@ fn a_triggering_mana_ability_cannot_be_undone() {
 
 #[test]
 fn sacrifice_observer_fires_when_a_replacement_exiles_the_permanent() {
-    let mut engine = GameEngine::new(156_008, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        156_008,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let observer = inject_creature_on_battlefield(&mut engine, 0, "pirate_peddlers");
     let victim = inject_creature_on_battlefield(&mut engine, 0, "bottle_gnomes");
@@ -461,7 +548,15 @@ fn cryogen_relic_leaves_trigger_fires_when_returned_to_hand() {
         deck_with("island", &["boomerang"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(156_009, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        156_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let relic = inject_permanent_on_battlefield(&mut engine, 0, "cryogen_relic");
     ensure_in_hand(&mut engine, 0, "boomerang");
@@ -488,7 +583,15 @@ fn cryogen_relic_leaves_trigger_fires_when_returned_to_hand() {
 }
 
 fn issue_168_engine() -> GameEngine {
-    let mut engine = GameEngine::new(168100, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        168100,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

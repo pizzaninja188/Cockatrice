@@ -148,7 +148,7 @@ impl GameEngine {
     }
 
     pub(super) fn maximum_hand_size(&self, player: PlayerId) -> usize {
-        use tricerules_cards::primitives::NoMaximumHandSizeScope;
+        use tricerules_card_model::primitives::NoMaximumHandSizeScope;
 
         // CR 613.11 applies effects that modify game rules in timestamp order. A later Folio
         // removes Toad's limit; a later Toad restores the fixed limit for its controller.
@@ -393,7 +393,7 @@ impl GameEngine {
             let mut receipt = super::payment::card_result_entry(
                 &self.state,
                 self.registry,
-                tricerules_cards::primitives::CardResultAction::Discard,
+                tricerules_card_model::primitives::CardResultAction::Discard,
                 card.player,
                 card.object.object_id,
             );
@@ -633,7 +633,7 @@ impl GameEngine {
 
 impl GameEngine {
     pub(super) fn card_result_generation(&self, entry: &CardResultEntry) -> u64 {
-        if entry.action == tricerules_cards::primitives::CardResultAction::Discard {
+        if entry.action == tricerules_card_model::primitives::CardResultAction::Discard {
             self.state
                 .discard_reference_successors
                 .get(&(entry.object_id, entry.zone_change_generation))
@@ -651,6 +651,7 @@ mod tests {
     #[test]
     fn hand_size_effects_entering_in_one_command_follow_entry_order_not_object_id() {
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             61_371,
             &[0, 1],
             20,
@@ -688,6 +689,7 @@ mod tests {
     #[test]
     fn issue_197_uncast_madness_preserves_only_the_discard_reference() {
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             19710,
             &[0, 1],
             20,
@@ -706,7 +708,7 @@ mod tests {
         let receipt = super::super::payment::card_result_entry(
             &e.state,
             e.registry,
-            tricerules_cards::primitives::CardResultAction::Discard,
+            tricerules_card_model::primitives::CardResultAction::Discard,
             0,
             oid,
         );
@@ -733,7 +735,7 @@ mod tests {
             "CR 400.7k follows an uncast madness card to its public destination"
         );
         let mut ordinary = receipt.clone();
-        ordinary.action = tricerules_cards::primitives::CardResultAction::Exile;
+        ordinary.action = tricerules_card_model::primitives::CardResultAction::Exile;
         assert_eq!(
             e.card_result_generation(&ordinary),
             exile_generation,
@@ -752,6 +754,7 @@ mod tests {
     fn issue_197_madness_countering_and_new_incarnations_leave_the_card_exiled() {
         for countered in [true, false] {
             let mut e = GameEngine::new(
+                tricerules_cards::registry::global(),
                 19711,
                 &[0, 1],
                 20,
@@ -802,6 +805,7 @@ mod tests {
     #[test]
     fn issue_197_direct_hand_moves_are_not_discards() {
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             19712,
             &[0, 1],
             20,

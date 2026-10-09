@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     CastTriggerPlayer, CreatureScopeController, CreatureScopeFilter, SpellEffectKind,
 };
-use tricerules_cards::{Amount, CardRegistry, Color, CounterKind, Layout, TriggerCondition};
+use tricerules_cards::{Amount, Color, CounterKind, Layout, TriggerCondition};
 
 #[test]
 fn brokers_ascendancy_registers_its_characteristics_and_end_step_mapping() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(
         registry.id_for_name("Brokers Ascendancy"),
         Some("brokers_ascendancy")

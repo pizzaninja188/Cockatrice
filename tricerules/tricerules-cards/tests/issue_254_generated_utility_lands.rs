@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{TargetKind, TargetingDef};
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, Amount, CardRegistry, LibraryPartitionKind, ManaCost,
-    SpellEffectKind, TriggerCondition,
+    AbilityCost, AbilityPresentation, Amount, LibraryPartitionKind, ManaCost, SpellEffectKind,
+    TriggerCondition,
 };
 
 fn generated_face(id: &str) -> &'static tricerules_cards::CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .unwrap_or_else(|| panic!("missing generated card {id}"))
         .primary_face()

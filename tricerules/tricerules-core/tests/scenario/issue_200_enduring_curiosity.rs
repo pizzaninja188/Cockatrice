@@ -11,7 +11,15 @@ fn issue_200_engine(seed: u64) -> GameEngine {
         deck_with("island", &["enduring_curiosity"]),
         vec!["forest".into(); 20],
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -160,7 +168,7 @@ fn death_return_enters_as_an_enchantment_and_uses_the_next_generation() {
 fn return_trigger_rejects_tokens_and_stale_graveyard_generations() {
     let mut token_engine = issue_200_engine(200_003);
     let token = inject_creature_on_battlefield(&mut token_engine, 0, "enduring_curiosity");
-    let definition = tricerules_cards::CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("enduring_curiosity")
         .unwrap();
     token_engine

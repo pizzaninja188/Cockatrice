@@ -13,7 +13,15 @@ const DISENCHANT: &str = "disenchant";
 #[test]
 fn ichor_wellspring_draws_for_entry_and_graveyard_events_on_one_ability() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(20_260_961, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_961,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let wellspring = inject_card_into_hand(&mut engine, 0, ICHOR_WELLSPRING);

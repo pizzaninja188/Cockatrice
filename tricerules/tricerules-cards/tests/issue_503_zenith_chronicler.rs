@@ -14,7 +14,7 @@ fn probe(body: &str) -> Result<CardRegistry, String> {
 
 #[test]
 fn zenith_complete_definition_and_presentation() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("zenith_chronicler").unwrap();
     assert_eq!(card.name, "Zenith Chronicler");
     assert_eq!(

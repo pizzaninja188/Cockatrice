@@ -600,22 +600,22 @@ impl GameEngine {
                             })
                             .collect();
                         let keywords = [
-                            tricerules_cards::Keyword::Flying,
-                            tricerules_cards::Keyword::Reach,
-                            tricerules_cards::Keyword::Intimidate,
-                            tricerules_cards::Keyword::Vigilance,
-                            tricerules_cards::Keyword::Lifelink,
-                            tricerules_cards::Keyword::Haste,
-                            tricerules_cards::Keyword::Deathtouch,
-                            tricerules_cards::Keyword::Menace,
-                            tricerules_cards::Keyword::Trample,
-                            tricerules_cards::Keyword::FirstStrike,
-                            tricerules_cards::Keyword::DoubleStrike,
-                            tricerules_cards::Keyword::Indestructible,
-                            tricerules_cards::Keyword::Hexproof,
-                            tricerules_cards::Keyword::Shroud,
-                            tricerules_cards::Keyword::Defender,
-                            tricerules_cards::Keyword::Flash,
+                            tricerules_card_model::Keyword::Flying,
+                            tricerules_card_model::Keyword::Reach,
+                            tricerules_card_model::Keyword::Intimidate,
+                            tricerules_card_model::Keyword::Vigilance,
+                            tricerules_card_model::Keyword::Lifelink,
+                            tricerules_card_model::Keyword::Haste,
+                            tricerules_card_model::Keyword::Deathtouch,
+                            tricerules_card_model::Keyword::Menace,
+                            tricerules_card_model::Keyword::Trample,
+                            tricerules_card_model::Keyword::FirstStrike,
+                            tricerules_card_model::Keyword::DoubleStrike,
+                            tricerules_card_model::Keyword::Indestructible,
+                            tricerules_card_model::Keyword::Hexproof,
+                            tricerules_card_model::Keyword::Shroud,
+                            tricerules_card_model::Keyword::Defender,
+                            tricerules_card_model::Keyword::Flash,
                         ]
                         .into_iter()
                         .filter(|&keyword| {
@@ -624,8 +624,12 @@ impl GameEngine {
                                 .is_some_and(|value| value.has_keyword(keyword))
                         })
                         .map(|keyword| match keyword {
-                            tricerules_cards::Keyword::FirstStrike => "FirstStrike".to_string(),
-                            tricerules_cards::Keyword::DoubleStrike => "DoubleStrike".to_string(),
+                            tricerules_card_model::Keyword::FirstStrike => {
+                                "FirstStrike".to_string()
+                            }
+                            tricerules_card_model::Keyword::DoubleStrike => {
+                                "DoubleStrike".to_string()
+                            }
                             _ => keyword.as_str().to_string(),
                         })
                         .collect();
@@ -997,7 +1001,7 @@ pub(super) fn finish_with_events(eng: &GameEngine, events: Vec<RuledEvent>) -> R
 
 /// Render one [`ManaAmount`] as a brace-less symbol run for the zone view's mana-produced field
 /// (e.g. `{g:1}` → `"G"`, `{c:2}` → `"CC"`, `{w:1,u:1}` → `"WU"`). Order W U B R G C is canonical.
-pub(super) fn mana_amount_symbols(a: &tricerules_cards::ManaAmount) -> String {
+pub(super) fn mana_amount_symbols(a: &tricerules_card_model::ManaAmount) -> String {
     let mut s = String::new();
     for (sym, n) in [
         ('W', a.w),
@@ -1153,6 +1157,7 @@ mod library_card_projection_tests {
     fn deferred_library_tokens_are_not_physical_cards_in_full_or_tracked_views() {
         for position in [0, 1, 3] {
             let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
                 700_111,
                 &[0, 1],
                 20,
@@ -1185,6 +1190,7 @@ mod library_card_projection_tests {
     #[test]
     fn private_library_cache_ignores_token_only_changes_but_detects_card_order_changes() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             700_112,
             &[0, 1],
             20,

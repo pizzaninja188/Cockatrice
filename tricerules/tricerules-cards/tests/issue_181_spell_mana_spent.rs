@@ -5,7 +5,7 @@ use tricerules_cards::{CardRegistry, CounterKind};
 
 #[test]
 fn issue_181_cards_use_the_shared_spell_spending_context() {
-    let tackle = CardRegistry::global()
+    let tackle = tricerules_cards::registry::global()
         .get("tackle_artist")
         .expect("Tackle Artist must be registered")
         .primary_face();
@@ -27,7 +27,7 @@ fn issue_181_cards_use_the_shared_spell_spending_context() {
         }]
     ));
 
-    let graffalon = CardRegistry::global()
+    let graffalon = tricerules_cards::registry::global()
         .get("hungry_graffalon")
         .expect("Hungry Graffalon must be registered")
         .primary_face();

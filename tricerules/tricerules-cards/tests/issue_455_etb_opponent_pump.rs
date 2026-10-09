@@ -15,7 +15,7 @@ use common::FaceExpectation;
 use tricerules_cards::primitives::{
     EffectSubject, SpellEffectKind, TargetController, TargetFilter, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Keyword, ManaCost, TriggerCondition};
+use tricerules_cards::{AbilityPresentation, Keyword, ManaCost, TriggerCondition};
 
 struct PumpCase {
     id: &'static str,
@@ -75,7 +75,7 @@ const PUMP_CASES: [PumpCase; 3] = [
 
 #[test]
 fn issue_455_registers_the_three_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for case in &PUMP_CASES {
         assert_eq!(
             registry.id_for_name(case.name),
@@ -99,7 +99,7 @@ fn issue_455_registers_the_three_reviewed_identities() {
 #[test]
 fn issue_455_sinister_cryologist_has_a_blue_warp_cost() {
     for case in &PUMP_CASES {
-        let face = CardRegistry::global()
+        let face = tricerules_cards::registry::global()
             .get(case.id)
             .unwrap_or_else(|| panic!("missing reviewed card {}", case.id))
             .primary_face();
@@ -109,7 +109,7 @@ fn issue_455_sinister_cryologist_has_a_blue_warp_cost() {
         assert_eq!(face.warp_cost, expected, "{} printed Warp cost", case.id);
         assert!(face.flashback_cost.is_none(), "{}", case.id);
     }
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("sinister_cryologist")
         .expect("Sinister Cryologist")
         .primary_face();
@@ -122,7 +122,7 @@ fn issue_455_sinister_cryologist_has_a_blue_warp_cost() {
 #[test]
 fn issue_455_each_identity_prints_the_typed_opponent_pump_trigger() {
     for case in &PUMP_CASES {
-        let face = CardRegistry::global()
+        let face = tricerules_cards::registry::global()
             .get(case.id)
             .unwrap_or_else(|| panic!("missing reviewed card {}", case.id))
             .primary_face();
@@ -202,7 +202,7 @@ fn issue_455_each_identity_prints_the_typed_opponent_pump_trigger() {
 #[test]
 fn issue_455_shipped_minus_two_zero_identities_are_unchanged() {
     for id in ["cogwork_wrestler", "humbling_elder"] {
-        let face = CardRegistry::global()
+        let face = tricerules_cards::registry::global()
             .get(id)
             .unwrap_or_else(|| panic!("missing shipped {id}"))
             .primary_face();

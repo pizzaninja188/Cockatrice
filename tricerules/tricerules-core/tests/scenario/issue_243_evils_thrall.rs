@@ -4,6 +4,7 @@ use tricerules_core::{GameEngine, Zone};
 
 fn setup(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -37,7 +38,7 @@ fn cast_thrall(engine: &mut GameEngine, target: u32) {
 }
 
 fn copy_characteristics(engine: &mut GameEngine, object_id: u32, card_id: &str) {
-    let definition = tricerules_cards::CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get(card_id)
         .expect("copy source is registered");
     engine
@@ -57,6 +58,7 @@ fn copy_characteristics(engine: &mut GameEngine, object_id: u32, card_id: &str) 
 #[test]
 fn issue_243_evils_thrall_is_registered() {
     GameEngine::new(
+        tricerules_cards::registry::global(),
         243_001,
         &[0, 1],
         20,
@@ -159,6 +161,7 @@ fn issue_243_an_inserted_controller_turn_is_the_next_actual_turn() {
 #[test]
 fn issue_243_later_control_effect_wins_then_expiring_it_reveals_the_extended_effect() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         243_007,
         &[0, 1],
         20,

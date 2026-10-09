@@ -517,6 +517,7 @@ mod tests {
 
     fn accepted_aura_timestamp_fixture(tokens: bool) -> (GameEngine, Vec<ObjectId>) {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             613_709,
             &[0, 1, 2],
             20,
@@ -747,6 +748,7 @@ mod tests {
     fn accepted_aura_token_batch_skips_after_recipient_departure_during_second_choice_and_resumes_tail(
     ) {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             613_707,
             &[0, 1, 2],
             20,
@@ -860,7 +862,15 @@ mod tests {
 
     #[test]
     fn token_batch_resumes_after_logged_order_and_stamps_chosen_order() {
-        let mut engine = GameEngine::new(613_704, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            613_704,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = engine.state.players[0].hand[0];
         let stack = engine.observer_return_item(source, 0);
         let (entries, logs) = engine
@@ -931,6 +941,7 @@ mod tests {
     #[test]
     fn accepted_observer_auras_skip_after_recipient_departure_and_resume_tail_once() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             613_708,
             &[0, 1, 2],
             20,
@@ -1026,6 +1037,7 @@ mod tests {
     #[test]
     fn observer_returns_preserve_ready_cohort_until_logged_order_commits() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             613_705,
             &[0, 1],
             20,
@@ -1088,6 +1100,7 @@ mod tests {
     #[test]
     fn aura_return_pauses_preserve_the_observer_cohort_and_resume_the_effect_tail() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             613_706,
             &[0, 1],
             20,

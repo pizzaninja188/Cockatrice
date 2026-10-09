@@ -648,7 +648,7 @@ fn multikicker_absent_count_is_one_and_ordinary_kicker_rejects_repeat_counts() {
     let CastCostOptionDef::Mana { kind, .. } = &mut groups[0].options[0] else {
         unreachable!()
     };
-    *kind = tricerules_cards::primitives::ManaCostChoiceKind::Kicker;
+    *kind = tricerules_card_model::primitives::ManaCostChoiceKind::Kicker;
     for repetitions in [None, Some(1), Some(0), Some(2)] {
         let result = e.prepare_spell_costs(
             0,
@@ -708,7 +708,9 @@ fn multikicker_private_comet_storm_generic_fee_witness_composes_with_x_and_red_c
         .unwrap();
     assert_eq!(prepared.total_cost_label().unwrap(), "{7}{R}{R}");
     assert!(
-        CardRegistry::global().get("comet_storm").is_none(),
+        tricerules_cards::registry::global()
+            .get("comet_storm")
+            .is_none(),
         "the payment witness never admits an incomplete whole card"
     );
 }

@@ -23,6 +23,7 @@ fn resolve_top(engine: &mut GameEngine) -> RuledEventBatch {
 
 fn setup() -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         229_001,
         &[0, 1],
         20,
@@ -903,7 +904,7 @@ fn issue_229_blink_resets_entry_fact_without_changing_the_old_trigger() {
 }
 
 fn copy_characteristics(engine: &mut GameEngine, oid: u32, card: &str) {
-    let definition = tricerules_cards::CardRegistry::global().get(card).unwrap();
+    let definition = tricerules_cards::registry::global().get(card).unwrap();
     engine.state.objects.get_mut(&oid).unwrap().copiable_values =
         Some(tricerules_core::state::CopiableValues {
             source_card_id: card.into(),

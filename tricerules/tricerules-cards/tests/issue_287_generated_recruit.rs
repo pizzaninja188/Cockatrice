@@ -3,11 +3,11 @@ use tricerules_cards::primitives::{
     PlayerRecipient, RelativePlayerSet, ResolutionBranchRequirement, ResolutionBranchSelection,
     ResolutionCost, SpellEffectKind,
 };
-use tricerules_cards::{AbilityPresentation, Amount, CardRegistry, ChoiceId, TriggerCondition};
+use tricerules_cards::{AbilityPresentation, Amount, ChoiceId, TriggerCondition};
 
 #[test]
 fn issue_287_registers_both_generated_recruit_etb_cards_with_the_exact_result_branch() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana_cost, types, stats, keyword, oracle_line) in [
         (
             "long_lake_nuisance",

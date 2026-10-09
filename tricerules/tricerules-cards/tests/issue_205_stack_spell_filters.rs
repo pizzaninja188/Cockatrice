@@ -1,8 +1,10 @@
 use tricerules_cards::primitives::{SpellEffectKind, StackSpellFilter};
-use tricerules_cards::CardRegistry;
 
 fn counter_filter(card_id: &str) -> &StackSpellFilter {
-    let face = CardRegistry::global().get(card_id).unwrap().primary_face();
+    let face = tricerules_cards::registry::global()
+        .get(card_id)
+        .unwrap()
+        .primary_face();
     let [SpellEffectKind::CounterTargetSpell { spell_filter, .. }] = face.spell_effect.as_slice()
     else {
         panic!("{card_id} must have one counter-spell effect")

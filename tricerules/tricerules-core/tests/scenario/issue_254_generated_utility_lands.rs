@@ -9,7 +9,6 @@ use super::helpers::*;
 use tricerules_cards::primitives::{
     CastTriggerPlayer, ContinuousEffectKind, EffectDuration, Keyword, TriggerCondition,
 };
-use tricerules_cards::CardRegistry;
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ChoiceKind, ChooseTriggerTarget, RuledCommand,
@@ -58,7 +57,15 @@ fn generated_lifeland_gains_exactly_once_on_entry() {
         deck_with("plains", &["scoured_barrens"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(254_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        254_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     move_ready_to_battlefield(&mut engine, 0, "scoured_barrens");
@@ -79,7 +86,15 @@ fn generated_scry_and_surveil_keep_private_exact_library_identity_and_emit_surve
         deck_with("island", &["crystal_grotto"]),
         deck_with("forest", &[]),
     ]);
-    let mut scry = GameEngine::new(254_002, &[0, 1], 20, scry_decks, true).expect("scry engine");
+    let mut scry = GameEngine::new(
+        tricerules_cards::registry::global(),
+        254_002,
+        &[0, 1],
+        20,
+        scry_decks,
+        true,
+    )
+    .expect("scry engine");
     advance_to_main1_from_game_start(&mut scry);
     let scried = seat_on_top(&mut scry, 0, "storm_crow");
     move_ready_to_battlefield(&mut scry, 0, "crystal_grotto");
@@ -97,12 +112,19 @@ fn generated_scry_and_surveil_keep_private_exact_library_identity_and_emit_surve
         deck_with("swamp", &["conduit_pylons"]),
         deck_with("forest", &[]),
     ]);
-    let mut surveil =
-        GameEngine::new(254_003, &[0, 1], 20, surveil_decks, true).expect("surveil engine");
+    let mut surveil = GameEngine::new(
+        tricerules_cards::registry::global(),
+        254_003,
+        &[0, 1],
+        20,
+        surveil_decks,
+        true,
+    )
+    .expect("surveil engine");
     advance_to_main1_from_game_start(&mut surveil);
     let surveilled = seat_on_top(&mut surveil, 0, "storm_crow");
     let observer = inject_creature_on_battlefield(&mut surveil, 0, "grizzly_bears");
-    let mut observer_ability = CardRegistry::global()
+    let mut observer_ability = tricerules_cards::registry::global()
         .get("audacious_thief")
         .expect("observer definition")
         .primary_face()
@@ -144,7 +166,15 @@ fn generated_desert_targets_one_chosen_opponent_and_attributes_land_damage() {
         deck_with("island", &["lonely_arroyo"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(254_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        254_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     add_third_player(&mut engine);
     let land = move_ready_to_battlefield(&mut engine, 0, "lonely_arroyo");
@@ -193,7 +223,15 @@ fn generated_desert_revalidates_a_departed_player_target_before_resolution() {
         deck_with("swamp", &["jagged_barrens"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(254_005, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        254_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     add_third_player(&mut engine);
     move_ready_to_battlefield(&mut engine, 0, "jagged_barrens");
@@ -222,8 +260,15 @@ fn generated_paid_mana_ability_is_atomic_and_offers_exactly_five_outputs() {
         (3, [0, 0, 0, 1, 0]),
         (4, [0, 0, 0, 0, 1]),
     ] {
-        let mut engine =
-            GameEngine::new(254_100 + option as u64, &[0, 1], 20, None, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            254_100 + option as u64,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("engine");
         advance_to_main1_from_game_start(&mut engine);
         let land = inject_permanent_on_battlefield(&mut engine, 0, "crystal_grotto");
 

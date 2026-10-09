@@ -2,7 +2,6 @@
 //! deck-name resolver, dev gate, command dispatch, and initial publication cache behavior.
 
 use std::collections::BTreeSet;
-use tricerules_cards::CardRegistry;
 use tricerules_core::{EngineDeck, GameEngine, PlayerId};
 use tricerules_proto::ipc_envelope::Msg;
 use tricerules_proto::{commander_setup, IpcEnvelope, IpcResponse, PlayerDeck};
@@ -71,6 +70,7 @@ impl EngineSession {
                     },
                     Ok(decks) => {
                         match GameEngine::new_with_commander_decks(
+                            tricerules_cards::registry::global(),
                             start.seed,
                             &start.player_ids,
                             20,
@@ -92,7 +92,7 @@ impl EngineSession {
                                     ok: true,
                                     batch: Some(batch),
                                     engine_build: ENGINE_BUILD.into(),
-                                    card_data_hash: CardRegistry::content_hash(),
+                                    card_data_hash: tricerules_cards::registry::content_hash(),
                                     ..Default::default()
                                 }
                             }
@@ -152,7 +152,7 @@ pub fn missing_cards_response(missing: Vec<String>) -> IpcResponse {
 }
 
 pub fn validate_deck_response(card_names: &[String]) -> IpcResponse {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let missing: BTreeSet<_> = card_names
         .iter()
         .filter(|name| registry.id_for_name(name).is_none())
@@ -187,7 +187,7 @@ pub fn resolve_deck_names(
             "every player deck must have one explicit Commander setup".into(),
         ));
     }
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let mut out: Vec<EngineDeck> = pids.iter().map(|_| EngineDeck::default()).collect();
     let mut missing = BTreeSet::new();
     let mut seen = BTreeSet::new();

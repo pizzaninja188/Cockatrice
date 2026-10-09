@@ -13,8 +13,8 @@ use tricerules_cards::primitives::{
     ZoneCardFilter,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CardRegistry, Color, Layout,
-    ManaCost, TriggerCondition,
+    AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, Color, Layout, ManaCost,
+    TriggerCondition,
 };
 
 fn single_group(targeting: &tricerules_cards::primitives::TargetingDef) -> &TargetGroupDef {
@@ -33,7 +33,7 @@ fn graveyard_creature_card_filter() -> ZoneCardFilter {
 
 #[test]
 fn issue_317_registers_the_six_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_count, layout) in [
         (
             "careening_mine_cart",
@@ -69,7 +69,7 @@ fn issue_317_registers_the_six_reviewed_identities() {
 
 #[test]
 fn issue_317_careening_mine_cart_keeps_crew_and_attacks_for_treasure() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("careening_mine_cart")
         .expect("Careening Mine Cart");
     let face = definition.primary_face();
@@ -134,7 +134,9 @@ fn issue_317_careening_mine_cart_keeps_crew_and_attacks_for_treasure() {
 
 #[test]
 fn issue_317_fight_on_returns_up_to_two_creature_cards_from_own_graveyard() {
-    let definition = CardRegistry::global().get("fight_on!").expect("Fight On!");
+    let definition = tricerules_cards::registry::global()
+        .get("fight_on!")
+        .expect("Fight On!");
     let face = definition.primary_face();
     assert_eq!(face.face_id.as_str(), "fight_on");
     assert_eq!(face.name, "Fight On!");
@@ -170,7 +172,7 @@ fn issue_317_fight_on_returns_up_to_two_creature_cards_from_own_graveyard() {
 
 #[test]
 fn issue_317_springleaf_drum_taps_a_creature_for_any_color() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("springleaf_drum")
         .expect("Springleaf Drum");
     let face = definition.primary_face();
@@ -232,7 +234,7 @@ fn issue_317_springleaf_drum_taps_a_creature_for_any_color() {
 
 #[test]
 fn issue_317_stormkeld_vanguard_adventure_faces_carry_both_clauses() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("stormkeld_vanguard_bear_down")
         .expect("Stormkeld Vanguard // Bear Down");
     assert_eq!(definition.layout, Layout::Adventure);
@@ -294,7 +296,7 @@ fn issue_317_stormkeld_vanguard_adventure_faces_carry_both_clauses() {
 
 #[test]
 fn issue_317_cunning_maneuver_pumps_then_creates_a_clue() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("cunning_maneuver")
         .expect("Cunning Maneuver");
     let face = definition.primary_face();
@@ -326,7 +328,7 @@ fn issue_317_cunning_maneuver_pumps_then_creates_a_clue() {
 
 #[test]
 fn issue_317_project_deathlok_soldier_activates_from_the_graveyard() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("project_deathlok_soldier")
         .expect("Project Deathlok Soldier");
     let face = definition.primary_face();
@@ -364,7 +366,7 @@ fn issue_317_project_deathlok_soldier_activates_from_the_graveyard() {
 
 #[test]
 fn issue_317_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let cases: &[(&str, &str, &str, &str)] = &[
         (
             "careening_mine_cart",

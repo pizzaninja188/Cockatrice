@@ -9,7 +9,15 @@ fn evolving_wilds_finds_only_a_basic_land_and_puts_it_onto_the_battlefield_tappe
         deck_with("forest", &["evolving_wilds"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(9001, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let wilds = relocate_to_battlefield(&mut engine, 0, "evolving_wilds", false);
@@ -77,7 +85,15 @@ fn evolving_wilds_rejects_a_forged_nonbasic_choice_but_allows_fail_to_find() {
         deck_with("forest", &["evolving_wilds"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(9002, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let wilds = relocate_to_battlefield(&mut engine, 0, "evolving_wilds", false);
@@ -127,7 +143,15 @@ fn evolving_wilds_waits_for_entry_replacements_before_shuffling_and_resuming() {
         ),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(9003, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     relocate_to_battlefield(&mut engine, 0, "orb_of_dreams", false);

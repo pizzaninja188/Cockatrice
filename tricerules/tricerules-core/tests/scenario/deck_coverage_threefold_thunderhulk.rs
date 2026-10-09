@@ -2,7 +2,7 @@
 
 use super::helpers::*;
 use tricerules_cards::primitives::*;
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout, PermanentTypeFilter};
+use tricerules_cards::{AbilityPresentation, Layout, PermanentTypeFilter};
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{ruled_command::Cmd, RuledCommand};
 
@@ -117,7 +117,7 @@ fn ready_attack(engine: &mut GameEngine, source: u32) {
 
 #[test]
 fn threefold_thunderhulk_registers_exact_identity_and_all_clauses() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("threefold_thunderhulk")
         .expect("complete Threefold Thunderhulk definition");
     assert_eq!(card.name, "Threefold Thunderhulk");
@@ -426,6 +426,7 @@ fn threefold_thunderhulk_resolved_counter_does_not_follow_source_reentry() {
 #[test]
 fn threefold_thunderhulk_four_player_tokens_and_costs_use_actual_controller_ids() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         49710,
         &[7, 20, 42, 91],
         20,

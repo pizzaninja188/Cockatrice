@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
-use tricerules_cards::primitives::{
+use tricerules_card_model::primitives::{
     ActivatedAbilityDef, ArmySubtype, CardResultAction, CardSearchZone, CardTypeFilter,
     CastCostReceiptCondition, Color, ConditionalSearchDestination, ContinuousEffectKind,
     CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
@@ -9,8 +9,8 @@ use tricerules_cards::primitives::{
     SearchSelectionConstraint, SearchSelectionSlot, SearchZoneSelection, StaticEmblemEffect,
     TargetFilter, TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
 };
-use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
-use tricerules_cards::{
+use tricerules_card_model::primitives::{PlayerRecipient, ResolutionBranchDef};
+use tricerules_card_model::{
     is_creature_type, AbilityLinkId, CardFace, ChoiceId, ExiledCohortId, ManaCost, ManaSymbol,
     ModeId, SearchResultId,
 };
@@ -225,8 +225,8 @@ pub struct PersistentActivationUseKey {
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AbilityDefinitionId {
     pub card_id: String,
-    pub face_id: tricerules_cards::CardFaceId,
-    pub ability_path: Vec<tricerules_cards::AbilityId>,
+    pub face_id: tricerules_card_model::CardFaceId,
+    pub ability_path: Vec<tricerules_card_model::AbilityId>,
 }
 
 /// CR 113.2c identity of an ability occurrence. Infernal Scarring's static grant and
@@ -556,7 +556,7 @@ pub struct CopiableValues {
 /// token_origin mirrors that face so ordinary copied-ability consumers share the same values.
 #[derive(serde::Serialize, Debug, Clone)]
 pub struct DoubleFacedToken {
-    pub layout: tricerules_cards::Layout,
+    pub layout: tricerules_card_model::Layout,
     pub faces: [CopiableValues; 2],
 }
 
@@ -1209,7 +1209,7 @@ pub enum ResolutionContinuation {
     },
     GraveyardChoice {
         stack: ParkedStackResolution,
-        destination: tricerules_cards::primitives::GraveyardDestination,
+        destination: tricerules_card_model::primitives::GraveyardDestination,
         candidate_generations: Vec<(ObjectId, u64)>,
         spell_label: String,
     },
@@ -1682,7 +1682,7 @@ pub struct BattlefieldEntryEvent {
     pub set_types: Option<TypeLineReplacement>,
     /// A basic land type chosen by a still-resolving intrinsic entry replacement. Kept on the
     /// proposed event so later replacement predicates see the provisional characteristics.
-    pub chosen_basic_land_type: Option<tricerules_cards::BasicLandType>,
+    pub chosen_basic_land_type: Option<tricerules_card_model::BasicLandType>,
     /// Provisional linked choices; installed only with the committed incarnation.
     pub(crate) chosen_opponents: Vec<ChosenOpponentRecord>,
     /// Counter state accumulated by entry replacement effects before zone commitment.
@@ -1967,7 +1967,7 @@ pub enum CastCostObjectReceipt {
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct CastCostAbilityOrigin {
     pub original_card_id: String,
-    pub face_id: tricerules_cards::CardFaceId,
+    pub face_id: tricerules_card_model::CardFaceId,
     pub copy_revision: u64,
 }
 
@@ -2074,7 +2074,7 @@ pub struct StackItem {
     pub returned_attacker_assignment: Option<CombatAttackAssignment>,
     /// CR 107.3b: the value chosen for `{X}` as this spell was cast. `0` for spells without an
     /// `{X}` pip (and for abilities). On the stack the spell's mana value is `fixed_mv + chosen_x`;
-    /// at resolution this feeds [`Amount::X`](tricerules_cards::Amount) effect amounts.
+    /// at resolution this feeds [`Amount::X`](tricerules_card_model::Amount) effect amounts.
     pub chosen_x: u32,
     /// Atomic modal choices in printed order. Empty for nonmodal spells and abilities.
     pub chosen_modes: Vec<ChosenMode>,
@@ -3288,7 +3288,15 @@ mod event_observer_tests {
 
     #[test]
     fn next_turn_upkeep_observer_arms_for_first_later_turn_and_fires_at_its_upkeep() {
-        let mut engine = GameEngine::new(161_012, &[0, 1], 20, None, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            161_012,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
         engine
             .state
             .active_event_observers
@@ -3330,7 +3338,15 @@ mod event_observer_tests {
 
     #[test]
     fn next_turn_upkeep_observer_expires_when_armed_turn_ends_without_upkeep() {
-        let mut engine = GameEngine::new(161_013, &[0, 1], 20, None, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            161_013,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
         engine
             .state
             .active_event_observers
@@ -3357,7 +3373,15 @@ mod event_observer_tests {
 
     #[test]
     fn controller_next_turn_observer_arms_on_the_next_actual_turn() {
-        let mut engine = GameEngine::new(161_010, &[0, 1], 20, None, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            161_010,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
         engine
             .state
             .active_event_observers
@@ -3402,7 +3426,15 @@ mod event_observer_tests {
 
     #[test]
     fn controller_next_turn_observer_expires_if_its_armed_turn_has_no_end_step() {
-        let mut engine = GameEngine::new(161_011, &[0, 1], 20, None, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            161_011,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
         engine
             .state
             .active_event_observers

@@ -3,8 +3,7 @@ use tricerules_cards::primitives::{
     TargetKind,
 };
 use tricerules_cards::{
-    AbilityPresentation, AbilitySourceZone, ActivationTiming, CardRegistry, Keyword,
-    TriggerCondition,
+    AbilityPresentation, AbilitySourceZone, ActivationTiming, Keyword, TriggerCondition,
 };
 
 fn defending_creature_target() -> TargetFilter {
@@ -75,7 +74,7 @@ fn assert_common_identity(
     mana_cost: &str,
     supertypes: &[&str],
 ) -> tricerules_cards::FaceRef<'static> {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let definition = registry
         .get(id)
         .unwrap_or_else(|| panic!("missing issue #286 card {id}"));
@@ -101,7 +100,7 @@ fn assert_common_identity(
 
 #[test]
 fn issue_286_generated_cards_preserve_identity_and_all_equipment_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let shield = assert_common_identity(
         "captain_americas_shield",

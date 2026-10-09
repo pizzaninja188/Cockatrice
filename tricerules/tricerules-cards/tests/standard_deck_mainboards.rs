@@ -4,8 +4,8 @@ use tricerules_cards::primitives::{
     StaticAbilityDef, TargetController, TargetKind, TargetingSourceFilter, TriggeredCardReference,
 };
 use tricerules_cards::{
-    Amount, CardRegistry, CastCostOptionDef, CastTriggerPlayer, CounterKind, Keyword,
-    PermanentTypeFilter, SearchDestination, TriggerCondition,
+    Amount, CastCostOptionDef, CastTriggerPlayer, CounterKind, Keyword, PermanentTypeFilter,
+    SearchDestination, TriggerCondition,
 };
 
 struct ExpectedCard {
@@ -176,7 +176,7 @@ const COHORT: &[ExpectedCard] = &[
 
 #[test]
 fn current_standard_mainboard_cohort_has_exact_oracle_characteristics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for expected in COHORT {
         let definition = registry
             .get(expected.id)
@@ -230,7 +230,7 @@ fn current_standard_mainboard_cohort_has_exact_oracle_characteristics() {
 
 #[test]
 fn enduring_curiosity_uses_generic_damage_and_type_setting_primitives() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("enduring_curiosity")
         .unwrap()
         .primary_face();
@@ -281,7 +281,7 @@ fn enduring_curiosity_uses_generic_damage_and_type_setting_primitives() {
 
 #[test]
 fn surrak_uses_stack_counter_prohibition_and_parallel_target_watchers() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("surrak,_elusive_hunter")
         .unwrap()
         .primary_face();
@@ -323,7 +323,7 @@ fn surrak_uses_stack_counter_prohibition_and_parallel_target_watchers() {
 
 #[test]
 fn wan_shi_tong_uses_etb_x_and_opponent_own_library_search_triggers() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("wan_shi_tong,_librarian")
         .unwrap()
         .primary_face();
@@ -355,7 +355,7 @@ fn wan_shi_tong_uses_etb_x_and_opponent_own_library_search_triggers() {
 
 #[test]
 fn dimir_cohort_uses_authoritative_cost_target_and_trigger_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let dream = registry.get("dream_beavers").unwrap().primary_face();
     assert_eq!(
@@ -459,7 +459,7 @@ fn dimir_cohort_uses_authoritative_cost_target_and_trigger_shapes() {
 
 #[test]
 fn landfall_cohort_uses_authoritative_entry_search_and_combat_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let ba_sing_se = registry.get("ba_sing_se").unwrap().primary_face();
     assert!(matches!(

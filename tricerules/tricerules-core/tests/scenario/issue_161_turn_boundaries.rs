@@ -20,7 +20,15 @@ fn kav_lander_waits_for_its_controllers_next_turn_end_step() {
         deck_with("mountain", &["kav_landseeker"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(161_001, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        161_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "kav_landseeker");
     grant_pool(&mut engine, 0);
@@ -69,7 +77,15 @@ fn waterskin_untaps_at_another_players_untap_boundary_unless_it_lost_the_ability
         ),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(161_002, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        161_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let waterskin = relocate_to_battlefield(&mut engine, 0, "benders_waterskin", true);
     let silenced = relocate_to_battlefield(&mut engine, 0, "benders_waterskin", true);
@@ -121,7 +137,15 @@ fn kav_delayed_sacrifice_leaves_a_lander_no_longer_controlled_by_its_creator() {
         deck_with("mountain", &["kav_landseeker"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(161_003, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        161_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "kav_landseeker");
     grant_pool(&mut engine, 0);

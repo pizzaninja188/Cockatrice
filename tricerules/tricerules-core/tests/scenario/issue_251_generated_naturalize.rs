@@ -6,7 +6,15 @@ fn setup(seed: u64, source_card: &str, target_card: &str) -> (GameEngine, u32, u
         deck_with("forest", &[source_card]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = relocate_to_battlefield(&mut engine, 0, source_card, false);
     let target = inject_permanent_on_battlefield(&mut engine, 1, target_card);

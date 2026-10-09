@@ -24,8 +24,15 @@ fn engine(starting_life: i32) -> GameEngine {
         vec!["multiversal_passage".into(); 7],
         vec!["forest".into(); 7],
     ]);
-    let mut engine =
-        GameEngine::new(233_001, &[0, 1], starting_life, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        233_001,
+        &[0, 1],
+        starting_life,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -203,7 +210,15 @@ fn basic_land_setting_replaces_old_land_subtypes_and_copiable_abilities_but_not_
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut engine = GameEngine::new(233_002, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        233_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let watery_grave = inject_permanent_on_battlefield(&mut engine, 0, "watery_grave");
     engine.state.continuous_effects.push(ContinuousEffect {

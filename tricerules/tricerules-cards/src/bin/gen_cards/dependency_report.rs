@@ -127,7 +127,7 @@ fn validate_links(reviews: &Reviews, root: &Path, issues: Option<&Value>) -> Res
 }
 
 fn registry_inventory() -> Result<BTreeMap<String, RegistryStatus>, String> {
-    let registry = super::CardRegistry::from_embedded().map_err(|e| e.to_string())?;
+    let registry = tricerules_cards::registry::from_embedded().map_err(|e| e.to_string())?;
     let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let generated = super::generated_outputs(&crate_dir.join("data/generated"))?;
     let partial = fs::read_to_string(crate_dir.join("authoring/partial-cards.tsv"))

@@ -15,7 +15,15 @@ use tricerules_proto::ruled::v1::ChoiceKind;
 const ISSUE_290_CARDS: [&str; 2] = ["sage_of_days", "gurmag_nightwatch"];
 
 fn issue_290_engine(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("issue #290 engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("issue #290 engine");
     advance_to_main1_from_game_start(&mut engine);
     engine.state.players[0].library.clear();
     engine
@@ -324,7 +332,7 @@ fn issue_290_look_is_private_and_does_not_fire_a_surveil_trigger() {
     let mut engine = issue_290_engine(290_014);
     let top = seat_on_top(&mut engine, 0, &["island", "forest", "swamp"]);
     let observer = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
-    let mut ability = tricerules_cards::CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("audacious_thief")
         .expect("Audacious Thief definition")
         .primary_face()

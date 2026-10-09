@@ -1,11 +1,11 @@
 //! Complete-card definition checks for five reviewed life-trigger Standard identities.
 
 use tricerules_cards::primitives::{PlayerRecipient, SpellEffectKind, TriggerCondition};
-use tricerules_cards::{CardRegistry, Keyword, Layout};
+use tricerules_cards::{Keyword, Layout};
 
 #[test]
 fn issue_misc24_batch_maps_printed_cards_and_distinct_life_triggers() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, types, stats) in [
         (
             "potioners_trove",

@@ -7,7 +7,15 @@ fn copy_card_engine(seed: u64, copy_card: &str) -> GameEngine {
         vec![copy_card.to_string(); 20],
         vec!["island".to_string(); 20],
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     relocate_to_hand(&mut engine, 0, copy_card);
     engine
@@ -18,7 +26,15 @@ fn reanimate_engine(seed: u64) -> GameEngine {
         vec!["reanimate".to_string(); 20],
         vec!["island".to_string(); 20],
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     relocate_to_hand(&mut engine, 0, "reanimate");
     engine.state.players[0].mana_pool.black = 1;

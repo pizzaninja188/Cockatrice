@@ -14,7 +14,15 @@ use tricerules_proto::ruled::v1::{
 };
 
 fn setup_ripchain(seed: u64) -> (GameEngine, u32, u32, u32) {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "ripchain_razorkin");
     let land = inject_permanent_on_battlefield(&mut engine, 0, "mountain");
@@ -37,7 +45,15 @@ fn setup_ripchain(seed: u64) -> (GameEngine, u32, u32, u32) {
 }
 
 fn three_player_main1(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     engine
         .state
         .players
@@ -117,7 +133,15 @@ fn issue_300_ripchain_sacrifices_one_controlled_land_then_draws_one() {
 
 #[test]
 fn issue_300_no_controlled_land_publishes_no_payable_choice_and_fails_atomically() {
-    let mut engine = GameEngine::new(300_002, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        300_002,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "ripchain_razorkin");
     engine.state.players[0].mana_pool.colorless = 2;
@@ -254,7 +278,15 @@ fn issue_300_countered_ability_keeps_paid_cost_and_does_not_draw() {
         deck_with("island", &["tishanas_tidebinder"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(300_007, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        300_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "ripchain_razorkin");
     let land = inject_permanent_on_battlefield(&mut engine, 0, "mountain");
@@ -327,7 +359,15 @@ fn issue_300_seismic_mountaincycling_discards_from_hand_and_searches_revealed_mo
         deck_with("forest", &["seismic_monstrosaur"]),
         deck_with("plains", &[]),
     ]);
-    let mut engine = GameEngine::new(300_008, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        300_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "seismic_monstrosaur");
     let source =

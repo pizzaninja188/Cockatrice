@@ -160,8 +160,15 @@ fn issue_188_vow_chooses_and_attaches_one_legal_equipment_to_a_dwarf() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine =
-        GameEngine::new(188_001, &[0, 1], 20, decks, true).expect("issue #188 cards validate");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        188_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("issue #188 cards validate");
     advance_to_main1_from_game_start(&mut engine);
     let dwarf = relocate_to_battlefield(&mut engine, 0, "dwarven_priest", true);
     let equipment = relocate_to_battlefield(&mut engine, 0, "bonesplitter", false);
@@ -193,7 +200,15 @@ fn issue_188_vow_may_decline_the_equipment_choice() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(188_002, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        188_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let dwarf = relocate_to_battlefield(&mut engine, 0, "dwarven_priest", true);
     let equipment = relocate_to_battlefield(&mut engine, 0, "bonesplitter", false);
@@ -218,7 +233,15 @@ fn issue_188_vow_skips_the_equipment_choice_for_a_non_dwarf() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(188_003, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        188_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let creature = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", true);
     let equipment = relocate_to_battlefield(&mut engine, 0, "bonesplitter", false);
@@ -241,7 +264,15 @@ fn issue_188_vow_does_not_offer_equipment_that_cannot_legally_attach() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(188_004, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        188_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let dwarf = relocate_to_battlefield(&mut engine, 0, "dwarven_priest", true);
     let equipment = relocate_to_battlefield(&mut engine, 0, "bonesplitter", false);
@@ -270,7 +301,15 @@ fn issue_188_swordsman_shape_attaches_optional_equipment_to_required_creature() 
         deck_with("island", &["a.i.m._bot", "bonesplitter"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(188_005, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        188_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let recipient = inject_creature_on_battlefield(&mut engine, 0, "storm_crow");
@@ -308,7 +347,15 @@ fn issue_188_swordsman_shape_allows_omitting_the_optional_equipment() {
         deck_with("island", &["a.i.m._bot", "bonesplitter"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(188_006, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        188_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let recipient = inject_creature_on_battlefield(&mut engine, 0, "storm_crow");
@@ -343,7 +390,15 @@ fn issue_188_swordsman_shape_ignores_a_stale_equipment_target() {
         deck_with("island", &["a.i.m._bot", "bonesplitter"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(188_007, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        188_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let recipient = inject_creature_on_battlefield(&mut engine, 0, "storm_crow");
@@ -383,7 +438,15 @@ fn issue_188_swordsman_shape_rechecks_attachment_protection_on_resolution() {
         deck_with("island", &["a.i.m._bot", "bonesplitter"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(188_008, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        188_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let recipient = inject_creature_on_battlefield(&mut engine, 0, "storm_crow");

@@ -174,7 +174,15 @@ fn choose_stack_target(object_id: u32) -> RuledCommand {
 
 #[test]
 fn monument_each_discard_trigger_excludes_modes_chosen_by_earlier_trigger() {
-    let mut engine = GameEngine::new(20_261_080, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_261_080,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     inject_card_into_hand(&mut engine, 0, MONUMENT);
     move_ready_to_battlefield(&mut engine, 0, MONUMENT);
@@ -259,7 +267,15 @@ fn monument_each_discard_trigger_excludes_modes_chosen_by_earlier_trigger() {
 
 #[test]
 fn monument_instances_keep_independent_mode_histories() {
-    let mut engine = GameEngine::new(20_261_082, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_261_082,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let first_source = inject_permanent_on_battlefield(&mut engine, 0, MONUMENT);
     let second_source = inject_permanent_on_battlefield(&mut engine, 0, MONUMENT);
@@ -317,7 +333,15 @@ fn monument_instances_keep_independent_mode_histories() {
 
 #[test]
 fn monument_mode_history_starts_fresh_after_source_changes_zone_generation() {
-    let mut engine = GameEngine::new(20_261_083, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_261_083,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     inject_card_into_hand(&mut engine, 0, MONUMENT);
     let source = move_ready_to_battlefield(&mut engine, 0, MONUMENT);
@@ -350,7 +374,15 @@ fn monument_mode_history_starts_fresh_after_source_changes_zone_generation() {
 
 #[test]
 fn monument_mode_history_resets_at_the_next_turn_boundary() {
-    let mut engine = GameEngine::new(20_261_084, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_261_084,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     inject_card_into_hand(&mut engine, 0, MONUMENT);
     let source = move_ready_to_battlefield(&mut engine, 0, MONUMENT);
@@ -415,7 +447,15 @@ fn monument_mode_history_resets_at_the_next_turn_boundary() {
 
 #[test]
 fn monument_mode_remains_used_after_its_trigger_is_countered() {
-    let mut engine = GameEngine::new(20_261_085, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_261_085,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     inject_card_into_hand(&mut engine, 0, MONUMENT);
     let source = move_ready_to_battlefield(&mut engine, 0, MONUMENT);
@@ -493,7 +533,15 @@ fn monument_mode_remains_used_after_its_trigger_is_countered() {
 }
 
 fn monument_mode_history_snapshot_after_three_choices() -> serde_json::Value {
-    let mut engine = GameEngine::new(20_261_088, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_261_088,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     inject_card_into_hand(&mut engine, 0, MONUMENT);
     let source = move_ready_to_battlefield(&mut engine, 0, MONUMENT);
@@ -538,7 +586,15 @@ fn monument_mode_history_diagnostic_is_replay_deterministic() {
 #[test]
 fn monument_exhausts_three_modes_without_a_fourth_stack_item_and_resolves_each_mode() {
     let players = [10, 20, 30];
-    let mut engine = GameEngine::new(20_261_081, &players, 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_261_081,
+        &players,
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     for player in 0..players.len() {
         clear_hand_to_library(&mut engine, player);

@@ -10,6 +10,7 @@ use tricerules_core::GameEngine;
 #[test]
 fn mossfire_valley_pays_one_generic_and_produces_red_and_green_together() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         20_260_944,
         &[0, 1],
         20,

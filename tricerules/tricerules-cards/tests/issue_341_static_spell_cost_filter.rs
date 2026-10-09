@@ -158,7 +158,7 @@ fn reduction(
 
 #[test]
 fn issue_341_batch_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for ReviewedIdentity {
         id,
         name,
@@ -300,7 +300,7 @@ fn issue_341_batch_maps_definitions() {
 #[test]
 fn issue_341_batch_fingerprints_match_the_pinned_oracle_text() {
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let expected_fingerprints = [
         (
             "ballyrush_banneret",

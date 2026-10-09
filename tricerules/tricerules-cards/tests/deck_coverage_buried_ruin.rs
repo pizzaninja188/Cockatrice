@@ -1,11 +1,10 @@
 use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, GraveyardDestination, GraveyardOwner, SpellEffectKind,
 };
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn buried_ruin_registers_colorless_mana_and_targeted_artifact_recovery() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("buried_ruin").expect("Buried Ruin");
     let face = card.primary_face();
     assert_eq!(face.name, "Buried Ruin");

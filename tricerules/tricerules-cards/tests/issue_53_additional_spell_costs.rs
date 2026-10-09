@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     PlayerRecipient, SpellEffectKind, TargetController, TargetKind,
 };
-use tricerules_cards::{AdditionalCost, Amount, CardRegistry};
+use tricerules_cards::{AdditionalCost, Amount};
 
 #[test]
 fn issue_53_cards_have_exact_additional_costs_and_effects() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (id, name, mana, instant) in [
         (

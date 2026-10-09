@@ -46,8 +46,15 @@ fn gift_grants_its_land_controller_an_annotated_undoable_mana_ability() {
         deck_with("forest", &["gift_of_paradise"]),
         vec!["forest".into(); 20],
     ]);
-    let mut engine =
-        GameEngine::new(65_001, &[0, 1], 20, decks, true).expect("Gift of Paradise card data");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        65_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("Gift of Paradise card data");
     advance_to_main1_from_game_start(&mut engine);
     let opponent_land = inject_permanent_on_battlefield(&mut engine, 1, "forest");
     ensure_card_in_hand(&mut engine, 0, "gift_of_paradise");
@@ -123,8 +130,15 @@ fn hermetic_study_ability_survives_removal_of_the_granting_aura() {
         deck_with("island", &["hermetic_study"]),
         vec!["forest".into(); 20],
     ]);
-    let mut engine =
-        GameEngine::new(65_002, &[0, 1], 20, decks, true).expect("Hermetic Study card data");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        65_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("Hermetic Study card data");
     advance_to_main1_from_game_start(&mut engine);
     let creature = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     ensure_card_in_hand(&mut engine, 0, "hermetic_study");

@@ -19,7 +19,7 @@ pub(in crate::engine) use mana::plan_mana_payment_with_reduction;
 pub(in crate::engine) use transaction::{card_result_entry, PaidCardCost, PreparedPaymentCosts};
 
 use super::*;
-use tricerules_cards::ManaSpendingRestriction;
+use tricerules_card_model::ManaSpendingRestriction;
 
 fn spell_cost_filter_matches(
     filter: &SpellCostFilter,
@@ -264,7 +264,7 @@ impl GameEngine {
                 continue;
             };
             for effect in &rule.spending_effects {
-                let tricerules_cards::ManaSpendingEffect::GrantKeywordsToSpellUntilEndOfTurn {
+                let tricerules_card_model::ManaSpendingEffect::GrantKeywordsToSpellUntilEndOfTurn {
                     filter,
                     keywords: granted,
                 } = effect;
@@ -1074,13 +1074,14 @@ mod restricted_mana_filter_tests {
 mod spell_cost_filter_tests {
     use super::*;
     use crate::state::{AffectedScope, ContinuousEffect};
-    use tricerules_cards::primitives::{Color, TypeLineReplacement};
-    use tricerules_cards::PermanentTypeFilter;
+    use tricerules_card_model::primitives::{Color, TypeLineReplacement};
+    use tricerules_card_model::PermanentTypeFilter;
 
     #[test]
     fn spell_cost_filters_use_current_type_and_color_characteristics() {
         let deck = |card_id: &str| vec![card_id.to_string(); 20];
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             341_006,
             &[0, 1],
             20,

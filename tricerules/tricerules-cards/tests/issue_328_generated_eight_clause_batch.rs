@@ -13,8 +13,8 @@ use tricerules_cards::primitives::{
     TargetFilter, TargetGroupDef, TargetKind, TargetingDef, ZoneCardFilter,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, Amount, CardRegistry, CastTriggerPlayer, Color, Keyword,
-    Layout, LibraryPartitionKind, SpellEffectKind, TriggerCondition,
+    AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, Color, Keyword, Layout,
+    LibraryPartitionKind, SpellEffectKind, TriggerCondition,
 };
 
 fn single_group(targeting: &TargetingDef) -> &TargetGroupDef {
@@ -26,7 +26,7 @@ fn single_group(targeting: &TargetingDef) -> &TargetGroupDef {
 
 #[test]
 fn issue_328_registers_the_eight_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_count, layout) in [
         ("not_on_my_watch", "Not on My Watch", 1, Layout::Normal),
         ("felidar_cub", "Felidar Cub", 1, Layout::Normal),
@@ -54,7 +54,7 @@ fn issue_328_registers_the_eight_reviewed_identities() {
 
 #[test]
 fn issue_328_not_on_my_watch_exiles_only_attackers() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("not_on_my_watch")
         .expect("Not on My Watch");
     let face = definition.primary_face();
@@ -77,7 +77,7 @@ fn issue_328_not_on_my_watch_exiles_only_attackers() {
 
 #[test]
 fn issue_328_felidar_cub_sacrifices_itself_for_an_enchantment() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("felidar_cub")
         .expect("Felidar Cub");
     let face = definition.primary_face();
@@ -111,7 +111,7 @@ fn issue_328_felidar_cub_sacrifices_itself_for_an_enchantment() {
 
 #[test]
 fn issue_328_ravenous_giant_damages_its_controller_each_upkeep() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("ravenous_giant")
         .expect("Ravenous Giant");
     let face = definition.primary_face();
@@ -147,7 +147,7 @@ fn issue_328_ravenous_giant_damages_its_controller_each_upkeep() {
 
 #[test]
 fn issue_328_rune_sealed_wall_taps_to_surveil_one() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("rune-sealed_wall")
         .expect("Rune-Sealed Wall");
     let face = definition.primary_face();
@@ -180,7 +180,7 @@ fn issue_328_rune_sealed_wall_taps_to_surveil_one() {
 
 #[test]
 fn issue_328_axgard_cavalry_taps_to_grant_haste() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("axgard_cavalry")
         .expect("Axgard Cavalry");
     let face = definition.primary_face();
@@ -214,7 +214,7 @@ fn issue_328_axgard_cavalry_taps_to_grant_haste() {
 
 #[test]
 fn issue_328_elvish_regrower_returns_a_permanent_card() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("elvish_regrower")
         .expect("Elvish Regrower");
     let face = definition.primary_face();
@@ -252,7 +252,7 @@ fn issue_328_elvish_regrower_returns_a_permanent_card() {
 
 #[test]
 fn issue_328_bellowing_bruiser_is_an_adventure_with_the_cant_block_face() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("bellowing_bruiser_beat_a_path")
         .expect("Bellowing Bruiser // Beat a Path");
     assert_eq!(definition.layout, Layout::Adventure);
@@ -294,7 +294,7 @@ fn issue_328_bellowing_bruiser_is_an_adventure_with_the_cant_block_face() {
 
 #[test]
 fn issue_328_kindled_heroism_pumps_grants_first_strike_and_scries() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("kindled_heroism")
         .expect("Kindled Heroism");
     let face = definition.primary_face();
@@ -336,7 +336,7 @@ fn issue_328_kindled_heroism_pumps_grants_first_strike_and_scries() {
 
 #[test]
 fn issue_328_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let cases: &[(&str, &str, &str, &str)] = &[
         (
             "not_on_my_watch",

@@ -46,7 +46,15 @@ fn setup_unblocked_sneak_card(
         deck_with(basic_land, &[sneak_card, "grizzly_bears"]),
         vec!["island".into(); 30],
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_declare_attackers(&mut engine);
     ensure_card_in_hand(&mut engine, 0, sneak_card);
     ensure_card_in_hand(&mut engine, 0, "grizzly_bears");
@@ -143,7 +151,15 @@ fn issue_179_shredders_technique_loses_life_only_after_destroying_an_enchantment
         deck_with("swamp", &["shredders_technique", "grizzly_bears"]),
         deck_with("plains", &["glorious_anthem"]),
     ]);
-    let mut engine = GameEngine::new(179_004, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        179_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_declare_attackers(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "shredders_technique");
     ensure_card_in_hand(&mut engine, 0, "grizzly_bears");
@@ -179,7 +195,15 @@ fn issue_179_sneak_is_not_available_before_blockers_or_for_a_blocked_attacker() 
         deck_with("plains", &["foot_ninjas", "grizzly_bears"]),
         deck_with("island", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(179_005, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        179_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_declare_attackers(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "foot_ninjas");
     ensure_card_in_hand(&mut engine, 0, "grizzly_bears");
@@ -285,7 +309,15 @@ fn issue_179_sneak_inherits_planeswalker_and_battle_defenders() {
             deck_with("plains", &["foot_ninjas"]),
             deck_with("island", &[defender_card]),
         ]);
-        let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         advance_to_declare_attackers(&mut engine);
         ensure_card_in_hand(&mut engine, 0, "foot_ninjas");
         let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -344,7 +376,15 @@ fn issue_179_sneak_enters_tapped_but_not_attacking_when_the_defender_is_stale() 
         deck_with("plains", &["foot_ninjas"]),
         deck_with("island", &["jace_beleren"]),
     ]);
-    let mut engine = GameEngine::new(179_011, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        179_011,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_declare_attackers(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "foot_ninjas");
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -419,7 +459,15 @@ fn issue_179_spell_copy_keeps_the_sneak_choice_without_repaying_it() {
         deck_with("island", &["donatellos_technique", "grizzly_bears"]),
         deck_with("island", &["twincast"]),
     ]);
-    let mut engine = GameEngine::new(179_012, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        179_012,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_declare_attackers(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "donatellos_technique");
     ensure_card_in_hand(&mut engine, 0, "grizzly_bears");

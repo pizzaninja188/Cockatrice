@@ -7,7 +7,15 @@ fn key_engine(seed: u64) -> (GameEngine, u32) {
         deck_with("island", &["voltaic_key"]),
         island_only_deck(),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let key = relocate_to_battlefield(&mut engine, 0, "voltaic_key", false);
     (engine, key)

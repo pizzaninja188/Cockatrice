@@ -33,7 +33,7 @@ fn trigger<'a>(
 
 #[test]
 fn issue_misc7_batch_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (id, name, mana, types, power, toughness) in [
         (

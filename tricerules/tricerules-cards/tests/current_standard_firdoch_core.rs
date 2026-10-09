@@ -11,11 +11,10 @@ use tricerules_cards::mana::ManaCost;
 use tricerules_cards::primitives::{
     AbilityCost, CreatureTypeChange, ResolvingEffectDuration, SpellEffectKind,
 };
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn firdoch_core_has_its_temporary_artifact_creature_ability() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("firdoch_core")
         .expect("Firdoch Core is registered")
         .primary_face();

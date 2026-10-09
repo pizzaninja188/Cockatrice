@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{EffectSubject, TargetController, TargetKind};
-use tricerules_cards::{CardRegistry, SpellEffectKind, TriggerCondition};
+use tricerules_cards::{SpellEffectKind, TriggerCondition};
 
 #[test]
 fn red_guardian_is_a_complete_registered_standard_card() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("red_guardian,_super-soldier")
         .expect("Red Guardian, Super-Soldier should be admitted as a complete card");
     let face = card.primary_face();

@@ -26,7 +26,15 @@ fn issue_143_aggressive_negotiations_publicly_reveals_the_hand() {
         deck_with("swamp", &["aggressive_negotiations", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(126_001, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        126_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
 
     let counter_target = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -121,7 +129,15 @@ fn aggressive_negotiations_allows_omitting_the_creature_target() {
         deck_with("swamp", &["aggressive_negotiations"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(126_002, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        126_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let chosen = relocate_to_hand(&mut engine, 1, "grizzly_bears");
     relocate_to_hand(&mut engine, 0, "aggressive_negotiations");
@@ -157,7 +173,15 @@ fn aggressive_negotiations_all_land_hand_skips_the_choice_and_resumes_the_tail()
         deck_with("swamp", &["aggressive_negotiations", "grizzly_bears"]),
         vec!["forest".into(); 20],
     ]);
-    let mut engine = GameEngine::new(126_003, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        126_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let counter_target = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     relocate_to_hand(&mut engine, 0, "aggressive_negotiations");
@@ -198,7 +222,15 @@ fn aggressive_negotiations_keeps_the_hand_effect_when_the_optional_target_is_ill
         deck_with("swamp", &["aggressive_negotiations", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(126_004, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        126_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let departed = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let chosen = relocate_to_hand(&mut engine, 1, "grizzly_bears");
@@ -255,7 +287,15 @@ fn aggressive_negotiations_rejects_ineligible_and_stale_choices_atomically() {
         deck_with("swamp", &["aggressive_negotiations"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(126_005, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        126_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let chosen = relocate_to_hand(&mut engine, 1, "grizzly_bears");
     let land = relocate_to_hand(&mut engine, 1, "forest");

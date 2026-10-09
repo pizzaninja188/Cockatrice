@@ -254,8 +254,8 @@ impl CostTransactionPlan {
     pub(in crate::engine) fn mana_source_spend(
         &self,
     ) -> (
-        tricerules_cards::ManaAmount,
-        Vec<(u32, tricerules_cards::ManaAmount)>,
+        tricerules_card_model::ManaAmount,
+        Vec<(u32, tricerules_card_model::ManaAmount)>,
     ) {
         self.debits
             .iter()
@@ -2812,7 +2812,15 @@ mod convoke_transaction_tests {
     fn war_room_zero_life_transaction_is_valid_at_zero_or_negative_life() {
         // Bounded transaction fixtures: no claim that a nonpositive-life player has priority.
         for life in [0, -2] {
-            let mut engine = GameEngine::new(510_020, &[7, 19], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                510_020,
+                &[7, 19],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             engine.state.players[0].life = life;
             engine.state.players[0].has_declared_commander = true;
             assert_eq!(
@@ -2874,7 +2882,15 @@ mod convoke_transaction_tests {
 
     #[test]
     fn pentad_prism_combined_additional_payment_colors_life_exclusion_and_stale_atomicity() {
-        let mut engine = GameEngine::new(202_610_241, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            202_610_241,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.state.players[0].mana_pool.white = 1;
         engine.state.players[0].mana_pool.blue = 1;
         let prepared = PreparedPaymentCosts {
@@ -2959,7 +2975,15 @@ mod convoke_transaction_tests {
 
     #[test]
     fn counted_sacrifice_preserves_pre_group_lki_and_replacement_receipts() {
-        let mut engine = GameEngine::new(50201, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            50201,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let ids = [
             engine.state.players[0].hand[0],
             engine.state.players[1].hand[0],
@@ -2984,11 +3008,11 @@ mod convoke_transaction_tests {
                     delta_power: 3,
                     delta_toughness: 3,
                 },
-                ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+                ContinuousEffectKind::Layer4AddTypes(tricerules_card_model::TypeLineAddition {
                     card_types: vec![PermanentTypeFilter::Enchantment],
                     ..Default::default()
                 }),
-                ContinuousEffectKind::Layer5SetColors(vec![tricerules_cards::Color::Red]),
+                ContinuousEffectKind::Layer5SetColors(vec![tricerules_card_model::Color::Red]),
                 ContinuousEffectKind::Layer6AddKeyword(Keyword::Flying),
             ] {
                 engine.state.continuous_effects.push(ContinuousEffect {
@@ -3071,7 +3095,7 @@ mod convoke_transaction_tests {
             );
             assert_eq!(
                 engine.state.last_known_colors_by_generation[&key],
-                [tricerules_cards::Color::Red]
+                [tricerules_card_model::Color::Red]
             );
             assert!(engine.state.last_known_types_by_generation[&key]
                 .iter()
@@ -3472,7 +3496,15 @@ mod convoke_transaction_tests {
     }
 
     fn battlefield_self_exile_fixture() -> (GameEngine, ObjectId, Vec<AbilityCost>) {
-        let mut engine = GameEngine::new(218_001, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            218_001,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = engine.state.players[0].hand[0];
         engine.state.objects.get_mut(&source).unwrap().card_id = "grizzly_bears".into();
         move_object_to_zone(
@@ -3559,7 +3591,15 @@ mod convoke_transaction_tests {
 
     #[test]
     fn issue_182_teamwork_taps_a_generation_bound_power_cohort_and_records_every_object() {
-        let mut engine = GameEngine::new(182_001, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            182_001,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = engine.state.players[0].hand[0];
         let creatures = engine.state.players[0].hand[1..3].to_vec();
         for oid in &creatures {
@@ -3574,14 +3614,14 @@ mod convoke_transaction_tests {
             .unwrap();
         }
         let group = CastCostGroupDef {
-            group_id: tricerules_cards::ChoiceId::new("teamwork").unwrap(),
-            presentation: tricerules_cards::AbilityPresentation::Fallback,
+            group_id: tricerules_card_model::ChoiceId::new("teamwork").unwrap(),
+            presentation: tricerules_card_model::AbilityPresentation::Fallback,
             min: 0,
             max: 1,
             options: vec![CastCostOptionDef::TapPermanents {
-                option_id: tricerules_cards::ChoiceId::new("teamwork_4").unwrap(),
-                presentation: tricerules_cards::AbilityPresentation::Fallback,
-                kind: tricerules_cards::ObjectCastCostKind::Teamwork,
+                option_id: tricerules_card_model::ChoiceId::new("teamwork_4").unwrap(),
+                presentation: tricerules_card_model::AbilityPresentation::Fallback,
+                kind: tricerules_card_model::ObjectCastCostKind::Teamwork,
                 constraint: ObjectPaymentConstraint::AggregateMinimum {
                     minimum: 4,
                     contribution: ObjectContributionKind::CurrentPower,
@@ -3630,7 +3670,15 @@ mod convoke_transaction_tests {
 
     #[test]
     fn aggregate_power_and_mana_value_payments_revalidate_atomically() {
-        let mut engine = GameEngine::new(178_001, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            178_001,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let objects = engine.state.players[0].hand[..5].to_vec();
         for (oid, card_id, zone) in [
             (objects[0], "ornithopter", Zone::Battlefield),
@@ -3767,7 +3815,15 @@ mod convoke_transaction_tests {
             (2, 0, 0, 0, 2),
             (0, 0, 0, 0, 0),
         ] {
-            let mut engine = GameEngine::new(146020, &[0, 1], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                146020,
+                &[0, 1],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             let objects = engine.state.players[0].hand[..3].to_vec();
             for &oid in &objects {
                 engine.state.objects.get_mut(&oid).unwrap().card_id = "ornithopter".into();
@@ -3890,7 +3946,15 @@ mod convoke_transaction_tests {
 
     #[test]
     fn issue_157_counter_debits_aggregate_before_any_payment_and_precede_sacrifice() {
-        let mut engine = GameEngine::new(15707, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            15707,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let oid = engine.state.players[0].hand[0];
         engine.state.objects.get_mut(&oid).unwrap().card_id = "dockworker_drone".into();
         move_object_to_zone(
@@ -3962,7 +4026,15 @@ mod convoke_transaction_tests {
 
     #[test]
     fn issue_193_selected_counter_payment_revalidates_control_before_any_debit() {
-        let mut engine = GameEngine::new(19307, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            19307,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = engine.state.players[0].hand[0];
         engine.state.objects.get_mut(&source).unwrap().card_id = "brambleback_brute".into();
         move_object_to_zone(
@@ -4048,7 +4120,15 @@ mod convoke_transaction_tests {
 
     #[test]
     fn issue_153_blight_then_sacrifice_preserves_post_counter_lki_and_one_event() {
-        let mut engine = GameEngine::new(153020, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            153020,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let oid = engine.state.players[0].hand[0];
         engine.state.objects.get_mut(&oid).unwrap().card_id = "grizzly_bears".into();
         move_object_to_zone(
@@ -4111,7 +4191,15 @@ mod convoke_transaction_tests {
 
     #[test]
     fn issue_168_one_exile_cost_keeps_its_simultaneous_group() {
-        let mut engine = GameEngine::new(168020, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            168020,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let ids = engine.state.players[0].hand[..3].to_vec();
         for (i, oid) in ids.iter().enumerate() {
             engine.state.objects.get_mut(oid).unwrap().card_id = "grizzly_bears".into();
@@ -4169,7 +4257,15 @@ mod convoke_transaction_tests {
 
     #[test]
     fn issue_169_tap_components_keep_action_boundaries_and_stale_groups_are_atomic() {
-        let mut engine = GameEngine::new(169030, &[7, 19], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            169030,
+            &[7, 19],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let objects = engine.state.players[1].hand[..3].to_vec();
         for oid in &objects {
             engine.state.objects.get_mut(oid).unwrap().card_id = "grizzly_bears".into();
@@ -4245,7 +4341,15 @@ mod convoke_transaction_tests {
             ("{G/P}", 0, 0, 0, false, 1),
         ] {
             for purpose in [CostPurpose::Spell, CostPurpose::Ability] {
-                let mut engine = GameEngine::new(172010, &[0, 1], 20, None, true).unwrap();
+                let mut engine = GameEngine::new(
+                    tricerules_cards::registry::global(),
+                    172010,
+                    &[0, 1],
+                    20,
+                    None,
+                    true,
+                )
+                .unwrap();
                 engine.state.players[0].mana_pool.green = 1;
                 engine.state.players[0].mana_pool.colorless = 10;
                 engine.state.players[0].retained_combat_mana.colorless = 10;
@@ -4298,7 +4402,15 @@ mod convoke_transaction_tests {
     #[test]
     fn issue_170_life_payment_history_is_committed_atomically() {
         for purpose in [CostPurpose::Spell, CostPurpose::Ability] {
-            let mut engine = GameEngine::new(170002, &[0, 1], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                170002,
+                &[0, 1],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             let mana = super::super::mana::plan_mana_payment_with_reduction(
                 &engine.state,
                 0,
@@ -4369,14 +4481,30 @@ mod convoke_transaction_tests {
             }
         };
 
-        let mut insufficient = GameEngine::new(199_010, &[0, 1], 4, None, true).unwrap();
+        let mut insufficient = GameEngine::new(
+            tricerules_cards::registry::global(),
+            199_010,
+            &[0, 1],
+            4,
+            None,
+            true,
+        )
+        .unwrap();
         let before = format!("{:?}", insufficient.state);
         assert!(insufficient
             .commit_cost_transaction(plan(&insufficient))
             .is_err());
         assert_eq!(format!("{:?}", insufficient.state), before);
 
-        let mut exact = GameEngine::new(199_011, &[0, 1], 5, None, true).unwrap();
+        let mut exact = GameEngine::new(
+            tricerules_cards::registry::global(),
+            199_011,
+            &[0, 1],
+            5,
+            None,
+            true,
+        )
+        .unwrap();
         let receipt = exact.commit_cost_transaction(plan(&exact)).unwrap();
         assert_eq!(receipt.life_paid, 5);
         assert_eq!(exact.state.players[0].life, 0);
@@ -4385,7 +4513,15 @@ mod convoke_transaction_tests {
 
     #[test]
     fn issue_172_restricted_and_retained_mana_are_counted_once_and_stale_debits_are_atomic() {
-        let mut engine = GameEngine::new(172011, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            172011,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.state.players[0].mana_pool.colorless = 2;
         engine.state.players[0].retained_combat_mana.colorless = 2;
         engine.state.players[0]
@@ -4457,6 +4593,7 @@ mod convoke_transaction_tests {
     #[test]
     fn convoke_can_tap_then_sacrifice_but_not_pay_a_second_tap_cost() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             145,
             &[0, 1],
             20,

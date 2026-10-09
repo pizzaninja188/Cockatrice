@@ -2,13 +2,13 @@ use tricerules_cards::primitives::{
     LifeAmount, PermanentTypeFilter, PlayerRecipient, SpellEffectKind,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, Amount, CardRegistry, CastTriggerPlayer,
-    LibraryPartitionKind, TriggerCondition,
+    AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, LibraryPartitionKind,
+    TriggerCondition,
 };
 
 #[test]
 fn issue_252_registers_all_nineteen_generated_cards_with_typed_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (id, oracle_line) in [
         ("a.i.m._synthoids", 1),

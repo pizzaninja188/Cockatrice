@@ -4,7 +4,7 @@ use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivationTiming, EffectSubject, PermanentTypeFilter,
     SpellEffectKind, TargetFilter, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Color, ManaCost};
+use tricerules_cards::{AbilityPresentation, Color, ManaCost};
 
 #[derive(Clone)]
 struct CohortFixture {
@@ -74,7 +74,7 @@ fn cohort() -> [CohortFixture; 3] {
 
 #[test]
 fn issue_315_registry_contains_exactly_the_reviewed_creature_tapper_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for card in cohort() {
         let CohortFixture {
             id,

@@ -55,7 +55,15 @@ fn choose_trigger_target(target_object_id: u32) -> RuledCommand {
 
 #[test]
 fn generated_boulderborn_dragon_triggers_only_from_its_attack_declaration_and_surveille() {
-    let mut engine = GameEngine::new(260_001, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        260_001,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut engine);
     let dragon = inject_creature_on_battlefield(&mut engine, 0, "boulderborn_dragon");
     let top = seat_on_top(&mut engine, 0, &["storm_crow"]);
@@ -90,7 +98,15 @@ fn generated_cartographers_companion_creates_a_functional_canonical_map() {
         deck_with("plains", &["cartographers_companion"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(260_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        260_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let companion = move_ready_to_battlefield(&mut engine, 0, "cartographers_companion");
     resolve_entire_stack_two_player(&mut engine);
@@ -132,7 +148,15 @@ fn generated_venomized_cat_mills_up_to_two_cards_in_library_order_with_move_fact
             deck_with("swamp", &["venomized_cat"]),
             deck_with("forest", &[]),
         ]);
-        let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         advance_to_main1_from_game_start(&mut engine);
         let top = seat_on_top(&mut engine, 0, &cards);
         let other_library_cards = engine.state.players[0]
@@ -187,7 +211,15 @@ fn generated_bounce_restricts_targets_and_revalidates_the_exact_generation() {
         deck_with("island", &["bigfin_bouncer", "exclusion_mage"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(260_005, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        260_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let own_creature = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let opponent_creature = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -238,7 +270,15 @@ fn generated_eager_trufflesnout_creates_food_only_after_player_combat_damage() {
         deck_with("forest", &["eager_trufflesnout"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(260_006, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        260_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let trufflesnout = relocate_to_battlefield(&mut engine, 0, "eager_trufflesnout", false);
     engine.apply_command(0, &primitive_yield()).unwrap();
@@ -281,7 +321,15 @@ fn generated_eager_trufflesnout_creates_food_only_after_player_combat_damage() {
         deck_with("forest", &["eager_trufflesnout"]),
         deck_with("forest", &["giant_spider"]),
     ]);
-    let mut blocked = GameEngine::new(260_007, &[0, 1], 20, decks, true).expect("engine");
+    let mut blocked = GameEngine::new(
+        tricerules_cards::registry::global(),
+        260_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut blocked);
     let attacker = relocate_to_battlefield(&mut blocked, 0, "eager_trufflesnout", false);
     let blocker = relocate_to_battlefield(&mut blocked, 1, "giant_spider", false);

@@ -10,7 +10,15 @@ fn fixture(seed: u64, own_card: &str) -> (GameEngine, u32, u32, u32) {
         deck_with("forest", &["arena", own_card]),
         deck_with("forest", &["hill_giant"]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = move_ready_to_battlefield(&mut engine, 0, "arena");
     let own = move_ready_to_battlefield(&mut engine, 0, own_card);

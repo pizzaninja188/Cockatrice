@@ -1,6 +1,5 @@
 //! Best-effort command attempts prove zone integrity only, never resolution coverage.
 use tricerules_cards::mana::{ColorPip, ManaSymbol};
-use tricerules_cards::CardRegistry;
 use tricerules_core::{GameEngine, TurnStep, Zone};
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::{
@@ -326,8 +325,15 @@ fn exercise_face_in_fresh_game(card_id: &str, face_index: u32) -> bool {
     p0_deck.extend(std::iter::repeat_n("forest".to_string(), 10));
     let p1_deck: Vec<String> = std::iter::repeat_n("grizzly_bears".to_string(), 30).collect();
     let decks = Some(vec![p0_deck, p1_deck]);
-    let mut e = GameEngine::new(901, &[0, 1], 20, decks, true)
-        .unwrap_or_else(|err| panic!("{card_id}: engine init failed: {err:?}"));
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        901,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap_or_else(|err| panic!("{card_id}: engine init failed: {err:?}"));
     advance_to_main1(&mut e);
     let my_creature = deploy(&mut e, 0, "grizzly_bears");
     let their_creature = deploy(&mut e, 1, "grizzly_bears");
@@ -335,7 +341,7 @@ fn exercise_face_in_fresh_game(card_id: &str, face_index: u32) -> bool {
     let me = e.state.players[0].id as u32;
     let baseline = e.state.objects.len();
     let slot = put_card_in_hand(&mut e, card_id);
-    let is_land = CardRegistry::global()
+    let is_land = tricerules_cards::registry::global()
         .get(card_id)
         .and_then(|def| def.face(face_index as usize))
         .is_some_and(|face| face.is_land);
@@ -373,7 +379,7 @@ fn exercise_face_in_fresh_game(card_id: &str, face_index: u32) -> bool {
 }
 
 pub(super) fn observed_completed_cases() -> std::collections::BTreeSet<String> {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     // Deterministic order so a failure is reproducible.
     let mut card_ids: Vec<&str> = registry
         .definitions()
@@ -395,8 +401,15 @@ pub(super) fn observed_completed_cases() -> std::collections::BTreeSet<String> {
         let p1_deck: Vec<String> = std::iter::repeat_n("grizzly_bears".to_string(), 30).collect();
         let decks = Some(vec![p0_deck, p1_deck]);
 
-        let mut e = GameEngine::new(900, &[0, 1], 20, decks, true)
-            .unwrap_or_else(|err| panic!("{card_id}: engine init failed: {err:?}"));
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            900,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap_or_else(|err| panic!("{card_id}: engine init failed: {err:?}"));
         advance_to_main1(&mut e);
 
         // Vanilla creatures on each side serve as creature/permanent targets.
@@ -464,8 +477,15 @@ pub(super) fn observed_completed_cases() -> std::collections::BTreeSet<String> {
                     .collect::<Vec<_>>(),
                 std::iter::repeat_n("grizzly_bears".to_string(), 30).collect(),
             ]);
-            let mut ae = GameEngine::new(902, &[0, 1], 20, deck, true)
-                .unwrap_or_else(|err| panic!("{card_id}: engine init failed: {err:?}"));
+            let mut ae = GameEngine::new(
+                tricerules_cards::registry::global(),
+                902,
+                &[0, 1],
+                20,
+                deck,
+                true,
+            )
+            .unwrap_or_else(|err| panic!("{card_id}: engine init failed: {err:?}"));
             advance_to_main1(&mut ae);
             let src = deploy(&mut ae, 0, card_id);
             let my_c = deploy(&mut ae, 0, "grizzly_bears");

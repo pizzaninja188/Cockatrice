@@ -9,7 +9,15 @@ fn prepared(seed: u64) -> GameEngine {
         deck_with("swamp", &["feed_the_swarm"]),
         vec!["forest".into(); 20],
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "feed_the_swarm");
     engine
@@ -111,7 +119,7 @@ fn feed_the_swarm_rejects_a_permanent_the_caster_controls() {
 fn feed_the_swarm_uses_copied_battlefield_mana_value_after_destroy() {
     let mut engine = prepared(483_106);
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
-    let copied = tricerules_cards::CardRegistry::global()
+    let copied = tricerules_cards::registry::global()
         .get("serra_angel")
         .unwrap()
         .primary_face()

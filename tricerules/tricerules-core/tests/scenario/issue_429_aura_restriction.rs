@@ -72,7 +72,15 @@ fn stuck_in_summoners_sanctum_taps_locks_activation_and_untap_until_detached() {
         deck_with("island", &["stuck_in_summoners_sanctum"]),
         forest_only_deck(),
     ]);
-    let mut engine = GameEngine::new(429_007, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        429_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let skeletons = inject_creature_on_battlefield(&mut engine, 1, "drudge_skeletons");
     give_mana(
@@ -175,7 +183,15 @@ fn stuck_in_summoners_sanctum_taps_locks_activation_and_untap_until_detached() {
 #[test]
 fn petrify_prohibits_activated_abilities_and_attacks() {
     let decks = Some(vec![deck_with("plains", &["petrify"]), forest_only_deck()]);
-    let mut engine = GameEngine::new(429_008, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        429_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let petrified = inject_creature_on_battlefield(&mut engine, 0, "drudge_skeletons");
     let legal_attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -245,7 +261,15 @@ fn petrify_prohibits_blocking_and_accepts_artifact_targets() {
         deck_with("plains", &["petrify", "petrify"]),
         forest_only_deck(),
     ]);
-    let mut engine = GameEngine::new(429_009, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        429_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let petrified_blocker = inject_creature_on_battlefield(&mut engine, 1, "drudge_skeletons");
@@ -365,7 +389,15 @@ fn stop_cold_taps_removes_abilities_and_keeps_a_later_grant() {
         deck_with("island", &["stop_cold", "flight"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(429_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        429_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let farrier = inject_creature_on_battlefield(&mut engine, 1, "surly_farrier");
     assert_eq!(
@@ -432,7 +464,15 @@ fn flood_the_engine_requires_a_creature_or_vehicle_and_taps_it() {
         deck_with("island", &["flood_the_engine"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(429_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        429_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let land = inject_permanent_on_battlefield(&mut engine, 1, "forest");
     let bear = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -471,7 +511,15 @@ fn new_horizons_counters_and_grants_two_mana_of_one_color() {
         deck_with("forest", &["new_horizons"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(429_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        429_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let land = inject_permanent_on_battlefield(&mut engine, 0, "forest");
     let bear = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -527,7 +575,15 @@ fn new_horizons_cast_with_no_creature_is_legal_and_has_no_counter_target() {
         deck_with("forest", &["new_horizons"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(429_005, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        429_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let land = inject_permanent_on_battlefield(&mut engine, 0, "forest");
 
@@ -565,7 +621,15 @@ fn new_horizons_fizzles_and_never_triggers_when_its_land_leaves() {
         deck_with("forest", &["new_horizons"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(429_006, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        429_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let land = inject_permanent_on_battlefield(&mut engine, 0, "forest");
 
@@ -622,7 +686,15 @@ fn friendly_neighborhood_creates_three_citizens_and_pumps_per_creature() {
         deck_with("forest", &["friendly_neighborhood"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(429_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        429_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let land = inject_permanent_on_battlefield(&mut engine, 0, "forest");
     let bear = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");

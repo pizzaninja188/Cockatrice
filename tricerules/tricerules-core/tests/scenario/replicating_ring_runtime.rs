@@ -1,11 +1,7 @@
 //! Necessary counter contracts before Replicating Ring card admission.
 use super::helpers::*;
-use tricerules_cards::{
-    primitives::{
-        AbilityCost, CastTriggerPlayer, CounterKind, GameCondition, SpellEffectKind,
-        TriggerCondition,
-    },
-    CardRegistry,
+use tricerules_cards::primitives::{
+    AbilityCost, CastTriggerPlayer, CounterKind, GameCondition, SpellEffectKind, TriggerCondition,
 };
 use tricerules_core::{state::CopiableValues, GameEngine, TurnStep};
 use tricerules_proto::ruled::v1::{
@@ -21,6 +17,7 @@ fn night_counter_has_public_label() {
 #[test]
 fn remove_all_charge_counters_preserves_other_kinds_and_zero_is_noop() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         507_001,
         &[0, 1],
         20,
@@ -30,7 +27,7 @@ fn remove_all_charge_counters_preserves_other_kinds_and_zero_is_noop() {
     .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_permanent_on_battlefield(&mut engine, 0, "codex_shredder");
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("codex_shredder")
         .unwrap()
         .primary_face()
@@ -69,6 +66,7 @@ fn remove_all_charge_counters_preserves_other_kinds_and_zero_is_noop() {
 #[test]
 fn source_counter_condition_uses_exact_departed_generation_lki() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         507_002,
         &[0, 1],
         20,
@@ -78,7 +76,7 @@ fn source_counter_condition_uses_exact_departed_generation_lki() {
     .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_permanent_on_battlefield(&mut engine, 0, "ebony_owl_netsuke");
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("ebony_owl_netsuke")
         .unwrap()
         .primary_face()

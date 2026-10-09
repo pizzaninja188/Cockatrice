@@ -8,7 +8,7 @@ use tricerules_cards::{
 
 #[test]
 fn issue_263_registers_all_fourteen_generated_cards_with_exact_typed_triggers() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for id in ["exosuit_savior", "mischievous_pup", "stickytongue_sentinel"] {
         let ability = ability(registry, id);

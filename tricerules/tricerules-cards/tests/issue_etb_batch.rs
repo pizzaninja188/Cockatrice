@@ -12,7 +12,7 @@ use tricerules_cards::primitives::{
     ResolutionBranchRequirement, ResolutionBranchSelection, SearchDestination, SpellEffectKind,
     TargetFilter, TargetKind, TriggerCondition,
 };
-use tricerules_cards::{CardRegistry, CounterKind};
+use tricerules_cards::CounterKind;
 
 fn creature() -> EffectSubject {
     EffectSubject::Chosen(Box::new(TargetFilter {
@@ -40,7 +40,7 @@ fn token(token: &str, count: u32) -> SpellEffectKind {
 
 #[test]
 fn issue_etb_batch_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     // Shinra Reinforcements: entry mill three and gain three life.
     let shinra = registry.get("shinra_reinforcements").expect("registered");

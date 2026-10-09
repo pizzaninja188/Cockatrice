@@ -2,7 +2,7 @@ use tricerules_cards::primitives::{
     CastTriggerPlayer, EffectSubject, LibraryPartitionKind, SpellEffectKind, StaticAbilityDef,
     TargetController, TargetKind,
 };
-use tricerules_cards::{AbilityCost, CardRegistry, CounterKind, Keyword, TriggerCondition};
+use tricerules_cards::{AbilityCost, CounterKind, Keyword, TriggerCondition};
 
 struct ExpectedCard {
     id: &'static str,
@@ -82,7 +82,7 @@ const COHORT: &[ExpectedCard] = &[
 
 #[test]
 fn issue_156_cohort_has_exact_oracle_characteristics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for expected in COHORT {
         let definition = registry
             .get(expected.id)
@@ -119,7 +119,7 @@ fn issue_156_cohort_has_exact_oracle_characteristics() {
 
 #[test]
 fn issue_156_tap_cards_use_shared_trigger_and_effect_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for id in [
         "chrome_companion",
         "starfighter_pilot",
@@ -157,7 +157,7 @@ fn issue_156_tap_cards_use_shared_trigger_and_effect_shapes() {
 
 #[test]
 fn issue_156_attachment_leave_and_sacrifice_cards_use_shared_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let cryoshatter = registry.get("cryoshatter").unwrap().primary_face();
     assert_eq!(
@@ -219,7 +219,7 @@ fn issue_156_attachment_leave_and_sacrifice_cards_use_shared_shapes() {
 
 #[test]
 fn issue_168_complete_cohort_has_exact_oracle_characteristics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, types, stats, keywords) in [
         (
             "warehouse_tabby",

@@ -29,7 +29,15 @@ fn gorging_vulture_counts_only_creatures_milled_by_its_trigger() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(9101, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9101,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let cast_oid = relocate_to_hand(&mut e, 0, "gorging_vulture");
 
@@ -86,7 +94,15 @@ fn gorging_vulture_mills_as_many_as_possible_and_counts_that_short_cohort() {
         deck_with("swamp", &["gorging_vulture", "rumbling_baloth", "forest"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(9102, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9102,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     relocate_to_hand(&mut e, 0, "gorging_vulture");
     put_on_top(&mut e, 0, &["rumbling_baloth", "forest"]);
@@ -133,7 +149,15 @@ fn milled_card_result_does_not_leak_to_a_later_resolution() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(9103, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9103,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     relocate_to_hand(&mut e, 0, "gorging_vulture");
     relocate_to_hand(&mut e, 0, "gorging_vulture");

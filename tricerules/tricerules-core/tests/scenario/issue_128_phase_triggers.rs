@@ -3,7 +3,7 @@ use tricerules_cards::primitives::{
     ConditionObjectRef, ContinuousEffectKind, EffectDuration, GameCondition,
 };
 use tricerules_cards::{Amount, SpellEffectKind, TriggeredAbilityDef};
-use tricerules_cards::{CardRegistry, CastTriggerPlayer, CounterKind, Keyword, TriggerCondition};
+use tricerules_cards::{CastTriggerPlayer, CounterKind, Keyword, TriggerCondition};
 use tricerules_core::state::PlayerState;
 use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
@@ -26,7 +26,15 @@ fn choose_trigger_target(object_id: u32) -> RuledCommand {
 }
 
 fn engine_at_main1(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -328,7 +336,15 @@ fn acrobatic_cheerleader_uses_tap_lki_and_a_returned_object_is_fresh() {
 
 #[test]
 fn simultaneous_phase_triggers_use_apnap_order_before_priority() {
-    let mut engine = GameEngine::new(128_020, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        128_020,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     // Product session creation is intentionally still two-player. Add one synthetic seat only in
     // this scenario so the player-set-generic APNAP implementation proves the nonactive seats do
     // not collapse into one boolean rank.
@@ -337,7 +353,7 @@ fn simultaneous_phase_triggers_use_apnap_order_before_priority() {
     engine.state.active_player_idx = 1;
     engine.state.priority_idx = 1;
 
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("acrobatic_cheerleader")
         .expect("Acrobatic Cheerleader")
         .primary_face()
@@ -404,7 +420,7 @@ fn capped_phase_source(engine: &mut GameEngine, mut ability: TriggeredAbilityDef
     };
     ability.triggers_only_once = false;
     ability.max_triggers_per_turn = Some(1);
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("grizzly_bears")
         .unwrap()
         .primary_face()
@@ -439,7 +455,7 @@ fn refire_begin_combat(engine: &mut GameEngine) -> RuledEventBatch {
 #[test]
 fn issue_164_intervening_if_and_real_turn_rollover_preserve_trigger_caps() {
     let mut engine = engine_at_main1(164_101);
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("acrobatic_cheerleader")
         .unwrap()
         .primary_face()
@@ -492,7 +508,7 @@ fn issue_164_intervening_if_and_real_turn_rollover_preserve_trigger_caps() {
 #[test]
 fn issue_164_decline_rejected_target_and_refresh_do_not_refund_a_trigger() {
     let mut engine = engine_at_main1(164_102);
-    let ability = CardRegistry::global()
+    let ability = tricerules_cards::registry::global()
         .get("gravedigger")
         .unwrap()
         .primary_face()
@@ -526,7 +542,7 @@ fn issue_164_decline_rejected_target_and_refresh_do_not_refund_a_trigger() {
 #[test]
 fn issue_164_no_legal_targets_still_spends_the_trigger_allowance() {
     let mut engine = engine_at_main1(164_103);
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("gravedigger")
         .unwrap()
         .primary_face()
@@ -557,7 +573,7 @@ fn issue_164_no_legal_targets_still_spends_the_trigger_allowance() {
 #[test]
 fn issue_164_target_leaving_before_resolution_does_not_refund_the_cap() {
     let mut engine = engine_at_main1(164_104);
-    let ability = CardRegistry::global()
+    let ability = tricerules_cards::registry::global()
         .get("riling_dawnbreaker_signaling_roar")
         .unwrap()
         .primary_face()

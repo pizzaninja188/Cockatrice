@@ -33,7 +33,15 @@ fn any_target_publishes_planeswalkers_and_battles_but_not_lands() {
             ],
         ),
     ]);
-    let mut engine = GameEngine::new(72_001, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        72_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "lightning_bolt");
     let jace = relocate_to_battlefield(&mut engine, 1, "jace_beleren", false);
@@ -103,7 +111,15 @@ fn damage_removes_loyalty_and_defense_counters() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(72_002, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        72_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "jace_beleren");
     give_mana(
@@ -197,7 +213,15 @@ fn loyalty_cost_is_atomic_sorcery_speed_and_shared_across_abilities() {
         deck_with("island", &["jace_beleren"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(72_003, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        72_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "jace_beleren");
     give_mana(
@@ -232,6 +256,7 @@ fn loyalty_cost_is_atomic_sorcery_speed_and_shared_across_abilities() {
 #[test]
 fn siege_protector_is_chosen_before_the_battle_enters() {
     let mut duel = GameEngine::new(
+        tricerules_cards::registry::global(),
         72_004,
         &[0, 1],
         20,
@@ -279,6 +304,7 @@ fn siege_protector_is_chosen_before_the_battle_enters() {
 
 fn siege_ready_to_choose(seed: u64) -> (GameEngine, u32, u64) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -510,6 +536,7 @@ fn published_attack_assignment(
 #[test]
 fn split_attackers_damage_player_planeswalker_and_battle() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         72_007,
         &[0, 1],
         20,
@@ -596,6 +623,7 @@ fn split_attackers_damage_player_planeswalker_and_battle() {
 fn scorch_spitter_damages_attacked_planeswalker_but_not_battle() {
     let make_engine = |seed| {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             seed,
             &[0, 1],
             20,
@@ -686,6 +714,7 @@ fn scorch_spitter_damages_attacked_planeswalker_but_not_battle() {
 #[test]
 fn attacker_stays_in_combat_but_deals_no_damage_when_permanent_defender_disappears() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         72_010,
         &[0, 1],
         20,

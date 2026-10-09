@@ -21,7 +21,7 @@ fn primary<'a>(registry: &'a CardRegistry, id: &str) -> &'a tricerules_cards::Ca
 
 #[test]
 fn issue_misc2_batch_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (id, name, mana, types) in [
         ("playful_shove", "Playful Shove", "{1}{R}", &["Sorcery"][..]),

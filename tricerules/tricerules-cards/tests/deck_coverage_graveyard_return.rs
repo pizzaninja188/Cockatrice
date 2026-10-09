@@ -17,7 +17,7 @@ fn graveyard_return_registers_exact_single_faces_costs_types_and_filters() {
             false,
         ),
     ] {
-        let card = CardRegistry::global().get(id).unwrap();
+        let card = tricerules_cards::registry::global().get(id).unwrap();
         assert_eq!(card.name, name);
         assert_eq!(card.faces_iter().count(), 1);
         let face = card.primary_face();

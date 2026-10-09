@@ -31,7 +31,7 @@ fn surviel_partition() -> SpellEffectKind {
 
 #[test]
 fn issue_misc8_batch_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (id, name, mana, types) in [
         (

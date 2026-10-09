@@ -5,6 +5,7 @@ use tricerules_proto::ruled::v1 as rv1;
 #[test]
 fn issue_176_no_one_left_behind_publishes_graveyard_reduction_and_pays_it() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         176_101,
         &[0, 1],
         20,
@@ -81,7 +82,15 @@ fn winged_words_uses_the_flying_reduction_for_preview_and_payment() {
         deck_with("island", &["winged_words", "cloudkin_seer"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(56_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        56_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "winged_words");
     relocate_to_battlefield(&mut engine, 0, "cloudkin_seer", false);
@@ -111,7 +120,15 @@ fn winged_words_counts_only_its_controllers_flyers_and_reduces_only_once() {
         ),
         deck_with("forest", &["cloudkin_seer"]),
     ]);
-    let mut engine = GameEngine::new(56_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        56_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "winged_words");
 
@@ -130,7 +147,15 @@ fn winged_words_tracks_gained_and_lost_flying_and_revalidates_payment_atomically
         deck_with("island", &["winged_words", "grizzly_bears", "flight"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(56_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        56_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "winged_words");
     ensure_in_hand(&mut engine, 0, "flight");

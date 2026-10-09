@@ -343,7 +343,15 @@ mod tests {
 
     #[test]
     fn archive_occurrences_copy_control_blanking_and_departure_use_current_recipient() {
-        let mut engine = GameEngine::new(104_802, &[10, 20], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            104_802,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = archive_source(&mut engine, 10);
         let second = archive_source(&mut engine, 20);
         let mut copy = engine.copiable_values_for(source).unwrap();
@@ -397,7 +405,15 @@ mod tests {
 
     #[test]
     fn archive_zero_unknown_and_prohibited_huge_gain_short_circuit() {
-        let mut engine = GameEngine::new(104_803, &[10, 20], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            104_803,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         archive_source(&mut engine, 10);
         for (player, amount) in [(10, 0), (99, u32::MAX)] {
             let mut events = Vec::new();
@@ -436,7 +452,15 @@ mod tests {
             (1, i32::MAX - 1, 0),
             (1, 20, u64::MAX - 1),
         ] {
-            let mut engine = GameEngine::new(104_804, &[10, 20], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                104_804,
+                &[10, 20],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             archive_source(&mut engine, 10);
             engine.state.players[0].life = life;
             engine.state.turn_history.current.player_mut(10).life_gained = history;
@@ -453,7 +477,15 @@ mod tests {
 
     #[test]
     fn archive_replaces_one_life_gain_before_history_and_public_event() {
-        let mut engine = GameEngine::new(104_801, &[10, 20], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            104_801,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = engine.state.players[0].hand[0];
         engine.state.objects.get_mut(&source).unwrap().card_id = "alhammarrets_archive".into();
         move_object_to_zone(
@@ -480,7 +512,15 @@ mod tests {
 
     #[test]
     fn issue_170_gain_history_commits_before_triggers_and_rolls_over() {
-        let mut engine = GameEngine::new(170001, &[10, 20], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            170001,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let mut events = Vec::new();
         assert_eq!(engine.state.turn_history.current.player(10).life_gained, 0);
         assert!(
@@ -522,15 +562,24 @@ mod tests {
             RelativePlayerSet::Controller,
             RelativePlayerSet::Opponents,
         ] {
-            let mut engine = GameEngine::new(175_101, &[10, 20], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                175_101,
+                &[10, 20],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             engine.state.players.push(PlayerState::new(30, 20));
             let source = prohibition_source(&mut engine, 20);
             let mut values = engine.copiable_values_for(source).unwrap();
-            values.face.static_abilities = vec![tricerules_cards::IdentifiedAbility::fallback(
-                "static_01",
-                StaticAbilityDef::ProhibitLifeGain { players: scope },
-            )
-            .unwrap()];
+            values.face.static_abilities =
+                vec![tricerules_card_model::IdentifiedAbility::fallback(
+                    "static_01",
+                    StaticAbilityDef::ProhibitLifeGain { players: scope },
+                )
+                .unwrap()];
             engine
                 .state
                 .objects
@@ -544,7 +593,7 @@ mod tests {
                         source_id: None,
                         affected: AffectedScope::Single(source),
                         kind: ContinuousEffectKind::Layer2Control {
-                            controller: tricerules_cards::ControllerReference::Fixed(30),
+                            controller: tricerules_card_model::ControllerReference::Fixed(30),
                         },
                         condition: None,
                         duration: EffectDuration::UntilEndOfTurn,
@@ -591,7 +640,15 @@ mod tests {
 
     #[test]
     fn issue_175_prohibition_tracks_copy_blanking_face_down_and_zone_lifetime() {
-        let mut engine = GameEngine::new(175_102, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            175_102,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = prohibition_source(&mut engine, 0);
         let second = prohibition_source(&mut engine, 1);
         let values = engine.copiable_values_for(source).unwrap();
@@ -664,7 +721,15 @@ mod tests {
 
     #[test]
     fn issue_175_zero_or_unknown_recipient_gains_emit_nothing() {
-        let mut engine = GameEngine::new(175_103, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            175_103,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         for (player, amount) in [(0, 0), (99, 3)] {
             let mut events = Vec::new();
             assert!(apply_life_gain_without_triggers(
@@ -686,7 +751,15 @@ mod tests {
 
     #[test]
     fn lose_life_recipient_sets_are_player_generic_and_skip_lost_players() {
-        let mut engine = GameEngine::new(87, &[10, 20], 20, None, true).expect("two-player engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            87,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .expect("two-player engine");
         engine.state.players.push(PlayerState::new(30, 20));
         let mut lost_player = PlayerState::new(40, 20);
         lost_player.has_lost = true;

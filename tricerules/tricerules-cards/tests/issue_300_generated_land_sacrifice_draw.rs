@@ -3,13 +3,13 @@ use tricerules_cards::primitives::{
     TargetKind,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount, CardRegistry,
-    Keyword, ManaCost,
+    AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount, Keyword,
+    ManaCost,
 };
 
 #[test]
 fn issue_300_registers_exactly_the_reviewed_land_sacrifice_draw_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let ripchain = registry
         .get("ripchain_razorkin")
         .expect("Ripchain Razorkin must be registered")

@@ -12,6 +12,7 @@ const GRUUL_WAR_CHANT: &str = "gruul_war_chant";
 
 fn engine(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,

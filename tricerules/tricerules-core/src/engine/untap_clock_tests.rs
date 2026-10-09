@@ -67,7 +67,15 @@ fn next_turn(engine: &mut GameEngine) -> Vec<ObjectId> {
 
 #[test]
 fn self_untap_hook_uses_conditional_source_availability_from_before_all_untaps() {
-    let mut engine = GameEngine::new(502_301, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        502_301,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     let waterskin = permanent(&mut engine, 0, "benders_waterskin", true);
     let land = permanent(&mut engine, 1, "forest", true);
     conditional_removal(&mut engine, land, waterskin, false);
@@ -81,7 +89,15 @@ fn self_untap_hook_uses_conditional_source_availability_from_before_all_untaps()
 
 #[test]
 fn clock_group_membership_does_not_change_when_active_untap_restores_its_ability() {
-    let mut engine = GameEngine::new(502_302, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        502_302,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     let clock = permanent(&mut engine, 0, "unwinding_clock", true);
     let ring = permanent(&mut engine, 0, "sol_ring", true);
     let land = permanent(&mut engine, 1, "forest", true);
@@ -120,8 +136,16 @@ fn resolved_effect(
 
 #[test]
 fn clock_uses_nonconsecutive_multiplayer_controllers_and_current_types() {
-    use tricerules_cards::primitives::{TypeLineAddition, TypeLineReplacement};
-    let mut engine = GameEngine::new(502_304, &[10, 20, 30], 20, None, true).unwrap();
+    use tricerules_card_model::primitives::{TypeLineAddition, TypeLineReplacement};
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        502_304,
+        &[10, 20, 30],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     let clock = permanent(&mut engine, 10, "unwinding_clock", true);
     let own_ring = permanent(&mut engine, 10, "sol_ring", true);
     let moved_ring = permanent(&mut engine, 10, "sol_ring", true);
@@ -176,8 +200,16 @@ fn clock_uses_nonconsecutive_multiplayer_controllers_and_current_types() {
 
 #[test]
 fn clock_reads_scope_after_turn_start_expiry() {
-    use tricerules_cards::primitives::TypeLineAddition;
-    let mut engine = GameEngine::new(502_305, &[10, 20, 30], 20, None, true).unwrap();
+    use tricerules_card_model::primitives::TypeLineAddition;
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        502_305,
+        &[10, 20, 30],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     let clock = permanent(&mut engine, 10, "unwinding_clock", true);
     let own_ring = permanent(&mut engine, 10, "sol_ring", true);
     let other_ring = permanent(&mut engine, 30, "sol_ring", true);
@@ -212,7 +244,15 @@ fn clock_reads_scope_after_turn_start_expiry() {
 
 #[test]
 fn multiple_clocks_and_self_hook_make_one_attempt_and_preserve_nonactive_skip_markers() {
-    let mut engine = GameEngine::new(502_306, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        502_306,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     permanent(&mut engine, 0, "unwinding_clock", false);
     permanent(&mut engine, 0, "unwinding_clock", false);
     let waterskin = permanent(&mut engine, 0, "benders_waterskin", true);
@@ -294,7 +334,15 @@ fn multiple_clocks_and_self_hook_make_one_attempt_and_preserve_nonactive_skip_ma
 #[test]
 fn clock_face_down_basic_land_and_ability_suppression_disable_only_current_sources() {
     for case in 0..3 {
-        let mut engine = GameEngine::new(502_307 + case, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            502_307 + case,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let clock = permanent(&mut engine, 0, "unwinding_clock", true);
         let ring = permanent(&mut engine, 0, "sol_ring", true);
         match case {
@@ -302,11 +350,13 @@ fn clock_face_down_basic_land_and_ability_suppression_disable_only_current_sourc
             1 => resolved_effect(
                 &mut engine,
                 clock,
-                ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
-                    card_types: vec![tricerules_cards::PermanentTypeFilter::Land],
-                    creature_types: Vec::new(),
-                    land_types: vec![tricerules_cards::BasicLandType::Forest],
-                }),
+                ContinuousEffectKind::Layer4SetTypeLine(
+                    tricerules_card_model::TypeLineReplacement {
+                        card_types: vec![tricerules_card_model::PermanentTypeFilter::Land],
+                        creature_types: Vec::new(),
+                        land_types: vec![tricerules_card_model::BasicLandType::Forest],
+                    },
+                ),
                 EffectDuration::Indefinite,
             ),
             _ => resolved_effect(
@@ -328,7 +378,15 @@ fn clock_face_down_basic_land_and_ability_suppression_disable_only_current_sourc
 
 #[test]
 fn prepared_untap_never_changes_a_new_incarnation() {
-    let mut engine = GameEngine::new(502_310, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        502_310,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     let ring = permanent(&mut engine, 0, "sol_ring", true);
     engine
         .state
@@ -350,8 +408,15 @@ fn prepared_untap_never_changes_a_new_incarnation() {
 #[test]
 fn group_untap_empty_filter_means_all_and_nonempty_filter_means_any_listed_type() {
     for all in [false, true] {
-        let mut engine =
-            GameEngine::new(502_311 + u64::from(all), &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            502_311 + u64::from(all),
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = permanent(&mut engine, 0, "unwinding_clock", false);
         let ring = permanent(&mut engine, 0, "sol_ring", true);
         let bear = permanent(&mut engine, 0, "grizzly_bears", true);
@@ -400,7 +465,15 @@ fn prohibition_is_active(engine: &GameEngine, target: ObjectId) -> bool {
 
 #[test]
 fn clock_untap_outcomes_do_not_recheck_a_prohibition_restored_by_another_untap() {
-    let mut engine = GameEngine::new(502_303, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        502_303,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     permanent(&mut engine, 0, "unwinding_clock", false);
     let ring = permanent(&mut engine, 0, "sol_ring", true);
     let land = permanent(&mut engine, 1, "forest", true);

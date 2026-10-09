@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{AbilityCost, PlayerRecipient, SpellEffectKind};
-use tricerules_cards::{AbilityPresentation, Amount, CardRegistry};
+use tricerules_cards::{AbilityPresentation, Amount};
 
 #[test]
 fn waterlogged_grove_registers_both_complete_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(
         registry.id_for_name("Waterlogged Grove"),
         Some("waterlogged_grove")

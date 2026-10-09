@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::*;
-use tricerules_cards::{AbilityPresentation, CardRegistry};
+use tricerules_cards::AbilityPresentation;
 
 #[test]
 fn boseiju_exact_identity_maps_printed_mana_and_complete_channel() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(
         registry.id_for_name("Boseiju, Who Endures"),
         Some("boseiju,_who_endures")

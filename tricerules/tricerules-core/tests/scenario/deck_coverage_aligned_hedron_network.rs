@@ -14,8 +14,15 @@ use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone}
 use tricerules_proto::ruled::v1::{ruled_command::Cmd, RuledCommand};
 
 fn setup() -> GameEngine {
-    let mut engine =
-        GameEngine::new(202_610_801, &[4, 9, 27], 20, None, true).expect("new three-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_610_801,
+        &[4, 9, 27],
+        20,
+        None,
+        true,
+    )
+    .expect("new three-player game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

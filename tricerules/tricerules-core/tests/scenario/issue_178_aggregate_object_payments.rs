@@ -43,6 +43,7 @@ fn relocate_to_graveyard(engine: &mut GameEngine, player: usize, card_id: &str) 
 #[test]
 fn forensic_researcher_publishes_and_pays_mana_value_aggregate() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         178_001,
         &[0, 1],
         20,
@@ -121,6 +122,7 @@ fn forensic_researcher_publishes_and_pays_mana_value_aggregate() {
 #[test]
 fn mossbridge_troll_publishes_and_pays_current_power_aggregate() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         178_002,
         &[0, 1],
         20,

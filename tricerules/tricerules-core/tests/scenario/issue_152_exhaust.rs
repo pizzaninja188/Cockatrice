@@ -1,6 +1,6 @@
 use super::helpers::*;
 use tricerules_cards::primitives::{ActivationLimit, ContinuousEffectKind, EffectDuration};
-use tricerules_cards::{AbilityId, CardRegistry};
+use tricerules_cards::AbilityId;
 use tricerules_core::{AffectedScope, ContinuousEffect};
 use tricerules_proto::ruled::v1::ResolutionChoiceDecision;
 
@@ -17,7 +17,7 @@ fn mana_state(engine: &GameEngine, player: usize) -> (u32, u32, u32, u32, u32, u
 }
 
 fn grant_exhaust_ability(engine: &mut GameEngine, source: u32, ability_id: &str) {
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("temur_devotee")
         .expect("Temur Devotee definition")
         .primary_face()
@@ -192,7 +192,15 @@ fn a_countered_exhaust_ability_remains_spent() {
         deck_with("island", &["prodigal_sorcerer"]),
         deck_with("island", &["dirgur_island_dragon_skimming_strike"]),
     ];
-    let mut engine = GameEngine::new(15_204, &[0, 1], 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        15_204,
+        &[0, 1],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = relocate_to_battlefield(&mut engine, 0, "prodigal_sorcerer", false);
     let warded = relocate_to_battlefield(
@@ -201,7 +209,7 @@ fn a_countered_exhaust_ability_remains_spent() {
         "dirgur_island_dragon_skimming_strike",
         false,
     );
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("prodigal_sorcerer")
         .expect("Prodigal Sorcerer definition")
         .primary_face()

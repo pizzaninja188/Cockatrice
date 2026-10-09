@@ -1,9 +1,8 @@
 use tricerules_cards::primitives::{Amount, SpellEffectKind};
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn issue_105_cards_publish_harmonize_costs_and_complete_effects() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let whisper = registry.get("unending_whisper").expect("Unending Whisper");
     assert_eq!(

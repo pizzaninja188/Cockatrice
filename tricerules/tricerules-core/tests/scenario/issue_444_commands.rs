@@ -16,7 +16,15 @@ fn game(seed: u64) -> GameEngine {
             &["grizzly_bears", "coral_merfolk", "elvish_mystic"],
         ),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

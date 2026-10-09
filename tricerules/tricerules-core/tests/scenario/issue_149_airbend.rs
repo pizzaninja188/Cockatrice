@@ -9,6 +9,7 @@ use tricerules_core::Zone;
 #[test]
 fn airbending_lesson_token_ceases_to_exist_without_cast_permission() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         149_003,
         &[0, 1],
         20,
@@ -52,6 +53,7 @@ fn airbending_lesson_token_ceases_to_exist_without_cast_permission() {
 fn airbending_lesson_four_players_only_owner_can_recast_with_normal_timing() {
     let seats = [11, 23, 47, 89];
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         149_004,
         &seats[..2],
         20,
@@ -196,6 +198,7 @@ fn airbending_lesson_four_players_only_owner_can_recast_with_normal_timing() {
 #[test]
 fn issue_149_permission_cost_and_identity_are_engine_authoritative() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         149_001,
         &[0, 1],
         20,
@@ -301,6 +304,7 @@ fn issue_149_permission_cost_and_identity_are_engine_authoritative() {
 #[test]
 fn airbending_lesson_grants_the_exiled_cards_owner_and_draws() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         149_002,
         &[0, 1],
         20,

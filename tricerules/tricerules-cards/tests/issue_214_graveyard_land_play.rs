@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{Amount, PlayerRecipient, SpellEffectKind, StaticAbilityDef};
 use tricerules_cards::{
-    AbilityPresentation, CardRegistry, CastTriggerPlayer, PermanentTypeFilter, TriggerCondition,
+    AbilityPresentation, CastTriggerPlayer, PermanentTypeFilter, TriggerCondition,
 };
 
 #[test]
 fn icetill_explorer_has_the_exact_reusable_ability_shape() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("icetill_explorer")
         .expect("Icetill Explorer");
     let face = card.primary_face();

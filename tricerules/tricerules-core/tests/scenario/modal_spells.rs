@@ -30,7 +30,15 @@ fn fund_boros(e: &mut GameEngine) {
 
 #[test]
 fn boros_charm_damage_mode_is_atomic_and_public() {
-    let mut e = GameEngine::new(19001, &[0, 1], 20, modal_decks("boros_charm"), true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        19001,
+        &[0, 1],
+        20,
+        modal_decks("boros_charm"),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     fund_boros(&mut e);
     let index = hand_index_for_card(&e, 0, "boros_charm");
@@ -62,7 +70,15 @@ fn boros_charm_damage_mode_is_atomic_and_public() {
 
 #[test]
 fn healing_salve_life_mode_completes_the_card() {
-    let mut e = GameEngine::new(19002, &[0, 1], 20, modal_decks("healing_salve"), true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        19002,
+        &[0, 1],
+        20,
+        modal_decks("healing_salve"),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     give_mana(
         &mut e,
@@ -81,7 +97,15 @@ fn healing_salve_life_mode_completes_the_card() {
 
 #[test]
 fn boros_charm_keyword_modes_apply_to_the_correct_snapshot() {
-    let mut e = GameEngine::new(19003, &[0, 1], 20, modal_decks("boros_charm"), true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        19003,
+        &[0, 1],
+        20,
+        modal_decks("boros_charm"),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     let own = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let opponent = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -122,7 +146,15 @@ fn boros_charm_keyword_modes_apply_to_the_correct_snapshot() {
 /// must not advertise them in the mode's own target group (CR 115.1).
 #[test]
 fn boros_charm_double_strike_mode_rejects_targets_outside_the_battlefield() {
-    let mut e = GameEngine::new(19010, &[0, 1], 20, modal_decks("boros_charm"), true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        19010,
+        &[0, 1],
+        20,
+        modal_decks("boros_charm"),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     let creature = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let buried = inject_graveyard_card(&mut e, 0, "grizzly_bears");
@@ -194,7 +226,15 @@ fn modal_cast_rejects_bad_counts_duplicates_and_legacy_targets() {
         (19006, cast_modal_spell(0, vec![(99, vec![])])),
         (19007, cast_spell(0, target_player(1))),
     ] {
-        let mut e = GameEngine::new(seed, &[0, 1], 20, modal_decks("boros_charm"), true).unwrap();
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            modal_decks("boros_charm"),
+            true,
+        )
+        .unwrap();
         advance_to_main1_from_game_start(&mut e);
         fund_boros(&mut e);
         // The seven-card deck puts every card in hand, but shuffle determines the slot.
@@ -229,7 +269,15 @@ fn copied_modal_spell_retains_modes_and_mode_targets() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(19008, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        19008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     fund_boros(&mut e);
     let charm = hand_index_for_card(&e, 0, "boros_charm");
@@ -302,7 +350,15 @@ fn fund_cryptic(e: &mut GameEngine, player: i32) {
 
 #[test]
 fn cryptic_command_bounce_then_tap_uses_printed_order_and_relative_controller() {
-    let mut e = GameEngine::new(19009, &[0, 1], 20, cryptic_decks(), true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        19009,
+        &[0, 1],
+        20,
+        cryptic_decks(),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     let own = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let bounced = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -338,7 +394,15 @@ fn cryptic_command_bounce_then_tap_uses_printed_order_and_relative_controller() 
 
 #[test]
 fn cryptic_command_does_not_mass_tap_when_its_only_target_left_the_battlefield() {
-    let mut e = GameEngine::new(225_002, &[0, 1], 20, cryptic_decks(), true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        225_002,
+        &[0, 1],
+        20,
+        cryptic_decks(),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     let target = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let other = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -385,7 +449,15 @@ fn cryptic_command_counter_and_draw_resolve_together() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(19010, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        19010,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     give_mana(
         &mut e,
@@ -434,7 +506,15 @@ fn cryptic_command_counter_and_draw_resolve_together() {
 
 #[test]
 fn cryptic_command_requires_exactly_two_distinct_modes() {
-    let mut e = GameEngine::new(19011, &[0, 1], 20, cryptic_decks(), true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        19011,
+        &[0, 1],
+        20,
+        cryptic_decks(),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     fund_cryptic(&mut e, 0);
     let permanent = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");

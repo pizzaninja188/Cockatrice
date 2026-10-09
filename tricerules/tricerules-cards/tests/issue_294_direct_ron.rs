@@ -12,7 +12,7 @@ use tricerules_cards::primitives::{
     ManaCostChoiceKind, PermanentTypeFilter, PlayerRecipient, SpellEffectKind, TargetFilter,
     TargetGroupDef, TargetKind, TargetingDef,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, ChoiceId, Color, Layout};
+use tricerules_cards::{AbilityPresentation, ChoiceId, Color, Layout};
 
 const KICKER_FINGERPRINT: &str = "5208c66a815c11c01911fafbfcfcf17083f66d8863963c892844b7e2167d6c1f";
 
@@ -25,7 +25,7 @@ fn single_group(targeting: &TargetingDef) -> &TargetGroupDef {
 
 #[test]
 fn issue_294_direct_ron_registers_both_reviewed_handwritten_cards() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let kicker = ChoiceId::new("kicker").expect("stable kicker identity");
 
     for (id, name, face_id) in [

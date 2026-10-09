@@ -1,6 +1,5 @@
 use super::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
-use tricerules_cards::CardRegistry;
 use tricerules_core::{AffectedScope, ContinuousEffect};
 use tricerules_proto::ruled::v1::ResolutionChoiceDecision;
 
@@ -9,7 +8,15 @@ fn cast_unsummon_at_dirgur(seed: u64) -> (GameEngine, u32, u32) {
         deck_with("island", &["unsummon"]),
         deck_with("island", &["dirgur_island_dragon_skimming_strike"]),
     ];
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let dirgur = relocate_to_battlefield(
@@ -40,7 +47,15 @@ fn cast_unsummon_at_spectral_snatcher(seed: u64) -> (GameEngine, u32, u32, u32) 
         deck_with("island", &["unsummon", "grizzly_bears"]),
         deck_with("swamp", &["spectral_snatcher"]),
     ];
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let snatcher = relocate_to_battlefield(&mut engine, 1, "spectral_snatcher", false);
@@ -211,7 +226,15 @@ fn ward_does_not_trigger_for_its_controllers_spell() {
         ),
         deck_with("forest", &["grizzly_bears"]),
     ];
-    let mut engine = GameEngine::new(103_006, &[0, 1], 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        103_006,
+        &[0, 1],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let dirgur = relocate_to_battlefield(
         &mut engine,
@@ -289,7 +312,15 @@ fn ward_can_counter_an_exact_activated_ability_without_a_zone_move() {
         deck_with("island", &["prodigal_sorcerer"]),
         deck_with("island", &["dirgur_island_dragon_skimming_strike"]),
     ];
-    let mut engine = GameEngine::new(103_009, &[0, 1], 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        103_009,
+        &[0, 1],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let prodigal = relocate_to_battlefield(&mut engine, 0, "prodigal_sorcerer", false);
     let dirgur = relocate_to_battlefield(
@@ -328,7 +359,15 @@ fn each_ward_instance_creates_an_independent_orderable_trigger() {
         deck_with("island", &["unsummon"]),
         deck_with("island", &["dirgur_island_dragon_skimming_strike"]),
     ];
-    let mut engine = GameEngine::new(103_010, &[0, 1], 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        103_010,
+        &[0, 1],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let dirgur = relocate_to_battlefield(
         &mut engine,
@@ -336,7 +375,7 @@ fn each_ward_instance_creates_an_independent_orderable_trigger() {
         "dirgur_island_dragon_skimming_strike",
         false,
     );
-    let ward = CardRegistry::global()
+    let ward = tricerules_cards::registry::global()
         .get("dirgur_island_dragon_skimming_strike")
         .expect("Dirgur definition")
         .primary_face()
@@ -388,7 +427,15 @@ fn ward_can_counter_the_exact_targeted_triggered_ability() {
         deck_with("mountain", &["flametongue_kavu"]),
         deck_with("island", &["dirgur_island_dragon_skimming_strike"]),
     ];
-    let mut engine = GameEngine::new(103_011, &[0, 1], 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        103_011,
+        &[0, 1],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let dirgur = relocate_to_battlefield(
         &mut engine,
@@ -454,7 +501,15 @@ fn ward_can_counter_a_targeting_spell_copy_without_moving_a_card() {
         ),
         deck_with("island", &["twincast"]),
     ];
-    let mut engine = GameEngine::new(103_012, &[0, 1], 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        103_012,
+        &[0, 1],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let dirgur = relocate_to_battlefield(
         &mut engine,
@@ -539,7 +594,15 @@ fn mana_abilities_remain_available_during_a_ward_payment() {
         deck_with("island", &["unsummon", "island", "island"]),
         deck_with("island", &["dirgur_island_dragon_skimming_strike"]),
     ];
-    let mut engine = GameEngine::new(103_013, &[0, 1], 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        103_013,
+        &[0, 1],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let first_island = relocate_to_battlefield(&mut engine, 0, "island", false);
     let second_island = relocate_to_battlefield(&mut engine, 0, "island", false);
@@ -583,7 +646,15 @@ fn declining_ward_rewinds_mana_abilities_activated_during_payment() {
         deck_with("island", &["unsummon", "island", "island"]),
         deck_with("island", &["dirgur_island_dragon_skimming_strike"]),
     ];
-    let mut engine = GameEngine::new(103_017, &[0, 1], 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        103_017,
+        &[0, 1],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let first_island = relocate_to_battlefield(&mut engine, 0, "island", false);
     let second_island = relocate_to_battlefield(&mut engine, 0, "island", false);

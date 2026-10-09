@@ -2,7 +2,7 @@
 //!
 //! This catalog intentionally contains no Oracle prose. It binds authored card/face identity to
 //! display lookup names plus a SHA-256 of the normalized complete external face, allowing clients
-//! to reject valid-but-shifted line mappings. It is excluded from [`crate::CardRegistry::content_hash`]
+//! to reject valid-but-shifted line mappings. It is excluded from the embedded corpus content hash
 //! because external wording and cache refreshes are presentation-only.
 
 #[derive(Debug, Clone, PartialEq, Eq)]

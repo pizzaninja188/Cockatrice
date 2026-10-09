@@ -6,7 +6,15 @@ use tricerules_core::TurnStep;
 // Unrelated resources and must-attack flags are explicit fixture setup. Every declaration
 // below uses current engine-published, generation-bound assignments through apply_command.
 fn fixture(seed: u64, players: &[i32]) -> (GameEngine, u32, Vec<u32>) {
-    let mut engine = GameEngine::new(seed, players, 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        players,
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_permanent_on_battlefield(&mut engine, 1, "crawlspace");
     let attackers = (0..5)
@@ -59,7 +67,7 @@ fn limit_fixture(
     maximum: u32,
     affected: AttackLimitAffected,
 ) {
-    let mut face = tricerules_cards::CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("crawlspace")
         .unwrap()
         .primary_face()
@@ -334,7 +342,7 @@ fn crawlspace_inactive_face_down_or_removed_source_has_no_limit() {
 
 #[test]
 fn crawlspace_exact_identity_and_presentation_cover_the_complete_card() {
-    let definition = tricerules_cards::CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("crawlspace")
         .unwrap();
     assert_eq!(definition.name, "Crawlspace");

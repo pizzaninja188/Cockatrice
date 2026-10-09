@@ -68,8 +68,15 @@ fn attach_roads_face(engine: &mut GameEngine, object_id: u32) {
 
 fn roads_engine(seed: u64) -> (GameEngine, u32) {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine =
-        GameEngine::new(seed, &[0, 1], 20, decks, true).expect("issue #416 scenario engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("issue #416 scenario engine");
     advance_to_main1_from_game_start(&mut engine);
     let land = inject_card_into_hand(&mut engine, 0, "island");
     attach_roads_face(&mut engine, land);

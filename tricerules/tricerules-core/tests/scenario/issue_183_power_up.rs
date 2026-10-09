@@ -45,11 +45,19 @@ fn power_up_reduces_fixed_symbols_then_overflows_to_generic() {
         deck_with("mountain", &["rough_rhino_cavalry"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(183_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        183_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = move_ready_to_battlefield(&mut engine, 0, "rough_rhino_cavalry");
 
-    let mut face = tricerules_cards::CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("rough_rhino_cavalry")
         .expect("Rough Rhino Cavalry")
         .primary_face()
@@ -95,7 +103,15 @@ fn power_up_tracks_entry_generation_across_turns_and_control_changes() {
         deck_with("wastes", &["ultron_drone", "ultron_drone"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(183_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        183_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let unrecorded = relocate_to_battlefield(&mut engine, 0, "ultron_drone", false);
@@ -140,6 +156,7 @@ fn power_up_tracks_entry_generation_across_turns_and_control_changes() {
     );
 
     let mut next_turn = GameEngine::new(
+        tricerules_cards::registry::global(),
         183_003,
         &[0, 1],
         20,
@@ -175,6 +192,7 @@ fn issue_183_cards_publish_reduced_costs_and_resolve_their_power_ups() {
         "viv_vision,_teen_synthezoid",
     ];
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         183_004,
         &[0, 1],
         20,
@@ -263,6 +281,7 @@ fn issue_183_cards_publish_reduced_costs_and_resolve_their_power_ups() {
 #[test]
 fn failed_power_up_payment_is_atomic() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         183_005,
         &[0, 1],
         20,
@@ -295,6 +314,7 @@ fn failed_power_up_payment_is_atomic() {
 #[test]
 fn copied_power_up_abilities_keep_independent_once_per_object_limits() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         183_006,
         &[0, 1],
         20,
@@ -307,7 +327,7 @@ fn copied_power_up_abilities_keep_independent_once_per_object_limits() {
     .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = move_ready_to_battlefield(&mut engine, 0, "rough_rhino_cavalry");
-    let mut face = tricerules_cards::CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("rough_rhino_cavalry")
         .expect("Rough Rhino Cavalry")
         .primary_face()
@@ -352,6 +372,7 @@ fn copied_power_up_abilities_keep_independent_once_per_object_limits() {
 fn viv_vision_draws_on_attack_only_after_reaching_four_power() {
     fn attack_with_viv(power_up: bool, seed: u64) -> (usize, usize) {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             seed,
             &[0, 1],
             20,

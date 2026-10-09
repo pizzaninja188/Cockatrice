@@ -20,7 +20,15 @@ fn setup(seed: u64) -> (GameEngine, u32, u32, u32, u32) {
         deck_with("forest", &["demolition_field", "taiga"]),
         deck_with("island", &["taiga"]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let field = relocate_to_battlefield(&mut engine, 0, "demolition_field", false);
     let target = relocate_to_battlefield(&mut engine, 0, "taiga", false);
@@ -200,7 +208,15 @@ fn issue_210_indestructible_legal_target_still_allows_its_controller_to_search()
         deck_with("forest", &["demolition_field"]),
         deck_with("island", &["darksteel_citadel"]),
     ]);
-    let mut engine = GameEngine::new(210_005, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        210_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let field = relocate_to_battlefield(&mut engine, 0, "demolition_field", false);
     let citadel = relocate_to_battlefield(&mut engine, 1, "darksteel_citadel", false);

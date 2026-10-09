@@ -19,7 +19,15 @@ use tricerules_proto::ruled::v1::{
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("swamp", &[]), deck_with("island", &[])]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
     grant_pool(&mut e, 0);
     grant_pool(&mut e, 1);
@@ -228,7 +236,15 @@ fn issue_misc10_fire_nation_raider_raid_creates_a_clue_only_after_attacking() {
     assert_eq!(battlefield_token_oids(&no_attack, 0, "clue").len(), 0);
 
     // After attacking this turn, entering creates a Clue.
-    let mut e = GameEngine::new(734_017, &[0, 1], 20, None, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        734_017,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut e);
     let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     e.apply_command(0, &declare_attackers(vec![attacker]))

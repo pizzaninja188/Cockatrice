@@ -1,8 +1,8 @@
 //! Actual cast-color, entry-copy and mana-ability coverage for Pentad Prism.
 use super::helpers::*;
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CardRegistry, CountExpression,
-    CounterKind, ManaAmount, SpellEffectKind,
+    AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CountExpression, CounterKind,
+    ManaAmount, SpellEffectKind,
 };
 use tricerules_core::{GameEngine, Zone};
 use tricerules_proto::ruled::v1::{
@@ -12,6 +12,7 @@ use tricerules_proto::ruled::v1::{
 
 fn setup(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -102,7 +103,7 @@ fn activation(engine: &mut GameEngine, source: u32, option: u32) -> RuledCommand
 
 #[test]
 fn pentad_prism_complete_registry_identity_exists() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("pentad_prism")
         .expect("complete Prism definition");
     assert_eq!(card.name, "Pentad Prism");

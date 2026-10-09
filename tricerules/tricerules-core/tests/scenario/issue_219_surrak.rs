@@ -6,7 +6,15 @@ fn setup_surrak_and_counterspell(seed: u64) -> GameEngine {
         deck_with("forest", &["surrak,_elusive_hunter", "grizzly_bears"]),
         deck_with("island", &["counterspell"]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     give_mana(
         &mut engine,
@@ -136,7 +144,15 @@ fn soft_counter_still_offers_payment_before_failing_to_counter_surrak() {
         deck_with("forest", &["surrak,_elusive_hunter"]),
         deck_with("island", &["convolute"]),
     ]);
-    let mut engine = GameEngine::new(219_003, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        219_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "surrak,_elusive_hunter");
     ensure_in_hand(&mut engine, 1, "convolute");
@@ -214,7 +230,15 @@ fn surrak_spell_watcher_rejects_own_targeting_and_noncreature_spells() {
         ),
         deck_with("island", &[]),
     ]);
-    let mut own = GameEngine::new(219_004, &[0, 1], 20, decks, true).expect("new game");
+    let mut own = GameEngine::new(
+        tricerules_cards::registry::global(),
+        219_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut own);
     relocate_to_battlefield(&mut own, 0, "surrak,_elusive_hunter", false);
     ensure_in_hand(&mut own, 0, "grizzly_bears");
@@ -253,7 +277,15 @@ fn surrak_spell_watcher_rejects_own_targeting_and_noncreature_spells() {
         deck_with("forest", &["surrak,_elusive_hunter", "lightning_bolt"]),
         deck_with("island", &["counterspell"]),
     ]);
-    let mut noncreature = GameEngine::new(219_005, &[0, 1], 20, decks, true).expect("new game");
+    let mut noncreature = GameEngine::new(
+        tricerules_cards::registry::global(),
+        219_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut noncreature);
     relocate_to_battlefield(&mut noncreature, 0, "surrak,_elusive_hunter", false);
     ensure_in_hand(&mut noncreature, 0, "lightning_bolt");
@@ -309,7 +341,15 @@ fn surrak_spell_watcher_rejects_an_opponents_creature_spell() {
         deck_with("forest", &["surrak,_elusive_hunter"]),
         deck_with("island", &["ambush_viper", "counterspell"]),
     ]);
-    let mut engine = GameEngine::new(219_006, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        219_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     relocate_to_battlefield(&mut engine, 0, "surrak,_elusive_hunter", false);
     ensure_in_hand(&mut engine, 1, "ambush_viper");

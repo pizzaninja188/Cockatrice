@@ -3,7 +3,7 @@ use tricerules_cards::{AbilityPresentation, Amount, CardRegistry};
 
 #[test]
 fn war_room_registers_the_complete_exact_card_and_two_mapped_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(registry.id_for_name("War Room"), Some("war_room"));
     let card = registry.get("war_room").unwrap();
     assert_eq!(card.name, "War Room");

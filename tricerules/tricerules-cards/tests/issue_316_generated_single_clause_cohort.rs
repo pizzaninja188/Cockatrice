@@ -10,8 +10,7 @@ use tricerules_cards::primitives::{
     TargetGroupDef, TargetKind, TargetSchema,
 };
 use tricerules_cards::{
-    AbilityPresentation, CardRegistry, CharacteristicDefiningAbility, Color, Keyword, Layout,
-    TriggerCondition,
+    AbilityPresentation, CharacteristicDefiningAbility, Color, Keyword, Layout, TriggerCondition,
 };
 
 fn single_group(targeting: &tricerules_cards::primitives::TargetingDef) -> &TargetGroupDef {
@@ -23,7 +22,7 @@ fn single_group(targeting: &tricerules_cards::primitives::TargetingDef) -> &Targ
 
 #[test]
 fn issue_316_registers_the_seven_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_count, layout) in [
         (
             "threadbind_clique_rip_the_seams",
@@ -60,7 +59,7 @@ fn issue_316_registers_the_seven_reviewed_identities() {
 
 #[test]
 fn issue_316_rip_the_seams_adventure_face_destroys_only_tapped_creatures() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("threadbind_clique_rip_the_seams")
         .expect("Threadbind Clique // Rip the Seams");
     assert_eq!(definition.layout, Layout::Adventure);
@@ -101,7 +100,7 @@ fn issue_316_rip_the_seams_adventure_face_destroys_only_tapped_creatures() {
 
 #[test]
 fn issue_316_chomping_changeling_keeps_changeling_and_optional_destroy() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("chomping_changeling")
         .expect("Chomping Changeling");
     let face = definition.primary_face();
@@ -163,7 +162,7 @@ fn issue_316_chomping_changeling_keeps_changeling_and_optional_destroy() {
 
 #[test]
 fn issue_316_stormbrood_omen_faces_carry_the_etb_and_power_bounded_destroy() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("disruptive_stormbrood_petty_revenge")
         .expect("Disruptive Stormbrood // Petty Revenge");
     assert_eq!(definition.layout, Layout::Omen);
@@ -231,7 +230,7 @@ fn issue_316_stormbrood_omen_faces_carry_the_etb_and_power_bounded_destroy() {
 
 #[test]
 fn issue_316_griffnaut_tracker_exiles_up_to_two_from_one_graveyard() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("griffnaut_tracker")
         .expect("Griffnaut Tracker");
     let face = definition.primary_face();
@@ -277,7 +276,7 @@ fn issue_316_griffnaut_tracker_exiles_up_to_two_from_one_graveyard() {
 
 #[test]
 fn issue_316_firebrand_archer_pings_each_opponent_on_owner_noncreature_casts() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("firebrand_archer")
         .expect("Firebrand Archer");
     let face = definition.primary_face();
@@ -322,7 +321,7 @@ fn issue_316_firebrand_archer_pings_each_opponent_on_owner_noncreature_casts() {
 
 #[test]
 fn issue_316_first_strike_pumps_share_one_mandatory_target_group() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, expected_power) in [
         ("kindled_fury", "Kindled Fury", "{R}", 1),
         ("sure_strike", "Sure Strike", "{1}{R}", 3),
@@ -364,7 +363,7 @@ fn issue_316_first_strike_pumps_share_one_mandatory_target_group() {
 
 #[test]
 fn issue_316_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let cases: &[(&str, &str, &str, &str)] = &[
         (
             "threadbind_clique_rip_the_seams",

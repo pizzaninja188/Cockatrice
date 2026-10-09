@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     DrawDiscardOrder, EffectSubject, PlayerRecipient, SpellEffectKind, TargetFilter,
 };
-use tricerules_cards::{AbilityPresentation, Amount, CardRegistry, CounterKind, TriggerCondition};
+use tricerules_cards::{AbilityPresentation, Amount, CounterKind, TriggerCondition};
 
 #[test]
 fn issue_259_registers_all_thirteen_generated_cards_with_exact_typed_etbs() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (id, ability_index, oracle_line) in [
         ("alanias_pathmaker", 0, 1),

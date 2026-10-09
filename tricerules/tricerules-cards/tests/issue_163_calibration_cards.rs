@@ -3,8 +3,8 @@ use tricerules_cards::primitives::{
     TargetController, TargetKind,
 };
 use tricerules_cards::{
-    AbilityCost, AbilitySourceZone, ActivationTiming, CardRegistry, Color, CounterKind,
-    GameCondition, Keyword, SearchDestination, SpellCostModifier, TriggerCondition,
+    AbilityCost, AbilitySourceZone, ActivationTiming, Color, CounterKind, GameCondition, Keyword,
+    SearchDestination, SpellCostModifier, TriggerCondition,
 };
 
 struct ExpectedCard {
@@ -181,7 +181,7 @@ const COHORT: &[ExpectedCard] = &[
 
 #[test]
 fn issue_163_cohort_has_exact_oracle_characteristics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for expected in COHORT {
         let definition = registry
             .get(expected.id)
@@ -218,7 +218,7 @@ fn issue_163_cohort_has_exact_oracle_characteristics() {
 
 #[test]
 fn issue_163_tokens_have_exact_registry_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let lander = registry.get("lander").expect("Lander token");
     assert!(registry.is_token("lander"));
     assert_eq!(lander.primary_face().types, ["Artifact", "Lander"]);
@@ -246,7 +246,7 @@ fn issue_163_tokens_have_exact_registry_definitions() {
 
 #[test]
 fn issue_163_uses_generic_target_modal_and_trigger_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let radiant = registry.get("radiant_strike").unwrap().primary_face();
     assert!(
         matches!(radiant.spell_effect.as_slice(), [SpellEffectKind::Destroy { subject: EffectSubject::Chosen(target) }, SpellEffectKind::GainLife { .. }] if target.any_of.as_ref().is_some_and(|filters| filters.len() == 2))
@@ -314,7 +314,7 @@ fn issue_163_uses_generic_target_modal_and_trigger_shapes() {
 
 #[test]
 fn issue_163_uses_generic_typecycling_condition_and_ordinal_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let mongoose = registry.get("mongoose_lizard").unwrap().primary_face();
     let typecycling = &mongoose.activated_abilities[0];
     assert_eq!(typecycling.source_zone, AbilitySourceZone::Hand);

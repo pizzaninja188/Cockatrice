@@ -2,7 +2,7 @@ mod common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{CardTypeFilter, PlayerRecipient, SpellEffectKind};
-use tricerules_cards::{CardRegistry, Color, Keyword};
+use tricerules_cards::{Color, Keyword};
 
 const BIRD_TOKEN: &str = "bird_u_2_2_flying";
 
@@ -58,7 +58,7 @@ fn swan_song_registers_its_exact_spell_filter_and_bird_token() {
     assert_eq!(*count, tricerules_cards::Amount::Fixed(1));
     assert_eq!(*who, PlayerRecipient::PreviousTargetedSpellController);
 
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert!(registry.is_token(BIRD_TOKEN));
     let bird = registry.get(BIRD_TOKEN).expect("blue Bird token");
     assert_eq!(bird.name, "Bird");

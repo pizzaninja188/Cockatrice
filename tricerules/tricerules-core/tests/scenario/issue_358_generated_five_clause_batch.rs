@@ -17,7 +17,15 @@ fn main1_engine(seed: u64, own: &[&str], opposing: &[&str]) -> GameEngine {
         deck_with("forest", own),
         deck_with("forest", opposing),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -90,7 +98,15 @@ fn issue_358_frilled_sparkshooter_counts_only_an_opponents_life_loss() {
         deck_with("swamp", &["frilled_sparkshooter", "bump_in_the_night"]),
         deck_with("forest", &[]),
     ]);
-    let mut opponent_loss = GameEngine::new(358_002, &[0, 1], 20, decks, true).expect("new game");
+    let mut opponent_loss = GameEngine::new(
+        tricerules_cards::registry::global(),
+        358_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut opponent_loss);
     ensure_in_hand(&mut opponent_loss, 0, "bump_in_the_night");
     give_mana(
@@ -121,7 +137,15 @@ fn issue_358_frilled_sparkshooter_counts_only_an_opponents_life_loss() {
         deck_with("swamp", &["frilled_sparkshooter", "decode_transmissions"]),
         deck_with("forest", &[]),
     ]);
-    let mut controller_loss = GameEngine::new(358_003, &[0, 1], 20, decks, true).expect("new game");
+    let mut controller_loss = GameEngine::new(
+        tricerules_cards::registry::global(),
+        358_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut controller_loss);
     ensure_in_hand(&mut controller_loss, 0, "decode_transmissions");
     give_mana(

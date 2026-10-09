@@ -52,7 +52,15 @@ fn seeker_engine(seed: u64, bear_tapped: bool) -> (GameEngine, u32, u32) {
         deck_with("forest", &["seeker_of_skybreak", "grizzly_bears"]),
         forest_only_deck(),
     ]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let seeker = relocate_to_battlefield(&mut e, 0, "seeker_of_skybreak", false);
     let bear = relocate_to_battlefield(&mut e, 0, "grizzly_bears", bear_tapped);
@@ -271,7 +279,15 @@ fn vitalize_untaps_only_the_casters_creatures() {
         deck_with("forest", &["vitalize", "grizzly_bears"]),
         forest_only_deck(),
     ]);
-    let mut e = GameEngine::new(9104, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9104,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let my_bear = relocate_to_battlefield(&mut e, 0, "grizzly_bears", true);
@@ -309,7 +325,15 @@ fn vitalize_applies_stun_independently_to_each_untap_event() {
         deck_with("forest", &["vitalize", "grizzly_bears"]),
         forest_only_deck(),
     ]);
-    let mut e = GameEngine::new(9126, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9126,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let stunned = relocate_to_battlefield(&mut e, 0, "grizzly_bears", true);
     let ordinary = inject_creature_on_battlefield(&mut e, 0, "savannah_lions");
@@ -348,7 +372,7 @@ fn creature_power(e: &GameEngine, oid: u32) -> u32 {
 fn zealous_display_has_a_complete_registered_definition() {
     use tricerules_cards::primitives::{GameCondition, RelativePlayerSet, SpellEffectKind};
 
-    let card = tricerules_cards::CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("zealous_display")
         .expect("Zealous Display registered");
     let face = card.primary_face();
@@ -385,7 +409,15 @@ fn zealous_display_pumps_on_own_turn_without_untapping() {
         deck_with("plains", &["zealous_display", "grizzly_bears"]),
         forest_only_deck(),
     ]);
-    let mut e = GameEngine::new(484_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        484_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
 
     let tapped_creature = relocate_to_battlefield(&mut e, 0, "grizzly_bears", true);
@@ -424,7 +456,15 @@ fn zealous_display_pumps_and_untaps_on_opponent_turn() {
         deck_with("plains", &["zealous_display", "grizzly_bears"]),
         forest_only_deck(),
     ]);
-    let mut e = GameEngine::new(484_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        484_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_active_player_upkeep(&mut e, 1);
     assert_eq!(e.state.active_player_id(), 1);
 
@@ -478,7 +518,15 @@ fn skipped_untap_preserves_stun_for_the_next_actual_attempt() {
     use tricerules_cards::CounterKind;
 
     let decks = Some(vec![forest_only_deck(), forest_only_deck()]);
-    let mut e = GameEngine::new(9127, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9127,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     set_tapped(&mut e, bear, true);

@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     CardTypeFilter, CreatureScopeController, DrawDiscardOrder, EffectSubject, GraveyardDestination,
     SpellEffectKind, TargetController, TargetKind,
 };
-use tricerules_cards::{CardRegistry, Color, Keyword, SearchDestination, TriggerCondition};
+use tricerules_cards::{Color, Keyword, SearchDestination, TriggerCondition};
 
 #[test]
 fn audited_cards_have_exact_oracle_characteristics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let cases = [
         (
             "environmental_scientist",
@@ -54,7 +54,7 @@ fn audited_cards_have_exact_oracle_characteristics() {
 
 #[test]
 fn mountain_kings_return_composes_recruit_reanimation_and_counter_chapters() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("the_mountain-kings_return")
         .expect("The Mountain-king's Return")
         .primary_face();
@@ -86,7 +86,7 @@ fn mountain_kings_return_composes_recruit_reanimation_and_counter_chapters() {
 
 #[test]
 fn environmental_scientist_uses_optional_basic_land_search() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("environmental_scientist")
         .expect("Environmental Scientist")
         .primary_face();
@@ -103,7 +103,7 @@ fn environmental_scientist_uses_optional_basic_land_search() {
 
 #[test]
 fn hire_a_crew_creates_exact_villain_then_pumps_controlled_creatures() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let face = registry
         .get("hire_a_crew")
         .expect("Hire a Crew")
@@ -130,7 +130,7 @@ fn hire_a_crew_creates_exact_villain_then_pumps_controlled_creatures() {
 
 #[test]
 fn front_porch_sentries_has_an_opponent_creature_death_trigger() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("front_porch_sentries")
         .expect("Front Porch Sentries")
         .primary_face();

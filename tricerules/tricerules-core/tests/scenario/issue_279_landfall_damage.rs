@@ -6,7 +6,15 @@ use super::helpers::*;
 use tricerules_core::{TurnStep, Zone};
 
 fn three_player_main1(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     engine
         .state
         .players

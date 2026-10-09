@@ -5,7 +5,7 @@ use tricerules_cards::{AbilityPresentation, CardRegistry};
 
 #[test]
 fn maze_is_the_exact_single_face_land_with_one_shared_attacking_target_and_no_mana_ability() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(registry.id_for_name("Maze of Ith"), Some("maze_of_ith"));
     let card = registry.get("maze_of_ith").unwrap();
     assert_eq!(card.name, "Maze of Ith");

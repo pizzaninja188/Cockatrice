@@ -10,7 +10,15 @@ fn prepared(seed: u64) -> GameEngine {
         deck_with("swamp", &["tainted_treats"]),
         vec!["forest".into(); 20],
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "tainted_treats");
     engine
@@ -100,7 +108,7 @@ fn tainted_treats_illegal_target_prevents_food() {
 fn tainted_treats_uses_copied_battlefield_mana_value_after_destroy() {
     let mut engine = prepared(480_105);
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
-    let copied = tricerules_cards::CardRegistry::global()
+    let copied = tricerules_cards::registry::global()
         .get("serra_angel")
         .unwrap()
         .primary_face()

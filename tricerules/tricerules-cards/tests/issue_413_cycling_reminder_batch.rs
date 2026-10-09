@@ -12,12 +12,12 @@ use tricerules_cards::primitives::{
     TargetKind,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, AbilitySourceZone, CardRegistry, CounterKind, Keyword,
-    ManaCost, PermanentTypeFilter, SpellEffectKind,
+    AbilityCost, AbilityPresentation, AbilitySourceZone, CounterKind, Keyword, ManaCost,
+    PermanentTypeFilter, SpellEffectKind,
 };
 
 fn issue_413_cycling_face(card_id: &str) -> tricerules_cards::CardFace {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let face = registry
         .get(card_id)
         .unwrap_or_else(|| panic!("{card_id} must be registered"))

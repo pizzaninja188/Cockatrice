@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     EffectSubject, SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
 };
-use tricerules_cards::{CardRegistry, PermanentTypeFilter, TriggerCondition};
+use tricerules_cards::{PermanentTypeFilter, TriggerCondition};
 
 #[test]
 fn glaring_aegis_has_complete_oracle_behavior() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("glaring_aegis")
         .expect("Glaring Aegis must be registered");
     let face = definition.primary_face();
@@ -66,7 +66,7 @@ fn glaring_aegis_has_complete_oracle_behavior() {
 
 #[test]
 fn rambunctious_mutt_has_complete_oracle_behavior() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("rambunctious_mutt")
         .expect("Rambunctious Mutt must be registered");
     let face = definition.primary_face();

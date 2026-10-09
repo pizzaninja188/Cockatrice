@@ -11,7 +11,7 @@
 //! (+1/+1 counters), and CR 400.7 (new object on zone change).
 
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, CounterKind};
+use tricerules_cards::CounterKind;
 use tricerules_core::{GameEngine, Zone};
 
 fn mana_pool(engine: &GameEngine) -> (u32, u32, u32, u32, u32, u32) {
@@ -70,7 +70,7 @@ fn cast_creature(engine: &mut GameEngine, card: &str) -> u32 {
 fn move_permanent_to_graveyard(engine: &mut GameEngine, player: usize, card_id: &str) {
     use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
     let player_id = engine.state.players[player].id;
-    let name = CardRegistry::global()
+    let name = tricerules_cards::registry::global()
         .get(card_id)
         .expect("registered card")
         .name

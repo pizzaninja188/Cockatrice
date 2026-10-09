@@ -21,6 +21,7 @@ fn choose_branch(index: u32) -> RuledCommand {
 #[test]
 fn issue_153_chaos_spewer_requires_blight_after_declining_mana() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         153_103,
         &[0, 1],
         20,
@@ -106,6 +107,7 @@ fn issue_153_chaos_spewer_requires_blight_after_declining_mana() {
 #[test]
 fn issue_153_resolution_blight_parks_before_discard_and_defers_lethal_sba() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         153_102,
         &[0, 1],
         20,
@@ -178,6 +180,7 @@ fn blight_selection(cost_index: u32, object_id: u32, zone_change_generation: u64
 #[test]
 fn issue_153_rejected_blight_is_atomic_and_receipts_bind_the_incarnation() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         153_104,
         &[0, 1],
         20,
@@ -255,6 +258,7 @@ fn issue_153_rejected_blight_is_atomic_and_receipts_bind_the_incarnation() {
 #[test]
 fn issue_153_blackthorn_etb_pays_before_drawing_and_losing_life() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         153_105,
         &[0, 1],
         20,
@@ -315,6 +319,7 @@ fn cast_blight(
 #[test]
 fn issue_153_copied_cinder_inherits_payment_without_blighting_again() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         153_106,
         &[0, 1],
         20,
@@ -376,6 +381,7 @@ fn issue_153_copied_cinder_inherits_payment_without_blighting_again() {
 fn issue_153_wild_unraveling_requires_exactly_one_additional_payment() {
     for blight in [true, false] {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             153_107,
             &[0, 1],
             20,
@@ -449,6 +455,7 @@ fn issue_153_wild_unraveling_requires_exactly_one_additional_payment() {
 fn issue_153_cinder_strike_uses_paid_receipt_for_one_damage_instruction() {
     for paid in [false, true] {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             153_101,
             &[0, 1],
             20,
@@ -497,6 +504,7 @@ fn issue_153_cinder_strike_uses_paid_receipt_for_one_damage_instruction() {
 #[test]
 fn issue_153_activation_publishes_one_creature_and_blights_without_targeting() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         153_100,
         &[0, 1],
         20,

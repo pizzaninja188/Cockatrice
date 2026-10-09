@@ -14,7 +14,15 @@ use tricerules_proto::ruled::v1::ChoiceKind;
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("swamp", &[]), deck_with("island", &[])]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
     grant_pool(&mut e, 0);
     grant_pool(&mut e, 1);
@@ -135,7 +143,15 @@ fn issue_misc8_kin_tree_severance_exiles_a_large_permanent() {
 
 #[test]
 fn issue_misc8_joust_through_hits_an_attacker_and_gains_life() {
-    let mut e = GameEngine::new(732_007, &[0, 1], 20, None, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        732_007,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut e);
     let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     e.apply_command(0, &declare_attackers(vec![attacker]))

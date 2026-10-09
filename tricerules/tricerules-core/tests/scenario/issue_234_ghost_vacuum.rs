@@ -1,7 +1,7 @@
 //! Ghost Vacuum: generation-bound linked exile and modified simultaneous reanimation.
 use super::helpers::*;
 use prost::Message;
-use tricerules_cards::{CardRegistry, CounterKind, Keyword};
+use tricerules_cards::{CounterKind, Keyword};
 use tricerules_core::state::CopiableValues;
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::dev_command::Dev;
@@ -11,6 +11,7 @@ use tricerules_proto::ruled::v1::{
 
 fn setup() -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         234_001,
         &[0, 1],
         20,
@@ -408,7 +409,9 @@ fn issue_234_multiplayer_entry_choices_follow_owner_apnap_before_atomic_return()
 fn issue_234_copied_release_and_permanent_or_token_copies_keep_source_links() {
     let mut engine = setup();
     let token = inject_permanent_on_battlefield(&mut engine, 0, "treasure");
-    let vacuum = CardRegistry::global().get("ghost_vacuum").unwrap();
+    let vacuum = tricerules_cards::registry::global()
+        .get("ghost_vacuum")
+        .unwrap();
     engine.state.objects.get_mut(&token).unwrap().token_origin = Some(CopiableValues {
         source_card_id: "ghost_vacuum".into(),
         source_face_index: 0,

@@ -48,7 +48,15 @@ fn three_player_engine(seed: u64) -> GameEngine {
         island_only_deck(),
         island_only_deck(),
     ]);
-    GameEngine::new(seed, &[0, 1, 2], 40, decks, true).expect("new three-player game")
+    GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1, 2],
+        40,
+        decks,
+        true,
+    )
+    .expect("new three-player game")
 }
 
 fn resolve_two_player_stack_and_capture_logs(engine: &mut GameEngine) -> Vec<String> {
@@ -151,8 +159,15 @@ fn prosperity_with_x_zero_draws_no_cards_but_still_pays_blue() {
         deck_with("island", &["prosperity"]),
         island_only_deck(),
     ]);
-    let mut engine =
-        GameEngine::new(202_609_262, &[0, 1], 20, decks, true).expect("new two-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_609_262,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new two-player game");
     ensure_card_in_hand(&mut engine, 0, "prosperity");
     advance_to_main1_from_game_start(&mut engine);
     let libraries: Vec<_> = engine
@@ -190,8 +205,15 @@ fn prosperity_can_make_all_remaining_players_lose_simultaneously() {
         deck_with("island", &["prosperity"]),
         island_only_deck(),
     ]);
-    let mut engine =
-        GameEngine::new(202_609_263, &[0, 1], 20, decks, true).expect("new two-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202_609_263,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new two-player game");
     ensure_card_in_hand(&mut engine, 0, "prosperity");
     advance_to_main1_from_game_start(&mut engine);
     for player in 0..2 {

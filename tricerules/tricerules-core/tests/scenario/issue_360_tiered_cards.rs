@@ -14,7 +14,15 @@ use tricerules_proto::ruled::v1::{
 
 fn engine(seed: u64, p0: &[&str], p1: &[&str]) -> GameEngine {
     let decks = Some(vec![deck_with("forest", p0), deck_with("forest", p1)]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     grant_pool(&mut engine, 0);
     grant_pool(&mut engine, 1);

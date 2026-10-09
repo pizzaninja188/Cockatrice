@@ -27,8 +27,15 @@ fn setup(seed: u64, players: &[i32]) -> GameEngine {
             "prodigal_sorcerer",
         ],
     );
-    let mut engine =
-        GameEngine::new(seed, players, 20, Some(vec![deck; players.len()]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        players,
+        20,
+        Some(vec![deck; players.len()]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -264,7 +271,7 @@ fn song_paid_cast_sets_colorless_forest_preserves_identity_and_restores_when_des
         assert_eq!(current.types, ["Land", "Forest"]);
         assert!(current.colors.is_empty());
         assert!(current.keywords.is_empty());
-        let authored_span = tricerules_cards::CardRegistry::global()
+        let authored_span = tricerules_cards::registry::global()
             .get(card)
             .unwrap()
             .primary_face()

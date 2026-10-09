@@ -17,6 +17,7 @@ fn main() {
     let mut files = vec![];
     for package in [
         "tricerules-core",
+        "tricerules-card-model",
         "tricerules-cards",
         "tricerules-proto",
         "tricerules-server",

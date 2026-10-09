@@ -1,3266 +1,93 @@
-use crate::card_def::{CardDefinition, CardFace, Layout, RawCardDefinition};
-use crate::primitives::{
-    AbilityCost, ActivatedCostModifier, AdditionalCost, Amount, BattlefieldAggregate,
-    CardResultAction, CardResultSource, CastCostGroupDef, CastCostOptionDef,
-    CastCostReceiptCondition, EffectContext, FaceChangeAction, GameCondition,
-    ObjectContributionKind, ResolutionBranchRequirement, SpecialActionAffected, SpellEffectKind,
-    StaticAbilityDef, TargetController, TargetKind, TargetingDef, TriggerCondition, ZoneCardFilter,
-};
-use crate::token_def::TokenDefinition;
-use crate::ManaSymbol;
+//! Production embedded card corpus; the model crate owns parsing and validation.
 use crate::PresentationFaceMetadata;
 use once_cell::sync::Lazy;
-use ron::extensions::Extensions;
-use ron::Options;
-use std::collections::{HashMap, HashSet};
-use thiserror::Error;
+pub use tricerules_card_model::registry::{CardRegistry, RegistryError};
 
-/// `Option` fields need `IMPLICIT_SOME` so bare values (e.g. `2` for `Option<u32>`) deserialize.
-static RON_OPTS: Lazy<Options> =
-    Lazy::new(|| Options::default().with_default_extension(Extensions::IMPLICIT_SOME));
+static GLOBAL: Lazy<CardRegistry> = Lazy::new(|| from_embedded().expect("embedded card data"));
 
-/// Parsed once per process and shared by every game (read-only after init).
-/// Panics on invalid embedded data: fail-fast at sidecar startup is the validation point.
-static GLOBAL: Lazy<CardRegistry> =
-    Lazy::new(|| CardRegistry::from_embedded().expect("embedded card data"));
-
-#[derive(Debug, Error)]
-pub enum RegistryError {
-    #[error("ron parse: {0}")]
-    Ron(#[from] ron::error::SpannedError),
-    #[error("invalid card data for '{id}': {reason}")]
-    InvalidCard { id: String, reason: String },
+/// Parsed once per process and shared by every game. Invalid shipped data fails startup.
+pub fn global() -> &'static CardRegistry {
+    &GLOBAL
 }
 
-#[derive(Debug, Default)]
-pub struct CardRegistry {
-    by_id: HashMap<String, CardDefinition>,
-    /// Trimmed, lowercased Oracle name -> card id (see [`Self::id_for_name`]).
-    by_name: HashMap<String, String>,
-    /// Token namespace: token id -> the [`CardDefinition`] synthesized from its
-    /// [`TokenDefinition`] (CR 111). Kept apart from `by_id` so tokens are never deck cards
-    /// or counted as implemented Oracle cards, but [`Self::get`] falls back here so the engine's
-    /// characteristic queries work uniformly for token objects.
-    tokens: HashMap<String, CardDefinition>,
-    presentation_faces: HashMap<(String, String), PresentationFaceMetadata>,
-}
-
-/// Name-index key normalization, applied to both stored names and lookup queries.
-fn normalize_name(name: &str) -> String {
-    name.trim().to_lowercase()
-}
-
-fn face_can_reference_attached_object(face: &CardFace) -> bool {
-    if face.types.iter().any(|card_type| card_type == "Equipment") {
-        return true;
-    }
-    face.is_aura
-        && face.spell_effect.iter().any(|effect| {
-            matches!(
-                effect,
-                SpellEffectKind::AuraAttach { target } if !target.is_player()
-            )
-        })
-}
-
-fn face_activated_abilities(
-    face: &CardFace,
-) -> impl Iterator<Item = &crate::ActivatedAbilityDef> + '_ {
-    face.activated_abilities.iter().chain(
-        face.class_level_bars
-            .iter()
-            .flat_map(|bar| &bar.activated_abilities),
-    )
-}
-
-fn face_triggered_abilities(
-    face: &CardFace,
-) -> impl Iterator<Item = &crate::TriggeredAbilityDef> + '_ {
-    face.triggered_abilities.iter().chain(
-        face.class_level_bars
-            .iter()
-            .flat_map(|bar| &bar.triggered_abilities),
-    )
-}
-
-fn face_static_abilities(
-    face: &CardFace,
-) -> impl Iterator<Item = &crate::IdentifiedStaticAbility> + '_ {
-    face.static_abilities.iter().chain(
-        face.class_level_bars
-            .iter()
-            .flat_map(|bar| &bar.static_abilities),
-    )
-}
-
-// This traversal belongs to the new scoped grant boundary. Existing grant families retain
-// their validation contracts; recipient-dependent metadata cannot be checked on the grantor.
-fn visit_scoped_grant_effect(
-    effect: &SpellEffectKind,
-    visit: &mut impl FnMut(&SpellEffectKind) -> Result<(), String>,
-) -> Result<(), String> {
-    visit(effect)?;
-    match effect {
-        SpellEffectKind::Conditional { effect, .. }
-        | SpellEffectKind::ConditionalCastCost { effect, .. } => {
-            visit_scoped_grant_effect(effect, visit)?
-        }
-        SpellEffectKind::ChooseResolutionBranch {
-            branches,
-            otherwise,
-            ..
-        } => {
-            for nested in branches
-                .iter()
-                .flat_map(|branch| &branch.effects)
-                .chain(otherwise)
-            {
-                visit_scoped_grant_effect(nested, visit)?;
-            }
-        }
-        SpellEffectKind::MayBehold { if_beheld, .. } => {
-            for nested in if_beheld {
-                visit_scoped_grant_effect(nested, visit)?;
-            }
-        }
-        SpellEffectKind::ApplyPermanentModifier {
-            modifier: crate::primitives::ResolvingPermanentModifier::GrantActivatedAbility(ability),
-            ..
-        } => {
-            for nested in &ability.effect {
-                visit_scoped_grant_effect(nested, visit)?;
-            }
-        }
-        SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
-            for nested in &ability.effect {
-                visit_scoped_grant_effect(nested, visit)?;
-            }
-        }
-        SpellEffectKind::GrantTriggeredAbility { ability, .. }
-        | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
-            for nested in ability.effect.iter().chain(
-                ability
-                    .modal
-                    .iter()
-                    .flat_map(|modal| &modal.modes)
-                    .flat_map(|mode| &mode.effects),
-            ) {
-                visit_scoped_grant_effect(nested, visit)?;
-            }
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-fn validate_scoped_granted_activation_metadata(
-    ability: &crate::ActivatedAbilityDef,
-) -> Result<(), String> {
-    if ability.source_zone != crate::AbilitySourceZone::Battlefield {
-        return Err("scoped granted activation requires a battlefield source".into());
-    }
-    if ability.intrinsic_land_mana {
-        return Err("intrinsic land mana cannot be an independently granted ability".into());
-    }
-    ability.validate_shape()?;
-    validate_effect_list_metadata(&ability.effect)?;
-    if ability.cost_modifiers.iter().any(|modifier| {
-        matches!(
-            modifier,
-            ActivatedCostModifier::ConditionalSourceManaCostReduction { .. }
-        )
-    }) {
-        return Err(
-            "scoped grants do not support recipient-dependent source mana cost reduction".into(),
-        );
-    }
-    validate_scoped_grant_targeting(ability.targeting.as_ref())?;
-    let allowed = ability_cost_result_actions(&ability.costs);
-    validate_scoped_grant_payment_effects(&ability.effect, &allowed)?;
-    Ok(())
-}
-
-fn validate_scoped_grant_targeting(targeting: Option<&TargetingDef>) -> Result<(), String> {
-    if targeting
-        .iter()
-        .flat_map(|targeting| &targeting.groups)
-        .any(|group| group.cast_cost_expansion.is_some())
-    {
-        return Err("scoped grants cannot reference cast-cost target expansion".into());
-    }
-    Ok(())
-}
-
-fn validate_scoped_grant_condition(condition: &GameCondition) -> Result<(), String> {
-    if condition.any_node_matches(|condition| matches!(condition, GameCondition::CastOrigin { .. }))
-    {
-        return Err("CastOrigin is available only as a face cast condition".into());
-    }
-    Ok(())
-}
-
-fn scoped_grant_effect_amount(effect: &SpellEffectKind) -> Option<&Amount> {
-    match effect {
-        SpellEffectKind::DamageTarget { amount, .. }
-        | SpellEffectKind::DamageAll { amount, .. }
-        | SpellEffectKind::DamageTargets { amount, .. }
-        | SpellEffectKind::DamagePlayer { amount, .. }
-        | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { amount }
-        | SpellEffectKind::Scry { count: amount }
-        | SpellEffectKind::Earthbend { count: amount }
-        | SpellEffectKind::CounterTargetSpell {
-            unless_controller_pays: Some(amount),
-            ..
-        }
-        | SpellEffectKind::Draw { count: amount, .. }
-        | SpellEffectKind::TargetPlayerDraws { count: amount, .. }
-        | SpellEffectKind::GainLife { amount }
-        | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
-        | SpellEffectKind::Mill { count: amount, .. }
-        | SpellEffectKind::PutCounters { count: amount, .. }
-        | SpellEffectKind::PutCountersAll { count: amount, .. }
-        | SpellEffectKind::PutCountersAllPlaneswalkers { count: amount, .. }
-        | SpellEffectKind::Amass { count: amount, .. }
-        | SpellEffectKind::CreateTokens { count: amount, .. }
-        | SpellEffectKind::CreateTokenCopies { count: amount, .. }
-        | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
-        SpellEffectKind::PumpTarget {
-            scale: Some(scale), ..
-        } => scale.amount(),
-        _ => None,
-    }
-}
-
-fn validate_scoped_grant_amount(
-    amount: &Amount,
-    allowed: &[CardResultAction],
-) -> Result<(), String> {
-    if amount.card_result_filter().is_some_and(|filter| {
-        filter.source == CardResultSource::Payment && !allowed.contains(&filter.action)
-    }) {
-        return Err("Payment card result requires a compatible card cost".into());
-    }
-    if let Some(conditional) = amount.cast_cost_amount() {
-        validate_cast_cost_condition(&[], &conditional.condition)?;
-    }
-    match amount {
-        Amount::Conditional { condition, .. } => validate_scoped_grant_condition(condition)?,
-        Amount::DivideRoundedDown { amount, .. } => validate_scoped_grant_amount(amount, allowed)?,
-        _ => {}
-    }
-    Ok(())
-}
-
-fn validate_scoped_grant_payment_effects(
-    effects: &[SpellEffectKind],
-    allowed: &[CardResultAction],
-) -> Result<(), String> {
-    for effect in effects {
-        validate_effect_payment_results(allowed, effect)?;
-        if let Some(amount) = scoped_grant_effect_amount(effect) {
-            validate_scoped_grant_amount(amount, allowed)?;
-        }
-        match effect {
-            SpellEffectKind::Conditional { effect, .. }
-            | SpellEffectKind::ConditionalCastCost { effect, .. } => {
-                validate_scoped_grant_payment_effects(
-                    std::slice::from_ref(effect.as_ref()),
-                    allowed,
-                )?
-            }
-            SpellEffectKind::MayBehold { if_beheld, .. } => {
-                validate_scoped_grant_payment_effects(if_beheld, allowed)?
-            }
-            SpellEffectKind::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                for branch in branches {
-                    validate_scoped_grant_payment_effects(&branch.effects, allowed)?;
-                }
-                validate_scoped_grant_payment_effects(otherwise, allowed)?;
-            }
-            SpellEffectKind::ApplyPermanentModifier {
-                modifier:
-                    crate::primitives::ResolvingPermanentModifier::GrantActivatedAbility(ability),
-                ..
-            } => {
-                validate_scoped_grant_payment_effects(
-                    &ability.effect,
-                    &ability_cost_result_actions(&ability.costs),
-                )?;
-            }
-            SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
-                validate_scoped_grant_payment_effects(&ability.effect, &[])?
-            }
-            SpellEffectKind::GrantTriggeredAbility { ability, .. }
-            | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
-                validate_scoped_grant_payment_effects(&ability.effect, &[])?;
-                for mode in ability.modal.iter().flat_map(|modal| &modal.modes) {
-                    validate_scoped_grant_payment_effects(&mode.effects, &[])?;
-                }
-            }
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
-fn validate_scoped_granted_activation(ability: &crate::ActivatedAbilityDef) -> Result<(), String> {
-    validate_scoped_granted_activation_metadata(ability)?;
-    for effect in &ability.effect {
-        visit_scoped_grant_effect(effect, &mut |effect| {
-            validate_effect_cast_cost_conditions(&[], effect)?;
-            match effect {
-                SpellEffectKind::Conditional { condition, .. }
-                | SpellEffectKind::WinGameIf { condition } => {
-                    validate_scoped_grant_condition(condition)?
-                }
-                SpellEffectKind::SearchLibrary {
-                    conditional_destination: Some(conditional),
-                    ..
-                } => validate_scoped_grant_condition(&conditional.condition)?,
-                SpellEffectKind::ProduceMana {
-                    conditional: Some(conditional),
-                    ..
-                } => validate_scoped_grant_condition(&conditional.condition)?,
-                SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
-                    for branch in branches {
-                        if let ResolutionBranchRequirement::GameCondition(condition) =
-                            &branch.requirement
-                        {
-                            validate_scoped_grant_condition(condition)?;
-                        }
-                    }
-                }
-                _ => {}
-            }
-            if matches!(
-                effect,
-                SpellEffectKind::ChangeSourceFace { .. }
-                    | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
-                    | SpellEffectKind::AttachSource { .. }
-                    | SpellEffectKind::AuraAttach { .. }
-            ) || effect.uses_attached_object_subject()
-                || matches!(
-                    effect,
-                    SpellEffectKind::Sacrifice {
-                        subject: crate::primitives::EffectSubject::AttachedObject
-                    } | SpellEffectKind::RemoveAllAbilities {
-                        subject: crate::primitives::EffectSubject::AttachedObject,
-                        ..
-                    } | SpellEffectKind::GrantProtection {
-                        subject: crate::primitives::EffectSubject::AttachedObject,
-                        ..
-                    }
-                )
-            {
-                return Err(
-                    "scoped grants do not support recipient layout or attachment dependencies"
-                        .into(),
-                );
-            }
-            if matches!(
-                effect,
-                SpellEffectKind::SiegeDefeat | SpellEffectKind::CastMadness { .. }
-            ) {
-                return Err(
-                    "scoped grants cannot use engine-synthesized defeat or madness context".into(),
-                );
-            }
-            if let SpellEffectKind::ApplyPermanentModifier {
-                modifier:
-                    crate::primitives::ResolvingPermanentModifier::GrantActivatedAbility(nested),
-                ..
-            } = effect
-            {
-                validate_scoped_granted_activation_metadata(nested)?;
-            }
-            if let SpellEffectKind::CreateReflexiveTrigger { ability, .. } = effect {
-                if let Some(condition) = &ability.intervening_if {
-                    validate_scoped_grant_condition(condition)?;
-                }
-                validate_scoped_grant_targeting(ability.targeting.as_ref())?;
-            }
-            if let SpellEffectKind::GrantTriggeredAbility { ability, .. }
-            | SpellEffectKind::CreateDelayedTrigger { ability, .. } = effect
-            {
-                if let Some(condition) = &ability.intervening_if {
-                    validate_scoped_grant_condition(condition)?;
-                }
-                validate_scoped_grant_targeting(ability.targeting.as_ref())?;
-                if let Some(modal) = &ability.modal {
-                    if modal.all_modes_cast_cost.is_some()
-                        || modal
-                            .modes
-                            .iter()
-                            .any(|mode| mode.linked_cast_cost.is_some())
-                    {
-                        return Err("scoped grants cannot reference modal cast-cost links".into());
-                    }
-                    for mode in &modal.modes {
-                        validate_scoped_grant_targeting(mode.targeting.as_ref())?;
-                    }
-                }
-            }
-            Ok(())
-        })?;
-    }
-    Ok(())
-}
-
-fn validate_scoped_grant_tokens(
-    face: &CardFace,
-    tokens: &HashMap<String, CardDefinition>,
-) -> Result<(), String> {
-    for static_ability in face_static_abilities(face) {
-        let StaticAbilityDef::GrantActivatedAbilityToPermanents {
-            activated_abilities,
-            ..
-        } = &static_ability.definition
-        else {
-            continue;
-        };
-        for effect in activated_abilities
-            .iter()
-            .flat_map(|ability| &ability.effect)
-        {
-            visit_scoped_grant_effect(effect, &mut |effect| {
-                for token in effect.referenced_token_ids() {
-                    if !tokens.contains_key(token) {
-                        return Err(format!("CreateTokens references unknown token '{token}'"));
-                    }
-                }
-                Ok(())
-            })?;
-        }
-    }
-    Ok(())
-}
-
-fn validate_saga_face(card: &CardDefinition, face: &CardFace) -> Result<(), RegistryError> {
-    let is_saga = face
-        .types
-        .iter()
-        .any(|card_type| card_type == "Enchantment")
-        && face.types.iter().any(|card_type| card_type == "Saga");
-    let chapter_abilities: Vec<_> = face_triggered_abilities(face)
-        .filter(|ability| matches!(ability.trigger, TriggerCondition::SagaChapter { .. }))
-        .collect();
-    if !chapter_abilities.is_empty() && !is_saga {
-        return Err(RegistryError::InvalidCard {
-            id: card.id.clone(),
-            reason: "Saga chapter triggers require an Enchantment Saga face".into(),
-        });
-    }
-    if face
-        .keywords
-        .contains(&crate::primitives::Keyword::ReadAhead)
-        && (!is_saga || chapter_abilities.is_empty())
-    {
-        return Err(RegistryError::InvalidCard {
-            id: card.id.clone(),
-            reason: "Read ahead requires an Enchantment Saga face with chapter abilities".into(),
-        });
-    }
-    Ok(())
-}
-
-fn face_can_reference_attached_player(face: &CardFace) -> bool {
-    face.is_aura
-        && face.spell_effect.iter().any(
-            |effect| matches!(effect, SpellEffectKind::AuraAttach { target } if target.is_player()),
-        )
-}
-
-fn validate_cast_cost_condition(
-    groups: &[CastCostGroupDef],
-    condition: &CastCostReceiptCondition,
-) -> Result<(), String> {
-    let group = groups
-        .iter()
-        .find(|group| group.group_id == condition.group_id)
-        .ok_or_else(|| "cast-cost condition references an unknown group".to_string())?;
-    if !group
-        .options
-        .iter()
-        .any(|option| option.option_id() == &condition.option_id)
-    {
-        return Err("cast-cost condition references an unknown option".into());
-    }
-    Ok(())
-}
-
-fn validate_effect_cast_cost_conditions(
-    groups: &[CastCostGroupDef],
-    effect: &SpellEffectKind,
-) -> Result<(), String> {
-    let amount = match effect {
-        SpellEffectKind::DamageTarget { amount, .. }
-        | SpellEffectKind::DamageAll { amount, .. }
-        | SpellEffectKind::DamageTargets { amount, .. }
-        | SpellEffectKind::DamagePlayer { amount, .. }
-        | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { amount }
-        | SpellEffectKind::Scry { count: amount }
-        | SpellEffectKind::Earthbend { count: amount }
-        | SpellEffectKind::CounterTargetSpell {
-            unless_controller_pays: Some(amount),
-            ..
-        }
-        | SpellEffectKind::Draw { count: amount, .. }
-        | SpellEffectKind::TargetPlayerDraws { count: amount, .. }
-        | SpellEffectKind::GainLife { amount }
-        | SpellEffectKind::Mill { count: amount, .. }
-        | SpellEffectKind::PutCounters { count: amount, .. }
-        | SpellEffectKind::Amass { count: amount, .. }
-        | SpellEffectKind::CreateTokens { count: amount, .. }
-        | SpellEffectKind::CreateTokenCopies { count: amount, .. }
-        | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
-        SpellEffectKind::PumpTarget {
-            scale: Some(scale), ..
-        } => scale.amount(),
-        _ => None,
-    };
-    if let Some(value) = amount.and_then(Amount::cast_cost_amount) {
-        validate_cast_cost_condition(groups, &value.condition)?;
-    }
-    match effect {
-        SpellEffectKind::ConditionalCastCost { condition, effect } => {
-            validate_cast_cost_condition(groups, condition)?;
-            validate_effect_cast_cost_conditions(groups, effect)
-        }
-        SpellEffectKind::CounterTargetSpell {
-            unless_controller_pays_by_cast_cost: Some(conditional),
-            ..
-        }
-        | SpellEffectKind::SearchLibrary {
-            count_by_cast_cost: Some(conditional),
-            ..
-        }
-        | SpellEffectKind::ExileTopWithPlayPermission {
-            count_by_cast_cost: Some(conditional),
-            ..
-        } => validate_cast_cost_condition(groups, &conditional.condition),
-        SpellEffectKind::SearchLibrary { slots, .. } => {
-            for condition in slots
-                .iter()
-                .filter_map(|slot| slot.enabled_by_cast_cost.as_ref())
-            {
-                validate_cast_cost_condition(groups, condition)?;
-            }
-            Ok(())
-        }
-        SpellEffectKind::ChooseResolutionBranch {
-            branches,
-            otherwise,
-            ..
-        } => {
-            for branch in branches {
-                if let ResolutionBranchRequirement::CastCostReceipt(condition) = &branch.requirement
-                {
-                    validate_cast_cost_condition(groups, condition)?;
-                }
-                for nested in &branch.effects {
-                    validate_effect_cast_cost_conditions(groups, nested)?;
-                }
-            }
-            for nested in otherwise {
-                validate_effect_cast_cost_conditions(groups, nested)?;
-            }
-            Ok(())
-        }
-        _ => Ok(()),
-    }
-}
-
-fn validate_effect_payment_results(
-    allowed: &[CardResultAction],
-    effect: &SpellEffectKind,
-) -> Result<(), String> {
-    let amount = effect.result_consuming_amount();
-    if let Some(filter) = amount.and_then(Amount::card_result_filter) {
-        if filter.source == CardResultSource::Payment && !allowed.contains(&filter.action) {
-            return Err("Payment card result requires a compatible card cost".into());
-        }
-    }
-    if let SpellEffectKind::ChooseResolutionBranch {
-        branches,
-        otherwise,
-        ..
-    } = effect
-    {
-        for branch in branches {
-            if let ResolutionBranchRequirement::CardResultCount { filter, .. } = &branch.requirement
-            {
-                if filter.source == CardResultSource::Payment && !allowed.contains(&filter.action) {
-                    return Err("Payment card result requires a compatible card cost".into());
-                }
-            }
-            for nested in &branch.effects {
-                validate_effect_payment_results(allowed, nested)?;
-            }
-        }
-        for nested in otherwise {
-            validate_effect_payment_results(allowed, nested)?;
-        }
-    }
-    Ok(())
-}
-
-fn additional_cost_result_actions(costs: &[AdditionalCost]) -> Vec<CardResultAction> {
-    costs
-        .iter()
-        .filter_map(|cost| match cost {
-            AdditionalCost::DiscardCard => Some(CardResultAction::Discard),
-            AdditionalCost::ExileGraveyardCards { .. } => Some(CardResultAction::Exile),
-            AdditionalCost::SacrificePermanent { .. } => Some(CardResultAction::Sacrifice),
-            AdditionalCost::TapPermanents { .. } => Some(CardResultAction::Tap),
-            AdditionalCost::Blight { .. } => None,
-        })
-        .collect()
-}
-
-fn spell_payment_result_actions(
-    costs: &[AdditionalCost],
-    groups: &[CastCostGroupDef],
-) -> Vec<CardResultAction> {
-    let mut actions = additional_cost_result_actions(costs);
-    for action in groups
-        .iter()
-        .flat_map(|group| &group.options)
-        .filter_map(|option| match option {
-            CastCostOptionDef::DiscardCard { .. } => Some(CardResultAction::Discard),
-            CastCostOptionDef::TapPermanents { .. } => Some(CardResultAction::Tap),
-            CastCostOptionDef::SacrificePermanent { .. } => Some(CardResultAction::Sacrifice),
-            CastCostOptionDef::Blight { .. }
-            | CastCostOptionDef::Mana { .. }
-            | CastCostOptionDef::Behold { .. }
-            | CastCostOptionDef::PayLife { .. } => None,
-        })
-    {
-        if !actions.contains(&action) {
-            actions.push(action);
-        }
-    }
-    actions
-}
-
-fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
-    costs
-        .iter()
-        .filter_map(|cost| match cost {
-            AbilityCost::Discard | AbilityCost::DiscardCard { .. } | AbilityCost::DiscardSelf => {
-                Some(CardResultAction::Discard)
-            }
-            AbilityCost::ExileSelf | AbilityCost::ExileGraveyardCards { .. } => {
-                Some(CardResultAction::Exile)
-            }
-            AbilityCost::SacrificeSelf | AbilityCost::SacrificePermanent { .. } => {
-                Some(CardResultAction::Sacrifice)
-            }
-            AbilityCost::Tap
-            | AbilityCost::PayLife { .. }
-            | AbilityCost::PayCommanderColorIdentityLife
-            | AbilityCost::ReturnUnblockedAttacker
-            | AbilityCost::ReturnTappedCreature
-            | AbilityCost::Blight { .. }
-            | AbilityCost::RemoveCounters { .. }
-            | AbilityCost::RemoveXStorageCountersFromSource
-            | AbilityCost::TapPermanents { .. }
-            | AbilityCost::Mana(_)
-            | AbilityCost::Waterbend(_)
-            | AbilityCost::Loyalty(_) => {
-                matches!(cost, AbilityCost::TapPermanents { .. }).then_some(CardResultAction::Tap)
-            }
-        })
-        .collect()
-}
-
-// Shared by deck cards and fixed tokens, so token abilities cannot bypass authoring checks.
-fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(), RegistryError> {
-    let attachment_source = face.is_aura || face.types.iter().any(|t| t == "Equipment");
-    for identified in face.static_abilities.iter().chain(
-        face.class_level_bars
-            .iter()
-            .flat_map(|bar| &bar.static_abilities),
-    ) {
-        identified
-            .validate_metadata()
-            .map_err(|reason| RegistryError::InvalidCard {
-                id: card.id.clone(),
-                reason,
-            })?;
-        let ability = &identified.definition;
-        if let StaticAbilityDef::UntapControlledPermanentsDuringOtherPlayersUntapSteps {
-            permanent_types,
-        } = ability
-        {
-            let unique: std::collections::HashSet<_> = permanent_types.iter().collect();
-            if unique.len() != permanent_types.len() {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "group untap permanent types cannot contain duplicates".into(),
-                });
-            }
-        }
-        if let StaticAbilityDef::MultiplyManaFromTappedPermanents { multiplier } = ability {
-            if *multiplier < 2 {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "static replacement multiplier must be at least 2".into(),
-                });
-            }
-        }
-        if let StaticAbilityDef::AttackTax {
-            generic_per_attacker,
-        } = ability
-        {
-            if *generic_per_attacker == 0 {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "AttackTax requires a nonzero generic mana amount".into(),
-                });
-            }
-        }
-        if let StaticAbilityDef::AdditionalTriggeredAbilityInstances {
-            source_filter,
-            condition,
-            additional_count,
-            ..
-        } = ability
-        {
-            if *additional_count == 0 {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "AdditionalTriggeredAbilityInstances additional_count must be nonzero"
-                        .into(),
-                });
-            }
-            source_filter
-                .validate()
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-            if let Some(condition) = condition {
-                condition
-                    .validate_live()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-        }
-        if let StaticAbilityDef::SelfDoesntUntapDuringUntapStepUnless { condition } = ability {
-            condition
-                .validate_live()
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-        }
-        if let StaticAbilityDef::AddTypesToPermanents { addition, .. } = ability {
-            addition
-                .validate()
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-        }
-        if let StaticAbilityDef::GrantKeywordToPermanents { filter, .. }
-        | StaticAbilityDef::AddTypesToPermanents { filter, .. }
-        | StaticAbilityDef::GrantActivatedAbilityToPermanents { filter, .. } = ability
-        {
-            filter
-                .validate_characteristic_constraints()
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-            if !filter.all_terminal_filters_match(|leaf| {
-                matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
-                    && leaf.controller != crate::primitives::TargetController::DefendingPlayer
-                    && leaf.tapped.is_none()
-                    && leaf.power.is_none()
-                    && leaf.toughness.is_none()
-                    && leaf.required_keywords.is_empty()
-                    && leaf.excluded_keywords.is_empty()
-                    && leaf.excluded_objects.iter().all(|excluded| {
-                        *excluded == crate::primitives::TargetObjectExclusion::Source
-                    })
-            }) {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "live static permanent effects require a supported earlier-layer scope without tapped, keyword, P/T, defending-player or attached-object constraints".into(),
-                });
-            }
-        }
-        if let StaticAbilityDef::GrantActivatedAbilityToPermanents {
-            activated_abilities,
-            ..
-        } = ability
-        {
-            if activated_abilities.is_empty() {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "GrantActivatedAbilityToPermanents requires at least one ability"
-                        .into(),
-                });
-            }
-            for granted in activated_abilities {
-                validate_scoped_granted_activation(granted).map_err(|reason| {
-                    RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    }
-                })?;
-            }
-        }
-        if let StaticAbilityDef::GrantTriggeredAbilityToPermanents {
-            filter,
-            condition,
-            triggered_abilities,
-        } = ability
-        {
-            filter
-                .validate_characteristic_constraints()
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-            if !filter.is_permanent_only() {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "GrantTriggeredAbilityToPermanents requires a permanent-only filter"
-                        .into(),
-                });
-            }
-            if triggered_abilities.is_empty() {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "GrantTriggeredAbilityToPermanents requires at least one ability"
-                        .into(),
-                });
-            }
-            if let Some(condition) = condition {
-                condition
-                    .validate_live()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-            for granted in triggered_abilities {
-                if granted.trigger.is_delayed_only()
-                    || matches!(granted.trigger, TriggerCondition::SagaChapter { .. })
-                {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "GrantTriggeredAbilityToPermanents requires an ordinary non-Saga trigger"
-                            .into(),
-                    });
-                }
-                granted
-                    .validate_shape()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-        }
-        if let StaticAbilityDef::EntersTapped {
-            affected,
-            condition,
-            unless_cost,
-        } = ability
-        {
-            if let Some(condition) = condition {
-                condition
-                    .validate_live()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-            if let Some(cost) = unless_cost {
-                if affected != &crate::primitives::EntersTappedAffected::Self_ {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "entry costs require an intrinsic EntersTapped ability".into(),
-                    });
-                }
-                match cost {
-                    crate::primitives::EntryCost::PayLife { amount }
-                        if *amount == 0 || *amount > i32::MAX as u32 =>
-                    {
-                        return Err(RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason: "entry life payment requires a positive i32 amount".into(),
-                        });
-                    }
-                    crate::primitives::EntryCost::RevealFromHand { filter } => {
-                        filter
-                            .validate()
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                    }
-                    _ => {}
-                }
-            }
-        }
-        if let StaticAbilityDef::EntersWithChosenBasicLandType { untapped_cost } = ability {
-            let crate::primitives::EntryCost::PayLife { amount } = untapped_cost else {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "chosen basic land type entry requires life payment".into(),
-                });
-            };
-            if *amount == 0 || *amount > i32::MAX as u32 {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "entry life payment requires a positive i32 amount".into(),
-                });
-            }
-            if !face.types.iter().any(|value| value == "Land") {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "EntersWithChosenBasicLandType requires a Land".into(),
-                });
-            }
-        }
-        if let StaticAbilityDef::TargetingCostIncrease {
-            protected, amount, ..
-        } = ability
-        {
-            if *amount == 0 {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "TargetingCostIncrease amount must be nonzero".into(),
-                });
-            }
-            if let crate::primitives::TargetingCostProtected::Creatures(filter) = protected {
-                filter
-                    .validate()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-        }
-        if let StaticAbilityDef::AnthemPt {
-            filter, condition, ..
-        }
-        | StaticAbilityDef::AnthemKeyword {
-            filter, condition, ..
-        } = ability
-        {
-            filter
-                .validate()
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-            if let Some(condition) = condition {
-                condition
-                    .validate_live()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-                if condition.any_node_matches(|node| {
-                    matches!(
-                        node,
-                        GameCondition::ControlsCreatureTiedForGreatestPower
-                            | GameCondition::BattlefieldAggregate {
-                                aggregate: BattlefieldAggregate::DistinctNames
-                                    | BattlefieldAggregate::TotalPower
-                                    | BattlefieldAggregate::MaximumPower,
-                                ..
-                            }
+pub fn from_embedded() -> Result<CardRegistry, RegistryError> {
+    Ok(
+        CardRegistry::from_chunks_and_tokens(EMBEDDED_RON_CHUNKS, EMBEDDED_TOKEN_CHUNKS)?
+            .with_presentation_faces(EMBEDDED_PRESENTATION_FACES.iter().map(
+                |&(card_id, card_name, face_id, face_name, oracle_text_sha256)| {
+                    (
+                        (card_id.to_string(), face_id.to_string()),
+                        PresentationFaceMetadata {
+                            card_name: card_name.to_string(),
+                            face_name: face_name.to_string(),
+                            oracle_text_sha256: oracle_text_sha256.to_string(),
+                        },
                     )
-                }) {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "conditional layer-6/7 anthems support only simple battlefield counts until CR 613.8 dependency ordering is implemented".into(),
-                    });
-                }
-                if condition.any_node_matches(|node| {
-                    matches!(
-                        node,
-                        GameCondition::BattlefieldCreatureCount { .. }
-                            | GameCondition::OpponentHasMoreThanYou {
-                                metric: crate::primitives::PlayerComparisonMetric::LandCount
-                                    | crate::primitives::PlayerComparisonMetric::CreatureCount,
-                            }
-                    )
-                }) {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "conditional layer-6/7 anthems cannot depend on derived battlefield counts until CR 613.8 dependency ordering is implemented".into(),
-                    });
-                }
-            }
-        }
-        if let StaticAbilityDef::AnthemKeyword { filter, .. } = ability {
-            if filter.required_keyword.is_some() {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "AnthemKeyword cannot require a current keyword until CR 613.8 layer-6 dependency ordering is implemented".into(),
-                });
-            }
-        }
-        if let StaticAbilityDef::SpellGenericReduction {
-            amount,
-            condition,
-            spell_filter,
-            ..
-        } = ability
-        {
-            amount
-                .validate_cost(true)
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-            if let Some(condition) = condition {
-                condition
-                    .validate_live()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-            if let Some(filter) = spell_filter {
-                if filter.is_unrestricted() {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "SpellGenericReduction spell_filter must constrain the spell"
-                            .into(),
-                    });
-                }
-                filter
-                    .validate()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-        }
-        if let StaticAbilityDef::ConditionalSelfModifier {
-            condition,
-            remove_creature,
-            set_types,
-            add_types,
-            base_power,
-            base_toughness,
-            delta_power,
-            delta_toughness,
-            keywords,
-            activated_abilities,
-            triggered_abilities,
-            can_attack_as_though_without_defender,
-        } = ability
-        {
-            condition
-                .validate_live()
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-            if condition.any_node_matches(|node| {
-                matches!(
-                    node,
-                    crate::primitives::GameCondition::ControlsCreatureTiedForGreatestPower
-                )
-            }) {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "ControlsCreatureTiedForGreatestPower cannot drive characteristic-layer conditions until CR 613.8 dependency ordering is implemented".into(),
-                });
-            }
-            if *delta_power == 0
-                && *delta_toughness == 0
-                && set_types.is_none()
-                && !remove_creature
-                && add_types.is_empty()
-                && base_power.is_none()
-                && base_toughness.is_none()
-                && keywords.is_empty()
-                && activated_abilities.is_empty()
-                && triggered_abilities.is_empty()
-                && !can_attack_as_though_without_defender
-            {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "ConditionalSelfModifier must modify at least one value".into(),
-                });
-            }
-            if base_power.is_some() != base_toughness.is_some() {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason:
-                        "ConditionalSelfModifier base power and toughness must be provided together"
-                            .into(),
-                });
-            }
-            if !add_types.is_empty() {
-                add_types
-                    .validate()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-            if let Some(set_types) = set_types {
-                set_types
-                    .validate()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-            for ability in activated_abilities {
-                ability
-                    .validate_shape()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-                let allowed = ability_cost_result_actions(&ability.costs);
-                for effect in &ability.effect {
-                    validate_effect_payment_results(&allowed, effect).map_err(|reason| {
-                        RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        }
-                    })?;
-                }
-            }
-            for ability in triggered_abilities {
-                ability
-                    .validate_shape()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-            if (*delta_power != 0
-                || *delta_toughness != 0
-                || !add_types.is_empty()
-                || base_power.is_some()
-                || !keywords.is_empty()
-                || !activated_abilities.is_empty())
-                && condition.any_node_matches(|node| {
-                    matches!(
-                        node,
-                        crate::primitives::GameCondition::ControlsCreatureTiedForGreatestPower
-                            | crate::primitives::GameCondition::BattlefieldAggregate {
-                                aggregate: BattlefieldAggregate::DistinctNames
-                                    | BattlefieldAggregate::TotalPower
-                                    | BattlefieldAggregate::MaximumPower,
-                                ..
-                            }
-                    )
-                })
-            {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "conditional layer-6/7 modifiers support only simple battlefield counts until CR 613.8 dependency ordering is implemented".into(),
-                });
-            }
-            if condition.any_node_matches(|node| {
-                matches!(
-                    node,
-                    GameCondition::BattlefieldCreatureCount { .. }
-                        | GameCondition::OpponentHasMoreThanYou {
-                            metric: crate::primitives::PlayerComparisonMetric::LandCount
-                                | crate::primitives::PlayerComparisonMetric::CreatureCount,
-                        }
-                )
-            }) {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "conditional self modifiers cannot depend on derived battlefield counts until CR 613.8 dependency ordering is implemented".into(),
-                });
-            }
-        }
-        if let StaticAbilityDef::CountScaledSelfPt {
-            count,
-            power_per_match,
-            toughness_per_match,
-        } = ability
-        {
-            count
-                .validate_static_count()
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-            if *power_per_match == 0 && *toughness_per_match == 0 {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "CountScaledSelfPt must modify power or toughness".into(),
-                });
-            }
-        }
-        if let StaticAbilityDef::EntersAsCopy { filter, .. } = ability {
-            filter
-                .validate_characteristic_constraints()
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-            if !filter.all_terminal_filters_match(|leaf| {
-                matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
-                    && leaf.controller == TargetController::Any
-                    && leaf.owner == crate::primitives::TargetOwner::Any
-                    && leaf.excluded_objects.is_empty()
-            }) {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "EntersAsCopy requires an untargeted Creature or AnyPermanent filter"
-                        .into(),
-                });
-            }
-        }
-        if let StaticAbilityDef::EntersWithCounters {
-            affected,
-            counter,
-            amount,
-            cast_cost_condition,
-        } = ability
-        {
-            if let Some(reference) = amount.entry_cast_cost_reference() {
-                let linked = face
-                    .cast_cost_groups
-                    .iter()
-                    .find(|group| group.group_id == reference.group_id)
-                    .and_then(|group| {
-                        group
-                            .options
-                            .iter()
-                            .find(|option| option.option_id() == &reference.option_id)
-                    });
-                if linked
-                    .and_then(CastCostOptionDef::multikicker_generic_unit)
-                    .is_none()
-                {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "entry cast-payment count requires its linked Multikicker option"
-                            .into(),
-                    });
-                }
-            }
-            if let Some(condition) = cast_cost_condition {
-                validate_cast_cost_condition(&face.cast_cost_groups, condition).map_err(
-                    |reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    },
-                )?;
-            }
-            counter
-                .validate()
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-            if let crate::primitives::EntersWithCountersAffected::Creatures(filter) = affected {
-                filter
-                    .validate()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-                if filter.required_keyword.is_some() {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "EntersWithCounters creature scopes cannot require a current keyword before layer 6 is applied".into(),
-                    });
-                }
-            }
-            if amount.card_result_filter().is_some() {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "card result counts are valid only in a resolving effect list".into(),
-                });
-            }
-            amount
-                .validate_entry(matches!(
-                    affected,
-                    crate::primitives::EntersWithCountersAffected::Self_
-                ))
-                .and_then(|()| amount.validate_source_context(false))
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-        }
-        if let StaticAbilityDef::PreventDamage {
-            additional_effect:
-                Some(crate::primitives::DamagePreventionAdditionalEffect::PutCounters {
-                    counter, ..
-                }),
-            ..
-        } = ability
-        {
-            counter
-                .validate()
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-        }
-        if let StaticAbilityDef::AttachedModifier {
-            condition,
-            add_types,
-            set_types,
-            set_name,
-            set_colors,
-            delta_power,
-            delta_toughness,
-            count,
-            power_per_match,
-            toughness_per_match,
-            set_power,
-            set_toughness,
-            remove_all_abilities,
-            keywords,
-            protections,
-            triggered_abilities,
-            activated_abilities,
-            restriction,
-            doesnt_untap_during_untap_step,
-            cant_untap,
-        } = ability
-        {
-            if !attachment_source {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "AttachedModifier requires an Aura or Equipment source".into(),
-                });
-            }
-            if *delta_power == 0
-                && *delta_toughness == 0
-                && count.is_none()
-                && set_power.is_none()
-                && set_toughness.is_none()
-                && !remove_all_abilities
-                && add_types.is_empty()
-                && set_types.is_none()
-                && set_name.is_none()
-                && set_colors.is_none()
-                && keywords.is_empty()
-                && protections.is_empty()
-                && triggered_abilities.is_empty()
-                && activated_abilities.is_empty()
-                && restriction.is_empty()
-                && !doesnt_untap_during_untap_step
-                && !cant_untap
-            {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "AttachedModifier must modify at least one value".into(),
-                });
-            }
-            if set_power.is_some() != set_toughness.is_some() {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "AttachedModifier must set both power and toughness".into(),
-                });
-            }
-            if let Some(expression) = count {
-                expression.validate_static_count().map_err(|reason| {
-                    RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    }
-                })?;
-                if *power_per_match == 0 && *toughness_per_match == 0 {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "AttachedModifier count scaling must modify power or toughness"
-                            .into(),
-                    });
-                }
-            }
-            if !add_types.is_empty() && set_types.is_some() {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "AttachedModifier cannot both add and replace types".into(),
-                });
-            }
-            if !add_types.is_empty() {
-                add_types
-                    .validate()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-            if let Some(replacement) = set_types {
-                replacement
-                    .validate()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-            if set_name.as_ref().is_some_and(|name| name.trim().is_empty()) {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "AttachedModifier set_name cannot be empty".into(),
-                });
-            }
-            if let Some(colors) = set_colors {
-                let unique: std::collections::HashSet<_> = colors.iter().copied().collect();
-                if unique.len() != colors.len() {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "AttachedModifier set_colors repeats a color".into(),
-                    });
-                }
-            }
-            if let Some(condition) = condition {
-                condition
-                    .validate_live()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-                if condition.any_node_matches(|node| {
-                    matches!(
-                        node,
-                        crate::primitives::GameCondition::ControlsCreatureTiedForGreatestPower
-                    )
-                }) {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "ControlsCreatureTiedForGreatestPower cannot drive characteristic-layer conditions until CR 613.8 dependency ordering is implemented".into(),
-                    });
-                }
-                if !triggered_abilities.is_empty()
-                    || !activated_abilities.is_empty()
-                    || !restriction.is_empty()
-                    || *doesnt_untap_during_untap_step
-                    || *cant_untap
-                {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason:
-                            "conditioned AttachedModifier only supports characteristic modifiers"
-                                .into(),
-                    });
-                }
-                if (*delta_power != 0
-                    || *delta_toughness != 0
-                    || count.is_some()
-                    || set_power.is_some()
-                    || *remove_all_abilities
-                    || !keywords.is_empty()
-                    || !protections.is_empty())
-                    && condition.any_node_matches(|node| {
-                        matches!(
-                            node,
-                            crate::primitives::GameCondition::ControlsCreatureTiedForGreatestPower
-                                | crate::primitives::GameCondition::BattlefieldAggregate {
-                                    aggregate: BattlefieldAggregate::TotalPower
-                                        | BattlefieldAggregate::MaximumPower,
-                                    ..
-                                }
-                        )
-                    })
-                {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "power-dependent conditional characteristics require CR 613.8 dependency ordering"
-                            .into(),
-                    });
-                }
-            }
-            if !restriction.is_empty() {
-                restriction
-                    .validate()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-            for granted in triggered_abilities {
-                if granted.trigger.is_delayed_only() {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "AttachedModifier cannot grant a delayed trigger".into(),
-                    });
-                }
-                granted
-                    .validate_shape()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-            for granted in activated_abilities {
-                granted
-                    .validate_shape()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-        }
-        if matches!(
-            ability,
-            StaticAbilityDef::ProhibitActivatedAbilitiesOfAttachedPermanent
-        ) && !face.is_aura
-        {
-            return Err(RegistryError::InvalidCard {
-                id: card.id.clone(),
-                reason: "ProhibitActivatedAbilitiesOfAttachedPermanent requires an Aura source"
-                    .into(),
-            });
-        }
-        if let StaticAbilityDef::ProhibitSpecialAction {
-            affected,
-            condition,
-            ..
-        } = ability
-        {
-            if matches!(affected, SpecialActionAffected::AttachedPermanent) && !attachment_source {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason:
-                        "attached special-action prohibition requires an Aura or Equipment source"
-                            .into(),
-                });
-            }
-            if let SpecialActionAffected::Permanents(filter) = affected {
-                if filter.any_terminal_filter_matches(|leaf| !leaf.excluded_objects.is_empty()) {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "special-action scopes do not bind object exclusions".into(),
-                    });
-                }
-                filter
-                    .validate_characteristic_constraints()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-            if let Some(condition) = condition {
-                condition
-                    .validate_live()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-        }
-        if let StaticAbilityDef::SelfCombatRestriction {
-            restriction,
-            condition,
-        } = ability
-        {
-            restriction
-                .validate()
-                .and_then(|()| {
-                    condition
-                        .as_ref()
-                        .map_or(Ok(()), GameCondition::validate_live)
-                })
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-        }
-        if let StaticAbilityDef::CreatureScopeCombatRestriction {
-            filter,
-            restriction,
-        } = ability
-        {
-            filter
-                .validate()
-                .and_then(|()| restriction.validate())
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-        }
-        if matches!(ability, StaticAbilityDef::ControlsAttached) && !face.is_aura {
-            return Err(RegistryError::InvalidCard {
-                id: card.id.clone(),
-                reason: "ControlsAttached requires an Aura source".into(),
-            });
-        }
-    }
-    Ok(())
-}
-
-fn insert_ability_id(ids: &mut HashSet<String>, id: &crate::AbilityId) -> Result<(), String> {
-    id.validate()?;
-    if !ids.insert(id.as_str().to_owned()) {
-        return Err(format!("duplicate sibling ability id '{}'", id));
-    }
-    Ok(())
-}
-
-fn validate_nested_effect_metadata(effect: &SpellEffectKind) -> Result<(), String> {
-    match effect {
-        SpellEffectKind::SetClassLevel { .. } => {
-            Err("SetClassLevel may only be the sole effect of a Class level-up ability".into())
-        }
-        SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
-            ability.validate_shape()?;
-            validate_effect_list_metadata(&ability.effect)
-        }
-        SpellEffectKind::GrantTriggeredAbility { ability, .. }
-        | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
-            ability.validate_shape()?;
-            validate_effect_list_metadata(&ability.effect)
-        }
-        SpellEffectKind::ApplyPermanentModifier {
-            modifier: crate::primitives::ResolvingPermanentModifier::GrantActivatedAbility(ability),
-            ..
-        } => {
-            ability.validate_shape()?;
-            validate_effect_list_metadata(&ability.effect)
-        }
-        SpellEffectKind::ChooseResolutionBranch {
-            branches,
-            otherwise,
-            ..
-        } => {
-            for branch in branches {
-                validate_effect_list_metadata(&branch.effects)?;
-            }
-            validate_effect_list_metadata(otherwise)
-        }
-        _ => Ok(()),
-    }
-}
-
-fn validate_effect_list_metadata(effects: &[SpellEffectKind]) -> Result<(), String> {
-    for effect in effects {
-        validate_nested_effect_metadata(effect)?;
-    }
-    Ok(())
-}
-
-fn collect_linked_exile_uses(effect: &SpellEffectKind, uses: &mut HashMap<String, (u32, u32)>) {
-    match effect {
-        SpellEffectKind::MoveGraveyardCards {
-            linked_exile_id: Some(link_id),
-            ..
-        } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
-        SpellEffectKind::ReturnLinkedExiledCards {
-            linked_exile_id, ..
-        } => {
-            uses.entry(linked_exile_id.as_str().to_owned())
-                .or_default()
-                .1 += 1
-        }
-        SpellEffectKind::Conditional { effect, .. }
-        | SpellEffectKind::ConditionalCastCost { effect, .. } => {
-            collect_linked_exile_uses(effect, uses)
-        }
-        SpellEffectKind::ChooseResolutionBranch {
-            branches,
-            otherwise,
-            ..
-        } => {
-            for effect in branches.iter().flat_map(|branch| &branch.effects) {
-                collect_linked_exile_uses(effect, uses);
-            }
-            for effect in otherwise {
-                collect_linked_exile_uses(effect, uses);
-            }
-        }
-        SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
-            for effect in &ability.effect {
-                collect_linked_exile_uses(effect, uses);
-            }
-        }
-        SpellEffectKind::GrantTriggeredAbility { ability, .. }
-        | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
-            for effect in &ability.effect {
-                collect_linked_exile_uses(effect, uses);
-            }
-        }
-        SpellEffectKind::ApplyPermanentModifier {
-            modifier: crate::primitives::ResolvingPermanentModifier::GrantActivatedAbility(ability),
-            ..
-        } => {
-            for effect in &ability.effect {
-                collect_linked_exile_uses(effect, uses);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn validate_chosen_opponent_links(face: &CardFace) -> Result<(), String> {
-    let producers = face
-        .static_abilities
-        .iter()
-        .filter_map(|ability| match &ability.definition {
-            StaticAbilityDef::AsEntersChooseOpponent { link_id } => Some(link_id),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let consumers = face
-        .triggered_abilities
-        .iter()
-        .filter_map(|ability| match &ability.trigger {
-            TriggerCondition::AtBeginningOfChosenPlayerUpkeep { link_id } => Some(link_id),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    if producers.is_empty() && consumers.is_empty() {
-        return Ok(());
-    }
-    if producers.len() != 1 || consumers.len() != 1 || producers[0] != consumers[0] {
-        return Err(
-            "chosen-opponent link requires one matching printed producer and consumer".into(),
-        );
-    }
-    producers[0].validate()
-}
-
-fn validate_granted_chosen_opponent(ability: &crate::TriggeredAbilityDef) -> Result<(), String> {
-    if matches!(
-        ability.trigger,
-        TriggerCondition::AtBeginningOfChosenPlayerUpkeep { .. }
-    ) {
-        return Err("chosen-opponent upkeep links must be a printed face-local pair".into());
-    }
-    Ok(())
-}
-
-fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
-    let mut uses = HashMap::new();
-    let collect = |effects: &[SpellEffectKind], uses: &mut HashMap<String, (u32, u32)>| {
-        for effect in effects {
-            collect_linked_exile_uses(effect, uses);
-        }
-    };
-    collect(&face.spell_effect, &mut uses);
-    for mode in face.modal_spell.iter().flat_map(|modal| &modal.modes) {
-        collect(&mode.effects, &mut uses);
-    }
-    for ability in face_activated_abilities(face) {
-        collect(&ability.effect, &mut uses);
-    }
-    for ability in face_triggered_abilities(face) {
-        collect(&ability.effect, &mut uses);
-    }
-    for ability in face_static_abilities(face) {
-        match &ability.definition {
-            StaticAbilityDef::AttachedModifier {
-                activated_abilities,
-                triggered_abilities,
-                ..
-            }
-            | StaticAbilityDef::ConditionalSelfModifier {
-                activated_abilities,
-                triggered_abilities,
-                ..
-            } => {
-                for ability in activated_abilities {
-                    collect(&ability.effect, &mut uses);
-                }
-                for ability in triggered_abilities {
-                    collect(&ability.effect, &mut uses);
-                }
-            }
-            StaticAbilityDef::GrantActivatedAbilityToPermanents {
-                activated_abilities,
-                ..
-            } => {
-                for ability in activated_abilities {
-                    // Scoped traversal also includes MayBehold and nested triggered modes.
-                    // Collect direct leaves exactly once instead of recursively collecting twice.
-                    for effect in &ability.effect {
-                        visit_scoped_grant_effect(effect, &mut |effect| {
-                            match effect {
-                                SpellEffectKind::MoveGraveyardCards {
-                                    linked_exile_id: Some(link_id),
-                                    ..
-                                } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
-                                SpellEffectKind::ReturnLinkedExiledCards {
-                                    linked_exile_id,
-                                    ..
-                                } => {
-                                    uses.entry(linked_exile_id.as_str().to_owned())
-                                        .or_default()
-                                        .1 += 1
-                                }
-                                _ => {}
-                            }
-                            Ok(())
-                        })?;
-                    }
-                }
-            }
-            StaticAbilityDef::GrantTriggeredAbilityToPermanents {
-                triggered_abilities,
-                ..
-            } => {
-                for ability in triggered_abilities {
-                    collect(&ability.effect, &mut uses);
-                }
-            }
-            _ => {}
-        }
-    }
-    for (link_id, (producers, consumers)) in uses {
-        if producers != 1 || consumers != 1 {
-            return Err(format!(
-                "linked exile id '{link_id}' requires exactly one producer and one consumer"
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn effect_returns_source_transformed(effect: &SpellEffectKind) -> bool {
-    match effect {
-        SpellEffectKind::ExileSourceThenReturnTransformed { .. } => true,
-        SpellEffectKind::Conditional { effect, .. }
-        | SpellEffectKind::ConditionalCastCost { effect, .. } => {
-            effect_returns_source_transformed(effect)
-        }
-        SpellEffectKind::ChooseResolutionBranch {
-            branches,
-            otherwise,
-            ..
-        } => {
-            branches
-                .iter()
-                .flat_map(|branch| &branch.effects)
-                .any(effect_returns_source_transformed)
-                || otherwise.iter().any(effect_returns_source_transformed)
-        }
-        SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
-            ability.effect.iter().any(effect_returns_source_transformed)
-        }
-        SpellEffectKind::GrantTriggeredAbility { ability, .. }
-        | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
-            ability.effect.iter().any(effect_returns_source_transformed)
-        }
-        _ => false,
-    }
-}
-
-fn face_returns_source_transformed(face: &CardFace) -> bool {
-    face.spell_effect
-        .iter()
-        .chain(
-            face.modal_spell
-                .iter()
-                .flat_map(|modal| &modal.modes)
-                .flat_map(|mode| &mode.effects),
-        )
-        .chain(face_activated_abilities(face).flat_map(|ability| &ability.effect))
-        .chain(face_triggered_abilities(face).flat_map(|ability| &ability.effect))
-        .any(effect_returns_source_transformed)
-}
-
-fn fixed_source_reduction_cost(cost: &crate::ManaCost) -> bool {
-    cost.pips.iter().all(|symbol| {
-        matches!(
-            symbol,
-            ManaSymbol::W
-                | ManaSymbol::U
-                | ManaSymbol::B
-                | ManaSymbol::R
-                | ManaSymbol::G
-                | ManaSymbol::C
-                | ManaSymbol::Generic(_)
-        )
-    })
-}
-
-fn validate_source_mana_cost_reduction(
-    face: &CardFace,
-    ability: &crate::primitives::ActivatedAbilityDef,
-) -> Result<(), String> {
-    if !ability.cost_modifiers.iter().any(|modifier| {
-        matches!(
-            modifier,
-            ActivatedCostModifier::ConditionalSourceManaCostReduction { .. }
-        )
-    }) {
-        return Ok(());
-    }
-    if !fixed_source_reduction_cost(&face.mana_cost) {
-        return Err(
-            "source mana cost reduction requires a source cost containing only fixed mana symbols"
-                .into(),
-        );
-    }
-    let ability_mana_cost = ability.costs.iter().find_map(|cost| match cost {
-        AbilityCost::Mana(cost) | AbilityCost::Waterbend(cost) => Some(cost),
-        _ => None,
-    });
-    if ability_mana_cost.is_none_or(|cost| !fixed_source_reduction_cost(cost)) {
-        return Err(
-            "source mana cost reduction requires an ability cost containing only fixed mana symbols"
-                .into(),
-        );
-    }
-    Ok(())
-}
-
-fn validate_retained_exile_cohorts(
-    effects: &[SpellEffectKind],
-    direct_spell: bool,
-) -> Result<(), String> {
-    let mut producers = HashSet::new();
-    let mut consumers = HashSet::new();
-    for effect in effects {
-        let binding = match effect {
-            SpellEffectKind::ExileGraveyards {
-                capture_exile_cohort: Some(id),
-                ..
-            } => Some((id, true)),
-            SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { cohort_id } => {
-                Some((cohort_id, false))
-            }
-            _ => None,
-        };
-        if let Some((id, producer)) = binding {
-            if !direct_spell {
-                return Err(
-                    "retained exile cohorts require a direct nonmodal spell effect list".into(),
-                );
-            }
-            if producer {
-                if !producers.insert(id.as_str()) {
-                    return Err(format!("duplicate retained exile cohort producer '{id}'"));
-                }
-            } else if !producers.contains(id.as_str()) || !consumers.insert(id.as_str()) {
-                return Err(format!(
-                    "retained exile cohort '{id}' requires one earlier producer and one consumer"
-                ));
-            }
-        }
-        match effect {
-            SpellEffectKind::Conditional { effect, .. }
-            | SpellEffectKind::ConditionalCastCost { effect, .. } => {
-                validate_retained_exile_cohorts(std::slice::from_ref(effect), false)?;
-            }
-            SpellEffectKind::MayBehold { if_beheld, .. } => {
-                validate_retained_exile_cohorts(if_beheld, false)?
-            }
-            SpellEffectKind::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => {
-                for branch in branches {
-                    validate_retained_exile_cohorts(&branch.effects, false)?;
-                }
-                validate_retained_exile_cohorts(otherwise, false)?;
-            }
-            _ => {}
-        }
-    }
-    if producers != consumers {
-        return Err("every retained exile cohort requires one later consumer".into());
-    }
-    Ok(())
-}
-
-fn validate_face_identity(face: &CardFace) -> Result<(), String> {
-    validate_retained_exile_cohorts(&face.spell_effect, face.modal_spell.is_none())?;
-    if let Some(modal) = &face.modal_spell {
-        for mode in &modal.modes {
-            validate_retained_exile_cohorts(&mode.effects, false)?;
-        }
-    }
-    face.face_id.validate()?;
-    if face
-        .activated_abilities
-        .iter()
-        .filter(|ability| ability.intrinsic_land_mana)
-        .count()
-        > 1
-    {
-        return Err("a face may have only one intrinsic land mana bundle".into());
-    }
-    let mut siblings = HashSet::new();
-    for ability in &face.activated_abilities {
-        insert_ability_id(&mut siblings, &ability.ability_id)?;
-        ability.validate_shape()?;
-        if ability.intrinsic_land_mana {
-            let expected = crate::BasicLandType::ALL
-                .into_iter()
-                .filter(|land_type| face.types.iter().any(|value| value == land_type.as_str()))
-                .map(crate::BasicLandType::mana)
-                .collect::<Vec<_>>();
-            let matching_output = matches!(ability.effect.as_slice(),
-                [SpellEffectKind::ProduceMana { options, commander_color_identity: false, restriction: None, conditional: None }]
-                if options.len() == expected.len() && expected.iter().all(|mana| options.contains(mana)));
-            if !face.types.iter().any(|value| value == "Land")
-                || expected.is_empty()
-                || !matching_output
-                || ability.source_zone != crate::AbilitySourceZone::Battlefield
-                || ability.costs.as_slice() != [AbilityCost::Tap]
-                || !ability.cost_modifiers.is_empty()
-                || ability.targeting.is_some()
-                || ability.timing != crate::ActivationTiming::Normal
-                || !ability.conditions.is_empty()
-                || ability.activation_limit.is_some()
-            {
-                return Err("intrinsic land mana must be the unrestricted tap-only bundle of the face's basic land subtypes".into());
-            }
-        }
-        validate_source_mana_cost_reduction(face, ability)?;
-        validate_effect_list_metadata(&ability.effect)?;
-    }
-    for ability in &face.triggered_abilities {
-        insert_ability_id(&mut siblings, &ability.ability_id)?;
-        ability.validate_shape()?;
-        if matches!(
-            ability.trigger,
-            TriggerCondition::WhenThisClassBecomesLevel { .. }
-        ) {
-            return Err(
-                "Class-level transition triggers must appear in their matching level bar".into(),
-            );
-        }
-        validate_effect_list_metadata(&ability.effect)?;
-    }
-    validate_class_level_bars(face, &mut siblings)?;
-    for ability in face.static_abilities.iter().chain(
-        face.class_level_bars
-            .iter()
-            .flat_map(|bar| &bar.static_abilities),
-    ) {
-        insert_ability_id(&mut siblings, &ability.ability_id)?;
-        ability.validate_metadata()?;
-        let mut nested = HashSet::new();
-        match &ability.definition {
-            StaticAbilityDef::AttachedModifier {
-                activated_abilities,
-                triggered_abilities,
-                ..
-            } => {
-                for nested_ability in activated_abilities {
-                    insert_ability_id(&mut nested, &nested_ability.ability_id)?;
-                    if nested_ability.intrinsic_land_mana {
-                        return Err(
-                            "intrinsic land mana cannot be an independently granted ability".into(),
-                        );
-                    }
-                    nested_ability.validate_shape()?;
-                    validate_effect_list_metadata(&nested_ability.effect)?;
-                }
-                for nested_ability in triggered_abilities {
-                    insert_ability_id(&mut nested, &nested_ability.ability_id)?;
-                    validate_granted_chosen_opponent(nested_ability)?;
-                    nested_ability.validate_shape()?;
-                    validate_effect_list_metadata(&nested_ability.effect)?;
-                }
-            }
-            StaticAbilityDef::ConditionalSelfModifier {
-                activated_abilities,
-                triggered_abilities,
-                ..
-            } => {
-                for nested_ability in activated_abilities {
-                    insert_ability_id(&mut nested, &nested_ability.ability_id)?;
-                    if nested_ability.intrinsic_land_mana {
-                        return Err(
-                            "intrinsic land mana cannot be an independently granted ability".into(),
-                        );
-                    }
-                    nested_ability.validate_shape()?;
-                    validate_effect_list_metadata(&nested_ability.effect)?;
-                }
-                for nested_ability in triggered_abilities {
-                    insert_ability_id(&mut nested, &nested_ability.ability_id)?;
-                    validate_granted_chosen_opponent(nested_ability)?;
-                    nested_ability.validate_shape()?;
-                    validate_effect_list_metadata(&nested_ability.effect)?;
-                }
-            }
-            StaticAbilityDef::GrantActivatedAbilityToPermanents {
-                activated_abilities,
-                ..
-            } => {
-                for nested_ability in activated_abilities {
-                    insert_ability_id(&mut nested, &nested_ability.ability_id)?;
-                    validate_scoped_granted_activation(nested_ability)?;
-                }
-            }
-            StaticAbilityDef::GrantTriggeredAbilityToPermanents {
-                triggered_abilities,
-                ..
-            } => {
-                for nested_ability in triggered_abilities {
-                    insert_ability_id(&mut nested, &nested_ability.ability_id)?;
-                    validate_granted_chosen_opponent(nested_ability)?;
-                    nested_ability.validate_shape()?;
-                    validate_effect_list_metadata(&nested_ability.effect)?;
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut defines_colors = false;
-    for ability in &face.characteristic_defining_abilities {
-        insert_ability_id(&mut siblings, &ability.ability_id)?;
-        ability.validate_metadata()?;
-        ability.definition.validate()?;
-        if matches!(
-            &ability.definition,
-            crate::CharacteristicDefiningAbility::Devoid
-                | crate::CharacteristicDefiningAbility::DefinesColors { .. }
-        ) {
-            if defines_colors {
-                return Err("a face may have only one color-defining CDA".into());
-            }
-            defines_colors = true;
-        }
-    }
-    validate_linked_exile_pairs(face)?;
-    validate_chosen_opponent_links(face)?;
-    let mut cast_cost_group_ids = HashSet::new();
-    for group in &face.cast_cost_groups {
-        group.validate()?;
-        if !cast_cost_group_ids.insert(group.group_id.as_str()) {
-            return Err(format!("duplicate cast cost group id '{}'", group.group_id));
-        }
-    }
-    let mut linked_costs = HashSet::new();
-    if let Some(modal) = &face.modal_spell {
-        if let Some(link) = &modal.all_modes_cast_cost {
-            link.validate()?;
-            validate_cast_cost_condition(
-                &face.cast_cost_groups,
-                &CastCostReceiptCondition {
-                    group_id: link.group_id.clone(),
-                    option_id: link.option_id.clone(),
-                    expected_selected: true,
                 },
-            )?;
-            linked_costs.insert((link.group_id.as_str(), link.option_id.as_str()));
-        }
-        for mode in &modal.modes {
-            let Some(link) = &mode.linked_cast_cost else {
-                continue;
-            };
-            link.validate()?;
-            let condition = CastCostReceiptCondition {
-                group_id: link.group_id.clone(),
-                option_id: link.option_id.clone(),
-                expected_selected: true,
-            };
-            validate_cast_cost_condition(&face.cast_cost_groups, &condition)?;
-            if !linked_costs.insert((link.group_id.as_str(), link.option_id.as_str())) {
-                return Err(format!(
-                    "cast-cost option '{}.{}' is linked more than once by modal rules",
-                    link.group_id, link.option_id
-                ));
-            }
-        }
-    }
-    for targeting in std::iter::once(face.targeting.as_ref())
-        .chain(
-            face.modal_spell
-                .iter()
-                .flat_map(|modal| modal.modes.iter().map(|mode| mode.targeting.as_ref())),
-        )
-        .flatten()
-    {
-        for expansion in targeting
-            .groups
-            .iter()
-            .filter_map(|group| group.cast_cost_expansion.as_ref())
-        {
-            if !expansion.condition.expected_selected {
-                return Err(
-                    "cast-cost target expansion must require its linked option to be selected"
-                        .into(),
-                );
-            }
-            validate_cast_cost_condition(&face.cast_cost_groups, &expansion.condition)?;
-        }
-    }
-    validate_effect_list_metadata(&face.spell_effect)?;
-    Ok(())
+            )),
+    )
 }
 
-fn validate_class_level_bars(
-    face: &CardFace,
-    siblings: &mut HashSet<String>,
-) -> Result<(), String> {
-    let is_class = face.types.iter().any(|kind| kind == "Class");
-    if is_class == face.class_level_bars.is_empty() {
-        return Err(if is_class {
-            "a Class face must define its level bars"
-        } else {
-            "class level bars require a Class face"
-        }
-        .into());
-    }
-    if is_class && !face.types.iter().any(|kind| kind == "Enchantment") {
-        return Err("Class faces must be enchantments".into());
-    }
-    if is_class
-        && face
-            .class_level_bars
-            .first()
-            .is_some_and(|bar| bar.level != 2)
-    {
-        return Err("Class level bars must begin at level 2".into());
-    }
-    if is_class && face.class_level_bars.len() != 2 {
-        return Err("a Class face requires level bars 2 and 3".into());
-    }
-
-    let mut expected_level = 2u32;
-    for bar in &face.class_level_bars {
-        if bar.level != expected_level {
-            return Err(if expected_level == 2 {
-                "Class level bars must begin at level 2"
-            } else {
-                "Class level bars must be consecutive"
-            }
-            .into());
-        }
-        let level_ability = &bar.level_ability;
-        insert_ability_id(siblings, &level_ability.ability_id)?;
-        level_ability.validate_shape()?;
-        if level_ability.source_zone != crate::AbilitySourceZone::Battlefield
-            || level_ability.intrinsic_land_mana
-            || level_ability.timing != crate::ActivationTiming::SorcerySpeed
-            || level_ability.targeting.is_some()
-            || !level_ability.conditions.is_empty()
-            || !matches!(
-                level_ability.effect.as_slice(),
-                [SpellEffectKind::SetClassLevel { level }] if *level == bar.level
-            )
-        {
-            return Err(format!(
-                "Class level {} ability must be an untargeted sorcery-speed battlefield ability whose sole effect sets that level",
-                bar.level
-            ));
-        }
-
-        for ability in &bar.activated_abilities {
-            insert_ability_id(siblings, &ability.ability_id)?;
-            ability.validate_shape()?;
-            if ability.source_zone != crate::AbilitySourceZone::Battlefield
-                || ability.intrinsic_land_mana
-            {
-                return Err(
-                    "Class section activated abilities require a battlefield source".into(),
-                );
-            }
-            validate_source_mana_cost_reduction(face, ability)?;
-            validate_effect_list_metadata(&ability.effect)?;
-        }
-        for ability in &bar.triggered_abilities {
-            insert_ability_id(siblings, &ability.ability_id)?;
-            ability.validate_shape()?;
-            if matches!(
-                &ability.trigger,
-                TriggerCondition::WhenThisClassBecomesLevel { level }
-                    if *level != bar.level
-            ) {
-                return Err(format!(
-                    "Class-level transition trigger in the level {} bar must name level {}",
-                    bar.level, bar.level
-                ));
-            }
-            validate_effect_list_metadata(&ability.effect)?;
-            if let Some(modal) = &ability.modal {
-                for mode in &modal.modes {
-                    validate_effect_list_metadata(&mode.effects)?;
-                }
-            }
-        }
-        if bar.static_abilities.iter().any(|ability| {
-            matches!(
-                &ability.definition,
-                StaticAbilityDef::EntersPrepared
-                    | StaticAbilityDef::EntersAsCopy { .. }
-                    | StaticAbilityDef::EntersWithChosenBasicLandType { .. }
-                    | StaticAbilityDef::AsEntersChooseOpponent { .. }
-                    | StaticAbilityDef::EntersTapped { .. }
-                    | StaticAbilityDef::EntersWithCounters { .. }
-                    | StaticAbilityDef::SpellCannotBeCountered
-                    | StaticAbilityDef::Madness { .. }
-                    | StaticAbilityDef::GraveyardAnthemKeyword { .. }
-            )
-        }) {
-            return Err(
-                "Class section static ability must function while the Class level is active on the battlefield"
-                    .into(),
-            );
-        }
-
-        expected_level = bar
-            .level
-            .checked_add(1)
-            .ok_or_else(|| "Class level exceeds the supported level range".to_string())?;
-    }
-    Ok(())
+/// Validate an isolated offline draft against the shipped token namespace.
+pub fn from_authoring_draft(chunk: &str) -> Result<CardRegistry, RegistryError> {
+    CardRegistry::from_chunks_and_tokens(&[chunk], EMBEDDED_TOKEN_CHUNKS)
 }
 
-impl CardRegistry {
-    pub fn from_embedded() -> Result<Self, RegistryError> {
-        let mut registry =
-            Self::from_chunks_and_tokens(EMBEDDED_RON_CHUNKS, EMBEDDED_TOKEN_CHUNKS)?;
-        for &(card_id, card_name, face_id, face_name, oracle_text_sha256) in
-            EMBEDDED_PRESENTATION_FACES
-        {
-            registry.presentation_faces.insert(
-                (card_id.to_string(), face_id.to_string()),
-                PresentationFaceMetadata {
-                    card_name: card_name.to_string(),
-                    face_name: face_name.to_string(),
-                    oracle_text_sha256: oracle_text_sha256.to_string(),
-                },
-            );
-        }
-        Ok(registry)
-    }
+#[cfg(test)]
+fn from_chunks(chunks: &[&str]) -> Result<CardRegistry, RegistryError> {
+    CardRegistry::from_chunks_and_tokens(chunks, &[])
+}
 
-    /// Parse and validate one offline authoring draft against the shipped token namespace.
-    ///
-    /// This deliberately does not merge the draft into the embedded card registry. Authoring
-    /// tools use it to exercise the exact runtime schema and validators while separately
-    /// enforcing identity-collision and promotion policy.
-    pub fn from_authoring_draft(chunk: &str) -> Result<Self, RegistryError> {
-        Self::from_chunks_and_tokens(&[chunk], EMBEDDED_TOKEN_CHUNKS)
-    }
-
-    #[cfg(test)]
-    fn from_chunks(chunks: &[&str]) -> Result<Self, RegistryError> {
-        Self::from_chunks_and_tokens(chunks, &[])
-    }
-
-    /// Load and validate a complete RON corpus, including its separate token namespace.
-    /// Embedded startup and isolated engine fixtures use the same validation path.
-    pub fn from_chunks_and_tokens(
-        chunks: &[&str],
-        token_chunks: &[&str],
-    ) -> Result<Self, RegistryError> {
-        let mut reg = CardRegistry::default();
-        // Tokens first: card effects (CreateTokens) are validated against the token namespace.
-        for chunk in token_chunks {
-            let token: TokenDefinition = RON_OPTS.from_str(chunk)?;
-            let mut def = token.to_card_def();
-            def.derive_type_flags();
-            let id = token.id.clone();
-            if reg.tokens.insert(id.clone(), def).is_some() {
-                return Err(RegistryError::InvalidCard {
-                    id,
-                    reason: "duplicate token id".into(),
-                });
-            }
-        }
-        // Token definitions use the same ability vocabulary as permanent cards. Validate after
-        // the complete token namespace is loaded so a token trigger may create another token
-        // regardless of file ordering.
-        for (id, token) in &reg.tokens {
-            let face = token.primary_face();
-            validate_face_identity(face).map_err(|reason| RegistryError::InvalidCard {
-                id: id.clone(),
-                reason,
-            })?;
-            validate_static_abilities(token, face)?;
-            validate_scoped_grant_tokens(face, &reg.tokens).map_err(|reason| {
-                RegistryError::InvalidCard {
-                    id: id.clone(),
-                    reason,
-                }
-            })?;
-            validate_saga_face(token, face)?;
-            let can_reference_attached_object = face_can_reference_attached_object(face);
-            let can_reference_attached_player = face_can_reference_attached_player(face);
-            for ability in face.activated_abilities.iter().chain(
-                face.class_level_bars
-                    .iter()
-                    .flat_map(|bar| &bar.activated_abilities),
-            ) {
-                ability
-                    .validate_shape()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: id.clone(),
-                        reason,
-                    })?;
-                for effect in &ability.effect {
-                    for token in effect.referenced_token_ids() {
-                        if !reg.tokens.contains_key(token) {
-                            return Err(RegistryError::InvalidCard {
-                                id: id.clone(),
-                                reason: format!("CreateTokens references unknown token '{token}'"),
-                            });
-                        }
-                    }
-                }
-            }
-            for ability in face.triggered_abilities.iter().chain(
-                face.class_level_bars
-                    .iter()
-                    .flat_map(|bar| &bar.triggered_abilities),
-            ) {
-                if ability.trigger.is_delayed_only() {
-                    return Err(RegistryError::InvalidCard {
-                        id: id.clone(),
-                        reason: "delayed trigger conditions require CreateDelayedTrigger".into(),
-                    });
-                }
-                ability
-                    .trigger
-                    .validate()
-                    .and_then(|()| ability.validate_trigger_limit())
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: id.clone(),
-                        reason,
-                    })?;
-                match &ability.trigger {
-                    TriggerCondition::WheneverAttachedObjectAttacks
-                    | TriggerCondition::WheneverAttachedObjectBecomesTapped
-                    | TriggerCondition::WheneverAttachedObjectDies
-                        if !can_reference_attached_object =>
-                    {
-                        return Err(RegistryError::InvalidCard {
-                            id: id.clone(),
-                            reason: "attached-object trigger requires an object-attaching Aura or Equipment source"
-                                .into(),
-                        });
-                    }
-                    TriggerCondition::WheneverAttachedPlayerIsAttacked
-                        if !can_reference_attached_player =>
-                    {
-                        return Err(RegistryError::InvalidCard {
-                            id: id.clone(),
-                            reason:
-                                "attached-player trigger requires a player-attaching Aura source"
-                                    .into(),
-                        });
-                    }
-                    _ => {}
-                }
-                ability
-                    .validate_shape()
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: id.clone(),
-                        reason,
-                    })?;
-                if ability.effect.is_empty() {
-                    return Err(RegistryError::InvalidCard {
-                        id: id.clone(),
-                        reason: "token triggered ability must contain at least one effect".into(),
-                    });
-                }
-                if let Some(condition) = ability.intervening_if.as_ref() {
-                    condition.validate_trigger_condition().map_err(|reason| {
-                        RegistryError::InvalidCard {
-                            id: id.clone(),
-                            reason,
-                        }
-                    })?;
-                    if condition.requires_observed_object_context()
-                        && !ability.trigger.observes_permanent_entry()
-                    {
-                        return Err(RegistryError::InvalidCard {
-                            id: id.clone(),
-                            reason: "event-observed condition requires a permanent-entry observer"
-                                .into(),
-                        });
-                    }
-                }
-                for effect in &ability.effect {
-                    if effect.uses_trigger_object_reference()
-                        && !ability.trigger.supplies_trigger_object()
-                    {
-                        return Err(RegistryError::InvalidCard {
-                            id: id.clone(),
-                            reason: "trigger-object effect requires a trigger that supplies an observed object"
-                                .into(),
-                        });
-                    }
-                    if effect.uses_defending_player_reference()
-                        && !ability.trigger.supplies_defending_player()
-                    {
-                        return Err(RegistryError::InvalidCard {
-                            id: id.clone(),
-                            reason: "defending-player target requires an attack trigger that supplies a defender"
-                                .into(),
-                        });
-                    }
-                    if effect.uses_attached_object_subject() && !can_reference_attached_object {
-                        return Err(RegistryError::InvalidCard {
-                            id: id.clone(),
-                            reason: "AttachedObject requires an Aura enchanting an object or an Equipment source"
-                                .into(),
-                        });
-                    }
-                    effect.validate(EffectContext::Ability).map_err(|reason| {
-                        RegistryError::InvalidCard {
-                            id: id.clone(),
-                            reason,
-                        }
-                    })?;
-                    for token in effect.referenced_token_ids() {
-                        if !reg.tokens.contains_key(token) {
-                            return Err(RegistryError::InvalidCard {
-                                id: id.clone(),
-                                reason: format!("CreateTokens references unknown token '{token}'"),
-                            });
-                        }
-                    }
-                }
-                SpellEffectKind::validate_list(&ability.effect).map_err(|reason| {
-                    RegistryError::InvalidCard {
-                        id: id.clone(),
-                        reason,
-                    }
-                })?;
-            }
-        }
-        for chunk in chunks {
-            // Authored RON (flat for single-face cards) is normalized into the faces-only runtime
-            // shape here — the one place that knows about the flat authoring schema.
-            let raw: RawCardDefinition = RON_OPTS.from_str(chunk)?;
-            let id = raw.id.clone();
-            let mut card = raw
-                .into_definition()
-                .map_err(|reason| RegistryError::InvalidCard { id, reason })?;
-            // Type flags are derived from `types`/`supertypes`, not authored in RON (per face).
-            card.derive_type_flags();
-            if matches!(card.layout, Layout::Adventure | Layout::Preparation) {
-                let valid_roles = card.faces.len() == 2
-                    && card.faces[0].is_permanent()
-                    && (card.faces[1].is_instant || card.faces[1].is_sorcery)
-                    && !card.faces[1].is_permanent();
-                if !valid_roles {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: format!("{:?} requires exactly two faces: permanent face 0 and instant/sorcery face 1", card.layout),
-                    });
-                }
-            }
-            if card.layout == Layout::Omen {
-                let valid_roles = card.faces.len() == 2
-                    && card.faces[0].is_permanent()
-                    && (card.faces[1].is_instant || card.faces[1].is_sorcery)
-                    && !card.faces[1].is_permanent()
-                    && card.faces[1].types.iter().any(|value| value == "Omen");
-                if !valid_roles {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "Omen requires exactly two faces: permanent face 0 and instant/sorcery Omen face 1"
-                            .into(),
-                    });
-                }
-            }
-            if card.faces_iter().any(face_returns_source_transformed)
-                && !(card.layout == Layout::Transform
-                    && card.faces.len() == 2
-                    && card.faces[1].is_permanent())
-            {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason: "transformed source return requires a two-face Transform card with a permanent back face"
-                        .into(),
-                });
-            }
-            // Validate every face's effects at startup — multi-face cards (CR 709/712/715/720)
-            // validate each face uniformly. Spell effects have no source permanent, so `Source`
-            // subjects are rejected here (EffectContext::Spell); activated/triggered
-            // effects bind to a source (Ability).
-            let mut face_ids = HashSet::new();
-            for face in card.faces_iter() {
-                validate_face_identity(face).map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
-                if !face_ids.insert(face.face_id.as_str()) {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: format!("duplicate face id '{}'", face.face_id),
-                    });
-                }
-                if face.warp_cost.is_some() && (!face.is_permanent() || face.is_land) {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "Warp requires a permanent spell face".into(),
-                    });
-                }
-                for condition in &face.cast_conditions {
-                    condition.validate_cast_condition().map_err(|reason| {
-                        RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        }
-                    })?;
-                }
-                for effect in face.spell_effect.iter().chain(
-                    face.modal_spell
-                        .iter()
-                        .flat_map(|modal| &modal.modes)
-                        .flat_map(|mode| &mode.effects),
-                ) {
-                    effect
-                        .validate_cast_snapshot_references(face.cast_conditions.len())
-                        .map_err(|reason| RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        })?;
-                }
-                for modifier in &face.cost_modifiers {
-                    modifier
-                        .validate()
-                        .map_err(|reason| RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        })?;
-                }
-                if let Some(condition) = &face.instant_speed_cast_cost {
-                    if !condition.expected_selected {
-                        return Err(RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason:
-                                "instant-speed cast-cost permission must require a selected option"
-                                    .into(),
-                        });
-                    }
-                    validate_cast_cost_condition(&face.cast_cost_groups, condition).map_err(
-                        |reason| RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        },
-                    )?;
-                }
-                // One resolution owner per face (CR 608): ordinary data, modal data, and a
-                // custom (tier-3) effect are mutually exclusive. The
-                // matching custom impl is validated to exist on the `tricerules-core` side
-                // (it owns the `CardEffect` lookup; this crate has no engine access).
-                let resolution_owners = usize::from(!face.spell_effect.is_empty())
-                    + usize::from(face.modal_spell.is_some())
-                    + usize::from(face.custom_effect.is_some());
-                if resolution_owners > 1 {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "face has more than one of spell_effect, modal_spell, and \
-                                 custom_effect (one resolution owner allowed)"
-                            .into(),
-                    });
-                }
-                let payment_actions =
-                    spell_payment_result_actions(&face.additional_costs, &face.cast_cost_groups);
-                for effect in &face.spell_effect {
-                    validate_effect_payment_results(&payment_actions, effect).map_err(
-                        |reason| RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        },
-                    )?;
-                    validate_effect_cast_cost_conditions(&face.cast_cost_groups, effect).map_err(
-                        |reason| RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        },
-                    )?;
-                    if effect.uses_defending_player_reference() {
-                        return Err(RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason: "spell effects cannot reference a trigger's defending player"
-                                .into(),
-                        });
-                    }
-                    effect.validate(EffectContext::Spell).map_err(|reason| {
-                        RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        }
-                    })?;
-                }
-                // Rules that depend on sibling effects (e.g. an amount read from another
-                // effect's target) can only be checked over the whole list.
-                SpellEffectKind::validate_list(&face.spell_effect).map_err(|reason| {
-                    RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    }
-                })?;
-                TargetingDef::validate_optional(face.targeting.as_ref(), &face.spell_effect)
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-                if let Some(modal) = &face.modal_spell {
-                    for mode in &modal.modes {
-                        for effect in &mode.effects {
-                            validate_effect_payment_results(&payment_actions, effect).map_err(
-                                |reason| RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                },
-                            )?;
-                            validate_effect_cast_cost_conditions(&face.cast_cost_groups, effect)
-                                .map_err(|reason| RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                })?;
-                        }
-                    }
-                    modal.validate(EffectContext::Spell).map_err(|reason| {
-                        RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        }
-                    })?;
-                }
-                // CR 113.6g is the stack-active exception to CR 604.2. Every other static ability
-                // here requires a permanent source on the battlefield; an instant/sorcery anthem,
-                // for example, belongs in `spell_effect` as a one-shot `PumpAll`.
-                if (face.is_instant || face.is_sorcery)
-                    && face.static_abilities.iter().any(|ability| {
-                        !matches!(
-                            ability.definition,
-                            StaticAbilityDef::SpellCannotBeCountered
-                                | StaticAbilityDef::Madness { .. }
-                        )
-                    })
-                {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "only stack-active or madness static abilities are valid on instant/sorcery"
-                            .into(),
-                    });
-                }
-                let spell_aura_attach_count = face
-                    .spell_effect
-                    .iter()
-                    .filter(|effect| matches!(effect, SpellEffectKind::AuraAttach { .. }))
-                    .count();
-                let nonspell_aura_attach = face
-                    .activated_abilities
-                    .iter()
-                    .flat_map(|ability| &ability.effect)
-                    .chain(
-                        face.triggered_abilities
-                            .iter()
-                            .flat_map(|ability| &ability.effect),
-                    )
-                    .chain(
-                        face.class_level_bars
-                            .iter()
-                            .flat_map(|bar| &bar.activated_abilities)
-                            .flat_map(|ability| &ability.effect),
-                    )
-                    .chain(
-                        face.class_level_bars
-                            .iter()
-                            .flat_map(|bar| &bar.triggered_abilities)
-                            .flat_map(|ability| &ability.effect),
-                    )
-                    .chain(
-                        face.modal_spell
-                            .iter()
-                            .flat_map(|modal| &modal.modes)
-                            .flat_map(|mode| &mode.effects),
-                    )
-                    .any(|effect| matches!(effect, SpellEffectKind::AuraAttach { .. }));
-                if face.is_aura && (spell_aura_attach_count != 1 || nonspell_aura_attach) {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "an Aura face requires exactly one AuraAttach in spell_effect"
-                            .into(),
-                    });
-                }
-                if !face.is_aura && (spell_aura_attach_count != 0 || nonspell_aura_attach) {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "AuraAttach is only valid on an Aura face".into(),
-                    });
-                }
-                let uses_attach_source = face
-                    .activated_abilities
-                    .iter()
-                    .flat_map(|ability| &ability.effect)
-                    .chain(
-                        face.triggered_abilities
-                            .iter()
-                            .flat_map(|ability| &ability.effect),
-                    )
-                    .chain(
-                        face.class_level_bars
-                            .iter()
-                            .flat_map(|bar| &bar.activated_abilities)
-                            .flat_map(|ability| &ability.effect),
-                    )
-                    .chain(
-                        face.class_level_bars
-                            .iter()
-                            .flat_map(|bar| &bar.triggered_abilities)
-                            .flat_map(|ability| &ability.effect),
-                    )
-                    .any(|effect| matches!(effect, SpellEffectKind::AttachSource { .. }));
-                if uses_attach_source
-                    && !face.types.iter().any(|card_type| card_type == "Equipment")
-                {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "AttachSource requires an Equipment source".into(),
-                    });
-                }
-                let can_reference_attached_object = face_can_reference_attached_object(face);
-                let can_reference_attached_player = face_can_reference_attached_player(face);
-                let uses_attached_object = face
-                    .activated_abilities
-                    .iter()
-                    .flat_map(|ability| &ability.effect)
-                    .chain(
-                        face.triggered_abilities
-                            .iter()
-                            .flat_map(|ability| &ability.effect),
-                    )
-                    .chain(
-                        face.class_level_bars
-                            .iter()
-                            .flat_map(|bar| &bar.activated_abilities)
-                            .flat_map(|ability| &ability.effect),
-                    )
-                    .chain(
-                        face.class_level_bars
-                            .iter()
-                            .flat_map(|bar| &bar.triggered_abilities)
-                            .flat_map(|ability| &ability.effect),
-                    )
-                    .any(SpellEffectKind::uses_attached_object_subject);
-                if uses_attached_object && !can_reference_attached_object {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "AttachedObject requires an Aura enchanting an object or an Equipment source"
-                            .into(),
-                    });
-                }
-                validate_static_abilities(&card, face)?;
-                validate_scoped_grant_tokens(face, &reg.tokens).map_err(|reason| {
-                    RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    }
-                })?;
-                validate_saga_face(&card, face)?;
-                for ability in face.triggered_abilities.iter().chain(
-                    face.class_level_bars
-                        .iter()
-                        .flat_map(|bar| &bar.triggered_abilities),
-                ) {
-                    if ability.trigger.is_delayed_only() {
-                        return Err(RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason: "delayed trigger conditions require CreateDelayedTrigger"
-                                .into(),
-                        });
-                    }
-                    ability
-                        .trigger
-                        .validate()
-                        .and_then(|()| ability.validate_trigger_limit())
-                        .map_err(|reason| RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        })?;
-                    match &ability.trigger {
-                        TriggerCondition::WheneverAttachedObjectAttacks
-                        | TriggerCondition::WheneverAttachedObjectBecomesTapped
-                        | TriggerCondition::WheneverAttachedObjectDies
-                        | TriggerCondition::WheneverAttachedObjectDealsCombatDamageToPlayer
-                        | TriggerCondition::WheneverAttachedObjectIsDealtDamage
-                            if !can_reference_attached_object =>
-                        {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "attached-object trigger requires an object-attaching Aura or Equipment source"
-                                    .into(),
-                            });
-                        }
-                        TriggerCondition::WheneverAttachedPlayerIsAttacked
-                            if !can_reference_attached_player =>
-                        {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "attached-player trigger requires a player-attaching Aura source"
-                                    .into(),
-                            });
-                        }
-                        _ => {}
-                    }
-                    if ability
-                        .effect
-                        .iter()
-                        .any(SpellEffectKind::uses_trigger_object_reference)
-                        && !ability.trigger.supplies_trigger_object()
-                    {
-                        return Err(RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason: "trigger-object effect requires a trigger that supplies an observed object"
-                                .into(),
-                        });
-                    }
-                    if ability
-                        .effect
-                        .iter()
-                        .any(SpellEffectKind::uses_defending_player_reference)
-                        && !ability.trigger.supplies_defending_player()
-                    {
-                        return Err(RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason: "defending-player target requires an attack trigger that supplies a defender"
-                                .into(),
-                        });
-                    }
-                    if let Some(condition) = ability.intervening_if.as_ref() {
-                        condition.validate_trigger_condition().map_err(|reason| {
-                            RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            }
-                        })?;
-                        if condition.requires_observed_object_context()
-                            && !ability.trigger.observes_permanent_entry()
-                        {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason:
-                                    "event-observed condition requires a permanent-entry observer"
-                                        .into(),
-                            });
-                        }
-                    }
-                }
-                // An ability's effect list gets the same two checks a spell's does: each effect
-                // against its context, then the list as a whole (CR 608.2 — the effects resolve
-                // together, so a cross-effect requirement like `LoseLife(TargetManaValue)` must
-                // find its object-targeting sibling inside this one ability).
-                for ability in face_activated_abilities(face) {
-                    ability
-                        .validate_shape()
-                        .map_err(|reason| RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        })?;
-                    let allowed = ability_cost_result_actions(&ability.costs);
-                    for effect in &ability.effect {
-                        validate_effect_payment_results(&allowed, effect).map_err(|reason| {
-                            RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            }
-                        })?;
-                    }
-                }
-                for ability in face_triggered_abilities(face) {
-                    for effect in &ability.effect {
-                        validate_effect_payment_results(&[], effect).map_err(|reason| {
-                            RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            }
-                        })?;
-                    }
-                }
-                for cost in &face.additional_costs {
-                    if matches!(cost, AdditionalCost::Blight { count: 0 }) {
-                        return Err(RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason: "additional tap or Blight cost requires a positive count"
-                                .into(),
-                        });
-                    }
-                    if let AdditionalCost::TapPermanents {
-                        constraint, filter, ..
-                    } = cost
-                    {
-                        constraint
-                            .validate_for(ObjectContributionKind::CurrentPower, "additional tap")
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                        filter
-                            .validate_characteristic_constraints()
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                    }
-                    if let AdditionalCost::ExileGraveyardCards {
-                        constraint, filter, ..
-                    } = cost
-                    {
-                        constraint
-                            .validate_for(
-                                ObjectContributionKind::ManaValue,
-                                "additional graveyard exile",
-                            )
-                            .and_then(|_| {
-                                if constraint.aggregate_minimum().is_some()
-                                    && filter == &ZoneCardFilter::default()
-                                {
-                                    Ok(())
-                                } else {
-                                    filter.validate()
-                                }
-                            })
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                    }
-                    if let AdditionalCost::SacrificePermanent { filter }
-                    | AdditionalCost::TapPermanents { filter, .. } = cost
-                    {
-                        filter
-                            .validate_characteristic_constraints()
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                        if !filter.all_terminal_filters_match(|leaf| {
-                            matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
-                                && leaf.controller == TargetController::You
-                                && leaf.excluded_objects.is_empty()
-                        }) {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "additional selected-permanent cost filter requires Creature or AnyPermanent, controller: You, and may include its source".into(),
-                            });
-                        }
-                    }
-                }
-                for group in &face.cast_cost_groups {
-                    group
-                        .validate()
-                        .map_err(|reason| RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        })?;
-                }
-                for effects in face
-                    .activated_abilities
-                    .iter()
-                    .map(|a| &a.effect)
-                    .chain(face.triggered_abilities.iter().map(|t| &t.effect))
-                    .chain(face.class_level_bars.iter().flat_map(|bar| {
-                        std::iter::once(&bar.level_ability.effect)
-                            .chain(bar.activated_abilities.iter().map(|a| &a.effect))
-                            .chain(bar.triggered_abilities.iter().map(|t| &t.effect))
-                    }))
-                {
-                    for effect in effects {
-                        effect.validate(EffectContext::Ability).map_err(|reason| {
-                            RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            }
-                        })?;
-                    }
-                    SpellEffectKind::validate_list(effects).map_err(|reason| {
-                        RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        }
-                    })?;
-                }
-                // Activated groups were checked by validate_shape, including CR 602.3 chooser
-                // authority. Triggers retain the ordinary controller-owned target contract.
-                for (effects, targeting) in face
-                    .triggered_abilities
-                    .iter()
-                    .map(|ability| (&ability.effect, ability.targeting.as_ref()))
-                    .chain(face.class_level_bars.iter().flat_map(|bar| {
-                        bar.triggered_abilities
-                            .iter()
-                            .map(|ability| (&ability.effect, ability.targeting.as_ref()))
-                    }))
-                {
-                    TargetingDef::validate_optional(targeting, effects).map_err(|reason| {
-                        RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        }
-                    })?;
-                }
-                // Every CreateTokens effect must name a loaded token (an uncreatable id is a bug).
-                let all_effects = face
-                    .spell_effect
-                    .iter()
-                    .chain(face.activated_abilities.iter().flat_map(|a| &a.effect))
-                    .chain(
-                        face.class_level_bars
-                            .iter()
-                            .flat_map(|bar| &bar.activated_abilities)
-                            .flat_map(|ability| &ability.effect),
-                    )
-                    .chain(face.triggered_abilities.iter().flat_map(|t| &t.effect))
-                    .chain(
-                        face.class_level_bars
-                            .iter()
-                            .flat_map(|bar| &bar.triggered_abilities)
-                            .flat_map(|ability| &ability.effect),
-                    );
-                for effect in all_effects {
-                    if let SpellEffectKind::ChangeSourceFace { action } = effect {
-                        let valid_layout = match action {
-                            FaceChangeAction::Transform => {
-                                matches!(card.layout, Layout::Transform | Layout::ModalDfc)
-                            }
-                            FaceChangeAction::Flip => card.layout == Layout::Flip,
-                        };
-                        if !valid_layout {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: format!(
-                                    "ChangeSourceFace({action:?}) is incompatible with {:?} layout",
-                                    card.layout
-                                ),
-                            });
-                        }
-                    }
-                    for token in effect.referenced_token_ids() {
-                        if !reg.tokens.contains_key(token) {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: format!("CreateTokens references unknown token '{token}'"),
-                            });
-                        }
-                    }
-                }
-                for modal in face
-                    .modal_spell
-                    .iter()
-                    .chain(
-                        face.triggered_abilities
-                            .iter()
-                            .filter_map(|ability| ability.modal.as_ref()),
-                    )
-                    .chain(
-                        face.class_level_bars
-                            .iter()
-                            .flat_map(|bar| &bar.triggered_abilities)
-                            .filter_map(|ability| ability.modal.as_ref()),
-                    )
-                {
-                    for effect in modal.modes.iter().flat_map(|mode| &mode.effects) {
-                        for token in effect.referenced_token_ids() {
-                            if !reg.tokens.contains_key(token) {
-                                return Err(RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason: format!(
-                                        "CreateTokens references unknown token '{token}'"
-                                    ),
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            let id = card.id.clone();
-            // Only physical-card aliases belong in deck admission. Inset spell names may
-            // collide with separately printed cards and must not claim those cards' support.
-            for name in card.deck_input_names() {
-                if reg
-                    .by_name
-                    .insert(normalize_name(name), id.clone())
-                    .is_some()
-                {
-                    return Err(RegistryError::InvalidCard {
-                        id,
-                        reason: format!("duplicate name '{name}'"),
-                    });
-                }
-            }
-            if reg.by_id.insert(id.clone(), card).is_some() {
-                return Err(RegistryError::InvalidCard {
-                    id,
-                    reason: "duplicate id".into(),
-                });
-            }
-        }
-        Ok(reg)
-    }
-
-    /// Look up a definition by id. Falls back to the token namespace so the engine queries a
-    /// token object's characteristics (types, P/T, keywords, colors) the same way as a card.
-    pub fn get(&self, id: &str) -> Option<&CardDefinition> {
-        self.by_id.get(id).or_else(|| self.tokens.get(id))
-    }
-
-    /// True if `id` names a token (created by an effect), not a deck card.
-    pub fn is_token(&self, id: &str) -> bool {
-        self.tokens.contains_key(id)
-    }
-
-    /// Resolves an Oracle card name (trimmed, case-insensitive) to a card id.
-    /// This is the only supported name->id path; deck lists cross IPC as names.
-    pub fn id_for_name(&self, name: &str) -> Option<&str> {
-        self.by_name.get(&normalize_name(name)).map(String::as_str)
-    }
-
-    /// Iterate over every loaded card definition (order is unspecified).
-    pub fn definitions(&self) -> impl Iterator<Item = &CardDefinition> {
-        self.by_id.values()
-    }
-
-    pub fn presentation_face(
-        &self,
-        card_id: &str,
-        face_id: &str,
-    ) -> Option<&PresentationFaceMetadata> {
-        self.presentation_faces
-            .get(&(card_id.to_string(), face_id.to_string()))
-    }
-
-    pub fn global() -> &'static CardRegistry {
-        &GLOBAL
-    }
-
-    /// Stable FNV-1a hash of the sorted embedded card RON, as 16-char hex.
-    /// Build-to-build stable (not cryptographic): a card-data version tag for the
-    /// Servatrice↔sidecar handshake and ruled-replay stamping, so (seed, command log,
-    /// data hash) reproduces a game. `EMBEDDED_RON_CHUNKS` is path-sorted by build.rs,
-    /// so the hash is independent of filesystem enumeration order.
-    pub fn content_hash() -> String {
-        let mut hash: u64 = 0xcbf2_9ce4_8422_2325; // FNV-1a offset basis
-        const PRIME: u64 = 0x0000_0100_0000_01b3;
-        // Tokens are part of the rules data, so fold them into the hash after cards.
-        for chunk in EMBEDDED_RON_CHUNKS
-            .iter()
-            .chain(EMBEDDED_TOKEN_CHUNKS.iter())
-        {
-            for &b in chunk.as_bytes() {
-                hash ^= b as u64;
-                hash = hash.wrapping_mul(PRIME);
-            }
-            hash ^= 0xff; // chunk separator so file boundaries are significant
+/// Stable FNV-1a hash of the sorted embedded card RON, as 16-char hex.
+/// Build-to-build stable (not cryptographic): a card-data version tag for the
+/// Servatrice↔sidecar handshake and ruled-replay stamping, so (seed, command log,
+/// data hash) reproduces a game. `EMBEDDED_RON_CHUNKS` is path-sorted by build.rs,
+/// so the hash is independent of filesystem enumeration order.
+pub fn content_hash() -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325; // FNV-1a offset basis
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    // Tokens are part of the rules data, so fold them into the hash after cards.
+    for chunk in EMBEDDED_RON_CHUNKS
+        .iter()
+        .chain(EMBEDDED_TOKEN_CHUNKS.iter())
+    {
+        for &b in chunk.as_bytes() {
+            hash ^= b as u64;
             hash = hash.wrapping_mul(PRIME);
         }
-        format!("{hash:016x}")
+        hash ^= 0xff; // chunk separator so file boundaries are significant
+        hash = hash.wrapping_mul(PRIME);
     }
+    format!("{hash:016x}")
 }
 
-// `EMBEDDED_RON_CHUNKS`, generated by build.rs from `data/**/*.ron`.
 include!(concat!(env!("OUT_DIR"), "/embedded_cards.rs"));
 
 #[cfg(test)]
 mod tests {
+    use crate::primitives::{AbilityCost, ActivatedCostModifier};
+    use crate::TokenDefinition;
+    use once_cell::sync::Lazy;
+    use ron::{extensions::Extensions, Options};
+    static RON_OPTS: Lazy<Options> =
+        Lazy::new(|| Options::default().with_default_extension(Extensions::IMPLICIT_SOME));
+    #[test]
+    fn commander_color_identity_counts_mana_symbols_but_not_any_color_output() {
+        let registry = super::global();
+        assert_eq!(
+            registry
+                .get("talisman_of_impulse")
+                .expect("Talisman of Impulse")
+                .color_identity(),
+            vec![crate::Color::Red, crate::Color::Green]
+        );
+        assert!(registry
+            .get("decanter_of_endless_water")
+            .expect("Decanter of Endless Water")
+            .color_identity()
+            .is_empty());
+    }
+
     #[test]
     fn class_section_linked_exile_pairs_are_validated_as_sibling_abilities() {
         let card = r#"(
@@ -3296,7 +123,7 @@ mod tests {
                     timing: SorcerySpeed),
             )],
         )"#;
-        let error = super::CardRegistry::from_chunks(&[card])
+        let error = super::from_chunks(&[card])
             .expect_err("a linked-exile pair cannot be split across Class section validation");
         assert!(error.to_string().contains("linked exile id"), "{error}");
     }
@@ -3313,8 +140,8 @@ mod tests {
                     timing: SorcerySpeed),
             )],
         )"#;
-        let error = CardRegistry::from_chunks(&[card])
-            .expect_err("Class level sections begin with a level 2 bar");
+        let error =
+            super::from_chunks(&[card]).expect_err("Class level sections begin with a level 2 bar");
         assert!(
             error.to_string().contains("must begin at level 2"),
             "{error}"
@@ -3333,8 +160,7 @@ mod tests {
                     timing: SorcerySpeed),
             )],
         )"#;
-        let error =
-            CardRegistry::from_chunks(&[card]).expect_err("a Class card has two level bars");
+        let error = super::from_chunks(&[card]).expect_err("a Class card has two level bars");
         assert!(
             error.to_string().contains("requires level bars 2 and 3"),
             "{error}"
@@ -3368,7 +194,7 @@ mod tests {
                     )],
                 )"#
             );
-            let error = CardRegistry::from_chunks(&[&card])
+            let error = super::from_chunks(&[&card])
                 .expect_err("a section static without live Class-level gating is unsupported");
             assert!(
                 error
@@ -3421,7 +247,7 @@ mod tests {
                     r#"(id: "provenance_grant_fixture", name: "Provenance Grant Fixture",
                     face_id: "provenance_grant_fixture", types: ["{types}"], {body})"#
                 );
-                let result = CardRegistry::from_chunks(&[&card]);
+                let result = super::from_chunks(&[&card]);
                 if marked {
                     let error = result
                         .expect_err("an independent resolving grant cannot be intrinsic land mana");
@@ -3448,8 +274,7 @@ mod tests {
                 costs: [Tap], effect: [ProduceMana(options: [(u: 1), (g: 1)])],
             )],
         )"#;
-        CardRegistry::from_chunks(&[card])
-            .expect("explicit intrinsic bundle matches both basic subtypes");
+        super::from_chunks(&[card]).expect("explicit intrinsic bundle matches both basic subtypes");
     }
 
     #[test]
@@ -3458,8 +283,8 @@ mod tests {
             types: ["Land", "Forest"], activated_abilities: [
                 (ability_id: "first", presentation: Fallback, intrinsic_land_mana: true, costs: [Tap], effect: [ProduceMana(options: [(g: 1)])]),
                 (ability_id: "second", presentation: Fallback, intrinsic_land_mana: true, costs: [Tap], effect: [ProduceMana(options: [(g: 1)])])])"#;
-        let error = CardRegistry::from_chunks(&[card])
-            .expect_err("one face has one intrinsic index anchor");
+        let error =
+            super::from_chunks(&[card]).expect_err("one face has one intrinsic index anchor");
         assert!(
             error.to_string().contains("one intrinsic land mana"),
             "{error}"
@@ -3495,7 +320,7 @@ mod tests {
                 "battlefield source",
             ),
         ] {
-            let error = CardRegistry::from_chunks(&[&malformed])
+            let error = super::from_chunks(&[&malformed])
                 .expect_err("intrinsic provenance is not a rules-text mana tag");
             assert!(error.to_string().contains(expected_error), "{error}");
         }
@@ -3516,7 +341,7 @@ mod tests {
             "kind: AnyPermanent, controller: You, excluded_objects: [Source]",
             "any_of: Some([(kind: AnyPermanent, permanent_types: [Artifact]), (kind: AnyPermanent, permanent_types: [Land])])",
         ] {
-            CardRegistry::from_chunks(&[&definition(filter)])
+            super::from_chunks(&[&definition(filter)])
                 .expect("earlier-layer permanent filters support a live keyword grant");
         }
         for constraint in [
@@ -3535,7 +360,7 @@ mod tests {
             ] {
                 assert!(
                     matches!(
-                        CardRegistry::from_chunks(&[&definition(&filter)]),
+                        super::from_chunks(&[&definition(&filter)]),
                         Err(RegistryError::InvalidCard { .. })
                     ),
                     "must reject unsupported static scope: {filter}"
@@ -3565,7 +390,7 @@ mod tests {
             ),
             ("kind: AnyPermanent", "card_types: [Artifact]"),
         ] {
-            CardRegistry::from_chunks(&[&definition(filter, addition)])
+            super::from_chunks(&[&definition(filter, addition)])
                 .expect("live additive type/subtype effects use supported permanent scopes");
         }
         for (filter, addition) in [
@@ -3586,7 +411,7 @@ mod tests {
             ),
         ] {
             assert!(
-                CardRegistry::from_chunks(&[&definition(filter, addition)]).is_err(),
+                super::from_chunks(&[&definition(filter, addition)]).is_err(),
                 "unsupported or empty additions fail closed: {filter}, {addition}"
             );
         }
@@ -3604,7 +429,7 @@ mod tests {
     fn per_target_damage_cards_have_complete_modes_and_presentation() {
         use crate::primitives::DamageDivision;
         use crate::AbilityPresentation;
-        let registry = CardRegistry::from_embedded().unwrap();
+        let registry = crate::registry::from_embedded().unwrap();
         let charm = registry.get("prismari_charm").unwrap().primary_face();
         let modes = &charm.modal_spell.as_ref().unwrap().modes;
         assert_eq!(modes.len(), 3);
@@ -3637,7 +462,7 @@ mod tests {
 
     #[test]
     fn embedded_registry_loads() {
-        CardRegistry::from_embedded().unwrap();
+        crate::registry::from_embedded().unwrap();
     }
 
     #[test]
@@ -3656,7 +481,7 @@ mod tests {
                     keyword: Vigilance,
                 ))],
         )"#;
-        let error = CardRegistry::from_chunks(&[anthem_keyword])
+        let error = super::from_chunks(&[anthem_keyword])
             .expect_err("layer-6 keyword anthem cannot depend on a layer-6 keyword");
         assert!(error.to_string().contains("CR 613.8 layer-6 dependency"));
 
@@ -3673,7 +498,7 @@ mod tests {
                     amount: 1,
                 ))],
         )"#;
-        let error = CardRegistry::from_chunks(&[entry_replacement])
+        let error = super::from_chunks(&[entry_replacement])
             .expect_err("entry replacement sees characteristics only through layer 5");
         assert!(
             error.to_string().contains("before layer 6 is applied"),
@@ -3693,11 +518,7 @@ mod tests {
                 r#"(id: "choice_test", name: "Choice Test", face_id: "choice_test", types: ["Instant"],
                 spell_effect: [GrantKeywordChoice(subject: Chosen((kind: Creature)), choices: {choices})])"#
             );
-            assert_eq!(
-                CardRegistry::from_chunks(&[&card]).is_ok(),
-                valid,
-                "{choices}"
-            );
+            assert_eq!(super::from_chunks(&[&card]).is_ok(), valid, "{choices}");
         }
     }
 
@@ -3714,11 +535,7 @@ mod tests {
                 triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)],
                     intervening_if: Some(CrimesCommittedThisTurn(players: Controller, {bounds})) )])"#
             );
-            assert_eq!(
-                CardRegistry::from_chunks(&[&card]).is_ok(),
-                valid,
-                "{bounds}"
-            );
+            assert_eq!(super::from_chunks(&[&card]).is_ok(), valid, "{bounds}");
         }
     }
 
@@ -3744,7 +561,7 @@ mod tests {
                     cast_conditions: [{kind}(players: Controller, {fields})], spell_effect: [GainLife(amount: 1)])"#
                 );
                 assert_eq!(
-                    CardRegistry::from_chunks(&[&data]).is_ok(),
+                    super::from_chunks(&[&data]).is_ok(),
                     valid,
                     "{kind}: {fields}"
                 );
@@ -3778,7 +595,7 @@ mod tests {
                 r#"(id: "tap_mana_trigger_{index}", name: "Tap Mana Trigger {index}", face_id: "tap_mana_trigger_{index}", mana_cost: "{{1}}", {types} {stats}
                 triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: {trigger}, effect: [AddMana(amount: (g: 1), retention: EndOfStep)])])"#
             );
-            let error = CardRegistry::from_chunks(&[&data])
+            let error = super::from_chunks(&[&data])
                 .expect_err("unmodeled CR 605.4a ability must fail closed");
             assert!(
                 matches!(&error, RegistryError::InvalidCard { reason, .. } if reason.contains("CR 605.4a immediate resolution")),
@@ -3788,12 +605,12 @@ mod tests {
 
         let ordinary = r#"(id: "attack_mana_trigger", name: "Attack Mana Trigger", face_id: "attack_mana_trigger", types: ["Creature"], power: Some(1), toughness: Some(1), triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WheneverSelfAttacks(minimum_other_attackers: 0), effect: [AddMana(amount: (r: 1), retention: EndOfStep)])])"#;
         assert!(
-            CardRegistry::from_chunks(&[ordinary]).is_ok(),
+            super::from_chunks(&[ordinary]).is_ok(),
             "an ordinary attack trigger is not a triggered mana ability"
         );
 
         let targeted = r#"(id: "targeted_tap_mana_trigger", name: "Targeted Tap Mana Trigger", face_id: "targeted_tap_mana_trigger", types: ["Creature"], power: Some(1), toughness: Some(1), triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WheneverSelfBecomesTapped, effect: [AddMana(amount: (r: 1), retention: EndOfStep), DamageTarget(amount: 1, target: (kind: Creature))])])"#;
-        let targeted_result = CardRegistry::from_chunks(&[targeted]);
+        let targeted_result = super::from_chunks(&[targeted]);
         assert!(
             targeted_result.is_ok(),
             "targeted triggers are not CR 605.1b mana abilities: {:?}",
@@ -3810,7 +627,7 @@ mod tests {
             format!("activated_abilities: [(ability_id: \"activated_01\", presentation: Fallback, costs: [], effect: [GrantTriggeredAbility(subject: Source, ability: {ability})])]"),
         ] {
             let card = format!(r#"(id: "trigger_limit_test", name: "Trigger Limit Test", face_id: "trigger_limit_test", mana_cost: "{{1}}", types: ["Enchantment"], {fields})"#);
-            let error = CardRegistry::from_chunks(&[&card]).expect_err("zero cap must be rejected");
+            let error = super::from_chunks(&[&card]).expect_err("zero cap must be rejected");
             assert!(matches!(&error,
                 RegistryError::InvalidCard { reason, .. } if reason.contains("max_triggers_per_turn")),
                 "a zero trigger cap must fail shape validation: {fields}: {error}");
@@ -3836,7 +653,7 @@ mod tests {
                 let card = format!(
                     r#"(id: "trigger_limit_test", name: "Trigger Limit Test", face_id: "trigger_limit_test", mana_cost: "{{1}}", types: ["Enchantment"], triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], triggers_only_once: {lifetime}, {limit})])"#
                 );
-                let registry = CardRegistry::from_chunks(&[&card]).unwrap();
+                let registry = super::from_chunks(&[&card]).unwrap();
                 let ability = &registry
                     .get("trigger_limit_test")
                     .unwrap()
@@ -3850,7 +667,7 @@ mod tests {
 
     #[test]
     fn issue_160_cards_use_typed_combat_constraints() {
-        let registry = CardRegistry::from_embedded().expect("embedded registry");
+        let registry = crate::registry::from_embedded().expect("embedded registry");
 
         let dark_endurance = registry
             .get("dark_endurance")
@@ -3977,8 +794,7 @@ mod tests {
         };
         for prefix in ["", "GainLife(amount: 1),"] {
             let card = make(prefix, "PreviousEffect");
-            let error =
-                CardRegistry::from_chunks(&[&card]).expect_err("missing compatible predecessor");
+            let error = super::from_chunks(&[&card]).expect_err("missing compatible predecessor");
             assert!(
                 error
                     .to_string()
@@ -3990,10 +806,10 @@ mod tests {
             "Discard(who: EachPlayer, quantity: AnyNumber),",
             "PreviousEffect",
         );
-        CardRegistry::from_chunks(&[&card])
+        super::from_chunks(&[&card])
             .expect("outer discard result remains available inside the conditional");
         let card = make("", "Payment");
-        let error = CardRegistry::from_chunks(&[&card]).expect_err("missing payment cost");
+        let error = super::from_chunks(&[&card]).expect_err("missing payment cost");
         assert!(
             error.to_string().contains("compatible card cost"),
             "{error}"
@@ -4019,7 +835,7 @@ mod tests {
             ],
         )"#;
 
-        let error = CardRegistry::from_chunks(&[card]).expect_err("invalid result dependency");
+        let error = super::from_chunks(&[card]).expect_err("invalid result dependency");
         assert!(error
             .to_string()
             .contains("immediately preceding compatible"));
@@ -4056,7 +872,7 @@ mod tests {
             )],
         )"#;
 
-        let error = CardRegistry::from_chunks(&[card]).expect_err("missing discard cost");
+        let error = super::from_chunks(&[card]).expect_err("missing discard cost");
         assert!(error.to_string().contains("compatible card cost"));
 
         let cast_option = card
@@ -4073,13 +889,13 @@ mod tests {
                 spell_effect:"#,
             )
             .replace("effects: []", "effects: [GainLife(amount: 1)]");
-        CardRegistry::from_chunks(&[&cast_option])
+        super::from_chunks(&[&cast_option])
             .expect("a discard cast-cost option backs Payment discard results");
     }
 
     #[test]
     fn issue_125_damage_spells_share_their_target_with_the_death_replacement() {
-        let registry = CardRegistry::from_embedded().expect("embedded registry");
+        let registry = crate::registry::from_embedded().expect("embedded registry");
         for (id, expected_damage) in [("lava_coil", 4), ("scorching_dragonfire", 3)] {
             let card = registry.get(id).unwrap_or_else(|| panic!("missing {id}"));
             let face = card.primary_face();
@@ -4122,7 +938,7 @@ mod tests {
 
     #[test]
     fn winged_words_loads_its_conditional_reduction() {
-        let registry = CardRegistry::from_embedded().expect("embedded registry");
+        let registry = crate::registry::from_embedded().expect("embedded registry");
         let card = registry.get("winged_words").expect("Winged Words");
         assert!(matches!(
             card.primary_face().cost_modifiers.as_slice(),
@@ -4141,7 +957,7 @@ mod tests {
     fn issue_148_warp_cost_survives_flat_face_normalization() {
         let fixture = r#"(id: "warp_test", name: "Warp Test", face_id: "warp_test", mana_cost: "{3}{W}",
             warp_cost: Some("{1}{W}"), types: ["Creature"], power: 3, toughness: 2)"#;
-        let registry = CardRegistry::from_chunks(&[fixture]).expect("Warp face");
+        let registry = super::from_chunks(&[fixture]).expect("Warp face");
         let face = registry.get("warp_test").unwrap().primary_face();
         let serialized = ron::to_string(face).unwrap();
         assert!(
@@ -4154,7 +970,7 @@ mod tests {
     fn issue_148_warp_rejects_nonpermanent_faces() {
         let fixture = r#"(id: "bad_warp", name: "Bad Warp", face_id: "bad_warp", mana_cost: "{3}{W}",
             warp_cost: Some("{1}{W}"), types: ["Sorcery"], spell_effect: [Draw(count: 1)])"#;
-        assert!(matches!(CardRegistry::from_chunks(&[fixture]),
+        assert!(matches!(super::from_chunks(&[fixture]),
             Err(RegistryError::InvalidCard { reason, .. }) if reason.contains("Warp")));
     }
 
@@ -4175,7 +991,7 @@ mod tests {
             types: ["Sorcery"],
             spell_effect: [Draw(count: 1)],
         )"#;
-        CardRegistry::from_chunks(&[x_cost]).expect("X is quoted separately from reductions");
+        super::from_chunks(&[x_cost]).expect("X is quoted separately from reductions");
 
         let target_surcharge = r#"(
             id: "bad_target_surcharge_reduction",
@@ -4197,7 +1013,7 @@ mod tests {
                 extra_mana_per_target: 1,
             )],
         )"#;
-        CardRegistry::from_chunks(&[target_surcharge])
+        super::from_chunks(&[target_surcharge])
             .expect("target-count increases are quoted before reductions");
     }
 
@@ -4221,7 +1037,7 @@ mod tests {
                 effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
             )],
         )"#;
-        let error = CardRegistry::from_chunks(&[card]).expect_err("contradictory filter");
+        let error = super::from_chunks(&[card]).expect_err("contradictory filter");
         assert!(matches!(
             error,
             RegistryError::InvalidCard { reason, .. }
@@ -4231,7 +1047,7 @@ mod tests {
 
     #[test]
     fn issue_127_embedded_cards_load_event_time_power_filters() {
-        let registry = CardRegistry::from_embedded().expect("embedded registry");
+        let registry = crate::registry::from_embedded().expect("embedded registry");
 
         for card_id in ["vicious_clown", "mentor_of_the_meek"] {
             let card = registry
@@ -4283,7 +1099,7 @@ mod tests {
                     )],
                 )"#
             );
-            let error = CardRegistry::from_chunks(&[&card]).expect_err("invalid entry filter");
+            let error = super::from_chunks(&[&card]).expect_err("invalid entry filter");
             assert!(matches!(
                 error,
                 RegistryError::InvalidCard { reason, .. } if reason.contains(expected_reason)
@@ -4308,7 +1124,7 @@ mod tests {
                 effect: [LoseLife(amount: Fixed(2), who: TriggerObjectController)],
             )],
         )"#;
-        let error = CardRegistry::from_chunks(&[card]).expect_err("missing trigger object");
+        let error = super::from_chunks(&[card]).expect_err("missing trigger object");
         assert!(matches!(
             error,
             RegistryError::InvalidCard { reason, .. }
@@ -4413,7 +1229,7 @@ mod tests {
         ];
 
         for (id, card) in invalid_cards {
-            let error = CardRegistry::from_chunks(&[card]).expect_err("unsupported split shape");
+            let error = super::from_chunks(&[card]).expect_err("unsupported split shape");
             assert!(
                 matches!(&error, RegistryError::InvalidCard { id: invalid_id, reason }
                     if invalid_id == id && reason.contains("storage-counter split mana")),
@@ -4437,7 +1253,7 @@ mod tests {
                 effect: [Draw(count: 1)],
             )],
         )"#;
-        let error = CardRegistry::from_chunks(&[ordinary_permanent])
+        let error = super::from_chunks(&[ordinary_permanent])
             .expect_err("ordinary permanent cannot carry an attachment trigger");
         assert!(matches!(
             error,
@@ -4459,7 +1275,7 @@ mod tests {
                 effect: [Draw(count: 1)],
             )],
         )"#;
-        let error = CardRegistry::from_chunks(&[wrong_aura_recipient])
+        let error = super::from_chunks(&[wrong_aura_recipient])
             .expect_err("creature Aura cannot observe an attached player");
         assert!(matches!(
             error,
@@ -4485,7 +1301,7 @@ mod tests {
                 )],
             )],
         )"#;
-        let error = CardRegistry::from_chunks(&[missing_defender])
+        let error = super::from_chunks(&[missing_defender])
             .expect_err("nonattack trigger has no defending player");
         assert!(matches!(
             error,
@@ -4518,8 +1334,7 @@ mod tests {
             ("destination: Hand,", true),
         ] {
             let fixture = card(fields);
-            let registry =
-                CardRegistry::from_chunks(&[&fixture]).expect("valid return destination");
+            let registry = super::from_chunks(&[&fixture]).expect("valid return destination");
             let effect = &registry
                 .get("return_probe")
                 .unwrap()
@@ -4540,8 +1355,7 @@ mod tests {
             "set_types: Some((card_types: [Enchantment])),",
         ] {
             let fixture = card(&format!("destination: Hand, {field}"));
-            let error =
-                CardRegistry::from_chunks(&[&fixture]).expect_err("hand entry fields must reject");
+            let error = super::from_chunks(&[&fixture]).expect_err("hand entry fields must reject");
             assert!(
                 matches!(&error, RegistryError::InvalidCard { reason, .. }
                 if reason.contains("owner-hand return cannot specify battlefield-entry fields")),
@@ -4551,8 +1365,8 @@ mod tests {
         for from in ["[]", "[Battlefield]"] {
             let fixture =
                 card("destination: Hand,").replace("from: [Graveyard]", &format!("from: {from}"));
-            let error = CardRegistry::from_chunks(&[&fixture])
-                .expect_err("invalid return origin must reject");
+            let error =
+                super::from_chunks(&[&fixture]).expect_err("invalid return origin must reject");
             assert!(matches!(error, RegistryError::InvalidCard { reason, .. }
                 if reason.contains("graveyard and/or exile")));
         }
@@ -4576,13 +1390,13 @@ mod tests {
             "permanent_types: [Artifact],",
             "permanent_types: [Artifact, Creature],",
         ] {
-            CardRegistry::from_chunks(&[&probe(fields)]).expect("all or any listed permanent type");
+            super::from_chunks(&[&probe(fields)]).expect("all or any listed permanent type");
         }
-        let error = CardRegistry::from_chunks(&[&probe("permanent_types: [Artifact, Artifact],")])
+        let error = super::from_chunks(&[&probe("permanent_types: [Artifact, Artifact],")])
             .expect_err("duplicate group untap types must reject");
         assert!(matches!(error, RegistryError::InvalidCard { reason, .. }
             if reason.contains("group untap permanent types cannot contain duplicates")));
-        assert!(CardRegistry::from_chunks(&[&probe("permanent_types: [Instant],")]).is_err());
+        assert!(super::from_chunks(&[&probe("permanent_types: [Instant],")]).is_err());
     }
 
     #[test]
@@ -4596,8 +1410,7 @@ mod tests {
                 effect: [ReturnTriggeredCard(reference: ExactTriggerObject, from: [Graveyard], destination: Hand)],
             )],
         )"#;
-        let error =
-            CardRegistry::from_chunks(&[fixture]).expect_err("ETB supplies no observed object");
+        let error = super::from_chunks(&[fixture]).expect_err("ETB supplies no observed object");
         assert!(matches!(error, RegistryError::InvalidCard { reason, .. }
             if reason.contains("trigger that supplies an observed object")));
     }
@@ -4629,11 +1442,11 @@ mod tests {
             )
         };
         let observing_trigger = "WheneverPermanentEntersBattlefield(controller: Controller, filter: (permanent_type: Some(Land)), creature_filter: None)";
-        CardRegistry::from_chunks(&[&card(observing_trigger)])
+        super::from_chunks(&[&card(observing_trigger)])
             .expect("permanent-entry watcher supplies an observed object generation");
 
         let leaving_observer = "WheneverPermanentLeavesBattlefield(controller: Controller, filter: (permanent_type: Some(Land)), destination: OneOf([Graveyard]), cardinality: EachObject)";
-        let error = CardRegistry::from_chunks(&[&card(leaving_observer)]).expect_err(
+        let error = super::from_chunks(&[&card(leaving_observer)]).expect_err(
             "a departure observer checks intervening-if before its event object is bound",
         );
         assert!(matches!(error, RegistryError::InvalidCard { reason, .. }
@@ -4652,7 +1465,7 @@ mod tests {
                 effect: [Draw(count: 1)],
             )],
         )"#;
-        let error = CardRegistry::from_chunks(&[fixture])
+        let error = super::from_chunks(&[fixture])
             .expect_err("a self-entry event does not bind an entering permanent");
         assert!(matches!(error, RegistryError::InvalidCard { reason, .. }
             if reason.contains("requires a permanent-entry observer")));
@@ -4685,7 +1498,7 @@ mod tests {
                     )],
                 )"#
             );
-            let error = CardRegistry::from_chunks(&[&card])
+            let error = super::from_chunks(&[&card])
                 .expect_err("invalid entry counter list must fail registry load");
             assert!(matches!(
                 error,
@@ -4716,7 +1529,7 @@ mod tests {
                 )],
             )],
         )"#;
-        let error = CardRegistry::from_chunks(&[card])
+        let error = super::from_chunks(&[card])
             .expect_err("invalid return type line must fail registry load");
         assert!(matches!(
             error,
@@ -4738,7 +1551,7 @@ mod tests {
                     spell_effect: [PutCounters(counter: {counter}, count: 1)],
                 )"#
             );
-            CardRegistry::from_chunks(&[&card]).expect("supported counter kind must load");
+            super::from_chunks(&[&card]).expect("supported counter kind must load");
         }
 
         let invalid = r#"(
@@ -4749,7 +1562,7 @@ mod tests {
             types: ["Instant"],
             spell_effect: [PutCounters(counter: Keyword(Defender), count: 1)],
         )"#;
-        let error = CardRegistry::from_chunks(&[invalid])
+        let error = super::from_chunks(&[invalid])
             .expect_err("unsupported keyword counter must fail registry load");
         assert!(
             matches!(
@@ -4913,7 +1726,7 @@ mod tests {
                 effect: [Draw(count: 1)],
             )],
         )"#;
-        let error = CardRegistry::from_chunks(&[bad_trigger]).expect_err("nonattachment observer");
+        let error = super::from_chunks(&[bad_trigger]).expect_err("nonattachment observer");
         assert!(matches!(
             error,
             RegistryError::InvalidCard { reason, .. }
@@ -4936,8 +1749,8 @@ mod tests {
                 )],
             ))],
         )"#;
-        let error = CardRegistry::from_chunks(&[conditioned_ability])
-            .expect_err("conditioned ability grant");
+        let error =
+            super::from_chunks(&[conditioned_ability]).expect_err("conditioned ability grant");
         assert!(matches!(
             error,
             RegistryError::InvalidCard { reason, .. }
@@ -4959,7 +1772,7 @@ mod tests {
                 keywords: [FirstStrike],
             ))],
         )"#;
-        let error = CardRegistry::from_chunks(&[power_dependency])
+        let error = super::from_chunks(&[power_dependency])
             .expect_err("power-dependent attached characteristics");
         assert!(matches!(
             error,
@@ -4977,7 +1790,7 @@ mod tests {
                 keywords: [FirstStrike],
             ))],
         )"#;
-        let error = CardRegistry::from_chunks(&[tied_power_dependency])
+        let error = super::from_chunks(&[tied_power_dependency])
             .expect_err("greatest-power-conditioned attached characteristics");
         assert!(matches!(
             error,
@@ -5006,7 +1819,7 @@ mod tests {
                 keyword: FirstStrike,
             ))],
         )"#;
-        let error = CardRegistry::from_chunks(&[power_dependency])
+        let error = super::from_chunks(&[power_dependency])
             .expect_err("power-dependent conditioned anthem");
         assert!(matches!(
             error,
@@ -5028,7 +1841,7 @@ mod tests {
                 keyword: FirstStrike,
             ))],
         )"#;
-        let error = CardRegistry::from_chunks(&[tied_power_dependency])
+        let error = super::from_chunks(&[tied_power_dependency])
             .expect_err("greatest-power-conditioned anthem");
         assert!(matches!(
             error,
@@ -5076,7 +1889,7 @@ mod tests {
                 excluded_keywords: [Flying],
             )))],
         )"#;
-        let err = CardRegistry::from_chunks(&[bad]).expect_err("overlap must be rejected");
+        let err = super::from_chunks(&[bad]).expect_err("overlap must be rejected");
         assert!(matches!(
             err,
             RegistryError::InvalidCard { reason, .. }
@@ -5086,7 +1899,7 @@ mod tests {
 
     #[test]
     fn spell_effects_deserialize_from_ron() {
-        let reg = CardRegistry::from_embedded().unwrap();
+        let reg = crate::registry::from_embedded().unwrap();
         assert_eq!(
             reg.get("angels_mercy").unwrap().primary_face().spell_effect,
             vec![SpellEffectKind::GainLife {
@@ -5147,11 +1960,7 @@ mod tests {
             types: ["Instant"],
             spell_effect: [TargetPlayerGainsLife(amount: 3, target: (kind: Creature))],
         )"#;
-        let raw: RawCardDefinition = RON_OPTS.from_str(bad).unwrap();
-        let card = raw.into_definition().unwrap();
-        assert!(card.primary_face().spell_effect[0]
-            .validate(crate::primitives::EffectContext::Spell)
-            .is_err());
+        assert!(CardRegistry::from_chunks_and_tokens(&[bad], &[]).is_err());
     }
 
     #[test]
@@ -5166,7 +1975,7 @@ mod tests {
                 PreventAllCombatDamageToTargetTurn(target: (kind: AnyPlayer)),
             ],
         )"#;
-        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        let err = super::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(
             err,
             RegistryError::InvalidCard { ref reason, .. }
@@ -5197,7 +2006,7 @@ mod tests {
                     "subject: Chosen((kind: AnyPlayer))"
                 }
             );
-            let err = CardRegistry::from_chunks(&[&bad]).unwrap_err();
+            let err = super::from_chunks(&[&bad]).unwrap_err();
             assert!(
                 matches!(err, RegistryError::InvalidCard { .. }),
                 "{effect} at a player should be rejected, got {err:?}"
@@ -5223,7 +2032,7 @@ mod tests {
                 effect: [Draw(count: 1)],
             )],
         )"#;
-        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        let err = super::from_chunks(&[bad]).unwrap_err();
         assert!(
             matches!(err, RegistryError::InvalidCard { ref reason, .. } if reason.contains("requires at least one"))
         );
@@ -5239,7 +2048,7 @@ mod tests {
             types: ["Instant"],
             spell_effect: [Untap(subject: Source)],
         )"#;
-        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        let err = super::from_chunks(&[bad]).unwrap_err();
         assert!(
             matches!(err, RegistryError::InvalidCard { ref reason, .. } if reason.contains("source-bound effects"))
         );
@@ -5257,7 +2066,7 @@ mod tests {
             types: ["Sorcery"],
             spell_effect: [LoseLife(amount: TargetManaValue)],
         )"#;
-        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        let err = super::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_lose_life"));
 
         // A player target is not enough either — players have no mana value.
@@ -5272,7 +2081,7 @@ mod tests {
                 LoseLife(amount: TargetManaValue),
             ],
         )"#;
-        let err = CardRegistry::from_chunks(&[bad_player_target]).unwrap_err();
+        let err = super::from_chunks(&[bad_player_target]).unwrap_err();
         assert!(
             matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_lose_life_player")
         );
@@ -5292,7 +2101,7 @@ mod tests {
                 LoseLife(amount: TargetManaValue),
             ],
         )"#;
-        assert!(CardRegistry::from_chunks(&[good]).is_ok());
+        assert!(super::from_chunks(&[good]).is_ok());
 
         // A fixed amount never needs a target.
         let fixed = r#"(
@@ -5303,7 +2112,7 @@ mod tests {
             types: ["Sorcery"],
             spell_effect: [LoseLife(amount: Fixed(2))],
         )"#;
-        assert!(CardRegistry::from_chunks(&[fixed]).is_ok());
+        assert!(super::from_chunks(&[fixed]).is_ok());
     }
 
     #[test]
@@ -5325,7 +2134,7 @@ mod tests {
                 ),
             ],
         )"#;
-        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        let err = super::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_trigger"));
     }
 
@@ -5346,7 +2155,7 @@ mod tests {
                 effect: [DamagePlayer(amount: 1, who: DefendingPlayer)],
             )],
         )"#;
-        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        let err = super::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(
             err,
             RegistryError::InvalidCard { ref id, ref reason }
@@ -5383,7 +2192,7 @@ mod tests {
                 ),
             ],
         )"#;
-        let reg = CardRegistry::from_chunks(&[card]).expect("multi-effect abilities load");
+        let reg = super::from_chunks(&[card]).expect("multi-effect abilities load");
         let def = reg.get("multi_effect").expect("card present");
         let face = def.primary_face();
         assert_eq!(face.activated_abilities[0].effect.len(), 2);
@@ -5420,7 +2229,7 @@ mod tests {
                 ),
             ],
         )"#;
-        let reg = CardRegistry::from_chunks(&[card]).expect("card loads");
+        let reg = super::from_chunks(&[card]).expect("card loads");
         let face = reg.get("impure_mana").unwrap().primary_face();
         assert!(face.activated_abilities[0].mana_options().is_none());
         assert!(face.activated_abilities[1].mana_options().is_some());
@@ -5447,7 +2256,7 @@ mod tests {
                 ),
             ],
         )"#;
-        assert!(CardRegistry::from_chunks(&[good]).is_ok());
+        assert!(super::from_chunks(&[good]).is_ok());
 
         let bad = r#"(
             id: "self_spell",
@@ -5457,7 +2266,7 @@ mod tests {
             types: ["Instant"],
             spell_effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
         )"#;
-        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        let err = super::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "self_spell"));
     }
 
@@ -5465,7 +2274,7 @@ mod tests {
     /// Catches id/name typos in current and future RON; Phase 6 codegen reuses `slugify`.
     #[test]
     fn card_ids_follow_slug_convention() {
-        let reg = CardRegistry::from_embedded().unwrap();
+        let reg = crate::registry::from_embedded().unwrap();
         for def in reg.definitions() {
             assert_eq!(
                 def.id,
@@ -5481,7 +2290,7 @@ mod tests {
     /// characteristics. The slug invariant (tested above) covers the `//` whole-card name.
     #[test]
     fn preparation_inset_name_is_not_an_alias_for_a_physical_deck_card() {
-        let registry = CardRegistry::from_embedded().unwrap();
+        let registry = crate::registry::from_embedded().unwrap();
         assert_eq!(
             registry.id_for_name("Infirmary Healer"),
             Some("infirmary_healer_stream_of_life")
@@ -5499,7 +2308,7 @@ mod tests {
 
     #[test]
     fn multiface_card_loads_and_resolves_by_face_name() {
-        let reg = CardRegistry::from_embedded().unwrap();
+        let reg = crate::registry::from_embedded().unwrap();
         let def = reg.get("fire_ice").expect("fire_ice loaded");
         assert_eq!(def.face_count(), 2);
         assert!(def.is_multiface());
@@ -5520,7 +2329,7 @@ mod tests {
     /// `faces[0]` at load, so the runtime definition is faces-only for single-face cards too.
     #[test]
     fn flat_authoring_becomes_a_single_face() {
-        let reg = CardRegistry::from_embedded().unwrap();
+        let reg = crate::registry::from_embedded().unwrap();
         let def = reg.get("grizzly_bears").expect("grizzly_bears loaded");
         assert_eq!(def.face_count(), 1);
         assert!(!def.is_multiface());
@@ -5543,7 +2352,7 @@ mod tests {
             mana_cost: "{R}",
             types: ["Instant"],
         )"#;
-        let err = CardRegistry::from_chunks(&[faceless_split]).unwrap_err();
+        let err = super::from_chunks(&[faceless_split]).unwrap_err();
         match err {
             RegistryError::InvalidCard { id, reason } => {
                 assert_eq!(id, "faceless_split");
@@ -5560,7 +2369,7 @@ mod tests {
                 (name: "B", face_id: "b", mana_cost: "{U}", types: ["Instant"]),
             ],
         )"#;
-        let err = CardRegistry::from_chunks(&[normal_with_faces]).unwrap_err();
+        let err = super::from_chunks(&[normal_with_faces]).unwrap_err();
         match err {
             RegistryError::InvalidCard { id, reason } => {
                 assert_eq!(id, "normal_with_faces");
@@ -5578,7 +2387,7 @@ mod tests {
             layout: Room,
             faces: [(name: "Only Door", face_id: "only_door", mana_cost: "{2}", types: ["Enchantment", "Room"])],
         )"#;
-        let err = CardRegistry::from_chunks(&[one_door]).unwrap_err();
+        let err = super::from_chunks(&[one_door]).unwrap_err();
         assert!(
             matches!(err, RegistryError::InvalidCard { reason, .. } if reason.contains("exactly two doors"))
         );
@@ -5592,7 +2401,7 @@ mod tests {
                 (name: "Right", face_id: "right", mana_cost: "{3}", types: ["Artifact"]),
             ],
         )"#;
-        let err = CardRegistry::from_chunks(&[mismatched_types]).unwrap_err();
+        let err = super::from_chunks(&[mismatched_types]).unwrap_err();
         assert!(
             matches!(err, RegistryError::InvalidCard { reason, .. } if reason.contains("shared type line"))
         );
@@ -5600,7 +2409,7 @@ mod tests {
 
     #[test]
     fn id_for_name_normalizes_trim_and_case() {
-        let reg = CardRegistry::from_embedded().unwrap();
+        let reg = crate::registry::from_embedded().unwrap();
         assert_eq!(reg.id_for_name("Lightning Bolt"), Some("lightning_bolt"));
         assert_eq!(reg.id_for_name("  lightning BOLT "), Some("lightning_bolt"));
         assert_eq!(reg.id_for_name("Pharika's Chosen"), Some("pharikas_chosen"));
@@ -5623,7 +2432,7 @@ mod tests {
             mana_cost: "",
             types: ["Land"],
         )"#;
-        let err = CardRegistry::from_chunks(&[a, b]).unwrap_err();
+        let err = super::from_chunks(&[a, b]).unwrap_err();
         match err {
             RegistryError::InvalidCard { id, reason } => {
                 assert_eq!(id, "dupe_b");
@@ -5642,7 +2451,7 @@ mod tests {
             mana_cost: "",
             types: ["Land"],
         )"#;
-        let err = CardRegistry::from_chunks(&[card, card]).unwrap_err();
+        let err = super::from_chunks(&[card, card]).unwrap_err();
         match err {
             RegistryError::InvalidCard { id, reason } => {
                 assert_eq!(id, "dupe");
@@ -5655,7 +2464,7 @@ mod tests {
     #[test]
     fn tokens_load_into_separate_namespace_with_explicit_colors() {
         use crate::primitives::Color;
-        let reg = CardRegistry::from_embedded().unwrap();
+        let reg = crate::registry::from_embedded().unwrap();
         // A token resolves through get() but is flagged as a token and is not a deck card.
         let soldier = reg.get("soldier_w_1_1").expect("soldier token");
         assert!(reg.is_token("soldier_w_1_1"));
@@ -5678,8 +2487,11 @@ mod tests {
         // `soldier_w_1_1_lifelink`). We can't require id == slugify(name) (that allows only one
         // token per name); instead require slugify(name) to be the id's leading segment, keeping
         // the id traceable to the name. Uniqueness is enforced at load (duplicate token id error).
-        let reg = CardRegistry::from_embedded().unwrap();
-        for (id, def) in &reg.tokens {
+        let reg = crate::registry::from_embedded().unwrap();
+        for chunk in super::EMBEDDED_TOKEN_CHUNKS {
+            let token: TokenDefinition = RON_OPTS.from_str(chunk).unwrap();
+            let id = &token.id;
+            let def = reg.get(id).unwrap();
             let slug = crate::slug::slugify(&def.name);
             let ok = *id == slug
                 || id
@@ -5703,7 +2515,7 @@ mod tests {
             types: ["Sorcery"],
             spell_effect: [CreateTokens(token: "no_such_token", count: 1)],
         )"#;
-        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        let err = super::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_maker"));
     }
 
@@ -5797,7 +2609,7 @@ mod tests {
                 )],
             )],
         )"#;
-        let err = CardRegistry::from_chunks(&[unsupported]).unwrap_err();
+        let err = super::from_chunks(&[unsupported]).unwrap_err();
         assert!(matches!(
             err,
             RegistryError::InvalidCard { ref reason, .. }
@@ -5821,7 +2633,7 @@ mod tests {
                 )],
             )],
         )"#;
-        let err = CardRegistry::from_chunks(&[multiple_choosers]).unwrap_err();
+        let err = super::from_chunks(&[multiple_choosers]).unwrap_err();
         assert!(matches!(
             err,
             RegistryError::InvalidCard { ref reason, .. }
@@ -5856,7 +2668,7 @@ mod tests {
                 )],
             )],
         )"#;
-        let err = CardRegistry::from_chunks(&[missing_fallback]).unwrap_err();
+        let err = super::from_chunks(&[missing_fallback]).unwrap_err();
         assert!(matches!(
             err,
             RegistryError::InvalidCard { ref reason, .. }
@@ -5876,7 +2688,7 @@ mod tests {
             spell_effect: [Draw(count: 1)],
             custom_effect: "brainstorm",
         )"#;
-        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        let err = super::from_chunks(&[bad]).unwrap_err();
         match err {
             RegistryError::InvalidCard { id, reason } => {
                 assert_eq!(id, "double_owner");
@@ -5921,8 +2733,7 @@ mod tests {
                 condition: Some(GraveyardAggregate(owners: Controller, aggregate: CardCount, min: Some(7))),
             ))],
         )"#;
-        CardRegistry::from_chunks(&[card])
-            .expect("typed static and conditional combat restrictions");
+        super::from_chunks(&[card]).expect("typed static and conditional combat restrictions");
         for (old, new) in [
             ("minimum_blockers: Some(3)", "minimum_blockers: Some(0)"),
             ("maximum_blockers: Some(4)", "maximum_blockers: Some(2)"),
@@ -5936,7 +2747,7 @@ mod tests {
             ),
         ] {
             assert!(
-                CardRegistry::from_chunks(&[&card.replace(old, new)]).is_err(),
+                super::from_chunks(&[&card.replace(old, new)]).is_err(),
                 "invalid authored restriction: {new}"
             );
         }
@@ -5953,7 +2764,7 @@ mod tests {
             toughness: 1,
             static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: SelfCombatRestriction())],
         )"#;
-        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        let err = super::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(
             err,
             RegistryError::InvalidCard { ref reason, .. }
@@ -5963,7 +2774,7 @@ mod tests {
 
     #[test]
     fn vampire_soulcaller_uses_self_combat_restriction() {
-        let registry = CardRegistry::from_embedded().expect("embedded registry");
+        let registry = crate::registry::from_embedded().expect("embedded registry");
         let face = registry
             .get("vampire_soulcaller")
             .expect("Vampire Soulcaller")
@@ -5996,7 +2807,7 @@ mod tests {
                 ],
             ),
         )"#;
-        let registry = CardRegistry::from_chunks(&[good]).unwrap();
+        let registry = super::from_chunks(&[good]).unwrap();
         let modal = registry
             .get("modal_test")
             .unwrap()
@@ -6012,7 +2823,7 @@ mod tests {
     fn issue_269_generated_modal_cohort_is_registered_with_exact_bounds_and_targets() {
         use crate::AbilityPresentation;
 
-        let registry = CardRegistry::from_embedded().expect("embedded registry");
+        let registry = crate::registry::from_embedded().expect("embedded registry");
         let cards = [
             "confusticate_and_bebother",
             "giantfall",
@@ -6073,7 +2884,7 @@ mod tests {
 
     #[test]
     fn issue_276_generated_power_damage_cohort_registers_union_targeting() {
-        let registry = CardRegistry::from_embedded().expect("embedded registry");
+        let registry = crate::registry::from_embedded().expect("embedded registry");
         for card_id in ["bite_down", "hard-hitting_question"] {
             let face = registry
                 .get(card_id)
@@ -6123,8 +2934,7 @@ mod tests {
                 ],
             ),
         )"#;
-        CardRegistry::from_chunks(&[valid])
-            .expect("stable modal identity and presentation should load");
+        super::from_chunks(&[valid]).expect("stable modal identity and presentation should load");
 
         let invalid_modes = [
             r#"(label: "Draw a card", effects: [Draw(count: 1)])"#,
@@ -6142,10 +2952,7 @@ mod tests {
                     modal_spell: (min_modes: 1, max_modes: 1, modes: [{mode}]),
                 )"#
             );
-            assert!(
-                CardRegistry::from_chunks(&[&card]).is_err(),
-                "must reject {mode}"
-            );
+            assert!(super::from_chunks(&[&card]).is_err(), "must reject {mode}");
         }
 
         let duplicate = r#"(
@@ -6160,7 +2967,7 @@ mod tests {
                 ],
             ),
         )"#;
-        assert!(CardRegistry::from_chunks(&[duplicate]).is_err());
+        assert!(super::from_chunks(&[duplicate]).is_err());
     }
 
     #[test]
@@ -6192,7 +2999,7 @@ mod tests {
         for bad in invalid {
             assert!(
                 matches!(
-                    CardRegistry::from_chunks(&[bad]),
+                    super::from_chunks(&[bad]),
                     Err(RegistryError::InvalidCard { .. })
                 ),
                 "expected invalid modal definition to be rejected"
@@ -6214,7 +3021,7 @@ mod tests {
                 modes: [(mode_id: "mode_01", presentation: Fallback, effects: [GainLife(amount: 3)])],
             ),
         )"#;
-        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        let err = super::from_chunks(&[bad]).unwrap_err();
         assert!(
             matches!(err, RegistryError::InvalidCard { ref reason, .. } if reason.contains("one resolution owner"))
         );
@@ -6222,7 +3029,7 @@ mod tests {
 
     #[test]
     fn issue_50_enters_tapped_card_cohort_has_the_shared_data_shape() {
-        let reg = CardRegistry::from_embedded().unwrap();
+        let reg = crate::registry::from_embedded().unwrap();
         let gainlands = [
             "blossoming_sands",
             "dismal_backwater",
@@ -6296,7 +3103,7 @@ mod tests {
 
     #[test]
     fn issue_233_multiversal_passage_has_one_combined_entry_replacement() {
-        let reg = CardRegistry::from_embedded().unwrap();
+        let reg = crate::registry::from_embedded().unwrap();
         let face = reg
             .get("multiversal_passage")
             .expect("Multiversal Passage")
@@ -6315,7 +3122,7 @@ mod tests {
 
     #[test]
     fn issue_209_watery_grave_has_a_typed_positive_entry_cost() {
-        let registry = CardRegistry::from_embedded().unwrap();
+        let registry = crate::registry::from_embedded().unwrap();
         let face = registry.get("watery_grave").unwrap().primary_face();
         assert!(face.static_abilities.iter().any(|ability| matches!(
             &ability.definition,
@@ -6342,7 +3149,7 @@ mod tests {
             )],
         )"#;
         assert!(matches!(
-            CardRegistry::from_chunks(&[zero]),
+            super::from_chunks(&[zero]),
             Err(RegistryError::InvalidCard { ref reason, .. })
                 if reason.contains("positive i32 amount")
         ));
@@ -6352,7 +3159,7 @@ mod tests {
     fn entry_reveal_pair_schema_rejects_unbounded_malformed_and_nonintrinsic_costs() {
         let source = include_str!("../data/game_trail.ron");
         let filter = "any_of: Some([(required_subtypes: [\"Mountain\"]), (required_subtypes: [\"Forest\"])]),";
-        assert!(CardRegistry::from_chunks(&[source]).is_ok());
+        assert!(super::from_chunks(&[source]).is_ok());
         for invalid in [
             source.replace(filter, ""),
             source.replace(filter, "any_of: Some([]),"),
@@ -6360,13 +3167,13 @@ mod tests {
             source.replace("affected: Self_", "affected: Permanents"),
             source.replace("EntersTapped(affected: Self_, unless_cost: Some(RevealFromHand(filter: (", "EntersWithChosenBasicLandType(untapped_cost: RevealFromHand(filter: (").replace(")))),", "))),"),
         ] {
-            assert!(matches!(CardRegistry::from_chunks(&[&invalid]), Err(RegistryError::InvalidCard { .. })), "{invalid}");
+            assert!(matches!(super::from_chunks(&[&invalid]), Err(RegistryError::InvalidCard { .. })), "{invalid}");
         }
     }
 
     #[test]
     fn issue_97_entry_replacement_cards_have_exact_shared_data_shapes() {
-        let registry = CardRegistry::from_embedded().unwrap();
+        let registry = crate::registry::from_embedded().unwrap();
         let expected_condition = GameCondition::PlayerLifeAggregate {
             players: RelativePlayerSet::All,
             aggregate: PlayerLifeAggregate::Minimum,
@@ -6531,7 +3338,7 @@ mod tests {
 
     #[test]
     fn issue_60_end_step_cards_share_the_trigger_and_condition_shape() {
-        let registry = CardRegistry::from_embedded().unwrap();
+        let registry = crate::registry::from_embedded().unwrap();
         let death_condition = Some(GameCondition::CreatureDeathsThisTurn {
             min: Some(1),
             max: None,
@@ -6581,7 +3388,7 @@ mod tests {
 
     #[test]
     fn issue_51_dynamic_entry_counter_cards_share_the_amount_vocabulary() {
-        let reg = CardRegistry::from_embedded().unwrap();
+        let reg = crate::registry::from_embedded().unwrap();
         let controlled_creatures = Amount::Count(CountExpression::BattlefieldCreatures {
             filter: BattlefieldCreatureCountFilter {
                 controllers: RelativePlayerSet::Controller,
@@ -6641,7 +3448,7 @@ mod tests {
 
     #[test]
     fn authored_color_indicator_overrides_empty_mana_cost() {
-        let reg = CardRegistry::from_embedded().unwrap();
+        let reg = crate::registry::from_embedded().unwrap();
         let back = reg
             .get("reckless_waif_merciless_predator")
             .unwrap()
@@ -6667,7 +3474,7 @@ mod tests {
                 effect: [ChangeSourceFace(action: Flip)],
             )],
         )"#;
-        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        let err = super::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_flip"));
     }
 
@@ -6684,7 +3491,7 @@ mod tests {
                 entry_counters: [(counter: Finality, count: 1)],
             )],
         )"#;
-        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        let err = super::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(
             err,
             RegistryError::InvalidCard { ref reason, .. }
@@ -6723,7 +3530,7 @@ mod tests {
         for bad in invalid {
             assert!(
                 matches!(
-                    CardRegistry::from_chunks(&[bad]),
+                    super::from_chunks(&[bad]),
                     Err(RegistryError::InvalidCard { .. })
                 ),
                 "expected malformed Adventure definition to be rejected"
@@ -6762,7 +3569,7 @@ mod tests {
         for bad in invalid {
             assert!(
                 matches!(
-                    CardRegistry::from_chunks(&[bad]),
+                    super::from_chunks(&[bad]),
                     Err(RegistryError::InvalidCard { .. })
                 ),
                 "expected malformed Omen definition to be rejected"
@@ -6852,7 +3659,7 @@ mod tests {
         for bad in invalid {
             assert!(
                 matches!(
-                    CardRegistry::from_chunks(&[bad]),
+                    super::from_chunks(&[bad]),
                     Err(RegistryError::InvalidCard { .. })
                 ),
                 "expected malformed attachment definition to be rejected"
@@ -6893,7 +3700,7 @@ mod tests {
             )],
         )"#;
 
-        let registry = CardRegistry::from_chunks(&[card])
+        let registry = super::from_chunks(&[card])
             .expect("a typed combat restriction is valid on an attached modifier");
         let restriction = match &registry
             .get("attached_blocking_restriction")
@@ -6922,7 +3729,7 @@ mod tests {
             ),
         ] {
             assert!(
-                CardRegistry::from_chunks(&[&invalid]).is_err(),
+                super::from_chunks(&[&invalid]).is_err(),
                 "malformed attached combat restriction must fail closed"
             );
         }
@@ -7037,7 +3844,7 @@ mod tests {
         for bad in invalid {
             assert!(
                 matches!(
-                    CardRegistry::from_chunks(&[bad]),
+                    super::from_chunks(&[bad]),
                     Err(RegistryError::InvalidCard { .. })
                 ),
                 "expected malformed type addition to be rejected"
@@ -7073,7 +3880,7 @@ mod tests {
                 .replace("ABILITY_COST", ability);
             assert!(
                 matches!(
-                    CardRegistry::from_chunks(&[&card]),
+                    super::from_chunks(&[&card]),
                     Err(RegistryError::InvalidCard { ref reason, .. })
                         if reason.contains("source mana cost reduction")
                 ),
@@ -7084,7 +3891,7 @@ mod tests {
 
     #[test]
     fn issue_183_power_up_cards_and_tokens_have_complete_registry_shapes() {
-        let registry = CardRegistry::global();
+        let registry = crate::registry::global();
         for (id, source_cost, activation_cost) in [
             ("ninja_of_the_hand", "{2}{B}", "{4}{B}"),
             ("ultron_drone", "{3}", "{6}"),
@@ -7179,7 +3986,7 @@ mod tests {
         for card in invalid {
             assert!(
                 matches!(
-                    CardRegistry::from_chunks(&[card]),
+                    super::from_chunks(&[card]),
                     Err(RegistryError::InvalidCard { .. })
                 ),
                 "expected malformed characteristic replacement to be rejected"
@@ -7197,7 +4004,7 @@ mod tests {
             "spell_effect: [ChooseResolutionBranch(selection: FirstApplicable, branches: [(branch_id: \"bonus\", presentation: Fallback, cost: None, requirement: GameCondition(CastSnapshot(index: 0)), effects: [GainLife(amount: 4)]), (branch_id: \"fallback_branch\", presentation: Fallback, cost: None, requirement: Always, effects: [])])]",
         ] {
             let card = format!("(id: \"snapshot_test\", name: \"Snapshot Test\", types: [\"Instant\"], {fields})");
-            assert!(matches!(CardRegistry::from_chunks(&[&card]), Err(RegistryError::InvalidCard { .. })), "must reject: {fields}");
+            assert!(matches!(super::from_chunks(&[&card]), Err(RegistryError::InvalidCard { .. })), "must reject: {fields}");
         }
     }
 
@@ -7215,7 +4022,7 @@ mod tests {
             "spell_effect: [GrantTriggeredAbility(subject: Chosen((kind: Creature)), ability: (ability_id: \"triggered_01\", presentation: Fallback, trigger: WhenSelfDies, effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))]))]",
         ] {
             let card = format!("(id: \"snapshot_test\", name: \"Snapshot Test\", face_id: \"snapshot_test\", types: [\"Creature\"], power: 1, toughness: 1, cast_conditions: [ActivePlayer(players: Controller)], {fields})");
-            assert!(matches!(CardRegistry::from_chunks(&[&card]), Err(RegistryError::InvalidCard { .. })), "must reject: {fields}");
+            assert!(matches!(super::from_chunks(&[&card]), Err(RegistryError::InvalidCard { .. })), "must reject: {fields}");
         }
     }
 
@@ -7228,7 +4035,7 @@ mod tests {
                 trigger: WheneverPlayerDiscardsOneOrMoreCards(player: Controller),
                 effect: [PutCounters(counter: PlusOnePlusOne, count: EventCount, subject: Source)])],
         )"#;
-        CardRegistry::from_chunks(&[valid])
+        super::from_chunks(&[valid])
             .expect("the discard-batch trigger supplies the committed count");
 
         for fields in [
@@ -7240,7 +4047,7 @@ mod tests {
         ] {
             let card = format!("(id: \"event_count_probe\", name: \"Event Count Probe\", face_id: \"event_count_probe\", types: [\"Creature\"], power: 1, toughness: 1, {fields})");
             assert!(
-                matches!(CardRegistry::from_chunks(&[&card]), Err(RegistryError::InvalidCard { .. })),
+                matches!(super::from_chunks(&[&card]), Err(RegistryError::InvalidCard { .. })),
                 "must reject event count outside a supplying trigger: {fields}"
             );
         }
@@ -7248,16 +4055,16 @@ mod tests {
 
     #[test]
     fn content_hash_is_stable_and_well_formed() {
-        let h = CardRegistry::content_hash();
+        let h = crate::registry::content_hash();
         assert_eq!(h.len(), 16, "expected 16-char hex digest");
         assert!(h.chars().all(|c| c.is_ascii_hexdigit()));
         // Deterministic within a build (same embedded data → same digest).
-        assert_eq!(h, CardRegistry::content_hash());
+        assert_eq!(h, crate::registry::content_hash());
     }
 
     #[test]
     fn generated_presentation_catalog_covers_normal_and_multiface_cards() {
-        let registry = CardRegistry::from_embedded().expect("embedded registry");
+        let registry = crate::registry::from_embedded().expect("embedded registry");
         for (card_id, face_id, card_name, face_name) in [
             (
                 "grow_from_the_ashes",
@@ -7292,7 +4099,7 @@ mod tests {
                 text: "When this creature enters, you gain 1 life.",
             )],
         )"#;
-        assert!(CardRegistry::from_chunks(&[missing_identity]).is_err());
+        assert!(super::from_chunks(&[missing_identity]).is_err());
 
         let valid_external_mapping = r#"(
             id: "schema_probe", name: "Schema Probe", face_id: "schema_probe",
@@ -7303,7 +4110,7 @@ mod tests {
                 effect: [GainLife(amount: 1)],
             )],
         )"#;
-        CardRegistry::from_chunks(&[valid_external_mapping])
+        super::from_chunks(&[valid_external_mapping])
             .expect("stable identity and external Oracle line references should load");
 
         let valid_fallback = r#"(
@@ -7314,7 +4121,7 @@ mod tests {
                 costs: [], effect: [GainLife(amount: 1)],
             )],
         )"#;
-        CardRegistry::from_chunks(&[valid_fallback])
+        super::from_chunks(&[valid_fallback])
             .expect("explicit fallback should load without external Oracle text");
 
         for invalid_id in ["", "Upper", "has-dash", "two__underscores", "fallback"] {
@@ -7328,10 +4135,7 @@ mod tests {
                     )],
                 )"#
             );
-            assert!(
-                CardRegistry::from_chunks(&[&data]).is_err(),
-                "{invalid_id:?}"
-            );
+            assert!(super::from_chunks(&[&data]).is_err(), "{invalid_id:?}");
         }
 
         let duplicate_siblings = r#"(
@@ -7342,7 +4146,7 @@ mod tests {
                 (ability_id: "ability_01", presentation: Fallback, costs: [], effect: [GainLife(amount: 2)]),
             ],
         )"#;
-        assert!(CardRegistry::from_chunks(&[duplicate_siblings]).is_err());
+        assert!(super::from_chunks(&[duplicate_siblings]).is_err());
 
         let nested_collision = r#"(
             id: "schema_probe", name: "Schema Probe", face_id: "schema_probe",
@@ -7361,7 +4165,7 @@ mod tests {
                 ),
             )],
         )"#;
-        assert!(CardRegistry::from_chunks(&[nested_collision]).is_err());
+        assert!(super::from_chunks(&[nested_collision]).is_err());
 
         let absent_presentation = r#"(
             id: "schema_probe", name: "Schema Probe", face_id: "schema_probe",
@@ -7370,7 +4174,7 @@ mod tests {
                 ability_id: "activated_01", costs: [], effect: [GainLife(amount: 1)],
             )],
         )"#;
-        assert!(CardRegistry::from_chunks(&[absent_presentation]).is_err());
+        assert!(super::from_chunks(&[absent_presentation]).is_err());
 
         for invalid in [
             "OracleLines([])",
@@ -7388,7 +4192,7 @@ mod tests {
                     )],
                 )"#
             );
-            assert!(CardRegistry::from_chunks(&[&data]).is_err(), "{invalid}");
+            assert!(super::from_chunks(&[&data]).is_err(), "{invalid}");
         }
 
         for obsolete in ["text: \"legacy copy\",", "oracle_text: \"legacy copy\","] {
@@ -7402,7 +4206,7 @@ mod tests {
                     )],
                 )"#
             );
-            assert!(CardRegistry::from_chunks(&[&data]).is_err(), "{obsolete}");
+            assert!(super::from_chunks(&[&data]).is_err(), "{obsolete}");
         }
     }
 
@@ -7416,7 +4220,7 @@ mod tests {
                 base_power: Some(2),
             ))],
         )"#;
-        let error = CardRegistry::from_chunks(&[partial_pt]).unwrap_err();
+        let error = super::from_chunks(&[partial_pt]).unwrap_err();
         assert!(matches!(
             error,
             RegistryError::InvalidCard { reason, .. }
@@ -7441,7 +4245,7 @@ mod tests {
                 )],
             ))],
         )"#;
-        let error = CardRegistry::from_chunks(&[unbacked_payment]).unwrap_err();
+        let error = super::from_chunks(&[unbacked_payment]).unwrap_err();
         assert!(matches!(
             error,
             RegistryError::InvalidCard { reason, .. }

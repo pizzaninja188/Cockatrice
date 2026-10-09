@@ -13,10 +13,10 @@ use super::targeting::{
     TargetSourceIdentity,
 };
 use super::*;
-use tricerules_cards::primitives::{
+use tricerules_card_model::primitives::{
     ManaRetention, ResolutionBranchRequirement, TargetRole, TargetingDef,
 };
-use tricerules_cards::{AbilityPresentation, ChoiceId};
+use tricerules_card_model::{AbilityPresentation, ChoiceId};
 
 mod chaos_warp;
 mod choices;
@@ -355,7 +355,7 @@ pub(super) fn token_identity(values: &CopiableValues) -> rv1::TokenIdentity {
             // Parameterized evasion is a printed keyword too. Project its MTG label into
             // display identity without changing the engine's typed combat authority.
             .chain(face.evasions.iter().map(|evasion| match evasion {
-                tricerules_cards::Evasion::Landwalk { land_subtype } => {
+                tricerules_card_model::Evasion::Landwalk { land_subtype } => {
                     format!("{land_subtype}walk")
                 }
             }))
@@ -367,14 +367,14 @@ pub(super) fn token_identity(values: &CopiableValues) -> rv1::TokenIdentity {
             // identity fallback here: generated descriptions are not verbatim token Oracle text.
             // Legal actions and synthetic ability cards publish the readable fallback separately.
             .map(|ability| {
-                tricerules_cards::ability_fallback(
+                tricerules_card_model::ability_fallback(
                     &values.display_name,
                     "activated ability",
                     std::slice::from_ref(&ability.ability_id),
                 )
             })
             .chain(face.triggered_abilities.iter().map(|ability| {
-                tricerules_cards::ability_fallback(
+                tricerules_card_model::ability_fallback(
                     &values.display_name,
                     "triggered ability",
                     std::slice::from_ref(&ability.ability_id),
@@ -389,7 +389,7 @@ enum EffectOutcome {
     Continue,
     GameEnded,
     Blighted(crate::state::BlightReceipt),
-    RetainedExile(tricerules_cards::ExiledCohortId, Vec<TriggerObjectRef>),
+    RetainedExile(tricerules_card_model::ExiledCohortId, Vec<TriggerObjectRef>),
     ChaosWarpOwnerInstructions(PlayerId),
     ChaosWarpCommanderChoice,
     Suspended,
@@ -458,8 +458,15 @@ mod player_recipient_order_tests {
 
     #[test]
     fn player_sets_follow_apnap_order_instead_of_storage_order() {
-        let mut engine =
-            GameEngine::new(121_001, &[10, 20], 20, None, true).expect("two-player engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            121_001,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .expect("two-player engine");
         engine.state.players.push(PlayerState::new(30, 20));
         engine.state.active_player_idx = 1;
 
@@ -3381,7 +3388,13 @@ mod exile_permission_generation_tests {
 
     #[test]
     fn exile_to_exile_creates_a_new_generation_and_invalidates_permission() {
-        let mut engine = GameEngine::new_with_default_decks(123_007, &[0, 1], 20).expect("engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            123_007,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
         let object_id = engine.state.players[0].library[0];
         move_object_to_zone(
             &mut engine.state,
@@ -3433,7 +3446,15 @@ mod zone_card_filter_tests {
             vec!["reckless_waif_merciless_predator".to_string(); 12],
             vec!["forest".to_string(); 12],
         ]);
-        let engine = GameEngine::new(110_001, &[0, 1], 20, decks, true).expect("new game");
+        let engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            110_001,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new game");
         let object_id = engine.state.players[0].library[0];
         let front_face_power = ZoneCardFilter {
             printed_power: Some(PowerComparison::AtMost(1)),
@@ -3539,7 +3560,15 @@ mod anthem_scope_tests {
 
     #[test]
     fn token_copy_cannot_reenter_before_the_next_sba() {
-        let mut engine = GameEngine::new(4610, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            4610,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let token = add_creature(&mut engine, 0);
         let values = engine.copiable_values_for(token).unwrap();
         engine.state.objects.get_mut(&token).unwrap().token_origin = Some(values);
@@ -3560,8 +3589,15 @@ mod anthem_scope_tests {
 
     #[test]
     fn issue_75_opponent_snapshot_is_player_set_generic() {
-        let mut engine =
-            GameEngine::new(75_004, &[10, 20], 20, None, true).expect("two-player engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            75_004,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .expect("two-player engine");
         engine.state.players.push(PlayerState::new(30, 20));
         let mine = add_creature(&mut engine, 10);
         let first_opponent = add_creature(&mut engine, 20);
@@ -3665,7 +3701,15 @@ mod attached_subject_tests {
 
     #[test]
     fn winning_effect_stops_remaining_draw_and_life_tail_immediately() {
-        let mut engine = GameEngine::new(507_001, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            507_001,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         let top = triggered_item(source, 0);
         let hand_before = engine.state.players[0].hand.clone();
@@ -3673,16 +3717,16 @@ mod attached_subject_tests {
         let count = hand_before.len() as u32;
         let effects = vec![
             SpellEffectKind::WinGameIf {
-                condition: tricerules_cards::GameCondition::CardsInHand {
-                    players: tricerules_cards::primitives::ConditionPlayerSet::Relative(
-                        tricerules_cards::primitives::RelativePlayerSet::Controller,
+                condition: tricerules_card_model::GameCondition::CardsInHand {
+                    players: tricerules_card_model::primitives::ConditionPlayerSet::Relative(
+                        tricerules_card_model::primitives::RelativePlayerSet::Controller,
                     ),
                     min: Some(count),
                     max: Some(count),
                 },
             },
             SpellEffectKind::Draw {
-                who: tricerules_cards::primitives::PlayerRecipient::Controller,
+                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
                 count: Amount::Fixed(2),
             },
             SpellEffectKind::GainLife {
@@ -3715,7 +3759,15 @@ mod attached_subject_tests {
 
     #[test]
     fn terminal_command_preserves_winner_before_pending_loss_and_sba() {
-        let mut engine = GameEngine::new(507_002, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            507_002,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         let returning = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         move_object_to_zone(
@@ -3738,9 +3790,9 @@ mod attached_subject_tests {
         let item = quantity_item(
             source,
             vec![SpellEffectKind::WinGameIf {
-                condition: tricerules_cards::GameCondition::CardsInHand {
-                    players: tricerules_cards::primitives::ConditionPlayerSet::Relative(
-                        tricerules_cards::primitives::RelativePlayerSet::Controller,
+                condition: tricerules_card_model::GameCondition::CardsInHand {
+                    players: tricerules_card_model::primitives::ConditionPlayerSet::Relative(
+                        tricerules_card_model::primitives::RelativePlayerSet::Controller,
                     ),
                     min: None,
                     max: None,
@@ -3794,7 +3846,15 @@ mod attached_subject_tests {
 
     #[test]
     fn terminal_life_sweep_does_not_overwrite_winner_or_eliminate_players() {
-        let mut engine = GameEngine::new(507_003, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            507_003,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.state.outcome = Some(crate::state::GameOutcome::Winner(0));
         engine.state.players[0].life = 0;
         engine.sweep_life();
@@ -3804,7 +3864,15 @@ mod attached_subject_tests {
 
     #[test]
     fn terminal_draw_preserves_committed_state_and_ignores_later_losses() {
-        let mut engine = GameEngine::new(505_054, &[4, 9, 27], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            505_054,
+            &[4, 9, 27],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.state.outcome = Some(crate::state::GameOutcome::Draw);
         engine.state.players[0].life = 0;
         engine.state.players[1].pending_library_loss = true;
@@ -3819,7 +3887,15 @@ mod attached_subject_tests {
 
     #[test]
     fn terminal_sbas_preserve_lethal_permanent() {
-        let mut engine = GameEngine::new(507_005, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            507_005,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let creature = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         engine.state.objects.get_mut(&creature).unwrap().damage = 2;
         engine.state.outcome = Some(crate::state::GameOutcome::Winner(0));
@@ -3831,7 +3907,7 @@ mod attached_subject_tests {
 
     fn quantity_item(source: ObjectId, effects: Vec<SpellEffectKind>) -> StackItem {
         let mut item = triggered_item(source, 0);
-        let mut ability = tricerules_cards::CardRegistry::global()
+        let mut ability = tricerules_cards::registry::global()
             .get("brambleguard_captain")
             .unwrap()
             .primary_face()
@@ -3847,7 +3923,7 @@ mod attached_subject_tests {
         for inner in [
             SpellEffectKind::Discard {
                 who: PlayerRecipient::Controller,
-                quantity: tricerules_cards::primitives::DiscardQuantity::Exact(1),
+                quantity: tricerules_card_model::primitives::DiscardQuantity::Exact(1),
             },
             SpellEffectKind::LookChooseToHand {
                 count: 1,
@@ -3858,7 +3934,15 @@ mod attached_subject_tests {
                 bottom_order: LibraryBottomOrder::Chosen,
             },
         ] {
-            let mut engine = GameEngine::new(38101, &[0, 1], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                38101,
+                &[0, 1],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
             let item = quantity_item(
                 source,
@@ -3921,7 +4005,15 @@ mod attached_subject_tests {
 
     #[test]
     fn authoring_false_conditional_does_not_inspect_private_library() {
-        let mut engine = GameEngine::new(38102, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38102,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         let library = engine.state.players[0].library.clone();
         let item = quantity_item(
@@ -3961,6 +4053,7 @@ mod attached_subject_tests {
             r#"(id: "flux_fixture", name: "Flux fixture", face_id: "flux_fixture", mana_cost: "{2}{U}", types: ["Sorcery"], spell_effect: [Discard(who: EachPlayer, quantity: AnyNumber), Draw(who: EachPlayer, count: Count(CardsMatchingResultForAffectedPlayer(filter: (source: PreviousEffect, action: Discard, players: All)))), GainLife(amount: 2)])"#,
         ], &[]).expect("admit the Flux instruction composition");
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             38201,
             &[0, 1, 2, 3],
             20,
@@ -4043,6 +4136,7 @@ mod attached_subject_tests {
     #[test]
     fn authoring_draw_action_preserves_a_started_resolution_when_its_controller_leaves() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             80004,
             &[0, 1, 2],
             20,
@@ -4128,9 +4222,12 @@ mod attached_subject_tests {
 
     #[test]
     fn authoring_bounded_discard_preserves_actual_results_including_leng_destinations() {
-        use tricerules_cards::primitives::{CardResultFilter, CardResultSource, DiscardQuantity};
+        use tricerules_card_model::primitives::{
+            CardResultFilter, CardResultSource, DiscardQuantity,
+        };
         for (count, leng) in [(0, false), (1, false), (2, false), (0, true), (2, true)] {
             let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
                 38202,
                 &[0, 1],
                 20,
@@ -4242,8 +4339,9 @@ mod attached_subject_tests {
 
     #[test]
     fn authoring_scoped_result_keeps_you_and_opponents_relative_to_the_spell_controller() {
-        use tricerules_cards::primitives::{CardResultFilter, CardResultSource};
+        use tricerules_card_model::primitives::{CardResultFilter, CardResultSource};
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             38203,
             &[0, 1],
             20,
@@ -4297,9 +4395,12 @@ mod attached_subject_tests {
 
     #[test]
     fn authoring_conditional_discard_result_and_post_draw_threshold_are_live() {
-        use tricerules_cards::primitives::{CardResultFilter, CardResultSource, DiscardQuantity};
+        use tricerules_card_model::primitives::{
+            CardResultFilter, CardResultSource, DiscardQuantity,
+        };
         for threshold in [6, 7] {
             let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
                 38103,
                 &[0, 1],
                 20,
@@ -4395,6 +4496,7 @@ mod attached_subject_tests {
         for (lessons, owner) in [(2, 0), (3, 0), (3, 1)] {
             for size in 0..=3 {
                 let mut engine = GameEngine::new(
+                    tricerules_cards::registry::global(),
                     38104,
                     &[0, 1],
                     20,
@@ -4504,6 +4606,7 @@ mod attached_subject_tests {
     #[test]
     fn authoring_shoreline_threshold_is_evaluated_after_a_parked_draw_finishes() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             38105,
             &[0, 1],
             20,
@@ -4542,7 +4645,7 @@ mod attached_subject_tests {
                     },
                     effect: Box::new(SpellEffectKind::Discard {
                         who: PlayerRecipient::Controller,
-                        quantity: tricerules_cards::primitives::DiscardQuantity::Exact(1),
+                        quantity: tricerules_card_model::primitives::DiscardQuantity::Exact(1),
                     }),
                 },
                 SpellEffectKind::GainLife {
@@ -4589,7 +4692,15 @@ mod attached_subject_tests {
 
     #[test]
     fn archive_numeric_command_failure_restores_earlier_draw_and_publication_caches() {
-        let mut engine = GameEngine::new(104_805, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            104_805,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.state.opening = None;
         engine.state.turn_step = TurnStep::Main1;
         engine.state.active_player_idx = 0;
@@ -4646,7 +4757,15 @@ mod attached_subject_tests {
 
     #[test]
     fn archive_upstream_three_opponent_drain_sum_overflow_rolls_back_all_losses() {
-        let mut engine = GameEngine::new(104_818, &[0, 1, 2, 3], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            104_818,
+            &[0, 1, 2, 3],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.state.opening = None;
         engine.state.turn_step = TurnStep::Main1;
         engine.state.active_player_idx = 0;
@@ -4675,7 +4794,15 @@ mod attached_subject_tests {
     #[test]
     fn blue_spell_shuffle_continues_tail_and_never_moves_an_off_stack_incarnation() {
         for on_stack in [true, false] {
-            let mut engine = GameEngine::new(504_008, &[0, 1], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                504_008,
+                &[0, 1],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             let source = add_battlefield_object(&mut engine, 0, "blue_suns_zenith");
             move_object_to_zone(
                 &mut engine.state,
@@ -4760,7 +4887,15 @@ mod attached_subject_tests {
             (Some(20), Some(20), vec![30, 10]),
             (Some(20), Some(30), vec![10]),
         ] {
-            let mut engine = GameEngine::new(503_004, &[10, 20, 30], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                503_004,
+                &[10, 20, 30],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             engine.state.active_player_idx = 2;
             if let Some(lost) = lost {
                 let seat = engine.state.player_idx(lost).unwrap();
@@ -4814,7 +4949,13 @@ mod attached_subject_tests {
 
     #[test]
     fn proliferate_parks_for_a_mixed_any_number_choice() {
-        let mut engine = GameEngine::new_with_default_decks(701_034, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            701_034,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         engine.state.objects.get_mut(&source).unwrap().add_counters(
             CounterKind::PlusOnePlusOne,
@@ -4887,7 +5028,13 @@ mod attached_subject_tests {
 
     #[test]
     fn proliferate_rejects_an_unoffered_player_and_restores_the_prompt() {
-        let mut engine = GameEngine::new_with_default_decks(701_035, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            701_035,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         engine.state.objects.get_mut(&source).unwrap().add_counters(
             CounterKind::PlusOnePlusOne,
@@ -4926,7 +5073,13 @@ mod attached_subject_tests {
 
     #[test]
     fn proliferate_revalidates_candidate_generation_and_counter_eligibility() {
-        let mut engine = GameEngine::new_with_default_decks(701_036, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            701_036,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         engine.state.objects.get_mut(&source).unwrap().add_counters(
             CounterKind::PlusOnePlusOne,
@@ -4993,7 +5146,13 @@ mod attached_subject_tests {
 
     #[test]
     fn proliferate_revalidates_player_counter_eligibility_after_choice_is_offered() {
-        let mut engine = GameEngine::new_with_default_decks(701_037, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            701_037,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         engine.state.players[1]
             .counters
@@ -5041,7 +5200,13 @@ mod attached_subject_tests {
 
     #[test]
     fn issue_483_life_loss_uses_copied_battlefield_mana_value_after_destroy() {
-        let mut engine = GameEngine::new_with_default_decks(483_001, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            483_001,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let original = add_battlefield_object(&mut engine, 1, "grizzly_bears");
         let copied_from = add_battlefield_object(&mut engine, 1, "serra_angel");
         engine
@@ -5110,6 +5275,7 @@ mod attached_subject_tests {
     fn issue_230_residual_hands_discard_as_much_as_possible_and_resume_once() {
         for size in 0..=2 {
             let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
                 23003,
                 &[10, 20],
                 20,
@@ -5145,11 +5311,11 @@ mod attached_subject_tests {
                 vec![
                     SpellEffectKind::Discard {
                         who: PlayerRecipient::EachPlayer,
-                        quantity: tricerules_cards::primitives::DiscardQuantity::UnlessOne {
+                        quantity: tricerules_card_model::primitives::DiscardQuantity::UnlessOne {
                             count: 2,
-                            filter: tricerules_cards::primitives::ZoneCardFilter {
+                            filter: tricerules_card_model::primitives::ZoneCardFilter {
                                 card_type: Some(
-                                    tricerules_cards::primitives::CardTypeFilter::Creature,
+                                    tricerules_card_model::primitives::CardTypeFilter::Creature,
                                 ),
                                 ..Default::default()
                             },
@@ -5212,6 +5378,7 @@ mod attached_subject_tests {
     fn issue_228_dual_type_card_and_third_seat_resume_the_tail_once() {
         for dual_type in [false, true] {
             let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
                 22803,
                 &[10, 20],
                 20,
@@ -5309,7 +5476,15 @@ mod attached_subject_tests {
     #[test]
     fn issue_227_whole_hand_discard_preserves_player_sets_and_runs_the_tail() {
         for who in [PlayerRecipient::EachPlayer, PlayerRecipient::EachOpponent] {
-            let mut engine = GameEngine::new(227_003, &[10, 20], 20, None, true).unwrap();
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                227_003,
+                &[10, 20],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
             // Exercise a third nonconsecutive seat below the two-player session admission gate.
             engine.state.players.push(PlayerState::new(30, 20));
             let third_card = add_battlefield_object(&mut engine, 30, "island");
@@ -5334,7 +5509,7 @@ mod attached_subject_tests {
                 vec![
                     SpellEffectKind::Discard {
                         who,
-                        quantity: tricerules_cards::primitives::DiscardQuantity::All,
+                        quantity: tricerules_card_model::primitives::DiscardQuantity::All,
                     },
                     SpellEffectKind::GainLife {
                         amount: Amount::Fixed(2),
@@ -5362,7 +5537,13 @@ mod attached_subject_tests {
 
     #[test]
     fn issue_157_blossombind_prohibition_precedes_stun_and_expires_on_departure() {
-        let mut engine = GameEngine::new_with_default_decks(15705, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            15705,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let target = add_battlefield_object(&mut engine, 0, "hill_giant");
         let aura = add_battlefield_object(&mut engine, 1, "blossombind");
         engine.state.objects.get_mut(&aura).unwrap().attached_to =
@@ -5413,8 +5594,14 @@ mod attached_subject_tests {
 
     #[test]
     fn issue_157_multiple_observers_recreate_the_same_departure_counter_bag() {
-        use tricerules_cards::primitives::CounterSnapshotSource;
-        let mut engine = GameEngine::new_with_default_decks(15709, &[0, 1], 20).unwrap();
+        use tricerules_card_model::primitives::CounterSnapshotSource;
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            15709,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let departed = add_battlefield_object(&mut engine, 0, "dockworker_drone");
         let first = add_battlefield_object(&mut engine, 0, "hill_giant");
         let second = add_battlefield_object(&mut engine, 1, "hill_giant");
@@ -5478,7 +5665,13 @@ mod attached_subject_tests {
         for (moved_again, initialized_generation) in
             [(false, false), (false, true), (true, false), (true, true)]
         {
-            let mut engine = GameEngine::new_with_default_decks(167201, &[0, 1], 20).unwrap();
+            let mut engine = GameEngine::new_with_default_decks(
+                tricerules_cards::registry::global(),
+                167201,
+                &[0, 1],
+                20,
+            )
+            .unwrap();
             // A permanent-front MDFC using the existing Brainstorm algorithm on its instant face
             // exercises destination card types and the custom park/resume boundary together.
             engine.registry = Box::leak(Box::new(
@@ -5595,7 +5788,13 @@ mod attached_subject_tests {
 
     #[test]
     fn issue_167_source_sacrifice_cannot_sacrifice_a_stolen_permanent() {
-        let mut engine = GameEngine::new_with_default_decks(167202, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            167202,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let oid = add_battlefield_object(&mut engine, 1, "grizzly_bears");
         let item = quantity_item(
             oid,
@@ -5624,6 +5823,7 @@ mod attached_subject_tests {
     #[test]
     fn issue_167_mill_discard_and_countered_spell_routes_record_destination_cards() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             167203,
             &[0, 1],
             20,
@@ -5720,13 +5920,19 @@ mod attached_subject_tests {
 
     #[test]
     fn issue_167_simultaneous_sacrifices_keep_predeparture_types() {
-        let mut engine = GameEngine::new_with_default_decks(167204, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            167204,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let first = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         let second = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         engine.state.continuous_effects.push(ContinuousEffect {
             source_id: Some(first),
             affected: AffectedScope::Single(second),
-            kind: ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+            kind: ContinuousEffectKind::Layer4AddTypes(tricerules_card_model::TypeLineAddition {
                 land_types: Vec::new(),
                 card_types: vec![PermanentTypeFilter::Artifact],
                 creature_types: vec![],
@@ -5773,7 +5979,13 @@ mod attached_subject_tests {
     #[test]
     fn issue_165_dynamic_scry_freezes_private_candidates_and_resumes_tail_once() {
         fn run(power: u32) -> Vec<rv1::RuledEvent> {
-            let mut engine = GameEngine::new_with_default_decks(165_201, &[0, 1], 20).unwrap();
+            let mut engine = GameEngine::new_with_default_decks(
+                tricerules_cards::registry::global(),
+                165_201,
+                &[0, 1],
+                20,
+            )
+            .unwrap();
             let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
             engine.state.objects.get_mut(&source).unwrap().power = Some(power);
             let item = quantity_item(
@@ -5866,7 +6078,13 @@ mod attached_subject_tests {
             (2, false, false),
             (2, false, true),
         ] {
-            let mut engine = GameEngine::new_with_default_decks(165_202, &[0, 1], 20).unwrap();
+            let mut engine = GameEngine::new_with_default_decks(
+                tricerules_cards::registry::global(),
+                165_202,
+                &[0, 1],
+                20,
+            )
+            .unwrap();
             let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
             engine.state.objects.get_mut(&source).unwrap().power = Some(power);
             let mut target = triggered_item(source, 0);
@@ -5916,7 +6134,8 @@ mod attached_subject_tests {
                             required_subtypes: vec![],
                             exclude_source: false,
                         },
-                        characteristic: tricerules_cards::BattlefieldQuantityCharacteristic::Power,
+                        characteristic:
+                            tricerules_card_model::BattlefieldQuantityCharacteristic::Power,
                     }
                 };
                 *unless_controller_pays = Some(Amount::Count(quantity));
@@ -6056,7 +6275,13 @@ mod attached_subject_tests {
     #[test]
     fn issue_175_ferocidon_simultaneous_entry_uses_current_or_last_known_controller() {
         for departure in [0, 1, 2] {
-            let mut engine = GameEngine::new_with_default_decks(175_301, &[0, 1], 20).unwrap();
+            let mut engine = GameEngine::new_with_default_decks(
+                tricerules_cards::registry::global(),
+                175_301,
+                &[0, 1],
+                20,
+            )
+            .unwrap();
             let ferocidon = add_battlefield_object(&mut engine, 1, "rampaging_ferocidon");
             let creature = add_battlefield_object(&mut engine, 0, "grizzly_bears");
             let triggers = engine.collect_event_triggers(&[
@@ -6081,7 +6306,7 @@ mod attached_subject_tests {
                 source_id: None,
                 affected: AffectedScope::Single(creature),
                 kind: ContinuousEffectKind::Layer2Control {
-                    controller: tricerules_cards::ControllerReference::Fixed(1),
+                    controller: tricerules_card_model::ControllerReference::Fixed(1),
                 },
                 condition: None,
                 duration: EffectDuration::UntilEndOfTurn,
@@ -6167,7 +6392,13 @@ mod attached_subject_tests {
         ];
         for (effect, targets, lost) in cases {
             for prohibited in [false, true] {
-                let mut engine = GameEngine::new_with_default_decks(175_302, &[0, 1], 20).unwrap();
+                let mut engine = GameEngine::new_with_default_decks(
+                    tricerules_cards::registry::global(),
+                    175_302,
+                    &[0, 1],
+                    20,
+                )
+                .unwrap();
                 let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
                 if prohibited {
                     add_battlefield_object(&mut engine, 1, "giant_cindermaw");
@@ -6222,7 +6453,13 @@ mod attached_subject_tests {
     #[test]
     fn issue_170_direct_loss_effects_and_chosen_player_conditions_share_history() {
         for amount in [0, 2] {
-            let mut engine = GameEngine::new_with_default_decks(170007, &[0, 1], 20).unwrap();
+            let mut engine = GameEngine::new_with_default_decks(
+                tricerules_cards::registry::global(),
+                170007,
+                &[0, 1],
+                20,
+            )
+            .unwrap();
             let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
             let mut item = triggered_item(source, 0);
             item.targets = vec![super::super::targeting::capture_stack_target(
@@ -6293,7 +6530,13 @@ mod attached_subject_tests {
 
     #[test]
     fn attached_subject_uses_generation_scoped_lki_after_source_exits() {
-        let mut engine = GameEngine::new_with_default_decks(82_101, &[0, 1], 20).expect("engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            82_101,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
         let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
         let creature = add_battlefield_object(&mut engine, 1, "grizzly_bears");
         engine.state.objects.get_mut(&source).unwrap().attached_to =
@@ -6330,7 +6573,13 @@ mod attached_subject_tests {
 
     #[test]
     fn attached_subject_lki_rejects_an_attached_object_that_left_and_returned() {
-        let mut engine = GameEngine::new_with_default_decks(82_102, &[0, 1], 20).expect("engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            82_102,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
         let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
         let creature = add_battlefield_object(&mut engine, 1, "grizzly_bears");
         engine.state.objects.get_mut(&source).unwrap().attached_to =
@@ -6379,7 +6628,13 @@ mod attached_subject_tests {
 
     #[test]
     fn current_attached_subject_is_empty_after_detachment() {
-        let mut engine = GameEngine::new_with_default_decks(82_103, &[0, 1], 20).expect("engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            82_103,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
         let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
         let item = triggered_item(
             source,
@@ -6399,7 +6654,13 @@ mod attached_subject_tests {
 
     #[test]
     fn trigger_object_subject_rejects_a_leave_and_return_generation() {
-        let mut engine = GameEngine::new_with_default_decks(82_104, &[0, 1], 20).expect("engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            82_104,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         let related = add_battlefield_object(&mut engine, 1, "grizzly_bears");
         let related_generation = engine
@@ -6452,7 +6713,13 @@ mod attached_subject_tests {
 
     #[test]
     fn put_counters_applicability_accepts_a_current_noncreature_permanent() {
-        let mut engine = GameEngine::new_with_default_decks(142_101, &[0, 1], 20).expect("engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            142_101,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
         let source = add_battlefield_object(&mut engine, 0, "forest");
         let generation = engine
             .state
@@ -6472,7 +6739,13 @@ mod attached_subject_tests {
 
     #[test]
     fn issue_153_tatterkite_cannot_pay_a_counter_placement() {
-        let mut engine = GameEngine::new_with_default_decks(153_001, &[0, 1], 20).expect("engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            153_001,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
         let source = add_battlefield_object(&mut engine, 0, "tatterkite");
         let generation = engine
             .state
@@ -6531,8 +6804,14 @@ mod attached_subject_tests {
 
     #[test]
     fn issue_153_counter_prohibition_tracks_attachment_and_ability_removal() {
-        use tricerules_cards::primitives::CounterPlacementAffected;
-        let mut engine = GameEngine::new_with_default_decks(153_002, &[0, 1], 20).unwrap();
+        use tricerules_card_model::primitives::CounterPlacementAffected;
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            153_002,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let aura = add_battlefield_object(&mut engine, 0, "pacifism");
         let first = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         let second = add_battlefield_object(&mut engine, 1, "grizzly_bears");
@@ -6543,7 +6822,7 @@ mod attached_subject_tests {
             super::continuous::CounterPlacementOrigin::Effect,
         );
         let mut values = engine.copiable_values_for(aura).unwrap();
-        values.face.static_abilities = vec![tricerules_cards::IdentifiedAbility::fallback(
+        values.face.static_abilities = vec![tricerules_card_model::IdentifiedAbility::fallback(
             "static_01",
             StaticAbilityDef::ProhibitCounters {
                 affected: CounterPlacementAffected::AttachedPermanent,
@@ -6587,7 +6866,13 @@ mod attached_subject_tests {
 
     #[test]
     fn issue_153_forced_impossible_blight_records_receipt_before_a_parked_tail() {
-        let mut engine = GameEngine::new_with_default_decks(153_003, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            153_003,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let source = add_battlefield_object(&mut engine, 0, "tatterkite");
         let item = quantity_item(
             source,
@@ -6595,7 +6880,7 @@ mod attached_subject_tests {
                 SpellEffectKind::Blight { count: 2 },
                 SpellEffectKind::Discard {
                     who: PlayerRecipient::EachOpponent,
-                    quantity: tricerules_cards::primitives::DiscardQuantity::Exact(1),
+                    quantity: tricerules_card_model::primitives::DiscardQuantity::Exact(1),
                 },
             ],
         );
@@ -6619,7 +6904,13 @@ mod attached_subject_tests {
 
     #[test]
     fn issue_211_failed_counter_placement_does_not_create_reflexive_trigger() {
-        let mut engine = GameEngine::new_with_default_decks(211_001, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            211_001,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         let source = add_battlefield_object(&mut engine, 0, "tatterkite");
         let item = quantity_item(
             source,
@@ -6631,14 +6922,14 @@ mod attached_subject_tests {
                 },
                 SpellEffectKind::CreateReflexiveTrigger {
                     when: Some(
-                        tricerules_cards::primitives::ResolutionReceiptCondition::CountersPlaced {
+                        tricerules_card_model::primitives::ResolutionReceiptCondition::CountersPlaced {
                             counter: CounterKind::PlusOnePlusOne,
-                            object: tricerules_cards::primitives::ConditionObjectRef::Source,
+                            object: tricerules_card_model::primitives::ConditionObjectRef::Source,
                         },
                     ),
-                    ability: Box::new(tricerules_cards::primitives::ReflexiveTriggeredAbilityDef {
-                        ability_id: tricerules_cards::AbilityId::new("reflexive_01").unwrap(),
-                        presentation: tricerules_cards::AbilityPresentation::Fallback,
+                    ability: Box::new(tricerules_card_model::primitives::ReflexiveTriggeredAbilityDef {
+                        ability_id: tricerules_card_model::AbilityId::new("reflexive_01").unwrap(),
+                        presentation: tricerules_card_model::AbilityPresentation::Fallback,
                         effect: vec![SpellEffectKind::GainLife {
                             amount: Amount::Fixed(1),
                         }],
@@ -6666,7 +6957,13 @@ mod attached_subject_tests {
 
     #[test]
     fn optional_resolution_branch_runs_otherwise_when_no_branch_is_applicable() {
-        let mut engine = GameEngine::new_with_default_decks(241_099, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            241_099,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         engine.state.opening = None;
         engine.state.turn_step = TurnStep::Main1;
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
@@ -6675,14 +6972,14 @@ mod attached_subject_tests {
             vec![SpellEffectKind::ChooseResolutionBranch {
                 chooser: PlayerRecipient::Controller,
                 optional: true,
-                selection: tricerules_cards::primitives::ResolutionBranchSelection::PlayerChoice,
+                selection: tricerules_card_model::primitives::ResolutionBranchSelection::PlayerChoice,
                 branches: vec![ResolutionBranchDef {
-                    branch_id: tricerules_cards::ChoiceId::new("unavailable").unwrap(),
-                    presentation: tricerules_cards::AbilityPresentation::Fallback,
+                    branch_id: tricerules_card_model::ChoiceId::new("unavailable").unwrap(),
+                    presentation: tricerules_card_model::AbilityPresentation::Fallback,
                     runtime_fallback: None,
                     cost: ResolutionCost::None,
                     requirement:
-                        tricerules_cards::primitives::ResolutionBranchRequirement::GameCondition(
+                        tricerules_card_model::primitives::ResolutionBranchRequirement::GameCondition(
                             GameCondition::CreatureDeathsThisTurn {
                                 min: Some(1),
                                 max: None,
@@ -6710,11 +7007,11 @@ mod attached_subject_tests {
 
         fn branch(branch_id: &str, cost: ResolutionCost, life: u32) -> ResolutionBranchDef {
             ResolutionBranchDef {
-                branch_id: tricerules_cards::ChoiceId::new(branch_id).unwrap(),
-                presentation: tricerules_cards::AbilityPresentation::Fallback,
+                branch_id: tricerules_card_model::ChoiceId::new(branch_id).unwrap(),
+                presentation: tricerules_card_model::AbilityPresentation::Fallback,
                 runtime_fallback: None,
                 cost,
-                requirement: tricerules_cards::primitives::ResolutionBranchRequirement::Always,
+                requirement: tricerules_card_model::primitives::ResolutionBranchRequirement::Always,
                 effects: vec![SpellEffectKind::GainLife {
                     amount: Amount::Fixed(life),
                 }],
@@ -6722,7 +7019,13 @@ mod attached_subject_tests {
         }
 
         fn engine_with_pending_choice(branches: Vec<ResolutionBranchDef>) -> GameEngine {
-            let mut engine = GameEngine::new_with_default_decks(800_401, &[0, 1], 20).unwrap();
+            let mut engine = GameEngine::new_with_default_decks(
+                tricerules_cards::registry::global(),
+                800_401,
+                &[0, 1],
+                20,
+            )
+            .unwrap();
             engine.state.players.push(PlayerState::new(2, 20));
             engine.state.opening = None;
             engine.state.turn_step = TurnStep::Main1;
@@ -6734,7 +7037,7 @@ mod attached_subject_tests {
                         chooser: PlayerRecipient::AffectedPlayer,
                         optional: false,
                         selection:
-                            tricerules_cards::primitives::ResolutionBranchSelection::PlayerChoice,
+                            tricerules_card_model::primitives::ResolutionBranchSelection::PlayerChoice,
                         branches,
                         otherwise: vec![SpellEffectKind::GainLife {
                             amount: Amount::Fixed(4),
@@ -6773,7 +7076,13 @@ mod attached_subject_tests {
 
         #[test]
         fn controller_is_a_fallback_replacement_when_no_other_opponent_survives() {
-            let mut engine = GameEngine::new_with_default_decks(800_403, &[0, 1], 20).unwrap();
+            let mut engine = GameEngine::new_with_default_decks(
+                tricerules_cards::registry::global(),
+                800_403,
+                &[0, 1],
+                20,
+            )
+            .unwrap();
             engine.state.players.push(PlayerState::new(2, 20));
             engine.state.players[1].has_lost = true;
             engine.state.players[2].has_lost = true;
@@ -6790,7 +7099,7 @@ mod attached_subject_tests {
             let mut engine = engine_with_pending_choice(vec![
                 branch(
                     "costed",
-                    ResolutionCost::Mana(tricerules_cards::ManaCost::parse("{1}").unwrap()),
+                    ResolutionCost::Mana(tricerules_card_model::ManaCost::parse("{1}").unwrap()),
                     10,
                 ),
                 branch("free", ResolutionCost::None, 1),
@@ -6847,7 +7156,7 @@ mod attached_subject_tests {
         fn no_cost_free_branch_runs_the_authored_otherwise_and_tail() {
             let mut engine = engine_with_pending_choice(vec![branch(
                 "costed",
-                ResolutionCost::Mana(tricerules_cards::ManaCost::parse("{1}").unwrap()),
+                ResolutionCost::Mana(tricerules_card_model::ManaCost::parse("{1}").unwrap()),
                 10,
             )]);
 
@@ -6881,7 +7190,7 @@ mod attached_subject_tests {
         fn departing_chooser_abandons_an_unpaid_mana_branch_and_resumes_otherwise_and_tail() {
             let mut engine = engine_with_pending_choice(vec![branch(
                 "costed_mana",
-                ResolutionCost::Mana(tricerules_cards::ManaCost::parse("{1}").unwrap()),
+                ResolutionCost::Mana(tricerules_card_model::ManaCost::parse("{1}").unwrap()),
                 10,
             )]);
             select_pending_branch(&mut engine);
@@ -6951,7 +7260,13 @@ mod attached_subject_tests {
 
         #[test]
         fn first_applicable_skips_a_costed_branch_for_an_already_departed_chooser() {
-            let mut engine = GameEngine::new_with_default_decks(800_402, &[0, 1], 20).unwrap();
+            let mut engine = GameEngine::new_with_default_decks(
+                tricerules_cards::registry::global(),
+                800_402,
+                &[0, 1],
+                20,
+            )
+            .unwrap();
             engine.state.players.push(PlayerState::new(2, 20));
             engine.state.opening = None;
             engine.state.turn_step = TurnStep::Main1;
@@ -6963,10 +7278,10 @@ mod attached_subject_tests {
                         chooser: PlayerRecipient::AffectedPlayer,
                         optional: false,
                         selection:
-                            tricerules_cards::primitives::ResolutionBranchSelection::FirstApplicable,
+                            tricerules_card_model::primitives::ResolutionBranchSelection::FirstApplicable,
                         branches: vec![branch(
                             "costed",
-                            ResolutionCost::Mana(tricerules_cards::ManaCost::parse("{1}").unwrap()),
+                            ResolutionCost::Mana(tricerules_card_model::ManaCost::parse("{1}").unwrap()),
                             10,
                         )],
                         otherwise: vec![SpellEffectKind::GainLife {
@@ -6995,7 +7310,13 @@ mod attached_subject_tests {
     fn payment_branch_fixture(
         cost: ResolutionCost,
     ) -> (GameEngine, Vec<ObjectId>, rv1::RuledEventBatch) {
-        let mut engine = GameEngine::new_with_default_decks(195_001, &[0, 1], 20).unwrap();
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            195_001,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
         engine.state.opening = None;
         engine.state.turn_step = TurnStep::Main1;
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
@@ -7013,14 +7334,14 @@ mod attached_subject_tests {
                     chooser: PlayerRecipient::Controller,
                     optional: true,
                     selection:
-                        tricerules_cards::primitives::ResolutionBranchSelection::PlayerChoice,
+                        tricerules_card_model::primitives::ResolutionBranchSelection::PlayerChoice,
                     branches: vec![ResolutionBranchDef {
-                        branch_id: tricerules_cards::ChoiceId::new("payment").unwrap(),
-                        presentation: tricerules_cards::AbilityPresentation::Fallback,
+                        branch_id: tricerules_card_model::ChoiceId::new("payment").unwrap(),
+                        presentation: tricerules_card_model::AbilityPresentation::Fallback,
                         runtime_fallback: None,
                         cost,
                         requirement:
-                            tricerules_cards::primitives::ResolutionBranchRequirement::Always,
+                            tricerules_card_model::primitives::ResolutionBranchRequirement::Always,
                         effects: vec![SpellEffectKind::GainLife {
                             amount: Amount::Fixed(1),
                         }],
@@ -7289,7 +7610,13 @@ mod attached_subject_tests {
 
     #[test]
     fn forced_resolution_branch_runs_its_tail_exactly_once() {
-        let mut engine = GameEngine::new_with_default_decks(142_102, &[0, 1], 20).expect("engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            142_102,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         let generation = engine
             .state
@@ -7299,22 +7626,22 @@ mod attached_subject_tests {
             .unwrap_or(0);
         let mut item = triggered_item(source, generation);
         item.triggered_ability = Some(TriggeredAbilityDef {
-            ability_id: tricerules_cards::AbilityId::new("triggered_01").unwrap(),
-            presentation: tricerules_cards::AbilityPresentation::Fallback,
+            ability_id: tricerules_card_model::AbilityId::new("triggered_01").unwrap(),
+            presentation: tricerules_card_model::AbilityPresentation::Fallback,
             trigger: TriggerCondition::WhenSelfEntersBattlefield,
             effect: vec![
                 SpellEffectKind::ChooseResolutionBranch {
                     chooser: PlayerRecipient::Controller,
                     optional: false,
                     selection:
-                        tricerules_cards::primitives::ResolutionBranchSelection::PlayerChoice,
+                        tricerules_card_model::primitives::ResolutionBranchSelection::PlayerChoice,
                     branches: vec![ResolutionBranchDef {
-                        branch_id: tricerules_cards::ChoiceId::new("branch_01").unwrap(),
-                        presentation: tricerules_cards::AbilityPresentation::Fallback,
+                        branch_id: tricerules_card_model::ChoiceId::new("branch_01").unwrap(),
+                        presentation: tricerules_card_model::AbilityPresentation::Fallback,
                         runtime_fallback: None,
                         cost: ResolutionCost::None,
                         requirement:
-                            tricerules_cards::primitives::ResolutionBranchRequirement::Always,
+                            tricerules_card_model::primitives::ResolutionBranchRequirement::Always,
                         effects: vec![SpellEffectKind::GainLife {
                             amount: Amount::Fixed(1),
                         }],
@@ -7352,7 +7679,13 @@ mod attached_subject_tests {
 
     #[test]
     fn first_applicable_resolution_branch_uses_authored_order_and_runs_its_tail_once() {
-        let mut engine = GameEngine::new_with_default_decks(116_102, &[0, 1], 20).expect("engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            116_102,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         let generation = engine
             .state
@@ -7362,22 +7695,22 @@ mod attached_subject_tests {
             .unwrap_or(0);
         let mut item = triggered_item(source, generation);
         item.triggered_ability = Some(TriggeredAbilityDef {
-            ability_id: tricerules_cards::AbilityId::new("triggered_01").unwrap(),
-            presentation: tricerules_cards::AbilityPresentation::Fallback,
+            ability_id: tricerules_card_model::AbilityId::new("triggered_01").unwrap(),
+            presentation: tricerules_card_model::AbilityPresentation::Fallback,
             trigger: TriggerCondition::WhenSelfEntersBattlefield,
             effect: vec![
                 SpellEffectKind::ChooseResolutionBranch {
                     chooser: PlayerRecipient::Controller,
                     optional: false,
                     selection:
-                        tricerules_cards::primitives::ResolutionBranchSelection::FirstApplicable,
+                        tricerules_card_model::primitives::ResolutionBranchSelection::FirstApplicable,
                     branches: vec![
                         ResolutionBranchDef {
-                            branch_id: tricerules_cards::ChoiceId::new("branch_01").unwrap(),
-                            presentation: tricerules_cards::AbilityPresentation::Fallback,
+                            branch_id: tricerules_card_model::ChoiceId::new("branch_01").unwrap(),
+                            presentation: tricerules_card_model::AbilityPresentation::Fallback,
                             runtime_fallback: None,
                             cost: ResolutionCost::None,
-                            requirement: tricerules_cards::primitives::ResolutionBranchRequirement::GameCondition(
+                            requirement: tricerules_card_model::primitives::ResolutionBranchRequirement::GameCondition(
                                 GameCondition::ActivePlayer {
                                     players: RelativePlayerSet::Controller,
                                 },
@@ -7387,12 +7720,12 @@ mod attached_subject_tests {
                             }],
                         },
                         ResolutionBranchDef {
-                            branch_id: tricerules_cards::ChoiceId::new("branch_02").unwrap(),
-                            presentation: tricerules_cards::AbilityPresentation::Fallback,
+                            branch_id: tricerules_card_model::ChoiceId::new("branch_02").unwrap(),
+                            presentation: tricerules_card_model::AbilityPresentation::Fallback,
                             runtime_fallback: None,
                             cost: ResolutionCost::None,
                             requirement:
-                                tricerules_cards::primitives::ResolutionBranchRequirement::Always,
+                                tricerules_card_model::primitives::ResolutionBranchRequirement::Always,
                             effects: vec![SpellEffectKind::GainLife {
                                 amount: Amount::Fixed(5),
                             }],
@@ -7431,7 +7764,13 @@ mod attached_subject_tests {
 
     #[test]
     fn optional_resolution_branch_with_no_legal_option_skips_to_the_tail() {
-        let mut engine = GameEngine::new_with_default_decks(142_103, &[0, 1], 20).expect("engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            142_103,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         let generation = engine
             .state
@@ -7441,22 +7780,22 @@ mod attached_subject_tests {
             .unwrap_or(0);
         let mut item = triggered_item(source, generation.saturating_add(1));
         item.triggered_ability = Some(TriggeredAbilityDef {
-            ability_id: tricerules_cards::AbilityId::new("triggered_01").unwrap(),
-            presentation: tricerules_cards::AbilityPresentation::Fallback,
+            ability_id: tricerules_card_model::AbilityId::new("triggered_01").unwrap(),
+            presentation: tricerules_card_model::AbilityPresentation::Fallback,
             trigger: TriggerCondition::WhenSelfEntersBattlefield,
             effect: vec![
                 SpellEffectKind::ChooseResolutionBranch {
                     chooser: PlayerRecipient::Controller,
                     optional: true,
                     selection:
-                        tricerules_cards::primitives::ResolutionBranchSelection::PlayerChoice,
+                        tricerules_card_model::primitives::ResolutionBranchSelection::PlayerChoice,
                     branches: vec![ResolutionBranchDef {
-                        branch_id: tricerules_cards::ChoiceId::new("branch_01").unwrap(),
-                        presentation: tricerules_cards::AbilityPresentation::Fallback,
+                        branch_id: tricerules_card_model::ChoiceId::new("branch_01").unwrap(),
+                        presentation: tricerules_card_model::AbilityPresentation::Fallback,
                         runtime_fallback: None,
                         cost: ResolutionCost::None,
                         requirement:
-                            tricerules_cards::primitives::ResolutionBranchRequirement::EffectsApplicable,
+                            tricerules_card_model::primitives::ResolutionBranchRequirement::EffectsApplicable,
                         effects: vec![SpellEffectKind::PutCounters {
                             counter: CounterKind::PlusOnePlusOne,
                             count: Amount::Fixed(1),
@@ -7498,8 +7837,15 @@ mod attached_subject_tests {
 
     #[test]
     fn issue_86_attacking_recipient_is_player_set_generic_and_distinct_from_controller() {
-        let mut engine =
-            GameEngine::new(86_107, &[10, 20], 20, None, true).expect("two-player engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            86_107,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .expect("two-player engine");
         engine.state.players.push(PlayerState::new(30, 20));
         let source = add_battlefield_object(&mut engine, 10, "capture_sphere");
         let attacker = add_battlefield_object(&mut engine, 30, "grizzly_bears");
@@ -7569,8 +7915,13 @@ mod source_keyword_tests {
         for left_and_returned in [false, true] {
             for prohibited in [false, true] {
                 for prevented in [0, 1, 3] {
-                    let mut engine =
-                        GameEngine::new_with_default_decks(15704, &[0, 1], 20).unwrap();
+                    let mut engine = GameEngine::new_with_default_decks(
+                        tricerules_cards::registry::global(),
+                        15704,
+                        &[0, 1],
+                        20,
+                    )
+                    .unwrap();
                     let source = add_three_toughness_creature(&mut engine, 0);
                     let target = add_three_toughness_creature(&mut engine, 1);
                     engine.state.continuous_effects.push(ContinuousEffect {
@@ -7763,7 +8114,13 @@ mod source_keyword_tests {
 
     #[test]
     fn source_keyword_lki_is_generation_scoped_across_leave_and_return() {
-        let mut engine = GameEngine::new_with_default_decks(7022, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            7022,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         let source = engine.state.next_object_id;
         engine.state.next_object_id += 2;
         engine.state.objects.insert(
@@ -7833,7 +8190,13 @@ mod source_keyword_tests {
 
     #[test]
     fn divided_damage_marks_every_damaged_creature_from_deathtouch_source() {
-        let mut engine = GameEngine::new_with_default_decks(7023, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            7023,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         let first = add_three_toughness_creature(&mut engine, 0);
         let second = add_three_toughness_creature(&mut engine, 1);
         let targets = vec![first, second];
@@ -7875,7 +8238,13 @@ mod source_keyword_tests {
 
     #[test]
     fn mass_damage_marks_every_damaged_creature_from_deathtouch_source() {
-        let mut engine = GameEngine::new_with_default_decks(7024, &[0, 1], 20).expect("new engine");
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            7024,
+            &[0, 1],
+            20,
+        )
+        .expect("new engine");
         let first = add_three_toughness_creature(&mut engine, 0);
         let second = add_three_toughness_creature(&mut engine, 1);
         let top = deathtouch_spell_item(0);

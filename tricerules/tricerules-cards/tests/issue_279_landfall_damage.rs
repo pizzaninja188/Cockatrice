@@ -1,13 +1,11 @@
 use tricerules_cards::primitives::{
     CastTriggerPlayer, PermanentEventFilter, PermanentTypeFilter, PlayerRecipient,
 };
-use tricerules_cards::{
-    AbilityPresentation, Amount, CardRegistry, Keyword, SpellEffectKind, TriggerCondition,
-};
+use tricerules_cards::{AbilityPresentation, Amount, Keyword, SpellEffectKind, TriggerCondition};
 
 #[test]
 fn issue_279_registers_exact_landfall_damage_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let sabotender = registry
         .get("sabotender")

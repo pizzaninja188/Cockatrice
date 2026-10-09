@@ -1,6 +1,6 @@
 //! Pentavus entry counters and two ordinary composite activation costs.
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, ContinuousEffectKind, CounterKind, EffectDuration, Keyword};
+use tricerules_cards::{ContinuousEffectKind, CounterKind, EffectDuration, Keyword};
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{
     cost_selection::Selection, ruled_command::Cmd, CostChoiceKind, CostSelection,
@@ -9,7 +9,15 @@ use tricerules_proto::ruled::v1::{
 
 fn cast_pentavus(seed: u64) -> (GameEngine, u32) {
     let deck = deck_with("forest", &[]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, Some(vec![deck; 2]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![deck; 2]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_card_into_hand(&mut engine, 0, "pentavus");
     let slot = hand_index_for_card(&engine, 0, "pentavus");
@@ -96,11 +104,21 @@ fn pentavites(engine: &GameEngine) -> Vec<u32> {
 #[test]
 fn pentavus_actual_cast_enters_as_five_five_with_five_counters() {
     assert!(
-        CardRegistry::global().get("pentavus").is_some(),
+        tricerules_cards::registry::global()
+            .get("pentavus")
+            .is_some(),
         "missing exact Pentavus"
     );
     let deck = deck_with("forest", &[]);
-    let mut engine = GameEngine::new(2026100101, &[10, 20], 20, Some(vec![deck; 2]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2026100101,
+        &[10, 20],
+        20,
+        Some(vec![deck; 2]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_card_into_hand(&mut engine, 0, "pentavus");
     let slot = hand_index_for_card(&engine, 0, "pentavus");

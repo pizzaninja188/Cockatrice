@@ -13,13 +13,13 @@ use tricerules_cards::primitives::{
     GameCondition, PermanentEventFilter, StaticAbilityDef, TargetFilter, TargetKind,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, Amount, CardRegistry, CastTriggerPlayer, Color, CounterKind,
-    Keyword, ManaCost, PermanentTypeFilter, SpellEffectKind, TriggerCondition,
+    AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, Color, CounterKind, Keyword,
+    ManaCost, PermanentTypeFilter, SpellEffectKind, TriggerCondition,
 };
 
 #[test]
 fn issue_352_registers_the_eight_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name) in [
         ("interjection", "Interjection"),
         ("spin_out", "Spin Out"),
@@ -40,7 +40,7 @@ fn issue_352_registers_the_eight_reviewed_identities() {
 
 #[test]
 fn issue_352_interjection_pumps_two_two_and_first_strike() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("interjection")
         .expect("Interjection");
     let face = definition.primary_face();
@@ -71,7 +71,9 @@ fn issue_352_interjection_pumps_two_two_and_first_strike() {
 
 #[test]
 fn issue_352_spin_out_destroys_a_creature_or_vehicle() {
-    let definition = CardRegistry::global().get("spin_out").expect("Spin Out");
+    let definition = tricerules_cards::registry::global()
+        .get("spin_out")
+        .expect("Spin Out");
     let face = definition.primary_face();
     assert_eq!(face.mana_cost.to_string(), "{1}{B}{B}");
     assert_eq!(face.types, ["Instant"]);
@@ -100,7 +102,7 @@ fn issue_352_spin_out_destroys_a_creature_or_vehicle() {
 
 #[test]
 fn issue_352_elvenkings_harper_makes_a_creature_unblockable() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("elvenkings_harper")
         .expect("Elvenking's Harper");
     let face = definition.primary_face();
@@ -145,7 +147,7 @@ fn issue_352_elvenkings_harper_makes_a_creature_unblockable() {
 
 #[test]
 fn issue_352_moonrise_cleric_keeps_flying_and_gains_one_on_attack() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("moonrise_cleric")
         .expect("Moonrise Cleric");
     let face = definition.primary_face();
@@ -179,7 +181,7 @@ fn issue_352_moonrise_cleric_keeps_flying_and_gains_one_on_attack() {
 
 #[test]
 fn issue_352_masked_meower_keeps_haste_and_the_discard_sacrifice_loot() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("masked_meower")
         .expect("Masked Meower");
     let face = definition.primary_face();
@@ -211,7 +213,7 @@ fn issue_352_masked_meower_keeps_haste_and_the_discard_sacrifice_loot() {
 
 #[test]
 fn issue_352_iron_shield_elf_discards_for_indestructible_and_taps() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("iron-shield_elf")
         .expect("Iron-Shield Elf");
     let face = definition.primary_face();
@@ -245,7 +247,7 @@ fn issue_352_iron_shield_elf_discards_for_indestructible_and_taps() {
 
 #[test]
 fn issue_352_east_wind_avatar_keeps_keywords_and_alliance_pump() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("east_wind_avatar")
         .expect("East Wind Avatar");
     let face = definition.primary_face();
@@ -288,7 +290,7 @@ fn issue_352_east_wind_avatar_keeps_keywords_and_alliance_pump() {
 
 #[test]
 fn issue_352_cackling_slasher_keeps_deathtouch_and_the_conditional_entry_counter() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("cackling_slasher")
         .expect("Cackling Slasher");
     let face = definition.primary_face();
@@ -324,7 +326,7 @@ fn issue_352_cackling_slasher_keeps_deathtouch_and_the_conditional_entry_counter
 
 #[test]
 fn issue_352_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     for (id, face_id) in [
         ("interjection", "interjection"),

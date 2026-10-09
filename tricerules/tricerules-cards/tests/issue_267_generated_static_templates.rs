@@ -3,7 +3,7 @@ use tricerules_cards::primitives::{
     GameCondition, GraveyardDestination, Keyword, PermanentTypeFilter, PlayerRecipient,
     RelativePlayerSet, SearchDestination, SpellEffectKind, StaticAbilityDef, TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
+use tricerules_cards::{AbilityPresentation, Layout};
 
 fn assert_oracle_lines(presentation: &AbilityPresentation, expected: &[u16]) {
     assert_eq!(
@@ -14,7 +14,7 @@ fn assert_oracle_lines(presentation: &AbilityPresentation, expected: &[u16]) {
 
 #[test]
 fn issue_267_registers_exactly_the_reviewed_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name) in [
         ("anthem_of_champions", "Anthem of Champions"),
         ("bearer_of_glory", "Bearer of Glory"),
@@ -48,7 +48,7 @@ fn issue_267_registers_exactly_the_reviewed_cohort() {
 
 #[test]
 fn issue_267_static_abilities_keep_typed_conditions_and_presentation() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (id, lines) in [
         ("bearer_of_glory", &[1]),
@@ -154,7 +154,7 @@ fn issue_267_static_abilities_keep_typed_conditions_and_presentation() {
 
 #[test]
 fn issue_267_trigger_and_spell_effects_keep_exact_filters_and_order() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let icetill = &registry
         .get("icetill_explorer")

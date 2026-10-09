@@ -38,9 +38,9 @@ impl GameEngine {
             .and_then(|card| card.face(item.face_index));
         let card_name = face.map(|face| face.name.clone()).unwrap_or_default();
         let ability = TriggeredAbilityDef {
-            ability_id: tricerules_cards::AbilityId::new("warp_exile")
+            ability_id: tricerules_card_model::AbilityId::new("warp_exile")
                 .expect("intrinsic ability id"),
-            presentation: tricerules_cards::AbilityPresentation::Fallback,
+            presentation: tricerules_card_model::AbilityPresentation::Fallback,
             trigger: TriggerCondition::AtBeginningOfNextEndStep,
             effect: vec![SpellEffectKind::ExileWarpedObject],
             modal: None,
@@ -168,6 +168,7 @@ mod tests {
         )
         .unwrap();
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             148,
             &[0, 1],
             20,

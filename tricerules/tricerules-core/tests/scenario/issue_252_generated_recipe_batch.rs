@@ -41,7 +41,15 @@ fn generated_synthoids_surveils_two_with_private_ordered_library_choice() {
         deck_with("island", &["a.i.m._synthoids"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(252_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        252_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let top = seat_on_top(&mut engine, 0, &["storm_crow", "grizzly_bears"]);
 
@@ -75,7 +83,15 @@ fn generated_synthoids_surveils_two_with_private_ordered_library_choice() {
 
 #[test]
 fn generated_buzz_bots_death_lki_draws_for_its_last_controller() {
-    let mut engine = GameEngine::new(252_002, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        252_002,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let bots = inject_creature_under_foreign_control(&mut engine, 0, 1, "buzz_bots");
     let p0_hand = engine.state.players[0].hand.len();
@@ -106,7 +122,15 @@ fn generated_vampire_spawn_uses_each_opponent_then_controller_life_effects() {
         deck_with("swamp", &["vampire_spawn"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(252_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        252_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     move_ready_to_battlefield(&mut engine, 0, "vampire_spawn");
@@ -125,7 +149,15 @@ fn generated_sanctifier_excludes_itself_opponents_and_noncreatures() {
         ),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(252_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        252_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     move_ready_to_battlefield(&mut engine, 0, "hinterland_sanctifier");
@@ -156,8 +188,15 @@ fn generated_druid_publishes_and_produces_each_colored_mana_option() {
         (3, [0, 0, 0, 1, 0]),
         (4, [0, 0, 0, 0, 1]),
     ] {
-        let mut engine =
-            GameEngine::new(252_100 + option as u64, &[0, 1], 20, None, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            252_100 + option as u64,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("engine");
         advance_to_main1_from_game_start(&mut engine);
         let druid = inject_creature_on_battlefield(&mut engine, 0, "great_forest_druid");
         let mut command = activate_ability_for(&engine, druid, 0, vec![]);
@@ -182,7 +221,15 @@ fn generated_druid_publishes_and_produces_each_colored_mana_option() {
         );
     }
 
-    let mut engine = GameEngine::new(252_200, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        252_200,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let druid = inject_creature_on_battlefield(&mut engine, 0, "great_forest_druid");
     let mut invalid = activate_ability_for(&engine, druid, 0, vec![]);

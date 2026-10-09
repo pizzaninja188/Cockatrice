@@ -10,6 +10,7 @@ fn war_room_engine(commanders: &[&str]) -> (GameEngine, u32) {
 
 fn war_room_engine_with_opponent(commanders: &[&str], opponent: &[&str]) -> (GameEngine, u32) {
     let mut engine = GameEngine::new_with_commander_decks(
+        tricerules_cards::registry::global(),
         510_001,
         &[0, 1],
         20,

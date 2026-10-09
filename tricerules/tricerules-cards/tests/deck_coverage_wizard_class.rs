@@ -1,11 +1,10 @@
 use tricerules_cards::{
-    primitives::StaticAbilityDef, CardRegistry, CastTriggerPlayer, Layout, ManaCost,
-    TriggerCondition,
+    primitives::StaticAbilityDef, CastTriggerPlayer, Layout, ManaCost, TriggerCondition,
 };
 
 #[test]
 fn wizard_class_is_registered_as_a_complete_card() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("wizard_class")
         .expect("Wizard Class needs a complete definition");
     assert_eq!(card.name, "Wizard Class");

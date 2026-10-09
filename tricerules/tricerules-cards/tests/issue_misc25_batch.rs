@@ -1,10 +1,10 @@
 //! Printed identity and complete ability-shape checks for five Standard entry/token cards.
 
-use tricerules_cards::{CardRegistry, Layout};
+use tricerules_cards::Layout;
 
 #[test]
 fn issue_misc25_batch_registers_five_exact_oracle_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, types, stats) in [
         (
             "news_helicopter",

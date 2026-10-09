@@ -8,11 +8,11 @@
 use tricerules_cards::primitives::{
     GameCondition, PlayerComparisonMetric, SpellEffectKind, TriggerCondition,
 };
-use tricerules_cards::{Amount, CardRegistry};
+use tricerules_cards::Amount;
 
 #[test]
 fn issue_490_registers_beza_as_a_complete_standard_identity() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let definition = registry
         .get("beza,_the_bounding_spring")
         .expect("Beza is registered");

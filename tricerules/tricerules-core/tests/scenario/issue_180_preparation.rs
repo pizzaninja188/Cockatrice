@@ -4,6 +4,7 @@ use tricerules_proto::ruled::v1 as rv1;
 
 fn prepared_healer() -> (GameEngine, u32) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         18002,
         &[0, 1],
         20,
@@ -58,7 +59,7 @@ fn preparation_logged_instructions_reprepare_once_and_invalidate_old_copy() {
     let (mut engine, permanent) = prepared_healer();
     let old_copy = engine.state.prepared_permanents[&permanent];
     let stale_cast = inset_cast(&mut engine, old_copy, 0);
-    let definition = tricerules_cards::CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("infirmary_healer_stream_of_life")
         .unwrap();
     let mut face = definition.primary_face().clone();
@@ -262,6 +263,7 @@ fn preparation_rejoinder_decline_still_draws_and_twofold_intent_pumps() {
 #[test]
 fn preparation_entry_creates_a_distinct_castable_exile_copy() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         18001,
         &[0, 1],
         20,

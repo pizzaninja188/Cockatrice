@@ -24,7 +24,15 @@ fn setup(seed: u64) -> GameEngine {
             "disenchant",
         ],
     );
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, Some(vec![deck; 2]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![deck; 2]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -778,7 +786,7 @@ fn boseiju_target_union_accepts_enchantment_nonbasic_and_basic_artifact_land() {
                 source_face_index: 0,
                 display_name: "Basic artifact land fixture".into(),
                 face: {
-                    let mut face = tricerules_cards::CardRegistry::global()
+                    let mut face = tricerules_cards::registry::global()
                         .get(card)
                         .unwrap()
                         .primary_face()

@@ -1,7 +1,7 @@
 //! One-shot cast observers share normal trigger ordering and the ordinary copy executor.
 use super::triggers::CollectedTrigger;
 use super::*;
-use tricerules_cards::{AbilityPresentation, SpellCastFilter};
+use tricerules_card_model::{AbilityPresentation, SpellCastFilter};
 
 impl GameEngine {
     pub(super) fn register_next_spell_copy(
@@ -25,7 +25,7 @@ impl GameEngine {
             controller_at_event: controller,
         };
         let ability = TriggeredAbilityDef {
-            ability_id: tricerules_cards::AbilityId::new("copy_next_spell")
+            ability_id: tricerules_card_model::AbilityId::new("copy_next_spell")
                 .expect("static ability id"),
             presentation: AbilityPresentation::Fallback,
             trigger: TriggerCondition::WheneverPlayerCastsSpell {

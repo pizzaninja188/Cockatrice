@@ -9,7 +9,15 @@ use tricerules_proto::ruled::v1::{ChooseTriggerTarget, TargetRef, TargetRefKind}
 
 fn setup() -> GameEngine {
     let deck = deck_with("island", &[]);
-    let mut engine = GameEngine::new(26_100_201, &[0, 1], 20, Some(vec![deck; 2]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        26_100_201,
+        &[0, 1],
+        20,
+        Some(vec![deck; 2]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -367,8 +375,15 @@ fn deepglow_skate_paid_cast_and_target_command_replay_identically() {
 #[test]
 fn deepglow_skate_three_nonconsecutive_players_use_published_permanent_ids() {
     let deck = deck_with("island", &[]);
-    let mut engine =
-        GameEngine::new(26_100_209, &[4, 9, 27], 20, Some(vec![deck; 3]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        26_100_209,
+        &[4, 9, 27],
+        20,
+        Some(vec![deck; 3]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let own = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let other = inject_creature_on_battlefield(&mut engine, 2, "hill_giant");

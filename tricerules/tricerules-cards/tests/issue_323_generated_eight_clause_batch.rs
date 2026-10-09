@@ -11,9 +11,7 @@ use tricerules_cards::primitives::{
     EffectSubject, PlayerRecipient, SearchDestination, SearchZoneSelection, SpellEffectKind,
     StackSpellFilter, StaticAbilityDef, TargetFilter, TargetGroupDef, TargetSchema, ZoneCardFilter,
 };
-use tricerules_cards::{
-    AbilityPresentation, Amount, CardRegistry, Color, Keyword, Layout, TriggerCondition,
-};
+use tricerules_cards::{AbilityPresentation, Amount, Color, Keyword, Layout, TriggerCondition};
 
 fn single_group(targeting: &tricerules_cards::primitives::TargetingDef) -> &TargetGroupDef {
     let [group] = targeting.groups.as_slice() else {
@@ -55,7 +53,7 @@ fn basic_land_search_effect() -> SpellEffectKind {
 
 #[test]
 fn issue_323_registers_the_eight_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_count, layout) in [
         ("day_of_judgment", "Day of Judgment", 1, Layout::Normal),
         ("itll_quench_ya!", "It'll Quench Ya!", 1, Layout::Normal),
@@ -93,7 +91,7 @@ fn issue_323_registers_the_eight_reviewed_identities() {
 
 #[test]
 fn issue_323_day_of_judgment_is_the_untargeted_mass_destroy() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("day_of_judgment")
         .expect("Day of Judgment");
     let face = definition.primary_face();
@@ -114,7 +112,7 @@ fn issue_323_day_of_judgment_is_the_untargeted_mass_destroy() {
 
 #[test]
 fn issue_323_itll_quench_ya_counters_unless_two_is_paid() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("itll_quench_ya!")
         .expect("It'll Quench Ya!");
     let face = definition.primary_face();
@@ -136,7 +134,7 @@ fn issue_323_itll_quench_ya_counters_unless_two_is_paid() {
 
 #[test]
 fn issue_323_twice_the_rage_grants_double_strike() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("two-headed_hunter_twice_the_rage")
         .expect("Two-Headed Hunter // Twice the Rage");
     assert_eq!(definition.layout, Layout::Adventure);
@@ -177,7 +175,7 @@ fn issue_323_twice_the_rage_grants_double_strike() {
 
 #[test]
 fn issue_323_ancestors_aid_pumps_and_creates_a_treasure() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("ancestors_aid")
         .expect("Ancestors' Aid");
     let face = definition.primary_face();
@@ -214,7 +212,7 @@ fn issue_323_ancestors_aid_pumps_and_creates_a_treasure() {
 
 #[test]
 fn issue_323_shared_roots_searches_a_tapped_basic_land() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("shared_roots")
         .expect("Shared Roots");
     let face = definition.primary_face();
@@ -228,7 +226,7 @@ fn issue_323_shared_roots_searches_a_tapped_basic_land() {
 
 #[test]
 fn issue_323_aggressive_mammoth_anthems_trample_to_other_creatures() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("aggressive_mammoth")
         .expect("Aggressive Mammoth");
     let face = definition.primary_face();
@@ -263,7 +261,7 @@ fn issue_323_aggressive_mammoth_anthems_trample_to_other_creatures() {
 
 #[test]
 fn issue_323_enter_the_enigma_makes_a_creature_unblockable_and_draws() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("enter_the_enigma")
         .expect("Enter the Enigma");
     let face = definition.primary_face();
@@ -300,7 +298,7 @@ fn issue_323_enter_the_enigma_makes_a_creature_unblockable_and_draws() {
 
 #[test]
 fn issue_323_professional_wrestler_keeps_treasure_and_max_one_blocker() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("professional_wrestler")
         .expect("Professional Wrestler");
     let face = definition.primary_face();
@@ -347,7 +345,7 @@ fn issue_323_professional_wrestler_keeps_treasure_and_max_one_blocker() {
 
 #[test]
 fn issue_323_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let cases: &[(&str, &str, &str, &str)] = &[
         (
             "day_of_judgment",

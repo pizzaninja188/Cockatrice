@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::CardTypeFilter;
-use tricerules_cards::{
-    Amount, CardRegistry, CountExpression, Keyword, RelativePlayerSet, SpellCostModifier,
-};
+use tricerules_cards::{Amount, CountExpression, Keyword, RelativePlayerSet, SpellCostModifier};
 
 #[test]
 fn ghalta_exact_printed_definition_and_generic_only_current_creature_power_cost() {
-    let card = CardRegistry::global().get("ghalta,_primal_hunger").unwrap();
+    let card = tricerules_cards::registry::global()
+        .get("ghalta,_primal_hunger")
+        .unwrap();
     let face = card.primary_face();
     assert_eq!(card.name, "Ghalta, Primal Hunger");
     assert_eq!(face.mana_cost.to_string(), "{10}{G}{G}");

@@ -3,7 +3,7 @@ use tricerules_cards::{AbilityPresentation, CardRegistry};
 
 #[test]
 fn myr_battlesphere_complete_definition_and_rules_named_token_are_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("myr_battlesphere").unwrap();
     assert_eq!(
         registry.id_for_name("Myr Battlesphere"),
@@ -61,7 +61,7 @@ fn myr_battlesphere_complete_definition_and_rules_named_token_are_exact() {
 
 #[test]
 fn myr_attack_consumer_rejects_missing_incompatible_and_wrong_trigger_producers() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let mut effects = registry
         .get("myr_battlesphere")
         .unwrap()

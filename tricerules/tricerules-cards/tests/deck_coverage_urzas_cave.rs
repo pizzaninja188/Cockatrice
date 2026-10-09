@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, CardTypeFilter, SearchDestination, SpellEffectKind,
     ZoneCardFilter,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
+use tricerules_cards::{AbilityPresentation, Layout};
 
 #[test]
 fn urzas_cave_registers_its_full_type_line_and_both_activated_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("urzas_cave").expect("Urza's Cave");
 
     assert_eq!(card.name, "Urza's Cave");

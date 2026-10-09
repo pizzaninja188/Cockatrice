@@ -10,6 +10,7 @@ use tricerules_proto::ruled::v1::{ruled_command::Cmd, CastCostGroupSelection};
 
 fn game() -> GameEngine {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         704_100,
         &[0, 1],
         20,

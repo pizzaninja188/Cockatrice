@@ -3,13 +3,29 @@ use tricerules_proto::ruled::v1::ruled_event::Ev;
 
 #[test]
 fn engine_new_two_players() {
-    let eng = GameEngine::new(12345, &[0, 1], 20, None, true).expect("engine");
+    let eng = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12345,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     assert_eq!(eng.state.players.len(), 2);
 }
 
 #[test]
 fn initial_batch_includes_card_catalog_then_zone_view_for_cockatrice() {
-    let mut eng = GameEngine::new(12345, &[0, 1], 20, None, true).expect("engine");
+    let mut eng = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12345,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     let b = eng.initial_response_batch();
     // Catalog first: Servatrice resolves the zone-view card ids through it.
     let e0 = b.events.first().expect("catalog is first");
@@ -63,7 +79,15 @@ fn library_ids_preserve_comma_bearing_card_ids() {
     let decks = Some(vec![deck.clone(), deck]);
     // skip_opening_sequence = false: opening draws happen only after the choose-first command, so
     // the whole deck is still in the library when the initial zone view is emitted.
-    let mut eng = GameEngine::new(1, &[0, 1], 20, decks, false).expect("engine");
+    let mut eng = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1,
+        &[0, 1],
+        20,
+        decks,
+        false,
+    )
+    .expect("engine");
     let b = eng.initial_response_batch();
     let zv = b
         .events

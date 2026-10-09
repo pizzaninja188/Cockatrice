@@ -13,11 +13,10 @@ use tricerules_cards::primitives::{
     PlayerRecipient, RelativePlayerSet, ResolutionBranchRequirement, ResolutionBranchSelection,
     SpellEffectKind, TargetSchema,
 };
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn rooftop_percher_allows_zero_targets_across_graveyards() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("rooftop_percher")
         .expect("Rooftop Percher is registered")
         .primary_face();
@@ -40,7 +39,7 @@ fn rooftop_percher_allows_zero_targets_across_graveyards() {
 
 #[test]
 fn soul_shackled_zombie_loses_life_only_when_a_creature_was_exiled() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("soul-shackled_zombie")
         .expect("Soul-Shackled Zombie is registered")
         .primary_face();

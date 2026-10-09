@@ -1,11 +1,10 @@
 use tricerules_cards::primitives::{
     EffectSubject, Keyword, SpellEffectKind, TargetController, TargetKind,
 };
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn issue_misc48_two_target_power_damage_spells_are_registered() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana) in [
         ("rabid_gnaw", "Rabid Gnaw", "{1}{R}"),
         ("diplomatic_relations", "Diplomatic Relations", "{2}{G}"),
@@ -24,7 +23,7 @@ fn issue_misc48_two_target_power_damage_spells_are_registered() {
 
 #[test]
 fn issue_misc48_maps_buffs_and_power_damage_to_the_same_creature_targets() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let gnaw = registry
         .get("rabid_gnaw")

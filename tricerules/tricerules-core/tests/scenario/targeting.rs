@@ -22,7 +22,15 @@ fn lightning_bolt_rejects_basic_land_target() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(1401, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1401,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(mountain_idx))
@@ -68,7 +76,15 @@ fn lightning_bolt_rejects_missing_target() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(1402, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1402,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(mountain_idx))
@@ -105,7 +121,15 @@ fn giant_growth_rejects_land_target() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(1403, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1403,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let forest_idx = hand_index_for_card(&e, 0, "forest");
     e.apply_command(0, &play_land(forest_idx))
@@ -144,7 +168,15 @@ fn giant_growth_fizzles_if_creature_target_dies_before_resolution() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(91021, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        91021,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -257,7 +289,15 @@ fn lightning_bolt_fizzles_when_creature_target_left_battlefield() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(91022, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        91022,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -343,7 +383,15 @@ fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(91023, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        91023,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -464,7 +512,15 @@ fn go_for_the_throat_rejects_artifact_creature_target() {
             "plains".into(),
         ],
     ]);
-    let mut e = GameEngine::new(3001, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        3001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Seed Ornithopter directly onto P1's battlefield (bypasses priority).
@@ -529,7 +585,15 @@ fn bump_in_the_night_rejects_creature_target() {
         ],
         forest_only_deck(),
     ]);
-    let mut e = GameEngine::new(2605, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2605,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     give_mana(
@@ -572,7 +636,15 @@ fn bump_in_the_night_rejects_self_target() {
         ],
         forest_only_deck(),
     ]);
-    let mut e = GameEngine::new(2615, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2615,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     give_mana(
         &mut e,
@@ -606,7 +678,15 @@ fn bump_in_the_night_can_be_cast_from_graveyard_with_flashback() {
         ],
         forest_only_deck(),
     ]);
-    let mut e = GameEngine::new(2625, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2625,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bump_oid = e.state.players[0]
         .hand
@@ -707,7 +787,15 @@ fn swords_to_plowshares_fizzles_if_target_dies_before_resolution() {
         ],
         forest_only_deck(),
     ]);
-    let mut e = GameEngine::new(2609, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2609,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     give_mana(
@@ -787,7 +875,15 @@ fn unsummon_rejects_land_target() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(2611, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2611,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let island_idx = hand_index_for_card(&e, 0, "island");
     e.apply_command(0, &play_land(island_idx))
@@ -826,7 +922,15 @@ fn unsummon_rejects_land_target() {
 fn mind_sculpt_rejects_self_target() {
     // Mind Sculpt is opponent-only in this build: casting at yourself is illegal at cast time.
     let decks = Some(vec![island_only_deck(), forest_only_deck()]);
-    let mut e = GameEngine::new(2616, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2616,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     give_mana(
         &mut e,
@@ -901,7 +1005,15 @@ fn hexproof_opponent_cannot_target_with_spell() {
         .collect();
     let p1_deck: Vec<String> = std::iter::repeat_n("mountain".into(), 14).collect();
     let decks = Some(vec![p0_deck, p1_deck]);
-    let mut e = GameEngine::new(9001, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Inject Gladecover Scout (1/1 hexproof) directly onto P1's battlefield.
@@ -957,7 +1069,15 @@ fn hexproof_controller_can_target_own_permanent() {
         .collect();
     let p1_deck: Vec<String> = std::iter::repeat_n("mountain".into(), 14).collect();
     let decks = Some(vec![p0_deck, p1_deck]);
-    let mut e = GameEngine::new(9002, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Inject Gladecover Scout (1/1 hexproof) directly onto P0's battlefield.
@@ -1018,7 +1138,15 @@ fn shroud_controller_cannot_target_own_permanent() {
         .collect();
     let p1_deck: Vec<String> = std::iter::repeat_n("mountain".into(), 14).collect();
     let decks = Some(vec![p0_deck, p1_deck]);
-    let mut e = GameEngine::new(9003, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Inject Argothian Enchantress (0/1 shroud) directly onto P0's battlefield.
@@ -1073,7 +1201,15 @@ fn royal_assassin_destroys_tapped_creature() {
         vec!["royal_assassin".into(); 20],
         vec!["grizzly_bears".into(); 20],
     ]);
-    let mut e = GameEngine::new(4201, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4201,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let assassin = deploy_to_battlefield(&mut e, 0, "royal_assassin", false);
@@ -1115,7 +1251,15 @@ fn royal_assassin_cannot_target_untapped_creature() {
         vec!["royal_assassin".into(); 20],
         vec!["grizzly_bears".into(); 20],
     ]);
-    let mut e = GameEngine::new(4202, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4202,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let assassin = deploy_to_battlefield(&mut e, 0, "royal_assassin", false);
@@ -1149,7 +1293,15 @@ fn icy_manipulator_cannot_target_an_enchantment() {
         deck_with("island", &["icy_manipulator", "holy_strength"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(2811, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2811,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let icy = relocate_to_battlefield(&mut e, 0, "icy_manipulator", false);
@@ -1207,7 +1359,15 @@ fn eyeblights_ending_cannot_target_an_elf() {
         deck_with("swamp", &["eyeblights_ending"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(2812, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2812,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let elf = inject_creature_on_battlefield(&mut e, 1, "cylian_elf");
@@ -1258,7 +1418,15 @@ fn eyeblights_ending_cannot_target_an_elf() {
 #[test]
 fn avacynian_priest_taps_only_non_humans() {
     let decks = Some(vec![deck_with("plains", &[]), deck_with("forest", &[])]);
-    let mut e = GameEngine::new(2813, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2813,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let priest = inject_creature_on_battlefield(&mut e, 0, "avacynian_priest");
@@ -1323,7 +1491,15 @@ fn published_zone_targets_follow_apnap_and_zone_order() {
         deck_with("swamp", &["lightning_bolt", "reanimate"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(2814, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2814,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let p0_battlefield = [
@@ -1396,7 +1572,15 @@ fn bladebrand_target_tables_exclude_objects_outside_the_battlefield() {
         deck_with("swamp", &["bladebrand", "lightning_bolt"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(2816, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2816,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -1477,7 +1661,15 @@ fn bladebrand_rejects_cast_targets_outside_the_battlefield() {
         deck_with("swamp", &["bladebrand", "lightning_bolt"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(2817, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2817,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -1564,7 +1756,15 @@ fn published_stack_targets_include_copies_in_bottom_to_top_order() {
         deck_with("island", &["lightning_bolt", "counterspell"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(2815, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2815,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let counterspell = relocate_to_hand(&mut e, 0, "counterspell");

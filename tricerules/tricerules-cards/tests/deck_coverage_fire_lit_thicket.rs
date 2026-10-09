@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{AbilityCost, ManaAmount, SpellEffectKind};
-use tricerules_cards::{AbilityPresentation, AbilitySourceZone, CardRegistry, ManaCost};
+use tricerules_cards::{AbilityPresentation, AbilitySourceZone, ManaCost};
 
 #[test]
 fn fire_lit_thicket_registers_both_mana_abilities_and_all_three_outputs() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("fire-lit_thicket")
         .expect("Fire-Lit Thicket registry definition");

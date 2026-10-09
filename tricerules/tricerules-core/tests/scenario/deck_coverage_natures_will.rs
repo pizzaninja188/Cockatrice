@@ -13,6 +13,7 @@ const ENDURING_CURIOSITY: &str = "enduring_curiosity";
 
 fn engine() -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         202_610_061,
         &[0, 1, 2, 3],
         20,

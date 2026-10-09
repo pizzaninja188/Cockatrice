@@ -3,7 +3,7 @@ use tricerules_cards::primitives::{
     SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
 };
 use tricerules_cards::{
-    AbilityCost, AbilitySourceZone, ActivationTiming, CardRegistry, Color, CounterKind, Keyword,
+    AbilityCost, AbilitySourceZone, ActivationTiming, Color, CounterKind, Keyword,
     SearchDestination, TriggerCondition,
 };
 
@@ -165,7 +165,7 @@ const COHORT: &[ExpectedCard] = &[
 
 #[test]
 fn issue_192_cohort_has_exact_oracle_characteristics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for expected in COHORT {
         let definition = registry
             .get(expected.id)
@@ -223,7 +223,7 @@ fn issue_192_cohort_has_exact_oracle_characteristics() {
 
 #[test]
 fn issue_192_tokens_have_exact_registry_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let mutagen = registry
         .get("mutagen")
         .expect("Mutagen token")
@@ -256,7 +256,7 @@ fn issue_192_tokens_have_exact_registry_definitions() {
 
 #[test]
 fn issue_192_uses_generic_trigger_combat_and_token_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let zog = registry
         .get("zog,_triceraton_castaway")
         .unwrap()
@@ -329,7 +329,7 @@ fn issue_192_uses_generic_trigger_combat_and_token_shapes() {
 
 #[test]
 fn issue_192_uses_generic_spell_equipment_and_turn_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let return_to_sewers = registry.get("return_to_the_sewers").unwrap().primary_face();
     assert!(matches!(
         return_to_sewers.spell_effect.as_slice(),

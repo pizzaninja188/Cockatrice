@@ -14,13 +14,13 @@ use tricerules_cards::primitives::{
     TargetFilter, TargetKind, TypeLineAddition,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, Amount, CardRegistry, CastTriggerPlayer, Color, CounterKind,
-    Keyword, ManaCost, PermanentTypeFilter, SpellEffectKind, TriggerCondition,
+    AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, Color, CounterKind, Keyword,
+    ManaCost, PermanentTypeFilter, SpellEffectKind, TriggerCondition,
 };
 
 #[test]
 fn issue_351_registers_the_eight_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name) in [
         ("pillar_launch", "Pillar Launch"),
         ("smaugs_fury", "Smaug's Fury"),
@@ -41,7 +41,7 @@ fn issue_351_registers_the_eight_reviewed_identities() {
 
 #[test]
 fn issue_351_pillar_launch_pumps_reach_and_untaps() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("pillar_launch")
         .expect("Pillar Launch");
     let face = definition.primary_face();
@@ -73,7 +73,7 @@ fn issue_351_pillar_launch_pumps_reach_and_untaps() {
 
 #[test]
 fn issue_351_smaugs_fury_pumps_reach_and_first_strike() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("smaugs_fury")
         .expect("Smaug's Fury");
     let face = definition.primary_face();
@@ -101,7 +101,7 @@ fn issue_351_smaugs_fury_pumps_reach_and_first_strike() {
 
 #[test]
 fn issue_351_agate_blade_assassin_drains_the_defender() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("agate-blade_assassin")
         .expect("Agate-Blade Assassin");
     let face = definition.primary_face();
@@ -140,7 +140,7 @@ fn issue_351_agate_blade_assassin_drains_the_defender() {
 
 #[test]
 fn issue_351_lecturing_scornmage_keeps_the_targeted_repartee() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("lecturing_scornmage")
         .expect("Lecturing Scornmage");
     let face = definition.primary_face();
@@ -182,7 +182,7 @@ fn issue_351_lecturing_scornmage_keeps_the_targeted_repartee() {
 
 #[test]
 fn issue_351_frog_butler_keeps_deathtouch_mana_and_reach() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("frog_butler")
         .expect("Frog Butler");
     let face = definition.primary_face();
@@ -221,7 +221,7 @@ fn issue_351_frog_butler_keeps_deathtouch_mana_and_reach() {
 
 #[test]
 fn issue_351_ragged_playmate_activates_the_unblockable_grant() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("ragged_playmate")
         .expect("Ragged Playmate");
     let face = definition.primary_face();
@@ -268,7 +268,7 @@ fn issue_351_ragged_playmate_activates_the_unblockable_grant() {
 
 #[test]
 fn issue_351_shefet_archfiend_keeps_flying_cycling_and_the_sweep() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("shefet_archfiend")
         .expect("Shefet Archfiend");
     let face = definition.primary_face();
@@ -316,7 +316,7 @@ fn issue_351_shefet_archfiend_keeps_flying_cycling_and_the_sweep() {
 
 #[test]
 fn issue_351_gravblade_heavy_keeps_the_artifact_condition() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("gravblade_heavy")
         .expect("Gravblade Heavy");
     let face = definition.primary_face();
@@ -369,7 +369,7 @@ fn issue_351_gravblade_heavy_keeps_the_artifact_condition() {
 
 #[test]
 fn issue_351_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     for (id, face_id) in [
         ("pillar_launch", "pillar_launch"),

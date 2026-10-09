@@ -1,11 +1,10 @@
 use tricerules_cards::primitives::{
     Color, ProtectionCardType, ProtectionGrant, ProtectionQuality, SpellEffectKind,
 };
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn issue_80_calibration_cards_are_registered() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for card_id in [
         "feat_of_resistance",
@@ -22,7 +21,7 @@ fn issue_80_calibration_cards_are_registered() {
 
 #[test]
 fn protection_cards_author_fixed_and_chosen_qualities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let feat = registry.get("feat_of_resistance").expect("Feat");
     assert!(matches!(
         &feat.primary_face().spell_effect[1],

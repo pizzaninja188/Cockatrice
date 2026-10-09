@@ -6,12 +6,12 @@ use tricerules_cards::primitives::{
     CardTypeFilter, ContinuousEffectKind, CounterKind, EffectDuration, GraveyardFilter,
     SpellEffectKind, TriggerCondition, TriggeredAbilityDef, ZoneCardFilter,
 };
-use tricerules_cards::CardRegistry;
 use tricerules_core::state::PendingTrigger;
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 
 fn issue_176_engine(cards: &[&str]) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         176_100,
         &[0, 1],
         20,
@@ -429,7 +429,7 @@ fn published_hand_targets(engine: &mut GameEngine, player: i32, card_id: &str) -
 }
 
 fn graveyard_fixture_ability(filter: GraveyardFilter) -> TriggeredAbilityDef {
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("gravedigger")
         .expect("Gravedigger definition")
         .primary_face()
@@ -491,7 +491,15 @@ fn publish_graveyard_fixture(engine: &mut GameEngine, filter: GraveyardFilter) -
 #[test]
 fn issue_198_shared_predicate_publishes_and_resolves_searches_and_graveyard_targets() {
     for search in [false, true] {
-        let mut engine = GameEngine::new(198_114, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            198_114,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         advance_to_main1_from_game_start(&mut engine);
         let inject = if search {
             inject_library_card
@@ -529,7 +537,7 @@ fn issue_198_shared_predicate_publishes_and_resolves_searches_and_graveyard_targ
         });
         ability.may = false;
         if search {
-            let mut effect = CardRegistry::global()
+            let mut effect = tricerules_cards::registry::global()
                 .get("demonic_tutor")
                 .unwrap()
                 .primary_face()
@@ -606,7 +614,15 @@ fn cards_publish_the_exact_union_of_recursive_branches_without_duplicates() {
         deck_with("plains", &["make_your_move", "broken_wings"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(114_001, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        114_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let artifact = inject_permanent_on_battlefield(&mut engine, 1, "short_sword");
@@ -672,7 +688,15 @@ fn forged_nonmatching_target_is_rejected_before_mana_or_card_movement() {
         deck_with("plains", &["make_your_move"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(114_002, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        114_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let illegal = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     ensure_in_hand(&mut engine, 0, "make_your_move");
@@ -721,7 +745,15 @@ fn power_branch_is_revalidated_against_current_derived_power() {
         deck_with("plains", &["make_your_move"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(114_003, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        114_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     engine
@@ -763,8 +795,15 @@ fn power_branch_is_revalidated_against_current_derived_power() {
 
 #[test]
 fn graveyard_or_and_exclusion_fixtures_publish_and_revalidate_exact_candidates() {
-    let mut say_engine =
-        GameEngine::new(114_004, &[0, 1], 20, None, true).expect("Say Its Name fixture");
+    let mut say_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        114_004,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("Say Its Name fixture");
     advance_to_main1_from_game_start(&mut say_engine);
     let creature = inject_graveyard_card(&mut say_engine, 0, "grizzly_bears");
     let land = inject_graveyard_card(&mut say_engine, 0, "forest");
@@ -790,8 +829,15 @@ fn graveyard_or_and_exclusion_fixtures_publish_and_revalidate_exact_candidates()
     );
     assert_eq!(candidates, vec![creature, land]);
 
-    let mut messenger_engine =
-        GameEngine::new(114_005, &[0, 1], 20, None, true).expect("Messenger fixture");
+    let mut messenger_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        114_005,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("Messenger fixture");
     advance_to_main1_from_game_start(&mut messenger_engine);
     inject_graveyard_card(&mut messenger_engine, 0, "grizzly_bears");
     inject_graveyard_card(&mut messenger_engine, 0, "forest");
@@ -840,7 +886,15 @@ fn battlefield_target_generation_is_revalidated_through_the_recursive_filter() {
         deck_with("forest", &["broken_wings"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(114_006, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        114_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let target = inject_creature_on_battlefield(&mut engine, 1, "wind_drake");
     ensure_in_hand(&mut engine, 0, "broken_wings");

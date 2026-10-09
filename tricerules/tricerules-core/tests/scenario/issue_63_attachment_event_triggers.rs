@@ -23,7 +23,15 @@ fn issue_63_heart_piercer_bow_targets_only_the_defending_players_creature() {
         deck_with("mountain", &["heart-piercer_bow"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(6301, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6301,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut engine);
 
     let attacker = engine.state.players[0]
@@ -69,8 +77,15 @@ fn issue_63_bow_requires_the_event_attachment_and_revalidates_defender_control()
         ])
     };
 
-    let mut unattached_engine =
-        GameEngine::new(6308, &[0, 1], 20, decks(), true).expect("unattached engine");
+    let mut unattached_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6308,
+        &[0, 1],
+        20,
+        decks(),
+        true,
+    )
+    .expect("unattached engine");
     advance_to_declare_attackers(&mut unattached_engine);
     let unattached_attacker = unattached_engine.state.players[0]
         .battlefield
@@ -87,8 +102,15 @@ fn issue_63_bow_requires_the_event_attachment_and_revalidates_defender_control()
         "an unattached Bow does not observe the attack"
     );
 
-    let mut stale_engine =
-        GameEngine::new(6309, &[0, 1], 20, decks(), true).expect("stale-target engine");
+    let mut stale_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6309,
+        &[0, 1],
+        20,
+        decks(),
+        true,
+    )
+    .expect("stale-target engine");
     advance_to_declare_attackers(&mut stale_engine);
     let attacker = stale_engine.state.players[0]
         .battlefield
@@ -131,7 +153,15 @@ fn issue_63_unholy_indenture_returns_the_exact_card_with_an_entry_counter() {
         deck_with("swamp", &["unholy_indenture"]),
         deck_with("forest", &["squad_captain"]),
     ]);
-    let mut engine = GameEngine::new(6302, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6302,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let indenture = relocate_to_battlefield(&mut engine, 0, "unholy_indenture", false);
@@ -187,7 +217,15 @@ fn issue_63_multiple_attachment_triggers_keep_apnap_and_attachment_identity() {
         ),
         deck_with("forest", &["unholy_indenture", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(6304, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6304,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut engine);
 
     let attacker = engine.state.players[0]
@@ -217,6 +255,7 @@ fn issue_63_multiple_attachment_triggers_keep_apnap_and_attachment_identity() {
     );
 
     let mut death_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         6305,
         &[0, 1],
         20,
@@ -269,6 +308,7 @@ fn issue_63_multiple_attachment_triggers_keep_apnap_and_attachment_identity() {
 fn issue_63_unholy_indenture_rejects_tokens_and_stale_graveyard_generations() {
     let make_engine = |seed| {
         GameEngine::new(
+            tricerules_cards::registry::global(),
             seed,
             &[0, 1],
             20,

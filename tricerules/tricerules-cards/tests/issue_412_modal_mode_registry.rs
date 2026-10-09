@@ -14,10 +14,10 @@ use tricerules_cards::primitives::{
     ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient, SpellEffectKind,
     StackSpellFilter, TargetController, TargetFilter, TargetKind, TargetSchema,
 };
-use tricerules_cards::{Amount, CardRegistry, CounterKind, Keyword, ModalDef, TriggerCondition};
+use tricerules_cards::{Amount, CounterKind, Keyword, ModalDef, TriggerCondition};
 
 fn modal(card_id: &str) -> ModalDef {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("{card_id} is registered"))
         .primary_face()
@@ -27,7 +27,7 @@ fn modal(card_id: &str) -> ModalDef {
 }
 
 fn triggered_modal(card_id: &str) -> ModalDef {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("{card_id} is registered"));
     let [ability] = definition.primary_face().triggered_abilities.as_slice() else {
@@ -324,7 +324,7 @@ fn issue_412_teamwork_modal_spells_expose_the_cost_and_both_mode_allowance() {
             },
         ),
     ] {
-        let definition = CardRegistry::global()
+        let definition = tricerules_cards::registry::global()
             .get(card_id)
             .unwrap_or_else(|| panic!("{card_id} is registered"));
         let face = definition.primary_face();
@@ -366,7 +366,7 @@ fn issue_412_teamwork_modal_spells_expose_the_cost_and_both_mode_allowance() {
 #[test]
 fn issue_412_etb_modal_creatures_expose_the_triggered_mode_structure() {
     assert_eq!(
-        CardRegistry::global()
+        tricerules_cards::registry::global()
             .get("coliseum_behemoth")
             .expect("Coliseum Behemoth")
             .primary_face()
@@ -399,7 +399,7 @@ fn issue_412_etb_modal_creatures_expose_the_triggered_mode_structure() {
     assert_modal_schema("coliseum_behemoth", &coliseum);
 
     assert_eq!(
-        CardRegistry::global()
+        tricerules_cards::registry::global()
             .get("fangkeepers_familiar")
             .expect("Fangkeeper's Familiar")
             .primary_face()

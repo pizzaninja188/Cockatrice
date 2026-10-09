@@ -2,13 +2,13 @@ use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, CastTriggerPlayer, CounterRemovalPaymentSource, EffectSubject,
     PlayerRecipient, SpellEffectKind, TriggerCondition,
 };
-use tricerules_cards::{CardRegistry, Color};
+use tricerules_cards::Color;
 
 const KRAKEN_TOKEN: &str = "kraken_token_8_8";
 
 #[test]
 fn ominous_seas_registers_draw_foreshadow_cycling_and_kraken_activation() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("ominous_seas").expect("Ominous Seas");
     let face = card.primary_face();
     assert_eq!(face.name, "Ominous Seas");

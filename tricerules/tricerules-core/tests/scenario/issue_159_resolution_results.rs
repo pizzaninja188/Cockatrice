@@ -27,6 +27,7 @@ fn select_branch(index: u32) -> RuledCommand {
 
 fn setup_divert(seed: u64, payable: bool) -> (GameEngine, u32) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -194,6 +195,7 @@ fn resolve_targeted_spell(engine: &mut GameEngine, caster: i32, card_id: &str, t
 #[test]
 fn issue_159_depressurize_rechecks_the_same_targets_current_power() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         159_003,
         &[0, 1],
         20,
@@ -236,6 +238,7 @@ fn issue_159_depressurize_rechecks_the_same_targets_current_power() {
 #[test]
 fn issue_159_yip_yip_does_not_narrow_initial_target_legality() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         159_004,
         &[0, 1],
         20,
@@ -275,6 +278,7 @@ fn issue_159_yip_yip_does_not_narrow_initial_target_legality() {
 #[test]
 fn issue_159_midnight_tilling_offers_only_surviving_cards_milled_this_way() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         159_005,
         &[0, 1],
         20,
@@ -352,6 +356,7 @@ fn cast_blight(object_id: u32, generation: u64) -> CastCostGroupSelection {
 fn issue_159_burning_curiosity_uses_one_group_for_the_exact_two_or_three_cards() {
     for paid in [false, true] {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             159_006 + u64::from(paid),
             &[0, 1],
             20,
@@ -417,6 +422,7 @@ fn issue_159_burning_curiosity_uses_one_group_for_the_exact_two_or_three_cards()
 #[test]
 fn issue_159_lost_days_owner_places_the_exact_target_second_from_top() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         159_008,
         &[0, 1],
         20,
@@ -489,6 +495,7 @@ fn kicker_option() -> CastCostGroupSelection {
 fn issue_159_aangs_journey_enables_only_the_receipt_backed_search_slots() {
     for kicked in [false, true] {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             159_009 + u64::from(kicked),
             &[0, 1],
             20,
@@ -551,6 +558,7 @@ fn issue_159_aangs_journey_enables_only_the_receipt_backed_search_slots() {
 #[test]
 fn issue_159_library_search_rejects_a_stale_slot_candidate_atomically() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         159_011,
         &[0, 1],
         20,

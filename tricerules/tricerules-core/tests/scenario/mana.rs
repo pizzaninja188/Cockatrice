@@ -15,7 +15,15 @@ fn special_action_payment_fixture_for_players(
 ) -> (GameEngine, u32, ExecutePermanentAction) {
     // Session creation is currently two-seat-only; extend the state like existing multiplayer
     // scenarios, without widening session creation as part of this payment change.
-    let mut engine = GameEngine::new(129_001, &players[..2], 20, None, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        129_001,
+        &players[..2],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     while engine.state.turn_step != tricerules_core::TurnStep::Main1 {
         engine
             .apply_command(engine.state.priority_player_id(), &pass())
@@ -448,7 +456,15 @@ fn mana_ability_taps_land_and_fills_pool() {
         },
         vec!["forest".into(); 12],
     ]);
-    let mut e = GameEngine::new(7, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
@@ -501,7 +517,15 @@ fn mana_ability_taps_land_and_fills_pool() {
 /// activation in the same turn is illegal and produces no extra mana.
 #[test]
 fn cannot_activate_mana_ability_when_already_tapped() {
-    let mut e = GameEngine::new(8, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let land = inject_permanent_on_battlefield(&mut e, 0, "mountain");
     e.apply_command(0, &activate_ability(land, 0, vec![]))
@@ -523,7 +547,15 @@ fn cannot_activate_mana_ability_when_already_tapped() {
 /// Illegal result, so paying the {4} first and then failing the tap would burn the player's pool.
 #[test]
 fn tap_and_mana_ability_rejected_when_tapped_leaves_pool_intact() {
-    let mut e = GameEngine::new(11, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let tome = inject_permanent_on_battlefield(&mut e, 0, "jayemdae_tome");
     // Source already tapped (e.g. used earlier this turn); the player has the {4} ready in pool.
@@ -548,7 +580,15 @@ fn tap_and_mana_ability_rejected_when_tapped_leaves_pool_intact() {
 /// put on the stack; a failed tap precondition must leave both the mana and permanent untouched.
 #[test]
 fn composite_mana_tap_sacrifice_cost_is_atomic() {
-    let mut e = GameEngine::new(52, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        52,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let apparatus = inject_permanent_on_battlefield(&mut e, 0, "explosive_apparatus");
     e.state.objects.get_mut(&apparatus).unwrap().tapped = true;
@@ -569,7 +609,15 @@ fn composite_mana_tap_sacrifice_cost_is_atomic() {
 /// the controller's `LegalActions` advertises the undoable count.
 #[test]
 fn undo_mana_ability_untaps_source_and_removes_float() {
-    let mut e = GameEngine::new(31, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        31,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let land = inject_permanent_on_battlefield(&mut e, 0, "mountain");
 
@@ -621,7 +669,15 @@ fn undo_mana_ability_cleared_once_float_is_spent() {
         },
         vec!["forest".into(); 12],
     ]);
-    let mut e = GameEngine::new(13, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        13,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(mountain_idx))
@@ -646,7 +702,15 @@ fn undo_mana_ability_cleared_once_float_is_spent() {
 /// is dropped: the floated mana stays in the pool but can no longer be rewound.
 #[test]
 fn undo_mana_ability_cleared_by_passing_priority() {
-    let mut e = GameEngine::new(14, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        14,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let land = inject_permanent_on_battlefield(&mut e, 0, "mountain");
     e.apply_command(0, &activate_ability(land, 0, vec![]))
@@ -672,7 +736,15 @@ fn undo_mana_ability_cleared_by_passing_priority() {
 /// additional creatures cross the four-creature threshold and replace {G} with {G}{G}.
 #[test]
 fn leafkin_druid_uses_live_creature_count_for_mana_output() {
-    let mut e = GameEngine::new(5501, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5501,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let leafkin = inject_permanent_on_battlefield(&mut e, 0, "leafkin_druid");
 
@@ -695,7 +767,15 @@ fn leafkin_druid_uses_live_creature_count_for_mana_output() {
 /// spell. An illegal mixed payment is atomic.
 #[test]
 fn embercat_restricted_mana_requires_matching_explicit_payment() {
-    let mut e = GameEngine::new(5502, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5502,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let embercat = inject_permanent_on_battlefield(&mut e, 0, "chandras_embercat");
 
@@ -769,7 +849,15 @@ fn embercat_restricted_mana_requires_matching_explicit_payment() {
 /// the same printed mana value.
 #[test]
 fn vodalian_arcanist_colorless_mana_only_pays_for_instant_or_sorcery_spells() {
-    let mut e = GameEngine::new(5503, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5503,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let arcanist = inject_permanent_on_battlefield(&mut e, 0, "vodalian_arcanist");
     let produced = e
@@ -830,7 +918,15 @@ fn vodalian_arcanist_colorless_mana_only_pays_for_instant_or_sorcery_spells() {
 /// option the player chose via `mana_option_index`; an out-of-range index is rejected.
 #[test]
 fn dual_land_produces_chosen_color_option() {
-    let mut e = GameEngine::new(9, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Option index 1 is {U}.
@@ -879,7 +975,15 @@ fn cast_1u_creature_pays_from_mana_pool_without_tapping_extra_island() {
         ],
         vec!["mountain".into(); 7],
     ]);
-    let mut e = GameEngine::new(202, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        202,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Two islands + mountain on the battlefield (no land drop this turn).
@@ -951,7 +1055,15 @@ fn cast_grizzly_bears_resolves_to_battlefield_and_taps_two_forests() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(22, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        22,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Simulate one untapped Forest that was played on a previous turn.
@@ -1028,7 +1140,15 @@ fn hybrid_creature_castable_with_either_color() {
             ],
             vec!["forest".into(); 7],
         ]);
-        let mut e = GameEngine::new(71, &[0, 1], 20, decks, true).expect("new");
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            71,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
         advance_to_main1_from_game_start(&mut e);
 
         // Add exactly one R (first run) or one W (second run) — the {R/W} pip takes whichever.
@@ -1070,7 +1190,15 @@ fn mono_hybrid_flame_javelin_paid_with_generic() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(72, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        72,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Six generic (colorless) mana covers three {2/R} pips at two generic each.
@@ -1108,7 +1236,15 @@ fn phyrexian_mutagenic_growth_paid_with_life() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(73, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        73,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");

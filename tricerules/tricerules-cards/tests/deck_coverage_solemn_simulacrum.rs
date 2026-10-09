@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     Amount, CardTypeFilter, PlayerRecipient, SearchDestination, SpellEffectKind, TriggerCondition,
     ZoneCardFilter,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
+use tricerules_cards::{AbilityPresentation, Layout};
 
 #[test]
 fn solemn_simulacrum_registers_both_optional_triggered_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("solemn_simulacrum")
         .expect("Solemn Simulacrum registry definition");

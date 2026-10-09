@@ -12,8 +12,8 @@ use tricerules_cards::primitives::{
     RelativePlayerSet, StaticAbilityDef, TargetFilter, TargetKind,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, Amount, CardRegistry, CastTriggerPlayer, Color, Keyword,
-    Layout, ManaAmount, SpellEffectKind, TriggerCondition,
+    AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, Color, Keyword, Layout,
+    ManaAmount, SpellEffectKind, TriggerCondition,
 };
 
 const ISSUE_333_CARDS: &[(&str, &str)] = &[
@@ -67,7 +67,7 @@ fn any_one_color_options(per_color: u32) -> Vec<ManaAmount> {
 
 #[test]
 fn issue_333_registers_the_six_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name) in ISSUE_333_CARDS {
         let definition = registry
             .get(id)
@@ -82,7 +82,9 @@ fn issue_333_registers_the_six_reviewed_identities() {
 
 #[test]
 fn issue_333_pilfer_targets_an_opponent_for_a_public_nonland_discard() {
-    let definition = CardRegistry::global().get("pilfer").expect("Pilfer");
+    let definition = tricerules_cards::registry::global()
+        .get("pilfer")
+        .expect("Pilfer");
     let face = definition.primary_face();
     assert_eq!(face.mana_cost.to_string(), "{1}{B}");
     assert_eq!(face.types, ["Sorcery"]);
@@ -117,7 +119,7 @@ fn issue_333_pilfer_targets_an_opponent_for_a_public_nonland_discard() {
 
 #[test]
 fn issue_333_eumidian_terrabotanist_gains_one_life_on_a_controlled_land_entry() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("eumidian_terrabotanist")
         .expect("Eumidian Terrabotanist");
     let face = definition.primary_face();
@@ -157,7 +159,7 @@ fn issue_333_eumidian_terrabotanist_gains_one_life_on_a_controlled_land_entry() 
 
 #[test]
 fn issue_333_loporrit_scout_pumps_itself_for_another_creature_entry() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("loporrit_scout")
         .expect("Loporrit Scout");
     let face = definition.primary_face();
@@ -199,7 +201,7 @@ fn issue_333_loporrit_scout_pumps_itself_for_another_creature_entry() {
 
 #[test]
 fn issue_333_transdimensional_bovine_taps_for_two_mana_of_any_one_color() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("transdimensional_bovine")
         .expect("Transdimensional Bovine");
     let face = definition.primary_face();
@@ -232,7 +234,7 @@ fn issue_333_transdimensional_bovine_taps_for_two_mana_of_any_one_color() {
 
 #[test]
 fn issue_333_gilded_lotus_taps_for_three_mana_of_any_one_color() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("gilded_lotus")
         .expect("Gilded Lotus");
     let face = definition.primary_face();
@@ -262,7 +264,7 @@ fn issue_333_gilded_lotus_taps_for_three_mana_of_any_one_color() {
 
 #[test]
 fn issue_333_guidelight_synergist_scales_power_with_its_artifacts() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("guidelight_synergist")
         .expect("Guidelight Synergist");
     let face = definition.primary_face();
@@ -293,7 +295,7 @@ fn issue_333_guidelight_synergist_scales_power_with_its_artifacts() {
 
 #[test]
 fn issue_333_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     for (id, card_name) in ISSUE_333_CARDS {
         let presentation = registry

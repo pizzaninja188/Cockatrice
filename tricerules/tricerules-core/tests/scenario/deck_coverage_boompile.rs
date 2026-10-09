@@ -3,7 +3,7 @@
 use super::helpers::*;
 use rand::{Rng, SeedableRng};
 use tricerules_cards::primitives::{AbilityCost, CounterKind, SpellEffectKind};
-use tricerules_cards::{CardRegistry, ManaCost};
+use tricerules_cards::ManaCost;
 use tricerules_core::{GameEngine, Zone};
 
 const BOOMPILE: &str = "boompile";
@@ -11,15 +11,22 @@ const BOOMPILE_RANDOM_DOMAIN: u64 = 0x424F_4F4D_5049_4C45;
 
 fn engine(seed: u64) -> GameEngine {
     let deck = deck_with("forest", &[]);
-    let mut engine =
-        GameEngine::new(seed, &[0, 1], 20, Some(vec![deck.clone(), deck]), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![deck.clone(), deck]),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
 
 #[test]
 fn boompile_has_a_complete_card_definition() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get(BOOMPILE)
         .expect("Boompile needs a complete definition");
     assert_eq!(card.face_count(), 1);

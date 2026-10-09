@@ -7,7 +7,15 @@ fn engine(seed: u64) -> GameEngine {
         std::iter::repeat_n("forest".to_string(), 20).collect(),
         std::iter::repeat_n("island".to_string(), 20).collect(),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     for player in 0..2 {
         let cleared: Vec<_> = engine.state.players[player].hand.drain(..).collect();

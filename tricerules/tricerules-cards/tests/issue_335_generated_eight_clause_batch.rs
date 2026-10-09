@@ -14,8 +14,8 @@ use tricerules_cards::primitives::{
     TargetKind,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, Amount, CardRegistry, CastTriggerPlayer, Color, CounterKind,
-    Keyword, Layout, ManaAmount, ManaCost, SpellEffectKind, TriggerCondition,
+    AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, Color, CounterKind, Keyword,
+    Layout, ManaAmount, ManaCost, SpellEffectKind, TriggerCondition,
 };
 
 const ISSUE_335_CARDS: &[(&str, &str, &str)] = &[
@@ -35,7 +35,7 @@ const ISSUE_335_CARDS: &[(&str, &str, &str)] = &[
 
 #[test]
 fn issue_335_registers_the_eight_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id) in ISSUE_335_CARDS {
         let definition = registry
             .get(id)
@@ -50,7 +50,7 @@ fn issue_335_registers_the_eight_reviewed_identities() {
 
 #[test]
 fn issue_335_pulse_tracker_drains_each_opponent_on_attack() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("pulse_tracker")
         .expect("Pulse Tracker");
     let face = definition.primary_face();
@@ -89,7 +89,7 @@ fn issue_335_pulse_tracker_drains_each_opponent_on_attack() {
 
 #[test]
 fn issue_335_grasping_longneck_gains_two_life_when_it_dies() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("grasping_longneck")
         .expect("Grasping Longneck");
     let face = definition.primary_face();
@@ -122,7 +122,7 @@ fn issue_335_grasping_longneck_gains_two_life_when_it_dies() {
 
 #[test]
 fn issue_335_bogwater_lumaret_gains_one_life_for_inclusive_creature_entries() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("bogwater_lumaret")
         .expect("Bogwater Lumaret");
     let face = definition.primary_face();
@@ -169,7 +169,7 @@ fn issue_335_bogwater_lumaret_gains_one_life_for_inclusive_creature_entries() {
 
 #[test]
 fn issue_335_angelic_edict_exiles_a_creature_or_enchantment_union() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("angelic_edict")
         .expect("Angelic Edict");
     let face = definition.primary_face();
@@ -200,7 +200,7 @@ fn issue_335_angelic_edict_exiles_a_creature_or_enchantment_union() {
 
 #[test]
 fn issue_335_adventurers_inn_gains_two_life_on_its_own_entry() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("adventurers_inn")
         .expect("Adventurer's Inn");
     let face = definition.primary_face();
@@ -251,7 +251,7 @@ fn issue_335_adventurers_inn_gains_two_life_on_its_own_entry() {
 
 #[test]
 fn issue_335_drix_fatemaker_keeps_its_warp_counter_and_counter_filtered_anthem() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("drix_fatemaker")
         .expect("Drix Fatemaker");
     let face = definition.primary_face();
@@ -316,7 +316,9 @@ fn issue_335_drix_fatemaker_keeps_its_warp_counter_and_counter_filtered_anthem()
 
 #[test]
 fn issue_335_attercop_keeps_reach_deathtouch_and_landfall_pump() {
-    let definition = CardRegistry::global().get("attercop").expect("Attercop");
+    let definition = tricerules_cards::registry::global()
+        .get("attercop")
+        .expect("Attercop");
     let face = definition.primary_face();
     assert_eq!(face.mana_cost.to_string(), "{1}{G}");
     assert_eq!(face.types, ["Creature", "Spider"]);
@@ -359,7 +361,7 @@ fn issue_335_attercop_keeps_reach_deathtouch_and_landfall_pump() {
 
 #[test]
 fn issue_335_strix_lookout_keeps_flying_vigilance_and_tap_loot() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("strix_lookout")
         .expect("Strix Lookout");
     let face = definition.primary_face();
@@ -401,7 +403,7 @@ fn issue_335_strix_lookout_keeps_flying_vigilance_and_tap_loot() {
 
 #[test]
 fn issue_335_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     for (id, card_name, face_id) in ISSUE_335_CARDS {
         let presentation = registry

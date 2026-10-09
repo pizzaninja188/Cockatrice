@@ -61,7 +61,7 @@ impl GameEngine {
                 &answer.restricted_mana,
             )?;
             costs.mana = ManaCost {
-                pips: vec![tricerules_cards::mana::ManaSymbol::Generic(amount)],
+                pips: vec![tricerules_card_model::mana::ManaSymbol::Generic(amount)],
             };
             let life = self.validate_explicit_payment(
                 player,

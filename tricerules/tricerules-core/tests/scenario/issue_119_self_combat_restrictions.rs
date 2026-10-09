@@ -31,7 +31,15 @@ fn move_card(target: i32, zone: DevZone, card_name: &str) -> RuledCommand {
 
 fn dev_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("mountain", &[]), deck_with("swamp", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     engine.enable_dev_commands();
     advance_to_main1_from_game_start(&mut engine);
     engine
@@ -160,7 +168,15 @@ fn copied_and_controlled_soulcallers_keep_the_self_restriction() {
         deck_with("island", &["mind_control"]),
         deck_with("swamp", &[]),
     ]);
-    let mut engine = GameEngine::new(119_003, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        119_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     engine.enable_dev_commands();
     advance_to_main1_from_game_start(&mut engine);
     engine

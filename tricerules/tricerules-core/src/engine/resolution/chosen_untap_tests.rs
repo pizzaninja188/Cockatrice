@@ -110,7 +110,15 @@ fn prohibition_is_active(engine: &GameEngine, oid: ObjectId) -> bool {
 
 #[test]
 fn chosen_untaps_prepare_the_entire_cohort_before_conditional_prohibitions_change() {
-    let mut engine = GameEngine::new(26_100_704, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        26_100_704,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     let first = permanent(&mut engine, 0, "forest");
     let second = permanent(&mut engine, 1, "forest");
     let aura = permanent(&mut engine, 0, "indestructibility");
@@ -152,7 +160,15 @@ fn chosen_untaps_prepare_the_entire_cohort_before_conditional_prohibitions_chang
 
 #[test]
 fn chosen_untap_skips_stale_incarnations_and_off_battlefield_receipts() {
-    let mut engine = GameEngine::new(26_100_705, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        26_100_705,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     let returned = permanent(&mut engine, 0, "forest");
     let departed = permanent(&mut engine, 1, "forest");
     let old = receipt(&engine, returned);
@@ -189,7 +205,15 @@ fn chosen_untap_skips_stale_incarnations_and_off_battlefield_receipts() {
 
 #[test]
 fn chosen_untap_empty_and_missing_objects_preserve_unselected_lands() {
-    let mut engine = GameEngine::new(26_100_706, &[0, 1], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        26_100_706,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     let selected = permanent(&mut engine, 1, "forest");
     let unselected = permanent(&mut engine, 0, "forest");
     consume(&mut engine, vec![]);

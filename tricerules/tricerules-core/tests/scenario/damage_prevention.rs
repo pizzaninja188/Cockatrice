@@ -18,7 +18,15 @@ fn stomp_bypasses_prevention_shield_without_consuming_it() {
         deck_with("mountain", &["bonecrusher_giant_stomp"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(4801, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4801,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
 
     engine.state.add_damage_prevention_shield(1, 3);
@@ -59,7 +67,15 @@ fn anti_venom_prevents_direct_damage_and_gets_attempted_damage_counters() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(4802, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4802,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
 
     ensure_in_hand(&mut engine, 0, "anti-venom,_horrifying_healer");
@@ -114,7 +130,15 @@ fn anti_venom_with_shield_awaiting_five_damage(seed: u64) -> (GameEngine, u32, u
         deck_with("plains", &["anti-venom,_horrifying_healer", "blaze"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "anti-venom,_horrifying_healer");
     give_mana(
@@ -309,7 +333,15 @@ fn finite_prevention_annotation_tracks_remaining_capacity_and_zone_changes() {
         deck_with("mountain", &["blaze", "unsummon"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(4814, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4814,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let bears = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     engine.state.add_damage_prevention_shield(bears, 3);
@@ -425,7 +457,15 @@ fn lethal_damage_runs_state_based_actions_after_the_ordering_choice() {
         deck_with("mountain", &["blaze"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(4812, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4812,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let bears = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     engine.state.add_damage_prevention_shield(bears, 1);
@@ -480,7 +520,15 @@ fn combat_prevention_choice_parks_and_then_commits_the_entire_damage_batch() {
         deck_with("plains", &["anti-venom,_horrifying_healer"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(4806, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4806,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "anti-venom,_horrifying_healer");
     give_mana(
@@ -567,7 +615,15 @@ fn stomp_damage_still_gives_anti_venom_attempted_damage_counters() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(4807, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4807,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "anti-venom,_horrifying_healer");
     give_mana(
@@ -624,7 +680,15 @@ fn first_strike_damage_grows_anti_venom_before_normal_combat_damage() {
         deck_with("plains", &["anti-venom,_horrifying_healer"]),
         deck_with("forest", &["youthful_knight"]),
     ]);
-    let mut engine = GameEngine::new(4808, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4808,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "anti-venom,_horrifying_healer");
     give_mana(
@@ -693,7 +757,15 @@ fn cleanup_clears_stomps_prevention_prohibition() {
         deck_with("mountain", &["bonecrusher_giant_stomp"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(4809, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4809,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "bonecrusher_giant_stomp");
     give_mana(
@@ -726,7 +798,15 @@ fn stomp_bypasses_fog_for_later_combat_damage() {
         deck_with("mountain", &["bonecrusher_giant_stomp", "grizzly_bears"]),
         deck_with("forest", &["fog"]),
     ]);
-    let mut engine = GameEngine::new(4810, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4810,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "bonecrusher_giant_stomp");
     give_mana(
@@ -780,7 +860,15 @@ fn fleeting_flight_prevents_combat_damage_to_its_target() {
         deck_with("plains", &["fleeting_flight", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(4815, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4815,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
 
     let attacker = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -845,7 +933,15 @@ fn fleeting_flight_does_not_prevent_noncombat_damage() {
         deck_with("plains", &["fleeting_flight", "grizzly_bears"]),
         deck_with("mountain", &["lightning_bolt"]),
     ]);
-    let mut engine = GameEngine::new(4816, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4816,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     ensure_in_hand(&mut engine, 0, "fleeting_flight");
@@ -891,7 +987,15 @@ fn combat_with_fleeting_flight_and_finite_shield(seed: u64) -> (GameEngine, u32,
         deck_with("plains", &["fleeting_flight", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let attacker = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let blocker = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -981,7 +1085,15 @@ fn fleeting_flight_scope_does_not_follow_a_returned_object() {
         deck_with("island", &["fleeting_flight", "grizzly_bears", "unsummon"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(4819, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4819,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     ensure_in_hand(&mut engine, 0, "fleeting_flight");
@@ -1034,7 +1146,15 @@ fn fleeting_flight_scope_expires_at_cleanup() {
         deck_with("plains", &["fleeting_flight", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(4820, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4820,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     ensure_in_hand(&mut engine, 0, "fleeting_flight");

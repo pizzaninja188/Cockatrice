@@ -2,7 +2,7 @@ use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivationTiming, Amount, PlayerRecipient,
     SpellEffectKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout, ManaAmount};
+use tricerules_cards::{AbilityPresentation, Layout, ManaAmount};
 
 fn mana_option(c: u32, r: u32, g: u32, u: u32) -> ManaAmount {
     ManaAmount {
@@ -59,7 +59,7 @@ fn assert_mana_ability(
 
 #[test]
 fn issue_494_registers_exact_complete_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let cases = [
         (
             "talisman_of_impulse",

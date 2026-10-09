@@ -7,13 +7,13 @@ use tricerules_cards::primitives::{
     GameCondition, ObjectPaymentConstraint, PlayerRecipient, PowerToughnessCharacteristic,
     SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, CounterKind, Keyword};
+use tricerules_cards::{AbilityPresentation, CounterKind, Keyword};
 
 const COHORT: [&str; 2] = ["debris_field_crusher", "uthros_scanship"];
 
 #[test]
 fn issue_309_registry_contains_exactly_the_reviewed_station_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let matching = registry
         .definitions()
         .filter(|definition| {
@@ -52,7 +52,7 @@ fn issue_309_registry_contains_exactly_the_reviewed_station_cohort() {
 
 #[test]
 fn issue_309_cards_preserve_exact_faces_abilities_and_presentation_fingerprints() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, power, toughness, fingerprint) in [
         (
             "uthros_scanship",

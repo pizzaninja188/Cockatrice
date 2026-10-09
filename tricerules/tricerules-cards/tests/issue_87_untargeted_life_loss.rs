@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{LifeAmount, PlayerRecipient, SpellEffectKind};
-use tricerules_cards::{CardRegistry, TriggerCondition};
+use tricerules_cards::TriggerCondition;
 
 #[test]
 fn infectious_horror_has_complete_oracle_behavior() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("infectious_horror")
         .expect("Infectious Horror must be registered");
     let face = definition.primary_face();

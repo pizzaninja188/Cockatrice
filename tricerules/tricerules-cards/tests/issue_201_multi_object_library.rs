@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     AbilityCost, CounterKind, EffectSubject, Keyword, SpellEffectKind, TargetController, TargetKind,
 };
-use tricerules_cards::{Amount, CardRegistry};
+use tricerules_cards::Amount;
 
 #[test]
 fn floodpits_drowner_has_current_oracle_shape() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("floodpits_drowner")
         .expect("Floodpits Drowner must be registered");
     let face = definition.primary_face();

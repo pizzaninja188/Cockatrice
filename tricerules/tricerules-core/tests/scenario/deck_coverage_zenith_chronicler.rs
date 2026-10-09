@@ -1,7 +1,6 @@
 //! Exact Zenith Chronicler cast-event and caster-relative draw evidence.
 
 use super::helpers::*;
-use tricerules_cards::CardRegistry;
 use tricerules_cards::{Color, ContinuousEffectKind, EffectDuration};
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
 use tricerules_core::GameEngine;
@@ -10,6 +9,7 @@ use tricerules_core::TurnStep;
 fn setup() -> GameEngine {
     let deck = deck_with("forest", &[]);
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         503_002,
         &[10, 20, 30],
         20,
@@ -367,7 +367,9 @@ fn zenith_accepted_cast_and_draw_commands_replay_identically() {
 #[test]
 fn zenith_chronicler_opponent_first_multicolor_draws_casters_complement() {
     assert!(
-        CardRegistry::global().get("zenith_chronicler").is_some(),
+        tricerules_cards::registry::global()
+            .get("zenith_chronicler")
+            .is_some(),
         "the complete Zenith Chronicler definition must be admitted"
     );
     let decks = Some(vec![
@@ -375,7 +377,15 @@ fn zenith_chronicler_opponent_first_multicolor_draws_casters_complement() {
         deck_with("mountain", &["lightning_helix"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(503_001, &[10, 20, 30], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        503_001,
+        &[10, 20, 30],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "zenith_chronicler");
     give_mana(
@@ -536,6 +546,7 @@ fn zenith_first_matching_cast_is_per_caster_and_resets_next_turn() {
 fn zenith_history_before_entry_and_countered_cast_still_count() {
     let deck = deck_with("forest", &[]);
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         503_003,
         &[10, 20, 30],
         20,

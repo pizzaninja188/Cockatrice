@@ -1,14 +1,17 @@
 //! Exact Garruk's Uprising clauses and its intervening-if versus entry-event distinction.
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, CounterKind, Keyword};
+use tricerules_cards::{CounterKind, Keyword};
 use tricerules_core::{GameEngine, Zone};
 
 fn game() -> GameEngine {
     assert!(
-        CardRegistry::global().get("garruks_uprising").is_some(),
+        tricerules_cards::registry::global()
+            .get("garruks_uprising")
+            .is_some(),
         "exact scoped card must be registered"
     );
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         2026093009,
         &[0, 1],
         20,
@@ -22,7 +25,7 @@ fn game() -> GameEngine {
 
 fn seed_creature(engine: &mut GameEngine, player: usize, card_id: &str) -> u32 {
     // The combat helper overrides all creatures to 2/2. This fixture uses printed stats.
-    assert!(CardRegistry::global().get(card_id).is_some());
+    assert!(tricerules_cards::registry::global().get(card_id).is_some());
     inject_permanent_on_battlefield(engine, player, card_id)
 }
 
@@ -83,7 +86,7 @@ fn advance_to_main(engine: &mut GameEngine, player: i32) {
 
 #[test]
 fn exact_characteristics_and_three_printed_clauses() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("garruks_uprising")
         .expect("Garruk's Uprising registered");
     assert_eq!(card.name, "Garruk's Uprising");

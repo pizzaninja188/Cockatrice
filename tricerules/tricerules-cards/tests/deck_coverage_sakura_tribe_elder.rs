@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     AbilityCost, CardTypeFilter, PlayerRecipient, SearchDestination, SpellEffectKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Color, Layout};
+use tricerules_cards::{AbilityPresentation, Color, Layout};
 
 #[test]
 fn sakura_tribe_elder_registers_its_complete_sacrifice_search_ability() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(
         registry.id_for_name("Sakura-Tribe Elder"),
         Some("sakura-tribe_elder")

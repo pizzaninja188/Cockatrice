@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     ConditionObjectRef, EffectSubject, GameCondition, SpellEffectKind, TargetController,
 };
-use tricerules_cards::{CardRegistry, CastTriggerPlayer, CounterKind, Keyword, TriggerCondition};
+use tricerules_cards::{CastTriggerPlayer, CounterKind, Keyword, TriggerCondition};
 
 #[test]
 fn issue_128_cards_are_complete_registry_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let riling = registry
         .get("riling_dawnbreaker_signaling_roar")

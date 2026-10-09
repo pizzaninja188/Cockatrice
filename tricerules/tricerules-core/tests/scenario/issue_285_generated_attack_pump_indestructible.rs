@@ -58,7 +58,15 @@ fn cast_murder(engine: &mut GameEngine, target: u32) {
 #[test]
 fn attack_trigger_publishes_exact_targets_and_applies_ordered_temporary_effects() {
     for (seed, card_id) in [(285_001, "hardened_escort"), (285_002, "foot_elite")] {
-        let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("engine");
         advance_to_declare_attackers(&mut engine);
         let attacker = inject_creature_on_battlefield(&mut engine, 0, card_id);
         let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -136,7 +144,15 @@ fn attack_trigger_publishes_exact_targets_and_applies_ordered_temporary_effects(
 
 #[test]
 fn attack_trigger_revalidates_a_removed_target_by_exact_zone_generation() {
-    let mut engine = GameEngine::new(285_003, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        285_003,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut engine);
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "hardened_escort");
     let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -169,7 +185,15 @@ fn attack_trigger_revalidates_a_removed_target_by_exact_zone_generation() {
 
 #[test]
 fn attack_trigger_rejects_same_object_reentry_with_new_zone_generation() {
-    let mut engine = GameEngine::new(285_004, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        285_004,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut engine);
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "hardened_escort");
     let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");

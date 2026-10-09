@@ -13,7 +13,7 @@ pub(crate) mod semantic;
 pub use tricerules_cards::primitives::HandCardAction;
 
 fn fixture_token_origin(card_id: &str) -> Option<tricerules_core::state::CopiableValues> {
-    let registry = tricerules_cards::CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     if !registry.is_token(card_id) {
         return None;
     }
@@ -1238,7 +1238,15 @@ pub(crate) fn setup_two_blockers_assign_phase(
             d
         },
     ]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     ensure_in_hand(&mut e, 0, "grizzly_bears");
     ensure_in_hand(&mut e, 1, "savannah_lions");
@@ -1343,7 +1351,15 @@ pub(crate) fn setup_trample_single_blocker_assign_phase() -> (GameEngine, u32, u
         std::iter::repeat_n("colossal_dreadmaw".to_string(), 10).collect::<Vec<_>>(),
         std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
     ]);
-    let mut e = GameEngine::new(5001, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     ensure_in_hand(&mut e, 0, "colossal_dreadmaw");
     ensure_in_hand(&mut e, 1, "grizzly_bears");
@@ -1445,7 +1461,7 @@ pub(crate) fn move_ready_to_battlefield(e: &mut GameEngine, player: usize, card_
     use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
     let before = e.state.players[player].battlefield.clone();
     let player_id = e.state.players[player].id;
-    let name = tricerules_cards::CardRegistry::global()
+    let name = tricerules_cards::registry::global()
         .get(card_id)
         .unwrap()
         .name
@@ -1620,7 +1636,15 @@ pub(crate) fn anthem_engine(seed: u64, p0_card: &str) -> GameEngine {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     e
 }

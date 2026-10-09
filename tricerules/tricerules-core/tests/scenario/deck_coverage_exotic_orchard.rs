@@ -5,8 +5,7 @@
 
 use super::helpers::*;
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, AbilitySourceZone, CardRegistry, Layout, ManaAmount,
-    SpellEffectKind,
+    AbilityCost, AbilityPresentation, AbilitySourceZone, Layout, ManaAmount, SpellEffectKind,
 };
 use tricerules_core::{GameEngine, Zone};
 
@@ -17,7 +16,15 @@ fn orchard_engine(seed: u64, player_ids: &[i32]) -> GameEngine {
             .map(|_| deck_with("forest", &[]))
             .collect(),
     );
-    let mut engine = GameEngine::new(seed, player_ids, 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        player_ids,
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -27,7 +34,15 @@ fn orchard_engine_with_mana_reflection(seed: u64) -> GameEngine {
         deck_with("forest", &["mana_reflection"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     move_ready_to_battlefield(&mut engine, 0, "mana_reflection");
     engine
@@ -79,7 +94,7 @@ fn mana_pool(engine: &GameEngine, player: usize) -> ManaPool {
 
 #[test]
 fn exotic_orchard_registers_exact_identity_and_dynamic_tap_mana_ability() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("exotic_orchard")
         .expect("reviewed Exotic Orchard definition");
     assert_eq!(card.id, "exotic_orchard");

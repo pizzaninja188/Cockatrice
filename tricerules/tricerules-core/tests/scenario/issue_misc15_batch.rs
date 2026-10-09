@@ -15,7 +15,15 @@ use tricerules_proto::ruled::v1::{
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("forest", &[]), deck_with("island", &[])]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
     grant_pool(&mut e, 0);
     grant_pool(&mut e, 1);
@@ -119,7 +127,15 @@ fn pass_to_declare_blockers(e: &mut GameEngine) {
 
 #[test]
 fn issue_misc15_dauntless_veteran_pumps_the_team_when_attacking() {
-    let mut e = GameEngine::new(815_001, &[0, 1], 20, None, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        815_001,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
     let veteran = inject_creature_with_stats(&mut e, 0, "dauntless_veteran", 2, 2);
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -151,7 +167,15 @@ fn issue_misc15_remnant_elemental_pumps_on_landfall() {
 
 #[test]
 fn issue_misc15_skystinger_pumps_when_blocking_a_flyer() {
-    let mut e = GameEngine::new(815_003, &[0, 1], 20, None, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        815_003,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
     let flyer = inject_creature_with_stats(&mut e, 0, "air_elemental", 4, 4);
     let skystinger = inject_creature_with_stats(&mut e, 1, "skystinger", 3, 3);

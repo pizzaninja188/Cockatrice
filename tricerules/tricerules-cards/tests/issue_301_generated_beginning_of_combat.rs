@@ -3,13 +3,13 @@ use std::collections::BTreeSet;
 use tricerules_cards::primitives::{
     CastTriggerPlayer, GraveyardDestination, GraveyardOwner, SpellEffectKind, TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Keyword};
+use tricerules_cards::{AbilityPresentation, Keyword};
 
 const ISSUE_301_CARD_IDS: [&str; 2] = ["ascendant_dustspeaker", "startled_relic_sloth"];
 
 #[test]
 fn issue_301_registers_exactly_the_reviewed_two_card_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let matching_ids = registry
         .definitions()
         .filter(|card| {
@@ -53,7 +53,7 @@ fn issue_301_registers_exactly_the_reviewed_two_card_cohort() {
 
 #[test]
 fn issue_301_preserves_each_card_characteristics_and_other_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let dustspeaker = registry
         .get("ascendant_dustspeaker")

@@ -11,8 +11,8 @@ use tricerules_cards::primitives::{
     PlayerRecipient, SearchDestination, SearchZoneSelection, ZoneCardFilter,
 };
 use tricerules_cards::{
-    AbilityPresentation, Amount, CardRegistry, CastTriggerPlayer, Color, LibraryPartitionKind,
-    SpellEffectKind, TriggerCondition,
+    AbilityPresentation, Amount, CastTriggerPlayer, Color, LibraryPartitionKind, SpellEffectKind,
+    TriggerCondition,
 };
 
 fn dragon_return_trigger() -> TriggerCondition {
@@ -51,7 +51,7 @@ fn assert_shared_dragon_return(face: tricerules_cards::FaceRef<'_>) {
 
 #[test]
 fn issue_363_registers_the_four_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id) in [
         (
             "corroding_dragonstorm",
@@ -87,7 +87,7 @@ fn issue_363_registers_the_four_reviewed_identities() {
 
 #[test]
 fn issue_363_corroding_dragonstorm_drains_each_opponent_then_surveils() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("corroding_dragonstorm")
         .expect("Corroding Dragonstorm");
     let face = definition.primary_face();
@@ -122,7 +122,7 @@ fn issue_363_corroding_dragonstorm_drains_each_opponent_then_surveils() {
 
 #[test]
 fn issue_363_encroaching_dragonstorm_searches_up_to_two_basic_lands_tapped() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("encroaching_dragonstorm")
         .expect("Encroaching Dragonstorm");
     let face = definition.primary_face();
@@ -160,7 +160,7 @@ fn issue_363_encroaching_dragonstorm_searches_up_to_two_basic_lands_tapped() {
 
 #[test]
 fn issue_363_roiling_dragonstorm_draws_two_then_discards_one() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("roiling_dragonstorm")
         .expect("Roiling Dragonstorm");
     let face = definition.primary_face();
@@ -187,7 +187,7 @@ fn issue_363_roiling_dragonstorm_draws_two_then_discards_one() {
 
 #[test]
 fn issue_363_teeming_dragonstorm_creates_two_white_soldiers() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("teeming_dragonstorm")
         .expect("Teeming Dragonstorm");
     let face = definition.primary_face();
@@ -213,7 +213,7 @@ fn issue_363_teeming_dragonstorm_creates_two_white_soldiers() {
 
 #[test]
 fn issue_363_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     for (id, face_id) in [
         ("corroding_dragonstorm", "corroding_dragonstorm"),

@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::StaticAbilityDef;
-use tricerules_cards::{AbilityPresentation, CardRegistry, Color};
+use tricerules_cards::{AbilityPresentation, Color};
 
 #[test]
 fn zurs_weirding_has_its_exact_printed_identity() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("zurs_weirding")
         .expect("Zur's Weirding is implemented in the card registry");

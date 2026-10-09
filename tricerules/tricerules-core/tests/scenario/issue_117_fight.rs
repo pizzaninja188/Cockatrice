@@ -25,7 +25,15 @@ fn prey_upon_publishes_two_targets_and_fights_with_current_power_simultaneously(
         deck_with("forest", &["prey_upon", "grizzly_bears"]),
         deck_with("forest", &["colossal_dreadmaw"]),
     ]);
-    let mut engine = GameEngine::new(117_100, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        117_100,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let first = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let second = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);
@@ -79,7 +87,15 @@ fn prey_upon_deals_no_damage_when_either_target_is_illegal_at_resolution() {
         deck_with("forest", &["prey_upon", "grizzly_bears"]),
         deck_with("forest", &["hill_giant"]),
     ]);
-    let mut engine = GameEngine::new(117_101, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        117_101,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let first = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let second = relocate_to_battlefield(&mut engine, 1, "hill_giant", false);
@@ -119,7 +135,15 @@ fn prey_upon_deals_no_damage_when_a_target_is_no_longer_a_creature() {
         deck_with("forest", &["prey_upon", "grizzly_bears"]),
         deck_with("forest", &["hill_giant"]),
     ]);
-    let mut engine = GameEngine::new(117_105, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        117_105,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let first = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let second = relocate_to_battlefield(&mut engine, 1, "hill_giant", false);
@@ -156,7 +180,15 @@ fn fight_reuses_prevention_deathtouch_lifelink_and_state_based_actions() {
         deck_with("forest", &["prey_upon", "grizzly_bears"]),
         deck_with("forest", &["colossal_dreadmaw"]),
     ]);
-    let mut engine = GameEngine::new(117_102, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        117_102,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let first = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let second = relocate_to_battlefield(&mut engine, 1, "colossal_dreadmaw", false);
@@ -200,7 +232,15 @@ fn bushwhack_search_mode_reveals_a_basic_land_to_hand() {
         deck_with("forest", &["bushwhack"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(117_103, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        117_103,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "bushwhack");
     let land = inject_library_card(&mut engine, 0, "plains");
@@ -236,7 +276,15 @@ fn bushwhack_fight_mode_uses_both_target_groups() {
         deck_with("forest", &["bushwhack", "grizzly_bears"]),
         deck_with("forest", &["hill_giant"]),
     ]);
-    let mut engine = GameEngine::new(117_104, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        117_104,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let first = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let second = relocate_to_battlefield(&mut engine, 1, "hill_giant", false);

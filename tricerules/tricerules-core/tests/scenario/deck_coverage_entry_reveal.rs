@@ -10,6 +10,7 @@ use tricerules_proto::ruled::v1::{self as rv1, ruled_command::Cmd};
 
 fn setup(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -39,7 +40,7 @@ fn play(engine: &mut GameEngine, card: &str) -> (u32, RuledEventBatch) {
 
 #[test]
 fn entry_reveal_pair_game_trail_and_bosk_complete_definitions_are_registered() {
-    let registry = tricerules_cards::CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (card, name) in [
         ("game_trail", "Game Trail"),
         ("murmuring_bosk", "Murmuring Bosk"),
@@ -404,6 +405,7 @@ fn entry_reveal_pair_bosk_colored_mana_damage_uses_prevention_pipeline() {
 #[test]
 fn entry_reveal_pair_game_trail_reveals_a_forest_without_moving_it() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         614_121,
         &[0, 1],
         20,
@@ -435,7 +437,7 @@ fn entry_reveal_pair_game_trail_reveals_a_forest_without_moving_it() {
 
 #[test]
 fn entry_reveal_pair_bosk_accepts_literal_noncreature_kindred_treefolk() {
-    let registry = tricerules_cards::CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let StaticAbilityDef::EntersTapped {
         unless_cost: Some(EntryCost::RevealFromHand { filter }),
         ..
@@ -649,6 +651,7 @@ fn entry_reveal_pair_serialized_accepted_commands_and_batches_replay_exactly() {
 #[test]
 fn entry_reveal_pair_four_nonconsecutive_seats_use_chooser_hand_and_current_mana_controller() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         614_230,
         &[10, 20, 30, 40],
         20,

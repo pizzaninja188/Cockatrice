@@ -28,6 +28,7 @@ fn stack_target(oid: u32) -> Vec<TargetRef> {
 
 fn setup(counter: &str, spell: &str) -> (GameEngine, u32, usize) {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         231010,
         &[0, 1],
         20,
@@ -159,6 +160,7 @@ fn issue_231_flashfreeze_rechecks_color_and_exact_stack_generation() {
 
 fn get_out_setup() -> (GameEngine, u32, u32, u32) {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         231020,
         &[0, 1],
         20,
@@ -262,9 +264,7 @@ fn issue_231_get_out_rechecks_types_and_generations_for_each_target() {
                     *e.state.zone_change_generation.entry(oid).or_default() += 1;
                 } else {
                     // A copy effect changes current types without changing this incarnation.
-                    let definition = tricerules_cards::CardRegistry::global()
-                        .get("forest")
-                        .unwrap();
+                    let definition = tricerules_cards::registry::global().get("forest").unwrap();
                     e.state.objects.get_mut(&oid).unwrap().copiable_values =
                         Some(tricerules_core::state::CopiableValues {
                             source_card_id: "forest".into(),

@@ -6,7 +6,15 @@ fn boreal_elemental_increases_an_opponents_targeting_spell_cost_atomically() {
         deck_with("island", &["unsummon"]),
         deck_with("island", &["boreal_elemental"]),
     ];
-    let mut engine = GameEngine::new(57_001, &[0, 1], 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        57_001,
+        &[0, 1],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let boreal = relocate_to_battlefield(&mut engine, 1, "boreal_elemental", false);
@@ -55,7 +63,15 @@ fn kopala_applies_once_when_a_spell_targets_multiple_merfolk() {
         deck_with("mountain", &["fireball"]),
         deck_with("island", &["kopala,_warden_of_waves", "coral_merfolk"]),
     ];
-    let mut engine = GameEngine::new(57_002, &[0, 1], 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        57_002,
+        &[0, 1],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let kopala = relocate_to_battlefield(&mut engine, 1, "kopala,_warden_of_waves", false);
@@ -109,7 +125,15 @@ fn kopala_adds_mana_to_an_opponents_manaless_activated_ability() {
         deck_with("island", &["prodigal_sorcerer"]),
         deck_with("island", &["kopala,_warden_of_waves"]),
     ];
-    let mut engine = GameEngine::new(57_003, &[0, 1], 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        57_003,
+        &[0, 1],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let prodigal = relocate_to_battlefield(&mut engine, 0, "prodigal_sorcerer", false);
@@ -171,7 +195,15 @@ fn distinct_kopala_sources_stack_but_do_not_tax_their_controller() {
             ],
         ),
     ];
-    let mut engine = GameEngine::new(57_004, &[0, 1], 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        57_004,
+        &[0, 1],
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let first = relocate_to_battlefield(&mut engine, 1, "kopala,_warden_of_waves", false);
@@ -208,8 +240,15 @@ fn distinct_kopala_sources_stack_but_do_not_tax_their_controller() {
         deck_with("island", &[]),
         deck_with("island", &["unsummon", "kopala,_warden_of_waves"]),
     ];
-    let mut own_engine =
-        GameEngine::new(57_005, &[0, 1], 20, Some(own_decks), true).expect("new game");
+    let mut own_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        57_005,
+        &[0, 1],
+        20,
+        Some(own_decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut own_engine);
     let own_kopala = relocate_to_battlefield(&mut own_engine, 1, "kopala,_warden_of_waves", false);
     ensure_in_hand(&mut own_engine, 1, "unsummon");

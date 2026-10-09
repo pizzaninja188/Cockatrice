@@ -1,11 +1,19 @@
 //! Exact Goblin Welder's two-target simultaneous sacrifice and return.
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, CounterKind};
+use tricerules_cards::CounterKind;
 use tricerules_core::Zone;
 
 fn game(seed: u64) -> GameEngine {
     let deck = deck_with("mountain", &[]);
-    let mut engine = GameEngine::new(seed, &[0, 1, 2], 20, Some(vec![deck; 3]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1, 2],
+        20,
+        Some(vec![deck; 3]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -57,7 +65,9 @@ fn rejected_unchanged(engine: &mut GameEngine, actor: i32, command: &RuledComman
 
 #[test]
 fn welder_actual_paid_cast_and_tap_cost_preserve_both_targets_until_resolution() {
-    assert!(CardRegistry::global().get("goblin_welder").is_some());
+    assert!(tricerules_cards::registry::global()
+        .get("goblin_welder")
+        .is_some());
     let mut engine = game(2026100521);
     let source = inject_card_into_hand(&mut engine, 0, "goblin_welder");
     give_mana(

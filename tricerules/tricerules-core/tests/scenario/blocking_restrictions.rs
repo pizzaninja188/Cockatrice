@@ -20,7 +20,15 @@ fn issue_174_sprite_uses_animated_types_and_counters_and_loses_static_restrictio
         deck_with("forest", &["argothian_sprite"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(174_009, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        174_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let sprite = move_ready_to_battlefield(&mut engine, 0, "argothian_sprite");
     let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -87,7 +95,15 @@ fn issue_174_sprite_uses_animated_types_and_counters_and_loses_static_restrictio
 
 #[test]
 fn issue_174_synthetic_defenders_have_separate_blocking_graphs() {
-    let mut engine = GameEngine::new(174_010, &[10, 20], 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        174_010,
+        &[10, 20],
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let first = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let second = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -150,6 +166,7 @@ fn issue_174_accepted_commands_replay_after_an_illegal_declaration() {
     };
     fn fresh() -> GameEngine {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             174_011,
             &[0, 1],
             20,
@@ -274,7 +291,15 @@ fn issue_174_outrider_checks_live_power_but_does_not_undo_blocks() {
         deck_with("forest", &["verdant_outrider"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(174_004, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        174_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let outrider = move_ready_to_battlefield(&mut engine, 0, "verdant_outrider");
     let ordinary = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -333,7 +358,15 @@ fn issue_174_outrider_generation_expiry_and_ability_removal() {
         deck_with("forest", &["verdant_outrider", "unsummon"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(174_005, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        174_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let outrider = move_ready_to_battlefield(&mut engine, 0, "verdant_outrider");
     let command_index = engine.state.command_index;
@@ -385,7 +418,15 @@ fn issue_174_hermit_threshold_is_live_and_does_not_change_established_blocks() {
         deck_with("island", &["nightwhorl_hermit"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(174_006, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        174_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let hermit = move_ready_to_battlefield(&mut engine, 0, "nightwhorl_hermit");
     let ordinary = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -445,7 +486,15 @@ fn issue_174_hermit_threshold_uses_controller_not_owner() {
         deck_with("island", &["nightwhorl_hermit"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(174_007, &[10, 20], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        174_007,
+        &[10, 20],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let hermit = move_ready_to_battlefield(&mut engine, 0, "nightwhorl_hermit");
     for _ in 0..7 {
@@ -474,7 +523,15 @@ fn issue_174_outrider_publishes_its_resolved_restriction() {
         deck_with("forest", &["verdant_outrider"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(174_003, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        174_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let outrider = move_ready_to_battlefield(&mut engine, 0, "verdant_outrider");
     grant_pool(&mut engine, 0);
@@ -492,7 +549,15 @@ fn issue_174_ceratops_requires_three_and_sprite_excludes_artifacts() {
         deck_with("forest", &["rampaging_ceratops", "argothian_sprite"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(174_002, &[10, 20], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        174_002,
+        &[10, 20],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let ceratops = move_ready_to_battlefield(&mut engine, 0, "rampaging_ceratops");
     let sprite = move_ready_to_battlefield(&mut engine, 0, "argothian_sprite");
@@ -551,7 +616,15 @@ fn issue_174_competing_must_block_creatures_allow_a_maximal_declaration() {
         deck_with("forest", &["safewright_cavalry"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(174_001, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        174_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let attacker = move_ready_to_battlefield(&mut engine, 0, "safewright_cavalry");
     let first = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -613,7 +686,15 @@ fn pass_to_declare_blockers(engine: &mut GameEngine) -> RuledEventBatch {
 
 #[test]
 fn frilled_sea_serpent_rejects_blocks_and_drives_automatic_empty_blocks() {
-    let mut engine = GameEngine::new(77_001, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        77_001,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let serpent = inject_creature_on_battlefield(&mut engine, 0, "frilled_sea_serpent");
     let ordinary_attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -662,7 +743,15 @@ fn frilled_sea_serpent_rejects_blocks_and_drives_automatic_empty_blocks() {
         )
         .expect("the same creature can block the ordinary attacker");
 
-    let mut auto = GameEngine::new(77_002, &[0, 1], 20, None, true).expect("new engine");
+    let mut auto = GameEngine::new(
+        tricerules_cards::registry::global(),
+        77_002,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut auto);
     let serpent = inject_creature_on_battlefield(&mut auto, 0, "frilled_sea_serpent");
     inject_creature_on_battlefield(&mut auto, 1, "grizzly_bears");
@@ -693,7 +782,15 @@ fn frilled_sea_serpent_rejects_blocks_and_drives_automatic_empty_blocks() {
 
 #[test]
 fn frilled_sea_serpent_does_not_undo_a_block_declared_before_activation() {
-    let mut engine = GameEngine::new(77_003, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        77_003,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let serpent = inject_creature_on_battlefield(&mut engine, 0, "frilled_sea_serpent");
     let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -733,7 +830,15 @@ fn frilled_sea_serpent_does_not_undo_a_block_declared_before_activation() {
 
 #[test]
 fn goblin_smuggler_uses_derived_power_and_revalidates_its_target() {
-    let mut engine = GameEngine::new(77_004, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        77_004,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let smuggler = inject_creature_on_battlefield(&mut engine, 0, "goblin_smuggler");
     let small = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -782,7 +887,15 @@ fn goblin_smuggler_uses_derived_power_and_revalidates_its_target() {
 
 #[test]
 fn goblin_smuggler_effect_persists_if_power_increases_after_resolution() {
-    let mut engine = GameEngine::new(77_005, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        77_005,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let smuggler = inject_creature_on_battlefield(&mut engine, 0, "goblin_smuggler");
     let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -828,7 +941,15 @@ fn destructive_tampering_tracks_current_flying_status_and_later_creatures() {
         deck_with("mountain", &["destructive_tampering"]),
         deck_with("mountain", &[]),
     ]);
-    let mut engine = GameEngine::new(77_006, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        77_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "destructive_tampering");
     give_mana(
@@ -917,7 +1038,15 @@ fn destructive_tampering_tracks_current_flying_status_and_later_creatures() {
 
 #[test]
 fn cant_be_blocked_coexists_with_menace_and_must_block_requirements() {
-    let mut engine = GameEngine::new(77_007, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        77_007,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let smuggler = inject_creature_on_battlefield(&mut engine, 0, "goblin_smuggler");
     let menace = inject_creature_on_battlefield(&mut engine, 0, "goblin_trailblazer");
@@ -971,7 +1100,15 @@ fn cant_be_blocked_coexists_with_menace_and_must_block_requirements() {
 
 #[test]
 fn legal_block_pairs_exclude_pair_specific_flying_restrictions() {
-    let mut engine = GameEngine::new(77_009, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        77_009,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let ground_attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let flying_attacker = inject_creature_on_battlefield(&mut engine, 0, "storm_crow");
@@ -997,7 +1134,15 @@ fn legal_block_pairs_exclude_pair_specific_flying_restrictions() {
 
 #[test]
 fn chosen_combat_restriction_expires_at_cleanup() {
-    let mut engine = GameEngine::new(77_008, &[0, 1], 20, None, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        77_008,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let smuggler = inject_creature_on_battlefield(&mut engine, 0, "goblin_smuggler");
     let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -1034,7 +1179,15 @@ fn chosen_combat_restriction_does_not_follow_a_zone_change() {
         deck_with("island", &["unsummon"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(77_009, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        77_009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let smuggler = inject_creature_on_battlefield(&mut engine, 0, "goblin_smuggler");
     let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");

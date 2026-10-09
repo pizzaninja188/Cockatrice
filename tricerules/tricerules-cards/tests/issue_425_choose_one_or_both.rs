@@ -11,10 +11,10 @@ use tricerules_cards::primitives::{
     SearchDestination, SearchZoneSelection, SpellEffectKind, TargetController, TargetFilter,
     TargetKind, TargetSchema, ZoneCardFilter,
 };
-use tricerules_cards::{CardRegistry, ModalDef};
+use tricerules_cards::ModalDef;
 
 fn modal(card_id: &str) -> ModalDef {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("{card_id} is registered"));
     let face = definition.primary_face();
@@ -40,7 +40,7 @@ fn modal(card_id: &str) -> ModalDef {
 
 #[test]
 fn issue_425_registers_the_six_choose_both_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana_cost, types) in [
         (
             "amazing_acrobatics",

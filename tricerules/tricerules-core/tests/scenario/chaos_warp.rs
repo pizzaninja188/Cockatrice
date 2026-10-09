@@ -1,5 +1,6 @@
 //! Actual registered Chaos Warp, plus explicitly private authoring-only tail compositions.
 use crate::helpers::*;
+#[cfg(feature = "authoring")]
 use tricerules_cards::CardRegistry;
 use tricerules_core::{state::CopiableValues, EngineDeck, Zone};
 
@@ -26,8 +27,15 @@ fn engine(seed: u64) -> GameEngine {
 }
 
 fn engine_with_decks(seed: u64, decks: Vec<EngineDeck>) -> GameEngine {
-    let mut engine =
-        GameEngine::new_with_commander_decks(seed, &[0, 4, 9], 20, Some(decks), true).unwrap();
+    let mut engine = GameEngine::new_with_commander_decks(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 4, 9],
+        20,
+        Some(decks),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -47,7 +55,8 @@ fn engine_with_draft(seed: u64, decks: Vec<EngineDeck>, draft: &str) -> GameEngi
         include_str!("../../../tricerules-cards/data/invasion_of_ulgrotha_grandmother_ravi_sengir.ron"),
     ], &[]).unwrap()));
     let mut engine =
-        GameEngine::new_for_authoring(seed, &[0, 4, 9], 20, Some(decks), true, registry).unwrap();
+        GameEngine::new_with_commander_decks(registry, seed, &[0, 4, 9], 20, Some(decks), true)
+            .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -125,7 +134,9 @@ fn token_with_owed_return(engine: &mut GameEngine, returning_card: &str) -> (u32
         ActiveEventObserver, EventObserverMatcher, EventObserverPayload, TriggerObjectRef,
     };
     let source = inject_permanent_on_battlefield(engine, 1, "grizzly_bears");
-    let definition = CardRegistry::global().get("grizzly_bears").unwrap();
+    let definition = tricerules_cards::registry::global()
+        .get("grizzly_bears")
+        .unwrap();
     engine.state.objects.get_mut(&source).unwrap().token_origin = Some(CopiableValues {
         source_card_id: definition.id.clone(),
         source_face_index: 0,
@@ -164,7 +175,9 @@ fn token_with_owed_return(engine: &mut GameEngine, returning_card: &str) -> (u32
 
 fn owner_token(engine: &mut GameEngine) -> u32 {
     let target = inject_permanent_on_battlefield(engine, 1, "grizzly_bears");
-    let definition = CardRegistry::global().get("grizzly_bears").unwrap();
+    let definition = tricerules_cards::registry::global()
+        .get("grizzly_bears")
+        .unwrap();
     engine.state.objects.get_mut(&target).unwrap().token_origin = Some(CopiableValues {
         source_card_id: definition.id.clone(),
         source_face_index: 0,
@@ -621,7 +634,9 @@ fn paid_chaos_warp_aura_attachment_is_not_targeting_but_obeys_protection() {
         let mut engine = engine(303_410);
         let host = inject_permanent_on_battlefield(&mut engine, 0, "grizzly_bears");
         let protected = inject_permanent_on_battlefield(&mut engine, 2, "grizzly_bears");
-        let definition = CardRegistry::global().get("grizzly_bears").unwrap();
+        let definition = tricerules_cards::registry::global()
+            .get("grizzly_bears")
+            .unwrap();
         let values = || CopiableValues {
             source_card_id: definition.id.clone(),
             source_face_index: 0,
@@ -1322,7 +1337,9 @@ fn chaos_warp_private_composition_resumes_tail_once_after_entry_choice_or_owner_
 fn paid_chaos_warp_token_target_uses_owner_library_and_reveals_nonpermanent_without_moving_it() {
     let mut engine = engine(701_240);
     let target = inject_permanent_on_battlefield(&mut engine, 1, "grizzly_bears");
-    let definition = CardRegistry::global().get("grizzly_bears").unwrap();
+    let definition = tricerules_cards::registry::global()
+        .get("grizzly_bears")
+        .unwrap();
     engine.state.objects.get_mut(&target).unwrap().token_origin = Some(CopiableValues {
         source_card_id: definition.id.clone(),
         source_face_index: 0,

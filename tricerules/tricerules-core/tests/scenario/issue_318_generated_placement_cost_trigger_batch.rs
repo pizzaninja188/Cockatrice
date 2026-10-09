@@ -19,7 +19,15 @@ fn deck_engine(seed: u64, own: &[&str], opposing: &[&str]) -> GameEngine {
         deck_with("island", own),
         deck_with("forest", opposing),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -139,7 +147,15 @@ fn issue_318_run_behind_reduces_only_for_an_attacking_target() {
         deck_with("island", &["run_behind", "run_behind"]),
         deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(318_010, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        318_010,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "run_behind");
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");

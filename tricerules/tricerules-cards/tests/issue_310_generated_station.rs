@@ -7,7 +7,7 @@ use tricerules_cards::primitives::{
     SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
     TypeLineAddition,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, CounterKind, Keyword};
+use tricerules_cards::{AbilityPresentation, CounterKind, Keyword};
 
 const COHORT: [&str; 2] = ["galvanizing_sawship", "wedgelight_rammer"];
 
@@ -41,7 +41,7 @@ fn station_effect() -> SpellEffectKind {
 
 #[test]
 fn issue_310_registry_contains_exactly_the_reviewed_station_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let matching = registry
         .definitions()
         .filter(|definition| {
@@ -83,7 +83,7 @@ fn issue_310_registry_contains_exactly_the_reviewed_station_cohort() {
 
 #[test]
 fn issue_310_cards_preserve_exact_faces_abilities_and_presentation_fingerprints() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, power, toughness, threshold, keywords, fingerprint) in [
         (
             "galvanizing_sawship",

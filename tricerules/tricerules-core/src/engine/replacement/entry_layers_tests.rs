@@ -111,7 +111,13 @@ fn devotion_actual_nylea_excludes_own_pip_for_entry_replacement_and_includes_it_
 }
 
 fn engine() -> GameEngine {
-    let mut engine = GameEngine::new_with_default_decks(305_030, &[0, 1], 20).unwrap();
+    let mut engine = GameEngine::new_with_default_decks(
+        tricerules_cards::registry::global(),
+        305_030,
+        &[0, 1],
+        20,
+    )
+    .unwrap();
     engine.state.opening = None;
     engine.state.priority_idx = 0;
     engine.state.turn_step = TurnStep::Main1;
@@ -1069,12 +1075,12 @@ fn effect(engine: &mut GameEngine, affected: AffectedScope, kind: ContinuousEffe
     });
 }
 
-fn land_scope(controller: tricerules_cards::primitives::TargetController) -> AffectedScope {
+fn land_scope(controller: tricerules_card_model::primitives::TargetController) -> AffectedScope {
     AffectedScope::PermanentsMatching {
         reference_player: 1,
         exclude: None,
-        filter: Box::new(tricerules_cards::primitives::TargetFilter {
-            kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+        filter: Box::new(tricerules_card_model::primitives::TargetFilter {
+            kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
             controller,
             permanent_types: vec![PermanentTypeFilter::Land],
             ..Default::default()
@@ -1082,8 +1088,8 @@ fn land_scope(controller: tricerules_cards::primitives::TargetController) -> Aff
     }
 }
 
-fn land() -> tricerules_cards::TypeLineReplacement {
-    tricerules_cards::TypeLineReplacement {
+fn land() -> tricerules_card_model::TypeLineReplacement {
+    tricerules_card_model::TypeLineReplacement {
         card_types: vec![PermanentTypeFilter::Land],
         creature_types: Vec::new(),
         land_types: Vec::new(),
@@ -1097,8 +1103,8 @@ fn entry_early_layers_land_making_precedes_existing_land_scope_in_both_forms() {
         let oid = object(&mut engine, "hill_giant", Zone::Stack, 0);
         effect(
             &mut engine,
-            land_scope(tricerules_cards::primitives::TargetController::Any),
-            ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+            land_scope(tricerules_card_model::primitives::TargetController::Any),
+            ContinuousEffectKind::Layer4AddTypes(tricerules_card_model::TypeLineAddition {
                 land_types: vec![BasicLandType::Forest],
                 ..Default::default()
             }),
@@ -1107,7 +1113,7 @@ fn entry_early_layers_land_making_precedes_existing_land_scope_in_both_forms() {
         entry.entry_modifiers = vec![if replace {
             ResolvingPermanentModifier::SetTypeLine(land())
         } else {
-            ResolvingPermanentModifier::AddTypes(tricerules_cards::TypeLineAddition {
+            ResolvingPermanentModifier::AddTypes(tricerules_card_model::TypeLineAddition {
                 card_types: vec![PermanentTypeFilter::Land],
                 ..Default::default()
             })
@@ -1135,8 +1141,8 @@ fn entry_early_layers_destination_controller_is_visible_to_land_scope() {
     let oid = object(&mut engine, "forest", Zone::Stack, 0);
     effect(
         &mut engine,
-        land_scope(tricerules_cards::primitives::TargetController::You),
-        ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+        land_scope(tricerules_card_model::primitives::TargetController::You),
+        ContinuousEffectKind::Layer4AddTypes(tricerules_card_model::TypeLineAddition {
             card_types: vec![PermanentTypeFilter::Artifact],
             ..Default::default()
         }),
@@ -1163,7 +1169,7 @@ fn entry_early_layers_face_down_values_precede_type_and_color_effects() {
     engine.state.objects.get_mut(&oid).unwrap().face_down = true;
     effect(
         &mut engine,
-        land_scope(tricerules_cards::primitives::TargetController::Any),
+        land_scope(tricerules_card_model::primitives::TargetController::Any),
         ContinuousEffectKind::Layer5SetColors(vec![Color::Blue]),
     );
     let mut entry = event(&engine, oid);

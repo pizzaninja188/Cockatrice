@@ -14,7 +14,15 @@ use tricerules_core::Zone;
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("swamp", &[]), deck_with("island", &[])]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
     grant_pool(&mut e, 0);
     grant_pool(&mut e, 1);
@@ -80,7 +88,15 @@ fn issue_misc6_brave_kin_duo_pumps_a_target_at_sorcery_speed() {
     assert!(e.state.objects[&duo].tapped, "the tap cost was paid");
 
     // Sorcery speed: it cannot be activated once the combat step has begun.
-    let mut combat = GameEngine::new(730_012, &[0, 1], 20, None, true).expect("engine");
+    let mut combat = GameEngine::new(
+        tricerules_cards::registry::global(),
+        730_012,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut combat);
     let duo = inject_creature_on_battlefield(&mut combat, 0, "brave-kin_duo");
     let target = inject_creature_on_battlefield(&mut combat, 0, "grizzly_bears");
@@ -119,7 +135,15 @@ fn issue_misc6_raccoon_rallier_grants_haste_at_sorcery_speed() {
     );
 
     // Sorcery speed: it cannot be activated once the combat step has begun.
-    let mut combat = GameEngine::new(730_023, &[0, 1], 20, None, true).expect("engine");
+    let mut combat = GameEngine::new(
+        tricerules_cards::registry::global(),
+        730_023,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut combat);
     let rallier = inject_creature_on_battlefield(&mut combat, 0, "raccoon_rallier");
     let target = inject_creature_on_battlefield(&mut combat, 0, "grizzly_bears");

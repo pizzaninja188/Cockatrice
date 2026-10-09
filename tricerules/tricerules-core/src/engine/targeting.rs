@@ -1,5 +1,5 @@
 use super::*;
-use tricerules_cards::primitives::{
+use tricerules_card_model::primitives::{
     GraveyardFilter, GraveyardOwner, TargetObjectExclusion, TargetRole, TargetSchema, TargetingDef,
 };
 
@@ -67,15 +67,15 @@ pub(super) fn object_is_excluded(
 
 pub(super) fn cost_target_matches(
     engine: &GameEngine,
-    filter: &tricerules_cards::TargetMatchFilter,
+    filter: &tricerules_card_model::TargetMatchFilter,
     kind: i32,
     oid: ObjectId,
     actor: PlayerId,
     source: TargetSourceIdentity,
 ) -> bool {
     let expected_kind = match filter {
-        tricerules_cards::TargetMatchFilter::Battlefield(_) => rv1::TargetRefKind::Permanent,
-        tricerules_cards::TargetMatchFilter::Graveyard(_) => rv1::TargetRefKind::Graveyard,
+        tricerules_card_model::TargetMatchFilter::Battlefield(_) => rv1::TargetRefKind::Permanent,
+        tricerules_card_model::TargetMatchFilter::Graveyard(_) => rv1::TargetRefKind::Graveyard,
     };
     (kind == rv1::TargetRefKind::Unspecified as i32 || kind == expected_kind as i32)
         && target_role_legal_at_resolution(
@@ -2400,7 +2400,7 @@ fn compute_targets_with_context(
             }
             rv1::LegalTargetGroup {
                 chosen_by_opponent: group.chooser
-                    == tricerules_cards::primitives::TargetChooser::ChosenOpponent,
+                    == tricerules_card_model::primitives::TargetChooser::ChosenOpponent,
                 group_index: group_index as u32,
                 prompt_text: group.prompt.to_string(),
                 min: group.min,
@@ -2534,7 +2534,15 @@ mod tests {
         .unwrap();
         let registry: &'static CardRegistry = Box::leak(Box::new(registry));
         let decks = Some(vec![vec!["forest".into(); 7], vec!["forest".into(); 7]]);
-        let mut engine = GameEngine::new(205, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            205,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         engine.state.stack = vec![
             issue_205_stack_item(101, "mv_one", 0, 0),
             issue_205_stack_item(102, "mv_two", 0, 0),
@@ -2647,7 +2655,15 @@ mod tests {
             &[],
         ).unwrap();
         let registry: &'static CardRegistry = Box::leak(Box::new(registry));
-        let mut engine = GameEngine::new(231, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            231,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.state.stack = vec![
             issue_205_stack_item(101, "red_creature", 0, 0),
             issue_205_stack_item(102, "artifact", 0, 0),
@@ -2742,7 +2758,15 @@ mod tests {
             vec!["grizzly_bears".into(); 7],
             vec!["forest".into(); 7],
         ]);
-        let mut engine = GameEngine::new(231002, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            231002,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         let oid = engine.state.players[0].hand.remove(0);
         engine.state.players[1].battlefield.push(oid);
         let object = engine.state.objects.get_mut(&oid).unwrap();
@@ -2751,7 +2775,7 @@ mod tests {
         object.base_controller = 1;
         let filter = TargetFilter {
             kind: TargetKind::Creature,
-            owner: tricerules_cards::primitives::TargetOwner::You,
+            owner: tricerules_card_model::primitives::TargetOwner::You,
             ..Default::default()
         };
         for player in [0, 1] {
@@ -2858,7 +2882,15 @@ mod tests {
             vec!["short_sword".into(); 7],
             vec!["forest".into(); 7],
         ]);
-        let mut engine = GameEngine::new(176005, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            176005,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         let artifact = engine.state.players[0].hand.remove(0);
         engine.state.players[0].battlefield.push(artifact);
         engine.state.objects.get_mut(&artifact).unwrap().zone = Zone::Battlefield;
@@ -2877,7 +2909,15 @@ mod tests {
             vec!["grizzly_bears".into(); 7],
             vec!["forest".into(); 7],
         ]);
-        let mut engine = GameEngine::new(176003, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            176003,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         let ids = engine.state.players[0].hand[..3].to_vec();
         for &oid in &ids {
             engine.state.players[0].hand.retain(|id| *id != oid);
@@ -2944,7 +2984,15 @@ mod tests {
             vec!["grizzly_bears".into(); 7],
             vec!["forest".into(); 7],
         ]);
-        let mut engine = GameEngine::new(176004, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            176004,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         let bear = engine.state.players[0].hand.remove(0);
         engine.state.players[0].graveyard.push(bear);
         engine.state.objects.get_mut(&bear).unwrap().zone = Zone::Graveyard;
@@ -3027,7 +3075,15 @@ mod tests {
             vec!["grizzly_bears".into(); 7],
             vec!["forest".into(); 7],
         ]);
-        let mut engine = GameEngine::new(176001, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            176001,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         let bear = engine.state.players[0].hand.remove(0);
         engine.state.players[0].battlefield.push(bear);
         engine.state.objects.get_mut(&bear).unwrap().zone = Zone::Battlefield;
@@ -3085,7 +3141,15 @@ mod tests {
             vec!["grizzly_bears".into(); 7],
             vec!["island".into(); 7],
         ]);
-        let mut engine = GameEngine::new(464_001, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            464_001,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         let bear = engine.state.players[0].hand.remove(0);
         engine.state.players[0].battlefield.push(bear);
         engine.state.objects.get_mut(&bear).unwrap().zone = Zone::Battlefield;
@@ -3130,7 +3194,15 @@ mod tests {
             vec!["grizzly_bears".into(); 7],
             vec!["grizzly_bears".into(); 7],
         ]);
-        let mut engine = GameEngine::new(464_004, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            464_004,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         let target = engine.state.players[1].hand.remove(0);
         engine.state.players[1].battlefield.push(target);
         engine.state.objects.get_mut(&target).unwrap().zone = Zone::Battlefield;
@@ -3214,7 +3286,15 @@ mod tests {
             vec!["grizzly_bears".into(); 7],
             vec!["forest".into(); 7],
         ]);
-        let mut engine = GameEngine::new(176002, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            176002,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         let bear = engine.state.players[0].hand.remove(0);
         engine.state.players[0].graveyard.push(bear);
         engine.state.objects.get_mut(&bear).unwrap().zone = Zone::Graveyard;
@@ -3261,6 +3341,7 @@ mod tests {
         let mut deck = cards.iter().map(|id| id.to_string()).collect::<Vec<_>>();
         deck.extend(vec!["forest".into(); 3]);
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             176006,
             &[0, 1],
             20,
@@ -3345,7 +3426,7 @@ mod tests {
         ));
     }
     use super::*;
-    use tricerules_cards::{primitives::TargetGroupDef, CounterKind};
+    use tricerules_card_model::{primitives::TargetGroupDef, CounterKind};
 
     #[test]
     fn artifact_exchange_targets_require_a_current_same_player_pair() {
@@ -3356,7 +3437,15 @@ mod tests {
             {"min":1,"max":1,"prompt":"Choose battlefield artifact","effect_indices":[0]},
             {"min":1,"max":1,"prompt":"Choose artifact in that player's graveyard","effect_indices":[0]}
         ]})).unwrap();
-        let mut engine = GameEngine::new(2026100510, &[10, 20, 30], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            2026100510,
+            &[10, 20, 30],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let mut battlefield = Vec::new();
         let mut graveyard = Vec::new();
         for index in 0..3 {
@@ -3447,7 +3536,8 @@ mod tests {
             "a paired role must be singleton"
         );
         malformed = targeting.clone();
-        malformed.groups[0].chooser = tricerules_cards::primitives::TargetChooser::ChosenOpponent;
+        malformed.groups[0].chooser =
+            tricerules_card_model::primitives::TargetChooser::ChosenOpponent;
         assert!(
             TargetSchema::compile(&effects, Some(&malformed)).is_err(),
             "the ability controller chooses both targets"
@@ -3504,7 +3594,15 @@ mod tests {
 
     #[test]
     fn grouped_targets_publish_independent_candidates_and_validate_distinctness_atomically() {
-        let engine = GameEngine::new(73_001, &[10, 20], 20, None, true).expect("new");
+        let engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            73_001,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
         let effects = vec![
             SpellEffectKind::TargetPlayerGainsLife {
                 amount: 1.into(),
@@ -3601,7 +3699,15 @@ mod tests {
 
     #[test]
     fn opponent_relation_is_state_backed_and_independent_of_loss() {
-        let mut engine = GameEngine::new(96905, &[10, 20], 20, None, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            96905,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
         assert!(target_controller_matches(
             &engine.state,
             TargetController::Opponent,
@@ -3658,7 +3764,15 @@ mod tests {
             vec!["grizzly_bears".into(); 7],
             vec!["forest".into(); 7],
         ]);
-        let mut engine = GameEngine::new(96906, &[0, 1], 20, decks, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            96906,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
         let bear = engine.state.players[0]
             .hand
             .iter()
@@ -3726,7 +3840,15 @@ mod tests {
             vec!["grizzly_bears".into(); 7],
             vec!["forest".into(); 7],
         ]);
-        let mut engine = GameEngine::new(70070, &[0, 1], 20, decks, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            70070,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
         let bear = engine.state.players[0].hand[0];
         engine.state.players[0].hand.remove(0);
         engine.state.players[0].battlefield.push(bear);
@@ -3734,7 +3856,7 @@ mod tests {
 
         let filter = TargetFilter {
             kind: TargetKind::Creature,
-            excluded_objects: vec![tricerules_cards::TargetObjectExclusion::Source],
+            excluded_objects: vec![tricerules_card_model::TargetObjectExclusion::Source],
             ..TargetFilter::default()
         };
         let original_source = TargetSourceIdentity::current(&engine, bear);
@@ -3787,7 +3909,15 @@ mod tests {
             vec!["grizzly_bears".into(); 7],
             vec!["forest".into(); 7],
         ]);
-        let mut engine = GameEngine::new(96907, &[0, 1], 20, decks, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            96907,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
         let any_player = TargetFilter {
             kind: TargetKind::AnyPlayer,
             ..TargetFilter::default()
@@ -3857,7 +3987,15 @@ mod tests {
             ],
             vec!["forest".into(); 7],
         ]);
-        let mut engine = GameEngine::new(71_001, &[0, 1], 20, decks, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            71_001,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
         let mut deploy = |card_id: &str| {
             let oid = engine.state.players[0]
                 .hand
@@ -3917,7 +4055,15 @@ mod tests {
             ],
             vec!["forest".into(); 7],
         ]);
-        let mut engine = GameEngine::new(114_007, &[0, 1], 20, decks, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            114_007,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
         let mut deploy = |card_id: &str| {
             let oid = engine.state.players[0]
                 .hand
@@ -3984,7 +4130,15 @@ mod tests {
 
     #[test]
     fn issue_219_stack_target_identity_tracks_physical_generations_but_not_copy_ids() {
-        let mut engine = GameEngine::new(219_008, &[0, 1], 20, None, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            219_008,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
         let physical = engine.state.players[0].hand[0];
         let physical_target = capture_stack_target(
             &engine,

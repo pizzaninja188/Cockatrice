@@ -31,7 +31,15 @@ fn starport_security_reduces_only_for_a_plus_one_plus_one_counter() {
         deck_with("plains", &["starport_security", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(158_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        158_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let security = relocate_to_battlefield(&mut engine, 0, "starport_security", false);
     let target = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -99,7 +107,15 @@ fn boneclub_berserker_counts_other_controlled_goblins_in_layer_seven() {
         ),
         deck_with("mountain", &["crazed_goblin"]),
     ]);
-    let mut engine = GameEngine::new(158_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        158_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "boneclub_berserker");
     give_mana(
@@ -137,7 +153,15 @@ fn sold_out_uses_the_chosen_targets_pre_exile_damage_identity() {
         deck_with("swamp", &["sold_out", "shock"]),
         deck_with("forest", &["giant_spider"]),
     ]);
-    let mut engine = GameEngine::new(158_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        158_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 1, "giant_spider", false);
     ensure_in_hand(&mut engine, 0, "shock");
@@ -183,7 +207,15 @@ fn flaring_cinder_cast_trigger_includes_announced_x_in_mana_value() {
         deck_with("mountain", &["flaring_cinder", "blaze", "blaze"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(158_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        158_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let cinder = relocate_to_battlefield(&mut engine, 0, "flaring_cinder", false);
     ensure_in_hand(&mut engine, 0, "blaze");

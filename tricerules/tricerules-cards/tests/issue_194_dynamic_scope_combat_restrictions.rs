@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     CombatRestriction, CreatureScopeController, CreatureScopeFilter, StaticAbilityDef,
 };
-use tricerules_cards::{CardRegistry, CounterKind};
+use tricerules_cards::CounterKind;
 
 #[test]
 fn issue_194_consumers_are_registered() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     let michelangelo = registry
         .get("michelangelo,_mutant_bff")

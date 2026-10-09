@@ -8,7 +8,15 @@ fn keyword_counter_grants_layer_6_keyword_and_refreshes_timestamp() {
         std::iter::repeat_n("forest".to_string(), 20).collect(),
         std::iter::repeat_n("mountain".to_string(), 20).collect(),
     ]);
-    let mut e = GameEngine::new(124, &[0, 1], 20, decks, true).expect("new engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        124,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let first_timestamp = e.state.command_index;
 
@@ -110,7 +118,15 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(144, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        144,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
@@ -211,7 +227,15 @@ fn giant_growth_pump_expires_after_active_turn_ends() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(904, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        904,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -280,7 +304,15 @@ fn fiery_hellhound_self_firebreathing_pumps_and_expires() {
         },
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(7311, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7311,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let hound = put_creature_on_battlefield(&mut e, 0, "fiery_hellhound");
@@ -357,7 +389,15 @@ fn fiery_hellhound_source_pump_rejects_supplied_target() {
         },
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(7312, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        7312,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let hound = put_creature_on_battlefield(&mut e, 0, "fiery_hellhound");
     give_mana(
@@ -410,7 +450,15 @@ fn two_giant_growths_stack_correctly() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(9050, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9050,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -486,7 +534,15 @@ fn battlegrowth_counter_raises_pt_and_persists() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(1221, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1221,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -561,7 +617,15 @@ fn zone_view_reports_counter_annotation() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(1313, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1313,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -648,7 +712,15 @@ fn plus_and_minus_counters_annihilate() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(1222, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1222,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -734,7 +806,15 @@ fn minus_counter_to_zero_toughness_kills_via_sba() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(1223, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1223,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Prodigal Sorcerer is a 1/1.
@@ -793,7 +873,15 @@ fn marked_damage_clears_at_cleanup() {
         },
         vec!["mountain".into(); 20],
     ]);
-    let mut e = GameEngine::new(906, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        906,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -864,7 +952,15 @@ fn bounce_clears_counters_and_marked_damage() {
         ],
         forest_only_deck(),
     ]);
-    let mut e = GameEngine::new(2611, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2611,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     {
@@ -1222,7 +1318,15 @@ fn anthem_buff_drains_when_source_leaves_battlefield() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(5003, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mine = inject_creature_on_battlefield(&mut e, 0, "savannah_lions");
 
@@ -1409,7 +1513,15 @@ fn issue_75_uncomfortable_chill_snapshots_opponents_and_draws() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(75_001, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        75_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mine = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let theirs = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -1488,7 +1600,15 @@ fn issue_75_make_obsolete_only_kills_opposing_creatures() {
         ],
         vec!["plains".into(); 7],
     ]);
-    let mut e = GameEngine::new(75_002, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        75_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mine = inject_creature_on_battlefield(&mut e, 0, "savannah_lions");
     let theirs = inject_creature_on_battlefield(&mut e, 1, "savannah_lions");

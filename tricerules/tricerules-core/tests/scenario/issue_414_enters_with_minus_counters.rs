@@ -19,7 +19,15 @@ use tricerules_proto::ruled::v1::{
 
 fn engine_with(seed: u64, own: &[&str]) -> GameEngine {
     let decks = Some(vec![deck_with("forest", own), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -389,7 +397,7 @@ fn issue_414_hovel_hurler_excludes_itself_and_pumps_the_other_creature() {
 
 #[test]
 fn issue_414_blocked_identities_stay_unregistered() {
-    let registry = tricerules_cards::CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for name in [
         "Flitterwing Nuisance",
         "Glen Elendra Guardian",

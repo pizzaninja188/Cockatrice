@@ -13,8 +13,8 @@ use tricerules_cards::primitives::{
     TypeLineAddition,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount, CardRegistry,
-    Keyword, LibraryPartitionKind, ManaCost, TriggerCondition,
+    AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount, Keyword,
+    LibraryPartitionKind, ManaCost, TriggerCondition,
 };
 
 const CARDS: &[(&str, &str, &str, &str)] = &[
@@ -51,7 +51,7 @@ fn equip_ability_index(face: &tricerules_cards::CardFace) -> usize {
 
 #[test]
 fn issue_415_registers_the_five_completed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana_cost, _) in CARDS {
         let definition = registry
             .get(id)
@@ -68,7 +68,7 @@ fn issue_415_registers_the_five_completed_identities() {
 
 #[test]
 fn issue_415_equip_abilities_match_the_printed_costs() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, _, equip_cost) in CARDS {
         let face = registry.get(id).expect("retained identity").primary_face();
         let index = equip_ability_index(face);
@@ -98,7 +98,7 @@ fn issue_415_equip_abilities_match_the_printed_costs() {
 
 #[test]
 fn issue_415_shared_sacrifice_draw_activation_is_exact_and_ordered_before_equip() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, _, _) in CARDS {
         let face = registry.get(id).expect("retained identity").primary_face();
         let index = sacrifice_draw_ability_index(face);
@@ -131,7 +131,7 @@ fn issue_415_shared_sacrifice_draw_activation_is_exact_and_ordered_before_equip(
 
 #[test]
 fn issue_415_candlestick_static_grants_the_attack_surveil_trigger() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let face = registry
         .get("candlestick")
         .expect("Candlestick")
@@ -210,7 +210,7 @@ fn issue_415_candlestick_static_grants_the_attack_surveil_trigger() {
 
 #[test]
 fn issue_415_knife_static_is_conditioned_on_the_controllers_turn() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let face = registry.get("knife").expect("Knife").primary_face();
     let [static_ability] = face.static_abilities.as_slice() else {
         panic!("Knife must have exactly one static ability");
@@ -247,7 +247,7 @@ fn issue_415_knife_static_is_conditioned_on_the_controllers_turn() {
 
 #[test]
 fn issue_415_lead_pipe_static_and_death_trigger_are_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let face = registry.get("lead_pipe").expect("Lead Pipe").primary_face();
     let [static_ability] = face.static_abilities.as_slice() else {
         panic!("Lead Pipe must have exactly one static ability");
@@ -307,7 +307,7 @@ fn issue_415_lead_pipe_static_and_death_trigger_are_exact() {
 
 #[test]
 fn issue_415_rope_static_carries_reach_and_the_one_blocker_cap() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let face = registry.get("rope").expect("Rope").primary_face();
     let [static_ability] = face.static_abilities.as_slice() else {
         panic!("Rope must have exactly one static ability");
@@ -343,7 +343,7 @@ fn issue_415_rope_static_carries_reach_and_the_one_blocker_cap() {
 
 #[test]
 fn issue_415_wrench_static_grants_vigilance_and_the_tap_ability() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let face = registry.get("wrench").expect("Wrench").primary_face();
     let [static_ability] = face.static_abilities.as_slice() else {
         panic!("Wrench must have exactly one static ability");
@@ -404,7 +404,7 @@ fn issue_415_wrench_static_grants_vigilance_and_the_tap_ability() {
 
 #[test]
 fn issue_415_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     for (id, _, _, _) in CARDS {
         let presentation = registry

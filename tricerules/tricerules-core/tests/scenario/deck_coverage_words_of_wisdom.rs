@@ -53,7 +53,15 @@ fn four_player_engine(seed: u64) -> GameEngine {
         island_only_deck(),
         island_only_deck(),
     ]);
-    GameEngine::new(seed, &[0, 1, 2, 3], 20, decks, true).expect("new four-player game")
+    GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1, 2, 3],
+        20,
+        decks,
+        true,
+    )
+    .expect("new four-player game")
 }
 
 #[test]

@@ -9,6 +9,7 @@ use tricerules_proto::ruled::v1::{
 
 fn wizard_engine(seed: u64) -> GameEngine {
     GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -265,6 +266,7 @@ fn wizard_class_level_three_counters_only_its_controllers_draws() {
 #[test]
 fn wizard_class_level_up_ability_can_be_countered() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         716_003,
         &[0, 1],
         20,

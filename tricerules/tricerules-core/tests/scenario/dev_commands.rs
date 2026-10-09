@@ -55,7 +55,15 @@ fn add_mana(target: i32, w: u32, u: u32, b: u32, r: u32, g: u32, c: u32) -> Rule
 /// conjure path is what gets exercised.
 fn basics_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![vec!["mountain".into(); 12], vec!["forest".into(); 12]]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     e.enable_dev_commands();
     advance_to_main1_from_game_start(&mut e);
     e
@@ -74,8 +82,15 @@ fn dev_move_declared_commander_from_command_zone_round_trips_physical_identity_a
                 commanders: vec![],
             },
         ]);
-        let mut engine =
-            GameEngine::new_with_commander_decks(902_903, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new_with_commander_decks(
+            tricerules_cards::registry::global(),
+            902_903,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         engine.enable_dev_commands();
         advance_to_main1_from_game_start(&mut engine);
         engine
@@ -565,7 +580,15 @@ fn issue_176_graveyard_payment_and_stale_target_replay() {
 #[test]
 fn dev_command_rejected_when_gate_is_off() {
     let decks = Some(vec![vec!["mountain".into(); 12], vec!["forest".into(); 12]]);
-    let mut e = GameEngine::new(900, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        900,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let before = e.state.command_index;
 
@@ -592,7 +615,15 @@ fn dev_command_rejected_when_gate_is_off() {
 fn dev_command_rejected_during_opening() {
     let decks = Some(vec![vec!["mountain".into(); 12], vec!["forest".into(); 12]]);
     // skip_opening_sequence = false, so the engine starts inside the opening procedure.
-    let mut e = GameEngine::new(901, &[0, 1], 20, decks, false).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        901,
+        &[0, 1],
+        20,
+        decks,
+        false,
+    )
+    .expect("new");
     e.enable_dev_commands();
     assert!(e.state.opening.is_some(), "still in the opening procedure");
 
@@ -632,7 +663,15 @@ fn dev_put_always_conjures_so_repeating_it_builds_multiples() {
         deck_with("mountain", &["lightning_bolt"]),
         vec!["forest".into(); 12],
     ]);
-    let mut e2 = GameEngine::new(9021, &[0, 1], 20, decks, true).expect("new");
+    let mut e2 = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9021,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     e2.enable_dev_commands();
     advance_to_main1_from_game_start(&mut e2);
     e2.apply_command(0, &put(0, DevZone::Hand, "Lightning Bolt"))
@@ -653,7 +692,15 @@ fn dev_move_relocates_an_owned_card_without_duplicating_it() {
         deck_with("mountain", &["lightning_bolt"]),
         vec!["forest".into(); 12],
     ]);
-    let mut e = GameEngine::new(9022, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9022,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     e.enable_dev_commands();
     advance_to_main1_from_game_start(&mut e);
 
@@ -1046,7 +1093,15 @@ fn dev_move_reaches_zones_conjuring_cannot() {
         deck_with("mountain", &["lightning_bolt"]),
         vec!["forest".into(); 12],
     ]);
-    let mut e = GameEngine::new(907, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        907,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     e.enable_dev_commands();
     advance_to_main1_from_game_start(&mut e);
 
@@ -1079,7 +1134,15 @@ fn dev_conjure_then_move_prefers_the_staged_hand_copy_over_the_library() {
         deck_with("mountain", &["lightning_bolt"]),
         vec!["forest".into(); 12],
     ]);
-    let mut e = GameEngine::new(9072, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9072,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     e.enable_dev_commands();
     advance_to_main1_from_game_start(&mut e);
 

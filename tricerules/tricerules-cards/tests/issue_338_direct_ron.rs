@@ -16,9 +16,7 @@ use tricerules_cards::primitives::{
     PermanentTypeFilter, PlayerRecipient, SpellEffectKind, TargetController, TargetFilter,
     TargetGroupDef, TargetKind, TargetingDef, TriggerCondition,
 };
-use tricerules_cards::{
-    AbilityPresentation, CardRegistry, ChoiceId, Color, CounterKind, Keyword, Layout,
-};
+use tricerules_cards::{AbilityPresentation, ChoiceId, Color, CounterKind, Keyword, Layout};
 
 const WORTHY_COST_FINGERPRINT: &str =
     "a5201b1a3fe71957d72ff1579f0ace7f49e06e040bebc2ad2b198ad2fbcbcbf9";
@@ -74,7 +72,7 @@ fn creature_or_planeswalker() -> TargetFilter {
 
 #[test]
 fn issue_338_direct_ron_batch_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     // Worthy Cost: mandatory creature sacrifice, then exile a creature or planeswalker.
     let worthy = registry.get("worthy_cost").expect("registered");

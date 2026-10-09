@@ -2,13 +2,12 @@ use tricerules_cards::primitives::{
     EffectSubject, PlayerRecipient, SpellEffectKind, TargetController, TargetKind,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, ActivationTiming, Amount, CardRegistry, Color, Keyword,
-    TriggerCondition,
+    AbilityCost, AbilityPresentation, ActivationTiming, Amount, Color, Keyword, TriggerCondition,
 };
 
 #[test]
 fn issue_299_registers_exactly_the_reviewed_dies_mercenary_cohort() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let assert_card = |id: &str,
                        name: &str,
                        mana_cost: &str,
@@ -78,11 +77,11 @@ fn issue_299_registers_exactly_the_reviewed_dies_mercenary_cohort() {
 
 #[test]
 fn issue_299_reuses_the_predefined_mercenary_token_contract() {
-    let token = CardRegistry::global()
+    let token = tricerules_cards::registry::global()
         .get("mercenary_r_1_1")
         .expect("Mercenary token")
         .primary_face();
-    assert!(CardRegistry::global().is_token("mercenary_r_1_1"));
+    assert!(tricerules_cards::registry::global().is_token("mercenary_r_1_1"));
     assert_eq!(token.types, ["Creature", "Mercenary"]);
     assert_eq!(token.colors(), [Color::Red]);
     assert_eq!((token.power, token.toughness), (Some(1), Some(1)));

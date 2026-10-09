@@ -47,11 +47,26 @@ stamps `ruled_card_data_hash` from the sidecar's `SessionStart` handshake. Any m
 (`SubmitResolutionChoice`), which is why tier-3 resolution is park/resume rather than a
 callback — see §6.
 
+**Rust card-data build boundary.** `tricerules-card-model` owns stable typed definitions,
+primitives, parsing/validation and the immutable `CardRegistry` interface. `tricerules-cards`
+owns the embedded RON corpus, presentation fingerprints, global registry assembly, content hash
+and offline authoring tools. The engine's production dependencies include the model, never the
+embedded-data crate; the sidecar supplies `tricerules_cards::registry::global()` explicitly to
+engine constructors. Engine tests may depend on the corpus as a dev dependency. Thus RON and
+presentation-data edits rebuild the data crate and final consumers without recompiling engine
+library code. Definition or primitive edits correctly invalidate the engine. The final Rust
+verification includes `tests/scripts/card_data_boundary_test.ps1` to guard this graph.
+A controlled debug-build check on 2026-10-08 confirmed both RON and presentation-only edits
+reuse the model and core library artifacts; each warm rebuild took about 3.8 seconds on that
+checkout. This establishes the dependency boundary, not an end-to-end authoring speedup.
+Primitive/engine edits still require recompiling engine code, and actual-card test executables
+still depend on the embedded corpus.
+
 ### Where things live
 
 | Area | Path |
 |---|---|
-| Rules engine + sidecar | `tricerules/` (`-core`, `-cards`, `-proto`, `-server`) |
+| Rules engine + sidecar | `tricerules/` (`-card-model`, `-cards`, `-core`, `-proto`, `-server`) |
 | Shared protobuf | `libcockatrice_protocol/libcockatrice/protocol/pb/ruled_v1.proto` |
 | Server ruled integration | `libcockatrice_network/libcockatrice/network/server/remote/game/ruled_*.{h,cpp}`, `rules_relay.{h,cpp}` |
 | Client ruled view model | `cockatrice/src/game/ruled/` — see its [README](../cockatrice/src/game/ruled/README.md) |
@@ -372,7 +387,7 @@ Do not re-derive this per card.
 ## 7. Runtime performance posture
 
 **Card-base size does not affect per-game runtime.** The registry is parsed once per process into
-`HashMap`s (`CardRegistry::global()`); lookups are O(1), and a game touches ~120 cards regardless
+`HashMap`s (`tricerules_cards::registry::global()`); lookups are O(1), and a game touches ~120 cards regardless
 of whether the registry holds 800 or 35,000.
 
 What grows is **board complexity**. The hot paths, in the order they are likely to matter:
@@ -437,12 +452,12 @@ identity contract changed.
 
 1. **Name two real cards it covers**, or widen the parameters until you can. This gate is the
    whole scaling strategy.
-2. Variant in the right `tricerules-cards/src/primitives/` submodule (`effects`, `targeting`,
+2. Variant in the right `tricerules-card-model/src/primitives/` submodule (`effects`, `targeting`,
    `costs`, `abilities`, `keywords`) — the re-exports keep `primitives::X` paths and RON serde
    names stable.
 3. One arm in the exhaustive match in `engine/resolution/mod.rs` (a one-liner) plus the
    implementation in the matching domain submodule.
-4. Registry validation in `tricerules-cards/src/registry.rs` if the primitive has authoring
+4. Registry validation in `tricerules-card-model/src/registry.rs` if the primitive has authoring
    constraints; scenario tests; the RON card that motivated it.
 
 ### Add a keyword

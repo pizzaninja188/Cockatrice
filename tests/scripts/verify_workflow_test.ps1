@@ -37,21 +37,21 @@ try {
     Assert-Workflow ($result.Output -notmatch 'fixture successful (stdout|stderr)') 'Successful command output was noisy.'
     $trace = @(Read-WorkflowTrace $fixture)
     $formatCalls = @($trace | Where-Object { $_.Tool -eq 'rustfmt' })
-    Assert-Workflow ($formatCalls.Count -eq 4) 'Each Rust workspace package must receive a separate formatting command to avoid Windows command-line limits.'
-    foreach ($package in @('tricerules-proto', 'tricerules-core', 'tricerules-cards', 'tricerules-server')) {
+    Assert-Workflow ($formatCalls.Count -eq 5) 'Each Rust workspace package must receive a separate formatting command to avoid Windows command-line limits.'
+    foreach ($package in @('tricerules-proto', 'tricerules-core', 'tricerules-card-model', 'tricerules-cards', 'tricerules-server')) {
         Assert-Workflow (@($formatCalls | Where-Object { ($_.Arguments -join ' ') -match $package }).Count -eq 1) "Formatting did not cover exactly one $package package."
     }
-    Assert-Workflow (($trace.Tool -join ',') -eq 'cargo,cargo,cargo,cargo,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,build,ctest,git') 'Wrong combined gate order.'
-    foreach ($call in $trace[2..11]) {
+    Assert-Workflow (($trace.Tool -join ',') -eq 'cargo,cargo,cargo,cargo,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,build,ctest,git') 'Wrong combined gate order.'
+    foreach ($call in $trace[2..13]) {
         Assert-Workflow ($call.Cwd -eq (Join-Path $fixture 'tricerules')) 'Rust command ran outside tricerules.'
     }
-    Assert-Workflow ($trace[13].RequireE2E -eq '1') 'CTest did not require E2E prerequisites.'
-    Assert-Workflow ($trace[13].Arguments -contains '--no-tests=error') 'CTest could accept an empty suite.'
+    Assert-Workflow ($trace[15].RequireE2E -eq '1') 'CTest did not require E2E prerequisites.'
+    Assert-Workflow ($trace[15].Arguments -contains '--no-tests=error') 'CTest could accept an empty suite.'
     $summaries = @(Get-ChildItem -LiteralPath (Join-Path $fixture 'build\verification-logs') -Filter summary.json -Recurse)
     Assert-Workflow ($summaries.Count -eq 1) 'Combined run did not save one summary.'
     $summary = Get-Content -LiteralPath $summaries[0].FullName -Raw | ConvertFrom-Json
     Assert-Workflow ($summary.ExitCode -eq 0 -and $summary.Status -eq 'Pass') 'Summary did not report success.'
-    Assert-Workflow ($summary.Steps.Count -eq 10) 'Summary omitted a gate.'
+    Assert-Workflow ($summary.Steps.Count -eq 12) 'Summary omitted a gate.'
     foreach ($step in $summary.Steps) {
         Assert-Workflow ($step.Status -eq 'Pass' -and $step.ExitCode -eq 0) 'Summary reported a successful gate incorrectly.'
         Assert-Workflow (Test-Path -LiteralPath $step.LogPath) 'Summary points to a missing log.'
@@ -69,7 +69,7 @@ try {
     $failureSummary = Get-ChildItem -LiteralPath (Join-Path $fixture 'build\verification-logs') -Filter summary.json -Recurse |
         ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json } |
         Where-Object { $_.ExitCode -eq 7 }
-    Assert-Workflow ($failureSummary.Steps[1].Status -eq 'Fail' -and $failureSummary.Steps[2].Status -eq 'NotRun') 'Failure summary is misleading.'
+    Assert-Workflow ($failureSummary.Steps[2].Status -eq 'Fail' -and $failureSummary.Steps[3].Status -eq 'NotRun') 'Failure summary is misleading.'
 
     # Check restoration in the same PowerShell process, on success and failure.
     Set-Content -LiteralPath (Join-Path $fixture 'scripts\environment-probe.ps1') -Value @'
@@ -108,7 +108,7 @@ exit $code
     Assert-Workflow (@(Read-WorkflowTrace $fixture).Count -eq $before) 'Package discovery executed a command during preview.'
     [IO.File]::WriteAllText($workspaceManifest, $workspaceText.Replace('    "tricerules-proto",', '    "tricerules-proto", # ] comment must not end the member list'))
     $result = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Rust', '-Preview')
-    foreach ($package in @('tricerules-proto', 'tricerules-core', 'tricerules-cards', 'tricerules-server', 'extra-format-package')) {
+    foreach ($package in @('tricerules-proto', 'tricerules-core', 'tricerules-card-model', 'tricerules-cards', 'tricerules-server', 'extra-format-package')) {
         Assert-Workflow ($result.ExitCode -eq 0 -and $result.Output -match $package) "A comment containing a bracket silently omitted $package from formatting."
     }
     Assert-Workflow (@(Read-WorkflowTrace $fixture).Count -eq $before) 'Comment-aware discovery executed commands in preview.'

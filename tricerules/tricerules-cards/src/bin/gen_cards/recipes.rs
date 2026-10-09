@@ -17389,7 +17389,7 @@ fn match_static_enters_with_three_minus_one_minus_one_counters(
 // counter kind (`libcockatrice_protocol/.../ruled_v1.proto:905-909`), so
 // `RemoveCounters { counter: None, count: 2 }` would have to approximate mixed-kind payment as two
 // counters of one kind, and `AbilityCost::validate` rejects the shape outright
-// (tricerules-cards/src/primitives/costs.rs:167-176). The exact representation is *two*
+// (tricerules-card-model/src/primitives/costs.rs:167-176). The exact representation is *two*
 // `RemoveCounters { counter: None, count: 1, payment_source: Source }` components: the engine
 // publishes one any-one-counter legal choice per component
 // (tricerules-core/src/engine/legal_actions.rs:829-854), proves a joint assignment exists before
@@ -17693,7 +17693,7 @@ fn match_activated_remove_counter_return_small_creature_card(
 // instant-and-sorcery templates have seven corpus printings each. The disguise-flavored
 // template from the same issue is
 // deliberately absent: `SpellCostModifier` has no binding to a face-down alternative cost
-// (tricerules-cards/src/primitives/costs.rs:513-536), so any emission authored today would
+// (tricerules-card-model/src/primitives/costs.rs:513-536), so any emission authored today would
 // misapply the reduction to the normal cast; #345 owns Disguise cost assembly.
 //
 // Reviewed deviation from the issue text: it specifies `RecipeSurface::SpellClause`, but that
@@ -30715,6 +30715,7 @@ mod tests {
         let expected_land_count = |min, max| StaticAbilityDef::EntersTapped {
             affected: EntersTappedAffected::Self_,
             condition: Some(GameCondition::BattlefieldAggregate {
+                exclude_observed_object: false,
                 filter: BattlefieldPermanentFilter {
                     required_supertypes: Vec::new(),
                     token: None,
@@ -30948,7 +30949,7 @@ mod tests {
             mass.emission,
             RecipeEmission::SpellEffect(SpellEffectKind::DamageAll {
                 amount: Amount::Fixed(2),
-                players: RelativePlayerSet::All,
+                players: tricerules_cards::MassPlayerSet::All,
                 kind: TargetFilter::default_creature(),
             })
         );
@@ -33619,7 +33620,7 @@ mod tests {
                 },
                 SpellEffectKind::DamageAll {
                     amount: Amount::Fixed(4),
-                    players: RelativePlayerSet::All,
+                    players: tricerules_cards::MassPlayerSet::All,
                     kind: TargetFilter::default_creature(),
                 },
             ]
@@ -41024,6 +41025,7 @@ mod tests {
             ability.definition,
             StaticAbilityDef::ConditionalSelfModifier {
                 condition: GameCondition::BattlefieldAggregate {
+                    exclude_observed_object: false,
                     filter: BattlefieldPermanentFilter {
                         required_supertypes: Vec::new(),
                         token: None,
@@ -43938,6 +43940,7 @@ mod tests {
             aggregate,
             min,
             max,
+            exclude_observed_object: false,
         } = condition
         else {
             panic!("Doc Ock must gate on a battlefield aggregate");
@@ -47860,6 +47863,7 @@ mod tests {
             exclude_source: false,
         };
         GameCondition::BattlefieldAggregate {
+            exclude_observed_object: false,
             filter: BattlefieldPermanentFilter {
                 required_supertypes: Vec::new(),
                 token: None,
@@ -51363,7 +51367,7 @@ mod tests {
             ModalModeEmission {
                 effects: vec![SpellEffectKind::DamageAll {
                     amount: Amount::Fixed(3),
-                    players: RelativePlayerSet::All,
+                    players: tricerules_cards::MassPlayerSet::All,
                     kind: TargetFilter::default_creature(),
                 }],
                 targeting: None,
@@ -52670,6 +52674,7 @@ mod tests {
                 max: None,
             },
             GameCondition::BattlefieldAggregate {
+                exclude_observed_object: false,
                 filter: BattlefieldPermanentFilter {
                     required_supertypes: Vec::new(),
                     token: None,
@@ -53102,6 +53107,7 @@ mod tests {
     /// The exact reviewed condition: seven or more lands the source's controller controls.
     fn issue_458_seven_lands_condition() -> GameCondition {
         GameCondition::BattlefieldAggregate {
+            exclude_observed_object: false,
             filter: BattlefieldPermanentFilter {
                 required_supertypes: Vec::new(),
                 token: None,

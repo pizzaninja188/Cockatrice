@@ -2,7 +2,6 @@ use super::helpers::*;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, CounterKind, EffectDuration, PermanentTypeFilter, TypeLineAddition,
 };
-use tricerules_cards::CardRegistry;
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
 
 fn engine(seed: u64) -> GameEngine {
@@ -10,7 +9,15 @@ fn engine(seed: u64) -> GameEngine {
         std::iter::repeat_n("mountain".to_string(), 20).collect(),
         std::iter::repeat_n("forest".to_string(), 20).collect(),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -41,7 +48,7 @@ fn seed_army_counter(engine: &mut GameEngine, object_id: u32) {
 
 #[test]
 fn issue_186_registers_the_unblocked_amass_consumers() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for card_id in ["goblin-town_flunkies", "misty_mountains_raider"] {
         assert!(

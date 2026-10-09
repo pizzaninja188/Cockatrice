@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, EntersTappedAffected, PermanentTypeFilter, SpellEffectKind,
     StaticAbilityDef, TargetFilter, TargetKind, TargetSchema,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
+use tricerules_cards::{AbilityPresentation, Layout};
 
 #[test]
 fn nevinyrrals_disk_registers_entry_replacement_and_mass_destroy_activation() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("nevinyrrals_disk")
         .expect("Nevinyrral's Disk registry definition");

@@ -55,7 +55,15 @@ fn percussionist_grants_a_generation_bound_group_and_land_actions() {
         vec!["mountain".to_string(); 20],
         vec!["forest".to_string(); 20],
     ]);
-    let mut engine = GameEngine::new(12301, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12301,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let exiled = grant_from_percussionist(&mut engine, "cragcrown_pathway_timbercrown_pathway");
@@ -100,7 +108,15 @@ fn leaving_exile_invalidates_the_old_generation_permission() {
         vec!["mountain".to_string(); 20],
         vec!["forest".to_string(); 20],
     ]);
-    let mut engine = GameEngine::new(12306, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12306,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     engine.enable_dev_commands();
     advance_to_main1_from_game_start(&mut engine);
     let exiled = grant_from_percussionist(&mut engine, "grizzly_bears");
@@ -136,7 +152,15 @@ fn permission_group_persists_when_timing_suppresses_actions() {
         vec!["mountain".to_string(); 20],
         vec!["forest".to_string(); 20],
     ]);
-    let mut engine = GameEngine::new(12302, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12302,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let exiled = grant_from_percussionist(&mut engine, "grizzly_bears");
 
@@ -152,7 +176,15 @@ fn exile_land_actions_obey_timing_count_player_and_face_validation() {
         vec!["mountain".to_string(); 20],
         vec!["forest".to_string(); 20],
     ]);
-    let mut engine = GameEngine::new(12307, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12307,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let exiled = grant_from_percussionist(&mut engine, "cragcrown_pathway_timbercrown_pathway");
     let generation = engine.state.zone_change_generation[&exiled];
@@ -206,7 +238,15 @@ fn permission_expires_at_cleanup_of_the_grantees_next_turn() {
         vec!["mountain".to_string(); 20],
         vec!["forest".to_string(); 20],
     ]);
-    let mut engine = GameEngine::new(12303, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12303,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let exiled = grant_from_percussionist(&mut engine, "grizzly_bears");
     let expiry = engine.state.active_exile_play_permissions[0]
@@ -231,7 +271,15 @@ fn permission_groups_granted_on_successive_turns_expire_independently() {
         vec!["mountain".to_string(); 20],
         vec!["forest".to_string(); 20],
     ]);
-    let mut engine = GameEngine::new(12308, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12308,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let first = grant_from_percussionist(&mut engine, "grizzly_bears");
     let first_expiry = engine.state.active_exile_play_permissions[0]
@@ -275,7 +323,15 @@ fn impossible_inferno_checks_delirium_during_resolution_and_grants_permission() 
         vec!["mountain".to_string(); 20],
         vec!["forest".to_string(); 20],
     ]);
-    let mut engine = GameEngine::new(12304, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12304,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     put_in_graveyard(&mut engine, "mountain");
     put_in_graveyard(&mut engine, "grizzly_bears");
@@ -322,7 +378,15 @@ fn impossible_inferno_without_delirium_deals_damage_but_does_not_exile() {
         vec!["mountain".to_string(); 20],
         vec!["forest".to_string(); 20],
     ]);
-    let mut engine = GameEngine::new(12305, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        12305,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let top = *engine.state.players[0]

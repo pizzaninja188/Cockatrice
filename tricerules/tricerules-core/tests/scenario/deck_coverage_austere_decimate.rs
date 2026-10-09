@@ -6,12 +6,19 @@
 //! confirms that a permanent with multiple card types can fill multiple target instances.
 
 use super::helpers::*;
-use tricerules_cards::CardRegistry;
 use tricerules_core::{GameEngine, Zone};
 use tricerules_proto::ruled::v1::TargetRef;
 
 fn engine(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -26,7 +33,7 @@ fn target_in_group(group_index: u32, object_id: u32) -> TargetRef {
 
 #[test]
 fn both_card_definitions_have_exact_identity_and_choice_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     assert_eq!(
         registry.id_for_name("Austere Command"),

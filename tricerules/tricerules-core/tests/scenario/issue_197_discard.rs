@@ -4,6 +4,7 @@ use tricerules_proto::ruled::v1 as rv1;
 #[test]
 fn issue_197_megrim_observes_each_discard_after_mind_rot_finishes() {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         197,
         &[0, 1],
         20,
@@ -45,6 +46,7 @@ fn issue_197_megrim_observes_each_discard_after_mind_rot_finishes() {
 #[test]
 fn issue_197_library_discard_is_private_but_still_triggers_megrim() {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         19702,
         &[0, 1],
         20,
@@ -99,6 +101,7 @@ fn issue_197_library_discard_is_private_but_still_triggers_megrim() {
 #[test]
 fn issue_197_madness_casts_from_exile_during_trigger_resolution() {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         19703,
         &[0, 1],
         20,
@@ -166,6 +169,7 @@ fn issue_197_madness_casts_from_exile_during_trigger_resolution() {
 
 fn madness_offer(card: &str) -> (GameEngine, u32, rv1::RuledEventBatch) {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         19704,
         &[0, 1],
         20,
@@ -427,6 +431,7 @@ fn issue_197_madness_creature_cast_ignores_normal_timing_and_decline_is_final() 
 #[test]
 fn issue_197_madness_cost_discard_places_trigger_above_the_paid_spell() {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         19705,
         &[0, 1],
         20,
@@ -487,6 +492,7 @@ fn issue_197_madness_cost_discard_places_trigger_above_the_paid_spell() {
 #[test]
 fn issue_197_madness_cleanup_opens_priority_then_requires_another_cleanup() {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         19706,
         &[0, 1],
         20,
@@ -525,6 +531,7 @@ fn issue_197_madness_cleanup_opens_priority_then_requires_another_cleanup() {
 fn issue_197_library_and_madness_compete_before_any_discard_commits() {
     for destination in [1, 2] {
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             19707,
             &[0, 1],
             20,
@@ -631,6 +638,7 @@ fn issue_197_waste_not_uses_public_discard_types_and_land_mana_uses_the_stack() 
             "mind_rot"
         };
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             19708,
             &[0, 1],
             20,
@@ -686,6 +694,7 @@ fn issue_197_waste_not_uses_public_discard_types_and_land_mana_uses_the_stack() 
 fn issue_197_library_removal_restores_cleanup_hand_limit() {
     for keep in [true, false] {
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             19709,
             &[0, 1],
             20,
@@ -732,6 +741,7 @@ fn issue_197_library_removal_restores_cleanup_hand_limit() {
 #[test]
 fn issue_197_library_discard_then_draw_returns_the_ordered_top_card() {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         19713,
         &[0, 1],
         20,
@@ -767,6 +777,7 @@ fn issue_197_library_discard_then_draw_returns_the_ordered_top_card() {
 fn issue_197_random_library_replacements_replay_with_private_inspection_and_order() {
     fn setup() -> GameEngine {
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             19714,
             &[0, 1],
             20,

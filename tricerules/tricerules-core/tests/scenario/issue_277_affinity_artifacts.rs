@@ -5,7 +5,15 @@ use tricerules_core::GameEngine;
 #[test]
 fn issue_277_affinity_for_artifacts_counts_only_controlled_artifacts_and_preserves_etb() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(277_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        277_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     inject_card_into_hand(&mut engine, 0, "memory_guardian");

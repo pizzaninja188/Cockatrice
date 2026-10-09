@@ -1,6 +1,5 @@
 use super::helpers::*;
 use tricerules_cards::primitives::{ActivationLimit, ContinuousEffectKind, EffectDuration};
-use tricerules_cards::CardRegistry;
 use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep};
 
 fn red_mana(engine: &GameEngine, player: usize) -> (u32, u32) {
@@ -22,7 +21,15 @@ fn firebending_uses_the_stack_captures_controller_and_expires_after_end_of_comba
         deck_with("mountain", &["vindictive_warden"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(15_101, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        15_101,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut engine);
     let warden = relocate_to_battlefield(&mut engine, 0, "vindictive_warden", false);
 
@@ -108,10 +115,18 @@ fn fire_nation_cadets_has_firebending_only_when_a_lesson_is_in_its_graveyard() {
 
 #[test]
 fn separately_granted_firebending_instances_trigger_and_resolve_independently() {
-    let mut engine = GameEngine::new(15_104, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        15_104,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut engine);
     let warden = inject_creature_on_battlefield(&mut engine, 0, "vindictive_warden");
-    let firebending = CardRegistry::global()
+    let firebending = tricerules_cards::registry::global()
         .get("vindictive_warden")
         .expect("Warden definition")
         .primary_face()
@@ -142,14 +157,22 @@ fn a_creature_put_onto_the_battlefield_attacking_does_not_fire_its_granted_fireb
         deck_with("plains", &["dragonback_lancer"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(15_105, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        15_105,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut engine);
     let lancer = relocate_to_battlefield(&mut engine, 0, "dragonback_lancer", false);
     engine
         .apply_command(0, &declare_attackers(vec![lancer]))
         .expect("declare the mobilize attacker");
 
-    let firebending = CardRegistry::global()
+    let firebending = tricerules_cards::registry::global()
         .get("vindictive_warden")
         .expect("Warden definition")
         .primary_face()
@@ -178,7 +201,15 @@ fn same_seed_and_commands_replay_the_same_firebending_state() {
             deck_with("mountain", &["vindictive_warden"]),
             deck_with("island", &[]),
         ]);
-        let mut engine = GameEngine::new(15_106, &[0, 1], 20, decks, true).expect("new game");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            15_106,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new game");
         advance_to_declare_attackers(&mut engine);
         let warden = relocate_to_battlefield(&mut engine, 0, "vindictive_warden", false);
         engine
@@ -199,7 +230,7 @@ fn same_seed_and_commands_replay_the_same_firebending_state() {
 
 #[test]
 fn rough_rhino_cavalry_authors_firebending_and_a_per_object_exhaust_limit() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("rough_rhino_cavalry")
         .expect("Rough Rhino Cavalry definition")
         .primary_face();

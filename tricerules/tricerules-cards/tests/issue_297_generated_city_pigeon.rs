@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{PlayerRecipient, SpellEffectKind, TriggerCondition};
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, ActivationTiming, Amount, CardRegistry, Keyword, ManaCost,
+    AbilityCost, AbilityPresentation, ActivationTiming, Amount, Keyword, ManaCost,
 };
 
 fn assert_food_leave_trigger(face: &tricerules_cards::CardFace, card_id: &str) {
@@ -59,7 +59,7 @@ fn assert_food_leave_trigger(face: &tricerules_cards::CardFace, card_id: &str) {
 
 #[test]
 fn issue_297_city_pigeon_has_exact_generated_leave_food_shape() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let city = registry
         .get("city_pigeon")
         .expect("City Pigeon must be generated");
@@ -75,7 +75,7 @@ fn issue_297_city_pigeon_has_exact_generated_leave_food_shape() {
 
 #[test]
 fn issue_297_featherbrained_filcher_calibrates_without_duplicate_generation() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let feather = registry
         .get("featherbrained_filcher")
         .expect("existing Featherbrained Filcher calibration");
@@ -88,7 +88,7 @@ fn issue_297_featherbrained_filcher_calibrates_without_duplicate_generation() {
 
 #[test]
 fn issue_297_reuses_the_predefined_food_token_contract() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let food = registry.get("food").expect("Food token");
     assert!(registry.is_token("food"));
     let face = food.primary_face();

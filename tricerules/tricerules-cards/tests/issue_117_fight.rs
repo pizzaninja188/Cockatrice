@@ -1,7 +1,6 @@
 use tricerules_cards::primitives::{
     CardTypeFilter, EffectSubject, SearchDestination, SpellEffectKind, TargetController, TargetKind,
 };
-use tricerules_cards::CardRegistry;
 
 fn assert_fight_subjects(first: &EffectSubject, second: &EffectSubject) {
     assert!(matches!(
@@ -20,7 +19,7 @@ fn assert_fight_subjects(first: &EffectSubject, second: &EffectSubject) {
 
 #[test]
 fn issue_117_prey_upon_uses_two_distinct_chosen_fighters() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("prey_upon")
         .expect("Prey Upon is registered");
     let face = definition.primary_face();
@@ -40,7 +39,7 @@ fn issue_117_prey_upon_uses_two_distinct_chosen_fighters() {
 
 #[test]
 fn issue_117_bushwhack_has_search_and_two_target_fight_modes() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("bushwhack")
         .expect("Bushwhack is registered");
     let face = definition.primary_face();

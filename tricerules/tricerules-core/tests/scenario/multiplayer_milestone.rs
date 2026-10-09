@@ -30,7 +30,15 @@ fn advance_until(engine: &mut GameEngine, active: i32, step: TurnStep) {
 #[test]
 fn three_player_opening_split_combat_elimination_and_final_victory() {
     let decks = Some(vec![vec!["forest".into(); 30]; 3]);
-    let mut engine = GameEngine::new(3001, &[0, 1, 2], 20, decks, false).expect("three seats");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        3001,
+        &[0, 1, 2],
+        20,
+        decks,
+        false,
+    )
+    .expect("three seats");
     let chooser = engine.state.opening.as_ref().unwrap().chooser;
     engine
         .apply_command(
@@ -193,7 +201,15 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
 #[test]
 fn four_player_opening_priority_split_combat_and_departure() {
     let decks = Some(vec![vec!["forest".into(); 30]; 4]);
-    let mut engine = GameEngine::new(4001, &[0, 1, 2, 3], 20, decks, false).expect("four seats");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4001,
+        &[0, 1, 2, 3],
+        20,
+        decks,
+        false,
+    )
+    .expect("four seats");
     let chooser = engine.state.opening.as_ref().unwrap().chooser;
     engine
         .apply_command(
@@ -307,7 +323,15 @@ fn four_player_opening_priority_split_combat_and_departure() {
 
 #[test]
 fn four_player_blocking_skips_empty_middle_defender() {
-    let mut engine = GameEngine::new(4002, &[0, 1, 2, 3], 20, None, true).expect("four seats");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        4002,
+        &[0, 1, 2, 3],
+        20,
+        None,
+        true,
+    )
+    .expect("four seats");
     advance_until(&mut engine, 0, TurnStep::Main1);
     let first_attack = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let middle_attack = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -370,7 +394,15 @@ fn four_player_blocking_skips_empty_middle_defender() {
 #[test]
 fn opening_continues_when_chooser_or_mulligan_actor_leaves() {
     let decks = Some(vec![vec!["forest".into(); 30]; 3]);
-    let mut engine = GameEngine::new(3002, &[0, 1, 2], 20, decks, false).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        3002,
+        &[0, 1, 2],
+        20,
+        decks,
+        false,
+    )
+    .unwrap();
     let chooser = engine.state.opening.as_ref().unwrap().chooser;
     engine.apply_command(chooser, &concede()).unwrap();
     let next = engine.state.opening.as_ref().unwrap().chooser;
@@ -413,7 +445,15 @@ fn opening_continues_when_chooser_or_mulligan_actor_leaves() {
     assert!(engine.state.opening.is_none());
 
     let decks = Some(vec![vec!["forest".into(); 30]; 3]);
-    let mut engine = GameEngine::new(3004, &[0, 1, 2], 20, decks, false).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        3004,
+        &[0, 1, 2],
+        20,
+        decks,
+        false,
+    )
+    .unwrap();
     let chooser = engine.state.opening.as_ref().unwrap().chooser;
     engine
         .apply_command(
@@ -459,7 +499,15 @@ fn opening_continues_when_chooser_or_mulligan_actor_leaves() {
 #[test]
 fn departed_active_players_turn_completes_and_next_player_acts() {
     let decks = Some(vec![vec!["forest".into(); 30]; 3]);
-    let mut engine = GameEngine::new(3003, &[0, 1, 2], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        3003,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     let active = engine.state.active_player_id();
     let next = (active + 1) % 3;
     engine.apply_command(active, &concede()).unwrap();
@@ -477,7 +525,15 @@ fn unrelated_concession_does_not_erase_parked_resolution() {
         vec!["forest".into(); 30],
         vec!["forest".into(); 30],
     ]);
-    let mut engine = GameEngine::new(3005, &[0, 1, 2], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        3005,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_until(&mut engine, 0, TurnStep::Main1);
     ensure_in_hand(&mut engine, 0, "brainstorm");
     give_mana(
@@ -533,7 +589,15 @@ fn departing_spell_owner_clears_its_parked_resolution() {
         vec!["forest".into(); 30],
         vec!["forest".into(); 30],
     ]);
-    let mut engine = GameEngine::new(3010, &[0, 1, 2], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        3010,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_until(&mut engine, 0, TurnStep::Main1);
     ensure_in_hand(&mut engine, 0, "brainstorm");
     give_mana(
@@ -562,7 +626,15 @@ fn departure_returns_stolen_permanents_and_exiles_unowned_objects_with_no_contro
     use tricerules_core::state::{AffectedScope, ContinuousEffect, Zone};
 
     let decks = Some(vec![vec!["forest".into(); 30]; 3]);
-    let mut engine = GameEngine::new(3006, &[0, 1, 2], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        3006,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     let stolen = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine.state.continuous_effects.push(ContinuousEffect {
         trigger_grant_origin: None,
@@ -601,7 +673,15 @@ fn departure_returns_stolen_permanents_and_exiles_unowned_objects_with_no_contro
 #[test]
 fn departing_defender_does_not_strand_block_declarations() {
     let decks = Some(vec![vec!["forest".into(); 30]; 3]);
-    let mut engine = GameEngine::new(3007, &[0, 1, 2], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        3007,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_until(&mut engine, 0, TurnStep::Main1);
     let attacker_one = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let attacker_two = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -643,7 +723,15 @@ fn departing_defender_does_not_strand_block_declarations() {
 #[test]
 fn sole_attacked_defender_departure_finishes_block_declaration() {
     let decks = Some(vec![vec!["forest".into(); 30]; 3]);
-    let mut engine = GameEngine::new(3008, &[0, 1, 2], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        3008,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_until(&mut engine, 0, TurnStep::Main1);
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -681,7 +769,15 @@ fn departing_stack_controller_exiles_survivor_owned_card() {
         vec!["forest".into(); 30],
         vec!["forest".into(); 30],
     ]);
-    let mut engine = GameEngine::new(3009, &[0, 1, 2], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        3009,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_until(&mut engine, 0, TurnStep::Main1);
     ensure_in_hand(&mut engine, 0, "brainstorm");
     give_mana(

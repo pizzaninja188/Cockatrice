@@ -13,7 +13,15 @@ fn totally_lost_places_nonland_permanent_on_owners_library_top() {
         },
         std::iter::repeat_n("forest".to_string(), 30).collect(),
     ]);
-    let mut engine = GameEngine::new(8901, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8901,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -95,7 +103,15 @@ fn totally_lost_rejects_land_targets() {
         },
         std::iter::repeat_n("forest".to_string(), 30).collect(),
     ]);
-    let mut engine = GameEngine::new(8902, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8902,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let land = inject_permanent_on_battlefield(&mut engine, 1, "forest");
     ensure_in_hand(&mut engine, 0, "totally_lost");
@@ -135,7 +151,15 @@ fn resolve_deglamer(seed: u64) -> (GameEngine, u32) {
             deck
         },
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let target = deploy_to_battlefield(&mut engine, 1, "bonesplitter", false);
     ensure_in_hand(&mut engine, 0, "deglamer");
@@ -187,7 +211,15 @@ fn griptide_fizzles_after_its_target_changes_zones() {
         },
         std::iter::repeat_n("forest".to_string(), 30).collect(),
     ]);
-    let mut engine = GameEngine::new(8904, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8904,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     ensure_in_hand(&mut engine, 0, "griptide");
@@ -235,7 +267,15 @@ fn a_token_put_into_a_library_ceases_to_exist() {
         },
         std::iter::repeat_n("forest".to_string(), 30).collect(),
     ]);
-    let mut engine = GameEngine::new(8905, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        8905,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "raise_the_alarm");
     ensure_in_hand(&mut engine, 0, "totally_lost");

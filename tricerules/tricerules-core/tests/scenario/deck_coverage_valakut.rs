@@ -6,7 +6,7 @@
 //! resolution-time may choice, and target legality.
 
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, Layout};
+use tricerules_cards::Layout;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ChooseTriggerTarget, DevCommand, DevMoveCard, DevZone,
@@ -18,7 +18,15 @@ const VALAKUT_FACE: &str = "valakut_the_molten_pinnacle";
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("forest", &[]), deck_with("island", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     grant_pool(&mut engine, 0);
     grant_pool(&mut engine, 1);
@@ -26,7 +34,7 @@ fn engine(seed: u64) -> GameEngine {
 }
 
 fn move_owned_card(engine: &mut GameEngine, player: usize, card_id: &str, zone: DevZone) {
-    let name = CardRegistry::global()
+    let name = tricerules_cards::registry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("missing card definition: {card_id}"))
         .name
@@ -124,7 +132,7 @@ fn make_one_valakut_trigger(seed: u64) -> (GameEngine, u32) {
 
 #[test]
 fn valakut_registers_exact_identity_and_complete_land_definition() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get(VALAKUT)
         .expect("reviewed Valakut definition");
     assert_eq!(card.id, VALAKUT);
@@ -153,7 +161,7 @@ fn valakut_enters_tapped_and_can_tap_for_red() {
 
     let mut mana = engine(20_261_012);
     let valakut = enter_owned_card(&mut mana, 0, VALAKUT);
-    assert!(CardRegistry::global()
+    assert!(tricerules_cards::registry::global()
         .get(VALAKUT)
         .unwrap()
         .primary_face()

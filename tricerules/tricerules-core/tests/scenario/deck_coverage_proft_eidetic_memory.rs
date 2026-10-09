@@ -60,7 +60,15 @@ fn choose_proft_target(engine: &mut GameEngine, target: u32) {
 #[test]
 fn proft_counts_pre_entry_draws_and_reads_x_when_the_trigger_resolves() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(20_260_957, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_957,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     start_player_zero_second_main(&mut engine);
     let creature = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     inject_card_into_hand(&mut engine, 0, "vision_skeins");
@@ -141,7 +149,15 @@ fn proft_counts_pre_entry_draws_and_reads_x_when_the_trigger_resolves() {
 #[test]
 fn proft_does_not_trigger_after_only_one_draw_this_turn() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(20_260_958, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_958,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     cast_proft(&mut engine);
     assert_eq!(engine.state.turn_history.current.player(0).cards_drawn, 1);
@@ -156,7 +172,15 @@ fn proft_does_not_trigger_after_only_one_draw_this_turn() {
 #[test]
 fn proft_removes_only_its_controllers_hand_size_limit() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(20_260_959, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_959,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     cast_proft(&mut engine);
     while engine.state.players[0].hand.len() < 9 {

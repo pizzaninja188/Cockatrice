@@ -14,7 +14,7 @@ use tricerules_cards::primitives::{
     ObjectCastCostKind, PermanentTypeFilter, PlayerRecipient, RelativePlayerSet, SpellCostModifier,
     SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
 };
-use tricerules_cards::{CardRegistry, Layout};
+use tricerules_cards::Layout;
 
 const DRAG_TO_THE_ROOTS_FINGERPRINT: &str =
     "d403de0ae46693ec080e2b5305233a88ea7ae5bff77110c8ffcce0bdec3ffba0";
@@ -25,7 +25,7 @@ const ALLURE_OF_POWER_FINGERPRINT: &str =
 
 #[test]
 fn issue_338_direct_ron_batch3_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     // Drag to the Roots: delirium generic reduction and nonland destroy.
     let drag = registry.get("drag_to_the_roots").expect("registered");

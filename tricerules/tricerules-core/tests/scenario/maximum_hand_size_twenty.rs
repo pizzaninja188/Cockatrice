@@ -1,19 +1,27 @@
 //! Engine regression for Twenty-Toed Toad's fixed maximum hand size (CR 613.11, 514.1).
 
 use super::helpers::*;
-use tricerules_cards::{primitives::StaticAbilityDef, CardRegistry};
+use tricerules_cards::primitives::StaticAbilityDef;
 use tricerules_core::{state::CopiableValues, GameEngine, TurnStep};
 
 #[test]
 fn fixed_twenty_hand_limit_does_not_request_cleanup_discard_at_twenty() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(20_260_929, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_929,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
 
     // Give an existing permanent the test-only Toad-style static ability. The exact card RON
     // is deliberately absent until the primitive's red/green engine behavior is established.
     let source = inject_permanent_on_battlefield(&mut engine, 0, "spellbook");
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("spellbook")
         .expect("Spellbook is registered")
         .primary_face()

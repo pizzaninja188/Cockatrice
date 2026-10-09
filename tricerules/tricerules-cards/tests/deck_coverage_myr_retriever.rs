@@ -1,8 +1,8 @@
-use tricerules_cards::{CardRegistry, TriggerCondition};
+use tricerules_cards::TriggerCondition;
 
 #[test]
 fn myr_retriever_registers_its_targeted_death_trigger() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry.get("myr_retriever").expect("Myr Retriever");
     let face = card.primary_face();
     assert_eq!(face.name, "Myr Retriever");

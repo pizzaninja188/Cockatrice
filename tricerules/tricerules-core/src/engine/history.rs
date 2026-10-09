@@ -128,11 +128,11 @@ pub(super) fn battlefield_quantity_value(
             .fold(0_i64, i64::saturating_add),
         CountExpression::BattlefieldMaximum { characteristic, .. } => values
             .filter_map(|c| match characteristic {
-                tricerules_cards::BattlefieldQuantityCharacteristic::Power => c.signed_power,
-                tricerules_cards::BattlefieldQuantityCharacteristic::Toughness => {
+                tricerules_card_model::BattlefieldQuantityCharacteristic::Power => c.signed_power,
+                tricerules_card_model::BattlefieldQuantityCharacteristic::Toughness => {
                     c.signed_toughness
                 }
-                tricerules_cards::BattlefieldQuantityCharacteristic::ManaValue => {
+                tricerules_card_model::BattlefieldQuantityCharacteristic::ManaValue => {
                     Some(c.mana_value.into())
                 }
             })
@@ -274,7 +274,7 @@ pub(super) fn spell_cast_matches(
             .is_none_or(|kind| fact.targeted_permanent_types.contains(&kind))
         && filter.required_subtypes.iter().all(|subtype| {
             fact.types.contains(subtype)
-                || (fact.all_creature_types && tricerules_cards::is_creature_type(subtype))
+                || (fact.all_creature_types && tricerules_card_model::is_creature_type(subtype))
         })
         && filter
             .min_mana_value
@@ -938,7 +938,7 @@ impl GameEngine {
         let mut types = face.types.clone();
         // CR 715.3b: existing Adventure data encodes the alternative face through layout,
         // even when its type list omits the Adventure spell subtype (e.g. Stomp).
-        if definition.layout == tricerules_cards::Layout::Adventure
+        if definition.layout == tricerules_card_model::Layout::Adventure
             && item.face_index == 1
             && !types.iter().any(|kind| kind == "Adventure")
         {
@@ -957,7 +957,7 @@ impl GameEngine {
                 .iter()
                 .any(|ability| {
                     ability.definition
-                        == tricerules_cards::CharacteristicDefiningAbility::Changeling
+                        == tricerules_card_model::CharacteristicDefiningAbility::Changeling
                 }),
             mana_value,
             mana_spent,
@@ -1855,7 +1855,7 @@ impl GameEngine {
 
     pub(super) fn battlefield_creature_count(
         &self,
-        filter: &tricerules_cards::BattlefieldCreatureCountFilter,
+        filter: &tricerules_card_model::BattlefieldCreatureCountFilter,
         controller: PlayerId,
         source_object_id: ObjectId,
     ) -> u32 {
@@ -2290,6 +2290,7 @@ mod tests {
     #[test]
     fn issue_189_departures_are_committed_controller_relative_and_reset_per_turn() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             189_001,
             &[0, 1],
             20,
@@ -2401,7 +2402,15 @@ mod tests {
             deck_with_cards(&[], "forest"),
             deck_with_cards(&[], "island"),
         ]);
-        let mut engine = GameEngine::new(168001, &[0, 1], 20, decks, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            168001,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .unwrap();
         let land = move_to_battlefield(&mut engine, 0, "forest");
         engine.record_committed_events(&[GameEvent::EntersBattlefield {
             object_id: land,
@@ -2661,7 +2670,7 @@ mod tests {
         engine.state.continuous_effects.push(ContinuousEffect {
             source_id: None,
             affected: AffectedScope::Single(land),
-            kind: ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+            kind: ContinuousEffectKind::Layer4AddTypes(tricerules_card_model::TypeLineAddition {
                 land_types: Vec::new(),
                 card_types: vec![PermanentTypeFilter::Artifact, PermanentTypeFilter::Creature],
                 creature_types: vec![],
@@ -2786,11 +2795,11 @@ mod tests {
     fn multikicker_entry_query_matches_definition_face_revision_and_semantic_kind() {
         use crate::state::{CastCostAbilityOrigin, CastCostReceipt, MultikickerPaymentReceipt};
         let engine = quantity_engine();
-        let group_id = tricerules_cards::ChoiceId::new("multikicker").unwrap();
-        let option_id = tricerules_cards::ChoiceId::new("kick").unwrap();
+        let group_id = tricerules_card_model::ChoiceId::new("multikicker").unwrap();
+        let option_id = tricerules_card_model::ChoiceId::new("kick").unwrap();
         let origin = CastCostAbilityOrigin {
             original_card_id: "paid_definition".into(),
-            face_id: tricerules_cards::CardFaceId::new("paid_face").unwrap(),
+            face_id: tricerules_card_model::CardFaceId::new("paid_face").unwrap(),
             copy_revision: 0,
         };
         let receipt = CastCostReceipt {
@@ -2807,7 +2816,7 @@ mod tests {
             objects: vec![],
         };
         let expression = CountExpression::CastCostPaymentCount {
-            cost: tricerules_cards::CastCostOptionRef {
+            cost: tricerules_card_model::CastCostOptionRef {
                 group_id,
                 option_id,
             },
@@ -2823,7 +2832,7 @@ mod tests {
             ),
             (
                 CastCostAbilityOrigin {
-                    face_id: tricerules_cards::CardFaceId::new("foreign_face").unwrap(),
+                    face_id: tricerules_card_model::CardFaceId::new("foreign_face").unwrap(),
                     ..origin.clone()
                 },
                 0,
@@ -2864,6 +2873,7 @@ mod tests {
 
     fn quantity_engine() -> GameEngine {
         GameEngine::new(
+            tricerules_cards::registry::global(),
             165_001,
             &[0, 1],
             20,
@@ -2916,7 +2926,7 @@ mod tests {
         );
         let affine = Amount::Count(CountExpression::Affine {
             constant: 6,
-            terms: vec![tricerules_cards::QuantityTerm {
+            terms: vec![tricerules_card_model::QuantityTerm {
                 coefficient: 1,
                 quantity: quantity.clone(),
             }],
@@ -2967,7 +2977,7 @@ mod tests {
                 characteristic,
             })
         };
-        use tricerules_cards::BattlefieldQuantityCharacteristic::{Power, Toughness};
+        use tricerules_card_model::BattlefieldQuantityCharacteristic::{Power, Toughness};
         assert_eq!(
             engine.resolve_amount(&maximum(filter.clone(), Power), quantity_context(0)),
             0
@@ -3012,7 +3022,7 @@ mod tests {
             engine.resolve_amount(
                 &Amount::Count(CountExpression::Affine {
                     constant: 2,
-                    terms: vec![tricerules_cards::QuantityTerm {
+                    terms: vec![tricerules_card_model::QuantityTerm {
                         coefficient: -1,
                         quantity
                     }]
@@ -3146,7 +3156,7 @@ mod tests {
             .copiable_values = Some(values.clone());
         engine.state.objects.get_mut(&token).unwrap().token_origin = Some(values);
         engine.registry = registry;
-        let global = CardRegistry::global();
+        let global = tricerules_cards::registry::global();
         let SpellEffectKind::DamageAll { amount, .. } = &global
             .get("calamitous_cave-in")
             .unwrap()
@@ -3199,7 +3209,7 @@ mod tests {
         });
         let amount = Amount::Count(CountExpression::Affine {
             constant: 2,
-            terms: vec![tricerules_cards::QuantityTerm {
+            terms: vec![tricerules_card_model::QuantityTerm {
                 coefficient: -1,
                 quantity: CountExpression::SourcePower,
             }],
@@ -3331,11 +3341,11 @@ mod tests {
         let amount = Amount::Count(CountExpression::Affine {
             constant: 0,
             terms: vec![
-                tricerules_cards::QuantityTerm {
+                tricerules_card_model::QuantityTerm {
                     coefficient: 1,
                     quantity: battlefield,
                 },
-                tricerules_cards::QuantityTerm {
+                tricerules_card_model::QuantityTerm {
                     coefficient: 1,
                     quantity: graveyard,
                 },
@@ -3374,7 +3384,15 @@ mod tests {
 
     #[test]
     fn issue_172_new_turn_record_resets_spending_even_for_the_same_active_player() {
-        let mut engine = GameEngine::new(172030, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            172030,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let player = engine.state.active_player_id();
         engine.record_spell_mana_spent(player, 8);
         // Exercise the shared rollover with a consecutive turn for the same seat. This does not
@@ -3469,6 +3487,7 @@ mod tests {
     #[test]
     fn issue_171_resolution_sacrifice_can_require_the_exact_source() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             171_002,
             &[0, 1],
             20,
@@ -3509,6 +3528,7 @@ mod tests {
     #[test]
     fn issue_424_resolution_sacrifice_honors_another_creature_exclusion() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             424_100,
             &[0, 1],
             20,
@@ -3543,6 +3563,7 @@ mod tests {
     #[test]
     fn issue_171_classification_uses_target_kind_controller_and_graveyard_owner() {
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             171_020,
             &[0, 1],
             20,
@@ -3657,7 +3678,15 @@ mod tests {
 
     #[test]
     fn issue_170_life_conditions_keep_each_players_gain_and_loss_separate() {
-        let mut e = GameEngine::new(170003, &[10, 20], 20, None, true).unwrap();
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            170003,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         e.state.players.push(PlayerState::new(30, 20));
         commit_life_change(&mut e.state, 0, 2);
         commit_life_change(&mut e.state, 0, -2);
@@ -3739,7 +3768,15 @@ mod tests {
 
     #[test]
     fn issue_170_chosen_player_and_empty_sets_fail_closed() {
-        let mut e = GameEngine::new(170004, &[10, 20], 20, None, true).unwrap();
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            170004,
+            &[10, 20],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         e.state.players.push(PlayerState::new(30, 20));
         commit_life_change(&mut e.state, 1, -1);
         let selector = ConditionPlayerSet::ChosenTarget {
@@ -3853,6 +3890,7 @@ mod tests {
     fn issue_170_gecko_rechecks_opponents_but_keeps_its_trigger_controller() {
         for departure in ["none", "source", "control", "opponent"] {
             let mut e = GameEngine::new(
+                tricerules_cards::registry::global(),
                 170005,
                 &[0, 1],
                 20,
@@ -3912,6 +3950,7 @@ mod tests {
     #[test]
     fn issue_170_continuous_conditions_share_life_history_and_live_controller() {
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             170006,
             &[0, 1],
             20,
@@ -3969,7 +4008,15 @@ mod tests {
 
     #[test]
     fn issue_171_history_conditions_count_each_commit_and_reset_at_turn_boundary() {
-        let mut e = GameEngine::new(171_021, &[0, 1], 20, None, true).unwrap();
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            171_021,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         e.state.players.push(crate::state::PlayerState::new(2, 20));
         e.record_committed_events(&[
             GameEvent::CrimeCommitted { player: 0 },
@@ -4017,7 +4064,15 @@ mod tests {
             deck_with_cards(&["ornithopter"], "forest"),
             deck_with_cards(&[], "island"),
         ]);
-        let mut engine = GameEngine::new(158_001, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            158_001,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         let artifact = move_to_battlefield(&mut engine, 0, "ornithopter");
         let generation = engine
             .state
@@ -4151,7 +4206,15 @@ mod tests {
             deck_with_cards(&["grizzly_bears"], "forest"),
             deck_with_cards(&[], "island"),
         ]);
-        let mut engine = GameEngine::new(464_002, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            464_002,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         let source = move_to_battlefield(&mut engine, 0, "grizzly_bears");
         let generation = engine
             .state
@@ -4210,7 +4273,15 @@ mod tests {
             ),
             deck_with_cards(&[], "mountain"),
         ]);
-        let mut engine = GameEngine::new(158_002, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            158_002,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         move_to_battlefield(&mut engine, 0, "forest");
         move_to_battlefield(&mut engine, 0, "forest");
         move_to_battlefield(&mut engine, 0, "island");
@@ -4296,7 +4367,15 @@ mod tests {
             deck_with_cards(&[], "forest"),
             deck_with_cards(&[], "island"),
         ]);
-        let mut engine = GameEngine::new(479_001, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            479_001,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         for _ in 0..2 {
             move_to_battlefield(&mut engine, 0, "forest");
         }
@@ -4389,7 +4468,15 @@ mod tests {
             deck_with_cards(&["forest", "grizzly_bears", "grizzly_bears"], "plains"),
             deck_with_cards(&["forest", "grizzly_bears", "grizzly_bears"], "island"),
         ]);
-        let mut engine = GameEngine::new(490_001, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            490_001,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         engine.state.players.push(PlayerState::new(2, 20));
         for player in 0..2 {
             move_to_battlefield(&mut engine, player, "forest");
@@ -4458,11 +4545,19 @@ mod tests {
             deck_with_cards(&["grizzly_bears", "serra_angel"], "forest"),
             deck_with_cards(&["grizzly_bears"], "island"),
         ]);
-        let mut engine = GameEngine::new(124_001, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            124_001,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
         let _angel = move_to_battlefield(&mut engine, 0, "serra_angel");
         let opposing_bear = move_to_battlefield(&mut engine, 1, "grizzly_bears");
-        let filter = tricerules_cards::BattlefieldCreatureCountFilter {
+        let filter = tricerules_card_model::BattlefieldCreatureCountFilter {
             controllers: RelativePlayerSet::Controller,
             subtype: None,
             required_keywords: vec![],
@@ -4531,7 +4626,15 @@ mod tests {
             deck_with_cards(&["growth_cycle"], "forest"),
             deck_with_cards(&[], "island"),
         ]);
-        let mut engine = GameEngine::new(108_010, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            108_010,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         let resolving_spell = move_to_graveyard(&mut engine, 0, "growth_cycle");
 
         assert_eq!(
@@ -4567,7 +4670,15 @@ mod tests {
             deck_with_cards(&["grizzly_bears", "serra_angel"], "forest"),
             deck_with_cards(&[], "island"),
         ]);
-        let mut engine = GameEngine::new(67_010, &[0, 1], 20, decks, true).expect("engine");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            67_010,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
         let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
         let angel = move_to_battlefield(&mut engine, 0, "serra_angel");
         let filter = BattlefieldPermanentFilter {
@@ -4609,6 +4720,7 @@ mod tests {
     #[test]
     fn self_was_bargained_uses_the_matching_spell_entry_generation() {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             67_011,
             &[0, 1],
             20,

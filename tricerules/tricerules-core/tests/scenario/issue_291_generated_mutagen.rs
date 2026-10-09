@@ -33,7 +33,15 @@ fn cast_and_resolve_mutagen_source(
             deck_with("forest", &[card_id, "grizzly_bears"]),
         ]
     });
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     move_ready_to_battlefield(&mut engine, player, card_id);
     assert_eq!(

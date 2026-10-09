@@ -12,7 +12,15 @@ fn engine(players: &[i32]) -> GameEngine {
         .iter()
         .map(|_| vec!["island".to_string(); 20])
         .collect();
-    let mut engine = GameEngine::new(236_001, players, 20, Some(decks), true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        236_001,
+        players,
+        20,
+        Some(decks),
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

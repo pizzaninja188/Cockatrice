@@ -28,8 +28,15 @@ fn witness_protection_sets_characteristics_and_publishes_ability_removal() {
         deck_with("island", &["witness_protection", "zetalpa,_primal_dawn"]),
         deck_with("swamp", &[]),
     ]);
-    let mut engine = GameEngine::new(113_001, &[0, 1], 20, decks, true)
-        .expect("new game with Witness Protection");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        113_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game with Witness Protection");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 0, "zetalpa,_primal_dawn", false);
     let aura = cast_aura(&mut engine, "witness_protection", target);
@@ -70,7 +77,15 @@ fn witness_and_unable_to_scream_follow_layer_timestamp_order() {
             deck_with("island", &[first, second, "grizzly_bears"]),
             deck_with("swamp", &[]),
         ]);
-        let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new game");
         advance_to_main1_from_game_start(&mut engine);
         let target = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
         cast_aura(&mut engine, first, target);
@@ -118,7 +133,15 @@ fn ability_gained_after_removal_is_retained_and_annotated() {
         deck_with("island", &["witness_protection", "flight", "grizzly_bears"]),
         deck_with("swamp", &[]),
     ]);
-    let mut engine = GameEngine::new(113_004, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        113_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let target = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     cast_aura(&mut engine, "witness_protection", target);
@@ -137,7 +160,15 @@ fn witness_protection_rejects_a_noncreature_target_without_partial_changes() {
         deck_with("island", &["witness_protection"]),
         deck_with("swamp", &[]),
     ]);
-    let mut engine = GameEngine::new(113_005, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        113_005,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "witness_protection");
     let land = relocate_to_battlefield(&mut engine, 0, "island", false);
@@ -168,7 +199,15 @@ fn clone_excludes_witness_protections_later_layer_changes() {
         deck_with("island", &["witness_protection", "clone"]),
         deck_with("plains", &["zetalpa,_primal_dawn"]),
     ]);
-    let mut engine = GameEngine::new(113_006, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        113_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = relocate_to_battlefield(&mut engine, 1, "zetalpa,_primal_dawn", false);
     cast_aura(&mut engine, "witness_protection", source);
@@ -217,7 +256,15 @@ fn witness_protection_names_drive_the_legend_rule() {
         ),
         deck_with("swamp", &[]),
     ]);
-    let mut engine = GameEngine::new(113_007, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        113_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let first = relocate_to_battlefield(&mut engine, 0, "isamaru,_hound_of_konda", false);
     let second = relocate_to_battlefield(&mut engine, 0, "zetalpa,_primal_dawn", false);

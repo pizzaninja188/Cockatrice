@@ -3,14 +3,13 @@
 use super::helpers::*;
 use tricerules_cards::primitives::CounterKind;
 use tricerules_cards::primitives::{ContinuousEffectKind, ControllerReference, EffectDuration};
-use tricerules_cards::CardRegistry;
 use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine, Zone};
 
 const TEFERI: &str = "teferi,_temporal_pilgrim";
 
 #[test]
 fn exact_card_identity_is_registered() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get(TEFERI)
         .expect("Teferi, Temporal Pilgrim needs a complete definition");
 
@@ -20,6 +19,7 @@ fn exact_card_identity_is_registered() {
 fn multiplayer_engine(seed: u64) -> GameEngine {
     let deck = deck_with("forest", &[]);
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[10, 20, 30, 40],
         20,
@@ -123,7 +123,7 @@ fn give_control_to(engine: &mut GameEngine, object_id: u32, controller: i32) {
 
 #[test]
 fn teferis_ultimate_returns_the_chosen_land_and_shuffles_each_remaining_nonland_by_owner() {
-    let teferi = CardRegistry::global()
+    let teferi = tricerules_cards::registry::global()
         .get(TEFERI)
         .expect("Teferi, Temporal Pilgrim needs a complete definition");
     assert_eq!(teferi.primary_face().activated_abilities.len(), 3);
@@ -349,7 +349,7 @@ fn teferis_minus_two_creates_a_vigilant_spirit_that_grows_on_each_draw() {
 
 #[test]
 fn target_departure_assigns_a_replacement_chooser_and_limits_it_to_the_lki_control_cohort() {
-    let teferi = CardRegistry::global()
+    let teferi = tricerules_cards::registry::global()
         .get(TEFERI)
         .expect("Teferi, Temporal Pilgrim needs a complete definition");
     let mut engine = multiplayer_engine(26_106_001);

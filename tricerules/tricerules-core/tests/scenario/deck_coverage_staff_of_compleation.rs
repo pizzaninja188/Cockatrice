@@ -1,5 +1,5 @@
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, CounterKind};
+use tricerules_cards::CounterKind;
 use tricerules_core::{GameEngine, Zone};
 use tricerules_proto::ruled::v1::SubmitResolutionChoice;
 
@@ -8,7 +8,15 @@ const STAFF: &str = "staff_of_compleation";
 fn game(seed: u64, seats: usize) -> (GameEngine, u32) {
     let ids: Vec<i32> = (0..seats as i32).collect();
     let decks = Some(ids.iter().map(|_| deck_with("forest", &[])).collect());
-    let mut e = GameEngine::new(seed, &ids, 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &ids,
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     for _ in 0..16 {
         if e.state.turn_step == tricerules_core::TurnStep::Main1 {
             break;
@@ -62,7 +70,9 @@ fn move_control(e: &mut GameEngine, id: u32, from: usize, to: usize) {
 
 #[test]
 fn exact_artifact_and_five_complete_abilities() {
-    let card = CardRegistry::global().get(STAFF).expect("Staff registered");
+    let card = tricerules_cards::registry::global()
+        .get(STAFF)
+        .expect("Staff registered");
     assert_eq!(card.name, "Staff of Compleation");
     assert_eq!(card.face_count(), 1);
     let face = card.primary_face();

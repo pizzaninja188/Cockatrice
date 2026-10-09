@@ -19,7 +19,15 @@ fn fire_ice_fire_half_deals_two_and_shows_face_name() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(21, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        21,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // {1}{R}: two red pays the colored pip and the generic.
@@ -68,7 +76,15 @@ fn fire_ice_ice_half_taps_and_draws() {
     let mut p0_deck: Vec<String> = vec!["fire_ice".into(), "mountain".into()];
     p0_deck.extend(std::iter::repeat_n("island".to_string(), 10));
     let decks = Some(vec![p0_deck, vec!["forest".into(); 12]]);
-    let mut e = GameEngine::new(22, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        22,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Place the card and an untapped land deterministically (shuffle-independent).
@@ -145,7 +161,15 @@ fn mdfc_pathway_enter_as_face_0_taps_for_red() {
         deck_with("mountain", &["cragcrown_pathway_timbercrown_pathway"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(40, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        40,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let card_oid = relocate_to_hand(&mut e, 0, "cragcrown_pathway_timbercrown_pathway");
@@ -184,7 +208,15 @@ fn mdfc_pathway_enter_as_face_1_taps_for_green() {
         deck_with("forest", &["cragcrown_pathway_timbercrown_pathway"]),
         vec!["mountain".into(); 20],
     ]);
-    let mut e = GameEngine::new(41, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        41,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let card_oid = relocate_to_hand(&mut e, 0, "cragcrown_pathway_timbercrown_pathway");
@@ -222,7 +254,15 @@ fn fire_ice_target_sets_are_per_face() {
         deck_with("mountain", &["fire_ice", "grizzly_bears"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(23, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        23,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // A creature (legal for both halves) and a land (legal for Ice only) on the battlefield.
@@ -314,7 +354,15 @@ fn multiface_catalog_separates_face_labels_from_physical_display_names() {
         ),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(42, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        42,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     let batch = e.initial_response_batch();
     let catalog = batch
         .events
@@ -367,7 +415,15 @@ fn stomp_resolves_to_exile() {
         deck_with("mountain", &["bonecrusher_giant_stomp"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(43, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        43,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let card_oid = relocate_to_hand(&mut e, 0, "bonecrusher_giant_stomp");
@@ -424,7 +480,15 @@ fn bonecrusher_giant_casts_normally_from_hand() {
         deck_with("mountain", &["bonecrusher_giant_stomp"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(49, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        49,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let oid = relocate_to_hand(&mut e, 0, "bonecrusher_giant_stomp");
     let slot = e.state.players[0]
@@ -469,7 +533,15 @@ fn temporarily_sole_hand_adventure_face_identifies_combined_display() {
         deck_with("mountain", &["bonecrusher_giant_stomp"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(50, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        50,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let oid = relocate_to_hand(&mut e, 0, "bonecrusher_giant_stomp");
     let slot = e.state.players[0]
@@ -520,7 +592,15 @@ fn bonecrusher_giant_casts_once_from_adventure_exile() {
         deck_with("mountain", &["bonecrusher_giant_stomp"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(44, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        44,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let oid = relocate_to_hand(&mut e, 0, "bonecrusher_giant_stomp");
     let hand_index = e.state.players[0]
@@ -597,7 +677,15 @@ fn adventure_exile_permission_rejects_wrong_source_player_face_and_unpaid_cost()
         deck_with("mountain", &["bonecrusher_giant_stomp"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(45, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        45,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let oid = relocate_to_hand(&mut e, 0, "bonecrusher_giant_stomp");
     let slot = e.state.players[0]
@@ -683,7 +771,15 @@ fn adventure_permission_does_not_return_when_the_card_leaves_and_reenters_exile(
         deck_with("mountain", &["bonecrusher_giant_stomp"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(48, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        48,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     e.enable_dev_commands();
     advance_to_main1_from_game_start(&mut e);
     let oid = relocate_to_hand(&mut e, 0, "bonecrusher_giant_stomp");
@@ -741,7 +837,15 @@ fn stomp_with_no_legal_target_goes_to_graveyard_without_permission() {
         ),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(46, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        46,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bear = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
     let adventure = relocate_to_hand(&mut e, 0, "bonecrusher_giant_stomp");
@@ -821,7 +925,15 @@ fn countered_stomp_goes_to_graveyard_without_permission() {
         ),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(47, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        47,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let adventure = relocate_to_hand(&mut e, 0, "bonecrusher_giant_stomp");
     relocate_to_hand(&mut e, 0, "counterspell");
@@ -884,7 +996,15 @@ fn transform_and_flip_back_faces_cannot_be_cast_from_hand() {
         ),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(87, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        87,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     for card_id in [
@@ -923,7 +1043,15 @@ fn sole_transform_front_cast_has_no_redundant_face_annotation() {
         deck_with("mountain", &["reckless_waif_merciless_predator"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(86, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        86,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let oid = relocate_to_hand(&mut e, 0, "reckless_waif_merciless_predator");
     let slot = e.state.players[0]
@@ -972,7 +1100,15 @@ fn sole_transform_front_cast_has_no_redundant_face_annotation() {
 /// from the face that was showing when it triggered.
 #[test]
 fn reckless_waif_transforms_after_a_spell_free_turn() {
-    let mut e = GameEngine::new(88, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        88,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     let waif = inject_permanent_on_battlefield(&mut e, 0, "reckless_waif_merciless_predator");
     let original_owner = e.state.objects[&waif].owner;
 
@@ -1047,7 +1183,15 @@ fn classic_werewolf_spell_count_thresholds_are_face_aware() {
         "reckless_waif_merciless_predator",
         "village_ironsmith_ironfang",
     ] {
-        let mut e = GameEngine::new(89, &[0, 1], 20, None, true).expect("new");
+        let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
+            89,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new");
         let oid = inject_permanent_on_battlefield(&mut e, 0, card_id);
 
         e.state.turn_history.current.spells_cast = 1;
@@ -1072,7 +1216,15 @@ fn classic_werewolf_spell_count_thresholds_are_face_aware() {
 
 #[test]
 fn werewolf_intervening_if_is_rechecked_at_resolution() {
-    let mut e = GameEngine::new(90, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        90,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     let oid = inject_permanent_on_battlefield(&mut e, 0, "reckless_waif_merciless_predator");
     advance_to_next_upkeep_trigger(&mut e);
     assert!(!e.state.stack.is_empty());
@@ -1086,7 +1238,15 @@ fn werewolf_intervening_if_is_rechecked_at_resolution() {
 
 #[test]
 fn older_transform_instruction_is_ignored_after_an_intervening_face_change() {
-    let mut e = GameEngine::new(92, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        92,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     let oid = inject_permanent_on_battlefield(&mut e, 0, "reckless_waif_merciless_predator");
     advance_to_next_upkeep_trigger(&mut e);
     assert!(!e.state.stack.is_empty());
@@ -1107,7 +1267,15 @@ fn transform_preserves_battlefield_identity_and_does_not_fire_etb() {
         deck_with("plains", &["soul_warden"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(91, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        91,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     let _warden = inject_permanent_on_battlefield(&mut e, 0, "soul_warden");
     resolve_entire_stack_two_player(&mut e);
     let waif = inject_permanent_on_battlefield(&mut e, 0, "reckless_waif_merciless_predator");
@@ -1145,7 +1313,15 @@ fn transform_preserves_battlefield_identity_and_does_not_fire_etb() {
 
 #[test]
 fn akki_lavarunner_flips_after_damaging_an_opponent() {
-    let mut e = GameEngine::new(93, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        93,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let akki = inject_permanent_on_battlefield(&mut e, 0, "akki_lavarunner_tok-tok,_volcano_born");
     e.state.objects.get_mut(&akki).unwrap().summoning_sick = false;

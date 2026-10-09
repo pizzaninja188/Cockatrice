@@ -117,7 +117,15 @@ fn generated_optional_bounce_restricts_targets_and_revalidates_target_generation
         deck_with("plains", &["exosuit_savior", "mischievous_pup"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(263_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        263_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let own_artifact = inject_permanent_on_battlefield(&mut engine, 0, "icy_manipulator");
     let opponent_artifact = inject_permanent_on_battlefield(&mut engine, 1, "icy_manipulator");
@@ -169,7 +177,15 @@ fn generated_may_mill_can_be_declined_or_move_exactly_two_cards_in_library_order
         deck_with("swamp", &["daggerfang_duo", "deathcap_marionette"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(263_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        263_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     move_ready_to_battlefield(&mut engine, 0, "daggerfang_duo");
@@ -220,8 +236,15 @@ fn generated_may_mill_can_be_declined_or_move_exactly_two_cards_in_library_order
         deck_with("forest", &["mineshaft_spider"]),
         deck_with("forest", &[]),
     ]);
-    let mut short_library =
-        GameEngine::new(263_003, &[0, 1], 20, decks, true).expect("short-library engine");
+    let mut short_library = GameEngine::new(
+        tricerules_cards::registry::global(),
+        263_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("short-library engine");
     advance_to_main1_from_game_start(&mut short_library);
     ensure_in_hand(&mut short_library, 0, "mineshaft_spider");
     let only_card = inject_library_card(&mut short_library, 0, "storm_crow");
@@ -250,7 +273,15 @@ fn generated_noncreature_cast_triggers_use_ordering_and_exact_source_generations
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(263_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        263_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let boar = relocate_to_battlefield(&mut engine, 0, "boar-q-pine", false);
     let angler = relocate_to_battlefield(&mut engine, 0, "tempest_angler", false);
@@ -304,7 +335,15 @@ fn generated_second_draw_trigger_fires_once_each_turn_and_resets_next_turn() {
         deck_with("island", &["atlantean_cavalry", "divination", "divination"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(263_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        263_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let cavalry = relocate_to_battlefield(&mut engine, 0, "atlantean_cavalry", false);
     ensure_copies_in_hand(&mut engine, 0, "divination", 2);
@@ -343,7 +382,15 @@ fn generated_second_draw_trigger_fires_once_each_turn_and_resets_next_turn() {
 
 #[test]
 fn generated_attack_triggers_only_stage_for_declared_attackers() {
-    let mut engine = GameEngine::new(263_005, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        263_005,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut engine);
     let herald = inject_creature_on_battlefield(&mut engine, 0, "herald_of_faith");
     let phantasm = inject_creature_on_battlefield(&mut engine, 0, "mysterios_phantasm");

@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{CardTypeFilter, ResolutionCost};
 use tricerules_cards::{
-    AbilityPresentation, CardRegistry, CastTriggerPlayer, PermanentTypeFilter, SpellCastFilter,
-    SpellEffectKind, TriggerCondition,
+    AbilityPresentation, CastTriggerPlayer, PermanentTypeFilter, SpellCastFilter, SpellEffectKind,
+    TriggerCondition,
 };
 
 fn repartee_filter(card_id: &str) -> &SpellCastFilter {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("missing Issue #191 card {card_id}"))
         .primary_face();
@@ -47,7 +47,7 @@ fn issue_191_cards_author_the_shared_repartee_filter() {
 
 #[test]
 fn forum_necroscribe_keeps_ward_and_oracle_line_identity() {
-    let forum = CardRegistry::global()
+    let forum = tricerules_cards::registry::global()
         .get("forum_necroscribe")
         .expect("Forum Necroscribe")
         .primary_face();
@@ -67,7 +67,7 @@ fn forum_necroscribe_keeps_ward_and_oracle_line_identity() {
         AbilityPresentation::OracleLines(vec![2])
     );
 
-    let graduation = CardRegistry::global()
+    let graduation = tricerules_cards::registry::global()
         .get("graduation_day")
         .expect("Graduation Day")
         .primary_face();

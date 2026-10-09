@@ -1,7 +1,7 @@
 //! Exact Replicating Ring: source-backed resolution sequencing and named Snow tokens.
 use super::helpers::*;
 use tricerules_cards::primitives::*;
-use tricerules_cards::{AbilityPresentation, CardRegistry, ControllerReference, Layout};
+use tricerules_cards::{AbilityPresentation, ControllerReference, Layout};
 use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
 
@@ -10,10 +10,11 @@ const TOKEN: &str = "replicated_ring";
 
 fn setup() -> (GameEngine, u32) {
     assert!(
-        CardRegistry::global().get(RING).is_some(),
+        tricerules_cards::registry::global().get(RING).is_some(),
         "exact Replicating Ring is missing"
     );
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         507_100,
         &[0, 1],
         20,
@@ -105,7 +106,7 @@ fn reject(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
 fn ring_paid_cast_and_exact_card_token_characteristics() {
     let (mut engine, source) = setup();
     for (id, name, triggered) in [(RING, "Replicating Ring", 1), (TOKEN, "Replicated Ring", 0)] {
-        let card = CardRegistry::global().get(id).unwrap();
+        let card = tricerules_cards::registry::global().get(id).unwrap();
         assert_eq!(card.name, name);
         assert_eq!(card.layout, Layout::Normal);
         assert_eq!(card.face_count(), 1);
@@ -118,7 +119,10 @@ fn ring_paid_cast_and_exact_card_token_characteristics() {
         assert_eq!(face.activated_abilities.len(), 1);
         assert_eq!(face.activated_abilities[0].costs, [AbilityCost::Tap]);
     }
-    let face = CardRegistry::global().get(RING).unwrap().primary_face();
+    let face = tricerules_cards::registry::global()
+        .get(RING)
+        .unwrap()
+        .primary_face();
     assert_eq!(face.mana_cost.to_string(), "{3}");
     assert_eq!(
         face.activated_abilities[0].presentation,
@@ -430,6 +434,7 @@ fn ring_replays_paid_cast_eight_real_upkeeps_and_parked_token_entry_commands() {
     use tricerules_proto::ruled::v1::{dev_command::Dev, DevAddMana, DevPutCardInZone};
     fn game() -> GameEngine {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             507_108,
             &[0, 1],
             20,

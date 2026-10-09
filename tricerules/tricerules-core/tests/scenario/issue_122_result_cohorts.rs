@@ -6,7 +6,15 @@ fn cast_grab_the_prize(discard_card: &str, seed: u64) -> GameEngine {
         deck_with("mountain", &["grab_the_prize", discard_card]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "grab_the_prize");
     ensure_card_in_hand(&mut engine, 0, discard_card);
@@ -98,7 +106,15 @@ fn cast_gerrards_verdict(cards: &[&str], seed: u64) -> (GameEngine, Vec<u32>) {
         deck_with("plains", &["gerrards_verdict"]),
         vec!["forest".into(); 20],
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let cleared: Vec<_> = engine.state.players[1].hand.drain(..).collect();
     engine.state.players[1].library.extend(cleared);

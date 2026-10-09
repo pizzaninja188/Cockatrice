@@ -7,12 +7,20 @@
 
 use super::helpers::*;
 use prost::Message;
-use tricerules_cards::{CardFaceId, CardRegistry, ManaCost};
+use tricerules_cards::{CardFaceId, ManaCost};
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::CanonicalGameplayCommand;
 
 fn creature_engine(seed: u64, source_card: &str, target_card: &str) -> (GameEngine, u32, u32) {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, source_card);
     let target = inject_creature_on_battlefield(&mut engine, 1, target_card);
@@ -24,7 +32,7 @@ fn creature_engine(seed: u64, source_card: &str, target_card: &str) -> (GameEngi
 /// characteristics through the engine's CR 707 copiable-values path so this test exercises a real
 /// Mount characteristic rather than relying on Three Tree Mascot's Changeling CDA.
 fn install_brightfield_mustang_face(engine: &mut GameEngine, object_id: u32) {
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("grizzly_bears")
         .expect("fixture source face")
         .primary_face()
@@ -57,7 +65,15 @@ fn resolve_two_player(engine: &mut GameEngine) {
 }
 
 fn three_player_main1(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     engine
         .state
         .players
@@ -446,7 +462,15 @@ fn issue_315_target_filters_cover_real_mount_artifact_creature_and_noncreature()
 
 #[test]
 fn issue_315_unrestricted_target_remains_legal_after_real_control_change() {
-    let mut engine = GameEngine::new(3_150_116, &[0, 1], 20, None, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        3_150_116,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "frostbridge_guard");
     let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");

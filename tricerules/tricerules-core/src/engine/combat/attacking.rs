@@ -1,6 +1,6 @@
 use super::*;
 use std::collections::BTreeMap;
-use tricerules_cards::primitives::AttackLimitAffected;
+use tricerules_card_model::primitives::AttackLimitAffected;
 
 /// Declaration restrictions, recomputed from active battlefield abilities. These are not
 /// occupancy limits: creatures put onto the battlefield attacking bypass declaration.

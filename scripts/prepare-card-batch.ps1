@@ -35,7 +35,7 @@ try {
         if (-not [IO.Path]::IsPathRooted($FocusedTests)) { $FocusedTests = Join-Path $repo $FocusedTests }
         $checks += @(Get-FocusedTestChecks -Manifest $FocusedTests)
     }
-    $checks += @{ Label = 'Authoring lint'; Args = @('clippy', '--quiet', '-p', 'tricerules-cards', '-p',
+    $checks += @{ Label = 'Authoring lint'; Args = @('clippy', '--quiet', '-p', 'tricerules-card-model', '-p', 'tricerules-cards', '-p',
         'tricerules-core', '--all-targets', '--features', 'tricerules-cards/authoring', '--', '-D', 'warnings'); Exact = $false }
     foreach ($check in $checks) {
         $executable = if ($check.Executable) { $check.Executable } else { 'cargo' }

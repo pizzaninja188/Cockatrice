@@ -10,8 +10,8 @@
 use super::helpers::*;
 use tricerules_cards::primitives::StaticAbilityDef;
 use tricerules_cards::{
-    AbilityCost, AbilitySourceZone, CardRegistry, Color, CounterKind, IdentifiedAbility, Layout,
-    ManaCost, SpellEffectKind,
+    AbilityCost, AbilitySourceZone, Color, CounterKind, IdentifiedAbility, Layout, ManaCost,
+    SpellEffectKind,
 };
 use tricerules_core::state::CopiableValues;
 use tricerules_core::GameEngine;
@@ -136,7 +136,7 @@ fn expected_split(first: Color, second: Color, x: u32, first_count: u32) -> Mana
 }
 
 fn install_static_fixture(engine: &mut GameEngine, source: u32, definition: StaticAbilityDef) {
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("island")
         .expect("Island fixture face")
         .primary_face()
@@ -160,7 +160,7 @@ fn install_static_fixture(engine: &mut GameEngine, source: u32, definition: Stat
 
 #[test]
 fn issue_499_registers_complete_typed_storage_counter_lands() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for card_data in STORAGE_LANDS {
         assert_eq!(
             card_data.oracle_id.len(),

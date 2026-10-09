@@ -3,7 +3,7 @@ use tricerules_cards::{BasicLandType, CardRegistry, Keyword};
 
 #[test]
 fn anger_exact_definition_and_zone_specific_schema_boundaries() {
-    let card = CardRegistry::global().get("anger").unwrap();
+    let card = tricerules_cards::registry::global().get("anger").unwrap();
     let face = card.primary_face();
     assert_eq!(card.name, "Anger");
     assert_eq!(face.types, ["Creature", "Incarnation"]);

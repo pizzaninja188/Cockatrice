@@ -112,7 +112,15 @@ fn issue_338_fanatical_offering_sacrifices_and_makes_a_map() {
         deck_with("swamp", &["fanatical_offering", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(338_701, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_701,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let artifact = inject_permanent_on_battlefield(&mut engine, 0, "swiftfoot_boots");
     ensure_card_in_hand(&mut engine, 0, "fanatical_offering");
@@ -154,7 +162,15 @@ fn issue_338_fanatical_offering_sacrifices_and_makes_a_map() {
         deck_with("swamp", &["fanatical_offering", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut creature_engine = GameEngine::new(338_702, &[0, 1], 20, decks, true).expect("engine");
+    let mut creature_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_702,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut creature_engine);
     let fodder = inject_creature_on_battlefield(&mut creature_engine, 0, "grizzly_bears");
     ensure_card_in_hand(&mut creature_engine, 0, "fanatical_offering");
@@ -190,7 +206,15 @@ fn issue_338_betrayers_bargain_pays_and_exiles_any_fatal_creature() {
         deck_with("mountain", &["betrayers_bargain", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(338_801, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_801,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let fodder = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -231,7 +255,15 @@ fn issue_338_betrayers_bargain_pays_and_exiles_any_fatal_creature() {
         deck_with("mountain", &["betrayers_bargain", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut mana_engine = GameEngine::new(338_802, &[0, 1], 20, decks, true).expect("engine");
+    let mut mana_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_802,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut mana_engine);
     let target = inject_creature_on_battlefield(&mut mana_engine, 1, "grizzly_bears");
     ensure_card_in_hand(&mut mana_engine, 0, "betrayers_bargain");
@@ -264,7 +296,15 @@ fn issue_338_betrayers_bargain_pays_and_exiles_any_fatal_creature() {
         ),
         deck_with("forest", &["havenwood_wurm"]),
     ]);
-    let mut later_engine = GameEngine::new(338_803, &[0, 1], 20, decks, true).expect("engine");
+    let mut later_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_803,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut later_engine);
     let fodder = inject_creature_on_battlefield(&mut later_engine, 0, "grizzly_bears");
     let wurm = inject_creature_with_stats(&mut later_engine, 1, "havenwood_wurm", 5, 6);
@@ -323,7 +363,15 @@ fn issue_338_betrayers_bargain_pays_and_exiles_any_fatal_creature() {
         deck_with("mountain", &["betrayers_bargain", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut enchant_engine = GameEngine::new(338_804, &[0, 1], 20, decks, true).expect("engine");
+    let mut enchant_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_804,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut enchant_engine);
     let enchantment = inject_permanent_on_battlefield(&mut enchant_engine, 0, "crusade");
     let target = inject_creature_on_battlefield(&mut enchant_engine, 1, "grizzly_bears");
@@ -362,7 +410,15 @@ fn issue_338_dusk_rose_reliquary_wards_and_exiles_until_it_leaves() {
         deck_with("plains", &["dusk_rose_reliquary", "grizzly_bears"]),
         deck_with("mountain", &["abrade"]),
     ]);
-    let mut engine = GameEngine::new(338_901, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_901,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let fodder = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let victim = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -445,7 +501,15 @@ fn issue_338_dusk_rose_reliquary_wards_and_exiles_until_it_leaves() {
         deck_with("plains", &["dusk_rose_reliquary", "grizzly_bears"]),
         deck_with("mountain", &["abrade"]),
     ]);
-    let mut decline = GameEngine::new(338_902, &[0, 1], 20, decks, true).expect("engine");
+    let mut decline = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_902,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut decline);
     let fodder = inject_creature_on_battlefield(&mut decline, 0, "grizzly_bears");
     let victim = inject_creature_on_battlefield(&mut decline, 1, "grizzly_bears");
@@ -509,7 +573,15 @@ fn issue_338_dusk_rose_reliquary_wards_and_exiles_until_it_leaves() {
         deck_with("plains", &["dusk_rose_reliquary"]),
         deck_with("mountain", &[]),
     ]);
-    let mut artifact_engine = GameEngine::new(338_903, &[0, 1], 20, decks, true).expect("engine");
+    let mut artifact_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_903,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut artifact_engine);
     let artifact = inject_permanent_on_battlefield(&mut artifact_engine, 0, "swiftfoot_boots");
     ensure_card_in_hand(&mut artifact_engine, 0, "dusk_rose_reliquary");
@@ -546,7 +618,15 @@ fn issue_338_mudbutton_cursetosser_beholds_or_pays_and_punishes_on_death() {
         deck_with("swamp", &["mudbutton_cursetosser", "grizzly_bears"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(338_951, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_951,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let goblin = inject_creature_on_battlefield(&mut engine, 0, "crazed_goblin");
     let non_goblin = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -606,7 +686,15 @@ fn issue_338_mudbutton_cursetosser_beholds_or_pays_and_punishes_on_death() {
         deck_with("swamp", &["mudbutton_cursetosser"]),
         deck_with("forest", &[]),
     ]);
-    let mut mana_engine = GameEngine::new(338_952, &[0, 1], 20, decks, true).expect("engine");
+    let mut mana_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_952,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut mana_engine);
     ensure_card_in_hand(&mut mana_engine, 0, "mudbutton_cursetosser");
     give_mana(
@@ -633,7 +721,15 @@ fn issue_338_mudbutton_cursetosser_beholds_or_pays_and_punishes_on_death() {
         deck_with("swamp", &["mudbutton_cursetosser"]),
         deck_with("forest", &[]),
     ]);
-    let mut hand_engine = GameEngine::new(338_953, &[0, 1], 20, decks, true).expect("engine");
+    let mut hand_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_953,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut hand_engine);
     let goblin_card = inject_card_into_hand(&mut hand_engine, 0, "crazed_goblin");
     ensure_card_in_hand(&mut hand_engine, 0, "mudbutton_cursetosser");
@@ -694,7 +790,15 @@ fn issue_338_lys_alana_dignitary_mana_requires_an_elf_in_graveyard() {
         deck_with("forest", &["lys_alana_dignitary", "llanowar_elves"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(338_971, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_971,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let elf = inject_creature_on_battlefield(&mut engine, 0, "llanowar_elves");
     ensure_card_in_hand(&mut engine, 0, "lys_alana_dignitary");
@@ -756,7 +860,15 @@ fn issue_338_lys_alana_dignitary_mana_requires_an_elf_in_graveyard() {
         deck_with("forest", &["lys_alana_dignitary"]),
         deck_with("forest", &[]),
     ]);
-    let mut mana_cast_engine = GameEngine::new(338_972, &[0, 1], 20, decks, true).expect("engine");
+    let mut mana_cast_engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        338_972,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut mana_cast_engine);
     ensure_card_in_hand(&mut mana_cast_engine, 0, "lys_alana_dignitary");
     give_mana(

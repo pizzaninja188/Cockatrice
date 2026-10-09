@@ -3,14 +3,13 @@ use tricerules_cards::primitives::{
     TargetKind, TargetingSourceFilter,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, CardRegistry, CastTriggerPlayer,
-    CharacteristicDefiningAbility, ManaCost, ObjectContributionKind, ObjectPaymentConstraint,
-    SpellEffectKind, TriggerCondition,
+    AbilityCost, AbilityPresentation, CastTriggerPlayer, CharacteristicDefiningAbility, ManaCost,
+    ObjectContributionKind, ObjectPaymentConstraint, SpellEffectKind, TriggerCondition,
 };
 
 #[test]
 fn issue_257_registers_all_nine_generated_cards_with_exact_typed_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (id, threshold, oracle_line) in [
         ("skybox_ferry", 2, 2),

@@ -17,7 +17,15 @@ use tricerules_proto::ruled::v1::{
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("swamp", &[]), deck_with("island", &[])]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
     grant_pool(&mut e, 0);
     grant_pool(&mut e, 1);
@@ -151,7 +159,15 @@ fn issue_misc11_thousand_moons_infantry_untaps_on_another_players_untap_step() {
         deck_with("plains", &["thousand_moons_infantry"]),
         deck_with("island", &[]),
     ]);
-    let mut e = GameEngine::new(811_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        811_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
     let infantry = relocate_to_battlefield(&mut e, 0, "thousand_moons_infantry", true);
     assert!(e.state.objects[&infantry].tapped);

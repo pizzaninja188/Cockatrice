@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{DrawDiscardOrder, PlayerRecipient, SpellEffectKind};
-use tricerules_cards::{AbilityPresentation, CardRegistry, TriggerCondition};
+use tricerules_cards::{AbilityPresentation, TriggerCondition};
 
 #[test]
 fn issue_282_registers_the_four_generated_self_tap_loot_cards() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana_cost, types, stats, order, optional) in [
         (
             "silvergill_peddler",

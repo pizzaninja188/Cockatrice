@@ -31,7 +31,15 @@ fn pegasus_courser_excludes_itself_and_grants_flying_to_the_other_attacker() {
         deck_with("plains", &["pegasus_courser"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(97001, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        97001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut engine);
     let other_attacker = battlefield_object_for_card(&engine, 0, "grizzly_bears");
     let courser = inject_creature_on_battlefield(&mut engine, 0, "pegasus_courser");
@@ -76,7 +84,15 @@ fn legion_guildmage_rejects_itself_before_costs_and_taps_another_creature() {
         deck_with("plains", &["legion_guildmage"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(97002, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        97002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let guildmage = inject_creature_on_battlefield(&mut engine, 0, "legion_guildmage");
     let other_creature = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
@@ -138,7 +154,15 @@ fn legion_guildmage_damages_the_opponent_not_its_controller() {
         deck_with("mountain", &["legion_guildmage"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(97003, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        97003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     let guildmage = inject_creature_on_battlefield(&mut engine, 0, "legion_guildmage");
     give_mana(
         &mut engine,

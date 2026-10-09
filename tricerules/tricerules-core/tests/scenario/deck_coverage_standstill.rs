@@ -1,6 +1,6 @@
 //! Actual Standstill: successful source sacrifice and frozen caster-relative draw.
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, ContinuousEffectKind, ControllerReference, EffectDuration};
+use tricerules_cards::{ContinuousEffectKind, ControllerReference, EffectDuration};
 use tricerules_core::state::ActiveDeathReplacement;
 use tricerules_core::Zone;
 use tricerules_core::{AffectedScope, ContinuousEffect};
@@ -9,6 +9,7 @@ use tricerules_proto::ruled::v1 as rv1;
 fn start() -> (GameEngine, u32) {
     let deck = deck_with("forest", &[]);
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         512_001,
         &[10, 20, 30],
         20,
@@ -254,7 +255,7 @@ fn standstill_first_successful_of_two_cast_triggers_draws_only_that_casters_oppo
 fn standstill_replaced_exile_still_pays_and_fires_sacrifice_but_not_graveyard_observer() {
     let (mut engine, source) = pending();
     let observer = inject_creature_on_battlefield(&mut engine, 1, "pirate_peddlers");
-    let ability = CardRegistry::global()
+    let ability = tricerules_cards::registry::global()
         .get("ichor_wellspring")
         .unwrap()
         .primary_face()
@@ -341,8 +342,15 @@ fn standstill_caster_and_other_departure_preserve_cohort_but_controller_departur
 #[test]
 fn standstill_own_cast_and_activated_ability_are_not_its_spell_cast_trigger() {
     let deck = deck_with("forest", &[]);
-    let mut engine =
-        GameEngine::new(512_002, &[10, 20], 20, Some(vec![deck.clone(), deck]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        512_002,
+        &[10, 20],
+        20,
+        Some(vec![deck.clone(), deck]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     inject_card_into_hand(&mut engine, 0, "standstill");
     give_mana(
@@ -405,8 +413,15 @@ fn standstill_logged_resolution_replays_identical_batches_and_state() {
 #[test]
 fn standstill_on_battlefield_during_twincast_copy_is_not_triggered_by_copy_creation() {
     let deck = deck_with("forest", &[]);
-    let mut engine =
-        GameEngine::new(512_003, &[10, 20], 20, Some(vec![deck.clone(), deck]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        512_003,
+        &[10, 20],
+        20,
+        Some(vec![deck.clone(), deck]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     give_mana(
         &mut engine,

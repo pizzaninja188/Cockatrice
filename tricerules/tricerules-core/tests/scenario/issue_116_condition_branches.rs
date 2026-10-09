@@ -40,7 +40,15 @@ fn move_to_hand(target: i32, card_name: &str) -> RuledCommand {
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![vec!["plains".into(); 12], vec!["forest".into(); 12]]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     engine.enable_dev_commands();
     advance_to_main1_from_game_start(&mut engine);
     engine

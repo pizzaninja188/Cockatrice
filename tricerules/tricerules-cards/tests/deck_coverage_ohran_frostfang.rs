@@ -1,13 +1,11 @@
 use tricerules_cards::primitives::{
     CastTriggerPlayer, CreatureScopeController, PlayerRecipient, SpellEffectKind, StaticAbilityDef,
 };
-use tricerules_cards::{
-    AbilityPresentation, Amount, CardRegistry, Color, Keyword, Layout, TriggerCondition,
-};
+use tricerules_cards::{AbilityPresentation, Amount, Color, Keyword, Layout, TriggerCondition};
 
 #[test]
 fn ohran_frostfang_registers_its_exact_characteristics_and_typed_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(
         registry.id_for_name("Ohran Frostfang"),
         Some("ohran_frostfang")

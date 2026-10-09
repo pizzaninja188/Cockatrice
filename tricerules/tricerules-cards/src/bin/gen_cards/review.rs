@@ -6,7 +6,7 @@ use std::path::{Component, Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use tricerules_cards::{external_oracle_lines, slugify, CardDefinition, CardRegistry};
+use tricerules_cards::{external_oracle_lines, slugify, CardDefinition};
 
 use super::{normalize_name, parse_type_line, str_field};
 
@@ -366,7 +366,7 @@ fn validate_identity(definition: &CardDefinition, source: &Value) -> Result<(), 
 }
 
 fn validate_collision(definition: &CardDefinition, inspect_existing: bool) -> Result<(), String> {
-    let embedded = CardRegistry::global();
+    let embedded = tricerules_cards::registry::global();
     if let Some(existing) = embedded.get(&definition.id) {
         if !inspect_existing {
             return Err(format!(
@@ -628,7 +628,7 @@ fn collect_typed_variants(value: &Value, face_index: usize, attributes: &mut BTr
 
 fn nearby_definitions(definition: &CardDefinition) -> Vec<NearbyDefinition> {
     let wanted = structural_attributes(definition);
-    let mut nearby = CardRegistry::global()
+    let mut nearby = tricerules_cards::registry::global()
         .definitions()
         .filter(|candidate| candidate.id != definition.id)
         .map(|candidate| {
@@ -694,7 +694,7 @@ fn build_packet_from_sources(
     let review: ReviewMap = serde_json::from_str(map)
         .map_err(|error| format!("cannot parse review map JSON: {error}"))?;
     let (oracle_id, source) = select_source(cards, &review)?;
-    let draft_registry = CardRegistry::from_authoring_draft(draft)
+    let draft_registry = tricerules_cards::registry::from_authoring_draft(draft)
         .map_err(|error| format!("draft failed registry validation: {error}"))?;
     let definitions = draft_registry.definitions().collect::<Vec<_>>();
     let [definition] = definitions.as_slice() else {

@@ -20,7 +20,7 @@ fn face<'a>(registry: &'a CardRegistry, id: &str) -> &'a tricerules_cards::CardF
 
 #[test]
 fn issue_removal_batch_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     // Identity for the whole batch.
     for (id, name, mana, types) in [

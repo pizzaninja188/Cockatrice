@@ -569,7 +569,15 @@ mod damage_source_tests {
             vec!["grizzly_bears".to_string(); 20],
             vec!["hill_giant".to_string(); 20],
         ]);
-        let mut engine = GameEngine::new(117_900, &[0, 1], 20, decks, true).expect("new");
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            117_900,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("new");
         let first = engine.state.players[0]
             .library
             .pop_front()

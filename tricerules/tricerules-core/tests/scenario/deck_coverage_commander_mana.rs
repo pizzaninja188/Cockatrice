@@ -32,8 +32,15 @@ fn commander_mana_engine_with_commanders(commanders: &[&str]) -> GameEngine {
             commanders: vec!["kami_of_the_crescent_moon".to_owned()],
         },
     ]);
-    let mut engine = GameEngine::new_with_commander_decks(62026, &[0, 1], 20, decks, true)
-        .expect("both Commander declarations resolve from card data");
+    let mut engine = GameEngine::new_with_commander_decks(
+        tricerules_cards::registry::global(),
+        62026,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("both Commander declarations resolve from card data");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

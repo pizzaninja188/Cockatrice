@@ -6,7 +6,15 @@ fn issue_174_fae_court_draws_then_creates_a_restricted_faerie_and_clone_keeps_it
         deck_with("island", &["into_the_fae_court", "clone"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(174_008, &[0, 1], 20, decks, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        174_008,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "into_the_fae_court");
     grant_pool(&mut engine, 0);
@@ -101,7 +109,15 @@ fn raise_the_alarm_creates_two_soldier_tokens() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(21, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        21,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     grant_pool(&mut e, 0);
@@ -165,7 +181,15 @@ fn call_the_cavalry_token_identity_carries_keywords() {
         vec!["call_the_cavalry".into(); 7],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(22, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        22,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     grant_pool(&mut e, 0);
@@ -202,7 +226,15 @@ fn goblin_wizardry_tokens_carry_and_trigger_prowess() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(66, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        66,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     ensure_in_hand(&mut e, 0, "goblin_wizardry");
@@ -292,7 +324,15 @@ fn bestial_menace_creates_three_distinct_tokens() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(25, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        25,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     grant_pool(&mut e, 0);
@@ -344,7 +384,15 @@ fn token_dies_and_ceases_to_exist() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(22, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        22,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     grant_pool(&mut e, 0);
@@ -414,7 +462,15 @@ fn bounced_token_ceases_to_exist() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(23, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        23,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     grant_pool(&mut e, 0);
@@ -480,7 +536,15 @@ fn anthem_buffs_token_via_shared_pt_path() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(24, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        24,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     grant_pool(&mut e, 0);

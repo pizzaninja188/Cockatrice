@@ -166,8 +166,8 @@ pub(in crate::engine) struct ManaPaymentPlan {
 
 impl ManaPaymentPlan {
     /// Unrestricted mana by type that this exact plan removes from the ordinary pool.
-    pub(in crate::engine) fn unrestricted_spent(&self) -> tricerules_cards::ManaAmount {
-        tricerules_cards::ManaAmount {
+    pub(in crate::engine) fn unrestricted_spent(&self) -> tricerules_card_model::ManaAmount {
+        tricerules_card_model::ManaAmount {
             w: self.expected_pool[0] - self.remaining[0],
             u: self.expected_pool[1] - self.remaining[1],
             b: self.expected_pool[2] - self.remaining[2],
@@ -177,7 +177,9 @@ impl ManaPaymentPlan {
         }
     }
 
-    pub(in crate::engine) fn restricted_spent(&self) -> &[(u32, tricerules_cards::ManaAmount)] {
+    pub(in crate::engine) fn restricted_spent(
+        &self,
+    ) -> &[(u32, tricerules_card_model::ManaAmount)] {
         &self.restricted_spent
     }
 

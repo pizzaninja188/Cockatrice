@@ -244,6 +244,7 @@ fn semantic_fixtures_modal_illegal_targets_preserve_state() {
 #[test]
 fn semantic_fixtures_drain_uses_all_priority_holders() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         448_006,
         &[7, 19],
         20,
@@ -272,6 +273,7 @@ fn semantic_fixtures_drain_uses_all_priority_holders() {
 #[test]
 fn semantic_fixtures_parked_resolution_is_not_exercised() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         448,
         &[0, 1],
         20,

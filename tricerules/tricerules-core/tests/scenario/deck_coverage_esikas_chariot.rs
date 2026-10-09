@@ -7,7 +7,7 @@
 
 use super::helpers::*;
 use tricerules_cards::primitives::{Color, CounterKind};
-use tricerules_cards::{AbilityPresentation, CardRegistry};
+use tricerules_cards::AbilityPresentation;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     cost_selection::Selection, ruled_command::Cmd, ruled_event::Ev, ChooseTriggerTarget,
@@ -22,7 +22,15 @@ fn engine(seed: u64) -> GameEngine {
         deck_with("forest", &["grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     grant_pool(&mut engine, 0);
     grant_pool(&mut engine, 1);
@@ -75,7 +83,7 @@ fn choose_trigger_target(object_id: u32) -> RuledCommand {
 
 #[test]
 fn esikas_chariot_and_its_cat_token_have_the_complete_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get(CHARIOT)
         .expect("Esika's Chariot registry definition");

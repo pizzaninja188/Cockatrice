@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     Amount, CastTriggerPlayer, CreatureEventFilter, PermanentTypeFilter, PlayerRecipient,
     PowerComparison, SpellEffectKind, TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
+use tricerules_cards::{AbilityPresentation, Layout};
 
 #[test]
 fn garruks_packleader_registers_its_power_filtered_optional_draw_trigger() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("garruks_packleader")
         .expect("Garruk's Packleader registry definition");

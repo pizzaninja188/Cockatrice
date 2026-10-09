@@ -27,7 +27,15 @@ fn second_committed_cast_triggers_flurry_exactly_once_for_that_player() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(11101, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11101,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     let practitioner = relocate_to_battlefield(&mut engine, 0, "poised_practitioner", false);
     ensure_copies_in_hand(&mut engine, 0, "life_goes_on", 3);
     give_mana(
@@ -91,7 +99,15 @@ fn successful_primitive_draws_are_ordinal_events_but_opening_cards_are_not() {
         deck_with("island", &["erudite_wizard", "divination"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(11102, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11102,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     assert_eq!(engine.state.turn_history.current.player(0).cards_drawn, 0);
     advance_to_main1_from_game_start(&mut engine);
     let wizard = relocate_to_battlefield(&mut engine, 0, "erudite_wizard", false);
@@ -129,7 +145,15 @@ fn erudite_wizard_only_needs_to_observe_the_second_draw() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(11108, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11108,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     ensure_copies_in_hand(&mut engine, 0, "elvish_visionary", 2);
     give_mana(
@@ -167,7 +191,15 @@ fn erudite_wizard_only_needs_to_observe_the_second_draw() {
 #[test]
 fn normal_turn_draws_are_recorded_for_only_the_drawing_player() {
     let decks = Some(vec![deck_with("forest", &[]), deck_with("island", &[])]);
-    let mut engine = GameEngine::new(11103, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11103,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     assert_eq!(engine.state.turn_history.current.player(0).cards_drawn, 0);
 
@@ -184,7 +216,15 @@ fn failed_empty_library_draw_attempts_do_not_increment_draw_history() {
         deck_with("island", &["divination"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(11107, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11107,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "divination");
     engine.state.players[0].library.clear();
@@ -211,6 +251,7 @@ fn failed_empty_library_draw_attempts_do_not_increment_draw_history() {
 #[test]
 fn only_a_committed_nonempty_declaration_sets_the_attack_fact() {
     let mut attacking = GameEngine::new(
+        tricerules_cards::registry::global(),
         11104,
         &[0, 1],
         20,
@@ -227,6 +268,7 @@ fn only_a_committed_nonempty_declaration_sets_the_attack_fact() {
     assert!(!attacking.state.turn_history.current.player(1).attacked);
 
     let mut empty = GameEngine::new(
+        tricerules_cards::registry::global(),
         11105,
         &[0, 1],
         20,
@@ -247,7 +289,15 @@ fn focus_the_mind_reduction_reads_prior_casts_not_the_current_spell() {
         deck_with("island", &["focus_the_mind", "life_goes_on"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(11106, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        11106,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     ensure_in_hand(&mut engine, 0, "focus_the_mind");
     ensure_in_hand(&mut engine, 0, "life_goes_on");
     give_mana(

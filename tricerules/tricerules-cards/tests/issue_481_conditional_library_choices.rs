@@ -5,7 +5,7 @@ use tricerules_cards::primitives::{
     Amount, BattlefieldAggregate, CardTypeFilter, EffectSubject, GameCondition,
     LibraryPartitionKind, PermanentTypeFilter, RelativePlayerSet, SpellEffectKind, TargetKind,
 };
-use tricerules_cards::{CardFace, CardRegistry, Keyword};
+use tricerules_cards::{CardFace, Keyword};
 
 const TAKEN_BY_NIGHTMARES_DRAFT: &str = r#"
 (
@@ -61,7 +61,7 @@ fn issue_481_conditional_scry_and_surveil_are_valid_typed_effects() {
         ("Taken by Nightmares", TAKEN_BY_NIGHTMARES_DRAFT),
         ("Failed Fording", FAILED_FORDING_DRAFT),
     ] {
-        CardRegistry::from_authoring_draft(draft)
+        tricerules_cards::registry::from_authoring_draft(draft)
             .unwrap_or_else(|error| panic!("{card} typed draft must validate: {error}"));
     }
 }
@@ -69,13 +69,13 @@ fn issue_481_conditional_scry_and_surveil_are_valid_typed_effects() {
 #[test]
 fn issue_481_does_not_admit_unneeded_conditional_library_look() {
     let unsupported = FAILED_FORDING_DRAFT.replace("kind: Surveil", "kind: Look");
-    let error = CardRegistry::from_authoring_draft(&unsupported)
+    let error = tricerules_cards::registry::from_authoring_draft(&unsupported)
         .expect_err("Conditional Look has no demonstrated issue-481 card use");
     assert!(error.to_string().contains("Conditional currently supports"));
 }
 
 fn face(id: &str) -> &'static CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .unwrap_or_else(|| panic!("missing complete issue-481 card {id}"))
         .primary_face()
@@ -87,7 +87,10 @@ fn issue_481_registers_both_complete_cards_and_exact_conditional_effects() {
         ("taken_by_nightmares", "Taken by Nightmares", "{2}{B}{B}"),
         ("failed_fording", "Failed Fording", "{1}{U}"),
     ] {
-        assert_eq!(CardRegistry::global().id_for_name(name), Some(id));
+        assert_eq!(
+            tricerules_cards::registry::global().id_for_name(name),
+            Some(id)
+        );
         let face = FaceExpectation {
             id,
             name,

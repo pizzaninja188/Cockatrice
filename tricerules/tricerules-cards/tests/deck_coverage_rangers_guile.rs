@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     EffectSubject, Keyword, SpellEffectKind, TargetController, TargetFilter, TargetGroupDef,
     TargetKind,
 };
-use tricerules_cards::{CardRegistry, Color, Layout};
+use tricerules_cards::{Color, Layout};
 
 #[test]
 fn rangers_guile_registers_its_complete_targeted_pump_and_hexproof() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(
         registry.id_for_name("Ranger's Guile"),
         Some("rangers_guile")

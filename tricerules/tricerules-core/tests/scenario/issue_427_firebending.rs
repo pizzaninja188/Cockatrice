@@ -15,7 +15,15 @@ fn issue_427_fire_sages_adds_red_mana_on_attack_and_retains_it_until_end_of_comb
         deck_with("mountain", &["fire_sages"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(15_201, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        15_201,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut engine);
     let sages = relocate_to_battlefield(&mut engine, 0, "fire_sages", false);
 
@@ -60,7 +68,15 @@ fn issue_427_fire_sages_adds_no_mana_when_it_does_not_attack() {
         deck_with("mountain", &["fire_sages"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(15_202, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        15_202,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut engine);
     let _sages = relocate_to_battlefield(&mut engine, 0, "fire_sages", false);
 
@@ -80,7 +96,15 @@ fn issue_427_azula_on_the_hunt_triggers_firebending_two_and_the_clue() {
         deck_with("swamp", &["azula,_on_the_hunt"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(15_203, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        15_203,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut engine);
     let azula = relocate_to_battlefield(&mut engine, 0, "azula,_on_the_hunt", false);
     let life_before = engine.state.players[0].life;
@@ -116,7 +140,15 @@ fn issue_427_zhao_pumps_the_team_after_a_sacrifice() {
         ),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(15_204, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        15_204,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let zhao = relocate_to_battlefield(&mut engine, 0, "zhao,_ruthless_admiral", false);
     let sacrificed = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);

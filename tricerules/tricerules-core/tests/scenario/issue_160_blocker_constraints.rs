@@ -44,7 +44,15 @@ fn dark_endurance_reduces_only_for_a_blocking_target() {
         deck_with("forest", &["grizzly_bears"]),
         deck_with("swamp", &["dark_endurance", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(160_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        160_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 1, "dark_endurance");
     let attacker = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -117,7 +125,15 @@ fn blocker_power_evasion_uses_derived_power_and_composes_with_flying() {
             &["giant_spider", "giant_spider", "elfsworn_giant"],
         ),
     ]);
-    let mut engine = GameEngine::new(160_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        160_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let vinebender = move_ready_to_battlefield(&mut engine, 0, "foggy_swamp_vinebender");
     let low_reach = relocate_to_battlefield(&mut engine, 1, "giant_spider", false);
@@ -179,7 +195,15 @@ fn maximum_blocker_count_rejects_two_without_mutating_combat() {
         deck_with("forest", &["safewright_cavalry"]),
         deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(160_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        160_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let cavalry = move_ready_to_battlefield(&mut engine, 0, "safewright_cavalry");
     let first = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -231,7 +255,15 @@ fn maximum_one_plus_menace_makes_blocking_impossible_even_with_requirements() {
         deck_with("forest", &["safewright_cavalry"]),
         deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(160_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        160_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let cavalry = move_ready_to_battlefield(&mut engine, 0, "safewright_cavalry");
     let first = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -279,7 +311,15 @@ fn blocker_caps_are_per_attacker_and_player_ids_are_not_seat_indices() {
         deck_with("forest", &["safewright_cavalry", "safewright_cavalry"]),
         deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(160_005, &[10, 20], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        160_005,
+        &[10, 20],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let first_attacker = move_ready_to_battlefield(&mut engine, 0, "safewright_cavalry");
     let second_attacker = move_ready_to_battlefield(&mut engine, 0, "safewright_cavalry");
@@ -317,7 +357,15 @@ fn removing_safewright_cavalrys_abilities_removes_its_blocker_cap() {
         deck_with("forest", &["safewright_cavalry"]),
         deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(160_006, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        160_006,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let cavalry = move_ready_to_battlefield(&mut engine, 0, "safewright_cavalry");
     let first = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
@@ -363,7 +411,15 @@ fn safewright_cavalry_targets_only_an_elf_with_its_pump_ability() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(160_007, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        160_007,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let cavalry = move_ready_to_battlefield(&mut engine, 0, "safewright_cavalry");
     let elf = relocate_to_battlefield(&mut engine, 0, "llanowar_elves", false);

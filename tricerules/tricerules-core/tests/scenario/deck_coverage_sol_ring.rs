@@ -4,6 +4,7 @@ use tricerules_core::GameEngine;
 #[test]
 fn sol_ring_casts_then_its_tap_ability_adds_two_colorless_mana() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         20_260_925,
         &[0, 1],
         20,

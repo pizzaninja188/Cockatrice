@@ -43,7 +43,7 @@ fn issue_218_hand_exile_self_cost_remains_invalid() {
 
 #[test]
 fn issue_218_sapling_nursery_has_exact_affinity_landfall_and_activation_shape() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("sapling_nursery")
         .expect("Sapling Nursery");
     let face = card.primary_face();

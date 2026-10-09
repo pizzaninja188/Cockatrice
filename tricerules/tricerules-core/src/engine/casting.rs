@@ -61,36 +61,36 @@ fn format_paid_card_costs_log(costs: &[PaidCardCost]) -> String {
 }
 
 fn mana_amount_for_color(
-    color: tricerules_cards::Color,
+    color: tricerules_card_model::Color,
     count: u32,
-) -> tricerules_cards::ManaAmount {
-    use tricerules_cards::Color;
+) -> tricerules_card_model::ManaAmount {
+    use tricerules_card_model::Color;
     match color {
-        Color::White => tricerules_cards::ManaAmount {
+        Color::White => tricerules_card_model::ManaAmount {
             w: count,
             ..Default::default()
         },
-        Color::Blue => tricerules_cards::ManaAmount {
+        Color::Blue => tricerules_card_model::ManaAmount {
             u: count,
             ..Default::default()
         },
-        Color::Black => tricerules_cards::ManaAmount {
+        Color::Black => tricerules_card_model::ManaAmount {
             b: count,
             ..Default::default()
         },
-        Color::Red => tricerules_cards::ManaAmount {
+        Color::Red => tricerules_card_model::ManaAmount {
             r: count,
             ..Default::default()
         },
-        Color::Green => tricerules_cards::ManaAmount {
+        Color::Green => tricerules_card_model::ManaAmount {
             g: count,
             ..Default::default()
         },
     }
 }
 
-fn color_for_index(index: usize) -> tricerules_cards::Color {
-    use tricerules_cards::Color;
+fn color_for_index(index: usize) -> tricerules_card_model::Color {
+    use tricerules_card_model::Color;
     match index {
         0 => Color::White,
         1 => Color::Blue,
@@ -101,7 +101,7 @@ fn color_for_index(index: usize) -> tricerules_cards::Color {
     }
 }
 
-fn mana_color_mask(amount: tricerules_cards::ManaAmount) -> u8 {
+fn mana_color_mask(amount: tricerules_card_model::ManaAmount) -> u8 {
     u8::from(amount.w > 0)
         | (u8::from(amount.u > 0) << 1)
         | (u8::from(amount.b > 0) << 2)
@@ -110,10 +110,10 @@ fn mana_color_mask(amount: tricerules_cards::ManaAmount) -> u8 {
 }
 
 fn multiply_mana_amount(
-    amount: tricerules_cards::ManaAmount,
+    amount: tricerules_card_model::ManaAmount,
     multiplier: u32,
-) -> tricerules_cards::ManaAmount {
-    tricerules_cards::ManaAmount {
+) -> tricerules_card_model::ManaAmount {
+    tricerules_card_model::ManaAmount {
         w: amount.w.saturating_mul(multiplier),
         u: amount.u.saturating_mul(multiplier),
         b: amount.b.saturating_mul(multiplier),
@@ -124,14 +124,17 @@ fn multiply_mana_amount(
 }
 
 /// CR 702.8b: true if the card face is castable at instant speed (is an instant, or has flash).
-pub(super) fn castable_at_instant_speed(face: &tricerules_cards::FaceRef<'_>) -> bool {
-    face.is_instant || face.keywords.contains(&tricerules_cards::Keyword::Flash)
+pub(super) fn castable_at_instant_speed(face: &tricerules_card_model::FaceRef<'_>) -> bool {
+    face.is_instant
+        || face
+            .keywords
+            .contains(&tricerules_card_model::Keyword::Flash)
 }
 
 fn command_satisfies_cast_cost_condition(
     selections: &[rv1::CastCostGroupSelection],
     groups: &[CastCostGroupDef],
-    condition: &tricerules_cards::CastCostReceiptCondition,
+    condition: &tricerules_card_model::CastCostReceiptCondition,
 ) -> bool {
     let selected = groups
         .iter()
@@ -261,7 +264,7 @@ impl GameEngine {
     pub(super) fn legendary_spell_cast_allowed(
         &self,
         player: PlayerId,
-        face: &tricerules_cards::CardFace,
+        face: &tricerules_card_model::CardFace,
     ) -> bool {
         if !face.is_legendary || !(face.is_instant || face.is_sorcery) {
             return true;
@@ -1564,8 +1567,8 @@ impl GameEngine {
     pub(super) fn active_mana_options(
         &self,
         permanent_id: ObjectId,
-        ability: &tricerules_cards::ActivatedAbilityDef,
-    ) -> Option<Vec<tricerules_cards::ManaAmount>> {
+        ability: &tricerules_card_model::ActivatedAbilityDef,
+    ) -> Option<Vec<tricerules_card_model::ManaAmount>> {
         if ability.opponent_land_mana_output() {
             return Some(self.opponent_land_mana_options(permanent_id, ability));
         }
@@ -1579,8 +1582,8 @@ impl GameEngine {
     fn opponent_land_mana_options(
         &self,
         source_id: ObjectId,
-        ability: &tricerules_cards::ActivatedAbilityDef,
-    ) -> Vec<tricerules_cards::ManaAmount> {
+        ability: &tricerules_card_model::ActivatedAbilityDef,
+    ) -> Vec<tricerules_card_model::ManaAmount> {
         let mut lands = self
             .state
             .objects
@@ -1649,7 +1652,7 @@ impl GameEngine {
             .characteristics(source_id)
             .map(|characteristics| characteristics.controller)
         else {
-            return vec![tricerules_cards::ManaAmount::default()];
+            return vec![tricerules_card_model::ManaAmount::default()];
         };
         let mut available_colors = 0u8;
         for (land_id, land_controller) in &lands {
@@ -1670,7 +1673,7 @@ impl GameEngine {
             .collect::<Vec<_>>();
         if options.is_empty() {
             // CR 605.2: this remains an activatable mana ability that taps its source and adds 0.
-            vec![tricerules_cards::ManaAmount::default()]
+            vec![tricerules_card_model::ManaAmount::default()]
         } else {
             options
         }
@@ -1679,8 +1682,8 @@ impl GameEngine {
     fn active_mana_options_for_fixed_output(
         &self,
         permanent_id: ObjectId,
-        ability: &tricerules_cards::ActivatedAbilityDef,
-    ) -> Option<Vec<tricerules_cards::ManaAmount>> {
+        ability: &tricerules_card_model::ActivatedAbilityDef,
+    ) -> Option<Vec<tricerules_card_model::ManaAmount>> {
         let default_options = ability.mana_options()?;
         let controller = self
             .characteristics(permanent_id)
@@ -1695,7 +1698,7 @@ impl GameEngine {
             if identity.is_empty() {
                 // CR 605.2 keeps this a mana ability even when the current game state supplies no
                 // legal color; activating it still taps the source and adds 0.
-                vec![tricerules_cards::ManaAmount::default()]
+                vec![tricerules_card_model::ManaAmount::default()]
             } else {
                 identity
                     .iter()
@@ -1752,7 +1755,7 @@ impl GameEngine {
     fn tapped_permanent_mana_multiplier(
         &self,
         permanent_id: ObjectId,
-        ability: &tricerules_cards::ActivatedAbilityDef,
+        ability: &tricerules_card_model::ActivatedAbilityDef,
     ) -> u32 {
         if !ability
             .costs
@@ -1784,7 +1787,7 @@ impl GameEngine {
             .flat_map(|source| self.active_static_ability_definitions(source))
             .filter_map(|static_ability| {
                 match static_ability {
-                tricerules_cards::primitives::StaticAbilityDef::MultiplyManaFromTappedPermanents {
+                tricerules_card_model::primitives::StaticAbilityDef::MultiplyManaFromTappedPermanents {
                     multiplier,
                 } => Some(multiplier),
                 _ => None,
@@ -1814,7 +1817,8 @@ impl GameEngine {
                 .ok_or(EngineError::Illegal("storage mana source missing"))?;
             if source_zone != AbilitySourceZone::Battlefield
                 || mana_option_index != 0
-                || x_value > source_object.counter_count(tricerules_cards::CounterKind::Storage)
+                || x_value
+                    > source_object.counter_count(tricerules_card_model::CounterKind::Storage)
                 || first_color_count > x_value
             {
                 return Err(EngineError::Illegal(
@@ -2422,7 +2426,7 @@ impl GameEngine {
         &self,
         permanent_id: ObjectId,
         ability_index: usize,
-        ability: &tricerules_cards::ActivatedAbilityDef,
+        ability: &tricerules_card_model::ActivatedAbilityDef,
     ) -> bool {
         let Some(object) = self.state.objects.get(&permanent_id) else {
             return false;
@@ -2723,13 +2727,13 @@ impl GameEngine {
         }
         if let Some(limit) = ability.activation_limit {
             uses.push(match limit {
-                tricerules_cards::primitives::ActivationLimit::PerTurn { .. } => {
+                tricerules_card_model::primitives::ActivationLimit::PerTurn { .. } => {
                     LimitedActivationUse::PerTurn(self.activation_use_key(
                         permanent_id,
                         ActivationUseIdentity::Ability(occurrence.clone()),
                     ))
                 }
-                tricerules_cards::primitives::ActivationLimit::PerObject { .. } => {
+                tricerules_card_model::primitives::ActivationLimit::PerObject { .. } => {
                     LimitedActivationUse::PerObject(
                         self.persistent_activation_use_key(permanent_id, occurrence.clone()),
                     )
@@ -2765,7 +2769,7 @@ impl GameEngine {
             return false;
         };
         match limit {
-            tricerules_cards::primitives::ActivationLimit::PerTurn { max_activations } => {
+            tricerules_card_model::primitives::ActivationLimit::PerTurn { max_activations } => {
                 self.state
                     .activation_uses_this_turn
                     .get(&self.activation_use_key(
@@ -2776,7 +2780,7 @@ impl GameEngine {
                     .unwrap_or(0)
                     < max_activations
             }
-            tricerules_cards::primitives::ActivationLimit::PerObject { max_activations } => {
+            tricerules_card_model::primitives::ActivationLimit::PerObject { max_activations } => {
                 self.state
                     .activation_uses_per_object
                     .get(&self.persistent_activation_use_key(permanent_id, occurrence))
@@ -2806,7 +2810,7 @@ impl GameEngine {
     fn activation_conditions_hold(
         &self,
         permanent_id: ObjectId,
-        ability: &tricerules_cards::ActivatedAbilityDef,
+        ability: &tricerules_card_model::ActivatedAbilityDef,
     ) -> bool {
         let Some(controller) = self.state.objects.get(&permanent_id).map(|object| {
             if ability.source_zone == AbilitySourceZone::Battlefield {
@@ -2844,7 +2848,7 @@ impl GameEngine {
     ) -> Result<(), EngineError> {
         let has_haste = self
             .characteristics(permanent_id)
-            .is_some_and(|value| value.has_keyword(tricerules_cards::Keyword::Haste));
+            .is_some_and(|value| value.has_keyword(tricerules_card_model::Keyword::Haste));
         let o = self
             .state
             .objects
@@ -3453,7 +3457,7 @@ mod cast_snapshot_tests {
             trigger_grant_origin: None,
             affected: AffectedScope::Single(qualifier),
             kind: ContinuousEffectKind::Layer2Control {
-                controller: tricerules_cards::ControllerReference::Fixed(0),
+                controller: tricerules_card_model::ControllerReference::Fixed(0),
             },
             condition: None,
             duration: EffectDuration::Indefinite,
@@ -3464,11 +3468,13 @@ mod cast_snapshot_tests {
             source_id: None,
             trigger_grant_origin: None,
             affected: AffectedScope::Single(qualifier),
-            kind: ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
-                card_types: vec![tricerules_cards::PermanentTypeFilter::Artifact],
-                creature_types: vec![],
-                land_types: vec![],
-            }),
+            kind: ContinuousEffectKind::Layer4SetTypeLine(
+                tricerules_card_model::TypeLineReplacement {
+                    card_types: vec![tricerules_card_model::PermanentTypeFilter::Artifact],
+                    creature_types: vec![],
+                    land_types: vec![],
+                },
+            ),
             condition: None,
             duration: EffectDuration::Indefinite,
             timestamp: 2,
@@ -4131,6 +4137,7 @@ mod cast_snapshot_tests {
         chunks.extend_from_slice(extra);
         let registry = CardRegistry::from_chunks_and_tokens(&chunks, &[]).unwrap();
         let mut e = GameEngine::new(
+            tricerules_cards::registry::global(),
             173010,
             &[0, 1],
             20,
@@ -5107,11 +5114,17 @@ mod cast_snapshot_tests {
 #[cfg(test)]
 mod mana_payment_tests {
     use super::*;
-    use tricerules_cards::ActivationTiming;
+    use tricerules_card_model::ActivationTiming;
 
     /// Build a 2-player engine and hand priority to player 0 so `pay_mana`'s priority gate passes.
     fn engine_with_priority() -> GameEngine {
-        let mut e = GameEngine::new_with_default_decks(1, &[0, 1], 20).expect("new");
+        let mut e = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            1,
+            &[0, 1],
+            20,
+        )
+        .expect("new");
         e.state.priority_idx = 0;
         e
     }
@@ -5125,8 +5138,8 @@ mod mana_payment_tests {
 
         let ability = ActivatedAbilityDef {
             intrinsic_land_mana: false,
-            ability_id: tricerules_cards::AbilityId::new("activated_01").unwrap(),
-            presentation: tricerules_cards::AbilityPresentation::Fallback,
+            ability_id: tricerules_card_model::AbilityId::new("activated_01").unwrap(),
+            presentation: tricerules_card_model::AbilityPresentation::Fallback,
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![AbilityCost::Mana(ManaCost::parse("{1}").unwrap())],
             cost_modifiers: vec![],
@@ -5190,17 +5203,17 @@ mod mana_payment_tests {
 
     #[test]
     fn conditional_instant_timing_requires_the_linked_cast_cost_selection() {
-        let group_id = tricerules_cards::ChoiceId::new("cast_cost_01").unwrap();
-        let option_id = tricerules_cards::ChoiceId::new("option_01").unwrap();
+        let group_id = tricerules_card_model::ChoiceId::new("cast_cost_01").unwrap();
+        let option_id = tricerules_card_model::ChoiceId::new("option_01").unwrap();
         let groups = vec![CastCostGroupDef {
             group_id: group_id.clone(),
-            presentation: tricerules_cards::AbilityPresentation::Fallback,
+            presentation: tricerules_card_model::AbilityPresentation::Fallback,
             min: 0,
             max: 1,
             options: vec![CastCostOptionDef::Mana {
                 option_id: option_id.clone(),
-                presentation: tricerules_cards::AbilityPresentation::Fallback,
-                kind: tricerules_cards::primitives::ManaCostChoiceKind::AdditionalPayment,
+                presentation: tricerules_card_model::AbilityPresentation::Fallback,
+                kind: tricerules_card_model::primitives::ManaCostChoiceKind::AdditionalPayment,
                 cost: ManaCost::parse("{1}").unwrap(),
             }],
         }];
@@ -5299,7 +5312,7 @@ mod mana_payment_tests {
     fn activation_limit_counts_follow_stable_occurrences_and_reject_unpublished_slots() {
         let mut engine = engine_with_priority();
         let object_id = engine.state.players[0].library[0];
-        let ability = CardRegistry::global()
+        let ability = tricerules_cards::registry::global()
             .get("temur_devotee")
             .expect("Temur Devotee must be registered")
             .primary_face()
@@ -5341,7 +5354,7 @@ mod mana_payment_tests {
             objects.push(oid);
         }
         let source = objects[0];
-        let mut ability = CardRegistry::global()
+        let mut ability = tricerules_cards::registry::global()
             .get("gene_pollinator")
             .expect("Gene Pollinator")
             .primary_face()
@@ -5456,7 +5469,7 @@ mod mana_payment_tests {
             engine.ability_definition(
                 object_id,
                 0,
-                vec![tricerules_cards::AbilityId::new("activated_01").unwrap()],
+                vec![tricerules_card_model::AbilityId::new("activated_01").unwrap()],
             ),
         ));
         let key_before_costs = engine.activation_use_key(object_id, identity.clone());
@@ -5615,7 +5628,7 @@ mod mana_payment_tests {
         let leaf = TargetFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
-            excluded_objects: vec![tricerules_cards::TargetObjectExclusion::Source],
+            excluded_objects: vec![tricerules_card_model::TargetObjectExclusion::Source],
             ..TargetFilter::default()
         };
         let filter = TargetFilter {

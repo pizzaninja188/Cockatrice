@@ -74,9 +74,25 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
                 commanders: vec!["kami_of_the_crescent_moon".into()],
             })
             .collect();
-        GameEngine::new_with_commander_decks(seed, players, 20, Some(decks), true).unwrap()
+        GameEngine::new_with_commander_decks(
+            tricerules_cards::registry::global(),
+            seed,
+            players,
+            20,
+            Some(decks),
+            true,
+        )
+        .unwrap()
     } else {
-        GameEngine::new(seed, players, 20, Some(vec![deck; players.len()]), true).unwrap()
+        GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            players,
+            20,
+            Some(vec![deck; players.len()]),
+            true,
+        )
+        .unwrap()
     };
     super::advance_to_main1_from_game_start(&mut e);
     for player in 0..e.state.players.len() {

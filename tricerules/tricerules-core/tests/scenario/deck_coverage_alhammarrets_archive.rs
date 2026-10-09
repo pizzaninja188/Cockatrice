@@ -10,6 +10,7 @@ fn setup(seed: u64) -> GameEngine {
         &["alhammarrets_archive", "chaplains_blessing", "divination"],
     );
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[4, 9, 27],
         20,
@@ -381,7 +382,15 @@ fn archive_actual_lifelink_after_prevention_and_overflow_restore_damage_and_shie
 #[test]
 fn archive_combat_sources_gain_separately_and_canonical_settlement_rolls_back_overflow() {
     for overflow in [false, true] {
-        let mut engine = GameEngine::new(104_816, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            104_816,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         advance_to_declare_attackers(&mut engine);
         inject_permanent_on_battlefield(&mut engine, 0, "alhammarrets_archive");
         let first = inject_creature_on_battlefield(&mut engine, 0, "vampire_nighthawk");

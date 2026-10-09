@@ -14,13 +14,13 @@ use tricerules_cards::primitives::{
     TargetKind, ZoneCardFilter,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, Amount, CardRegistry, CharacteristicDefiningAbility, Color,
-    Keyword, Layout, ManaCost, SpellEffectKind, TriggerCondition,
+    AbilityCost, AbilityPresentation, Amount, CharacteristicDefiningAbility, Color, Keyword,
+    Layout, ManaCost, SpellEffectKind, TriggerCondition,
 };
 
 #[test]
 fn issue_336_registers_the_eight_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let expected = [
         ("affectionate_indrik", "Affectionate Indrik", 1usize),
         ("arcane_epiphany", "Arcane Epiphany", 1),
@@ -58,7 +58,7 @@ fn issue_336_registers_the_eight_reviewed_identities() {
 
 #[test]
 fn issue_336_desperate_parry_carries_the_minus_four_minus_zero_pump() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("obyras_attendants_desperate_parry")
         .expect("Obyra's Attendants // Desperate Parry");
     let front = definition.face(0).expect("front face");
@@ -94,7 +94,7 @@ fn issue_336_desperate_parry_carries_the_minus_four_minus_zero_pump() {
 
 #[test]
 fn issue_336_arcane_epiphany_reduces_only_with_a_controlled_wizard() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("arcane_epiphany")
         .expect("Arcane Epiphany");
     let face = definition.primary_face();
@@ -127,7 +127,7 @@ fn issue_336_arcane_epiphany_reduces_only_with_a_controlled_wizard() {
 
 #[test]
 fn issue_336_spectral_sailor_keeps_flash_flying_and_the_printed_draw_cost() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("spectral_sailor")
         .expect("Spectral Sailor");
     let face = definition.primary_face();
@@ -165,7 +165,9 @@ fn issue_336_spectral_sailor_keeps_flash_flying_and_the_printed_draw_cost() {
 
 #[test]
 fn issue_336_magic_pot_exiles_any_graveyard_card_and_keeps_its_dies_treasure() {
-    let definition = CardRegistry::global().get("magic_pot").expect("Magic Pot");
+    let definition = tricerules_cards::registry::global()
+        .get("magic_pot")
+        .expect("Magic Pot");
     let face = definition.primary_face();
     assert_eq!(face.mana_cost.to_string(), "{3}");
     assert_eq!(face.types, ["Artifact", "Creature", "Goblin", "Construct"]);
@@ -227,7 +229,7 @@ fn issue_336_magic_pot_exiles_any_graveyard_card_and_keeps_its_dies_treasure() {
 
 #[test]
 fn issue_336_affectionate_indrik_may_fight_a_creature_you_dont_control() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("affectionate_indrik")
         .expect("Affectionate Indrik");
     let face = definition.primary_face();
@@ -271,7 +273,7 @@ fn issue_336_affectionate_indrik_may_fight_a_creature_you_dont_control() {
 
 #[test]
 fn issue_336_graveshifter_keeps_changeling_and_the_optional_return() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("graveshifter")
         .expect("Graveshifter");
     let face = definition.primary_face();
@@ -332,7 +334,7 @@ fn issue_336_graveshifter_keeps_changeling_and_the_optional_return() {
 
 #[test]
 fn issue_336_reclamation_sage_may_destroy_an_artifact_or_enchantment() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("reclamation_sage")
         .expect("Reclamation Sage");
     let face = definition.primary_face();
@@ -375,7 +377,9 @@ fn issue_336_reclamation_sage_may_destroy_an_artifact_or_enchantment() {
 
 #[test]
 fn issue_336_gold_pan_keeps_treasure_anthem_and_equip() {
-    let definition = CardRegistry::global().get("gold_pan").expect("Gold Pan");
+    let definition = tricerules_cards::registry::global()
+        .get("gold_pan")
+        .expect("Gold Pan");
     let face = definition.primary_face();
     assert_eq!(face.mana_cost.to_string(), "{2}");
     assert_eq!(face.types, ["Artifact", "Equipment"]);
@@ -447,7 +451,7 @@ fn issue_336_gold_pan_keeps_treasure_anthem_and_equip() {
 
 #[test]
 fn issue_336_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     let expected_rows = [
         ("affectionate_indrik", "affectionate_indrik"),

@@ -68,7 +68,15 @@ fn generated_gundabad_opportunist_grants_exact_public_land_permission_until_next
         deck_with("mountain", &["gundabad_opportunist"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(259_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        259_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let top = seat_on_top(&mut engine, 0, "forest");
 
@@ -119,7 +127,15 @@ fn generated_counter_etb_publishes_legal_creatures_and_revalidates_generation() 
         deck_with("plains", &["ironpaw_aspirant", "jeong_jeongs_deserters"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(259_002, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        259_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let creature = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let artifact = inject_permanent_on_battlefield(&mut engine, 1, "icy_manipulator");
@@ -166,7 +182,15 @@ fn generated_invasion_reinforcements_creates_the_canonical_ally_for_its_controll
         deck_with("plains", &["invasion_reinforcements"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(259_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        259_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     move_ready_to_battlefield(&mut engine, 0, "invasion_reinforcements");
@@ -188,7 +212,15 @@ fn generated_bellowing_crier_draws_before_its_mandatory_private_discard() {
         deck_with("island", &["bellowing_crier"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(259_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        259_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let drawn = seat_on_top(&mut engine, 0, "storm_crow");
 

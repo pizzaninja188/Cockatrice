@@ -1,14 +1,21 @@
 //! All Is Dust: one simultaneous sacrifice with owner-chosen graveyard order.
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, Color, ContinuousEffectKind, EffectDuration, Keyword};
+use tricerules_cards::{Color, ContinuousEffectKind, EffectDuration, Keyword};
 use tricerules_core::state::ActiveDeathReplacement;
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::ChoiceKind;
 
 fn setup() -> GameEngine {
     let deck = deck_with("forest", &["all_is_dust"]);
-    let mut engine =
-        GameEngine::new(26_100_101, &[0, 1, 2], 20, Some(vec![deck; 3]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        26_100_101,
+        &[0, 1, 2],
+        20,
+        Some(vec![deck; 3]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "all_is_dust");
     engine
@@ -222,8 +229,15 @@ fn all_is_dust_sacrifice_bypasses_indestructible_regeneration_and_targeting_prot
 #[test]
 fn all_is_dust_nonconsecutive_players_use_owner_not_controller_for_apnap_order() {
     let deck = deck_with("forest", &["all_is_dust"]);
-    let mut engine =
-        GameEngine::new(26_100_102, &[10, 30, 70], 20, Some(vec![deck; 3]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        26_100_102,
+        &[10, 30, 70],
+        20,
+        Some(vec![deck; 3]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "all_is_dust");
     let stolen = inject_creature_on_battlefield(&mut engine, 2, "grizzly_bears");
@@ -275,7 +289,7 @@ fn grant_observer(
     source: u32,
     trigger: tricerules_cards::TriggerCondition,
 ) {
-    let mut ability = CardRegistry::global()
+    let mut ability = tricerules_cards::registry::global()
         .get("ajanis_pridemate")
         .unwrap()
         .primary_face()

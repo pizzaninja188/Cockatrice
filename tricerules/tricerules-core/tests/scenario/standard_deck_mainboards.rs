@@ -7,6 +7,7 @@ use tricerules_proto::ruled::v1::{
 #[test]
 fn dream_beavers_resolves_its_entire_etb_sequence() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         2026090201,
         &[0, 1],
         20,
@@ -38,6 +39,7 @@ fn dream_beavers_resolves_its_entire_etb_sequence() {
 #[test]
 fn sazhs_chocobo_gets_a_counter_for_its_controllers_landfall() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         2026090202,
         &[0, 1],
         20,
@@ -72,6 +74,7 @@ fn sazhs_chocobo_gets_a_counter_for_its_controllers_landfall() {
 #[test]
 fn requiting_hex_rewards_the_optional_blight_payment() {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         2026090203,
         &[0, 1],
         20,

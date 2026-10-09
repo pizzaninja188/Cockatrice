@@ -111,12 +111,20 @@ fn assert_full_terminal_snapshot(engine: &mut GameEngine) {
 
 fn fixture(seed: u64, ids: &[i32], sizes: &[usize]) -> (GameEngine, Vec<Vec<u32>>) {
     assert!(
-        tricerules_cards::CardRegistry::global()
+        tricerules_cards::registry::global()
             .get("windfall")
             .is_some(),
         "Windfall must be completely registered"
     );
-    let mut engine = GameEngine::new(seed, ids, 20, None, true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        ids,
+        20,
+        None,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     for player in &mut engine.state.players {
         for oid in std::mem::take(&mut player.hand) {
@@ -546,7 +554,7 @@ fn windfall_exact_identity_face_and_complete_typed_effects() {
         Amount, CardResultAction, CardResultSource, CountExpression, DiscardQuantity,
         PlayerRecipient, RelativePlayerSet, SpellEffectKind,
     };
-    let definition = tricerules_cards::CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("windfall")
         .unwrap();
     assert_eq!(definition.name, "Windfall");

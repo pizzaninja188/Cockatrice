@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{EffectSubject, PlayerRecipient, SpellEffectKind, TargetKind};
-use tricerules_cards::{CardRegistry, Color, Layout};
+use tricerules_cards::{Color, Layout};
 
 #[test]
 fn beast_within_targets_any_permanent_and_gives_a_beast_to_its_controller() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(registry.id_for_name("Beast Within"), Some("beast_within"));
     let card = registry.get("beast_within").expect("Beast Within");
     assert_eq!(card.name, "Beast Within");

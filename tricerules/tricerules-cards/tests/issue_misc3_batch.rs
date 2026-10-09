@@ -7,11 +7,11 @@
 //! triggers), and 702.9 (flying).
 
 use tricerules_cards::primitives::{Amount, SpellEffectKind, TriggerCondition};
-use tricerules_cards::{CardRegistry, Color, Keyword, Layout};
+use tricerules_cards::{Color, Keyword, Layout};
 
 #[test]
 fn issue_misc3_batch_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     // Token characteristics.
     for (id, name, types, colors, power, toughness, keywords) in [

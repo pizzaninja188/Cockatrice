@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{SpellEffectKind, TargetSchema, TargetingDef, TokenCopySource};
-use tricerules_cards::{CardRegistry, ModalDef};
+use tricerules_cards::ModalDef;
 
 #[test]
 fn token_copy_requires_one_permanent_source() {
@@ -67,7 +67,7 @@ fn assert_modal_schema(card_id: &str, location: &str, modal: &ModalDef) {
 
 #[test]
 fn every_authored_effect_list_has_one_complete_target_schema() {
-    for card in CardRegistry::global().definitions() {
+    for card in tricerules_cards::registry::global().definitions() {
         for (face_index, face) in card.faces.iter().enumerate() {
             assert_schema(
                 &card.id,

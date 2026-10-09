@@ -23,7 +23,15 @@ fn phantom_interference_casts_both_spree_modes_with_one_atomic_total() {
         deck_with("island", &["phantom_interference"]),
         deck_with("mountain", &["lightning_bolt"]),
     ]);
-    let mut e = GameEngine::new(177_001, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        177_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "phantom_interference");
     ensure_card_in_hand(&mut e, 1, "lightning_bolt");
@@ -74,7 +82,15 @@ fn phantom_interference_rejects_a_cost_linked_to_an_unchosen_mode_atomically() {
         deck_with("island", &["phantom_interference"]),
         deck_with("mountain", &[]),
     ]);
-    let mut e = GameEngine::new(177_002, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        177_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "phantom_interference");
     e.state.players[0].mana_pool.blue = 1;
@@ -110,7 +126,15 @@ fn final_showdown_chooses_during_resolution_and_applies_modes_in_printed_order()
         deck_with("plains", &["final_showdown", "wind_drake", "grizzly_bears"]),
         deck_with("mountain", &["grizzly_bears"]),
     ]);
-    let mut e = GameEngine::new(177_003, &[0, 1], 20, decks, true).unwrap();
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        177_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut e);
     ensure_card_in_hand(&mut e, 0, "final_showdown");
     let survivor = relocate_to_battlefield(&mut e, 0, "wind_drake", false);

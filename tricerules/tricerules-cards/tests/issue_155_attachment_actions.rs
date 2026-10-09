@@ -1,11 +1,10 @@
 use tricerules_cards::primitives::{
     AbilitySourceZone, EffectSubject, LibraryPlacement, SpellEffectKind,
 };
-use tricerules_cards::CardRegistry;
 
 #[test]
 fn issue_155_equipment_cards_share_the_one_shot_attach_primitive() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for id in [
         "illvoi_light_jammer",
         "squires_lightblade",
@@ -30,7 +29,7 @@ fn issue_155_equipment_cards_share_the_one_shot_attach_primitive() {
 
 #[test]
 fn issue_274_generated_equipment_etb_targets_are_mandatory_and_shared() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let scythe = &registry
         .get("malamet_scythe")
         .expect("Malamet Scythe")
@@ -78,7 +77,7 @@ fn issue_274_generated_equipment_etb_targets_are_mandatory_and_shared() {
 
 #[test]
 fn issue_155_auras_use_untargeted_attached_object_zone_actions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for id in ["spiral_into_solitude", "path_to_redemption"] {
         let ability = &registry
             .get(id)
@@ -111,7 +110,7 @@ fn issue_155_auras_use_untargeted_attached_object_zone_actions() {
 
 #[test]
 fn issue_155_merchant_uses_its_exact_graveyard_source() {
-    let merchant = &CardRegistry::global()
+    let merchant = &tricerules_cards::registry::global()
         .get("merchant_of_many_hats")
         .expect("Merchant of Many Hats")
         .primary_face()

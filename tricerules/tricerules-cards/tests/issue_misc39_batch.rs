@@ -1,10 +1,10 @@
 //! Printed identities for six pinned Standard combat spells.
 
-use tricerules_cards::{CardRegistry, Layout};
+use tricerules_cards::Layout;
 
 #[test]
 fn issue_misc39_registers_six_exact_card_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, types) in [
         (
             "impolite_entrance",

@@ -1,6 +1,6 @@
 use crate::helpers::*;
 use tricerules_cards::primitives::StaticAbilityDef;
-use tricerules_cards::{CardRegistry, CharacteristicDefiningAbility, Keyword};
+use tricerules_cards::{CharacteristicDefiningAbility, Keyword};
 use tricerules_core::state::CastCostObjectReceipt;
 use tricerules_proto::ruled::v1::{
     cast_cost_group_selection::SelectedObject, CastCostGroupSelection,
@@ -18,7 +18,7 @@ const CHANGELINGS: [&str; 7] = [
 
 #[test]
 fn issue_154_authors_the_seven_changeling_cards() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for card_id in CHANGELINGS {
         let definition = registry
             .get(card_id)
@@ -67,7 +67,15 @@ fn issue_154_changeling_satisfies_a_live_goblin_lord() {
         deck_with("mountain", &["goblin_chieftain", "chitinous_graspling"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(154_001, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        154_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "chitinous_graspling");
     ensure_card_in_hand(&mut engine, 0, "goblin_chieftain");
@@ -99,7 +107,15 @@ fn issue_154_changeling_can_be_beheld_as_a_dragon_from_hand() {
         ),
         deck_with("forest", &["grizzly_bears"]),
     ]);
-    let mut engine = GameEngine::new(154_002, &[0, 1], 20, decks, true).expect("new engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        154_002,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     ensure_card_in_hand(&mut engine, 0, "caustic_exhale");
     ensure_card_in_hand(&mut engine, 0, "chitinous_graspling");

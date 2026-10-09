@@ -41,7 +41,15 @@ fn generated_plundering_pirate_creates_a_functional_canonical_treasure() {
         deck_with("mountain", &["plundering_pirate"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(256_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        256_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
     move_ready_to_battlefield(&mut engine, 0, "plundering_pirate");
@@ -77,7 +85,15 @@ fn generated_plundering_pirate_creates_a_functional_canonical_treasure() {
 
 #[test]
 fn generated_gleaming_barrier_death_lki_gives_treasure_to_its_last_controller() {
-    let mut engine = GameEngine::new(256_002, &[0, 1], 20, None, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        256_002,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let barrier = inject_creature_under_foreign_control(&mut engine, 0, 1, "gleaming_barrier");
     engine
@@ -105,7 +121,15 @@ fn generated_wakandan_drone_flock_scries_two_with_an_atomic_private_choice() {
         deck_with("plains", &["wakandan_drone_flock"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(256_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        256_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let top = seat_on_top(
         &mut engine,
@@ -148,7 +172,15 @@ fn generated_shore_lurker_surveillance_moves_the_exact_top_card() {
         deck_with("plains", &["shore_lurker"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(256_004, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        256_004,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let top = seat_on_top(&mut engine, 0, &["storm_crow"]);
 

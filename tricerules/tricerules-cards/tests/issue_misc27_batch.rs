@@ -1,10 +1,10 @@
 //! Printed identities and token characteristics for five pinned Standard entry triggers.
 
-use tricerules_cards::{CardRegistry, Color, Keyword, Layout};
+use tricerules_cards::{Color, Keyword, Layout};
 
 #[test]
 fn issue_misc27_registers_five_exact_card_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, types, stats, keywords) in [
         (
             "nimble_thopterist",
@@ -60,7 +60,7 @@ fn issue_misc27_registers_five_exact_card_identities() {
 
 #[test]
 fn issue_misc27_token_templates_match_printed_characteristics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, types, stats, colors, keywords) in [
         (
             "thopter_c_1_1_flying",

@@ -3,8 +3,8 @@ use tricerules_cards::primitives::{
     PlayerRecipient, SpellEffectKind, TargetController, TargetFilter, TargetKind,
 };
 use tricerules_cards::{
-    AbilityCost, Amount, CardRegistry, CastTriggerPlayer, CounterKind, Keyword, ManaAmount,
-    PermanentTypeFilter, TriggerCondition, TriggeredAbilityDef,
+    AbilityCost, Amount, CastTriggerPlayer, CounterKind, Keyword, ManaAmount, PermanentTypeFilter,
+    TriggerCondition, TriggeredAbilityDef,
 };
 
 struct ExpectedCard {
@@ -222,7 +222,7 @@ const COHORT: &[ExpectedCard] = &[
 ];
 
 fn trigger(card_id: &str) -> &'static TriggeredAbilityDef {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("missing issue #49 card {card_id}"))
         .primary_face();
@@ -240,7 +240,7 @@ fn creature_target(controller: TargetController) -> TargetFilter {
 
 #[test]
 fn issue_49_cohort_has_exact_oracle_characteristics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for expected in COHORT {
         let definition = registry
             .get(expected.id)
@@ -421,7 +421,7 @@ fn issue_49_untargeted_etbs_compose_existing_effects() {
         }]
     );
 
-    let visionary = CardRegistry::global()
+    let visionary = tricerules_cards::registry::global()
         .get("llanowar_visionary")
         .unwrap()
         .primary_face();

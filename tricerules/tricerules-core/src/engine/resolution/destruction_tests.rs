@@ -1,7 +1,7 @@
 //! Issue #196: characterize the three destruction callers before sharing execution.
 use super::*;
 use crate::state::ActiveDeathReplacement;
-use tricerules_cards::primitives::{CastTriggerPlayer, ControllerReference};
+use tricerules_card_model::primitives::{CastTriggerPlayer, ControllerReference};
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 
 #[derive(Clone, Copy, Debug)]
@@ -26,8 +26,15 @@ fn setup() -> GameEngine {
         .take(24)
         .map(str::to_string)
         .collect::<Vec<_>>();
-    let mut engine = GameEngine::new(196_001, &[3, 11], 20, Some(vec![deck.clone(), deck]), true)
-        .expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        196_001,
+        &[3, 11],
+        20,
+        Some(vec![deck.clone(), deck]),
+        true,
+    )
+    .expect("engine");
     // Test the resolver's player-set contract below the two-seat session-admission boundary.
     engine.state.players.push(PlayerState::new(299, 20));
     engine

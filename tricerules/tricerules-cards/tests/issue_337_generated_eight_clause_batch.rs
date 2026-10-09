@@ -12,12 +12,12 @@ use tricerules_cards::primitives::{
     TargetController, TargetFilter, TargetKind, TargetMatchFilter, TargetObjectExclusion,
 };
 use tricerules_cards::{
-    AbilityPresentation, Amount, CardRegistry, Color, Keyword, SpellEffectKind, TriggerCondition,
+    AbilityPresentation, Amount, Color, Keyword, SpellEffectKind, TriggerCondition,
 };
 
 #[test]
 fn issue_337_registers_the_eight_reviewed_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name) in [
         ("acrobatic_leap", "Acrobatic Leap"),
         ("attentive_sunscribe", "Attentive Sunscribe"),
@@ -38,7 +38,7 @@ fn issue_337_registers_the_eight_reviewed_identities() {
 
 #[test]
 fn issue_337_acrobatic_leap_pumps_grants_flying_and_untaps_one_creature() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("acrobatic_leap")
         .expect("Acrobatic Leap");
     let face = definition.primary_face();
@@ -70,7 +70,9 @@ fn issue_337_acrobatic_leap_pumps_grants_flying_and_untaps_one_creature() {
 
 #[test]
 fn issue_337_depower_reduces_two_against_an_attacking_target() {
-    let definition = CardRegistry::global().get("depower").expect("Depower");
+    let definition = tricerules_cards::registry::global()
+        .get("depower")
+        .expect("Depower");
     let face = definition.primary_face();
     assert_eq!(face.mana_cost.to_string(), "{2}{U}");
     assert_eq!(face.types, ["Instant"]);
@@ -105,7 +107,7 @@ fn issue_337_depower_reduces_two_against_an_attacking_target() {
 
 #[test]
 fn issue_337_inspiring_overseer_gains_one_then_draws_with_flying() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("inspiring_overseer")
         .expect("Inspiring Overseer");
     let face = definition.primary_face();
@@ -141,7 +143,7 @@ fn issue_337_inspiring_overseer_gains_one_then_draws_with_flying() {
 
 #[test]
 fn issue_337_blooming_stinger_grants_deathtouch_to_another_creature() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("blooming_stinger")
         .expect("Blooming Stinger");
     let face = definition.primary_face();
@@ -181,7 +183,7 @@ fn issue_337_blooming_stinger_grants_deathtouch_to_another_creature() {
 
 #[test]
 fn issue_337_attentive_sunscribe_scries_on_becoming_tapped() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("attentive_sunscribe")
         .expect("Attentive Sunscribe");
     let face = definition.primary_face();
@@ -208,7 +210,7 @@ fn issue_337_attentive_sunscribe_scries_on_becoming_tapped() {
 
 #[test]
 fn issue_337_rapacious_dragon_keeps_flying_and_makes_two_treasures() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("rapacious_dragon")
         .expect("Rapacious Dragon");
     let face = definition.primary_face();
@@ -241,7 +243,7 @@ fn issue_337_rapacious_dragon_keeps_flying_and_makes_two_treasures() {
 
 #[test]
 fn issue_337_super_suit_keeps_flash_modifier_equip_and_attach_untap() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("super_suit")
         .expect("Super Suit");
     let face = definition.primary_face();
@@ -322,7 +324,7 @@ fn issue_337_super_suit_keeps_flash_modifier_equip_and_attach_untap() {
 
 #[test]
 fn issue_337_super_villain_lockup_linked_exiles_a_tapped_creature() {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get("super_villain_lockup")
         .expect("Super Villain Lockup");
     let face = definition.primary_face();
@@ -363,7 +365,7 @@ fn issue_337_super_villain_lockup_linked_exiles_a_tapped_creature() {
 
 #[test]
 fn issue_337_fingerprint_rows_match_the_presentation_registry() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     for (id, face_id) in [
         ("acrobatic_leap", "acrobatic_leap"),

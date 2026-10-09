@@ -25,7 +25,15 @@ fn mana_pool(engine: &GameEngine) -> ManaPool {
 
 fn fire_lit_thicket_engine(seed: u64) -> (GameEngine, u32) {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     inject_card_into_hand(&mut engine, 0, "fire-lit_thicket");
     let slot = hand_index_for_card(&engine, 0, "fire-lit_thicket");

@@ -1,12 +1,12 @@
 use tricerules_cards::primitives::{EffectSubject, TargetController, TargetKind};
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CardRegistry, CountExpression,
+    AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CountExpression,
     PermanentTypeFilter, SpellCostModifier, SpellEffectKind,
 };
 
 #[test]
 fn metalwork_registers_exact_single_face_and_both_clauses() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("metalwork_colossus")
         .expect("the exact missing Metalwork Colossus must be implemented");
     let face = card.primary_face();

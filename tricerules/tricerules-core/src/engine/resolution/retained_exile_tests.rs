@@ -458,7 +458,7 @@ fn retained_cohort_missing_capture_and_duplicate_capture_fail_before_moving_card
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before);
     item.exiled_cohorts.insert(
-        tricerules_cards::ExiledCohortId::new("original_graveyards").unwrap(),
+        tricerules_card_model::ExiledCohortId::new("original_graveyards").unwrap(),
         Vec::new(),
     );
     let (effects, label) = engine.build_resolution_effects(&item);

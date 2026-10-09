@@ -24,12 +24,12 @@ use tricerules_cards::primitives::{
     TriggerCondition,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, ActivatedAbilityDef, ActivationTiming, CardFace,
-    CardRegistry, CounterKind, Keyword, ManaAmount, ManaCost,
+    AbilityCost, AbilityPresentation, ActivatedAbilityDef, ActivationTiming, CardFace, CounterKind,
+    Keyword, ManaAmount, ManaCost,
 };
 
 fn face(id: &str) -> &'static CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(id)
         .unwrap_or_else(|| panic!("missing reviewed card {id}"))
         .primary_face()
@@ -86,7 +86,7 @@ fn two_any_one_color() -> Vec<ManaAmount> {
 
 #[test]
 fn issue_429_registers_exactly_the_reviewed_six() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id, mana_cost, types, keywords, power_toughness) in [
         (
             "new_horizons",
@@ -159,7 +159,7 @@ fn issue_429_registers_exactly_the_reviewed_six() {
 
 #[test]
 fn issue_429_still_excludes_aura_identities_with_other_unsupported_clauses() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name) in [
         ("tractor_beam", "Tractor Beam"),
         ("buried_in_the_garden", "Buried in the Garden"),
@@ -510,7 +510,7 @@ fn issue_429_friendly_neighborhood_creates_citizens_and_pumps_per_creature() {
     let granted = granted_ability(definition);
     assert_eq!(granted.timing, ActivationTiming::SorcerySpeed);
 
-    let token = CardRegistry::global()
+    let token = tricerules_cards::registry::global()
         .get("human_citizen_gw_1_1")
         .expect("the Human Citizen token definition must be registered");
     let token_face = token.primary_face();

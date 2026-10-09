@@ -14,7 +14,15 @@ fn generated_land_draw_activation_is_generation_safe_atomic_and_resolves_from_th
         deck_with("forest", &["airship_engine_room"]),
         deck_with("island", &[]),
     ]);
-    let mut engine = GameEngine::new(255_001, &[0, 1], 20, decks, true).expect("engine");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        255_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = relocate_to_battlefield(&mut engine, 0, "airship_engine_room", false);
     inject_library_card(&mut engine, 0, "forest");

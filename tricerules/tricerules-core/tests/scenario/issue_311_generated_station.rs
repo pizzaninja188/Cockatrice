@@ -103,6 +103,7 @@ fn append_third_player(engine: &mut GameEngine) {
 
 fn station_engine(seed: u64, card_id: &str) -> (GameEngine, u32, u32) {
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[0, 1],
         20,
@@ -307,6 +308,7 @@ fn issue_311_station_activation_uses_current_controller_and_payment_power() {
 #[test]
 fn issue_311_pinnacle_allows_zero_or_one_creature_and_revalidates_target() {
     let mut zero = GameEngine::new(
+        tricerules_cards::registry::global(),
         311_010,
         &[0, 1],
         20,
@@ -331,6 +333,7 @@ fn issue_311_pinnacle_allows_zero_or_one_creature_and_revalidates_target() {
     assert_eq!(zero.state.objects[&target].zone, Zone::Battlefield);
 
     let mut one = GameEngine::new(
+        tricerules_cards::registry::global(),
         311_011,
         &[0, 1],
         20,
@@ -371,6 +374,7 @@ fn issue_311_pinnacle_allows_zero_or_one_creature_and_revalidates_target() {
     assert_eq!(one.state.objects[&source].zone, Zone::Hand);
 
     let mut stale = GameEngine::new(
+        tricerules_cards::registry::global(),
         311_012,
         &[0, 1],
         20,
@@ -396,6 +400,7 @@ fn issue_311_pinnacle_allows_zero_or_one_creature_and_revalidates_target() {
     assert_eq!(stale.state.objects[&source].zone, Zone::Battlefield);
 
     let mut controlled = GameEngine::new(
+        tricerules_cards::registry::global(),
         311_024,
         &[0, 1],
         20,
@@ -447,6 +452,7 @@ fn issue_311_pinnacle_allows_zero_or_one_creature_and_revalidates_target() {
 fn issue_311_pinnacle_is_player_set_generic_and_replays_deterministically() {
     fn run(seed: u64) -> (Vec<Vec<u8>>, Zone, u32) {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             seed,
             &[0, 1],
             20,
@@ -498,6 +504,7 @@ fn issue_311_pinnacle_is_player_set_generic_and_replays_deterministically() {
 #[test]
 fn issue_311_warmaker_counts_controlled_artifacts_on_resolution_and_targets_only_opponents() {
     let mut increased = GameEngine::new(
+        tricerules_cards::registry::global(),
         311_020,
         &[0, 1],
         20,
@@ -548,6 +555,7 @@ fn issue_311_warmaker_counts_controlled_artifacts_on_resolution_and_targets_only
     assert!(increased.state.objects.contains_key(&opponent_artifact));
 
     let mut decreased = GameEngine::new(
+        tricerules_cards::registry::global(),
         311_021,
         &[0, 1],
         20,
@@ -587,6 +595,7 @@ fn issue_311_warmaker_counts_controlled_artifacts_on_resolution_and_targets_only
     assert_eq!(decreased.state.objects[&artifact].zone, Zone::Battlefield);
 
     let mut stale = GameEngine::new(
+        tricerules_cards::registry::global(),
         311_022,
         &[0, 1],
         20,
@@ -617,6 +626,7 @@ fn issue_311_warmaker_counts_controlled_artifacts_on_resolution_and_targets_only
 fn issue_311_warmaker_is_player_set_generic_and_replays_deterministically() {
     fn run(seed: u64) -> (Vec<Vec<u8>>, u32) {
         let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
             seed,
             &[0, 1],
             20,

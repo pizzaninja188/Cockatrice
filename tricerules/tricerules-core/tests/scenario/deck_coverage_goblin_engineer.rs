@@ -1,12 +1,19 @@
 //! Exact Goblin Engineer: optional artifact search and targeted artifact return.
 use super::helpers::*;
-use tricerules_cards::CardRegistry;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ResolutionChoiceDecision;
 
 fn game(seed: u64) -> GameEngine {
     let deck = deck_with("mountain", &[]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, Some(vec![deck; 2]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![deck; 2]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -336,7 +343,9 @@ fn engineer_sacrifices_controlled_foreign_artifact_or_artifact_self() {
 
 #[test]
 fn engineer_actual_paid_cast_has_exact_characteristics_and_optional_etb() {
-    assert!(CardRegistry::global().get("goblin_engineer").is_some());
+    assert!(tricerules_cards::registry::global()
+        .get("goblin_engineer")
+        .is_some());
     let mut engine = game(2026100501);
     let source = inject_card_into_hand(&mut engine, 0, "goblin_engineer");
     give_mana(

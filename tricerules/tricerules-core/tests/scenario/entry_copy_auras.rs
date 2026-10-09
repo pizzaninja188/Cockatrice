@@ -61,7 +61,8 @@ const ENTRY_COPY_PLAIN_CREATURE_DRAFT: &str = r#"(
 
 fn copy_engine(seed: u64) -> GameEngine {
     let registry = Box::leak(Box::new(
-        CardRegistry::from_authoring_draft(ENTRY_COPY_DRAFT).expect("entry-copy draft"),
+        tricerules_cards::registry::from_authoring_draft(ENTRY_COPY_DRAFT)
+            .expect("entry-copy draft"),
     ));
     let decks = vec![
         EngineDeck {
@@ -70,8 +71,9 @@ fn copy_engine(seed: u64) -> GameEngine {
         };
         2
     ];
-    let mut engine = GameEngine::new_for_authoring(seed, &[0, 1], 20, Some(decks), true, registry)
-        .expect("engine");
+    let mut engine =
+        GameEngine::new_with_commander_decks(registry, seed, &[0, 1], 20, Some(decks), true)
+            .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -95,8 +97,9 @@ fn token_copy_engine(seed: u64) -> GameEngine {
         };
         2
     ];
-    let mut engine = GameEngine::new_for_authoring(seed, &[0, 1], 20, Some(decks), true, registry)
-        .expect("token-copy Aura engine");
+    let mut engine =
+        GameEngine::new_with_commander_decks(registry, seed, &[0, 1], 20, Some(decks), true)
+            .expect("token-copy Aura engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -120,8 +123,9 @@ fn aura_spell_copy_engine(seed: u64) -> GameEngine {
         };
         2
     ];
-    let mut engine = GameEngine::new_for_authoring(seed, &[0, 1], 20, Some(decks), true, registry)
-        .expect("Aura entry-copy engine");
+    let mut engine =
+        GameEngine::new_with_commander_decks(registry, seed, &[0, 1], 20, Some(decks), true)
+            .expect("Aura entry-copy engine");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -178,7 +182,7 @@ fn entry_copy_of_an_aura_asks_for_and_attaches_to_a_legal_permanent() {
         .unwrap()
         .face_down = true;
     let source_host = put_creature_on_battlefield(&mut engine, 1, "entry_copy_fixture");
-    let aura = CardRegistry::global()
+    let aura = tricerules_cards::registry::global()
         .get("pacifism")
         .expect("Pacifism")
         .primary_face()
@@ -243,7 +247,7 @@ fn entry_copy_of_an_aura_asks_for_and_attaches_to_a_legal_permanent() {
 #[test]
 fn entry_copy_of_a_player_aura_uses_the_existing_player_recipient_choice() {
     let mut engine = copy_engine(303_402);
-    let aura = CardRegistry::global()
+    let aura = tricerules_cards::registry::global()
         .get("curse_of_disturbance")
         .expect("Curse of Disturbance")
         .primary_face()
@@ -273,7 +277,7 @@ fn entry_copy_of_a_player_aura_uses_the_existing_player_recipient_choice() {
 #[test]
 fn entry_copy_of_an_aura_with_no_legal_recipient_goes_from_stack_to_graveyard() {
     let mut engine = copy_engine(303_403);
-    let aura = CardRegistry::global()
+    let aura = tricerules_cards::registry::global()
         .get("pacifism")
         .expect("Pacifism")
         .primary_face()
@@ -316,7 +320,7 @@ fn entry_copy_rejects_an_aura_recipient_from_an_old_zone_generation() {
     let mut engine = copy_engine(303_404);
     let host = put_creature_on_battlefield(&mut engine, 0, "entry_copy_fixture");
     let source_host = put_creature_on_battlefield(&mut engine, 1, "entry_copy_fixture");
-    let aura = CardRegistry::global()
+    let aura = tricerules_cards::registry::global()
         .get("pacifism")
         .expect("Pacifism")
         .primary_face()

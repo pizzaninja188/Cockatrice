@@ -7,7 +7,15 @@ use tricerules_cards::Keyword;
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
     grant_pool(&mut e, 0);
     grant_pool(&mut e, 1);
@@ -90,7 +98,15 @@ fn issue_misc24_wylie_duke_gains_and_draws_when_tapped() {
 #[test]
 fn issue_misc24_jeskai_shrinekeeper_rewards_combat_damage_to_player() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut e = GameEngine::new(824_003, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        824_003,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut e);
     let dragon = inject_creature_with_stats(&mut e, 0, "jeskai_shrinekeeper", 3, 3);
     assert!(e.effective_has_keyword(dragon, Keyword::Flying));
@@ -134,7 +150,15 @@ fn issue_misc24_pactdoll_counts_self_and_own_artifacts_only() {
     // Put the Pactdoll under player 0's control while player 1 is the active player,
     // then let player 1 cast an artifact at sorcery speed.
     let decks = Some(vec![deck_with("forest", &[]), deck_with("island", &[])]);
-    let mut opponent = GameEngine::new(824_014, &[1, 0], 20, decks, true).expect("engine");
+    let mut opponent = GameEngine::new(
+        tricerules_cards::registry::global(),
+        824_014,
+        &[1, 0],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut opponent);
     inject_permanent_on_battlefield(&mut opponent, 1, "pactdoll_terror");
     inject_card_into_hand(&mut opponent, 0, "magitek_armor");
@@ -163,7 +187,15 @@ fn issue_misc24_shroudstomper_has_entry_and_attack_occurrences() {
     assert_eq!(e.state.players[0].hand.len(), before_hand + 1);
 
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut attack = GameEngine::new(824_015, &[0, 1], 20, decks, true).expect("engine");
+    let mut attack = GameEngine::new(
+        tricerules_cards::registry::global(),
+        824_015,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut attack);
     let shroud = inject_creature_on_battlefield(&mut attack, 0, "shroudstomper");
     assert!(attack.effective_has_keyword(shroud, Keyword::Deathtouch));

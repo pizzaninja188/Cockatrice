@@ -76,7 +76,7 @@ fn issue_217_rejects_a_scale_that_cannot_change_power_or_toughness() {
 
 #[test]
 fn issue_217_mightform_harmonizer_has_exact_landfall_shape() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("mightform_harmonizer")
         .expect("Mightform Harmonizer");
     let face = card.primary_face();

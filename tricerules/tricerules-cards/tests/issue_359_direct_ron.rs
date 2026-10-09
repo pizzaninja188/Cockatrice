@@ -11,7 +11,7 @@ use tricerules_cards::primitives::{
     Amount, CastCostOptionDef, CastCostOptionRef, EffectSubject, ManaCostChoiceKind,
     PermanentTypeFilter, SpellEffectKind, TargetFilter, TargetGroupDef, TargetKind, TargetingDef,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, ChoiceId, Color, Layout, ModeId};
+use tricerules_cards::{AbilityPresentation, ChoiceId, Color, Layout, ModeId};
 
 const EXPLOSIVE_FINGERPRINT: &str =
     "cdccdd54cd9820bd251c15025c28a8ca9597cfdcd4f995418f401e299dee7e2e";
@@ -50,7 +50,7 @@ fn linked(option_id: &str) -> CastCostOptionRef {
 
 #[test]
 fn issue_359_explosive_derailment_maps_every_printed_clause() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let definition = registry.get("explosive_derailment").expect("registered");
     assert_eq!(definition.name, "Explosive Derailment");
     assert_eq!(
@@ -163,7 +163,7 @@ fn issue_359_explosive_derailment_maps_every_printed_clause() {
 
 #[test]
 fn issue_359_unfortunate_accident_maps_every_printed_clause() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let definition = registry.get("unfortunate_accident").expect("registered");
     assert_eq!(definition.name, "Unfortunate Accident");
     assert_eq!(

@@ -1,7 +1,7 @@
 use tricerules_cards::primitives::{
     EffectSubject, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Keyword, TriggerCondition};
+use tricerules_cards::{AbilityPresentation, Keyword, TriggerCondition};
 
 struct ExpectedCard {
     id: &'static str,
@@ -69,7 +69,7 @@ const COHORT: &[ExpectedCard] = &[
 
 #[test]
 fn issue_298_generated_auras_have_exact_flash_attach_etb_and_static_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for expected in COHORT {
         let id = expected.id;
         let definition = registry

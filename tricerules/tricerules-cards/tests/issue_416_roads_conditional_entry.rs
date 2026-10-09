@@ -28,7 +28,7 @@ const ROADS: &[(&str, &str)] = &[
 
 #[test]
 fn issue_416_roads_identities_stay_unregistered_until_the_pilot_token_exists() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name) in ROADS {
         assert!(
             registry.get(id).is_none(),

@@ -11,7 +11,15 @@ fn engine_with_battalion_and_others(other_attackers: usize) -> (GameEngine, u32,
         },
         vec!["forest".into(); 30],
     ]);
-    let mut engine = GameEngine::new(68, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        68,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
 
     let battalion = inject_creature_on_battlefield(&mut engine, 0, "makeshift_battalion");

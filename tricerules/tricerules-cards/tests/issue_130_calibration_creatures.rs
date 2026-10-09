@@ -2,7 +2,7 @@ use tricerules_cards::primitives::{
     CombatRestrictionScope, EffectSubject, GameCondition, LifeAmount, PlayerRecipient,
     PowerComparison, SpellEffectKind, TargetController, TargetKind,
 };
-use tricerules_cards::{AbilityCost, CardRegistry, Color, Keyword, TriggerCondition};
+use tricerules_cards::{AbilityCost, Color, Keyword, TriggerCondition};
 
 struct ExpectedCard {
     id: &'static str,
@@ -241,7 +241,7 @@ const COHORT: &[ExpectedCard] = &[
 
 #[test]
 fn issue_130_cohort_has_exact_oracle_characteristics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for expected in COHORT {
         let definition = registry
             .get(expected.id)
@@ -290,7 +290,7 @@ fn issue_130_cohort_has_exact_oracle_characteristics() {
 
 #[test]
 fn issue_130_token_definitions_have_exact_characteristics() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, colors, keywords) in [
         ("cat_w_1_1", "Cat", vec![Color::White], vec![]),
         (
@@ -320,7 +320,7 @@ fn issue_130_token_definitions_have_exact_characteristics() {
 
 #[test]
 fn issue_130_target_choice_and_condition_shapes_use_generic_vocabulary() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let face = |id: &str| {
         registry
             .get(id)

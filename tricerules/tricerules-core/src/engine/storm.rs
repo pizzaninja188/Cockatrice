@@ -63,14 +63,15 @@ impl GameEngine {
             .current
             .spells_cast
             .saturating_sub(1);
-        let ability_id = tricerules_cards::AbilityId::new("storm").expect("intrinsic ability id");
+        let ability_id =
+            tricerules_card_model::AbilityId::new("storm").expect("intrinsic ability id");
         let ability_text = format!(
             "Storm — copy this spell {earlier_casts} time{}",
             if earlier_casts == 1 { "" } else { "s" }
         );
         let ability = TriggeredAbilityDef {
             ability_id: ability_id.clone(),
-            presentation: tricerules_cards::AbilityPresentation::Fallback,
+            presentation: tricerules_card_model::AbilityPresentation::Fallback,
             trigger: TriggerCondition::WheneverPlayerCastsSpell {
                 caster: CastTriggerPlayer::Controller,
                 filter: SpellCastFilter::default(),

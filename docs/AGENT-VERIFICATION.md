@@ -76,12 +76,21 @@ directory is also supported. Rust runs in `tricerules`; Ninja runs in a child Wi
 CTest uses `build/windows-ninja-all`, rejects an empty suite, and requires ruled E2E prerequisites
 with `RULED_E2E_REQUIRE=1`. The caller's E2E environment is restored after CTest.
 
-Rust selects full tests, all-target Clippy with warnings denied, and a separate format check for
-every package declared in the workspace. `check-rust-format.ps1` reads Cargo's target inventory
+Rust checks the production card-data dependency boundary, then selects full tests, all-target
+Clippy with warnings denied, and a separate format check for every package declared in the
+workspace. `check-rust-format.ps1` reads Cargo's target inventory
 and runs check-only rustfmt with each target's edition in bounded argument chunks. This preserves
 formatting coverage when even one package exceeds Windows command-line limits. Package discovery
 is read-only during Preview; target discovery runs only during the selected check. Cpp selects
 the full Ninja build and CTest. `-CardData` adds the read-only card check and requires Rust or Both.
+
+For a card-data build-boundary refactor, run
+`tests/scripts/card_data_incremental_build_test.ps1` with no competing writers. It performs a
+warm baseline build, temporarily appends whitespace to one RON file and the presentation
+fingerprint table, and checks Cargo's library artifact freshness. It restores each file's exact
+bytes in `finally`, rebuilds restored inputs, and retains timings and Cargo logs. This is an
+explicit mutation test, not part of ordinary final verification.
+
 Every selection ends with `git diff --check`. Preview prints argument arrays and working
 directories without running commands or creating artifacts.
 With `-CardData`, the complete read-only card check runs first, before the full suites.

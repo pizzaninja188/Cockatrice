@@ -1,10 +1,10 @@
 //! Printed identities for five pinned Standard spells.
 
-use tricerules_cards::{CardRegistry, Layout};
+use tricerules_cards::Layout;
 
 #[test]
 fn issue_misc32_registers_five_exact_card_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, kind) in [
         ("gravkill", "Gravkill", "{3}{B}", "Instant"),
         (

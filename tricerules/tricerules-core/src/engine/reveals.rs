@@ -350,7 +350,15 @@ mod tests {
 
     #[test]
     fn completed_active_reveal_survives_batch_settlement() {
-        let engine = GameEngine::new(710, &[0, 1], 20, None, true).unwrap();
+        let engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            710,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         let reveal = rv1::CardsRevealed {
             reveal_id: "stack:42:cost:0".into(),
             cards: vec![rv1::RevealedCard {

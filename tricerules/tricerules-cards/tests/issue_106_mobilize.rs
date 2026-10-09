@@ -1,8 +1,8 @@
-use tricerules_cards::{CardRegistry, DelayedTokenSacrificeTiming, SpellEffectKind};
+use tricerules_cards::{DelayedTokenSacrificeTiming, SpellEffectKind};
 
 #[test]
 fn issue_106_mobilize_cards_are_complete_registry_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (card_id, name) in [
         ("reigning_victor", "Reigning Victor"),

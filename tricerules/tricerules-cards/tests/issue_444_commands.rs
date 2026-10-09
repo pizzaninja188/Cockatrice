@@ -5,11 +5,11 @@
 use tricerules_cards::primitives::{
     CreatureScopeController, MassPlayerSet, SpellEffectKind, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry};
+use tricerules_cards::AbilityPresentation;
 
 #[test]
 fn issue_444_complete_commands_have_exact_four_mode_presentation() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id, mana, subtype) in [
         (
             "syggs_command",
@@ -57,7 +57,7 @@ fn issue_444_complete_commands_have_exact_four_mode_presentation() {
 
 #[test]
 fn issue_444_mass_modes_bind_one_player_and_keep_ordered_instructions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let sygg = registry
         .get("syggs_command")
         .unwrap()

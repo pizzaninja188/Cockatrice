@@ -1,11 +1,9 @@
 use tricerules_cards::primitives::{CardTypeFilter, ManaSpendingEffect};
-use tricerules_cards::{
-    AbilityCost, AbilityPresentation, CardRegistry, Keyword, ManaAmount, SpellEffectKind,
-};
+use tricerules_cards::{AbilityCost, AbilityPresentation, Keyword, ManaAmount, SpellEffectKind};
 
 #[test]
 fn generator_servant_is_authored_with_exact_characteristics_and_mana_rule() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("generator_servant")
         .expect("Generator Servant");
     let face = card.primary_face();

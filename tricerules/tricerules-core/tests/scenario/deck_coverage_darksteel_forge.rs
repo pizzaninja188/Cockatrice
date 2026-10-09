@@ -4,7 +4,7 @@ use tricerules_cards::primitives::{
     ContinuousEffectKind, ControllerReference, EffectDuration, PermanentTypeFilter,
     TypeLineAddition, TypeLineReplacement,
 };
-use tricerules_cards::{CardRegistry, Keyword};
+use tricerules_cards::Keyword;
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
 
@@ -12,11 +12,19 @@ const FORGE: &str = "darksteel_forge";
 
 fn forge_engine() -> GameEngine {
     assert!(
-        CardRegistry::global().get(FORGE).is_some(),
+        tricerules_cards::registry::global().get(FORGE).is_some(),
         "missing exact Darksteel Forge"
     );
     let deck = deck_with("forest", &[FORGE, "sol_ring", "ornithopter"]);
-    let mut engine = GameEngine::new(2026093012, &[0, 1], 20, Some(vec![deck; 2]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2026093012,
+        &[0, 1],
+        20,
+        Some(vec![deck; 2]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine
 }

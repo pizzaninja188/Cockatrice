@@ -3,7 +3,7 @@ use tricerules_cards::{AbilityPresentation, CardRegistry, TokenDefinition};
 
 #[test]
 fn chasm_registers_exact_card_and_both_clauses() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get("chasm_skulker")
         .expect("complete Chasm Skulker");
     let face = card.primary_face();
@@ -38,7 +38,7 @@ fn chasm_registers_exact_card_and_both_clauses() {
     let death: tricerules_cards::SpellEffectKind = ron::from_str("CreateTokens(token: \"squid_u_1_1_islandwalk\", count: Count(SourceCounterCount(counter: PlusOnePlusOne)))").unwrap();
     assert_eq!(face.triggered_abilities[0].effect, [draw]);
     assert_eq!(face.triggered_abilities[1].effect, [death]);
-    let squid = CardRegistry::global()
+    let squid = tricerules_cards::registry::global()
         .get("squid_u_1_1_islandwalk")
         .unwrap()
         .primary_face();

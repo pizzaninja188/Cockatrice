@@ -56,50 +56,6 @@ fn mana_amount_ron_omits_zero_fields_and_round_trips() {
 }
 
 #[test]
-fn windfall_maximum_card_result_roundtrip_and_context_boundaries() {
-    let source = "MaximumCardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: All, card_type: None))";
-    let expression: super::CountExpression = ron::from_str(source).unwrap();
-    assert!(expression.validate().is_ok());
-    let encoded = ron::ser::to_string(&expression).unwrap();
-    assert_eq!(
-        ron::from_str::<super::CountExpression>(&encoded).unwrap(),
-        expression
-    );
-    assert!(expression.validate_static_count().is_err());
-    assert!(super::Amount::Count(expression)
-        .validate_cost(true)
-        .is_err());
-    let affine: super::CountExpression = ron::from_str(&format!(
-        "Affine(terms: [(coefficient: 1, quantity: {source})])"
-    ))
-    .unwrap();
-    assert!(affine.validate().is_err());
-    for preceding in ["", "Draw(count: 1),"] {
-        let card = format!(
-            r#"(id: "bad_wheel", name: "Bad Wheel", face_id: "bad_wheel", types: ["Sorcery"], spell_effect: [{preceding} Draw(who: EachPlayer, count: Count({source}))])"#
-        );
-        let error = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[]).unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("immediately preceding compatible"),
-            "{error}"
-        );
-    }
-    let entry = format!(
-        r#"(id: "bad_entry", name: "Bad Entry", face_id: "bad_entry", types: ["Artifact"], static_abilities: [(ability_id: "entry", presentation: Fallback, definition: EntersWithCounters(counter: Charge, amount: Count({source})))])"#
-    );
-    let error = crate::CardRegistry::from_chunks_and_tokens(&[&entry], &[]).unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("card result counts are valid only in a resolving effect list"),
-        "{error}"
-    );
-    assert!(crate::CardRegistry::global().get("windfall").is_some());
-}
-
-#[test]
 fn land_type_additions_and_replacements_validate_distinct_subtype_rules() {
     let forest: super::TypeLineAddition = ron::from_str("(land_types: [Forest])").unwrap();
     assert!(
@@ -280,30 +236,6 @@ fn structured_choice_metadata_is_stable_nonmechanical_and_unique() {
         ],
     )"#;
     assert!(crate::CardRegistry::from_chunks_and_tokens(&[duplicate_groups], &[]).is_err());
-}
-
-#[test]
-fn earthbend_nonland_permanent_discard_filter_is_shared() {
-    let filter: super::CardTypeFilter = ron::from_str("NonlandPermanent")
-        .expect("Dai Li Indoctrination and Auntie's Sentence need this filter");
-    let registry = crate::CardRegistry::global();
-    for (card, expected) in [
-        ("grizzly_bears", true),
-        ("liquimetal_coating", true),
-        ("unholy_indenture", true),
-        ("forest", false),
-        ("lightning_bolt", false),
-        ("divination", false),
-    ] {
-        assert_eq!(
-            registry
-                .get(card)
-                .unwrap()
-                .matches_card_type_outside_stack(filter),
-            expected,
-            "{card}"
-        );
-    }
 }
 
 #[test]
@@ -3157,30 +3089,6 @@ fn issue_207_stack_ability_and_source_linked_ability_loss_primitives_parse() {
     assert!(remove.validate(EffectContext::Ability).is_ok());
 }
 #[test]
-fn simple_ability_fallbacks_describe_typed_costs_and_effects() {
-    let registry = crate::CardRegistry::from_embedded().unwrap();
-    let forest = registry.get("forest").unwrap();
-    assert_eq!(
-        forest.faces[0].activated_abilities[0].fallback_text("Forest"),
-        "{T}: Add {G}."
-    );
-    let ability: super::ActivatedAbilityDef = ron::from_str(
-        r#"(ability_id: "synthetic_draw", presentation: Fallback, costs: [Mana("{2}"), Tap, SacrificeSelf], effect: [Draw(count: 1)])"#,
-    ).unwrap();
-    assert_eq!(
-        ability.fallback_text("Clue"),
-        "{2}, {T}, Sacrifice Clue: Draw a card."
-    );
-    let trigger: super::TriggeredAbilityDef = ron::from_str(
-        r#"(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 3)])"#,
-    ).unwrap();
-    assert_eq!(
-        trigger.fallback_text("Healer"),
-        "When Healer enters, you gain 3 life."
-    );
-}
-
-#[test]
 fn simple_fallbacks_cover_synthetic_choices_and_keep_unknown_instructions_whole() {
     let branch: super::ResolutionBranchDef = ron::from_str(
         r#"(branch_id: "continue", presentation: Fallback, cost: None, effects: [])"#,
@@ -3210,19 +3118,6 @@ fn simple_fallbacks_cover_synthetic_choices_and_keep_unknown_instructions_whole(
     );
 }
 
-#[test]
-fn simple_targeted_fallbacks_cover_map_and_granted_damage_abilities() {
-    let map = crate::CardRegistry::global().get("map").unwrap();
-    assert_eq!(map.faces[0].activated_abilities[0].fallback_text("Map"),
-        "{1}, {T}, Sacrifice Map: Target creature you control explores. Activate only as a sorcery.");
-    let ability: super::ActivatedAbilityDef = ron::from_str(
-        r#"(ability_id: "granted_01", presentation: Fallback, costs: [Tap], effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))])"#,
-    ).unwrap();
-    assert_eq!(
-        ability.fallback_text("Source"),
-        "{T}: Deal 1 damage to any target."
-    );
-}
 #[test]
 fn issue_197_hand_choice_requires_an_explicit_typed_action() {
     for action in ["Discard", "Exile"] {
@@ -3299,4 +3194,47 @@ fn boseiju_counted_activation_reduction_validates_cost_time_predicates() {
     ] {
         assert!(modifier(invalid).validate().is_err(), "accepted {invalid}");
     }
+}
+
+#[test]
+fn windfall_maximum_card_result_roundtrip_and_context_boundaries() {
+    let source = "MaximumCardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: All, card_type: None))";
+    let expression: super::CountExpression = ron::from_str(source).unwrap();
+    assert!(expression.validate().is_ok());
+    let encoded = ron::ser::to_string(&expression).unwrap();
+    assert_eq!(
+        ron::from_str::<super::CountExpression>(&encoded).unwrap(),
+        expression
+    );
+    assert!(expression.validate_static_count().is_err());
+    assert!(super::Amount::Count(expression)
+        .validate_cost(true)
+        .is_err());
+    let affine: super::CountExpression = ron::from_str(&format!(
+        "Affine(terms: [(coefficient: 1, quantity: {source})])"
+    ))
+    .unwrap();
+    assert!(affine.validate().is_err());
+    for preceding in ["", "Draw(count: 1),"] {
+        let card = format!(
+            r#"(id: "bad_wheel", name: "Bad Wheel", face_id: "bad_wheel", types: ["Sorcery"], spell_effect: [{preceding} Draw(who: EachPlayer, count: Count({source}))])"#
+        );
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[]).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("immediately preceding compatible"),
+            "{error}"
+        );
+    }
+    let entry = format!(
+        r#"(id: "bad_entry", name: "Bad Entry", face_id: "bad_entry", types: ["Artifact"], static_abilities: [(ability_id: "entry", presentation: Fallback, definition: EntersWithCounters(counter: Charge, amount: Count({source})))])"#
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&entry], &[]).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("card result counts are valid only in a resolving effect list"),
+        "{error}"
+    );
 }

@@ -6,7 +6,7 @@ use tricerules_cards::{
         AbilityCost, Amount, CastTriggerPlayer, ConditionPlayerSet, CounterKind, GameCondition,
         PlayerRecipient, RelativePlayerSet, SpellEffectKind, TriggerCondition,
     },
-    CardRegistry, ManaCost,
+    ManaCost,
 };
 use tricerules_core::{state::CopiableValues, GameEngine, TurnStep};
 use tricerules_proto::ruled::v1::{
@@ -16,10 +16,18 @@ use tricerules_proto::ruled::v1::{
 #[test]
 fn activated_double_x_cost_pays_twice_and_preserves_chosen_x_for_draw() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(20_260_930, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_930,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_permanent_on_battlefield(&mut engine, 0, "codex_shredder");
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("codex_shredder")
         .expect("Codex Shredder is registered")
         .primary_face()
@@ -83,10 +91,18 @@ fn activated_double_x_cost_pays_twice_and_preserves_chosen_x_for_draw() {
 #[test]
 fn conditional_upkeep_win_uses_the_trigger_controller() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(20_260_931, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_931,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_permanent_on_battlefield(&mut engine, 0, "ebony_owl_netsuke");
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("ebony_owl_netsuke")
         .expect("Ebony Owl Netsuke is registered")
         .primary_face()
@@ -139,10 +155,18 @@ fn conditional_upkeep_win_uses_the_trigger_controller() {
 #[test]
 fn source_total_counter_condition_counts_mixed_kinds_at_resolution() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(20_260_933, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_933,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_permanent_on_battlefield(&mut engine, 0, "ebony_owl_netsuke");
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("ebony_owl_netsuke")
         .expect("Ebony Owl Netsuke is registered")
         .primary_face()
@@ -185,10 +209,18 @@ fn source_total_counter_condition_counts_mixed_kinds_at_resolution() {
 #[test]
 fn source_total_counter_condition_uses_departed_generations_last_known_counters() {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(20_260_934, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_934,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_permanent_on_battlefield(&mut engine, 0, "ebony_owl_netsuke");
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("ebony_owl_netsuke")
         .expect("Ebony Owl Netsuke is registered")
         .primary_face()
@@ -274,10 +306,18 @@ fn each_opponent_mills_its_own_hand_count_in_three_player_game() {
         deck_with("forest", &[]),
         deck_with("plains", &[]),
     ]);
-    let mut engine = GameEngine::new(20_260_932, &[0, 1, 2], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        20_260_932,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     engine.state.turn_step = TurnStep::Main1;
     let source = inject_permanent_on_battlefield(&mut engine, 0, "codex_shredder");
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("codex_shredder")
         .expect("Codex Shredder is registered")
         .primary_face()

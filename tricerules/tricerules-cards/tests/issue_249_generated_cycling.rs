@@ -1,12 +1,11 @@
 use tricerules_cards::primitives::{PlayerRecipient, SearchDestination};
 use tricerules_cards::{
-    AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CardRegistry, Keyword,
-    SpellEffectKind,
+    AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, Keyword, SpellEffectKind,
 };
 
 #[test]
 fn issue_249_registers_the_seven_standard_cards_with_exact_cycling_abilities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     for (id, oracle_line) in [("lightshield_parry", 2), ("migrating_ketradon", 3)] {
         let face = registry

@@ -34,7 +34,15 @@ fn threshold_engine(seed: u64) -> (GameEngine, u32, u32) {
         deck_with("forest", &["earthbender_ascension", "grizzly_bears"]),
         vec!["island".into(); 20],
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let ascension = relocate_to_battlefield(&mut engine, 0, "earthbender_ascension", false);
     let creature = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -54,7 +62,15 @@ fn earthbender_ascension_etb_earthbends_then_searches_and_landfalls() {
         deck_with("forest", &["earthbender_ascension"]),
         vec!["island".into(); 20],
     ]);
-    let mut engine = GameEngine::new(211_000, &[0, 1], 20, decks, true).expect("new");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        211_000,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut engine);
     let land = inject_permanent_on_battlefield(&mut engine, 0, "forest");
     let searched_land = inject_library_card(&mut engine, 0, "plains");

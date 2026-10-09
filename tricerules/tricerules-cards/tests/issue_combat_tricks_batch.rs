@@ -11,7 +11,7 @@ use tricerules_cards::primitives::{
     Amount, EffectSubject, Keyword, LifeAmount, PlayerRecipient, SpellEffectKind, TargetController,
     TargetFilter, TargetKind,
 };
-use tricerules_cards::{CardRegistry, CounterKind, Layout};
+use tricerules_cards::{CounterKind, Layout};
 
 fn chosen(kind: TargetKind, controller: TargetController) -> EffectSubject {
     EffectSubject::Chosen(Box::new(TargetFilter {
@@ -40,7 +40,7 @@ fn assert_targeting(face: &tricerules_cards::CardFace, prompt: &str, indices: &[
 
 #[test]
 fn issue_combat_tricks_batch_maps_definitions() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     // Destroy a creature or enchantment.
     for (id, name, mana) in [

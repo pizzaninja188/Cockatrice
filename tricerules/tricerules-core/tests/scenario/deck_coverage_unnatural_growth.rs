@@ -7,6 +7,7 @@ use tricerules_proto::ruled::v1 as rv1;
 fn setup(seed: u64) -> GameEngine {
     let deck = deck_with("forest", &["unnatural_growth", "bottle_gnomes"]);
     let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
         seed,
         &[4, 9, 27],
         20,

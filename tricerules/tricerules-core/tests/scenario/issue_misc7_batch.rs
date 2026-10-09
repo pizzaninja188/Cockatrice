@@ -29,7 +29,15 @@ fn choose_trigger_target(object_id: u32) -> RuledCommand {
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("swamp", &[]), deck_with("island", &[])]);
-    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("engine");
     advance_to_main1_from_game_start(&mut e);
     grant_pool(&mut e, 0);
     grant_pool(&mut e, 1);
@@ -42,7 +50,15 @@ fn plus_one(e: &GameEngine, oid: u32) -> u32 {
 
 #[test]
 fn issue_misc7_malamet_brawler_grants_trample_to_an_attacker() {
-    let mut e = GameEngine::new(731_001, &[0, 1], 20, None, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        731_001,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut e);
     let brawler = inject_creature_on_battlefield(&mut e, 0, "malamet_brawler");
     let fellow = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -62,7 +78,15 @@ fn issue_misc7_malamet_brawler_grants_trample_to_an_attacker() {
 
 #[test]
 fn issue_misc7_nori_grants_first_strike_to_an_attacker() {
-    let mut e = GameEngine::new(731_002, &[0, 1], 20, None, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        731_002,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut e);
     let nori = inject_creature_on_battlefield(&mut e, 0, "nori,_teller_of_tales");
     let fellow = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -76,7 +100,15 @@ fn issue_misc7_nori_grants_first_strike_to_an_attacker() {
 
 #[test]
 fn issue_misc7_moonglove_extractor_draws_and_loses_life_on_attack() {
-    let mut e = GameEngine::new(731_003, &[0, 1], 20, None, true).expect("engine");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        731_003,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("engine");
     advance_to_declare_attackers(&mut e);
     let extractor = inject_creature_on_battlefield(&mut e, 0, "moonglove_extractor");
     let life_before = e.state.players[0].life;

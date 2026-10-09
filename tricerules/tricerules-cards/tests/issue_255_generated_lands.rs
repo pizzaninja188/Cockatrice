@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{PlayerRecipient, SpellEffectKind};
-use tricerules_cards::{AbilityCost, AbilityPresentation, Amount, CardRegistry};
+use tricerules_cards::{AbilityCost, AbilityPresentation, Amount};
 
 #[test]
 fn issue_255_registers_all_nine_lands_with_the_exact_draw_ability() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for id in [
         "airship_engine_room",
         "north_pole_gates",

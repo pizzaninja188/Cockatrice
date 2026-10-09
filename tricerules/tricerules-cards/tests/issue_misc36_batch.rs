@@ -1,10 +1,10 @@
 //! Printed identities for three pinned Standard graveyard spells.
 
-use tricerules_cards::{CardRegistry, Layout};
+use tricerules_cards::Layout;
 
 #[test]
 fn issue_misc36_registers_three_exact_card_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, mana, types) in [
         (
             "true_ancestry",

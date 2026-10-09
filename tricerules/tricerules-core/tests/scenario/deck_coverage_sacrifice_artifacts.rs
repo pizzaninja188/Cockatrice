@@ -6,7 +6,7 @@
 //! CR 702.12b and 514.2 govern Slobad's temporary indestructible effect and marked-damage cleanup.
 
 use super::helpers::*;
-use tricerules_cards::{CardRegistry, Keyword};
+use tricerules_cards::Keyword;
 use tricerules_core::{GameEngine, Zone};
 use tricerules_proto::ruled::v1::{ruled_command::Cmd, RuledCommand};
 
@@ -28,7 +28,15 @@ fn sacrifice_artifact_engine(seed: u64) -> GameEngine {
             &["shock", "disenchant", "sol_ring", "mind_stone"],
         ),
     ]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -291,7 +299,7 @@ fn deck_coverage_slobad_can_target_an_opponents_artifact() {
 
 #[test]
 fn deck_coverage_sacrifice_artifact_cards_have_exact_registry_faces() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let core = registry.get("phyrexias_core").expect("Core is registered");
     assert_eq!(core.name, "Phyrexia's Core");
     assert_eq!(core.primary_face().name, "Phyrexia's Core");

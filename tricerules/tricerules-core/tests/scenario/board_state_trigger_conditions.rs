@@ -25,7 +25,15 @@ fn issue_67_scholar_does_not_draw_when_the_last_artifact_leaves_before_resolutio
         deck_with("island", &["scholar_of_stars", "explosive_apparatus"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(6701, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6701,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let artifact = relocate_to_battlefield(&mut e, 0, "explosive_apparatus", false);
     ensure_in_hand(&mut e, 0, "scholar_of_stars");
@@ -57,7 +65,15 @@ fn issue_67_scholar_never_triggers_without_an_artifact() {
         deck_with("island", &["scholar_of_stars"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(6706, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6706,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "scholar_of_stars");
     grant_pool(&mut e, 0);
@@ -81,7 +97,15 @@ fn issue_67_scholar_may_use_a_different_artifact_at_resolution() {
         ),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(6702, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6702,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let original = relocate_to_battlefield(&mut e, 0, "explosive_apparatus", false);
     ensure_in_hand(&mut e, 0, "scholar_of_stars");
@@ -109,7 +133,15 @@ fn issue_67_ornery_dilophosaur_rechecks_derived_power_on_resolution() {
         deck_with("forest", &["ornery_dilophosaur"]),
         deck_with("island", &[]),
     ]);
-    let mut e = GameEngine::new(6703, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6703,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let dinosaur = relocate_to_battlefield(&mut e, 0, "ornery_dilophosaur", false);
     e.state.objects.get_mut(&dinosaur).expect("dinosaur").power = Some(4);
@@ -137,7 +169,15 @@ fn issue_67_ornery_dilophosaur_locks_its_bonus_after_resolution() {
         deck_with("forest", &["ornery_dilophosaur", "rumbling_baloth"]),
         deck_with("island", &[]),
     ]);
-    let mut e = GameEngine::new(6707, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6707,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let dinosaur = relocate_to_battlefield(&mut e, 0, "ornery_dilophosaur", false);
     let qualifier = relocate_to_battlefield(&mut e, 0, "rumbling_baloth", false);
@@ -165,7 +205,15 @@ fn issue_67_faerie_miscreant_requires_another_named_creature_at_resolution() {
         p0.push("island".to_string());
     }
     let decks = Some(vec![p0, deck_with("forest", &[])]);
-    let mut e = GameEngine::new(6704, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6704,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let first = relocate_to_battlefield(&mut e, 0, "faerie_miscreant", false);
     ensure_in_hand(&mut e, 0, "faerie_miscreant");
@@ -188,7 +236,15 @@ fn issue_67_faerie_miscreant_counts_a_permanent_with_copied_name() {
         deck_with("island", &["clone", "faerie_miscreant"]),
         deck_with("forest", &[]),
     ]);
-    let mut e = GameEngine::new(6708, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6708,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let faerie = relocate_to_battlefield(&mut e, 0, "faerie_miscreant", false);
     ensure_in_hand(&mut e, 0, "clone");
@@ -216,7 +272,15 @@ fn issue_67_turret_ogre_damages_the_opponent_once() {
         deck_with("mountain", &["turret_ogre", "rumbling_baloth"]),
         deck_with("island", &[]),
     ]);
-    let mut e = GameEngine::new(6705, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6705,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     relocate_to_battlefield(&mut e, 0, "rumbling_baloth", false);
     ensure_in_hand(&mut e, 0, "turret_ogre");
@@ -237,7 +301,15 @@ fn issue_67_turret_ogre_does_not_count_itself() {
         deck_with("mountain", &["turret_ogre"]),
         deck_with("island", &[]),
     ]);
-    let mut e = GameEngine::new(6709, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        6709,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     ensure_in_hand(&mut e, 0, "turret_ogre");
     grant_pool(&mut e, 0);

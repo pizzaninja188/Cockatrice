@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
     CastTriggerPlayer, MassPlayerSet, PermanentTypeFilter, SpellEffectKind, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, Layout, TriggerCondition};
+use tricerules_cards::{AbilityPresentation, Layout, TriggerCondition};
 
 #[test]
 fn nature_s_will_registers_its_grouped_combat_damage_ability() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     assert_eq!(registry.id_for_name("Nature's Will"), Some("natures_will"));
     let card = registry.get("natures_will").expect("Nature's Will");
     assert_eq!(card.name, "Nature's Will");

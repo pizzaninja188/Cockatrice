@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{DrawDiscardOrder, PlayerRecipient, SpellEffectKind};
-use tricerules_cards::{AbilityPresentation, CardRegistry, TriggerCondition};
+use tricerules_cards::{AbilityPresentation, TriggerCondition};
 
 #[test]
 fn issue_275_registers_the_two_generated_cards_with_exact_optional_etb() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, types, stats, reach, oracle_line) in [
         (
             "yuyan_archers",

@@ -9,7 +9,7 @@ use tricerules_cards::primitives::{
     Amount, CountExpression, EffectSubject, GameCondition, PlayerRecipient, SpellEffectKind,
     TargetKind, TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry, CounterKind, Layout, ManaCost};
+use tricerules_cards::{AbilityPresentation, CounterKind, Layout, ManaCost};
 use tricerules_core::state::CopiableValues;
 use tricerules_core::{GameEngine, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
@@ -21,8 +21,15 @@ const THICKEST: &str = "thickest_in_the_thicket";
 
 fn four_player_engine(seed: u64) -> GameEngine {
     let deck = deck_with("forest", &[]);
-    let mut engine = GameEngine::new(seed, &[0, 1, 2, 3], 20, Some(vec![deck; 4]), true)
-        .expect("new four-player game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1, 2, 3],
+        20,
+        Some(vec![deck; 4]),
+        true,
+    )
+    .expect("new four-player game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -87,7 +94,7 @@ fn set_test_creature_power(engine: &mut GameEngine, object: u32, power: i32) {
     let permanent = engine.state.objects.get_mut(&object).expect("creature");
     permanent.power = None;
     permanent.toughness = None;
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("grizzly_bears")
         .expect("Grizzly Bears definition")
         .primary_face()
@@ -125,7 +132,7 @@ fn set_test_creature_power_undefined(engine: &mut GameEngine, object: u32) {
     let permanent = engine.state.objects.get_mut(&object).expect("creature");
     permanent.power = None;
     permanent.toughness = None;
-    let mut face = CardRegistry::global()
+    let mut face = tricerules_cards::registry::global()
         .get("grizzly_bears")
         .expect("Grizzly Bears definition")
         .primary_face()
@@ -153,7 +160,7 @@ fn set_test_creature_power_undefined(engine: &mut GameEngine, object: u32) {
 
 #[test]
 fn thickest_has_its_complete_single_face_and_exact_trigger_definitions() {
-    let card = CardRegistry::global()
+    let card = tricerules_cards::registry::global()
         .get(THICKEST)
         .expect("Thickest in the Thicket is registered");
     assert_eq!(card.name, "Thickest in the Thicket");

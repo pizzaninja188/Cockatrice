@@ -2,10 +2,10 @@ use tricerules_cards::primitives::{
     EffectSubject, GameCondition, LifeAmount, PlayerRecipient, RelativePlayerSet, SpellEffectKind,
     TargetKind,
 };
-use tricerules_cards::{AbilityCost, ActivationTiming, CardRegistry, Keyword};
+use tricerules_cards::{AbilityCost, ActivationTiming, Keyword};
 
 fn face(card_id: &str) -> &'static tricerules_cards::CardFace {
-    let definition = CardRegistry::global()
+    let definition = tricerules_cards::registry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("{card_id} must be registered"));
     definition.primary_face()

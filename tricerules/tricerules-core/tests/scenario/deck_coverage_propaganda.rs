@@ -1,11 +1,11 @@
 //! Exact Propaganda card definition and static attack-cost mapping.
 
 use tricerules_cards::primitives::StaticAbilityDef;
-use tricerules_cards::{AbilityPresentation, CardRegistry, ManaCost};
+use tricerules_cards::{AbilityPresentation, ManaCost};
 
 #[test]
 fn propaganda_registers_its_complete_card_definition() {
-    let face = CardRegistry::global()
+    let face = tricerules_cards::registry::global()
         .get("propaganda")
         .expect("complete Propaganda definition")
         .primary_face();

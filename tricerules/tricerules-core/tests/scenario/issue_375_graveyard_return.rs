@@ -13,7 +13,15 @@ use tricerules_proto::ruled::v1::TargetRefKind;
 
 fn engine_with(seed: u64, own: &[&str]) -> GameEngine {
     let decks = Some(vec![deck_with("forest", own), deck_with("forest", &[])]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
@@ -278,7 +286,15 @@ fn issue_375_avenger_mobilize_counts_only_creature_cards_and_enters_attacking() 
         deck_with("forest", &["avenger_of_the_fallen"]),
         deck_with("forest", &[]),
     ]);
-    let mut engine = GameEngine::new(375_030, &[0, 1], 20, decks, true).expect("new game");
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        375_030,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut engine);
     inject_graveyard_card(&mut engine, 0, "grizzly_bears");
     inject_graveyard_card(&mut engine, 0, "grizzly_bears");
@@ -334,7 +350,15 @@ fn issue_375_avenger_mobilize_counts_only_creature_cards_and_enters_attacking() 
         deck_with("forest", &["avenger_of_the_fallen"]),
         deck_with("forest", &[]),
     ]);
-    let mut empty = GameEngine::new(375_031, &[0, 1], 20, decks, true).expect("new game");
+    let mut empty = GameEngine::new(
+        tricerules_cards::registry::global(),
+        375_031,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
     advance_to_declare_attackers(&mut empty);
     let avenger = relocate_to_battlefield(&mut empty, 0, "avenger_of_the_fallen", false);
     let assignment = empty.initial_response_batch().legal_by_player[&0]

@@ -25,7 +25,15 @@ fn all_land_decks() -> Option<Vec<Vec<String>>> {
 
 #[test]
 fn canonical_settlement_does_not_infer_a_stop_from_a_legal_land_play() {
-    let mut e = GameEngine::new(9901, &[0, 1], 20, all_land_decks(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9901,
+        &[0, 1],
+        20,
+        all_land_decks(),
+        true,
+    )
+    .expect("new");
     let batch = e
         .apply_command(
             0,
@@ -79,7 +87,15 @@ fn canonical_settlement_does_not_infer_a_stop_from_a_legal_land_play() {
 
 #[test]
 fn canonical_turn_roll_publishes_untap_and_draw_after_coalescing() {
-    let mut e = GameEngine::new(9909, &[0, 1], 20, all_land_decks(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9909,
+        &[0, 1],
+        20,
+        all_land_decks(),
+        true,
+    )
+    .expect("new");
     let forest_oid = inject_permanent_on_battlefield(&mut e, 1, "forest");
     e.state.objects.get_mut(&forest_oid).expect("forest").tapped = true;
     e.state.turn_step = tricerules_core::TurnStep::EndStep;
@@ -140,7 +156,15 @@ fn canonical_turn_roll_publishes_untap_and_draw_after_coalescing() {
 
 #[test]
 fn skip_next_untap_keeps_the_authoritative_zone_view_tapped_without_an_untap_edge() {
-    let mut e = GameEngine::new(9310, &[0, 1], 20, all_land_decks(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9310,
+        &[0, 1],
+        20,
+        all_land_decks(),
+        true,
+    )
+    .expect("new");
     let forest_oid = inject_permanent_on_battlefield(&mut e, 1, "forest");
     e.state.objects.get_mut(&forest_oid).expect("forest").tapped = true;
     let generation = e
@@ -199,7 +223,15 @@ fn skip_next_untap_keeps_the_authoritative_zone_view_tapped_without_an_untap_edg
 
 #[test]
 fn canonical_settlement_stops_at_configured_phase() {
-    let mut e = GameEngine::new(9902, &[0, 1], 20, all_land_decks(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9902,
+        &[0, 1],
+        20,
+        all_land_decks(),
+        true,
+    )
+    .expect("new");
     let batch = e
         .apply_command(
             0,
@@ -233,7 +265,15 @@ fn canonical_settlement_stops_at_configured_phase() {
 
 #[test]
 fn missing_auto_pass_policy_stops_conservatively() {
-    let mut e = GameEngine::new(9903, &[0, 1], 20, all_land_decks(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9903,
+        &[0, 1],
+        20,
+        all_land_decks(),
+        true,
+    )
+    .expect("new");
     e.apply_command(
         0,
         &canonical_with_policies(pass(), vec![auto_pass_everywhere(0)]),
@@ -258,7 +298,15 @@ fn canonical_settlement_stops_with_a_spell_on_the_stack() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(9904, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9904,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     give_mana(
         &mut e,
@@ -304,7 +352,15 @@ fn canonical_resolution_publishes_new_creature_battlefield_snapshot() {
         ],
         vec!["mountain".into(); 7],
     ]);
-    let mut e = GameEngine::new(9910, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9910,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let _ = e.initial_response_batch();
     give_mana(
@@ -378,7 +434,15 @@ fn canonical_stack_resolution_exposes_active_player_priority_before_auto_pass() 
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(9911, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9911,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     e.apply_command(0, &pass())
@@ -432,7 +496,15 @@ fn canonical_stack_resolution_exposes_active_player_priority_before_auto_pass() 
 
 #[test]
 fn automatic_settlement_stops_when_a_step_trigger_reaches_the_stack() {
-    let mut e = GameEngine::new(9908, &[0, 1], 20, all_land_decks(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9908,
+        &[0, 1],
+        20,
+        all_land_decks(),
+        true,
+    )
+    .expect("new");
     inject_permanent_on_battlefield(&mut e, 0, "howling_mine");
     let batch = e
         .apply_command(
@@ -458,7 +530,15 @@ fn automatic_settlement_stops_when_a_step_trigger_reaches_the_stack() {
 
 #[test]
 fn regular_combat_damage_stop_also_stops_at_first_strike_damage() {
-    let mut e = GameEngine::new(9905, &[0, 1], 20, all_land_decks(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9905,
+        &[0, 1],
+        20,
+        all_land_decks(),
+        true,
+    )
+    .expect("new");
     e.state.turn_step = tricerules_core::TurnStep::FirstStrikeDamage;
     e.apply_command(
         0,
@@ -485,7 +565,15 @@ fn regular_combat_damage_stop_also_stops_at_first_strike_damage() {
 
 #[test]
 fn automatic_settlement_publishes_terminal_draw_loss() {
-    let mut e = GameEngine::new(9906, &[0, 1], 20, all_land_decks(), true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9906,
+        &[0, 1],
+        20,
+        all_land_decks(),
+        true,
+    )
+    .expect("new");
     e.state.turn = 2; // the starting player's turn-one draw is intentionally skipped (CR 103.8)
     e.state.players[0].library.clear();
     let batch = e
@@ -511,7 +599,15 @@ fn automatic_settlement_stops_at_the_safety_limit() {
         vec!["grizzly_bears".into(); 200],
         vec!["grizzly_bears".into(); 200],
     ]);
-    let mut e = GameEngine::new(9907, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9907,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     e.state.players[0].hand.clear();
     e.state.players[1].hand.clear();
     let batch = e
@@ -586,7 +682,15 @@ fn advance_from_main1_through_end_step(e: &mut GameEngine, active_player: i32) {
 }
 
 fn engine_in_cleanup_with_excess(seed: u64, excess: usize) -> GameEngine {
-    let mut e = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     add_cards_to_hand_from_library(&mut e, 0, excess);
     advance_from_main1_through_end_step(&mut e, 0);
@@ -597,7 +701,15 @@ fn engine_in_cleanup_with_excess(seed: u64, excess: usize) -> GameEngine {
 
 #[test]
 fn primitive_yield_active_skips_double_pass_main1() {
-    let mut e = GameEngine::new(99, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        99,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
     e.apply_command(0, &primitive_yield())
         .expect("active primitive");
@@ -606,7 +718,15 @@ fn primitive_yield_active_skips_double_pass_main1() {
 
 #[test]
 fn empty_stack_double_pass_emits_ap_priority_in_new_phase() {
-    let mut e = GameEngine::new(99, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        99,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     e.apply_command(0, &pass()).expect("p0 pass");
     let b = e.apply_command(1, &pass()).expect("p1 pass");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
@@ -618,7 +738,15 @@ fn empty_stack_double_pass_emits_ap_priority_in_new_phase() {
 
 #[test]
 fn mana_pools_empty_on_step_change() {
-    let mut e = GameEngine::new(99, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        99,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     e.state.players[0].mana_pool.red = 2;
     e.state.players[1].mana_pool.green = 1;
 
@@ -658,7 +786,15 @@ fn stack_resolution_emits_priority_to_active_player() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(13, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        13,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(mountain_idx))
@@ -715,7 +851,15 @@ fn cleanup_step_opens_when_hand_exceeds_max_and_discard_finishes_turn() {
 
 #[test]
 fn cleanup_ignores_nonactive_player_over_max_hand_size() {
-    let mut e = GameEngine::new(1003, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1003,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     add_cards_to_hand_from_library(&mut e, 1, 1);
     let hand_before = e.state.players[1].hand.clone();
@@ -732,7 +876,15 @@ fn cleanup_ignores_nonactive_player_over_max_hand_size() {
 
 #[test]
 fn cleanup_does_not_chain_from_active_to_nonactive_player() {
-    let mut e = GameEngine::new(1004, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        1004,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     add_cards_to_hand_from_library(&mut e, 0, 1);
     add_cards_to_hand_from_library(&mut e, 1, 1);
@@ -779,7 +931,15 @@ fn cleanup_discard_rejects_invalid_index_lists_without_mutating_state() {
 
 #[test]
 fn main2_double_pass_advances_to_end_step_stop() {
-    let mut e = GameEngine::new(69, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        69,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin combat");
@@ -800,7 +960,15 @@ fn main2_double_pass_advances_to_end_step_stop() {
 
 #[test]
 fn new_turn_stops_at_upkeep_then_draw_then_main1() {
-    let mut e = GameEngine::new(70, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        70,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     end_active_turn(&mut e, 0);
     assert_eq!(e.state.active_player_id(), 1);
@@ -826,7 +994,15 @@ fn new_turn_stops_at_upkeep_then_draw_then_main1() {
 /// key off who started, not `turn == 1` alone.
 #[test]
 fn second_seat_first_draw_draws_when_seat_zero_started() {
-    let mut e = GameEngine::new(71, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        71,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     assert_eq!(e.state.starting_player_idx, 0);
     advance_to_main1_from_game_start(&mut e);
     assert_eq!(
@@ -873,7 +1049,15 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(88, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        88,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let hand_before_turn = e.state.players[0].hand.len();
@@ -965,7 +1149,15 @@ fn zone_view_includes_battlefield_object_ids() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(404, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        404,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bears = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     // The fixture was published at insertion. A reconnect snapshot contains full objects;
@@ -1006,7 +1198,15 @@ fn second_sorcery_rejected_while_spell_on_stack_even_with_priority() {
         .chain(std::iter::repeat_n("divination".into(), 5))
         .collect();
     let decks = Some(vec![p0_deck, vec!["forest".into(); 15]]);
-    let mut e = GameEngine::new(904, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        904,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
     while e.state.players[0]
         .hand
@@ -1048,7 +1248,15 @@ fn second_sorcery_rejected_while_spell_on_stack_even_with_priority() {
 /// Regression: flying/reach changes must not affect normal ground-vs-ground blocking.
 #[test]
 fn ground_creature_still_blockable_by_ground_blocker_regression() {
-    let mut e = GameEngine::new(9005, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9005,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
     advance_to_declare_attackers(&mut e);
     let merfolk = inject_creature_on_battlefield(&mut e, 0, "coral_merfolk");
     let bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -1148,7 +1356,15 @@ fn essence_scatter_and_negate_respect_spell_type() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(5009, &[0, 1], 20, decks, true).expect("new");
+    let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
+        5009,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // P0 casts a creature spell (grizzly_bears) — it sits on the stack.

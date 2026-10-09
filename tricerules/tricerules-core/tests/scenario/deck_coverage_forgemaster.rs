@@ -1,18 +1,25 @@
 //! Exact three-artifact activation payments for Kuldotha Forgemaster.
 use super::helpers::*;
-use tricerules_cards::CardRegistry;
 use tricerules_core::Zone;
 
 fn game(seed: u64) -> GameEngine {
     let deck = deck_with("forest", &[]);
-    let mut engine = GameEngine::new(seed, &[0, 1], 20, Some(vec![deck; 2]), true).unwrap();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![deck; 2]),
+        true,
+    )
+    .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     engine
 }
 
 fn cast_creature(engine: &mut GameEngine, card: &str, cost: u32) -> u32 {
     assert!(
-        CardRegistry::global().get(card).is_some(),
+        tricerules_cards::registry::global().get(card).is_some(),
         "missing exact {card}"
     );
     let source = inject_card_into_hand(engine, 0, card);
@@ -293,14 +300,21 @@ fn forgemaster_departing_observer_distinguishes_each_object_from_one_or_more() {
         (ZoneEventCardinality::EachObject, 3),
     ] {
         let deck = deck_with("forest", &[]);
-        let mut engine =
-            GameEngine::new(50202, &[10, 20, 30], 20, Some(vec![deck; 3]), true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            50202,
+            &[10, 20, 30],
+            20,
+            Some(vec![deck; 3]),
+            true,
+        )
+        .unwrap();
         advance_to_main1_from_game_start(&mut engine);
         let source = inject_permanent_on_battlefield(&mut engine, 0, "kuldotha_forgemaster");
         let a = inject_permanent_on_battlefield(&mut engine, 0, "sol_ring");
         let b = inject_permanent_on_battlefield(&mut engine, 0, "mind_stone");
         engine.state.objects.get_mut(&b).unwrap().owner = 30;
-        let mut ability = CardRegistry::global()
+        let mut ability = tricerules_cards::registry::global()
             .get("ajanis_pridemate")
             .unwrap()
             .primary_face()

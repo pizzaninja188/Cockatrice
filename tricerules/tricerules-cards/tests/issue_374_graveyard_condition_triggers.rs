@@ -14,9 +14,8 @@ use tricerules_cards::primitives::{
     StaticAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::{
-    AbilityPresentation, Amount, CardRegistry, CastTriggerPlayer, ChoiceId, CounterKind,
-    GameCondition, GraveyardAggregate, Keyword, Layout, RelativePlayerSet, SpellEffectKind,
-    TriggerCondition,
+    AbilityPresentation, Amount, CastTriggerPlayer, ChoiceId, CounterKind, GameCondition,
+    GraveyardAggregate, Keyword, Layout, RelativePlayerSet, SpellEffectKind, TriggerCondition,
 };
 
 fn graveyard_gate(
@@ -49,7 +48,7 @@ fn permanent_card_filter() -> ZoneCardFilter {
 
 #[test]
 fn issue_374_registers_the_five_retained_identities() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for (id, name, face_id, mana_cost, types, power, toughness, keywords) in [
         (
             "creakwood_safewright",
@@ -120,7 +119,7 @@ fn issue_374_registers_the_five_retained_identities() {
 
 #[test]
 fn issue_374_trigger_payloads_are_exact() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
 
     // Creakwood Safewright: the entry replacement starts it at three -1/-1 counters, and the
     // end-step trigger's conjunctive intervening-if rechecks the graveyard Elf and the self
@@ -336,7 +335,7 @@ fn issue_374_trigger_payloads_are_exact() {
 
 #[test]
 fn issue_374_blocked_identities_stay_unregistered() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for name in [
         "Fear of Burning Alive",
         "Fear of Missing Out",

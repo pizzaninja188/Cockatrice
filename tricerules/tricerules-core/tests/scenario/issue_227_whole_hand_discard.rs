@@ -6,6 +6,7 @@ const HEARTH: &str = "hearth_elemental_stoke_genius";
 
 fn game() -> GameEngine {
     let mut e = GameEngine::new(
+        tricerules_cards::registry::global(),
         227,
         &[0, 1],
         20,

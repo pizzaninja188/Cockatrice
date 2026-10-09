@@ -1,7 +1,5 @@
 use tricerules_cards::primitives::{EffectSubject, PlayerRecipient, SpellEffectKind, TargetKind};
-use tricerules_cards::{
-    AbilityCost, ActivationTiming, Amount, CardRegistry, CounterKind, TriggerCondition,
-};
+use tricerules_cards::{AbilityCost, ActivationTiming, Amount, CounterKind, TriggerCondition};
 
 struct ExpectedCard {
     id: &'static str,
@@ -33,7 +31,7 @@ const COHORT: &[ExpectedCard] = &[
 
 #[test]
 fn issue_291_cards_have_exact_allowlisted_etb_mutagen_shape() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for expected in COHORT {
         let id = expected.id;
         let name = expected.name;
@@ -85,7 +83,7 @@ fn issue_291_cards_have_exact_allowlisted_etb_mutagen_shape() {
 
 #[test]
 fn issue_291_reuses_the_predefined_mutagen_token_contract() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let token = registry
         .get("mutagen")
         .expect("Mutagen token")

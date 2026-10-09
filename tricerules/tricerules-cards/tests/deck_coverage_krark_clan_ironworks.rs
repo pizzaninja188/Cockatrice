@@ -2,11 +2,11 @@ use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ManaAmount, PermanentTypeFilter, SpellEffectKind,
     TargetController, TargetKind,
 };
-use tricerules_cards::{AbilityPresentation, CardRegistry};
+use tricerules_cards::AbilityPresentation;
 
 #[test]
 fn krark_clan_ironworks_registers_its_artifact_sacrifice_mana_ability() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     let card = registry
         .get("krark-clan_ironworks")
         .expect("Krark-Clan Ironworks registry definition");

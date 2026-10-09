@@ -3,12 +3,12 @@ use tricerules_cards::primitives::{
     SpellEffectKind, TargetController, TargetKind, TargetMatchFilter,
 };
 use tricerules_cards::{
-    AbilityPresentation, Amount, CardRegistry, Keyword, LibraryPartitionKind, TriggerCondition,
+    AbilityPresentation, Amount, Keyword, LibraryPartitionKind, TriggerCondition,
 };
 
 #[test]
 fn issue_271_registers_exactly_the_reviewed_eleven_card_shapes() {
-    let registry = CardRegistry::global();
+    let registry = tricerules_cards::registry::global();
     for id in [
         "quicksand_whirlpool",
         "grounded_for_life",

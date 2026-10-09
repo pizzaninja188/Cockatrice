@@ -540,9 +540,11 @@ pub(super) fn grant_keyword_choice(
             .map(|keyword| {
                 let label = keyword.as_str().to_string();
                 ResolutionBranchDef {
-                    branch_id: tricerules_cards::ChoiceId::new(tricerules_cards::slugify(&label))
-                        .expect("keyword names produce stable choice ids"),
-                    presentation: tricerules_cards::AbilityPresentation::Fallback,
+                    branch_id: tricerules_card_model::ChoiceId::new(
+                        tricerules_card_model::slugify(&label),
+                    )
+                    .expect("keyword names produce stable choice ids"),
+                    presentation: tricerules_card_model::AbilityPresentation::Fallback,
                     runtime_fallback: Some(label),
                     cost: ResolutionCost::None,
                     requirement: Default::default(),
@@ -585,11 +587,11 @@ pub(super) fn grant_protection(
                     .map(|option| {
                         let label = option.choice_label().to_string();
                         ResolutionBranchDef {
-                            branch_id: tricerules_cards::ChoiceId::new(tricerules_cards::slugify(
-                                &label,
-                            ))
+                            branch_id: tricerules_card_model::ChoiceId::new(
+                                tricerules_card_model::slugify(&label),
+                            )
                             .expect("protection qualities produce stable choice ids"),
-                            presentation: tricerules_cards::AbilityPresentation::Fallback,
+                            presentation: tricerules_card_model::AbilityPresentation::Fallback,
                             runtime_fallback: Some(label),
                             cost: ResolutionCost::None,
                             requirement: Default::default(),
@@ -660,7 +662,7 @@ pub(super) fn earthbend(
     cx: &mut EffectCx<'_>,
     count: Amount,
 ) -> Result<EffectOutcome, EngineError> {
-    use tricerules_cards::primitives::{
+    use tricerules_card_model::primitives::{
         earthbend_target_filter, EventZone, ReturnController, TriggerCondition,
         TriggeredAbilityDef, TriggeredCardReference, TypeLineAddition,
     };
@@ -686,8 +688,8 @@ pub(super) fn earthbend(
         ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
             land_types: Vec::new(),
             card_types: vec![
-                tricerules_cards::primitives::PermanentTypeFilter::Land,
-                tricerules_cards::primitives::PermanentTypeFilter::Creature,
+                tricerules_card_model::primitives::PermanentTypeFilter::Land,
+                tricerules_card_model::primitives::PermanentTypeFilter::Creature,
             ],
             creature_types: vec![],
         }),
@@ -709,7 +711,7 @@ pub(super) fn earthbend(
     }
     cx.engine.place_counters(
         oid,
-        tricerules_cards::primitives::CounterKind::PlusOnePlusOne,
+        tricerules_card_model::primitives::CounterKind::PlusOnePlusOne,
         count,
         super::super::continuous::CounterPlacementOrigin::Effect,
     );
@@ -719,15 +721,15 @@ pub(super) fn earthbend(
             subject: Some(EffectSubject::Chosen(Box::new(filter.clone()))),
             affected_player: None,
             ability: Box::new(TriggeredAbilityDef {
-                ability_id: tricerules_cards::AbilityId::new("earthbend_return")
+                ability_id: tricerules_card_model::AbilityId::new("earthbend_return")
                     .expect("intrinsic ability id"),
-                presentation: tricerules_cards::AbilityPresentation::Fallback,
+                presentation: tricerules_card_model::AbilityPresentation::Fallback,
                 trigger: TriggerCondition::WhenWatchedObjectDiesOrIsExiled,
                 effect: vec![SpellEffectKind::ReturnTriggeredCard {
                     reference: TriggeredCardReference::TriggerObject,
                     from: vec![EventZone::Graveyard, EventZone::Exile],
                     destination:
-                        tricerules_cards::primitives::TriggeredCardDestination::Battlefield,
+                        tricerules_card_model::primitives::TriggeredCardDestination::Battlefield,
                     tapped: true,
                     controller: ReturnController::AbilityController,
                     entry_counters: vec![],
@@ -753,7 +755,9 @@ pub(super) fn animate_self(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    use tricerules_cards::primitives::{CreatureTypeChange, PermanentTypeFilter, TypeLineAddition};
+    use tricerules_card_model::primitives::{
+        CreatureTypeChange, PermanentTypeFilter, TypeLineAddition,
+    };
 
     let SpellEffectKind::AnimateSelf {
         base_power,
@@ -1386,7 +1390,7 @@ pub(super) fn change_counters(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    use tricerules_cards::primitives::CounterSnapshotSource;
+    use tricerules_card_model::primitives::CounterSnapshotSource;
     let (subject, counters, removing) = match effect {
         SpellEffectKind::RemoveAllCounters { counter, subject } => {
             for oid in cx.resolve_battlefield_subjects(&subject) {
@@ -1466,7 +1470,15 @@ mod growth_tests {
     use super::*;
 
     fn signed_fixture(pairs: &[(i64, i64)]) -> (GameEngine, Vec<ObjectId>) {
-        let mut engine = GameEngine::new(104_910, &[0, 1], 20, None, true).unwrap();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            104_910,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
         engine.state.opening = None;
         engine.state.turn_step = TurnStep::Main1;
         engine.state.active_player_idx = 0;
@@ -1651,7 +1663,7 @@ mod growth_tests {
 #[cfg(test)]
 mod issue_236_tests {
     use super::*;
-    use tricerules_cards::primitives::TypeLineAddition;
+    use tricerules_card_model::primitives::TypeLineAddition;
 
     #[test]
     fn wrenn_shaped_modifiers_compile_to_existing_layer_kinds() {

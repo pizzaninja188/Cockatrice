@@ -19,10 +19,10 @@ use tricerules_cards::primitives::{
     ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PlayerRecipient,
     SpellEffectKind, TargetController, TargetFilter, TargetKind, TriggerCondition,
 };
-use tricerules_cards::{AbilityPresentation, CardFace, CardRegistry, CounterKind, ManaCost};
+use tricerules_cards::{AbilityPresentation, CardFace, CounterKind, ManaCost};
 
 fn registered_face(card_id: &str) -> CardFace {
-    CardRegistry::global()
+    tricerules_cards::registry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("{card_id} must be registered"))
         .primary_face()
@@ -298,7 +298,7 @@ fn issue_427_excluded_cohort_identities_stay_unregistered() {
         "fire_lord_azula",
     ] {
         assert!(
-            CardRegistry::global().get(card_id).is_none(),
+            tricerules_cards::registry::global().get(card_id).is_none(),
             "{card_id} must stay unregistered while a companion clause is unsupported"
         );
     }

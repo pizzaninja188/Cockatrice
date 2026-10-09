@@ -1,9 +1,11 @@
 use tricerules_cards::primitives::{EffectContext, SpellEffectKind, TargetFilter, TargetKind};
-use tricerules_cards::{CardRegistry, Color};
+use tricerules_cards::Color;
 
 #[test]
 fn deepglow_skate_exact_printed_identity_and_optional_permanent_target_group() {
-    let card = CardRegistry::global().get("deepglow_skate").unwrap();
+    let card = tricerules_cards::registry::global()
+        .get("deepglow_skate")
+        .unwrap();
     let face = card.primary_face();
     assert_eq!(card.name, "Deepglow Skate");
     assert_eq!(face.mana_cost.to_string(), "{4}{U}");
