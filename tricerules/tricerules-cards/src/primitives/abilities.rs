@@ -438,6 +438,28 @@ impl ActivatedAbilityDef {
                     .into(),
             );
         }
+        let return_tapped_creature_count = self
+            .costs
+            .iter()
+            .filter(|cost| matches!(cost, AbilityCost::ReturnTappedCreature))
+            .count();
+        let source_entry_count = self
+            .effect
+            .iter()
+            .filter(|effect| matches!(effect, SpellEffectKind::PutAbilitySourceOntoBattlefield))
+            .count();
+        if return_tapped_creature_count > 1 {
+            return Err("activated ability may return only one tapped creature".into());
+        }
+        if return_tapped_creature_count == 1 && self.source_zone != AbilitySourceZone::Hand {
+            return Err("return-tapped-creature cost requires a hand source".into());
+        }
+        if return_tapped_creature_count != source_entry_count || source_entry_count > 1 {
+            return Err(
+                "return-tapped-creature cost and exact ability-source entry must occur together exactly once"
+                    .into(),
+            );
+        }
         if self
             .effect
             .iter()

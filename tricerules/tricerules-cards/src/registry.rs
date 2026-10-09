@@ -663,6 +663,7 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
             | AbilityCost::PayLife { .. }
             | AbilityCost::PayCommanderColorIdentityLife
             | AbilityCost::ReturnUnblockedAttacker
+            | AbilityCost::ReturnTappedCreature
             | AbilityCost::Blight { .. }
             | AbilityCost::RemoveCounters { .. }
             | AbilityCost::RemoveXStorageCountersFromSource

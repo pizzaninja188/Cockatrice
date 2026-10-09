@@ -56,6 +56,9 @@ inline void ruledApplyActivationView(PendingActivatedAbility &local,
     const bool submitting = same && (local.stage == PendingActivatedAbility::Stage::CommitPending ||
                                       local.stage == PendingActivatedAbility::Stage::CancelPending);
     const bool wasPaying = same && local.enginePaymentInitialized;
+    const bool wasWaitingForCost = same && local.waitingForCost;
+    const bool wasWaitingForReturnCandidate = same && local.waitingForReturnTappedCreatureCandidate;
+    const auto previousCostSelections = same ? local.costSelections : QVector<RuledPendingCostSelection>{};
     local.valid = true;
     local.chosenOpponentTargets = true;
     local.engineTransactionId = engine.transaction_id();
@@ -63,9 +66,11 @@ inline void ruledApplyActivationView(PendingActivatedAbility &local,
     local.permanentOid = engine.source_object_id();
     local.expectedZoneChangeGeneration = engine.source_zone_change_generation();
     local.abilityIndex = static_cast<int>(engine.ability_index());
-    local.sourceZone = ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD;
+    local.sourceZone = engine.source_zone();
     local.abilityText = QString::fromStdString(engine.source_description());
-    local.needsTarget = true;
+    local.deferredReturnTappedCreature = engine.source_zone() == ruled::v1::ABILITY_SOURCE_ZONE_HAND &&
+                                         engine.has_return_tapped_creature_cost_index();
+    local.needsTarget = !local.deferredReturnTappedCreature;
     local.waitingForTarget = false;
     local.waitingForCost = false;
     local.selectedTargets.clear();
@@ -81,13 +86,69 @@ inline void ruledApplyActivationView(PendingActivatedAbility &local,
     if (!submitting)
         local.stage = paying ? PendingActivatedAbility::Stage::Paying : PendingActivatedAbility::Stage::Waiting;
     local.waitingForMana = paying;
+    local.waitingForReturnTappedCreatureCandidate = wasWaitingForReturnCandidate;
+    if (local.deferredReturnTappedCreature) {
+        RuledCostChoice choice;
+        choice.costIndex = static_cast<int>(engine.return_tapped_creature_cost_index());
+        choice.zone = RuledCostChoiceZone::Battlefield;
+        choice.min = 1;
+        choice.max = 1;
+        choice.kind = RuledCostChoiceKind::ReturnTappedCreature;
+        for (const auto &candidate : engine.return_tapped_creature_candidates()) {
+            if (candidate.object_id() == 0)
+                continue;
+            choice.candidateIds.insert(candidate.object_id());
+            choice.candidateGenerations.insert(candidate.object_id(), candidate.zone_change_generation());
+        }
+        local.costChoices = {choice};
+        local.costSelections.clear();
+        for (const auto &selection : previousCostSelections) {
+            if (selection.costIndex == choice.costIndex && selection.zone == choice.zone &&
+                selection.selectedIds.size() == 1 && selection.selectedGenerations.size() == 1 &&
+                choice.candidateGenerations.value(selection.selectedIds.first(), 0) ==
+                    selection.selectedGenerations.first()) {
+                local.costSelections.append(selection);
+                break;
+            }
+        }
+        const bool hasSelection = !local.costSelections.isEmpty();
+        local.nextCostChoice = wasWaitingForCost ? 0 : (hasSelection ? 1 : 0);
+        local.waitingForCost = wasWaitingForCost && !choice.candidateIds.isEmpty();
+        if (wasWaitingForCost && !hasSelection && choice.candidateIds.isEmpty())
+            local.waitingForReturnTappedCreatureCandidate = true;
+        local.waitingForMana = paying && !local.waitingForCost;
+    } else if (paying && !wasPaying) {
+        local.costChoices.clear();
+        local.costSelections.clear();
+        local.nextCostChoice = 0;
+    }
     if (paying && !wasPaying) {
         local.enginePaymentInitialized = true;
         local.remainingCost = RuledPendingCast::parseSimpleManaCost(QString::fromStdString(engine.locked_total_cost()));
         local.flexPips = RuledPendingCast::parseFlexPips(QString::fromStdString(engine.locked_total_cost()));
         local.targetingCostApplied = true;
-        local.costChoices.clear();
     }
+}
+
+[[nodiscard]] inline std::optional<ruled::v1::CostObjectRef>
+ruledReturnTappedCreatureSelection(const PendingActivatedAbility &local)
+{
+    if (!local.deferredReturnTappedCreature || local.costChoices.size() != 1 || local.costSelections.size() != 1)
+        return std::nullopt;
+    const auto &choice = local.costChoices.first();
+    const auto &selection = local.costSelections.first();
+    if (choice.kind != RuledCostChoiceKind::ReturnTappedCreature || selection.costIndex != choice.costIndex ||
+        selection.zone != RuledCostChoiceZone::Battlefield || selection.selectedIds.size() != 1 ||
+        selection.selectedGenerations.size() != 1)
+        return std::nullopt;
+    const quint32 objectId = selection.selectedIds.first();
+    const quint64 generation = selection.selectedGenerations.first();
+    if (!choice.candidateIds.contains(objectId) || choice.candidateGenerations.value(objectId, 0) != generation)
+        return std::nullopt;
+    ruled::v1::CostObjectRef result;
+    result.set_object_id(objectId);
+    result.set_zone_change_generation(generation);
+    return result;
 }
 
 #endif

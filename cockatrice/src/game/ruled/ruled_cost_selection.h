@@ -9,7 +9,8 @@
 inline bool ruledCostUsesObjectRefs(RuledCostChoiceKind kind)
 {
     return kind == RuledCostChoiceKind::Tap || kind == RuledCostChoiceKind::Blight ||
-           kind == RuledCostChoiceKind::ReturnUnblockedAttacker;
+           kind == RuledCostChoiceKind::ReturnUnblockedAttacker ||
+           kind == RuledCostChoiceKind::ReturnTappedCreature;
 }
 
 inline bool ruledCostUsesObjectRefs(const RuledCostChoice &choice)
@@ -64,6 +65,8 @@ inline QString ruledCostSelectionPrompt(const RuledCostChoice &choice, const QSt
         return tr("Blight %1: choose one creature you control for %2.").arg(choice.blightCount).arg(name);
     if (choice.kind == RuledCostChoiceKind::ReturnUnblockedAttacker)
         return tr("Choose an unblocked attacker to return for %1.").arg(name);
+    if (choice.kind == RuledCostChoiceKind::ReturnTappedCreature)
+        return tr("Choose a tapped creature you control to return to its owner's hand for %1.").arg(name);
     if (choice.kind == RuledCostChoiceKind::RemoveCounters && choice.counterSourceId == 0) {
         const QString counter = choice.counterOptions.isEmpty() ? tr("specified") : choice.counterOptions.front().label;
         return tr("Choose a permanent to remove %1 %2 counter(s) from for %3.")

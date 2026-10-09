@@ -567,6 +567,7 @@ pub(super) fn activated_ability_info(
                 .map(|amount| format!("Pay {amount} life"))
                 .unwrap_or_else(|| "Pay life (no commander)".to_string()),
             AbilityCost::ReturnUnblockedAttacker => "Return an unblocked attacker".to_string(),
+            AbilityCost::ReturnTappedCreature => "Return a tapped creature".to_string(),
             AbilityCost::Loyalty(delta) if *delta >= 0 => format!("+{delta}"),
             AbilityCost::Loyalty(delta) => delta.to_string(),
             AbilityCost::Mana(cost) => cost.to_string(),
@@ -997,7 +998,7 @@ fn cost_object_candidate(
     }
 }
 
-fn legal_ability_cost_choices(
+pub(super) fn legal_ability_cost_choices(
     eng: &GameEngine,
     player: PlayerId,
     source: ObjectId,
@@ -1059,6 +1060,30 @@ fn legal_ability_cost_choices(
                     blight_count: 0,
                     counter_removal: None,
                     kind: rv1::CostChoiceKind::ReturnUnblockedAttacker as i32,
+                    candidate_objects: candidate_ids
+                        .iter()
+                        .map(|oid| cost_object_candidate(eng, *oid, 0))
+                        .collect(),
+                    aggregate_minimum: None,
+                });
+            }
+            AbilityCost::ReturnTappedCreature => {
+                let candidate_ids = eng.tapped_creature_return_candidates(player);
+                if !candidate_ids.is_empty() {
+                    requirements.push(ObjectPaymentRequirement::Exact {
+                        candidates: candidate_ids.clone(),
+                        count: 1,
+                    });
+                }
+                choices.push(rv1::LegalCostChoice {
+                    cost_index: cost_index as u32,
+                    zone: rv1::CostChoiceZone::Battlefield as i32,
+                    candidate_ids: candidate_ids.clone(),
+                    min: 1,
+                    max: 1,
+                    blight_count: 0,
+                    counter_removal: None,
+                    kind: rv1::CostChoiceKind::ReturnTappedCreature as i32,
                     candidate_objects: candidate_ids
                         .iter()
                         .map(|oid| cost_object_candidate(eng, *oid, 0))

@@ -163,6 +163,7 @@ TEST_F(RuledE2ESmokeTest, ArenaOpponentChoosesBeforePaymentAndDuplicateCreatures
         auto *activation = command.mutable_begin_ability_activation();
         activation->set_source_object_id(arena.oid);
         activation->set_expected_zone_change_generation(arena.generation);
+        activation->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
         ASSERT_FALSE(arena.abilityIndices.empty());
         activation->set_ability_index(arena.abilityIndices.front());
         auto *target = activation->mutable_own_target();

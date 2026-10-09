@@ -118,6 +118,9 @@ pub enum AbilityCost {
     /// CR 702.49a: return one unblocked attacking creature you control to its owner's hand.
     /// Ninjutsu abilities use the existing generation-bound battlefield selection surface.
     ReturnUnblockedAttacker,
+    /// Urban Retreat returns one tapped creature the activating player controls to its owner's
+    /// hand as a non-target cost. Its exact battlefield incarnation is selected at payment.
+    ReturnTappedCreature,
     /// CR 606.4: add (positive), remove (negative), or leave unchanged (zero) loyalty counters
     /// as the cost of activating a planeswalker's loyalty ability.
     Loyalty(i32),

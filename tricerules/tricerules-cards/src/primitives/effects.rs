@@ -946,6 +946,9 @@ pub enum SpellEffectKind {
     /// attacking the defender inherited from its returned-attacker cost. Kaito and Ninja of the
     /// Deep Hours exercise the shared Ninjutsu resolution action.
     PutAbilitySourceOntoBattlefieldTappedAndAttacking,
+    /// Put this hand-activated land's exact source object onto the battlefield through ordinary
+    /// entry replacement and trigger processing. Urban Retreat is the first consumer.
+    PutAbilitySourceOntoBattlefield,
     /// PuPu UFO: optionally choose a land from the ability controller's hand and put it onto the
     /// battlefield through the ordinary replacement and entry-trigger pipeline. This is a
     /// dedicated action because it is neither playing a land nor an opponent-hand instruction.
@@ -3215,6 +3218,7 @@ impl SpellEffectKind {
             | SpellEffectKind::CopyNextSpellThisTurn
             | SpellEffectKind::CopyCapturedSpell { .. }
             | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
+            | SpellEffectKind::PutAbilitySourceOntoBattlefield
             | SpellEffectKind::CreateStaticEmblem { .. }
             | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
             | SpellEffectKind::MyrBattlesphereAttack
@@ -4131,11 +4135,10 @@ impl SpellEffectKind {
         if matches!(
             self,
             SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
+                | SpellEffectKind::PutAbilitySourceOntoBattlefield
         ) && context != EffectContext::Ability
         {
-            return Err(
-                "tapped-attacking ability-source entry requires an activated ability".into(),
-            );
+            return Err("ability-source battlefield entry requires an activated ability".into());
         }
         if let SpellEffectKind::CreateStaticEmblem {
             emblem_id,

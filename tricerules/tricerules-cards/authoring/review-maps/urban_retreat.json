@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "18290c4b-cff6-4ee5-a487-fe0d5706d3de",
+  "spans": [
+    {
+      "face_id": "urban_retreat",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "urban_retreat",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "urban_retreat",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_urban_retreat::urban_retreat_registers_its_complete_printed_identity",
+      "covers": "the typed whole-card identity, land subtypes, enters-tapped replacement, and both activated abilities"
+    },
+    {
+      "test": "scenario deck_coverage_urban_retreat::urban_retreat_stages_from_hand_before_tapping_its_mana_creature_cost_candidate",
+      "covers": "announcing from hand, using an initially untapped controlled mana creature in the activation mana window, refreshing its exact cost candidate, returning an opponent-owned creature to its owner's hand, maintaining the public reveal through the stack, checking a landfall observer, entering this land tapped, and not consuming a land play"
+    },
+    {
+      "test": "scenario deck_coverage_urban_retreat::urban_retreat_mana_ability_produces_each_printed_color_option",
+      "covers": "each printed green, white, and blue mana choice resolves"
+    },
+    {
+      "test": "scenario deck_coverage_urban_retreat::urban_retreat_requires_the_staged_hand_activation_transaction",
+      "covers": "a direct hand ActivateAbility command cannot bypass the announced mana-payment transaction or partially pay its costs"
+    },
+    {
+      "test": "scenario deck_coverage_urban_retreat::urban_retreat_accepts_a_creature_tapped_by_springleaf_drum_during_payment",
+      "covers": "a mana ability can tap an otherwise untapped controlled creature during the activation's mana window and that creature can pay the refreshed return cost"
+    },
+    {
+      "test": "scenario deck_coverage_urban_retreat::urban_retreat_return_cost_triggers_leaves_ability_above_the_land_activation",
+      "covers": "the returned creature's leaves-the-battlefield ability triggers from its pre-move characteristics and is ordered above the land activation"
+    },
+    {
+      "test": "scenario deck_coverage_urban_retreat::urban_retreat_hand_activation_is_limited_to_the_active_players_main_phase",
+      "covers": "the hand-zone sorcery-speed activation is rejected for a nonactive player without changing pending or stack state"
+    },
+    {
+      "test": "scenario deck_coverage_urban_retreat::urban_retreat_rejects_missing_and_stale_tapped_creature_receipts",
+      "covers": "missing and stale exact object/generation cost choices are rejected"
+    },
+    {
+      "test": "scenario deck_coverage_urban_retreat::urban_retreat_cancel_ends_its_temporary_public_reveal",
+      "covers": "canceling the announced hand ability ends its temporary public reveal"
+    },
+    {
+      "test": "scenario deck_coverage_urban_retreat::urban_retreat_does_not_move_a_new_hand_incarnation_when_its_ability_resolves",
+      "covers": "a source that left and returned to hand is a new zone-change generation and is not moved by the old ability"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

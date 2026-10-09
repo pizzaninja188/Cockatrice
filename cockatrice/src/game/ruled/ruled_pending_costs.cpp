@@ -679,6 +679,10 @@ bool RuledPendingCast::isAwaitingRuledAbilityCostSelection() const
 
 QString RuledPendingCast::pendingRuledAbilityCostPromptText() const
 {
+    if (ability.valid && ability.deferredReturnTappedCreature && ability.waitingForReturnTappedCreatureCandidate)
+        return QCoreApplication::translate("PlayerActions",
+                                          "Activate a mana ability that taps a creature you control, then return it to its owner's hand to activate %1.")
+            .arg(ability.cardName);
     if (!isAwaitingRuledAbilityCostSelection()) {
         return {};
     }

@@ -1,0 +1,30 @@
+// Oracle text pinned to Scryfall record 2581f320-8238-413d-ab04-d5535da55630.
+// CR 113.6m, 601.2g-h, 602.2a-b, 603.6c, 305.4, 400.7, 614.1d, 614.12 and 701.20a.
+(
+  id: "urban_retreat",
+  name: "Urban Retreat",
+  face_id: "urban_retreat",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(g: 1), (w: 1), (u: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      source_zone: Hand,
+      timing: SorcerySpeed,
+      costs: [Mana("{2}"), ReturnTappedCreature],
+      effect: [PutAbilitySourceOntoBattlefield],
+    ),
+  ],
+  static_abilities: [(
+    ability_id: "enters_tapped",
+    presentation: OracleLines([1]),
+    definition: EntersTapped(affected: Self_),
+  )],
+)

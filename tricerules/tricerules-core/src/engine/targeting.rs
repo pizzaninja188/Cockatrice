@@ -1607,6 +1607,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ExileWarpedObject
         | SpellEffectKind::AnimateSelf { .. }
         | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
+        | SpellEffectKind::PutAbilitySourceOntoBattlefield
         | SpellEffectKind::PutLandFromHandOntoBattlefield
         | SpellEffectKind::SetSourceBasePowerToTownCount
         | SpellEffectKind::SetClassLevel { .. }

@@ -35,6 +35,7 @@ pub(super) struct AnnouncedAbilityActivation {
     ability_text: String,
     source_token_identity: Option<rv1::TokenIdentity>,
     card_name: String,
+    pub(super) activation_reveal_id: Option<String>,
     primary_presentation: Option<rv1::PresentationRef>,
     targets: Vec<rv1::TargetRef>,
     stack_targets: Vec<StackTarget>,
@@ -1989,6 +1990,13 @@ impl GameEngine {
             }
         };
         let ability = effective.definition.clone();
+        if source_zone == AbilitySourceZone::Hand
+            && ability.costs.contains(&AbilityCost::ReturnTappedCreature)
+        {
+            return Err(EngineError::Illegal(
+                "hand ability with a tapped-creature return cost requires staged activation",
+            ));
+        }
         if ability.requires_opponent_target_choice() {
             return Err(EngineError::Illegal(
                 "opponent target choices require staged activation",
@@ -2181,6 +2189,7 @@ impl GameEngine {
             ability_text,
             source_token_identity,
             card_name,
+            activation_reveal_id: None,
             primary_presentation,
             targets: Vec::new(),
             stack_targets: Vec::new(),
@@ -2253,6 +2262,7 @@ impl GameEngine {
             ability_text,
             source_token_identity,
             card_name,
+            activation_reveal_id,
             primary_presentation,
             targets,
             stack_targets,
@@ -2290,6 +2300,7 @@ impl GameEngine {
             virtual_id,
             StackPresentation {
                 source_label: Some(card_name.clone()),
+                activation_reveal_id,
                 primary: primary_presentation.clone(),
                 ..Default::default()
             },
@@ -2455,6 +2466,14 @@ impl GameEngine {
         {
             return false;
         }
+        if ability.costs.contains(&AbilityCost::ReturnTappedCreature)
+            && self
+                .tapped_creature_return_candidates(activating_player)
+                .is_empty()
+            && !self.mana_ability_can_tap_creature_for_return(activating_player)
+        {
+            return false;
+        }
         let life_cost = self.activated_life_cost(activating_player, &ability.costs);
         let available_life = self
             .state
@@ -2486,6 +2505,141 @@ impl GameEngine {
             }
         }
         true
+    }
+
+    pub(super) fn tapped_creature_return_candidates(&self, player: PlayerId) -> Vec<ObjectId> {
+        let Some(player_idx) = self.state.player_idx(player) else {
+            return Vec::new();
+        };
+        self.state.players[player_idx]
+            .battlefield
+            .iter()
+            .copied()
+            .filter(|oid| {
+                self.state.objects.get(oid).is_some_and(|object| {
+                    object.zone == Zone::Battlefield && object.controller == player && object.tapped
+                }) && self
+                    .characteristics(*oid)
+                    .is_some_and(|characteristics| characteristics.is_creature())
+            })
+            .collect()
+    }
+
+    fn mana_ability_can_tap_creature_for_return(&self, player: PlayerId) -> bool {
+        let Some(player_idx) = self.state.player_idx(player) else {
+            return false;
+        };
+        let battlefield = self.state.players[player_idx].battlefield.clone();
+        let untapped_creatures: Vec<_> = battlefield
+            .iter()
+            .copied()
+            .filter(|oid| {
+                self.state.objects.get(oid).is_some_and(|object| {
+                    object.zone == Zone::Battlefield
+                        && object.controller == player
+                        && !object.tapped
+                }) && self
+                    .characteristics(*oid)
+                    .is_some_and(|characteristics| characteristics.is_creature())
+            })
+            .collect();
+
+        battlefield.into_iter().any(|source_id| {
+            let Some(source) = self.state.objects.get(&source_id) else {
+                return false;
+            };
+            if source.zone != Zone::Battlefield || source.controller != player {
+                return false;
+            }
+            self.effective_activated_abilities(source_id)
+                .into_iter()
+                .any(|effective| {
+                    let ability = &effective.definition;
+                    if !ability.is_mana_ability()
+                        || ability.source_zone != AbilitySourceZone::Battlefield
+                        || ability.costs.contains(&AbilityCost::ReturnTappedCreature)
+                    {
+                        return false;
+                    }
+
+                    // Reuse the engine's complete announced-cost candidate and payability
+                    // calculation, including conditions, tap readiness, activation limits,
+                    // and all selected-object costs.
+                    let costs = super::legal_actions::legal_ability_cost_choices(
+                        self,
+                        player,
+                        source_id,
+                        effective.slot as usize,
+                        ability,
+                    );
+                    if !costs.non_mana_costs_payable {
+                        return false;
+                    }
+
+                    // A creature's own {T} mana ability remains the direct path. Other mana
+                    // abilities may tap the creature through a TapPermanents cost, as with
+                    // Springleaf Drum.
+                    if ability.costs.contains(&AbilityCost::Tap)
+                        && untapped_creatures.contains(&source_id)
+                    {
+                        return true;
+                    }
+                    ability.costs.iter().enumerate().any(|(cost_index, cost)| {
+                        let AbilityCost::TapPermanents { constraint, .. } = cost else {
+                            return false;
+                        };
+                        let Some(choice) = costs
+                            .choices
+                            .iter()
+                            .find(|choice| choice.cost_index == cost_index as u32)
+                        else {
+                            return false;
+                        };
+                        let candidates: Vec<_> = choice
+                            .candidate_ids
+                            .iter()
+                            .copied()
+                            .filter(|candidate| {
+                                !ability.costs.contains(&AbilityCost::Tap)
+                                    || *candidate != source_id
+                            })
+                            .collect();
+                        match *constraint {
+                            ObjectPaymentConstraint::ExactCount(count) => {
+                                candidates.len() >= count as usize
+                                    && candidates
+                                        .iter()
+                                        .any(|candidate| untapped_creatures.contains(candidate))
+                            }
+                            ObjectPaymentConstraint::AggregateMinimum {
+                                minimum,
+                                contribution,
+                            } => untapped_creatures
+                                .iter()
+                                .filter(|candidate| candidates.contains(candidate))
+                                .any(|candidate| {
+                                    let Some(candidate_value) =
+                                        self.object_payment_contribution(*candidate, contribution)
+                                    else {
+                                        return false;
+                                    };
+                                    let other_max = candidates
+                                        .iter()
+                                        .copied()
+                                        .filter(|other| other != candidate)
+                                        .filter_map(|other| {
+                                            self.object_payment_contribution(other, contribution)
+                                        })
+                                        .filter(|value| *value > 0)
+                                        .try_fold(0_i64, |total, value| total.checked_add(value));
+                                    other_max
+                                        .and_then(|value| candidate_value.checked_add(value))
+                                        .is_some_and(|total| total >= i64::from(minimum))
+                                }),
+                        }
+                    })
+                })
+        })
     }
 
     fn activation_use_key(

@@ -2043,6 +2043,52 @@ TEST(RuledPendingTargetTest, ActivationReconnectUsesPublicTargetsAndLockedPaymen
     EXPECT_FALSE(ruledActivationCanPay(state, kLocalPlayer));
 }
 
+TEST(RuledPendingTargetTest, HandTappedCreatureActivationRetainsOnlyCurrentGenerationSelection)
+{
+    ruled::v1::PendingAbilityActivation engine;
+    engine.set_transaction_id(92);
+    engine.set_revision(1);
+    engine.set_actor_player_id(kLocalPlayer);
+    engine.set_source_object_id(500);
+    engine.set_source_zone_change_generation(8);
+    engine.set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    engine.set_return_tapped_creature_cost_index(1);
+    auto *candidate = engine.add_return_tapped_creature_candidates();
+    candidate->set_object_id(900);
+    candidate->set_zone_change_generation(12);
+
+    PendingActivatedAbility local;
+    ruledApplyActivationView(local, engine);
+    ASSERT_TRUE(local.deferredReturnTappedCreature);
+    EXPECT_FALSE(local.needsTarget);
+    ASSERT_EQ(local.costChoices.size(), 1);
+    EXPECT_EQ(local.costChoices.first().costIndex, 1);
+    EXPECT_EQ(local.costChoices.first().kind, RuledCostChoiceKind::ReturnTappedCreature);
+    EXPECT_EQ(local.costChoices.first().candidateGenerations.value(900), 12u);
+
+    local.costSelections = {{1, RuledCostChoiceZone::Battlefield, {900}, {12}}};
+    local.nextCostChoice = 0;
+    local.waitingForCost = true;
+    ruledApplyActivationView(local, engine);
+    ASSERT_EQ(local.costSelections.size(), 1);
+    EXPECT_EQ(local.nextCostChoice, 0);
+    EXPECT_TRUE(local.waitingForCost);
+    EXPECT_TRUE(ruledReturnTappedCreatureSelection(local).has_value());
+
+    local.waitingForCost = false;
+    ruledApplyActivationView(local, engine);
+    EXPECT_EQ(local.nextCostChoice, 1);
+    EXPECT_FALSE(local.waitingForCost);
+    engine.set_revision(2);
+    engine.mutable_return_tapped_creature_candidates(0)->set_zone_change_generation(13);
+    local.waitingForCost = true;
+    ruledApplyActivationView(local, engine);
+    EXPECT_TRUE(local.costSelections.isEmpty());
+    EXPECT_EQ(local.nextCostChoice, 0);
+    EXPECT_TRUE(local.waitingForCost);
+    EXPECT_FALSE(ruledReturnTappedCreatureSelection(local).has_value());
+}
+
 TEST(RuledPendingTargetTest, ActivationCancelRaceInitializesPaymentWithoutDroppingTheAckPhase)
 {
     ruled::v1::PendingAbilityActivation engine;
@@ -7148,6 +7194,52 @@ TEST(RuledPendingCostSelectionTest, SneakReturnIsGenerationBoundAndExclusive)
         ruledCostSelectionConflicts(sacrifice, choices, {0, RuledCostChoiceZone::Battlefield, {900}, {12}}, 900));
 }
 
+TEST(RuledPendingCostSelectionTest, ReturnTappedCreatureUsesExactRefsAndIsExclusive)
+{
+    RuledCostChoice returned;
+    returned.costIndex = 1;
+    returned.kind = RuledCostChoiceKind::ReturnTappedCreature;
+    returned.zone = RuledCostChoiceZone::Battlefield;
+    returned.candidateIds.insert(900);
+    returned.candidateGenerations.insert(900, 12);
+    EXPECT_TRUE(ruledCostUsesObjectRefs(returned));
+    EXPECT_TRUE(ruledCostNeedsConfirmation(returned));
+    EXPECT_EQ(ruledCostSelectionPrompt(returned, QStringLiteral("Urban Retreat")),
+              QStringLiteral("Choose a tapped creature you control to return to its owner's hand for Urban Retreat."));
+
+    RuledCostChoice sacrifice;
+    sacrifice.costIndex = 2;
+    sacrifice.kind = RuledCostChoiceKind::Sacrifice;
+    const QVector<RuledCostChoice> choices{returned, sacrifice};
+    EXPECT_TRUE(
+        ruledCostSelectionConflicts(sacrifice, choices, {1, RuledCostChoiceZone::Battlefield, {900}, {12}}, 900));
+
+    PendingActivatedAbility local;
+    local.deferredReturnTappedCreature = true;
+    local.costChoices = {returned};
+    local.costSelections = {{1, RuledCostChoiceZone::Battlefield, {900}, {12}}};
+    const auto ref = ruledReturnTappedCreatureSelection(local);
+    ASSERT_TRUE(ref.has_value());
+    EXPECT_EQ(ref->object_id(), 900u);
+    EXPECT_EQ(ref->zone_change_generation(), 12u);
+    local.costChoices[0].candidateGenerations[900] = 13;
+    EXPECT_FALSE(ruledReturnTappedCreatureSelection(local).has_value());
+}
+
+TEST(RuledPendingCostSelectionTest, EmptyReturnTappedCreatureCandidatesPromptForManaAbility)
+{
+    RuledPendingCast pending;
+    auto &ability = pending.beginAbility();
+    ability.valid = true;
+    ability.deferredReturnTappedCreature = true;
+    ability.waitingForReturnTappedCreatureCandidate = true;
+    ability.cardName = QStringLiteral("Urban Retreat");
+
+    EXPECT_EQ(pending.pendingRuledAbilityCostPromptText(),
+              QStringLiteral("Activate a mana ability that taps a creature you control, then return it to its "
+                             "owner's hand to activate Urban Retreat."));
+}
+
 TEST_F(RuledClientTest, ExilePermissionOffersKeepOpaqueIdentityCostAndSourceLabel)
 {
     ruled::v1::RuledEventBatch batch;
@@ -7909,6 +8001,43 @@ TEST_F(RuledClientTest, ActiveRevealsShareHistoryAndBecomeDismissibleWhenTheirSo
     EXPECT_EQ(state->reveals.entries().first().phase, RuledRevealState::Phase::Completed);
     state->reveals.dismiss("stack:700");
     EXPECT_EQ(state->reveals.entries().size(), 1);
+}
+
+TEST_F(RuledClientTest, CancelledHandActivationCanBeRevealedAgainAfterDismissal)
+{
+    const auto activeSnapshot = [](const std::string &revealId) {
+        ruled::v1::RuledEventBatch batch;
+        auto *reveal = batch.add_events()
+                           ->mutable_active_public_reveal_snapshot()
+                           ->add_reveals();
+        reveal->set_reveal_id(revealId);
+        reveal->set_source_object_id(702);
+        reveal->set_zone_owner_player_id(kLocalPlayer);
+        reveal->set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+        reveal->set_source_description("Urban Retreat");
+        auto *card = reveal->add_cards();
+        card->set_object_id(702);
+        card->set_zone_change_generation(9);
+        card->set_card_id("urban_retreat");
+        card->set_card_name("Urban Retreat");
+        return batch;
+    };
+
+    apply(activeSnapshot("activation:702:0:1:1001"));
+    ASSERT_EQ(state->reveals.entries().size(), 1);
+    EXPECT_EQ(state->reveals.entries().first().phase, RuledRevealState::Phase::Active);
+
+    ruled::v1::RuledEventBatch canceled;
+    canceled.add_events()->mutable_active_public_reveal_snapshot();
+    apply(canceled);
+    ASSERT_EQ(state->reveals.entries().first().phase, RuledRevealState::Phase::Completed);
+    state->reveals.dismiss(QStringLiteral("activation:702:0:1:1001"));
+    EXPECT_TRUE(state->reveals.entries().isEmpty());
+
+    apply(activeSnapshot("activation:702:0:1:1002"));
+    ASSERT_EQ(state->reveals.entries().size(), 1);
+    EXPECT_EQ(state->reveals.entries().first().id, QStringLiteral("activation:702:0:1:1002"));
+    EXPECT_EQ(state->reveals.entries().first().phase, RuledRevealState::Phase::Active);
 }
 
 TEST_F(RuledClientTest, MandatoryResolutionBranchesCannotSubmitDecline)
@@ -8882,6 +9011,35 @@ TEST_F(RuledClientTest, PendingAbilityActivationIsAuthoritativePerBatchState)
     (*completed.mutable_legal_by_player())[kLocalPlayer];
     apply(completed);
     EXPECT_FALSE(state->pendingAbilityActivation.has_value());
+}
+
+TEST_F(RuledClientTest, HandReturnTappedAbilityRemainsSelectableForManaWindow)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *zoneAbility = actions.add_zone_ability_actions();
+    zoneAbility->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    zoneAbility->set_object_id(700u);
+    zoneAbility->set_zone_change_generation(9u);
+    zoneAbility->set_hand_index(2u);
+    zoneAbility->set_ability_index(0u);
+    auto *info = zoneAbility->mutable_ability();
+    info->set_text("Activate this ability only as a sorcery.");
+    info->set_activatable(true);
+    const quint64 key = (static_cast<quint64>(700u) << 32) | 0u;
+    auto &costChoices = (*actions.mutable_cost_choices_by_ability())[key];
+    costChoices.set_non_mana_costs_payable(true);
+    auto *returnChoice = costChoices.add_choices();
+    returnChoice->set_cost_index(1u);
+    returnChoice->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
+    returnChoice->set_kind(ruled::v1::COST_CHOICE_KIND_RETURN_TAPPED_CREATURE);
+    returnChoice->set_min(1u);
+    returnChoice->set_max(1u);
+    apply(batch);
+
+    EXPECT_EQ(state->abilitySourceZone(700u), ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    EXPECT_TRUE(state->abilityCostChoices(700u, 0).first().candidateIds.isEmpty());
+    EXPECT_TRUE(state->abilityActivatable(700u, 0));
 }
 
 TEST(RuledPaymentTest, StagedAbilityCommitPreviewAndPaymentKeepTransactionAndRevision)

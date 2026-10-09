@@ -3201,6 +3201,91 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
     }
 }
 
+pub(super) fn put_ability_source_onto_battlefield(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    if !matches!(effect, SpellEffectKind::PutAbilitySourceOntoBattlefield) {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    }
+    let Some(source_id) = cx.top.source_permanent_id else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let current_generation = cx
+        .engine
+        .state
+        .zone_change_generation
+        .get(&source_id)
+        .copied()
+        .unwrap_or(0);
+    let Some(object) = cx.engine.state.objects.get(&source_id) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if object.zone != Zone::Hand || current_generation != cx.top.source_zone_change {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let owner = object.owner;
+    let object_label = object_display_name(&cx.engine.state, cx.engine.registry, source_id);
+    match cx.engine.begin_battlefield_entry(
+        cx.top.clone(),
+        BattlefieldEntryEvent {
+            entry_reveal_receipts: Vec::new(),
+            mana_colors_spent_to_cast: Default::default(),
+            prepared: false,
+            object_id: source_id,
+            deciding_player: cx.controller,
+            destination_controller: cx.controller,
+            battle_protector: None,
+            face_index: cx.top.face_index,
+            unlock_room_door: None,
+            chosen_x: 0,
+            cast_by: None,
+            cast_cost_receipts: Vec::new(),
+            player_life_snapshot: cx.engine.player_life_snapshot(),
+            tapped: false,
+            set_types: None,
+            chosen_basic_land_type: None,
+            chosen_opponents: Vec::new(),
+            entry_counters: BTreeMap::new(),
+            entry_modifiers: Vec::new(),
+            attached_to: None,
+            pending_copy_candidate: None,
+            pending_aura_recipient: None,
+            accepted_aura_recipient: None,
+            applied_effects: Vec::new(),
+        },
+        BattlefieldEntryCompletion::ResolutionEffect {
+            owner,
+            spell_label: cx.spell_label.to_string(),
+            object_label: object_label.clone(),
+            from_zone: Zone::Hand,
+        },
+        cx.events,
+    ) {
+        super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
+        super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
+            cx.engine.restore_skipped_battlefield_entry(&entry)?;
+            Ok(EffectOutcome::Continue)
+        }
+        super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+            cx.engine
+                .commit_battlefield_entry(*entry, None, cx.events)?;
+            cx.events.push(ev_log(format!(
+                "P{} puts {object_label} onto the battlefield ({}).",
+                cx.controller, cx.spell_label
+            )));
+            cx.events.push(permanent_moved_event(
+                &cx.engine.state,
+                source_id,
+                owner,
+                rv1::permanent_moved::Destination::Battlefield,
+            ));
+            Ok(EffectOutcome::Continue)
+        }
+    }
+}
+
 pub(super) fn exile_source_then_return_transformed(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

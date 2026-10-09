@@ -871,6 +871,7 @@ enum CostChoiceKind {
   COST_CHOICE_KIND_BLIGHT = 5;
   COST_CHOICE_KIND_REMOVE_COUNTERS = 6;
   COST_CHOICE_KIND_RETURN_UNBLOCKED_ATTACKER = 7;
+  COST_CHOICE_KIND_RETURN_TAPPED_CREATURE = 8;
 }
 
 // A public-zone object choice bound to the exact zone-change generation that was published.
@@ -1172,6 +1173,10 @@ message PendingAbilityActivation {
   string locked_total_cost = 16 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   PaymentPreview payment_preview = 17 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated uint32 eligible_restricted_mana_group_ids = 18 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  AbilitySourceZone source_zone = 19 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated CostObjectRef return_tapped_creature_candidates = 20
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  optional uint32 return_tapped_creature_cost_index = 21 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message BeginAbilityActivation {
@@ -1180,6 +1185,7 @@ message BeginAbilityActivation {
   uint32 ability_index = 3;
   AbilityActivationTarget own_target = 4;
   optional int32 opponent_player_id = 5;
+  AbilitySourceZone source_zone = 6;
 }
 
 message SubmitAbilityActivationChoice {
@@ -1196,6 +1202,7 @@ message CommitAbilityActivation {
   repeated FlexPipPayment flex_payments = 3;
   repeated ManaSpendSelection restricted_mana = 4;
   PaymentSelection payment = 5;
+  CostObjectRef return_tapped_creature = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message CancelAbilityActivation {

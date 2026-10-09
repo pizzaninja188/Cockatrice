@@ -291,6 +291,9 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledP
             case ruled::v1::COST_CHOICE_KIND_RETURN_UNBLOCKED_ATTACKER:
                 parsed.kind = RuledCostChoiceKind::ReturnUnblockedAttacker;
                 break;
+            case ruled::v1::COST_CHOICE_KIND_RETURN_TAPPED_CREATURE:
+                parsed.kind = RuledCostChoiceKind::ReturnTappedCreature;
+                break;
             default:
                 parsed.kind = RuledCostChoiceKind::Unspecified;
                 break;

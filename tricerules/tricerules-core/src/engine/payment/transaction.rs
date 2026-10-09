@@ -94,6 +94,10 @@ pub(super) enum CostDebit {
         owner: PlayerId,
         assignment: CombatAttackAssignment,
     },
+    ReturnTappedCreature {
+        object: rv1::CostObjectRef,
+        owner: PlayerId,
+    },
     ObserveHand {
         object_id: ObjectId,
         generation: u64,
@@ -325,6 +329,33 @@ impl PreparedPaymentCosts {
         .map(super::demand::Demand::label)
         .collect::<Vec<_>>()
         .join(" or "))
+    }
+
+    /// Attach a separately announced nonmana cost while retaining the mana cost locked earlier.
+    /// Staged activations use this for a choice that becomes payable only after mana abilities
+    /// have resolved.
+    pub(in crate::engine) fn append_non_mana_costs(
+        &mut self,
+        mut additional: PreparedPaymentCosts,
+    ) -> Result<(), EngineError> {
+        if self.transaction.purpose != additional.transaction.purpose
+            || self.transaction.player != additional.transaction.player
+            || self.transaction.player_idx != additional.transaction.player_idx
+            || !additional.mana.pips.is_empty()
+            || additional.extra_generic != 0
+            || additional.generic_reduction != 0
+        {
+            return Err(EngineError::Illegal(
+                "cannot merge an unrelated staged cost transaction",
+            ));
+        }
+        self.transaction
+            .debits
+            .append(&mut additional.transaction.debits);
+        self.transaction
+            .cast_cost_receipts
+            .append(&mut additional.transaction.cast_cost_receipts);
+        Ok(())
     }
 
     pub fn can_convoke(&self, oid: ObjectId) -> bool {
@@ -1491,6 +1522,41 @@ impl GameEngine {
                         assignment,
                     });
                 }
+                AbilityCost::ReturnTappedCreature => {
+                    expected_selections += 1;
+                    let selection = by_index.get(&cost_index).ok_or(EngineError::Illegal(
+                        "missing tapped-creature return selection",
+                    ))?;
+                    let Some(Selection::BattlefieldObjects(selected)) =
+                        selection.selection.as_ref()
+                    else {
+                        return Err(EngineError::Illegal(
+                            "tapped-creature return requires a generation-bound battlefield object",
+                        ));
+                    };
+                    let [object] = selected.objects.as_slice() else {
+                        return Err(EngineError::Illegal(
+                            "tapped-creature return requires exactly one creature",
+                        ));
+                    };
+                    if !self
+                        .tapped_creature_return_candidates(player)
+                        .contains(&object.object_id)
+                        || self.payment_object_ref(object.object_id) != *object
+                    {
+                        return Err(EngineError::Illegal(
+                            "illegal or stale tapped-creature return selection",
+                        ));
+                    }
+                    if !consumed.insert(object.object_id) {
+                        return Err(EngineError::Illegal("one object cannot pay two costs"));
+                    }
+                    let owner = self.state.objects[&object.object_id].owner;
+                    debits.push(CostDebit::ReturnTappedCreature {
+                        object: *object,
+                        owner,
+                    });
+                }
                 AbilityCost::Loyalty(delta) => {
                     let object = self
                         .state
@@ -1884,6 +1950,7 @@ impl GameEngine {
                     | CostDebit::ExileGroup { .. }
                     | CostDebit::SacrificeGroup { .. }
                     | CostDebit::ReturnUnblockedAttacker { .. }
+                    | CostDebit::ReturnTappedCreature { .. }
             )
             .then(|| self.snapshot_zone_event());
             match debit {
@@ -2119,6 +2186,11 @@ impl GameEngine {
                 } => {
                     let oid = object.object_id;
                     let returned_name = object_display_name(&self.state, self.registry, oid);
+                    if let Some(source) = zones.as_ref().and_then(|snapshot| snapshot.source(oid)) {
+                        payment
+                            .trigger_events
+                            .push(GameEvent::LeavesBattlefield { source });
+                    }
                     move_object_to_zone(&mut self.state, self.registry, oid, Zone::Hand, None)
                         .expect("prevalidated returned-attacker cost must commit");
                     payment.move_events.push(permanent_moved_event(
@@ -2130,6 +2202,22 @@ impl GameEngine {
                     self.remove_combat_participants(&[oid], &mut payment.move_events);
                     payment.returned_attacker_assignment = Some(assignment);
                     payment.sneak_returned_name = Some(returned_name);
+                }
+                CostDebit::ReturnTappedCreature { object, owner } => {
+                    let oid = object.object_id;
+                    if let Some(source) = zones.as_ref().and_then(|snapshot| snapshot.source(oid)) {
+                        payment
+                            .trigger_events
+                            .push(GameEvent::LeavesBattlefield { source });
+                    }
+                    move_object_to_zone(&mut self.state, self.registry, oid, Zone::Hand, None)
+                        .expect("prevalidated tapped-creature cost must commit");
+                    payment.move_events.push(permanent_moved_event(
+                        &self.state,
+                        oid,
+                        owner,
+                        rv1::permanent_moved::Destination::Hand,
+                    ));
                 }
                 CostDebit::ObserveHand { .. } | CostDebit::ObservePermanent { .. } => {}
             }
@@ -2267,6 +2355,7 @@ impl GameEngine {
                 CostDebit::ReturnUnblockedAttacker { object, .. } => {
                     consumed.insert(object.object_id)
                 }
+                CostDebit::ReturnTappedCreature { object, .. } => consumed.insert(object.object_id),
                 CostDebit::ExileGroup { objects, .. } => {
                     objects.iter().all(|(oid, _, _)| consumed.insert(*oid))
                 }
@@ -2504,6 +2593,18 @@ impl GameEngine {
                                 && self.state.player_idx(*owner).is_some()
                                 && assignment_is_current
                         })
+                }
+                CostDebit::ReturnTappedCreature { object, owner } => {
+                    self.tapped_creature_return_candidates(plan.player)
+                        .contains(&object.object_id)
+                        && self.payment_object_ref(object.object_id) == *object
+                        && self
+                            .state
+                            .objects
+                            .get(&object.object_id)
+                            .is_some_and(|permanent| {
+                                permanent.owner == *owner && self.state.player_idx(*owner).is_some()
+                            })
                 }
                 CostDebit::ObserveHand {
                     object_id,

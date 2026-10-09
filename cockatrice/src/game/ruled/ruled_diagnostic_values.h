@@ -112,6 +112,8 @@ inline QJsonValue value(RuledCostChoiceKind v)
             return QStringLiteral("RemoveCounters");
         case RuledCostChoiceKind::ReturnUnblockedAttacker:
             return QStringLiteral("ReturnUnblockedAttacker");
+        case RuledCostChoiceKind::ReturnTappedCreature:
+            return QStringLiteral("ReturnTappedCreature");
     }
     return QJsonObject{{"unknown_enum_value", static_cast<int>(v)}};
 }

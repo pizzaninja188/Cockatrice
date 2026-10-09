@@ -127,7 +127,9 @@ inline bool ruledCostSelectionConflicts(const RuledCostChoice &choice,
     // Returning a Sneak attacker changes zones and must be exclusive with every other use of
     // that physical permanent. The engine remains authoritative and revalidates generation.
     if (choice.kind == RuledCostChoiceKind::ReturnUnblockedAttacker ||
-        previous->kind == RuledCostChoiceKind::ReturnUnblockedAttacker)
+        previous->kind == RuledCostChoiceKind::ReturnUnblockedAttacker ||
+        choice.kind == RuledCostChoiceKind::ReturnTappedCreature ||
+        previous->kind == RuledCostChoiceKind::ReturnTappedCreature)
         return true;
     if (choice.kind == RuledCostChoiceKind::Blight || previous->kind == RuledCostChoiceKind::Blight ||
         choice.kind == RuledCostChoiceKind::RemoveCounters || previous->kind == RuledCostChoiceKind::RemoveCounters)
@@ -199,6 +201,8 @@ struct PendingActivatedAbility
     QVector<Target> selectedTargets;
     int activeTargetGroupPosition = 0;
     bool waitingForCost = false;
+    bool deferredReturnTappedCreature = false;
+    bool waitingForReturnTappedCreatureCandidate = false;
     QVector<RuledCostChoice> costChoices;
     int nextCostChoice = 0;
     QVector<RuledPendingCostSelection> costSelections;

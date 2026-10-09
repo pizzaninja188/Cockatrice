@@ -428,6 +428,7 @@ fn begin_choice(engine: &GameEngine, legacy: &rv1::ActivateAbility) -> RuledComm
                 source_object_id: legacy.source_object_id,
                 expected_zone_change_generation: legacy.expected_zone_change_generation,
                 ability_index: legacy.ability_index,
+                source_zone: rv1::AbilitySourceZone::Battlefield as i32,
                 own_target: Some(rv1::AbilityActivationTarget {
                     object_id: own.object_id,
                     zone_change_generation: own.zone_change_generation,

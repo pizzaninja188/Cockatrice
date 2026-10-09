@@ -175,6 +175,7 @@ mod tests {
                             expected_zone_change_generation: engine.state.zone_change_generation
                                 [&permanents[2]],
                             ability_index: 0,
+                            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
                             own_target: Some(rv1::AbilityActivationTarget {
                                 object_id: permanents[3],
                                 zone_change_generation: engine.state.zone_change_generation

@@ -200,6 +200,7 @@ impl GameEngine {
             virtual_id,
             StackPresentation {
                 source_label: Some(card_name.clone()),
+                activation_reveal_id: None,
                 primary: primary_presentation.clone(),
                 chosen_modes: chosen_mode_presentations.clone(),
                 chosen_cast_costs: vec![],

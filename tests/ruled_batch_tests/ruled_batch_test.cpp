@@ -796,6 +796,51 @@ TEST_F(RuledBatchTest, PresentationReferencesFollowTheirOwningPublicAndPerPlayer
     EXPECT_FALSE(forOpponent.legal_by_player().contains(p1->getPlayerId()));
 }
 
+TEST_F(RuledBatchTest, HandSourceActivationPublishesRevealAndKeepsCostCandidatesPerPlayer)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *pending = (*batch.mutable_legal_by_player())[p1->getPlayerId()].mutable_pending_ability_activation();
+    pending->set_actor_player_id(p1->getPlayerId());
+    pending->set_source_object_id(700);
+    pending->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    pending->set_return_tapped_creature_cost_index(1);
+    auto *candidate = pending->add_return_tapped_creature_candidates();
+    candidate->set_object_id(901);
+    candidate->set_zone_change_generation(12);
+
+    auto *reveal = batch.add_events()->mutable_active_public_reveal_snapshot()->add_reveals();
+    reveal->set_source_object_id(700);
+    reveal->set_reveal_id("activation:700:4:1");
+    reveal->set_zone_owner_player_id(p1->getPlayerId());
+    reveal->set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+    auto *card = reveal->add_cards();
+    card->set_object_id(700);
+    card->set_zone_change_generation(4);
+    card->set_card_id("urban_retreat");
+    card->set_card_name("Urban Retreat");
+
+    const auto forActor = redactFor(batch, p1);
+    ASSERT_TRUE(forActor.legal_by_player().contains(p1->getPlayerId()));
+    const auto &actorPending = forActor.legal_by_player()
+                                  .at(p1->getPlayerId())
+                                  .pending_ability_activation();
+    ASSERT_EQ(actorPending.return_tapped_creature_candidates_size(), 1);
+    EXPECT_EQ(actorPending.return_tapped_creature_candidates(0).object_id(), 901u);
+    EXPECT_EQ(actorPending.return_tapped_creature_candidates(0).zone_change_generation(), 12u);
+    ASSERT_EQ(forActor.events_size(), 1);
+    EXPECT_EQ(forActor.events(0).active_public_reveal_snapshot().reveals(0).cards(0).card_name(),
+              "Urban Retreat");
+
+    const auto forOpponent = redactFor(batch, p2);
+    EXPECT_FALSE(forOpponent.legal_by_player().contains(p1->getPlayerId()));
+    ASSERT_EQ(forOpponent.events_size(), 1);
+    const auto &publicReveal = forOpponent.events(0).active_public_reveal_snapshot().reveals(0);
+    ASSERT_EQ(publicReveal.cards_size(), 1);
+    EXPECT_EQ(publicReveal.cards(0).object_id(), 700u);
+    EXPECT_EQ(publicReveal.cards(0).zone_change_generation(), 4u);
+    EXPECT_EQ(publicReveal.cards(0).card_id(), "urban_retreat");
+}
+
 TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
 {
     ruled::v1::RuledEventBatch batch;

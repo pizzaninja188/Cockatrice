@@ -243,6 +243,7 @@ pub(super) fn spell_stack_presentation(
         .collect();
     StackPresentation {
         source_label: None,
+        activation_reveal_id: None,
         primary: None,
         chosen_modes,
         chosen_cast_costs,

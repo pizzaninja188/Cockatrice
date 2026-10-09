@@ -3,6 +3,15 @@
 
 use super::*;
 
+pub(super) fn activation_reveal_id(
+    source_id: ObjectId,
+    source_zone_change: u64,
+    ability_index: usize,
+    transaction_id: u64,
+) -> String {
+    format!("activation:{source_id}:{source_zone_change}:{ability_index}:{transaction_id}")
+}
+
 pub(crate) fn reveal_cards(
     state: &GameState,
     registry: &CardRegistry,
@@ -161,6 +170,51 @@ pub(super) fn active_reveals(eng: &GameEngine) -> Vec<rv1::CardsRevealed> {
             }
         }
     }
+    if let Some(pending) = eng
+        .state
+        .pending_ability_activation
+        .as_ref()
+        .filter(|pending| pending.source_zone() == rv1::AbilitySourceZone::Hand)
+    {
+        let ability = eng
+            .pending_ability_activation_internal
+            .as_ref()
+            .map(|internal| &internal.effective.definition);
+        if ability.is_some_and(|ability| ability.costs.contains(&AbilityCost::ReturnTappedCreature))
+        {
+            let source = eng.state.objects.get(&pending.source_object_id);
+            if let Some(source) = source.filter(|source| {
+                source.zone == Zone::Hand
+                    && source.owner == pending.actor_player_id
+                    && eng.payment_object_ref(source.id).zone_change_generation
+                        == pending.source_zone_change_generation
+            }) {
+                let card_name = eng
+                    .registry
+                    .get(&source.card_id)
+                    .map(|definition| definition.name.clone())
+                    .unwrap_or_else(|| source.card_id.clone());
+                reveals.push(rv1::CardsRevealed {
+                    reveal_id: activation_reveal_id(
+                        pending.source_object_id,
+                        pending.source_zone_change_generation,
+                        pending.ability_index as usize,
+                        pending.transaction_id,
+                    ),
+                    source_object_id: pending.source_object_id,
+                    source_description: pending.source_description.clone(),
+                    zone_owner_player_id: source.owner,
+                    source_zone: rv1::ChoiceCandidateSourceZone::Hand as i32,
+                    cards: vec![rv1::RevealedCard {
+                        object_id: source.id,
+                        zone_change_generation: pending.source_zone_change_generation,
+                        card_id: source.card_id.clone(),
+                        card_name,
+                    }],
+                });
+            }
+        }
+    }
     for item in eng.state.stack.iter().filter(|item| !item.is_copy) {
         let source_description =
             super::events::object_display_name(&eng.state, eng.registry, item.id);
@@ -202,20 +256,40 @@ pub(super) fn active_reveals(eng: &GameEngine) -> Vec<rv1::CardsRevealed> {
             ability
                 .costs
                 .contains(&AbilityCost::ReturnUnblockedAttacker)
+                || ability.costs.contains(&AbilityCost::ReturnTappedCreature)
         }) {
+            let source_id = item.source_permanent_id.unwrap_or(0);
+            let has_tapped_creature_return = item
+                .activated_ability
+                .as_ref()
+                .is_some_and(|ability| ability.costs.contains(&AbilityCost::ReturnTappedCreature));
             let card_name = eng
                 .registry
                 .get(&item.card_id)
                 .map(|definition| definition.name.clone())
                 .unwrap_or_else(|| item.card_id.clone());
             reveals.push(rv1::CardsRevealed {
-                reveal_id: format!("stack:{}:activation", item.id),
+                reveal_id: if has_tapped_creature_return {
+                    eng.state
+                        .stack_presentations
+                        .get(&item.id)
+                        .and_then(|presentation| presentation.activation_reveal_id.clone())
+                        .unwrap_or_else(|| {
+                            format!(
+                                "activation:{source_id}:{}:{}",
+                                item.source_zone_change,
+                                item.ability_index.unwrap_or(0)
+                            )
+                        })
+                } else {
+                    format!("stack:{}:activation", item.id)
+                },
                 source_object_id: item.id,
                 source_description: card_name.clone(),
-                zone_owner_player_id: item.controller,
+                zone_owner_player_id: item.source_owner.unwrap_or(item.controller),
                 source_zone: rv1::ChoiceCandidateSourceZone::Hand as i32,
                 cards: vec![rv1::RevealedCard {
-                    object_id: item.source_permanent_id.unwrap_or(0),
+                    object_id: source_id,
                     zone_change_generation: item.source_zone_change,
                     card_id: item.card_id.clone(),
                     card_name,

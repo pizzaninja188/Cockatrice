@@ -6,7 +6,7 @@ use super::*;
 
 #[derive(Clone)]
 pub(super) struct PendingAbilityActivationInternal {
-    effective: EffectiveActivatedAbility,
+    pub(super) effective: EffectiveActivatedAbility,
     prepared_costs: Option<PreparedPaymentCosts>,
     announcement: super::casting::AnnouncedAbilityActivation,
 }
@@ -59,20 +59,32 @@ impl GameEngine {
             .state
             .player_idx(pending.actor_player_id)
             .is_some_and(|idx| {
-                !self.state.players[idx].has_lost
-                    && self.state.players[idx]
-                        .battlefield
-                        .contains(&pending.source_object_id)
-                    && self
-                        .state
-                        .objects
-                        .get(&pending.source_object_id)
-                        .is_some_and(|source| {
-                            source.zone == Zone::Battlefield
-                                && source.controller == pending.actor_player_id
-                                && self.payment_object_ref(source.id).zone_change_generation
-                                    == pending.source_zone_change_generation
-                        })
+                if self.state.players[idx].has_lost {
+                    return false;
+                }
+                let Some(source) = self.state.objects.get(&pending.source_object_id) else {
+                    return false;
+                };
+                let in_zone = match pending.source_zone() {
+                    rv1::AbilitySourceZone::Battlefield => {
+                        source.zone == Zone::Battlefield
+                            && source.controller == pending.actor_player_id
+                            && self.state.players[idx]
+                                .battlefield
+                                .contains(&pending.source_object_id)
+                    }
+                    rv1::AbilitySourceZone::Hand => {
+                        source.zone == Zone::Hand
+                            && source.owner == pending.actor_player_id
+                            && self.state.players[idx]
+                                .hand
+                                .contains(&pending.source_object_id)
+                    }
+                    _ => false,
+                };
+                in_zone
+                    && self.payment_object_ref(source.id).zone_change_generation
+                        == pending.source_zone_change_generation
             });
         let ability = self
             .pending_ability_activation_internal
@@ -100,6 +112,18 @@ impl GameEngine {
         }
         // After the answer, preserve fixed target/player receipts even if a target departed.
         if pending.stage() == rv1::AbilityActivationStage::Payment {
+            if pending.source_zone() == rv1::AbilitySourceZone::Hand {
+                let candidates = self
+                    .tapped_creature_return_candidates(pending.actor_player_id)
+                    .into_iter()
+                    .map(|object_id| self.payment_object_ref(object_id))
+                    .collect::<Vec<_>>();
+                if pending.return_tapped_creature_candidates != candidates {
+                    pending.return_tapped_creature_candidates = candidates;
+                    pending.revision = pending.revision.saturating_add(1);
+                    self.state.pending_ability_activation = Some(pending);
+                }
+            }
             return;
         }
         let ability = ability.unwrap();
@@ -212,6 +236,19 @@ impl GameEngine {
                 "ability announcement is not legal now",
             ));
         }
+        match rv1::AbilitySourceZone::try_from(command.source_zone)
+            .map_err(|_| EngineError::Illegal("unknown activation source zone"))?
+        {
+            rv1::AbilitySourceZone::Hand => {
+                return self.begin_hand_tapped_creature_activation(player, command)
+            }
+            rv1::AbilitySourceZone::Battlefield => {}
+            _ => {
+                return Err(EngineError::Illegal(
+                    "unsupported staged activation source zone",
+                ))
+            }
+        }
         let source = self
             .state
             .objects
@@ -299,6 +336,127 @@ impl GameEngine {
         self.pending_ability_activation_internal = Some(PendingAbilityActivationInternal {
             effective,
             prepared_costs: None,
+            announcement,
+        });
+        Ok(RuledEventBatch::default())
+    }
+
+    fn begin_hand_tapped_creature_activation(
+        &mut self,
+        player: PlayerId,
+        command: &rv1::BeginAbilityActivation,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if command.own_target.is_some() || command.opponent_player_id.is_some() {
+            return Err(EngineError::Illegal(
+                "hand activation has no staged target choice",
+            ));
+        }
+        let idx = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        let source = self
+            .state
+            .objects
+            .get(&command.source_object_id)
+            .filter(|object| {
+                object.zone == Zone::Hand
+                    && object.owner == player
+                    && self.state.players[idx].hand.contains(&object.id)
+                    && !self.state.players[idx].has_lost
+            })
+            .ok_or(EngineError::Illegal(
+                "activation source is not in the actor's hand",
+            ))?;
+        if self.payment_object_ref(source.id).zone_change_generation
+            != command.expected_zone_change_generation
+        {
+            return Err(EngineError::Illegal("stale activation source generation"));
+        }
+        let (ability, face_index) = self
+            .authored_zone_activated_abilities(source.id, AbilitySourceZone::Hand)
+            .into_iter()
+            .find(|(index, _, _)| *index == command.ability_index as usize)
+            .map(|(_, ability, face_index)| (ability, face_index))
+            .ok_or(EngineError::Illegal("missing hand activated ability"))?;
+        if !ability.costs.contains(&AbilityCost::ReturnTappedCreature)
+            || ability.requires_opponent_target_choice()
+            || super::targeting::target_schema(&ability.effect, ability.targeting.as_ref())
+                .has_targets()
+            || !self.ability_activatable(source.id, command.ability_index as usize, &ability)
+        {
+            return Err(EngineError::Illegal(
+                "hand ability does not support this staged activation",
+            ));
+        }
+
+        let identity =
+            self.ability_definition(source.id, face_index, vec![ability.ability_id.clone()]);
+        let effective =
+            EffectiveActivatedAbility::authored(command.ability_index, ability.clone(), identity);
+        let base_costs = ability
+            .costs
+            .iter()
+            .filter(|cost| !matches!(cost, AbilityCost::ReturnTappedCreature))
+            .cloned()
+            .collect::<Vec<_>>();
+        let prepared_costs = self.prepare_ability_costs(
+            player,
+            idx,
+            source.id,
+            &base_costs,
+            &[],
+            &[],
+            &[],
+            0,
+            0,
+            self.activated_mana_reduction(player, source.id, &ability)?,
+        )?;
+        let transaction_id = self.state.next_ability_activation_transaction_id;
+        let mut announcement = self.capture_ability_announcement(
+            player,
+            source.id,
+            &effective,
+            &[],
+            0,
+            (source.card_id.clone(), face_index),
+        )?;
+        announcement.activation_reveal_id = Some(super::reveals::activation_reveal_id(
+            source.id,
+            command.expected_zone_change_generation,
+            command.ability_index as usize,
+            transaction_id,
+        ));
+        let pending = rv1::PendingAbilityActivation {
+            transaction_id,
+            revision: 1,
+            stage: rv1::AbilityActivationStage::Payment as i32,
+            actor_player_id: player,
+            deciding_player_id: player,
+            source_object_id: source.id,
+            source_zone_change_generation: command.expected_zone_change_generation,
+            ability_index: command.ability_index,
+            reserved_object_id: self.state.next_object_id,
+            source_description: events::object_display_name(&self.state, self.registry, source.id),
+            locked_total_cost: prepared_costs.total_cost_label()?,
+            return_tapped_creature_candidates: self
+                .tapped_creature_return_candidates(player)
+                .into_iter()
+                .map(|object_id| self.payment_object_ref(object_id))
+                .collect(),
+            return_tapped_creature_cost_index: ability
+                .costs
+                .iter()
+                .position(|cost| matches!(cost, AbilityCost::ReturnTappedCreature))
+                .map(|index| index as u32),
+            source_zone: rv1::AbilitySourceZone::Hand as i32,
+            ..Default::default()
+        };
+        self.state.next_ability_activation_transaction_id = transaction_id.saturating_add(1);
+        self.state.pending_ability_activation = Some(pending);
+        self.pending_ability_activation_internal = Some(PendingAbilityActivationInternal {
+            effective,
+            prepared_costs: Some(prepared_costs),
             announcement,
         });
         Ok(RuledEventBatch::default())
@@ -482,6 +640,80 @@ impl GameEngine {
             .state
             .player_idx(player)
             .ok_or(EngineError::UnknownPlayer(player))?;
+        if pending.source_zone() == rv1::AbilitySourceZone::Hand {
+            let source = self
+                .state
+                .objects
+                .get(&pending.source_object_id)
+                .filter(|source| {
+                    source.zone == Zone::Hand
+                        && source.owner == player
+                        && self.state.players[idx].hand.contains(&source.id)
+                        && !self.state.players[idx].has_lost
+                })
+                .ok_or(EngineError::Illegal(
+                    "hand activation source is no longer in its owner's hand",
+                ))?;
+            if self.payment_object_ref(source.id).zone_change_generation
+                != pending.source_zone_change_generation
+            {
+                return Err(EngineError::Illegal(
+                    "activation source incarnation changed",
+                ));
+            }
+            let internal = self
+                .pending_ability_activation_internal
+                .as_ref()
+                .ok_or(EngineError::Illegal("missing activation snapshot"))?;
+            let ability = &internal.effective.definition;
+            let return_cost_count = ability
+                .costs
+                .iter()
+                .filter(|cost| matches!(cost, AbilityCost::ReturnTappedCreature))
+                .count();
+            if return_cost_count != 1 {
+                return Err(EngineError::Illegal(
+                    "staged hand activation has no unique tapped-creature cost",
+                ));
+            }
+            let mut costs = internal
+                .prepared_costs
+                .clone()
+                .ok_or(EngineError::Illegal("missing locked activation cost"))?;
+            if let Some(selected) = command.return_tapped_creature.as_ref() {
+                let selection = rv1::CostSelection {
+                    cost_index: 0,
+                    selection: Some(rv1::cost_selection::Selection::BattlefieldObjects(
+                        rv1::CostObjectRefs {
+                            objects: vec![*selected],
+                        },
+                    )),
+                };
+                let deferred = self.prepare_ability_costs(
+                    player,
+                    idx,
+                    source.id,
+                    &[AbilityCost::ReturnTappedCreature],
+                    &[],
+                    &[selection],
+                    &[],
+                    0,
+                    0,
+                    Default::default(),
+                )?;
+                costs.append_non_mana_costs(deferred)?;
+            }
+            costs.eligible_restricted_mana =
+                self.eligible_restricted_mana_for_ability(idx, source.id);
+            costs.restricted_mana = command.restricted_mana.clone();
+            costs.flex_payments = command.flex_payments.clone();
+            return Ok(costs);
+        }
+        if command.return_tapped_creature.is_some() {
+            return Err(EngineError::Illegal(
+                "tapped-creature selection is not valid for this activation",
+            ));
+        }
         let source = self
             .state
             .objects
@@ -520,6 +752,19 @@ impl GameEngine {
         player: PlayerId,
         command: &rv1::CommitAbilityActivation,
     ) -> Result<RuledEventBatch, EngineError> {
+        if self
+            .state
+            .pending_ability_activation
+            .as_ref()
+            .is_some_and(|pending| {
+                pending.source_zone() == rv1::AbilitySourceZone::Hand
+                    && command.return_tapped_creature.is_none()
+            })
+        {
+            return Err(EngineError::Illegal(
+                "missing tapped-creature return cost selection",
+            ));
+        }
         let costs = self.prepare_pending_ability_payment(player, command)?;
         let source = self
             .state
@@ -569,6 +814,7 @@ impl GameEngine {
                     pending.valid_opponent_ids.clear();
                     pending.target_group = None;
                     pending.target_candidates.clear();
+                    pending.return_tapped_creature_candidates.clear();
                     pending.locked_total_cost.clear();
                     pending.payment_preview = None;
                     pending.eligible_restricted_mana_group_ids.clear();

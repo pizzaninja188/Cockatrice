@@ -86,6 +86,12 @@ fn cycle_ominous_seas_from_hand(engine: &mut GameEngine, source: u32) {
         .apply_command(0, &command)
         .expect("activate Cycling from hand");
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+    let refreshed = engine.initial_response_batch();
+    assert!(refreshed.events.iter().all(|event| !matches!(
+        &event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::ActivePublicRevealSnapshot(snapshot))
+            if snapshot.reveals.iter().any(|reveal| reveal.cards.iter().any(|card| card.object_id == source))
+    )), "DiscardSelf already moves the card to a public zone and needs no duplicate reveal window");
     resolve_entire_stack_two_player(engine);
 }
 

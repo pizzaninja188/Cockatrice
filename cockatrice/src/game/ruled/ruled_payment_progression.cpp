@@ -2388,12 +2388,20 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     actions->pendingActivatedAbility.waitingForTarget = needsTarget;
     actions->pendingActivatedAbility.selectedTargets.clear();
     const auto activationTargets = handler->abilityTargetData(oid, abilityIndex);
+    actions->pendingActivatedAbility.costChoices = handler->abilityCostChoices(oid, abilityIndex);
+    actions->pendingActivatedAbility.deferredReturnTappedCreature =
+        actions->pendingActivatedAbility.sourceZone == ruled::v1::ABILITY_SOURCE_ZONE_HAND &&
+        std::any_of(actions->pendingActivatedAbility.costChoices.cbegin(),
+                    actions->pendingActivatedAbility.costChoices.cend(), [](const auto &choice) {
+                        return choice.kind == RuledCostChoiceKind::ReturnTappedCreature;
+                    });
     actions->pendingActivatedAbility.chosenOpponentTargets =
+        actions->pendingActivatedAbility.deferredReturnTappedCreature ||
         std::any_of(activationTargets.groups.cbegin(), activationTargets.groups.cend(),
                     [](const auto &group) { return group.chosenByOpponent; });
-    actions->pendingActivatedAbility.costChoices = handler->abilityCostChoices(oid, abilityIndex);
     actions->pendingActivatedAbility.nextCostChoice = 0;
     actions->pendingActivatedAbility.waitingForCost = false;
+    actions->pendingActivatedAbility.waitingForReturnTappedCreatureCandidate = false;
     actions->pendingActivatedAbility.waitingForMana = false;
     actions->pendingActivatedAbility.remainingCost = manaCost;
     actions->pendingActivatedAbility.flexPips = flexPips;

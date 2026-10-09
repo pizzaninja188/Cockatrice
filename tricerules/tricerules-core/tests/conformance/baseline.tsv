@@ -3400,6 +3400,7 @@ unsubtle_mockery	0	cast	exercised
 unsummon	0	cast	exercised
 untamed_hunger	0	cast	exercised
 updraft_elemental	0	cast	exercised
+urban_retreat	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 urenis_rebuff	0	cast	exercised
 urzas_cave	0	ability:0	exercised
 urzas_cave	0	ability:1	exercised

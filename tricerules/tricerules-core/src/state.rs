@@ -2120,6 +2120,9 @@ pub struct StackPresentation {
     /// Public source label captured when an ability is activated; never reconstruct a concealed
     /// source's identity after it changes zones or turns face up while the ability is on the stack.
     pub source_label: Option<String>,
+    /// Public reveal identity reserved when a staged hand ability was announced. Kept with the
+    /// presentation so the pending reveal and its resulting stack item remain one occurrence.
+    pub activation_reveal_id: Option<String>,
     pub primary: Option<tricerules_proto::ruled::v1::PresentationRef>,
     pub chosen_modes: Vec<tricerules_proto::ruled::v1::PresentationRef>,
     pub chosen_cast_costs: Vec<tricerules_proto::ruled::v1::PresentationRef>,

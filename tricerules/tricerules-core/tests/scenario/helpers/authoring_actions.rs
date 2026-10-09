@@ -108,6 +108,7 @@ pub(crate) fn activation(
                     source_object_id: object,
                     expected_zone_change_generation: generation,
                     ability_index: index,
+                    source_zone: AbilitySourceZone::Battlefield as i32,
                     own_target: Some(AbilityActivationTarget {
                         object_id: target,
                         zone_change_generation: e

@@ -214,8 +214,11 @@ void RuledPaymentUi::reconcileEnginePendingAbilityActivation()
 bool RuledPaymentUi::beginAbilityActivation()
 {
     auto &local = actions->pendingActivatedAbility;
+    const bool handReturn = local.deferredReturnTappedCreature &&
+                            local.sourceZone == ruled::v1::ABILITY_SOURCE_ZONE_HAND;
     if (!local.valid || !local.chosenOpponentTargets || local.stage != PendingActivatedAbility::Stage::Announcing ||
-        local.selectedTargets.size() != 1 || local.selectedTargets.first().ref.group_index() != 0 ||
+        (handReturn ? !local.selectedTargets.isEmpty()
+                    : (local.selectedTargets.size() != 1 || local.selectedTargets.first().ref.group_index() != 0)) ||
         RuledActions::gameplayInputLocked(actions->player->getGame()))
         return false;
     ruled::v1::RuledCommand command;
@@ -223,10 +226,13 @@ bool RuledPaymentUi::beginAbilityActivation()
     begin->set_source_object_id(local.permanentOid);
     begin->set_expected_zone_change_generation(local.expectedZoneChangeGeneration);
     begin->set_ability_index(static_cast<quint32>(local.abilityIndex));
-    const auto &target = local.selectedTargets.first();
-    begin->mutable_own_target()->set_object_id(target.ref.object_id());
-    begin->mutable_own_target()->set_group_index(target.ref.group_index());
-    begin->mutable_own_target()->set_zone_change_generation(target.zoneChangeGeneration);
+    begin->set_source_zone(local.sourceZone);
+    if (!handReturn) {
+        const auto &target = local.selectedTargets.first();
+        begin->mutable_own_target()->set_object_id(target.ref.object_id());
+        begin->mutable_own_target()->set_group_index(target.ref.group_index());
+        begin->mutable_own_target()->set_zone_change_generation(target.zoneChangeGeneration);
+    }
     local.stage = PendingActivatedAbility::Stage::BeginPending;
     const auto source = local.permanentOid;
     const auto generation = local.expectedZoneChangeGeneration;
@@ -242,12 +248,17 @@ bool RuledPaymentUi::beginAbilityActivation()
                 startOrRefresh();
             } else if (current.stage == PendingActivatedAbility::Stage::BeginPending) {
                 current.stage = PendingActivatedAbility::Stage::Announcing;
-                current.waitingForTarget = true;
-                current.activeTargetGroupPosition = 0;
-                current.selectedTargets.clear();
-                emit actions->ruledActivatedAbilityTargetPendingChanged(
-                    true, ruledPendingAbilityTargetPrompt(current,
-                                                          *actions->player->getGame()->getGameEventHandler()->ruled()));
+                if (current.deferredReturnTappedCreature) {
+                    actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
+                        PlayerActions::tr("Urban Retreat's activation could not start. Refresh the game state and try again."));
+                } else {
+                    current.waitingForTarget = true;
+                    current.activeTargetGroupPosition = 0;
+                    current.selectedTargets.clear();
+                    emit actions->ruledActivatedAbilityTargetPendingChanged(
+                        true, ruledPendingAbilityTargetPrompt(current,
+                                                              *actions->player->getGame()->getGameEventHandler()->ruled()));
+                }
             }
         });
     return true;
@@ -279,6 +290,7 @@ RuledPaymentUi::Context RuledPaymentUi::context() const
         if (ability.chosenOpponentTargets)
             return ability.stage == PendingActivatedAbility::Stage::Paying && state->pendingAbilityActivation &&
                            state->pendingAbilityActivation->transaction_id() == ability.engineTransactionId &&
+                           !ability.waitingForCost && !ability.waitingForTarget &&
                            ruledActivationCanPay(*state, actions->player->getPlayerInfo()->getId())
                        ? Context::Ability
                        : Context::None;
@@ -477,6 +489,35 @@ void RuledPaymentUi::received()
     if (action == RuledPayment::PreviewAction::Submit) {
         restoreOptimisticManaCounters(model.takeRetiredOptimisticManaCounterIds());
         const auto submittingContext = context();
+        auto &ability = actions->pendingActivatedAbility;
+        if (submittingContext == Context::Ability && ability.deferredReturnTappedCreature &&
+            !ruledReturnTappedCreatureSelection(ability)) {
+            if (!ability.costSelections.isEmpty()) {
+                ability.costSelections.clear();
+                ability.nextCostChoice = 0;
+            }
+            if (ability.costChoices.isEmpty() || ability.costChoices.first().candidateIds.isEmpty()) {
+                ability.waitingForReturnTappedCreatureCandidate = true;
+                ability.waitingForCost = false;
+                ability.waitingForMana = true;
+                const QString prompt = actions->pendingRuledAbilityCostPromptText();
+                game->getGameEventHandler()->ruled()->emitLocalLog(prompt);
+                emit actions->ruledAbilityCostPromptChanged();
+                emit actions->ruledAbilityManaPromptChanged();
+            } else {
+                ability.waitingForReturnTappedCreatureCandidate = false;
+                ability.waitingForCost = true;
+                ability.waitingForMana = false;
+                ability.nextCostChoice = 0;
+                const auto &choice = ability.costChoices.first();
+                const QString prompt = actions->pendingRuledAbilityCostPromptText();
+                game->getGameEventHandler()->ruled()->emitLocalLog(prompt);
+                emit actions->ruledAbilityCostPromptChanged();
+                emit actions->ruledGraveyardCostSelectionChanged(
+                    choice.zone == RuledCostChoiceZone::Graveyard, choice.min, 0);
+            }
+            return;
+        }
         if (submittingContext == Context::Resolution) {
             game->getGameEventHandler()->ruled()->payResolutionMana();
             return;
@@ -971,6 +1012,8 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildActivationCommand(Pl
         auto *commit = cmd.mutable_commit_ability_activation();
         commit->set_transaction_id(pendingActivatedAbility.engineTransactionId);
         commit->set_expected_revision(pendingActivatedAbility.engineRevision);
+        if (const auto selected = ruledReturnTappedCreatureSelection(pendingActivatedAbility))
+            *commit->mutable_return_tapped_creature() = *selected;
         return cmd; // Shared RuledPayment appends the authoritative payment selection.
     }
     ruled::v1::ActivateAbility *aa = nullptr;

@@ -32,6 +32,7 @@ fn begin(engine: &GameEngine, source: u32, own: u32) -> RuledCommand {
             source_object_id: source,
             expected_zone_change_generation: engine.state.zone_change_generation[&source],
             ability_index: 0,
+            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
             own_target: Some(rv1::AbilityActivationTarget {
                 object_id: own,
                 zone_change_generation: engine.state.zone_change_generation[&own],
