@@ -12,20 +12,21 @@ use crate::state::{
     DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
     DelayedTriggerPayload, EffectResult, EntryReplacementApplication, EntryReplacementEffectId,
     EventObserverMatcher, EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState,
-    ImmediateObserverAction, LinkedChoiceOccurrence, LinkedExileKey, LinkedExiledObject, ObjectId,
-    ObservedGameEvent, ObserverReturnEntry, OpeningSequence, ParkedStackResolution, PendingAmass,
-    PendingBattlefieldEntry, PendingCopyCandidate, PendingEntryTimestampOrder, PendingHandChoice,
-    PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
-    PendingManaPayment, PendingObserverReturnBatch, PendingPlayerDiscardChoice,
-    PendingPlayerSetDiscard, PendingResolution, PendingResolutionBranch,
-    PendingResolutionBranchStage, PendingResolutionPresentation, PendingTokenEntryBatch,
-    PendingTrigger, PendingTriggerOrder, PendingWardPayment, PendingWardPaymentStage,
-    PersistentActivationUseKey, PlayerId, PlayerState, ReplacementPriority, ResolutionContinuation,
-    ResolutionReceipt, RoomState, SimultaneousEntryBatch, SpellCastMethod, StackItem,
-    StackObjectRef, StackPresentation, StackTarget, StagedTrigger, StagedTriggerGroup,
-    StaticEmblemInstance, TokenBattlefieldEntry, TokenEntryBatchOptions, TriggerAbilityOrigin,
-    TriggerContext, TriggerObjectRef, TriggerStackObjectRef, TriggerUseKey, TurnHistory,
-    TurnObjectFact, TurnStep, UndoableManaAbility, Zone,
+    ImmediateObserverAction, LinkedChoiceOccurrence, LinkedExileKey, LinkedExileOccurrence,
+    LinkedExiledObject, ObjectId, ObservedGameEvent, ObserverReturnEntry, OpeningSequence,
+    ParkedStackResolution, PendingAmass, PendingBattlefieldEntry, PendingCopyCandidate,
+    PendingEntryTimestampOrder, PendingHandChoice, PendingLibraryLookStage,
+    PendingLibraryPartitionKind, PendingLibraryPartitionStage, PendingManaPayment,
+    PendingObserverReturnBatch, PendingPlayerDiscardChoice, PendingPlayerSetDiscard,
+    PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
+    PendingResolutionPresentation, PendingTokenEntryBatch, PendingTrigger, PendingTriggerOrder,
+    PendingWardPayment, PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
+    ReplacementPriority, ResolutionContinuation, ResolutionReceipt, RoomState,
+    SimultaneousEntryBatch, SpellCastMethod, StackItem, StackObjectRef, StackPresentation,
+    StackTarget, StagedTrigger, StagedTriggerGroup, StaticEmblemInstance, TokenBattlefieldEntry,
+    TokenEntryBatchOptions, TriggerAbilityOrigin, TriggerContext, TriggerObjectRef,
+    TriggerStackObjectRef, TriggerUseKey, TurnHistory, TurnObjectFact, TurnStep,
+    UndoableManaAbility, Zone,
 };
 use crate::state::{DoubleFacedToken, TokenCopySnapshot};
 use prost::Message;
@@ -1311,6 +1312,7 @@ struct PrivateZoneSnapshot {
 #[derive(Clone, PartialEq, Eq)]
 struct BattlefieldViewSnapshot {
     players: Vec<PlayerBattlefieldSnapshot>,
+    duplicant_linked_exile_characteristics: Vec<DuplicantLinkedExileSnapshot>,
     continuous_effects: Vec<ContinuousEffect>,
     static_emblems: Vec<StaticEmblemInstance>,
     activation_uses_this_turn: HashMap<ActivationUseKey, u32>,
@@ -1321,6 +1323,27 @@ struct BattlefieldViewSnapshot {
     turn_step: TurnStep,
     stack_empty: bool,
     combat: Option<BattlefieldCombatSnapshot>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct DuplicantLinkedExileSnapshot {
+    source_object_id: ObjectId,
+    source_zone_change_generation: u64,
+    source_copy_revision: u64,
+    linked_pair: LinkedExileKey,
+    linked_objects: Vec<LinkedExileCharacteristicSnapshot>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct LinkedExileCharacteristicSnapshot {
+    object_id: ObjectId,
+    recorded_zone_change_generation: u64,
+    current_zone_change_generation: u64,
+    zone: Option<Zone>,
+    types: Option<Vec<String>>,
+    all_creature_types: Option<bool>,
+    power: Option<i64>,
+    toughness: Option<i64>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -1807,6 +1830,7 @@ impl GameEngine {
             last_known_copy_by_generation: HashMap::new(),
             last_known_attached_object_by_generation: HashMap::new(),
             zone_change_generation: HashMap::new(),
+            commander_sba_checked_generations: HashMap::new(),
             battlefield_entry_timestamps: HashMap::new(),
             next_game_rule_timestamp: 0,
             face_change_generation: HashMap::new(),

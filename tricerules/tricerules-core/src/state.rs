@@ -26,6 +26,13 @@ pub(crate) enum LinkedChoiceOccurrence {
     AcquiredCopy(u64),
 }
 
+/// CR 607.5: each acquired copy of a linked exile pair has its own exact occurrence.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum LinkedExileOccurrence {
+    NativeOrTokenBase,
+    AcquiredCopy(u64),
+}
+
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct LinkedChoiceKey {
     pub(crate) source_object_id: ObjectId,
@@ -60,7 +67,9 @@ pub enum GameOutcome {
 pub(crate) struct LinkedExileKey {
     pub source_object_id: ObjectId,
     pub source_zone_change: u64,
+    pub producer: AbilityDefinitionId,
     pub ability_link_id: AbilityLinkId,
+    pub occurrence: LinkedExileOccurrence,
 }
 
 /// One exact object generation placed into exile by a linked producer ability.
@@ -228,7 +237,7 @@ pub struct PersistentActivationUseKey {
 }
 
 /// Authored ability slot, independent of display names and flattened live ability indexes.
-#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AbilityDefinitionId {
     pub card_id: String,
     pub face_id: tricerules_card_model::CardFaceId,
@@ -314,6 +323,9 @@ pub struct TriggerStackObjectRef {
 /// reconstructing relationships after objects detach, change controller, or leave a zone.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TriggerContext {
+    /// Event-time copy occurrence for a linked-exile producer/consumer pair. The stack item's
+    /// card, face, and ability definition capture the other identity parts.
+    pub(crate) linked_exile_occurrence: Option<LinkedExileOccurrence>,
     /// The exact permanent incarnation and cast-time choices observed by its self-entry trigger.
     pub entering_spell: Option<SpellEntryFact>,
     /// CR 400.7e public-zone incarnation reached by a self zone-change trigger.
@@ -1429,7 +1441,11 @@ pub enum ResolutionContinuation {
         cost: ManaCost,
         undo_history_start: usize,
     },
-    LegendKeep,
+    /// CR 704.3: all choices that affect one frozen SBA set are collected before any action in
+    /// that set is committed. This continuation is deliberately independent of the stack.
+    StateBasedActions {
+        choices: PendingStateBasedActionChoices,
+    },
 }
 
 impl ResolutionContinuation {
@@ -1483,7 +1499,7 @@ impl ResolutionContinuation {
             | Self::MassSacrificeGraveyardOrder { stack, .. } => stack.as_ref(),
             Self::ManaAbilityDamageReplacement { .. }
             | Self::CombatDamageReplacement { .. }
-            | Self::LegendKeep => None,
+            | Self::StateBasedActions { .. } => None,
         }
     }
 
@@ -1537,7 +1553,7 @@ impl ResolutionContinuation {
             | Self::MassSacrificeGraveyardOrder { stack, .. } => stack.as_mut(),
             Self::ManaAbilityDamageReplacement { .. }
             | Self::CombatDamageReplacement { .. }
-            | Self::LegendKeep => None,
+            | Self::StateBasedActions { .. } => None,
         }
     }
 
@@ -1582,6 +1598,46 @@ pub struct PendingResolution {
     pub deciding_player: PlayerId,
     pub presentation: PendingResolutionPresentation,
     pub continuation: ResolutionContinuation,
+}
+
+/// A player decision needed to perform one frozen CR 704.3 state-based-action set.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub enum PendingStateBasedActionChoice {
+    CommanderZone {
+        object_id: ObjectId,
+        owner: PlayerId,
+        source_zone: Zone,
+        zone_change_generation: u64,
+    },
+    LegendKeep {
+        controller: PlayerId,
+        name: String,
+        candidates: Vec<(ObjectId, u64)>,
+    },
+}
+
+impl PendingStateBasedActionChoice {
+    pub fn deciding_player(&self) -> PlayerId {
+        match self {
+            Self::CommanderZone { owner, .. } => *owner,
+            Self::LegendKeep { controller, .. } => *controller,
+        }
+    }
+}
+
+/// The recorded answer for one choice in a frozen CR 704.3 SBA set.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub enum PendingStateBasedActionAnswer {
+    CommanderZone { move_to_command_zone: bool },
+    LegendKeep { object_id: ObjectId },
+}
+
+/// Choice order and answers are state so command replay resumes the exact same SBA set.
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct PendingStateBasedActionChoices {
+    pub choices: Vec<PendingStateBasedActionChoice>,
+    pub next_choice_index: usize,
+    pub answers: Vec<PendingStateBasedActionAnswer>,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -2635,6 +2691,9 @@ pub struct GameState {
     /// for relay compatibility, while this generation preserves CR 400.7 identity semantics for
     /// effects that resolve after a source leaves and returns.
     pub zone_change_generation: HashMap<ObjectId, u64>,
+    /// Last CR 704.6d/903.9a commander zone-change generation offered to its owner. A declined
+    /// choice consumes only that generation; a later zone change creates a new opportunity.
+    pub commander_sba_checked_generations: HashMap<ObjectId, u64>,
     /// CR 613.11: battlefield-entry timestamps for game-rule effects such as maximum hand size.
     /// The zone-change funnel replaces the timestamp on re-entry and removes it on departure.
     pub(crate) battlefield_entry_timestamps: HashMap<ObjectId, u64>,

@@ -57,7 +57,7 @@ fn flameshadow_conjuring_is_registered_as_a_complete_card() {
                         },
                     ] if keywords == &[tricerules_cards::Keyword::Haste]
                         && matches!(ability.trigger, TriggerCondition::AtBeginningOfNextEndStep)
-                        && matches!(ability.effect.as_slice(), [SpellEffectKind::Exile { subject: EffectSubject::TriggerObject }])
+                        && matches!(ability.effect.as_slice(), [SpellEffectKind::Exile { subject: EffectSubject::TriggerObject, .. }])
                     )
             )
     ));

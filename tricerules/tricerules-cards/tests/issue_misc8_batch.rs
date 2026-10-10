@@ -172,7 +172,7 @@ fn issue_misc8_batch_maps_definitions() {
     let severance = primary(registry, "kin-tree_severance");
     assert!(
         matches!(&severance.spell_effect[0], SpellEffectKind::Exile {
-            subject: EffectSubject::Chosen(filter) }
+            subject: EffectSubject::Chosen(filter), .. }
             if filter.kind == TargetKind::AnyPermanent
                 && filter.min_mana_value == Some(3)),
         "{:?}",

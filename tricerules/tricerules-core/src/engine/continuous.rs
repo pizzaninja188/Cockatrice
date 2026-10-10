@@ -1399,6 +1399,7 @@ impl GameEngine {
                         timestamp,
                     });
                 }
+                StaticAbilityDef::DuplicantImprint { .. } => {}
             }
             for effect in &mut self.state.continuous_effects[static_start..] {
                 if effect.trigger_grant_origin.is_none() {

@@ -13157,6 +13157,7 @@ mod tests {
                     combat_role: Some(CombatRole::Attacking),
                     ..TargetFilter::default()
                 })),
+                linked_exile_id: None,
             }]
         );
         assert!(raw.targeting.is_none());

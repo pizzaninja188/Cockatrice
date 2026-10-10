@@ -103,6 +103,7 @@ fn issue_misc1_batch_maps_definitions() {
     let exorcise = primary(registry, "exorcise");
     let SpellEffectKind::Exile {
         subject: EffectSubject::Chosen(filter),
+        ..
     } = &exorcise.spell_effect[0]
     else {
         panic!("exile, got {:?}", exorcise.spell_effect[0]);

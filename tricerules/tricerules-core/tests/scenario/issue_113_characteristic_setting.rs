@@ -50,7 +50,7 @@ fn witness_protection_sets_characteristics_and_publishes_ability_removal() {
     assert_eq!((protected.power, protected.toughness), (Some(1), Some(1)));
     assert_eq!(
         zone_view_rules_annotation_labels(&mut engine, 0, target),
-        vec!["Loses all abilities"]
+        vec!["Loses all abilities", "Creature types: Citizen"]
     );
     assert_eq!(
         zone_view_effective_display_name(&mut engine, 0, target).as_deref(),
@@ -108,7 +108,7 @@ fn witness_and_unable_to_scream_follow_layer_timestamp_order() {
     );
     assert_eq!(
         zone_view_rules_annotation_labels(&mut witness_then_unable, 0, target),
-        vec!["Loses all abilities"]
+        vec!["Loses all abilities", "Creature types: Citizen, Toy"]
     );
 
     let (mut unable_then_witness, target) =
@@ -123,7 +123,7 @@ fn witness_and_unable_to_scream_follow_layer_timestamp_order() {
     );
     assert_eq!(
         zone_view_rules_annotation_labels(&mut unable_then_witness, 0, target),
-        vec!["Loses all abilities"]
+        vec!["Loses all abilities", "Creature types: Citizen"]
     );
 }
 
@@ -150,7 +150,7 @@ fn ability_gained_after_removal_is_retained_and_annotated() {
     assert!(engine.effective_has_keyword(target, Keyword::Flying));
     assert_eq!(
         zone_view_rules_annotation_labels(&mut engine, 0, target),
-        vec!["Loses all abilities", "Flying"]
+        vec!["Loses all abilities", "Creature types: Citizen", "Flying"]
     );
 }
 

@@ -80,7 +80,7 @@ fn kenrith_transformation_draws_and_sets_the_enchanted_creature_characteristics(
     assert!(transformed_legendary.keywords.is_empty());
     assert_eq!(
         zone_view_rules_annotation_labels(&mut engine, 0, legendary),
-        vec!["Loses all abilities"]
+        vec!["Loses all abilities", "Creature types: Elk"]
     );
     assert_eq!(
         (transformed_legendary.power, transformed_legendary.toughness),
@@ -99,7 +99,7 @@ fn kenrith_transformation_draws_and_sets_the_enchanted_creature_characteristics(
     assert!(transformed_artifact.keywords.is_empty());
     assert_eq!(
         zone_view_rules_annotation_labels(&mut engine, 0, artifact),
-        vec!["Loses all abilities"]
+        vec!["Loses all abilities", "Creature types: Elk"]
     );
     assert!(!transformed_artifact
         .types

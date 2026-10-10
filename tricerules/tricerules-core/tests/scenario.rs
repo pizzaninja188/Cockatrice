@@ -304,6 +304,8 @@ mod deck_coverage_cycling_taplands;
 mod deck_coverage_darksteel_plate;
 #[path = "scenario/deck_coverage_devoid.rs"]
 mod deck_coverage_devoid;
+#[path = "scenario/deck_coverage_duplicant.rs"]
+mod deck_coverage_duplicant;
 #[path = "scenario/deck_coverage_everflowing_chalice.rs"]
 mod deck_coverage_everflowing_chalice;
 #[path = "scenario/deck_coverage_exotic_orchard.rs"]

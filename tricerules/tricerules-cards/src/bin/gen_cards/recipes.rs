@@ -1190,6 +1190,7 @@ fn match_spell_exile_creature(text: &str, _: &RecipeContext) -> Option<RecipeEmi
     (text == "Exile target creature.").then(|| {
         RecipeEmission::SpellEffect(SpellEffectKind::Exile {
             subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            linked_exile_id: None,
         })
     })
 }
@@ -2690,6 +2691,7 @@ fn match_modal_exile_artifact_or_enchantment(
                         ],
                         ..TargetFilter::default()
                     })),
+                    linked_exile_id: None,
                 }],
                 modal_targeting("Choose target artifact or enchantment", 0),
             )
@@ -11060,6 +11062,7 @@ fn match_spell_exile_attacking_creature(text: &str, _: &RecipeContext) -> Option
                 combat_role: Some(CombatRole::Attacking),
                 ..TargetFilter::default()
             })),
+            linked_exile_id: None,
         })
     })
 }
@@ -11621,6 +11624,7 @@ fn match_spell_exile_creature_or_enchantment(
                 ],
                 ..TargetFilter::default()
             })),
+            linked_exile_id: None,
         })
     })
 }
@@ -36622,6 +36626,7 @@ mod tests {
                         combat_role: Some(CombatRole::Attacking),
                         ..TargetFilter::default()
                     })),
+                    linked_exile_id: None,
                 }
             );
         }
@@ -38308,7 +38313,8 @@ mod tests {
                 matched.id.as_str(),
                 "spell.exile.target_creature_or_enchantment"
             );
-            let RecipeEmission::SpellEffect(SpellEffectKind::Exile { subject }) = matched.emission
+            let RecipeEmission::SpellEffect(SpellEffectKind::Exile { subject, .. }) =
+                matched.emission
             else {
                 panic!("{source_name} must emit the shipped exile spell effect");
             };
@@ -50397,6 +50403,7 @@ mod tests {
             ModalModeEmission {
                 effects: vec![SpellEffectKind::Exile {
                     subject: EffectSubject::Chosen(Box::new(artifact_or_enchantment)),
+                    linked_exile_id: None,
                 }],
                 targeting: modal_targeting("Choose target artifact or enchantment", 0),
             }

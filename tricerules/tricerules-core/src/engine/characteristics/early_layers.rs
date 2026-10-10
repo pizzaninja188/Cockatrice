@@ -51,6 +51,7 @@ fn is_type_effect(kind: &ContinuousEffectKind) -> bool {
             | ContinuousEffectKind::Layer4SetTypeLine(_)
             | ContinuousEffectKind::Layer4SetBasicLandType(_)
             | ContinuousEffectKind::Layer4SetCreatureTypes(_)
+            | ContinuousEffectKind::DuplicantImprintCreatureTypes { .. }
             | ContinuousEffectKind::Layer4SetAllCreatureTypes
     )
 }
@@ -280,11 +281,39 @@ impl CharacteristicsEvaluator<'_> {
             projected_entrant: inputs.entry.map(|entry| entry.event.object_id),
             ..Default::default()
         };
+        let linked_exile_objects = if world_required {
+            self.state
+                .linked_exile_records
+                .values()
+                .flatten()
+                .filter_map(|record| {
+                    self.state
+                        .objects
+                        .get(&record.object_id)
+                        .and_then(|object| {
+                            (object.zone == Zone::Exile
+                                && self
+                                    .state
+                                    .zone_change_generation
+                                    .get(&record.object_id)
+                                    .copied()
+                                    .unwrap_or(0)
+                                    == record.zone_change_generation)
+                                .then_some(record.object_id)
+                        })
+                })
+                .collect::<BTreeSet<_>>()
+        } else {
+            BTreeSet::new()
+        };
         let others = world_required
             .then_some(&self.state.objects)
             .into_iter()
             .flat_map(|objects| objects.iter())
-            .filter(|(&oid, object)| oid != queried && object.zone == Zone::Battlefield);
+            .filter(|(&oid, object)| {
+                oid != queried
+                    && (object.zone == Zone::Battlefield || linked_exile_objects.contains(&oid))
+            });
         for (&oid, object) in std::iter::once((&queried, queried_object)).chain(others) {
             if let Some(entry) = inputs.entry.filter(|entry| entry.event.object_id == oid) {
                 view.objects.insert(oid, entry.base.clone());
@@ -519,6 +548,37 @@ impl CharacteristicsEvaluator<'_> {
                     }
                     ContinuousEffectKind::Layer4SetAllCreatureTypes => {
                         TypeInstruction::AllCreatureTypes
+                    }
+                    ContinuousEffectKind::DuplicantImprintCreatureTypes {
+                        producer_ability_id,
+                        linked_exile_id,
+                    } => {
+                        let Some(linked_id) = self.duplicant_linked_creature_object(
+                            oid,
+                            producer_ability_id,
+                            linked_exile_id,
+                            view,
+                        ) else {
+                            continue;
+                        };
+                        let Some(linked) = view.objects.get(&linked_id) else {
+                            continue;
+                        };
+                        if linked.characteristics.all_creature_types {
+                            TypeInstruction::AllCreatureTypes
+                        } else {
+                            let mut creature_types = linked
+                                .characteristics
+                                .types
+                                .iter()
+                                .filter(|value| tricerules_card_model::is_creature_type(value))
+                                .cloned()
+                                .collect::<Vec<_>>();
+                            if !creature_types.iter().any(|value| value == "Shapeshifter") {
+                                creature_types.push("Shapeshifter".to_string());
+                            }
+                            TypeInstruction::CreatureTypes(creature_types)
+                        }
                     }
                     _ => unreachable!("selected type effect"),
                 };

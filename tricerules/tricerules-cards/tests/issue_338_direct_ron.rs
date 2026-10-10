@@ -116,6 +116,7 @@ fn issue_338_direct_ron_batch_maps_definitions() {
         face.spell_effect[0],
         SpellEffectKind::Exile {
             subject: EffectSubject::Chosen(Box::new(creature_or_planeswalker())),
+            linked_exile_id: None,
         }
     );
     let group = single_group(face.targeting.as_ref().expect("Worthy Cost targets"));
@@ -165,6 +166,7 @@ fn issue_338_direct_ron_batch_maps_definitions() {
         face.spell_effect[0],
         SpellEffectKind::Exile {
             subject: EffectSubject::Chosen(Box::new(creature_or_planeswalker())),
+            linked_exile_id: None,
         }
     );
     let group = single_group(face.targeting.as_ref().expect("Eaten Alive targets"));

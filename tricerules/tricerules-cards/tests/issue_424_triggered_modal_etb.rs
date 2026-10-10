@@ -280,6 +280,7 @@ fn issue_424_exile_modes_use_the_printed_type_union_and_single_graveyard_group()
                 ],
                 ..TargetFilter::default()
             })),
+            linked_exile_id: None,
         }]
     );
     assert_eq!(

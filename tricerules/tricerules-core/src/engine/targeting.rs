@@ -1180,6 +1180,7 @@ fn validate_effect_targets(
         | SpellEffectKind::AttachSource { target: _ }
         | SpellEffectKind::Exile {
             subject: EffectSubject::Chosen(_),
+            ..
         }
         | SpellEffectKind::ExileWithOwnerCastPermission {
             subject: EffectSubject::Chosen(_),
@@ -1613,6 +1614,7 @@ fn validate_effect_targets(
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
                 | EffectSubject::SearchedObject(_),
+            ..
         }
         | SpellEffectKind::ExileWithOwnerCastPermission {
             subject: EffectSubject::Source
@@ -2082,6 +2084,7 @@ fn spell_target_legality_error_with_context(
         | SpellEffectKind::AttachSource { target: _ }
         | SpellEffectKind::Exile {
             subject: EffectSubject::Chosen(_),
+            ..
         }
         | SpellEffectKind::ExileWithOwnerCastPermission {
             subject: EffectSubject::Chosen(_),
@@ -2230,6 +2233,7 @@ fn spell_target_legality_error_with_context(
         }
         | SpellEffectKind::Exile {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            ..
         }
         | SpellEffectKind::ExileWithOwnerCastPermission {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,

@@ -59,7 +59,7 @@ fn legend_rule_controller_chooses_which_to_keep() {
             .as_ref()
             .expect("legend continuation")
             .continuation,
-        ResolutionContinuation::LegendKeep
+        ResolutionContinuation::StateBasedActions { .. }
     ));
 
     // P0 chooses to keep oid_b.

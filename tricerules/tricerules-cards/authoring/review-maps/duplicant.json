@@ -1,0 +1,92 @@
+{
+  "format_version": 1,
+  "oracle_id": "ea86abfa-6cab-4ef0-8463-34136fc25b59",
+  "spans": [
+    {
+      "face_id": "duplicant",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    },
+    {
+      "face_id": "duplicant",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::DuplicantImprint",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_duplicant::duplicant_imprints_the_exact_exiled_creature_characteristics",
+      "covers": "A successful optional ETB choice links the exact nontoken creature, publishes its current subtypes and P/T, preserves later +1/+1 counters, and labels changed public creature types."
+    },
+    {
+      "test": "scenario deck_coverage_duplicant::duplicant_declined_imprint_keeps_its_printed_characteristics",
+      "covers": "Declining the optional trigger leaves the target in place and Duplicant as its printed 2/4 Shapeshifter."
+    },
+    {
+      "test": "scenario deck_coverage_duplicant::duplicant_rejects_a_token_target_without_consuming_the_trigger",
+      "covers": "A token target is rejected without consuming Duplicant's pending trigger, and a legal nontoken target can still resolve."
+    },
+    {
+      "test": "scenario deck_coverage_duplicant::duplicant_does_not_copy_a_card_that_was_only_creature_on_the_battlefield",
+      "covers": "A card animated into a creature only on the battlefield is not a creature card in Exile and does not enable Duplicant's static ability."
+    },
+    {
+      "test": "scenario deck_coverage_duplicant::duplicant_exile_uses_the_existing_aura_and_equipment_zone_change_sbas",
+      "covers": "Exiling the enchanted creature uses the normal zone-change path: its Aura goes to the graveyard and Equipment becomes unattached."
+    },
+    {
+      "test": "scenario deck_coverage_duplicant::duplicant_link_tracks_commander_acceptance_and_decline",
+      "covers": "Accepting a declared commander's Exile-to-Command move drops the link and updates the public view; declining keeps the card linked without repeating the same-generation choice."
+    },
+    {
+      "test": "scenario deck_coverage_duplicant::duplicant_does_not_exile_a_new_zone_incarnation_of_its_target",
+      "covers": "A target that leaves and returns before resolution is a new generation and is not exiled by the stale target."
+    },
+    {
+      "test": "scenario deck_coverage_duplicant::duplicant_new_incarnation_cannot_read_an_older_etb_pair",
+      "covers": "The ETB trigger retains its event-time source generation, while a later battlefield incarnation cannot use the older linked exile record."
+    },
+    {
+      "test": "scenario deck_coverage_duplicant::copied_duplicant_gets_its_own_linked_exile_pair",
+      "covers": "Clone entering as Duplicant creates an independent linked pair and does not replace the original Duplicant's linked characteristics."
+    },
+    {
+      "test": "scenario deck_coverage_duplicant::duplicant_layer_four_types_feed_the_exiled_creatures_layer_seven_cda",
+      "covers": "The linked card's layer-7 CDA counts Duplicant's acquired layer-4 subtype without recursively evaluating the same characteristic pipeline."
+    },
+    {
+      "test": "scenario deck_coverage_duplicant::duplicant_later_layer_four_type_setting_follows_timestamp_order",
+      "covers": "A later layer-4 type-setting effect replaces Duplicant's earlier copied creature subtypes while its independent layer-7b copied base remains."
+    },
+    {
+      "test": "scenario deck_coverage_duplicant::duplicant_later_all_creature_types_setting_updates_public_representation",
+      "covers": "A later all-creature-types effect is represented by the engine characteristic and the existing public annotation label."
+    },
+    {
+      "test": "scenario deck_coverage_duplicant::duplicant_layer_seven_setting_continues_after_layer_six_removes_abilities",
+      "covers": "The copied base P/T part continues in layer 7b after a layer-6 effect removes abilities from Duplicant."
+    },
+    {
+      "test": "scenario deck_coverage_duplicant::duplicant_refreshes_linked_hand_count_and_public_view_snapshot",
+      "covers": "A linked CDA hand-count change with no battlefield mutation updates Duplicant P/T, invalidates the battlefield cache, and publishes the new public view."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

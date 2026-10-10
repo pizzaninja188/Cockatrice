@@ -250,8 +250,7 @@ fn scoped_nested_triggered_definitions_cannot_borrow_cast_cost_metadata() {
 
 #[test]
 fn scoped_linked_exile_validation_reaches_wrappers_and_nested_modes_once() {
-    let consumer =
-        r#"ReturnLinkedExiledCards(linked_exile_id: "linked_01", filter: (card_type: Creature))"#;
+    let consumer = r#"ReturnLinkedExiledCards(producer_ability_id: "activated_01", linked_exile_id: "linked_01", filter: (card_type: Creature))"#;
     let beheld = format!(
         r#"MayBehold(choice_id: "behold_01", hand_filter: (card_type: Creature), permanent_filter: (kind: Creature, controller: You), if_beheld: [{consumer}])"#
     );
@@ -275,11 +274,12 @@ fn scoped_linked_exile_validation_reaches_wrappers_and_nested_modes_once() {
         "exactly one producer and one consumer",
     );
     let producer = r#"MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: "linked_01")"#;
-    let children = format!(
-        "{}, {}",
-        child_with_effect(producer),
-        child_with_effect(&beheld).replace("activated_01", "activated_02")
+    let consumer_ability = child_with_effect(&beheld).replacen(
+        "(ability_id: \"activated_01\"",
+        "(ability_id: \"activated_02\"",
+        1,
     );
+    let children = format!("{}, {}", child_with_effect(producer), consumer_ability);
     let ron = card("(kind: AnyPermanent)", &children);
     CardRegistry::from_chunks_and_tokens(&[&ron], &[]).expect("one exact producer-consumer pair");
 }

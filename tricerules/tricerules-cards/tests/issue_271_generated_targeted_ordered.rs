@@ -49,7 +49,9 @@ fn issue_271_registers_exactly_the_reviewed_eleven_card_shapes() {
             "{id} removal kind"
         );
         let subject = match &face.spell_effect[0] {
-            SpellEffectKind::Destroy { subject } | SpellEffectKind::Exile { subject } => subject,
+            SpellEffectKind::Destroy { subject } | SpellEffectKind::Exile { subject, .. } => {
+                subject
+            }
             effect => panic!("{id} unexpected removal effect: {effect:?}"),
         };
         let EffectSubject::Chosen(target) = subject else {

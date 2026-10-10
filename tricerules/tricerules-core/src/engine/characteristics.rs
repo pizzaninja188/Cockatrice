@@ -303,10 +303,40 @@ pub(super) fn stack_spell_colors(
     Some(characteristics.colors)
 }
 
+fn characteristic_condition_requires_world_view(condition: &GameCondition) -> bool {
+    match condition {
+        GameCondition::BattlefieldAggregate { .. }
+        | GameCondition::BattlefieldCreatureCount { .. } => true,
+        GameCondition::AllOf(conditions) | GameCondition::AnyOf(conditions) => conditions
+            .iter()
+            .any(characteristic_condition_requires_world_view),
+        _ => false,
+    }
+}
+
 impl CharacteristicsEvaluator<'_> {
     fn characteristics(&self, oid: ObjectId) -> Option<Characteristics> {
+        // Layer-7 conditions such as "you control an artifact" need the same full
+        // battlefield snapshot that their pre-refactor evaluator used. Duplicant's
+        // cross-zone dependency also requires a world view, which evaluate_early_layers
+        // detects from its layer-4 component.
+        let world_required = self
+            .state
+            .continuous_effects
+            .iter()
+            .filter_map(|effect| effect.condition.as_ref())
+            .any(characteristic_condition_requires_world_view);
+        let early_view = self.evaluate_early_layers(oid, world_required)?;
+        self.characteristics_from_early_view(oid, &early_view)
+    }
+
+    fn characteristics_from_early_view(
+        &self,
+        oid: ObjectId,
+        early_view: &EarlyLayerView,
+    ) -> Option<Characteristics> {
         let object = self.state.objects.get(&oid)?;
-        let mut result = self.characteristics_through_layer_5(oid)?;
+        let mut result = early_view.objects.get(&oid)?.characteristics.clone();
 
         let pre_layer_6 = result.clone();
         let layer_6_effects = self.ordered_layer_6_effects(oid, &pre_layer_6);
@@ -315,9 +345,60 @@ impl CharacteristicsEvaluator<'_> {
         // layer-6 additions/removals have been applied; a keyword grant in layer 6 and a P/T
         // modifier in layer 7 are in different layers, so this adds no 613.8 dependency.
         let mut ordered_effects = layer_6_effects;
-        ordered_effects.extend(self.ordered_layer_7_effects(oid, &result, &pre_layer_6));
-        self.apply_layer_7_power_toughness(oid, object, &mut result, &ordered_effects);
+        ordered_effects.extend(self.ordered_layer_7_effects(
+            oid,
+            &result,
+            &pre_layer_6,
+            Some(early_view),
+        ));
+        self.apply_layer_7_power_toughness(oid, object, &mut result, &ordered_effects, early_view);
         Some(result)
+    }
+
+    fn duplicant_link_key(
+        &self,
+        source_id: ObjectId,
+        producer_ability_id: &tricerules_card_model::AbilityId,
+        linked_exile_id: &tricerules_card_model::AbilityLinkId,
+    ) -> Option<LinkedExileKey> {
+        duplicant_imprint_link_key(
+            self.state,
+            self.registry,
+            source_id,
+            producer_ability_id,
+            linked_exile_id,
+        )
+    }
+
+    pub(super) fn duplicant_linked_creature_object(
+        &self,
+        source_id: ObjectId,
+        producer_ability_id: &tricerules_card_model::AbilityId,
+        linked_exile_id: &tricerules_card_model::AbilityLinkId,
+        early_view: &EarlyLayerView,
+    ) -> Option<ObjectId> {
+        let key = self.duplicant_link_key(source_id, producer_ability_id, linked_exile_id)?;
+        self.state
+            .linked_exile_records
+            .get(&key)?
+            .iter()
+            .rev()
+            .find_map(|record| {
+                let object = self.state.objects.get(&record.object_id)?;
+                let current_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&record.object_id)
+                    .copied()
+                    .unwrap_or(0);
+                (object.zone == Zone::Exile
+                    && current_generation == record.zone_change_generation
+                    && early_view
+                        .objects
+                        .get(&record.object_id)
+                        .is_some_and(|linked| linked.characteristics.is_creature()))
+                .then_some(record.object_id)
+            })
     }
 
     /// Evaluate a public, dependency-free count for a static P/T scaling modifier inside the
@@ -328,6 +409,7 @@ impl CharacteristicsEvaluator<'_> {
         &self,
         expression: &CountExpression,
         context: ConditionContext<'_>,
+        early_view: Option<&EarlyLayerView>,
     ) -> Option<i64> {
         match expression {
             CountExpression::CardsInHand {
@@ -367,7 +449,13 @@ impl CharacteristicsEvaluator<'_> {
             | CountExpression::BattlefieldCreatures { .. }
             | CountExpression::BattlefieldMaximum { .. } => {
                 battlefield_quantity_value(self.state, expression, context, |oid| {
-                    self.characteristics_through_layer_5(oid)
+                    early_view
+                        .and_then(|view| {
+                            view.objects
+                                .get(&oid)
+                                .map(|object| object.characteristics.clone())
+                        })
+                        .or_else(|| self.characteristics_through_layer_5(oid))
                 })
             }
             CountExpression::GraveyardCards { owners, filter } => {
@@ -394,7 +482,7 @@ impl CharacteristicsEvaluator<'_> {
             CountExpression::Affine { constant, terms } => {
                 let mut total = i64::from(*constant);
                 for term in terms {
-                    let value = self.static_scaling_count(&term.quantity, context)?;
+                    let value = self.static_scaling_count(&term.quantity, context, early_view)?;
                     total = total.saturating_add(i64::from(term.coefficient).saturating_mul(value));
                 }
                 Some(total)
@@ -907,6 +995,7 @@ impl CharacteristicsEvaluator<'_> {
         oid: ObjectId,
         post_layer_6: &Characteristics,
         pre_layer_6: &Characteristics,
+        early_view: Option<&EarlyLayerView>,
     ) -> Vec<&'a ContinuousEffect> {
         let mut effects: Vec<(usize, &ContinuousEffect)> = self
             .state
@@ -917,16 +1006,29 @@ impl CharacteristicsEvaluator<'_> {
                 matches!(
                     effect.kind,
                     ContinuousEffectKind::Layer7bSetPt { .. }
+                        | ContinuousEffectKind::DuplicantImprintBasePowerToughness { .. }
                         | ContinuousEffectKind::Layer7bSetPower { .. }
                         | ContinuousEffectKind::PtModify { .. }
                         | ContinuousEffectKind::PtModifyByCount { .. }
                 )
             })
             .filter(|(_, effect)| {
-                effect_affects(self.state, self.registry, effect, oid, post_layer_6)
+                effect_affects_with_view(
+                    self.state,
+                    self.registry,
+                    effect,
+                    oid,
+                    post_layer_6,
+                    early_view,
+                )
             })
             .filter(|(_, effect)| {
-                self.characteristic_effect_condition_holds(effect, oid, pre_layer_6)
+                self.characteristic_effect_condition_holds_in_early_view(
+                    effect,
+                    oid,
+                    pre_layer_6,
+                    early_view,
+                )
             })
             .collect();
         effects.sort_by_key(|(index, effect)| (effect.timestamp, *index));
@@ -939,7 +1041,28 @@ impl CharacteristicsEvaluator<'_> {
         queried_oid: ObjectId,
         queried_pre_layer_6: &Characteristics,
     ) -> bool {
-        if static_component_started_for(self.state, self.registry, effect, queried_oid) {
+        self.characteristic_effect_condition_holds_in_early_view(
+            effect,
+            queried_oid,
+            queried_pre_layer_6,
+            None,
+        )
+    }
+
+    fn characteristic_effect_condition_holds_in_early_view(
+        &self,
+        effect: &ContinuousEffect,
+        queried_oid: ObjectId,
+        queried_pre_layer_6: &Characteristics,
+        early_view: Option<&EarlyLayerView>,
+    ) -> bool {
+        if static_component_started_for_in_early_view(
+            self.state,
+            self.registry,
+            effect,
+            queried_oid,
+            early_view,
+        ) {
             return true;
         }
         let Some(condition) = effect.condition.as_ref() else {
@@ -949,13 +1072,24 @@ impl CharacteristicsEvaluator<'_> {
             return false;
         };
         let controller = self.layer_2_controller(source_oid, &mut Vec::new());
-        self.characteristic_condition_holds(
-            condition,
-            source_oid,
-            controller,
-            queried_oid,
-            queried_pre_layer_6,
-        )
+        if let Some(view) = early_view {
+            self.characteristic_condition_holds_in_view(
+                condition,
+                source_oid,
+                controller,
+                queried_oid,
+                queried_pre_layer_6,
+                Some(view),
+            )
+        } else {
+            self.characteristic_condition_holds(
+                condition,
+                source_oid,
+                controller,
+                queried_oid,
+                queried_pre_layer_6,
+            )
+        }
     }
 
     fn characteristic_condition_holds(
@@ -1486,6 +1620,17 @@ pub(super) fn effect_affects(
     oid: ObjectId,
     characteristics: &Characteristics,
 ) -> bool {
+    effect_affects_with_view(state, registry, effect, oid, characteristics, None)
+}
+
+fn effect_affects_with_view(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    effect: &ContinuousEffect,
+    oid: ObjectId,
+    characteristics: &Characteristics,
+    early_view: Option<&EarlyLayerView>,
+) -> bool {
     if !static_source_identity_is_current(state, registry, effect) {
         return false;
     }
@@ -1526,7 +1671,7 @@ pub(super) fn effect_affects(
             effect.kind,
             ContinuousEffectKind::Layer6AddKeywordFromStatic { .. }
         )
-        || static_component_started_for(state, registry, effect, oid);
+        || static_component_started_for_in_early_view(state, registry, effect, oid, early_view);
     if !independent_at_this_layer
         && component_group(state, registry, effect).is_some()
         && effect
@@ -1691,6 +1836,7 @@ fn is_earlier_characteristic_component(kind: &ContinuousEffectKind) -> bool {
             | ContinuousEffectKind::Layer4SetTypeLine(_)
             | ContinuousEffectKind::Layer4SetBasicLandType(_)
             | ContinuousEffectKind::Layer4SetCreatureTypes(_)
+            | ContinuousEffectKind::DuplicantImprintCreatureTypes { .. }
             | ContinuousEffectKind::Layer4SetAllCreatureTypes
             | ContinuousEffectKind::Layer5SetColors(_)
     )
@@ -1705,11 +1851,53 @@ fn is_characteristic_component(kind: &ContinuousEffectKind) -> bool {
                 | ContinuousEffectKind::Layer6AddProtection(_)
                 | ContinuousEffectKind::GrantActivatedAbility(_)
                 | ContinuousEffectKind::GrantTriggeredAbility(_)
+                | ContinuousEffectKind::DuplicantImprintBasePowerToughness { .. }
                 | ContinuousEffectKind::Layer7bSetPt { .. }
                 | ContinuousEffectKind::Layer7bSetPower { .. }
                 | ContinuousEffectKind::PtModify { .. }
                 | ContinuousEffectKind::PtModifyByCount { .. }
         )
+}
+
+pub(super) fn duplicant_imprint_link_key(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    source_id: ObjectId,
+    producer_ability_id: &tricerules_card_model::AbilityId,
+    linked_exile_id: &tricerules_card_model::AbilityLinkId,
+) -> Option<LinkedExileKey> {
+    let object = state.objects.get(&source_id)?;
+    let (card_id, face_index) = object
+        .copiable_values
+        .as_ref()
+        .or(object.token_origin.as_ref())
+        .map(|values| (values.source_card_id.as_str(), values.source_face_index))
+        .unwrap_or((object.card_id.as_str(), object.face_up_index));
+    let face = registry.get(card_id)?.faces.get(face_index)?;
+    let occurrence = if object.copiable_values.is_some() {
+        LinkedExileOccurrence::AcquiredCopy(
+            object
+                .active_copy_occurrence
+                .unwrap_or(object.copy_revision),
+        )
+    } else {
+        LinkedExileOccurrence::NativeOrTokenBase
+    };
+    Some(LinkedExileKey {
+        source_object_id: source_id,
+        source_zone_change: state
+            .zone_change_generation
+            .get(&source_id)
+            .copied()
+            .unwrap_or(0),
+        producer: AbilityDefinitionId {
+            card_id: card_id.to_string(),
+            face_id: face.face_id.clone(),
+            ability_path: vec![producer_ability_id.clone()],
+        },
+        ability_link_id: linked_exile_id.clone(),
+        occurrence,
+    })
 }
 
 /// Validate raw source identity and normalize a nested grant to its containing static ability.
@@ -1833,6 +2021,16 @@ pub(super) fn static_component_started_for(
     effect: &ContinuousEffect,
     oid: ObjectId,
 ) -> bool {
+    static_component_started_for_in_early_view(state, registry, effect, oid, None)
+}
+
+fn static_component_started_for_in_early_view(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    effect: &ContinuousEffect,
+    oid: ObjectId,
+    early_view: Option<&EarlyLayerView>,
+) -> bool {
     if !is_characteristic_component(&effect.kind)
         || is_earlier_characteristic_component(&effect.kind)
     {
@@ -1841,9 +2039,18 @@ pub(super) fn static_component_started_for(
     let Some(origin) = component_group(state, registry, effect) else {
         return false;
     };
-    (CharacteristicsEvaluator { state, registry })
-        .characteristics_through_layer_5_with_started(oid)
-        .is_some_and(|(_, started)| started.contains(&origin))
+    early_view.map_or_else(
+        || {
+            (CharacteristicsEvaluator { state, registry })
+                .characteristics_through_layer_5_with_started(oid)
+                .is_some_and(|(_, started)| started.contains(&origin))
+        },
+        |view| {
+            view.started
+                .get(&oid)
+                .is_some_and(|started| started.contains(&origin))
+        },
+    )
 }
 
 /// Latest remove-all-abilities timestamp for the scopes currently capable of creating that
@@ -2272,6 +2479,7 @@ impl CharacteristicsEvaluator<'_> {
         object: &GameObject,
         result: &mut Characteristics,
         effects: &[&ContinuousEffect],
+        early_view: &EarlyLayerView,
     ) {
         // CR 613.4a/613.3: characteristic-defining abilities apply before setters. A layer-6
         // remove-all effect suppresses a P/T CDA, while a face-down object uses its layer-1b 2/2.
@@ -2310,7 +2518,9 @@ impl CharacteristicsEvaluator<'_> {
                         stack_item: None,
                         previous_effect_result: None,
                     };
-                    let matches = self.static_scaling_count(count, context).unwrap_or(0);
+                    let matches = self
+                        .static_scaling_count(count, context, Some(early_view))
+                        .unwrap_or(0);
                     if *power_per_match != 0 {
                         power = Some(i64::from(*power_per_match).saturating_mul(matches));
                     }
@@ -2328,6 +2538,25 @@ impl CharacteristicsEvaluator<'_> {
                 } => {
                     power = Some(set_power);
                     toughness = Some(set_toughness);
+                }
+                ContinuousEffectKind::DuplicantImprintBasePowerToughness {
+                    ref producer_ability_id,
+                    ref linked_exile_id,
+                } => {
+                    let Some(linked_id) = self.duplicant_linked_creature_object(
+                        oid,
+                        producer_ability_id,
+                        linked_exile_id,
+                        early_view,
+                    ) else {
+                        continue;
+                    };
+                    let Some(linked) = self.characteristics_from_early_view(linked_id, early_view)
+                    else {
+                        continue;
+                    };
+                    power = Some(linked.signed_power.unwrap_or(0));
+                    toughness = Some(linked.signed_toughness.unwrap_or(0));
                 }
                 ContinuousEffectKind::Layer7bSetPower { power: set_power } => {
                     power = Some(set_power);
@@ -2374,7 +2603,9 @@ impl CharacteristicsEvaluator<'_> {
                     stack_item: None,
                     previous_effect_result: None,
                 };
-                let count = self.static_scaling_count(count, context).unwrap_or(0);
+                let count = self
+                    .static_scaling_count(count, context, Some(early_view))
+                    .unwrap_or(0);
                 if let Some(value) = &mut power {
                     *value = value.saturating_add((power_per_match as i64).saturating_mul(count));
                 }
@@ -2474,6 +2705,102 @@ mod tests {
             duration: EffectDuration::UntilEndOfTurn,
             timestamp,
         }
+    }
+
+    fn insert_exiled_characteristic_fixture(engine: &mut GameEngine, card_id: &str) -> ObjectId {
+        let object_id = insert_fixture(engine, 0, card_id, Zone::Exile);
+        engine.state.players[0].exile.push(object_id);
+        engine.state.zone_change_generation.insert(object_id, 1);
+        let object = engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("exiled characteristic fixture");
+        object.power = None;
+        object.toughness = None;
+        object_id
+    }
+
+    fn move_exiled_fixture_to_graveyard(engine: &mut GameEngine, object_id: ObjectId) {
+        engine.state.players[0]
+            .exile
+            .retain(|candidate| *candidate != object_id);
+        engine.state.players[0].graveyard.push(object_id);
+        engine.state.objects.get_mut(&object_id).unwrap().zone = Zone::Graveyard;
+        engine.state.zone_change_generation.insert(object_id, 2);
+    }
+
+    #[test]
+    fn duplicant_uses_latest_valid_linked_creature_and_falls_back_when_it_leaves_exile() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            305_100,
+            &[0, 1],
+            20,
+        )
+        .expect("engine");
+        let duplicant = insert_fixture(&mut engine, 0, "duplicant", Zone::Battlefield);
+        {
+            let object = engine.state.objects.get_mut(&duplicant).unwrap();
+            object.power = None;
+            object.toughness = None;
+        }
+        engine.emit_static_abilities_on_enter(duplicant);
+
+        let giant = insert_exiled_characteristic_fixture(&mut engine, "hill_giant");
+        let bear = insert_exiled_characteristic_fixture(&mut engine, "grizzly_bears");
+        let newest_noncreature = insert_exiled_characteristic_fixture(&mut engine, "sol_ring");
+        let producer = tricerules_card_model::AbilityId::new("imprint")
+            .expect("Duplicant producer ability id");
+        let link = tricerules_card_model::AbilityLinkId::new("imprinted_creature")
+            .expect("Duplicant linked ability id");
+        let key =
+            duplicant_imprint_link_key(&engine.state, engine.registry, duplicant, &producer, &link)
+                .expect("Duplicant linked-pair key");
+        engine.state.linked_exile_records.insert(
+            key,
+            vec![
+                LinkedExiledObject {
+                    object_id: giant,
+                    zone_change_generation: 1,
+                },
+                LinkedExiledObject {
+                    object_id: bear,
+                    zone_change_generation: 1,
+                },
+                LinkedExiledObject {
+                    object_id: newest_noncreature,
+                    zone_change_generation: 1,
+                },
+            ],
+        );
+
+        let latest_creature = engine.characteristics(duplicant).expect("linked Duplicant");
+        assert!(latest_creature.has_type("Bear"));
+        assert!(latest_creature.has_type("Shapeshifter"));
+        assert!(!latest_creature.has_type("Giant"));
+        assert_eq!(
+            (latest_creature.power, latest_creature.toughness),
+            (Some(2), Some(2)),
+            "a later linked noncreature does not mask the last linked creature card"
+        );
+
+        move_exiled_fixture_to_graveyard(&mut engine, bear);
+        let fallback = engine
+            .characteristics(duplicant)
+            .expect("fallback Duplicant");
+        assert!(fallback.has_type("Giant"));
+        assert!(!fallback.has_type("Bear"));
+        assert_eq!((fallback.power, fallback.toughness), (Some(3), Some(3)));
+
+        move_exiled_fixture_to_graveyard(&mut engine, giant);
+        let printed = engine
+            .characteristics(duplicant)
+            .expect("unlinked Duplicant");
+        assert!(!printed.has_type("Giant"));
+        assert!(!printed.has_type("Bear"));
+        assert!(printed.has_type("Shapeshifter"));
+        assert_eq!((printed.power, printed.toughness), (Some(2), Some(4)));
     }
 
     #[test]

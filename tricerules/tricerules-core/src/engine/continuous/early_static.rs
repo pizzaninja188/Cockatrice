@@ -103,6 +103,30 @@ pub(in crate::engine) fn materialize_early_static_components(
                 );
             }
         }
+        StaticAbilityDef::DuplicantImprint {
+            producer_ability_id,
+            linked_exile_id,
+        } => {
+            let affected = AffectedScope::Single(source);
+            let producer_ability_id = producer_ability_id.clone();
+            let linked_exile_id = linked_exile_id.clone();
+            emit(
+                affected.clone(),
+                ContinuousEffectKind::DuplicantImprintCreatureTypes {
+                    producer_ability_id: producer_ability_id.clone(),
+                    linked_exile_id: linked_exile_id.clone(),
+                },
+                None,
+            );
+            emit(
+                affected,
+                ContinuousEffectKind::DuplicantImprintBasePowerToughness {
+                    producer_ability_id,
+                    linked_exile_id,
+                },
+                None,
+            );
+        }
         _ => {}
     }
     components

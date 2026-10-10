@@ -5,5 +5,5 @@
   face_id: "angelic_edict",
   mana_cost: "{4}{W}",
   types: ["Sorcery"],
-  spell_effect: [Exile(subject:Chosen((any_of:None,kind:AnyPermanent,tapped:None,combat_role:None,not_color:None,is_color:None,controller:Any,owner:Any,excluded_objects:[],permanent_types:[Creature,Enchantment],required_subtypes:[],excluded_subtypes:[],required_supertypes:[],excluded_supertypes:[],power:None,required_keywords:[],excluded_keywords:[],token:None,excluded_permanent_types:[],min_mana_value:None,max_mana_value:None,was_dealt_damage_this_turn:None,required_counter:None)))],
+  spell_effect: [Exile(subject:Chosen((any_of:None,kind:AnyPermanent,tapped:None,combat_role:None,not_color:None,is_color:None,controller:Any,owner:Any,excluded_objects:[],permanent_types:[Creature,Enchantment],required_subtypes:[],excluded_subtypes:[],required_supertypes:[],excluded_supertypes:[],power:None,required_keywords:[],excluded_keywords:[],token:None,excluded_permanent_types:[],min_mana_value:None,max_mana_value:None,was_dealt_damage_this_turn:None,required_counter:None)),linked_exile_id:None)],
 )

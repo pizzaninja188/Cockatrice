@@ -109,6 +109,7 @@ fn issue_481_registers_both_complete_cards_and_exact_conditional_effects() {
     let taken = face("taken_by_nightmares");
     let [SpellEffectKind::Exile {
         subject: EffectSubject::Chosen(target),
+        ..
     }, SpellEffectKind::Conditional {
         condition:
             GameCondition::BattlefieldAggregate {

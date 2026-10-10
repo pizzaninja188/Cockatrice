@@ -334,6 +334,19 @@ fn paid_chaos_warp_permanent_foreign_control_departure_keeps_exiled_commander_an
     let (spell, mut batches) = cast_and_resolve(&mut engine, target);
     assert_eq!(engine.state.objects[&target].base_controller, 9);
     batches.push(engine.apply_command(9, &concede()).unwrap());
+    assert!(
+        batches.last().is_some_and(|batch| {
+            batch.events.iter().any(|event| {
+                matches!(
+                    &event.ev,
+                    Some(Ev::ResolutionChoiceRequired(choice))
+                        if choice.prompt_text.contains("command zone")
+                )
+            })
+        }),
+        "the commander owner receives the CR 704.6d/903.9a choice after it reaches Exile"
+    );
+    batches.push(engine.apply_command(4, &branch(1)).unwrap());
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
     assert_eq!(engine.state.zone_change_generation[&target], generation + 1);

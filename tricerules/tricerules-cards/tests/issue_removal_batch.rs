@@ -132,6 +132,7 @@ fn issue_removal_batch_maps_definitions() {
         };
         let SpellEffectKind::Exile {
             subject: EffectSubject::Chosen(filter),
+            ..
         } = effect
         else {
             panic!("{id} exile, got {effect:?}");

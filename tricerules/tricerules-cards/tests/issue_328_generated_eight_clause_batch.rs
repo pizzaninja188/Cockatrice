@@ -70,6 +70,7 @@ fn issue_328_not_on_my_watch_exiles_only_attackers() {
                 combat_role: Some(CombatRole::Attacking),
                 ..TargetFilter::default()
             })),
+            linked_exile_id: None,
         }]
     );
     assert!(face.targeting.is_none());

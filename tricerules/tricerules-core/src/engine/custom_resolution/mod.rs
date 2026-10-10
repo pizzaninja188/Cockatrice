@@ -11,7 +11,7 @@ use super::events::{
 use super::legal_actions::fill_legal;
 use super::resolution::{
     counter_stack_object, counter_stack_object_ref, move_object_to_zone, permanent_moved_event,
-    permanent_moved_event_with_library_position, put_permanent_in_graveyard, sacrifice_permanent,
+    permanent_moved_event_with_library_position, sacrifice_permanent,
     seat_resolved_spell_last_in_graveyard,
 };
 use super::targeting::{
@@ -109,6 +109,12 @@ impl GameEngine {
             ResolutionContinuation::OptionalTriggeredAbility { .. }
         ) {
             return self.finish_optional_triggered_ability_choice(pending, answer, decision);
+        }
+        if matches!(
+            &pending.continuation,
+            ResolutionContinuation::StateBasedActions { .. }
+        ) {
+            return self.finish_state_based_action_choice(pending, answer, decision);
         }
         if matches!(
             &pending.continuation,
@@ -432,8 +438,8 @@ impl GameEngine {
             ResolutionContinuation::ManaAbilityDamageReplacement { .. } => {
                 return self.finish_damage_replacement_choice(pending, chosen[0]);
             }
-            ResolutionContinuation::LegendKeep => {
-                return self.finish_legend_sba_choice(pending, chosen);
+            ResolutionContinuation::StateBasedActions { .. } => {
+                unreachable!("state-based action choice handled before object validation")
             }
             ResolutionContinuation::BattleProtector { .. } => {
                 return self.finish_battle_protector_choice(pending, chosen[0] as PlayerId);

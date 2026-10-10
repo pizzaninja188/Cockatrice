@@ -2340,6 +2340,13 @@ pub enum StaticAbilityDef {
         #[serde(default = "TargetFilter::default_creature")]
         filter: TargetFilter,
     },
+    /// Duplicant's static ability derives its creature subtypes and power/toughness from the
+    /// exact creature card exiled by its paired optional enters trigger. The dedicated form keeps
+    /// that linked Exile-zone characteristic relationship explicit and generation-bound.
+    DuplicantImprint {
+        producer_ability_id: AbilityId,
+        linked_exile_id: AbilityLinkId,
+    },
     /// CR 614.12 / 305.6-305.7: choose one basic land type as this land enters, then offer the
     /// linked optional cost. The type choice and cost are one replacement-effect application;
     /// no unrelated replacement effect may be interposed between them.

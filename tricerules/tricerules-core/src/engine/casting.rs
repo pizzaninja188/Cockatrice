@@ -28,6 +28,7 @@ pub(super) struct AnnouncedAbilityActivation {
     source_owner: PlayerId,
     source_zone_change: u64,
     source_face_change: u64,
+    source_linked_exile_occurrence: Option<LinkedExileOccurrence>,
     ability_index: usize,
     card_id: String,
     face_up_index: usize,
@@ -2188,6 +2189,7 @@ impl GameEngine {
             permanent_id,
             source_owner: object.owner,
             source_zone_change: self.payment_object_ref(permanent_id).zone_change_generation,
+            source_linked_exile_occurrence: self.linked_exile_occurrence(permanent_id),
             source_face_change: self
                 .state
                 .face_change_generation
@@ -2265,6 +2267,7 @@ impl GameEngine {
             permanent_id,
             source_owner,
             source_zone_change,
+            source_linked_exile_occurrence,
             source_face_change,
             ability_index,
             card_id,
@@ -2352,7 +2355,10 @@ impl GameEngine {
             resolution_branch_choices: Default::default(),
             blight_receipts: payment.blight_receipts.clone(),
             // An activated ability's effects act on the player who activated it.
-            trigger_context: TriggerContext::default(),
+            trigger_context: TriggerContext {
+                linked_exile_occurrence: source_linked_exile_occurrence,
+                ..TriggerContext::default()
+            },
             cast_method: SpellCastMethod::Normal,
             returned_attacker_assignment: payment.returned_attacker_assignment,
         });

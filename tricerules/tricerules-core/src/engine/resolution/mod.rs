@@ -2900,7 +2900,7 @@ pub(super) fn record_last_known_characteristics(
         .insert((oid, generation), characteristics.names);
 }
 
-struct PreparedZoneMove {
+pub(super) struct PreparedZoneMove {
     oid: ObjectId,
     owner: PlayerId,
     old_zone: Option<Zone>,
@@ -2918,8 +2918,14 @@ struct PreparedZoneMove {
     holder_index: usize,
 }
 
+impl PreparedZoneMove {
+    pub(super) fn object_id(&self) -> ObjectId {
+        self.oid
+    }
+}
+
 /// Prepare every departure in a simultaneous instruction against the same battlefield.
-fn prepare_zone_move(
+pub(super) fn prepare_zone_move(
     state: &GameState,
     registry: &'static CardRegistry,
     oid: ObjectId,
@@ -3051,7 +3057,7 @@ fn move_object_to_zone_with_entry_receipt(
     commit_zone_move(state, registry, prepared)
 }
 
-fn commit_zone_move(
+pub(super) fn commit_zone_move(
     state: &mut GameState,
     registry: &'static CardRegistry,
     prepared: PreparedZoneMove,

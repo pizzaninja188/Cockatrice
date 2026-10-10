@@ -2351,60 +2351,82 @@ impl GameEngine {
                 requires_event_context
                     || self.intervening_if_holds(source_id, controller, ta.intervening_if.as_ref())
             })
-            .map(|(idx, ta, origin)| CollectedTrigger {
-                captured_spell: None,
-                source_label: self.trigger_source_public_label(source_id, card_id, face_index),
-                source_id,
-                card_id: card_id.to_string(),
-                face_index,
-                source_zone_change: {
-                    let current = self
+            .map(|(idx, ta, origin)| {
+                let trigger_context = TriggerContext {
+                    linked_exile_occurrence: self.linked_exile_occurrence(source_id),
+                    ..TriggerContext::default()
+                };
+                CollectedTrigger {
+                    captured_spell: None,
+                    source_label: self.trigger_source_public_label(source_id, card_id, face_index),
+                    source_id,
+                    card_id: card_id.to_string(),
+                    face_index,
+                    source_zone_change: {
+                        let current = self
+                            .state
+                            .zone_change_generation
+                            .get(&source_id)
+                            .copied()
+                            .unwrap_or(0);
+                        if self
+                            .state
+                            .objects
+                            .get(&source_id)
+                            .is_some_and(|object| object.zone != Zone::Battlefield)
+                        {
+                            current.saturating_sub(1)
+                        } else {
+                            current
+                        }
+                    },
+                    source_face_change: self
                         .state
-                        .zone_change_generation
+                        .face_change_generation
                         .get(&source_id)
                         .copied()
-                        .unwrap_or(0);
-                    if self
-                        .state
-                        .objects
-                        .get(&source_id)
-                        .is_some_and(|object| object.zone != Zone::Battlefield)
-                    {
-                        current.saturating_sub(1)
-                    } else {
-                        current
-                    }
-                },
-                source_face_change: self
-                    .state
-                    .face_change_generation
-                    .get(&source_id)
-                    .copied()
-                    .unwrap_or(0),
-                source_fact: self.event_object_fact(source_id),
-                additional_instances: 0,
-                controller,
-                ability_index: idx,
-                ability_origin: Some(origin.clone()),
-                presentation: self.trigger_public_presentation(
-                    source_id,
-                    face_index,
-                    Some(&origin),
-                    &ta,
-                    &self.trigger_source_face_label(source_id, card_id, face_index),
-                    self.state
-                        .objects
-                        .get(&source_id)
-                        .is_some_and(|object| object.face_down),
-                ),
-                ability: ta.clone(),
-                ability_text: ta.fallback_text_with_path(
-                    &self.trigger_source_face_label(source_id, card_id, face_index),
-                    &trigger_ability_path(&origin, &ta),
-                ),
-                trigger_context: TriggerContext::default(),
+                        .unwrap_or(0),
+                    source_fact: self.event_object_fact(source_id),
+                    additional_instances: 0,
+                    controller,
+                    ability_index: idx,
+                    ability_origin: Some(origin.clone()),
+                    presentation: self.trigger_public_presentation(
+                        source_id,
+                        face_index,
+                        Some(&origin),
+                        &ta,
+                        &self.trigger_source_face_label(source_id, card_id, face_index),
+                        self.state
+                            .objects
+                            .get(&source_id)
+                            .is_some_and(|object| object.face_down),
+                    ),
+                    ability: ta.clone(),
+                    ability_text: ta.fallback_text_with_path(
+                        &self.trigger_source_face_label(source_id, card_id, face_index),
+                        &trigger_ability_path(&origin, &ta),
+                    ),
+                    trigger_context,
+                }
             })
             .collect()
+    }
+
+    pub(super) fn linked_exile_occurrence(
+        &self,
+        source_id: ObjectId,
+    ) -> Option<LinkedExileOccurrence> {
+        let object = self.state.objects.get(&source_id)?;
+        Some(if object.copiable_values.is_some() {
+            LinkedExileOccurrence::AcquiredCopy(
+                object
+                    .active_copy_occurrence
+                    .unwrap_or(object.copy_revision),
+            )
+        } else {
+            LinkedExileOccurrence::NativeOrTokenBase
+        })
     }
 
     pub(super) fn trigger_source_snapshot(

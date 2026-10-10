@@ -472,6 +472,42 @@ impl GameEngine {
                             power: None,
                         }
                     }
+                    Zone::Exile if self.state.is_card_object(object.id) => {
+                        let definition = self.registry.get(&object.card_id)?;
+                        let faces: Vec<_> = if object.face_down {
+                            Vec::new()
+                        } else if matches!(definition.layout, Layout::Split | Layout::Room) {
+                            definition.faces_iter().collect()
+                        } else {
+                            vec![definition.primary_face()]
+                        };
+                        TurnObjectFact {
+                            object_id: object.id,
+                            zone_change_generation: self
+                                .state
+                                .zone_change_generation
+                                .get(&object.id)
+                                .copied()
+                                .unwrap_or(0),
+                            owner: object.owner,
+                            controller: object.owner,
+                            is_token: false,
+                            types: faces
+                                .iter()
+                                .flat_map(|face| face.types.iter().cloned())
+                                .collect(),
+                            all_creature_types: faces.iter().any(|face| {
+                                face.characteristic_defining_abilities
+                                    .iter()
+                                    .any(|ability| {
+                                        ability.definition
+                                            == CharacteristicDefiningAbility::Changeling
+                                    })
+                            }),
+                            keywords: vec![],
+                            power: None,
+                        }
+                    }
                     _ => return None,
                 };
                 Some((object.zone, fact))

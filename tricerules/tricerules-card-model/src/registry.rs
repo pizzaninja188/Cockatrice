@@ -4,7 +4,8 @@ use crate::primitives::{
     CardResultAction, CardResultSource, CastCostGroupDef, CastCostOptionDef,
     CastCostReceiptCondition, EffectContext, FaceChangeAction, GameCondition,
     ObjectContributionKind, ResolutionBranchRequirement, SpecialActionAffected, SpellEffectKind,
-    StaticAbilityDef, TargetController, TargetKind, TargetingDef, TriggerCondition, ZoneCardFilter,
+    StaticAbilityDef, TargetController, TargetFilter, TargetKind, TargetingDef, TriggerCondition,
+    ZoneCardFilter,
 };
 use crate::token_def::TokenDefinition;
 use crate::ManaSymbol;
@@ -1654,6 +1655,10 @@ fn collect_linked_exile_uses(effect: &SpellEffectKind, uses: &mut HashMap<String
             linked_exile_id: Some(link_id),
             ..
         } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
+        SpellEffectKind::Exile {
+            linked_exile_id: Some(link_id),
+            ..
+        } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
         SpellEffectKind::ReturnLinkedExiledCards {
             linked_exile_id, ..
         } => {
@@ -1698,6 +1703,121 @@ fn collect_linked_exile_uses(effect: &SpellEffectKind, uses: &mut HashMap<String
         }
         _ => {}
     }
+}
+
+fn face_linked_exile_abilities(face: &CardFace) -> Vec<(&crate::AbilityId, &[SpellEffectKind])> {
+    let mut abilities = Vec::new();
+    for ability in face_activated_abilities(face) {
+        abilities.push((&ability.ability_id, ability.effect.as_slice()));
+    }
+    for ability in face_triggered_abilities(face) {
+        abilities.push((&ability.ability_id, ability.effect.as_slice()));
+    }
+    for ability in face_static_abilities(face) {
+        match &ability.definition {
+            StaticAbilityDef::AttachedModifier {
+                activated_abilities,
+                triggered_abilities,
+                ..
+            }
+            | StaticAbilityDef::ConditionalSelfModifier {
+                activated_abilities,
+                triggered_abilities,
+                ..
+            } => {
+                for granted in activated_abilities {
+                    abilities.push((&granted.ability_id, granted.effect.as_slice()));
+                }
+                for granted in triggered_abilities {
+                    abilities.push((&granted.ability_id, granted.effect.as_slice()));
+                }
+            }
+            StaticAbilityDef::GrantActivatedAbilityToPermanents {
+                activated_abilities,
+                ..
+            } => {
+                for granted in activated_abilities {
+                    abilities.push((&granted.ability_id, granted.effect.as_slice()));
+                }
+            }
+            StaticAbilityDef::GrantTriggeredAbilityToPermanents {
+                triggered_abilities,
+                ..
+            } => {
+                for granted in triggered_abilities {
+                    abilities.push((&granted.ability_id, granted.effect.as_slice()));
+                }
+            }
+            _ => {}
+        }
+    }
+    abilities
+}
+
+fn collect_return_linked_exile_uses(
+    effects: &[SpellEffectKind],
+    returns: &mut Vec<(crate::AbilityId, crate::AbilityLinkId)>,
+) -> Result<(), String> {
+    for effect in effects {
+        visit_scoped_grant_effect(effect, &mut |effect| {
+            if let SpellEffectKind::ReturnLinkedExiledCards {
+                producer_ability_id,
+                linked_exile_id,
+                ..
+            } = effect
+            {
+                returns.push((producer_ability_id.clone(), linked_exile_id.clone()));
+            }
+            Ok(())
+        })?;
+    }
+    Ok(())
+}
+
+fn ability_has_linked_graveyard_exile_producer(
+    effects: &[SpellEffectKind],
+    linked_exile_id: &crate::AbilityLinkId,
+) -> Result<bool, String> {
+    let mut found = false;
+    for effect in effects {
+        visit_scoped_grant_effect(effect, &mut |effect| {
+            if let SpellEffectKind::MoveGraveyardCards {
+                destination: crate::primitives::GraveyardDestination::Exile,
+                linked_exile_id: Some(effect_link_id),
+                ..
+            } = effect
+            {
+                found |= effect_link_id == linked_exile_id;
+            }
+            Ok(())
+        })?;
+    }
+    Ok(found)
+}
+
+fn validate_linked_exile_return_producers(face: &CardFace) -> Result<(), String> {
+    let abilities = face_linked_exile_abilities(face);
+    let mut returns = Vec::new();
+    for (_, effects) in &abilities {
+        collect_return_linked_exile_uses(effects, &mut returns)?;
+    }
+    for (producer_ability_id, linked_exile_id) in returns {
+        let mut matching_producers = 0;
+        for (ability_id, effects) in &abilities {
+            if **ability_id == producer_ability_id
+                && ability_has_linked_graveyard_exile_producer(effects, &linked_exile_id)?
+            {
+                matching_producers += 1;
+            }
+        }
+        if matching_producers != 1 {
+            return Err(
+                "linked exile return must name the linked-exile producer with matching ability and link ids"
+                    .into(),
+            );
+        }
+    }
+    Ok(())
 }
 
 fn validate_chosen_opponent_links(face: &CardFace) -> Result<(), String> {
@@ -1797,6 +1917,22 @@ fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
     }
     for ability in face_static_abilities(face) {
         match &ability.definition {
+            StaticAbilityDef::DuplicantImprint {
+                producer_ability_id,
+                linked_exile_id,
+            } => {
+                producer_ability_id.validate()?;
+                linked_exile_id.validate()?;
+                if !has_duplicant_imprint_producer(face, producer_ability_id, linked_exile_id) {
+                    return Err(
+                        "DuplicantImprint must match exactly one targeted self-entry exile producer"
+                            .into(),
+                    );
+                }
+                uses.entry(linked_exile_id.as_str().to_owned())
+                    .or_default()
+                    .1 += 1;
+            }
             StaticAbilityDef::AttachedModifier {
                 activated_abilities,
                 triggered_abilities,
@@ -1862,6 +1998,47 @@ fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn has_duplicant_imprint_producer(
+    face: &CardFace,
+    producer_ability_id: &crate::AbilityId,
+    linked_exile_id: &crate::AbilityLinkId,
+) -> bool {
+    let expected_filter = TargetFilter {
+        kind: TargetKind::Creature,
+        token: Some(false),
+        ..TargetFilter::default()
+    };
+    face_triggered_abilities(face)
+        .filter(|ability| {
+            let effect_ok = matches!(
+                ability.effect.as_slice(),
+                [SpellEffectKind::Exile {
+                    subject: crate::primitives::EffectSubject::Chosen(filter),
+                    linked_exile_id: Some(effect_link_id),
+                }] if **filter == expected_filter
+                    && effect_link_id.as_str() == linked_exile_id.as_str()
+            );
+            let targeting_ok = ability.targeting.as_ref().is_some_and(|targeting| {
+                matches!(targeting.groups.as_slice(), [group]
+                    if group.min == 1
+                        && group.max == 1
+                        && group.effect_indices == [0]
+                        && group.chooser == crate::primitives::TargetChooser::Controller
+                        && group.distinct_from.is_empty()
+                        && !group.same_graveyard
+                        && group.cast_cost_expansion.is_none())
+            });
+            ability.ability_id == *producer_ability_id
+                && ability.trigger == TriggerCondition::WhenSelfEntersBattlefield
+                && ability.may
+                && ability.modal.is_none()
+                && effect_ok
+                && targeting_ok
+        })
+        .count()
+        == 1
 }
 
 fn effect_returns_source_transformed(effect: &SpellEffectKind) -> bool {
@@ -2732,6 +2909,12 @@ impl CardRegistry {
                         }
                     })?;
                 }
+                validate_linked_exile_return_producers(face).map_err(|reason| {
+                    RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    }
+                })?;
                 // CR 113.6g is the stack-active exception to CR 604.2. Every other static ability
                 // here requires a permanent source on the battlefield; an instant/sorcery anthem,
                 // for example, belongs in `spell_effect` as a one-shot `PumpAll`.

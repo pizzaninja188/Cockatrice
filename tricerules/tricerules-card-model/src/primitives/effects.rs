@@ -15,8 +15,8 @@ use super::{
     PermanentEventFilter,
 };
 use crate::{
-    choice_fallback, AbilityLinkId, AbilityPresentation, ChoiceId, ExiledCohortId, ManaCost,
-    SearchResultId,
+    choice_fallback, AbilityId, AbilityLinkId, AbilityPresentation, ChoiceId, ExiledCohortId,
+    ManaCost, SearchResultId,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
@@ -1546,6 +1546,10 @@ pub enum SpellEffectKind {
     Exile {
         #[serde(default)]
         subject: EffectSubject,
+        /// Duplicant's optional entry trigger records the exact object incarnation its
+        /// controller exiles for the source's linked imprint ability.
+        #[serde(default)]
+        linked_exile_id: Option<AbilityLinkId>,
     },
     /// Exile a permanent-valued subject and let the resulting card's owner cast it from exile
     /// for the stated alternative mana cost while that exact generation remains there. Airbend
@@ -1613,6 +1617,7 @@ pub enum SpellEffectKind {
     /// link. The identity foundation is shared with cards such as Sisters of Stone Death; this
     /// all-matching-cards return shape and its entry modifications serve Ghost Vacuum.
     ReturnLinkedExiledCards {
+        producer_ability_id: AbilityId,
         linked_exile_id: AbilityLinkId,
         filter: ZoneCardFilter,
         #[serde(default)]
@@ -2910,6 +2915,7 @@ impl SpellEffectKind {
                 subject: EffectSubject::AttachedObject,
             } | SpellEffectKind::Exile {
                 subject: EffectSubject::AttachedObject,
+                ..
             } | SpellEffectKind::ExileWithOwnerCastPermission {
                 subject: EffectSubject::AttachedObject,
                 ..
@@ -2995,6 +3001,7 @@ impl SpellEffectKind {
                 subject: EffectSubject::TriggerObject,
             } | SpellEffectKind::Exile {
                 subject: EffectSubject::TriggerObject,
+                ..
             } | SpellEffectKind::ExileWithOwnerCastPermission {
                 subject: EffectSubject::TriggerObject,
                 ..
@@ -3250,7 +3257,7 @@ impl SpellEffectKind {
             | SpellEffectKind::GrantTriggeredAbility { subject, .. }
             | SpellEffectKind::AddTypes { subject, .. }
             | SpellEffectKind::ReturnToOwnersHand { subject }
-            | SpellEffectKind::Exile { subject }
+            | SpellEffectKind::Exile { subject, .. }
             | SpellEffectKind::ExileWithOwnerCastPermission { subject, .. }
             | SpellEffectKind::PutInOwnersLibrary { subject, .. }
             | SpellEffectKind::Regenerate { subject }
@@ -3787,7 +3794,7 @@ impl SpellEffectKind {
                 | SpellEffectKind::GrantTriggeredAbility { subject: value, .. }
                 | SpellEffectKind::AddTypes { subject: value, .. }
                 | SpellEffectKind::ReturnToOwnersHand { subject: value }
-                | SpellEffectKind::Exile { subject: value }
+                | SpellEffectKind::Exile { subject: value, .. }
                 | SpellEffectKind::ExileWithOwnerCastPermission { subject: value, .. }
                 | SpellEffectKind::PutInOwnersLibrary { subject: value, .. }
                 | SpellEffectKind::Regenerate { subject: value }
@@ -4343,7 +4350,20 @@ impl SpellEffectKind {
                 }
             }
         }
+        if let SpellEffectKind::Exile {
+            linked_exile_id: Some(link_id),
+            ..
+        } = self
+        {
+            link_id.validate()?;
+            if context != EffectContext::Ability {
+                return Err(
+                    "linked targeted exile requires an activated or triggered ability".into(),
+                );
+            }
+        }
         if let SpellEffectKind::ReturnLinkedExiledCards {
+            producer_ability_id,
             linked_exile_id,
             filter,
             entry_counters,
@@ -4355,6 +4375,7 @@ impl SpellEffectKind {
                     "linked exile return requires an activated or triggered ability".into(),
                 );
             }
+            producer_ability_id.validate()?;
             linked_exile_id.validate()?;
             filter.validate()?;
             let mut kinds = std::collections::HashSet::new();
@@ -4473,7 +4494,7 @@ impl SpellEffectKind {
                 _ => {}
             }
         }
-        if let SpellEffectKind::Exile { subject }
+        if let SpellEffectKind::Exile { subject, .. }
         | SpellEffectKind::PutInOwnersLibrary { subject, .. } = self
         {
             if let EffectSubject::Chosen(target) = subject {
@@ -5255,6 +5276,7 @@ impl SpellEffectKind {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
+                ..
             } | SpellEffectKind::PutInOwnersLibrary {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
@@ -5350,6 +5372,7 @@ impl SpellEffectKind {
             }
             | SpellEffectKind::Exile {
                 subject: EffectSubject::Chosen(target),
+                ..
             }
             | SpellEffectKind::PutInOwnersLibrary {
                 subject: EffectSubject::Chosen(target),
@@ -6642,6 +6665,12 @@ pub enum ContinuousEffectKind {
     /// CR 205.3m / 613.1d — replace every creature subtype with the complete current creature-type
     /// set without materializing that list. Soulstone Sanctuary exercises this layer operation.
     Layer4SetAllCreatureTypes,
+    /// Duplicant's linked imprint sets only its creature subtypes in layer 4. The linked card is
+    /// resolved from the exact source incarnation and acquired-pair occurrence at evaluation.
+    DuplicantImprintCreatureTypes {
+        producer_ability_id: AbilityId,
+        linked_exile_id: AbilityLinkId,
+    },
     /// CR 613.1e layer 5 — replace every color of the affected object.
     Layer5SetColors(Vec<Color>),
     /// CR 613 layer 6 — remove every ability with timestamp precedence. Unable to Scream,
@@ -6651,6 +6680,12 @@ pub enum ContinuousEffectKind {
     Layer7bSetPt {
         power: i64,
         toughness: i64,
+    },
+    /// Duplicant's linked imprint sets base P/T from the current Exile-zone characteristics of
+    /// its latest still-exiled linked creature card, after that card's layer 4 values settle.
+    DuplicantImprintBasePowerToughness {
+        producer_ability_id: AbilityId,
+        linked_exile_id: AbilityLinkId,
     },
     /// CR 613.4b: set only base power in layer 7b, preserving the current base toughness.
     /// PuPu UFO and Symmetry Sage exercise the source-count and fixed-value forms respectively.

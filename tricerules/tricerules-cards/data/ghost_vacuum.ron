@@ -27,6 +27,7 @@
     costs: [Mana("{6}"), Tap, SacrificeSelf],
     timing: SorcerySpeed,
     effect: [ReturnLinkedExiledCards(
+      producer_ability_id: "exile_graveyard_card",
       linked_exile_id: "exiled_cards",
       filter: (card_type: Some(Creature)),
       entry_counters: [(counter: Keyword(Flying), count: 1)],

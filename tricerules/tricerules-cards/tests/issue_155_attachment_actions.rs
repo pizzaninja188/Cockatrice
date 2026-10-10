@@ -87,7 +87,8 @@ fn issue_155_auras_use_untargeted_attached_object_zone_actions() {
         assert!(ability.effect.iter().any(|effect| matches!(
             effect,
             SpellEffectKind::Exile {
-                subject: EffectSubject::AttachedObject
+                subject: EffectSubject::AttachedObject,
+                ..
             }
         )));
         assert!(ability.targeting.is_none());

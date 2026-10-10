@@ -646,6 +646,7 @@ fn issue_234_linked_exile_schema_is_paired_and_fail_closed() {
             costs: [Mana("{6}"), Tap, SacrificeSelf],
             timing: SorcerySpeed,
             effect: [ReturnLinkedExiledCards(
+                producer_ability_id: "exile_card",
                 linked_exile_id: "exiled_cards",
                 filter: (card_type: Some(Creature)),
                 entry_counters: [(counter: Keyword(Flying), count: 1)],
@@ -663,25 +664,32 @@ fn issue_234_linked_exile_schema_is_paired_and_fail_closed() {
         (
             "requires an activated or triggered ability",
             r#"spell_effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))],
-            activated_abilities: [(ability_id: "return", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)))])]"#,
+            activated_abilities: [(ability_id: "return", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(producer_ability_id: "return", linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)))])]"#,
         ),
         (
             "requires the exile destination",
             r#"activated_abilities: [
                 (ability_id: "bad", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Hand, linked_exile_id: Some("exiled_cards"))]),
-                (ability_id: "return", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)))])
+                (ability_id: "return", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(producer_ability_id: "bad", linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)))])
             ]"#,
         ),
         (
             "linked exile return requires an activated or triggered ability",
-            r#"spell_effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)))],
+            r#"spell_effect: [ReturnLinkedExiledCards(producer_ability_id: "producer", linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)))],
             activated_abilities: [(ability_id: "producer", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))])]"#,
+        ),
+        (
+            "must name the linked-exile producer with matching ability and link ids",
+            r#"activated_abilities: [
+                (ability_id: "exile_card", presentation: Fallback, costs: [Tap], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))]),
+                (ability_id: "return", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(producer_ability_id: "other_exile", linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)))])
+            ]"#,
         ),
         (
             "ability link id 'Bad' must be canonical snake_case beginning with a letter",
             r#"activated_abilities: [
                 (ability_id: "first", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("Bad"))]),
-                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "Bad", filter: (card_type: Some(Creature)))])
+                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(producer_ability_id: "first", linked_exile_id: "Bad", filter: (card_type: Some(Creature)))])
             ]"#,
         ),
         (
@@ -693,35 +701,35 @@ fn issue_234_linked_exile_schema_is_paired_and_fail_closed() {
             r#"activated_abilities: [
                 (ability_id: "first", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))]),
                 (ability_id: "duplicate", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))]),
-                (ability_id: "return", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)))])
+                (ability_id: "return", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(producer_ability_id: "first", linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)))])
             ]"#,
         ),
         (
             "zone card filter requires at least one predicate",
             r#"activated_abilities: [
                 (ability_id: "first", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))]),
-                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: ())]),
+                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(producer_ability_id: "first", linked_exile_id: "exiled_cards", filter: ())]),
             ]"#,
         ),
         (
             "entry counter placement count must be positive",
             r#"activated_abilities: [
                 (ability_id: "first", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))]),
-                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)), entry_counters: [(counter: Keyword(Flying), count: 0)])]),
+                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(producer_ability_id: "first", linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)), entry_counters: [(counter: Keyword(Flying), count: 0)])]),
             ]"#,
         ),
         (
             "entry counter placements cannot repeat a counter kind",
             r#"activated_abilities: [
                 (ability_id: "first", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))]),
-                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)), entry_counters: [(counter: Keyword(Flying), count: 1), (counter: Keyword(Flying), count: 1)])]),
+                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(producer_ability_id: "first", linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)), entry_counters: [(counter: Keyword(Flying), count: 1), (counter: Keyword(Flying), count: 1)])]),
             ]"#,
         ),
         (
             "type-line addition must add a card type or subtype",
             r#"activated_abilities: [
                 (ability_id: "first", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))]),
-                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)), entry_modifiers: [AddTypes(())])]),
+                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(producer_ability_id: "first", linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)), entry_modifiers: [AddTypes(())])]),
             ]"#,
         ),
     ] {
@@ -735,6 +743,115 @@ fn issue_234_linked_exile_schema_is_paired_and_fail_closed() {
             "expected {needle:?}, got {error}"
         );
     }
+}
+
+#[test]
+fn duplicant_targeted_linked_exile_pair_is_exact_and_fail_closed() {
+    let valid = r#"(
+        id: "duplicant",
+        name: "Duplicant",
+        face_id: "duplicant",
+        mana_cost: "{6}",
+        types: ["Artifact", "Creature", "Shapeshifter"],
+        power: 2,
+        toughness: 4,
+        triggered_abilities: [(
+            ability_id: "imprint",
+            presentation: OracleLines([1]),
+            trigger: WhenSelfEntersBattlefield,
+            may: true,
+            targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target nontoken creature", effect_indices: [0])])),
+            effect: [Exile(
+                subject: Chosen((kind: Creature, token: Some(false))),
+                linked_exile_id: Some("imprinted_creature"),
+            )],
+        )],
+        static_abilities: [(ability_id: "imprint_static", presentation: OracleLines([2]), definition: DuplicantImprint(
+            producer_ability_id: "imprint",
+            linked_exile_id: "imprinted_creature",
+        ))],
+    )"#;
+    crate::CardRegistry::from_chunks_and_tokens(&[valid], &[])
+        .expect("Duplicant needs a valid, exact linked-exile pair");
+
+    let mismatched_producer = valid.replace(
+        "producer_ability_id: \"imprint\"",
+        "producer_ability_id: \"other\"",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&mismatched_producer], &[])
+        .expect_err("the static consumer must name the printed trigger producer");
+    assert!(
+        error
+            .to_string()
+            .contains("must match exactly one targeted self-entry exile producer"),
+        "{error}"
+    );
+
+    let mismatched_link = valid.replace(
+        "linked_exile_id: \"imprinted_creature\",\n        ))]",
+        "linked_exile_id: \"other_creature\",\n        ))]",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&mismatched_link], &[])
+        .expect_err("the static consumer must name the exile effect's link id");
+    assert!(
+        error
+            .to_string()
+            .contains("must match exactly one targeted self-entry exile producer"),
+        "{error}"
+    );
+
+    let cross_wired_pairs = r#"(
+        id: "cross_wired_duplicant",
+        name: "Cross-wired Duplicant",
+        face_id: "cross_wired_duplicant",
+        mana_cost: "{6}",
+        types: ["Artifact", "Creature", "Shapeshifter"],
+        power: 2,
+        toughness: 4,
+        triggered_abilities: [
+            (
+                ability_id: "imprint_a",
+                presentation: OracleLines([1]),
+                trigger: WhenSelfEntersBattlefield,
+                may: true,
+                targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target nontoken creature", effect_indices: [0])])),
+                effect: [Exile(subject: Chosen((kind: Creature, token: Some(false))), linked_exile_id: Some("link_a"))],
+            ),
+            (
+                ability_id: "imprint_b",
+                presentation: OracleLines([1]),
+                trigger: WhenSelfEntersBattlefield,
+                may: true,
+                targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target nontoken creature", effect_indices: [0])])),
+                effect: [Exile(subject: Chosen((kind: Creature, token: Some(false))), linked_exile_id: Some("link_b"))],
+            ),
+        ],
+        static_abilities: [
+            (ability_id: "static_a", presentation: OracleLines([2]), definition: DuplicantImprint(producer_ability_id: "imprint_a", linked_exile_id: "link_b")),
+            (ability_id: "static_b", presentation: OracleLines([2]), definition: DuplicantImprint(producer_ability_id: "imprint_b", linked_exile_id: "link_a")),
+        ],
+    )"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[cross_wired_pairs], &[])
+        .expect_err("each Duplicant static consumer must use its named producer's link id");
+    assert!(
+        error
+            .to_string()
+            .contains("must match exactly one targeted self-entry exile producer"),
+        "{error}"
+    );
+
+    let missing_consumer = valid.replace(
+        "        static_abilities: [(ability_id: \"imprint_static\", presentation: OracleLines([2]), definition: DuplicantImprint(\n            producer_ability_id: \"imprint\",\n            linked_exile_id: \"imprinted_creature\",\n        ))],\n",
+        "",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&missing_consumer], &[])
+        .expect_err("a linked targeted exile producer without its static consumer is invalid");
+    assert!(
+        error
+            .to_string()
+            .contains("requires exactly one producer and one consumer"),
+        "{error}"
+    );
 }
 
 #[test]

@@ -182,6 +182,7 @@ fn issue_335_angelic_edict_exiles_a_creature_or_enchantment_union() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::Exile {
+            linked_exile_id: None,
             subject: EffectSubject::Chosen(Box::new(TargetFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![

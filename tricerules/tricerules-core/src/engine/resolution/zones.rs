@@ -735,11 +735,51 @@ pub(super) fn exile_top_with_play_permission(
     Ok(EffectOutcome::Continue)
 }
 
+fn linked_exile_key(
+    engine: &GameEngine,
+    top: &StackItem,
+    ability_link_id: tricerules_card_model::AbilityLinkId,
+    producer_ability_id: tricerules_card_model::AbilityId,
+) -> Result<LinkedExileKey, EngineError> {
+    let source_object_id = top.source_permanent_id.ok_or(EngineError::Illegal(
+        "linked exile requires an ability source",
+    ))?;
+    let occurrence = top
+        .trigger_context
+        .linked_exile_occurrence
+        .ok_or(EngineError::Illegal(
+            "linked exile requires an event-time pair occurrence",
+        ))?;
+    let face_id = engine
+        .registry
+        .get(&top.card_id)
+        .and_then(|card| card.faces.get(top.face_index))
+        .map(|face| face.face_id.clone())
+        .ok_or(EngineError::Illegal(
+            "linked exile requires a stable producer face identity",
+        ))?;
+    Ok(LinkedExileKey {
+        source_object_id,
+        source_zone_change: top.source_zone_change,
+        producer: AbilityDefinitionId {
+            card_id: top.card_id.clone(),
+            face_id,
+            ability_path: vec![producer_ability_id],
+        },
+        ability_link_id,
+        occurrence,
+    })
+}
+
 pub(super) fn exile(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::Exile { subject } = effect else {
+    let SpellEffectKind::Exile {
+        subject,
+        linked_exile_id,
+    } = effect
+    else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let tid = resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject);
@@ -751,6 +791,31 @@ pub(super) fn exile(
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
         let controller = engine.state.objects.get(&tid).map(|o| o.controller);
+        let previous_generation = engine
+            .state
+            .zone_change_generation
+            .get(&tid)
+            .copied()
+            .unwrap_or(0);
+        let linked_key = linked_exile_id
+            .map(|ability_link_id| {
+                let producer_ability_id = cx
+                    .top
+                    .triggered_ability
+                    .as_ref()
+                    .map(|ability| ability.ability_id.clone())
+                    .or_else(|| {
+                        cx.top
+                            .activated_ability
+                            .as_ref()
+                            .map(|ability| ability.ability_id.clone())
+                    })
+                    .ok_or(EngineError::Illegal(
+                        "linked exile requires a triggered or activated producer",
+                    ))?;
+                linked_exile_key(engine, cx.top, ability_link_id, producer_ability_id)
+            })
+            .transpose()?;
         let zone_snapshot = engine.snapshot_zone_event();
         let leave_event = engine.battlefield_leave_event(tid);
         move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Exile, None)?;
@@ -759,15 +824,35 @@ pub(super) fn exile(
             leave_event.into_iter().collect::<Vec<_>>(),
             events,
         );
+        let new_generation = engine
+            .state
+            .zone_change_generation
+            .get(&tid)
+            .copied()
+            .unwrap_or(previous_generation);
+        if let Some(key) = linked_key {
+            if new_generation > previous_generation
+                && engine
+                    .state
+                    .objects
+                    .get(&tid)
+                    .is_some_and(|object| object.zone == Zone::Exile)
+            {
+                engine
+                    .state
+                    .linked_exile_records
+                    .entry(key)
+                    .or_default()
+                    .push(LinkedExiledObject {
+                        object_id: tid,
+                        zone_change_generation: new_generation,
+                    });
+            }
+        }
         if let Some(controller_at_event) = controller {
             cx.effect_result.produced_objects.push(TriggerObjectRef {
                 object_id: tid,
-                zone_change_generation: engine
-                    .state
-                    .zone_change_generation
-                    .get(&tid)
-                    .copied()
-                    .unwrap_or(0),
+                zone_change_generation: new_generation,
                 controller_at_event,
             });
         }
@@ -2761,14 +2846,21 @@ pub(super) fn move_graveyard_cards(
     if destination == GraveyardDestination::Exile {
         let linked_exile_key = linked_exile_id
             .map(|ability_link_id| {
-                let source_object_id = cx.top.source_permanent_id.ok_or(EngineError::Illegal(
-                    "linked exile requires an ability source",
-                ))?;
-                Ok(LinkedExileKey {
-                    source_object_id,
-                    source_zone_change: cx.top.source_zone_change,
-                    ability_link_id,
-                })
+                let producer_ability_id = cx
+                    .top
+                    .activated_ability
+                    .as_ref()
+                    .map(|ability| ability.ability_id.clone())
+                    .or_else(|| {
+                        cx.top
+                            .triggered_ability
+                            .as_ref()
+                            .map(|ability| ability.ability_id.clone())
+                    })
+                    .ok_or(EngineError::Illegal(
+                        "linked exile requires a triggered or activated producer",
+                    ))?;
+                linked_exile_key(cx.engine, cx.top, ability_link_id, producer_ability_id)
             })
             .transpose()?;
         return exile_graveyard_cohort(cx, targets, linked_exile_key);
@@ -2867,6 +2959,7 @@ pub(super) fn return_linked_exiled_cards(
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
     let SpellEffectKind::ReturnLinkedExiledCards {
+        producer_ability_id,
         linked_exile_id,
         filter,
         entry_counters,
@@ -2875,16 +2968,7 @@ pub(super) fn return_linked_exiled_cards(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let Some(source_object_id) = cx.top.source_permanent_id else {
-        return Err(EngineError::Illegal(
-            "linked exile requires an ability source",
-        ));
-    };
-    let key = LinkedExileKey {
-        source_object_id,
-        source_zone_change: cx.top.source_zone_change,
-        ability_link_id: linked_exile_id,
-    };
+    let key = linked_exile_key(cx.engine, cx.top, linked_exile_id, producer_ability_id)?;
     let linked = cx
         .engine
         .state

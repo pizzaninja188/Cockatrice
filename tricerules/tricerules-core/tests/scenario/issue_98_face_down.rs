@@ -1,8 +1,9 @@
 //! Issue #98: CR 701.40 / 708 face-down permanent characteristics and lifecycle.
 
 use crate::helpers::*;
+use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
 use tricerules_cards::{CounterKind, Keyword};
-use tricerules_core::{AttachmentRecipient, Zone};
+use tricerules_core::{AffectedScope, AttachmentRecipient, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 
 fn seat_on_top(engine: &mut GameEngine, player: usize, card_ids: &[&str]) -> Vec<u32> {
@@ -51,6 +52,52 @@ fn manifested_permanent_has_public_face_down_characteristics() {
     assert!(characteristics.evasions.is_empty());
     assert_eq!(characteristics.power, Some(2));
     assert_eq!(characteristics.toughness, Some(2));
+}
+
+#[test]
+fn face_down_creature_type_annotations_use_public_characteristics() {
+    let decks = Some(vec![
+        deck_with("forest", &["grizzly_bears", "plains"]),
+        deck_with("swamp", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        98_021,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new game");
+    advance_to_main1_from_game_start(&mut engine);
+    let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
+    let land = relocate_to_battlefield(&mut engine, 0, "plains", false);
+    engine.state.objects.get_mut(&bear).unwrap().face_down = true;
+    engine.state.objects.get_mut(&land).unwrap().face_down = true;
+
+    let bear_labels = zone_view_rules_annotation_labels(&mut engine, 0, bear);
+    let land_labels = zone_view_rules_annotation_labels(&mut engine, 0, land);
+    assert_eq!(bear_labels, land_labels);
+    assert!(
+        bear_labels
+            .iter()
+            .all(|label| !label.starts_with("Creature types:")),
+        "printed subtypes must not be disclosed by a face-down object: {bear_labels:?}"
+    );
+
+    engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::AllCreatures,
+        kind: ContinuousEffectKind::Layer4SetCreatureTypes(vec!["Elf".into()]),
+        condition: None,
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: 1,
+    });
+    let bear_labels = zone_view_rules_annotation_labels(&mut engine, 0, bear);
+    let land_labels = zone_view_rules_annotation_labels(&mut engine, 0, land);
+    assert_eq!(bear_labels, land_labels);
+    assert!(bear_labels.contains(&"Creature types: Elf".to_string()));
 }
 
 #[test]

@@ -111,6 +111,7 @@ mod tests {
                     ability_id: "return", presentation: Fallback,
                     costs: [Mana("{1}")],
                     effect: [ReturnLinkedExiledCards(
+                        producer_ability_id: "exile",
                         linked_exile_id: "unpaired_link",
                         filter: (card_type: Some(Creature)),
                         entry_counters: [], entry_modifiers: [],

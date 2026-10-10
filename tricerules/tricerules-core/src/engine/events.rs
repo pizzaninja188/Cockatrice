@@ -100,6 +100,49 @@ impl GameEngine {
                 labels.push(format!("Basic land types: {}", basic_types.join(", ")));
             }
         }
+        if let (Some(current), Some(intrinsic)) = (characteristics, face) {
+            if current.is_creature() {
+                let printed_all_creature_types = !object.face_down
+                    && intrinsic
+                        .characteristic_defining_abilities
+                        .iter()
+                        .any(|ability| {
+                            matches!(
+                                ability.definition,
+                                CharacteristicDefiningAbility::Changeling
+                            )
+                        });
+                let current_creature_types = current
+                    .types
+                    .iter()
+                    .filter(|value| is_creature_type(value))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                let printed_creature_types = if object.face_down {
+                    Vec::new()
+                } else {
+                    intrinsic
+                        .types
+                        .iter()
+                        .filter(|value| is_creature_type(value))
+                        .cloned()
+                        .collect::<Vec<_>>()
+                };
+                if current.all_creature_types && !printed_all_creature_types {
+                    labels.push("Creature types: All creature types".to_string());
+                } else if !current.all_creature_types
+                    && (printed_all_creature_types
+                        || current_creature_types != printed_creature_types)
+                {
+                    let types = if current_creature_types.is_empty() {
+                        "None".to_string()
+                    } else {
+                        current_creature_types.join(", ")
+                    };
+                    labels.push(format!("Creature types: {types}"));
+                }
+            }
+        }
         labels.extend(
             characteristics
                 .zip(face)
@@ -859,6 +902,8 @@ impl GameEngine {
             .collect();
         BattlefieldViewSnapshot {
             players,
+            duplicant_linked_exile_characteristics: self
+                .duplicant_linked_exile_characteristic_snapshot(),
             continuous_effects: self.state.continuous_effects.clone(),
             static_emblems: self.state.static_emblems.clone(),
             activation_uses_this_turn: self.state.activation_uses_this_turn.clone(),
@@ -882,6 +927,93 @@ impl GameEngine {
                 }
             }),
         }
+    }
+
+    fn duplicant_linked_exile_characteristic_snapshot(&self) -> Vec<DuplicantLinkedExileSnapshot> {
+        let mut sources = self
+            .state
+            .players
+            .iter()
+            .flat_map(|player| player.battlefield.iter().copied())
+            .collect::<Vec<_>>();
+        sources.sort_unstable();
+        sources
+            .into_iter()
+            .filter_map(|source_object_id| {
+                let object = self.state.objects.get(&source_object_id)?;
+                let face =
+                    super::effective_face_from(&self.state, self.registry, source_object_id)?;
+                let (producer_ability_id, linked_exile_id) = face
+                    .static_abilities
+                    .iter()
+                    .find_map(|ability| match &ability.definition {
+                        StaticAbilityDef::DuplicantImprint {
+                            producer_ability_id,
+                            linked_exile_id,
+                        } => Some((producer_ability_id, linked_exile_id)),
+                        _ => None,
+                    })?;
+                let linked_pair = super::characteristics::duplicant_imprint_link_key(
+                    &self.state,
+                    self.registry,
+                    source_object_id,
+                    producer_ability_id,
+                    linked_exile_id,
+                )?;
+                let source_zone_change_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&source_object_id)
+                    .copied()
+                    .unwrap_or(0);
+                let linked_objects = self
+                    .state
+                    .linked_exile_records
+                    .get(&linked_pair)
+                    .into_iter()
+                    .flatten()
+                    .map(|record| {
+                        let object = self.state.objects.get(&record.object_id);
+                        let current_zone_change_generation = self
+                            .state
+                            .zone_change_generation
+                            .get(&record.object_id)
+                            .copied()
+                            .unwrap_or(0);
+                        let characteristics = object
+                            .filter(|object| {
+                                object.zone == Zone::Exile
+                                    && current_zone_change_generation
+                                        == record.zone_change_generation
+                            })
+                            .and_then(|_| self.characteristics(record.object_id));
+                        LinkedExileCharacteristicSnapshot {
+                            object_id: record.object_id,
+                            recorded_zone_change_generation: record.zone_change_generation,
+                            current_zone_change_generation,
+                            zone: object.map(|object| object.zone),
+                            types: characteristics.as_ref().map(|value| value.types.clone()),
+                            all_creature_types: characteristics
+                                .as_ref()
+                                .map(|value| value.all_creature_types),
+                            power: characteristics
+                                .as_ref()
+                                .and_then(|value| value.signed_power),
+                            toughness: characteristics
+                                .as_ref()
+                                .and_then(|value| value.signed_toughness),
+                        }
+                    })
+                    .collect();
+                Some(DuplicantLinkedExileSnapshot {
+                    source_object_id,
+                    source_zone_change_generation,
+                    source_copy_revision: object.copy_revision,
+                    linked_pair,
+                    linked_objects,
+                })
+            })
+            .collect()
     }
 
     fn current_first_strike_step_pending(&self) -> bool {

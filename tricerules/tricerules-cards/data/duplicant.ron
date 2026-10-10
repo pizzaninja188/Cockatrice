@@ -1,0 +1,35 @@
+// Oracle and rulings checked 2026-10-09 against pinned Scryfall oracle ea86abfa-6cab-4ef0-8463-34136fc25b59.
+// CR 603.2, 607.2a, 613.1d, 613.4b, 613.6, and 604.3 govern the linked imprint effect.
+(
+  id: "duplicant",
+  name: "Duplicant",
+  face_id: "duplicant",
+  mana_cost: "{6}",
+  types: ["Artifact", "Creature", "Shapeshifter"],
+  power: 2,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "imprint",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    may: true,
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target nontoken creature",
+      effect_indices: [0],
+    )])),
+    effect: [Exile(
+      subject: Chosen((kind: Creature, token: Some(false))),
+      linked_exile_id: Some("imprinted_creature"),
+    )],
+  )],
+  static_abilities: [(
+    ability_id: "imprint_static",
+    presentation: OracleLines([2]),
+    definition: DuplicantImprint(
+      producer_ability_id: "imprint",
+      linked_exile_id: "imprinted_creature",
+    ),
+  )],
+)
