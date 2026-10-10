@@ -1017,6 +1017,25 @@ impl GameEngine {
                 })
                 .collect(),
             GameEvent::Blighted(_) | GameEvent::Waterbent { .. } => vec![],
+            GameEvent::UntapStepCompleted {
+                active_player,
+                untapped_count,
+            } => sources
+                .iter()
+                .filter(|source| source.controller == *active_player)
+                .flat_map(|source| {
+                    self.matching_snapshot_abilities(source, |condition| {
+                        matches!(
+                            condition,
+                            TriggerCondition::WheneverControllerUntapsOneOrMorePermanents
+                        )
+                    })
+                })
+                .map(|mut trigger| {
+                    trigger.trigger_context.event_count = Some(*untapped_count);
+                    trigger
+                })
+                .collect(),
             GameEvent::ClassLevelChanged {
                 source,
                 from_level,
@@ -2769,6 +2788,113 @@ impl GameEngine {
             .collect()
     }
 
+    /// Check the Millennium Calendar's CR 603.8 threshold from the current rules state. This is
+    /// intentionally specialized: no other card or mechanic uses this state-trigger condition.
+    pub(super) fn check_millennium_calendar_state_triggers(&mut self) {
+        if self.state.is_terminal() {
+            return;
+        }
+        let mut active = self.active_millennium_calendar_state_trigger_keys();
+        let mut collected = Vec::new();
+        for source in self.battlefield_sources_apnap() {
+            if !source.triggered_abilities.iter().any(|(_, ability, _)| {
+                matches!(
+                    ability.trigger,
+                    TriggerCondition::WhenSourceHasAtLeast1000TimeCounters
+                )
+            }) {
+                continue;
+            }
+            let Some(object) = self
+                .state
+                .objects
+                .get(&source.object_id)
+                .filter(|object| object.zone == Zone::Battlefield)
+            else {
+                continue;
+            };
+            if self
+                .state
+                .zone_change_generation
+                .get(&source.object_id)
+                .copied()
+                .unwrap_or(0)
+                != source.zone_change_generation
+                || object.counter_count(CounterKind::Time) < 1_000
+            {
+                continue;
+            }
+            for trigger in self.matching_snapshot_abilities_with_origin(&source, |condition, _| {
+                matches!(
+                    condition,
+                    TriggerCondition::WhenSourceHasAtLeast1000TimeCounters
+                )
+            }) {
+                let Some(key) = millennium_calendar_state_trigger_key(
+                    trigger.source_id,
+                    trigger.source_zone_change,
+                    &trigger.ability,
+                    trigger.ability_origin.as_ref(),
+                ) else {
+                    continue;
+                };
+                if active.insert(key) {
+                    collected.push(trigger);
+                }
+            }
+        }
+        if !collected.is_empty() {
+            self.stage_triggers(collected);
+        }
+    }
+
+    fn active_millennium_calendar_state_trigger_keys(&self) -> HashSet<TriggerUseKey> {
+        let mut active = self
+            .state
+            .millennium_calendar_state_trigger_stack_keys
+            .values()
+            .cloned()
+            .collect::<HashSet<_>>();
+        for trigger in self
+            .state
+            .staged_trigger_groups
+            .iter()
+            .flat_map(|group| &group.triggers)
+        {
+            if let Some(key) = millennium_calendar_state_trigger_key(
+                trigger.source_permanent_id,
+                trigger.source_zone_change,
+                &trigger.ability,
+                trigger.ability_origin.as_ref(),
+            ) {
+                active.insert(key);
+            }
+        }
+        if let Some(order) = self.state.pending_trigger_order.as_ref() {
+            for trigger in &order.candidates {
+                if let Some(key) = millennium_calendar_state_trigger_key(
+                    trigger.source_permanent_id,
+                    trigger.source_zone_change,
+                    &trigger.ability,
+                    trigger.ability_origin.as_ref(),
+                ) {
+                    active.insert(key);
+                }
+            }
+        }
+        for trigger in &self.state.pending_triggers {
+            if let Some(key) = millennium_calendar_state_trigger_key(
+                trigger.source_permanent_id,
+                trigger.source_zone_change,
+                &trigger.ability,
+                trigger.ability_origin.as_ref(),
+            ) {
+                active.insert(key);
+            }
+        }
+        active
+    }
+
     pub(super) fn trigger_object_ref(&self, object_id: ObjectId) -> Option<TriggerObjectRef> {
         let characteristics = self.characteristics(object_id)?;
         Some(TriggerObjectRef {
@@ -2868,6 +2994,7 @@ impl GameEngine {
     fn trigger_player_for(event: &GameEvent) -> Option<PlayerId> {
         match event {
             GameEvent::PhaseBegan { active_player, .. } => Some(*active_player),
+            GameEvent::UntapStepCompleted { active_player, .. } => Some(*active_player),
             GameEvent::Discarded(batch) => Some(batch.player),
             GameEvent::Sacrificed { player, .. } => Some(*player),
             GameEvent::Surveilled { player } => Some(*player),
@@ -3068,6 +3195,12 @@ impl GameEngine {
             // CR 603.3d: a trigger that has no legal target or enough legal modes is removed,
             // even when its effects are optional. Optionality is decided only on resolution.
         } else {
+            let state_trigger_key = millennium_calendar_state_trigger_key(
+                source_id,
+                source_zone_change,
+                &ability,
+                ability_origin.as_ref(),
+            );
             self.state.stack_presentations.insert(
                 virtual_id,
                 StackPresentation {
@@ -3109,6 +3242,11 @@ impl GameEngine {
                 cast_method: SpellCastMethod::Normal,
                 returned_attacker_assignment: None,
             });
+            if let Some(key) = state_trigger_key {
+                self.state
+                    .millennium_calendar_state_trigger_stack_keys
+                    .insert(virtual_id, key);
+            }
             self.state.passes_since_stack_change = 0;
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
@@ -3139,6 +3277,26 @@ impl GameEngine {
             ));
         }
     }
+}
+
+fn millennium_calendar_state_trigger_key(
+    source_id: ObjectId,
+    source_zone_change: u64,
+    ability: &TriggeredAbilityDef,
+    origin: Option<&TriggerAbilityOrigin>,
+) -> Option<TriggerUseKey> {
+    matches!(
+        ability.trigger,
+        TriggerCondition::WhenSourceHasAtLeast1000TimeCounters
+    )
+    .then(|| {
+        Some(TriggerUseKey {
+            object_id: source_id,
+            zone_change_generation: source_zone_change,
+            ability_origin: origin?.clone(),
+        })
+    })
+    .flatten()
 }
 
 impl TriggerSourceSnapshot {
@@ -3212,6 +3370,60 @@ pub(super) fn ability_definition_from(
 mod tests {
     use super::super::damage::DamageEvent;
     use super::*;
+
+    #[test]
+    fn millennium_calendar_threshold_guard_survives_while_original_resolves() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            514_001,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let calendar =
+            issue_168_fixture_object(&mut engine, 0, "the_millennium_calendar", Zone::Battlefield);
+        engine
+            .state
+            .objects
+            .get_mut(&calendar)
+            .unwrap()
+            .set_counter(CounterKind::Time, 1_000);
+        engine.state.players[1].life = 2_000;
+        engine.check_millennium_calendar_state_triggers();
+        let mut events = Vec::new();
+        engine.flush_staged_triggers(&mut events);
+        assert_eq!(engine.state.stack.len(), 1);
+
+        // Keep the source above threshold through one completed instruction, as a resolving
+        // ability may do before its source-bound sacrifice instruction.
+        engine
+            .state
+            .stack
+            .last_mut()
+            .unwrap()
+            .triggered_ability
+            .as_mut()
+            .unwrap()
+            .effect
+            .insert(
+                0,
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(1),
+                },
+            );
+        engine
+            .resolve_top_of_stack(&mut events)
+            .expect("resolve the threshold ability");
+
+        assert_eq!(engine.state.players[0].life, 21);
+        assert_eq!(engine.state.players[1].life, 1_000);
+        assert_eq!(engine.state.objects[&calendar].zone, Zone::Graveyard);
+        assert!(engine.state.stack.is_empty());
+        assert!(engine.state.staged_trigger_groups.is_empty());
+        assert!(engine.state.pending_triggers.is_empty());
+    }
 
     #[test]
     fn class_level_transition_collects_the_newly_active_matching_bar_trigger() {

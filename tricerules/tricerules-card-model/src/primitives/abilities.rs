@@ -636,6 +636,14 @@ pub enum TriggerCondition {
         #[serde(default)]
         player: CastTriggerPlayer,
     },
+    /// CR 502.3 / 603.2c: one trigger for the active player's untap action when this ability's
+    /// controller is that active player and at least one of their permanents actually untapped.
+    /// The completed action's successful untap count is available as `Amount::EventCount`.
+    WheneverControllerUntapsOneOrMorePermanents,
+    /// The Millennium Calendar's CR 603.8 state trigger. This is checked from current rules state,
+    /// not collected from a discrete counter-placement event, and its original ability is
+    /// suppressed until it resolves, is countered, or otherwise leaves the stack.
+    WhenSourceHasAtLeast1000TimeCounters,
     /// When this permanent enters the battlefield.
     WhenSelfEntersBattlefield,
     /// When this permanent enters or is put into a graveyard from the battlefield. Ichor
@@ -1198,7 +1206,11 @@ impl TriggerCondition {
 
     /// Whether a matching event supplies the committed cardinality read by `Amount::EventCount`.
     pub(crate) fn supplies_event_count(&self) -> bool {
-        matches!(self, Self::WheneverPlayerDiscardsOneOrMoreCards { .. })
+        matches!(
+            self,
+            Self::WheneverPlayerDiscardsOneOrMoreCards { .. }
+                | Self::WheneverControllerUntapsOneOrMorePermanents
+        )
     }
 
     /// Whether a matching attack event supplies an event-time defending player.

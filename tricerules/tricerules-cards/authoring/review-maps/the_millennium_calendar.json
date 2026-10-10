@@ -1,0 +1,95 @@
+{
+  "format_version": 1,
+  "oracle_id": "1f250443-8d5e-46c9-920e-8e9373780e32",
+  "spans": [
+    {
+      "face_id": "the_millennium_calendar",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    },
+    {
+      "face_id": "the_millennium_calendar",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/costs/1",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    },
+    {
+      "face_id": "the_millennium_calendar",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1/trigger",
+        "/faces/0/triggered_abilities/1/effect/0",
+        "/faces/0/triggered_abilities/1/effect/1"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_millennium_calendar::millennium_calendar_is_registered_with_its_complete_card_identity",
+      "covers": "Oracle identity, legendary artifact type line, mana cost, and typed mapping for all three printed abilities"
+    },
+    {
+      "test": "scenario deck_coverage_millennium_calendar::controller_untap_trigger_counts_only_successful_untaps_in_the_active_cohort",
+      "covers": "exact count of successful active-player untaps after excluding stun replacement, skip, and prohibition"
+    },
+    {
+      "test": "scenario deck_coverage_millennium_calendar::opponent_untaps_during_this_players_untap_do_not_trigger_the_calendar",
+      "covers": "opponent's own permanents untapping during the active player's untap step do not count"
+    },
+    {
+      "test": "scenario deck_coverage_millennium_calendar::controller_untap_trigger_does_not_fire_when_no_permanent_untaps",
+      "covers": "zero successful untaps produce no Calendar trigger"
+    },
+    {
+      "test": "scenario deck_coverage_millennium_calendar::untap_and_opponent_upkeep_triggers_are_stacked_together_in_apnap_order",
+      "covers": "untap trigger waits until upkeep and stacks with upkeep triggers in APNAP order before active-player priority"
+    },
+    {
+      "test": "scenario deck_coverage_millennium_calendar::activation_doubles_only_time_counters_and_zero_stays_zero",
+      "covers": "{2}, tap doubles Time counters only and leaves zero Time counters at zero"
+    },
+    {
+      "test": "scenario deck_coverage_millennium_calendar::state_trigger_resolves_after_time_counters_fall_below_1000",
+      "covers": "the triggered threshold ability resolves after its counter condition becomes false"
+    },
+    {
+      "test": "scenario deck_coverage_millennium_calendar::calendar_control_change_keeps_the_original_trigger_controller_and_retriggers_for_the_new_controller",
+      "covers": "the original trigger controller cannot sacrifice the artifact after Pyreswipe Hawk changes its controller, but the old ability still causes life loss and CR 603.8 retriggers under the new controller"
+    },
+    {
+      "test": "scenario deck_coverage_millennium_calendar::countering_the_state_trigger_retriggers_only_while_threshold_remains_met",
+      "covers": "countering the threshold ability creates a new trigger only while the source remains at or above 1000 Time counters"
+    },
+    {
+      "test": "scenario deck_coverage_millennium_calendar::copied_threshold_stack_item_does_not_suppress_a_new_original_after_countering",
+      "covers": "a copied stack item alone does not suppress a fresh original trigger after the original is countered"
+    },
+    {
+      "test": "scenario deck_coverage_millennium_calendar::threshold_crossing_is_retained_when_later_instruction_removes_the_counters",
+      "covers": "a threshold crossed during one instruction remains triggered when a later instruction removes the counters"
+    },
+    {
+      "test": "scenario deck_coverage_millennium_calendar::old_threshold_trigger_cannot_sacrifice_a_returned_calendar",
+      "covers": "an old trigger's source-bound sacrifice cannot affect the same physical card after it returns as a new object"
+    },
+    {
+      "test": "scenario deck_coverage_millennium_calendar::threshold_life_loss_affects_every_opponent_in_a_three_player_game",
+      "covers": "each opponent loses 1000 life in a three-player game while the controller is unaffected"
+    },
+    {
+      "test": "scenario deck_coverage_millennium_calendar::untap_count_activation_threshold_and_life_loss_replay_identically",
+      "covers": "command replay reproduces untap count, activation, threshold sacrifice, event batches, and multiplayer life state"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

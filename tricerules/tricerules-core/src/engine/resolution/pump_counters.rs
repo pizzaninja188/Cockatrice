@@ -1192,6 +1192,66 @@ pub(super) fn double_counters(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn double_time_counters(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    let Some(source_id) = cx.top.source_permanent_id else {
+        return Err(EngineError::Illegal(
+            "DoubleTimeCounters requires an ability source",
+        ));
+    };
+    let source_generation = cx.top.source_zone_change;
+    let Some(source) = cx.engine.state.objects.get(&source_id) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if source.zone != Zone::Battlefield
+        || cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&source_id)
+            .copied()
+            .unwrap_or(0)
+            != source_generation
+    {
+        return Ok(EffectOutcome::Continue);
+    }
+    let count = source.counter_count(CounterKind::Time);
+    if count == 0 {
+        return Ok(EffectOutcome::Continue);
+    }
+    let Some(event) = cx.engine.place_counters_with_event(
+        source_id,
+        CounterKind::Time,
+        count,
+        false,
+        super::super::continuous::CounterPlacementOrigin::Effect,
+    ) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if let GameEvent::CountersPlaced {
+        object,
+        before,
+        after,
+        ..
+    } = &event
+    {
+        let placed = after.saturating_sub(*before);
+        cx.effect_result
+            .counter_placements
+            .push(crate::state::CounterPlacementReceipt {
+                object: *object,
+                counter: CounterKind::Time,
+                count: placed,
+            });
+        cx.events.push(ev_log(format!(
+            "{} puts {placed} time counter(s) on {}",
+            cx.spell_label,
+            object_display_name(&cx.engine.state, cx.engine.registry, source_id),
+        )));
+    }
+    cx.engine.fire_triggers(&[event], cx.events);
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn put_counters(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

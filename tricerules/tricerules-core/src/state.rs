@@ -2837,6 +2837,11 @@ pub struct GameState {
     /// independently. Drained by `flush_staged_triggers` at the two points where the engine is
     /// between actions.
     pub staged_trigger_groups: VecDeque<StagedTriggerGroup>,
+    /// Original Millennium Calendar state-trigger abilities by stack-object id. The entry stays
+    /// live after the engine pops an ability for resolution and through any parked continuation;
+    /// it is removed only when that original leaves the stack or finishes resolving. Copies do
+    /// not acquire an entry and therefore do not suppress a new original trigger.
+    pub(crate) millennium_calendar_state_trigger_stack_keys: BTreeMap<ObjectId, TriggerUseKey>,
     /// Generation-bound one-shot event observers. Both delayed triggers and paired one-shot
     /// effects use this closed dispatcher so object identity and event matching cannot drift.
     pub active_event_observers: Vec<ActiveEventObserver>,

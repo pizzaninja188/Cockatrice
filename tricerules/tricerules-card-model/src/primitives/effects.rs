@@ -95,6 +95,9 @@ pub enum CounterKind {
     Night,
     /// Doom counters used by Lavabrink Floodgates.
     Doom,
+    /// Named time counters used by The Millennium Calendar and suspend cards such as Riftwing
+    /// Cloudskate (CR 702.62). The name carries no additional behavior by itself.
+    Time,
 }
 
 impl CounterKind {
@@ -117,6 +120,7 @@ impl CounterKind {
             CounterKind::Poison => "poison".into(),
             CounterKind::Night => "night".into(),
             CounterKind::Doom => "doom".into(),
+            CounterKind::Time => "time".into(),
         }
     }
 
@@ -1913,6 +1917,9 @@ pub enum SpellEffectKind {
     DoubleCounters {
         target: TargetFilter,
     },
+    /// The Millennium Calendar adds its current number of Time counters to itself (CR 701.10e).
+    /// This remains source-bound and intentionally does not double other counter kinds.
+    DoubleTimeCounters,
     /// Heirloom Auntie and Reluctant Dounguard remove counters without paying a cost.
     RemoveCounters {
         counter: CounterKind,
@@ -3488,6 +3495,7 @@ impl SpellEffectKind {
             | SpellEffectKind::MayBehold { .. }
             | SpellEffectKind::SearchLibrary { .. }
             | SpellEffectKind::SetSourceBasePowerToTownCount
+            | SpellEffectKind::DoubleTimeCounters
             | SpellEffectKind::SetClassLevel { .. }
             | SpellEffectKind::PreventAllCombatDamageTurn
             | SpellEffectKind::DamageCantBePreventedThisTurn

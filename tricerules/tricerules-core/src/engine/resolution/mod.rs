@@ -1491,6 +1491,11 @@ impl GameEngine {
         }
 
         self.state.stack.retain(|item| item.id != top.id);
+        let released_state_trigger = self
+            .state
+            .millennium_calendar_state_trigger_stack_keys
+            .remove(&top.id)
+            .is_some();
         let is_resolved_omen = exit == DeferredStackExit::Resolved && is_omen_spell;
         let is_resolved_adventure = exit == DeferredStackExit::Resolved
             && top.ability_text.is_none()
@@ -1551,6 +1556,9 @@ impl GameEngine {
                 "P{} shuffles the resolving Omen into P{}'s library.",
                 top.controller, shuffle_player
             )));
+        }
+        if released_state_trigger {
+            self.check_millennium_calendar_state_triggers();
         }
         Ok(())
     }
@@ -1912,6 +1920,9 @@ impl GameEngine {
                 dispatch::execute_effect(&mut cx, effect)?
             };
             if outcome == EffectOutcome::GameEnded {
+                self.state
+                    .millennium_calendar_state_trigger_stack_keys
+                    .remove(&top.id);
                 return Ok(ResolutionProgress::GameEnded);
             }
             let mut completed_item = top.clone();
@@ -1964,6 +1975,7 @@ impl GameEngine {
             if self.drain_immediate_observer_actions(Some(observer_stack), events)? {
                 return Ok(ResolutionProgress::Parked);
             }
+            self.check_millennium_calendar_state_triggers();
             match outcome {
                 EffectOutcome::Blighted(_) | EffectOutcome::RetainedExile(..) => {
                     let (effects, label) = self.build_resolution_effects(&completed_item);

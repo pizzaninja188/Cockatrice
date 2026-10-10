@@ -430,6 +430,10 @@ pub(crate) fn counter_stack_object(
         return Ok(None);
     }
     let st = engine.state.stack.remove(pos);
+    engine
+        .state
+        .millennium_calendar_state_trigger_stack_keys
+        .remove(&target_id);
     if st
         .triggered_ability
         .as_ref()
@@ -472,6 +476,7 @@ pub(crate) fn counter_stack_object(
         }
     }
     events.push(ev_log(format!("{counter_label} counters {target_name}")));
+    engine.check_millennium_calendar_state_triggers();
     Ok(Some(st))
 }
 

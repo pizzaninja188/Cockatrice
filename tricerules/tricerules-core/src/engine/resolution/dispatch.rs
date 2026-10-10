@@ -167,6 +167,7 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::DoubleCounters { .. } => {
             pump_counters::double_counters(cx, effect)?
         }
+        SpellEffectKind::DoubleTimeCounters => pump_counters::double_time_counters(cx)?,
         effect @ SpellEffectKind::PutCountersAll { .. } => {
             pump_counters::put_counters_all(cx, effect)?
         }

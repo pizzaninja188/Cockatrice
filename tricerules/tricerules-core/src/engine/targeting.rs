@@ -1718,6 +1718,7 @@ fn validate_effect_targets(
         | SpellEffectKind::SiegeDefeat
         | SpellEffectKind::ExileGraveyards { .. }
         | SpellEffectKind::Proliferate
+        | SpellEffectKind::DoubleTimeCounters
         | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary
         | SpellEffectKind::ExileResolvingSpell
         | SpellEffectKind::None => {

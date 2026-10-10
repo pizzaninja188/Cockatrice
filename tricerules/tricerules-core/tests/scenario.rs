@@ -65,6 +65,9 @@ mod deck_coverage_linked_exile_choice;
 mod deck_coverage_maze_of_ith;
 #[path = "scenario/deck_coverage_mimic_vat.rs"]
 mod deck_coverage_mimic_vat;
+
+#[path = "scenario/deck_coverage_millennium_calendar.rs"]
+mod deck_coverage_millennium_calendar;
 #[path = "scenario/deck_coverage_mutational_advantage.rs"]
 mod deck_coverage_mutational_advantage;
 #[path = "scenario/deck_coverage_myr_battlesphere.rs"]

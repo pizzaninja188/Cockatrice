@@ -317,6 +317,13 @@ impl GameEngine {
                     .map(|_| item.id)
             })
             .collect();
+        let departing_stack_ids: Vec<_> = self
+            .state
+            .stack
+            .iter()
+            .filter(|item| owned.contains(&item.id) || item.controller == player)
+            .map(|item| item.id)
+            .collect();
         let departing_stack_cohorts: Vec<_> = self
             .state
             .stack
@@ -328,6 +335,11 @@ impl GameEngine {
             .collect();
         for key in departing_stack_cohorts {
             self.state.observed_object_cohorts.remove(&key);
+        }
+        for id in departing_stack_ids {
+            self.state
+                .millennium_calendar_state_trigger_stack_keys
+                .remove(&id);
         }
         self.state
             .stack
@@ -1389,8 +1401,24 @@ impl GameEngine {
             .into_iter()
             .filter_map(|oid| super::prepare_untap(self, oid))
             .collect::<Vec<_>>();
+        let mut active_untapped_count = 0u32;
         for plan in plans {
-            super::commit_untap(self, plan);
+            let belongs_to_active_player =
+                active_cohort.contains(&(plan.object_id, plan.generation));
+            if super::commit_untap(self, plan) == super::UntapOutcome::Untapped
+                && belongs_to_active_player
+            {
+                active_untapped_count = active_untapped_count.saturating_add(1);
+            }
+        }
+        if active_untapped_count > 0 {
+            self.fire_triggers(
+                &[super::GameEvent::UntapStepCompleted {
+                    active_player: ap,
+                    untapped_count: active_untapped_count,
+                }],
+                &mut ev,
+            );
         }
         for (oid, generation) in active_cohort {
             self.state.skip_next_untap.remove(&(oid, generation));

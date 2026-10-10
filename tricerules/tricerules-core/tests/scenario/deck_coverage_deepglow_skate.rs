@@ -84,6 +84,13 @@ fn deepglow_skate_paid_cast_doubles_each_current_kind_on_own_and_opposing_target
     engine
         .state
         .objects
+        .get_mut(&own)
+        .unwrap()
+        .counters
+        .insert(CounterKind::Time, 6);
+    engine
+        .state
+        .objects
         .get_mut(&other)
         .unwrap()
         .counters
@@ -106,6 +113,7 @@ fn deepglow_skate_paid_cast_doubles_each_current_kind_on_own_and_opposing_target
         4
     );
     assert_eq!(engine.state.objects[&own].counters[&CounterKind::Stun], 10);
+    assert_eq!(engine.state.objects[&own].counters[&CounterKind::Time], 12);
     assert_eq!(
         engine.state.objects[&other].counters[&CounterKind::Charge],
         8

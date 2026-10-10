@@ -69,6 +69,7 @@ impl GameEngine {
                 break;
             }
         }
+        self.check_millennium_calendar_state_triggers();
         self.debug_assert_battlefield_control_index();
         Ok(performed)
     }

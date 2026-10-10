@@ -1,0 +1,32 @@
+// Oracle 1f250443-8d5e-46c9-920e-8e9373780e32; official LCI Release Notes and rulings reviewed.
+(
+  id: "the_millennium_calendar",
+  name: "The Millennium Calendar",
+  face_id: "the_millennium_calendar",
+  mana_cost: "{1}",
+  supertypes: ["Legendary"],
+  types: ["Artifact"],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverControllerUntapsOneOrMorePermanents,
+      effect: [PutCounters(counter: Time, count: EventCount, subject: Source)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([3]),
+      trigger: WhenSourceHasAtLeast1000TimeCounters,
+      effect: [
+        Sacrifice(subject: Source),
+        LoseLife(amount: Fixed(1000), who: EachOpponent),
+      ],
+    ),
+  ],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{2}"), Tap],
+    effect: [DoubleTimeCounters],
+  )],
+)

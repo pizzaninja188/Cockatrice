@@ -1176,6 +1176,12 @@ enum GameEvent {
         phase: rv1::PhaseId,
         active_player: PlayerId,
     },
+    /// CR 502.3: one committed active-player untap action. The count excludes replacement,
+    /// prohibited and no-op attempts and is consumed by "untap one or more" triggers.
+    UntapStepCompleted {
+        active_player: PlayerId,
+        untapped_count: u32,
+    },
     /// One card successfully moved from a library to a hand. `ordinal` is that player's
     /// one-based draw number in the current turn after this committed draw.
     CardDrawn {
@@ -1894,6 +1900,7 @@ impl GameEngine {
             starting_player_idx: 0,
             pending_triggers: VecDeque::new(),
             staged_trigger_groups: VecDeque::new(),
+            millennium_calendar_state_trigger_stack_keys: BTreeMap::new(),
             active_event_observers: Vec::new(),
             warped_permanent_incarnations: HashSet::new(),
             spell_entry_facts: HashMap::new(),
