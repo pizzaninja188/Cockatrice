@@ -3721,6 +3721,86 @@ pub(super) fn reveal_top_card_to_hand_if_matches(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn reveal_until_artifact(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    let Some(player_idx) = cx.engine.state.player_idx(cx.controller) else {
+        cx.effect_result.receipt = Some(crate::state::ResolutionReceipt::RevealedCardsCount(0));
+        return Ok(EffectOutcome::Continue);
+    };
+    let library: Vec<ObjectId> = cx.engine.state.players[player_idx]
+        .library
+        .iter()
+        .copied()
+        .collect();
+    let artifact_filter = tricerules_card_model::primitives::ZoneCardFilter {
+        card_type: Some(tricerules_card_model::primitives::CardTypeFilter::Artifact),
+        ..Default::default()
+    };
+    let mut revealed_refs = Vec::new();
+    let mut found = None;
+    for object_id in library {
+        let generation = cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        revealed_refs.push((object_id, generation));
+        if zone_card_matches_filter(
+            &cx.engine.state,
+            cx.engine.registry,
+            object_id,
+            Some(&artifact_filter),
+        ) {
+            found = Some((object_id, generation));
+            break;
+        }
+    }
+    let revealed_count = u32::try_from(revealed_refs.len())
+        .map_err(|_| EngineError::Illegal("revealed library prefix is too large"))?;
+    cx.effect_result.receipt = Some(crate::state::ResolutionReceipt::RevealedCardsCount(
+        revealed_count,
+    ));
+    let object_ids: Vec<_> = revealed_refs
+        .iter()
+        .map(|(object_id, _)| *object_id)
+        .collect();
+    cx.events.extend(super::super::reveals::reveal_cards(
+        &cx.engine.state,
+        cx.engine.registry,
+        &object_ids,
+        cx.top.source_permanent_id.unwrap_or(cx.top.id),
+        cx.spell_label,
+    ));
+
+    if let Some(found_ref) = found {
+        let entry = plain_return_entry(cx.engine, found_ref.0, cx.controller);
+        let completion = crate::state::ZoneEntryCompletion::RevealUntilArtifact {
+            library_owner: cx.controller,
+            found_ref,
+            revealed_refs,
+        };
+        if cx
+            .engine
+            .begin_zone_entry_batch(
+                ParkedStackResolution::new(cx.top.clone()),
+                vec![entry],
+                Zone::Library,
+                cx.spell_label,
+                Some(completion),
+                cx.events,
+            )?
+            .is_none()
+        {
+            return Ok(EffectOutcome::Suspended);
+        }
+    } else {
+        cx.engine
+            .bottom_revealed_library_refs(cx.controller, &revealed_refs, None, cx.events)?;
+    }
+    Ok(EffectOutcome::Continue)
+}
+
 /// CR 701.18 scry enters the shared private top-library partition state machine. Scry's selected
 /// cohort goes to the library bottom; the retained cohort may require a second ordering choice.
 pub(super) fn scry(

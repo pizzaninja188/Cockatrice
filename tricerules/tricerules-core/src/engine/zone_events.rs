@@ -158,6 +158,40 @@ impl GameEngine {
                 return false;
             }
         }
+        if let Some(crate::state::ZoneEntryCompletion::RevealUntilArtifact {
+            library_owner,
+            found_ref,
+            revealed_refs,
+        }) = &batch.completion
+        {
+            let Some(idx) = self.state.player_idx(*library_owner) else {
+                return false;
+            };
+            if self.state.players[idx].has_lost
+                || revealed_refs.last() != Some(found_ref)
+                || !revealed_refs
+                    .iter()
+                    .map(|(object_id, _)| *object_id)
+                    .eq(self.state.players[idx]
+                        .library
+                        .iter()
+                        .take(revealed_refs.len())
+                        .copied())
+                || revealed_refs.iter().any(|(object_id, generation)| {
+                    self.state.objects.get(object_id).is_none_or(|object| {
+                        object.zone != Zone::Library || object.owner != *library_owner
+                    }) || self
+                        .state
+                        .zone_change_generation
+                        .get(object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        != *generation
+                })
+            {
+                return false;
+            }
+        }
         batch.generations.iter().all(|(oid, generation)| {
             self.state
                 .objects
@@ -383,8 +417,78 @@ impl GameEngine {
                 "P{library_owner} puts {} cards on the bottom of their library in a random order.",
                 remaining.len()
             )));
+        } else if let Some(crate::state::ZoneEntryCompletion::RevealUntilArtifact {
+            library_owner,
+            found_ref,
+            revealed_refs,
+        }) = completion
+        {
+            self.bottom_revealed_library_refs(
+                library_owner,
+                &revealed_refs,
+                Some(found_ref.0),
+                events,
+            )?;
         }
         Ok(stack)
+    }
+
+    /// Randomize the still-current revealed objects to the bottom and renew their object
+    /// generations because CR 701.20d makes reordered library cards new objects.
+    pub(super) fn bottom_revealed_library_refs(
+        &mut self,
+        library_owner: PlayerId,
+        revealed_refs: &[(ObjectId, u64)],
+        excluded: Option<ObjectId>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let idx = self
+            .state
+            .player_idx(library_owner)
+            .ok_or(EngineError::UnknownPlayer(library_owner))?;
+        let in_library: HashSet<_> = self.state.players[idx].library.iter().copied().collect();
+        let mut bottom: Vec<ObjectId> = revealed_refs
+            .iter()
+            .filter_map(|(object_id, generation)| {
+                if Some(*object_id) == excluded || !in_library.contains(object_id) {
+                    return None;
+                }
+                let is_current = self.state.objects.get(object_id).is_some_and(|object| {
+                    object.zone == Zone::Library
+                        && object.owner == library_owner
+                        && self
+                            .state
+                            .zone_change_generation
+                            .get(object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == *generation
+                });
+                is_current.then_some(*object_id)
+            })
+            .collect();
+        if bottom.is_empty() {
+            return Ok(());
+        }
+        shuffle_object_ids_for_current_command(&self.state, library_owner, &mut bottom);
+        self.state.players[idx]
+            .library
+            .retain(|object_id| !bottom.contains(object_id));
+        self.state.players[idx]
+            .library
+            .extend(bottom.iter().copied());
+        for object_id in &bottom {
+            *self
+                .state
+                .zone_change_generation
+                .entry(*object_id)
+                .or_insert(0) += 1;
+        }
+        events.push(events::ev_log(format!(
+            "P{library_owner} puts {} cards on the bottom of their library in a random order.",
+            bottom.len()
+        )));
+        Ok(())
     }
 
     pub(super) fn commit_observed_zone_move(

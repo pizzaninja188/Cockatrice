@@ -1697,6 +1697,7 @@ fn validate_effect_targets(
         | SpellEffectKind::Scry { .. }
         | SpellEffectKind::LibraryPartition { .. }
         | SpellEffectKind::RevealTopCardToHandIfMatches { .. }
+        | SpellEffectKind::RevealUntilArtifact
         | SpellEffectKind::ManifestDread
         | SpellEffectKind::ExileTopWithPlayPermission { .. }
         | SpellEffectKind::ChooseResolutionBranch { .. }

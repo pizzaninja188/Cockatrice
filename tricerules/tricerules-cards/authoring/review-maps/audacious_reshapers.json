@@ -1,0 +1,78 @@
+{
+  "format_version": 1,
+  "oracle_id": "525c0e33-f073-4bed-be8a-14e436a0bcf1",
+  "spans": [
+    {
+      "face_id": "audacious_reshapers",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::RevealUntilArtifact",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    },
+    {
+      "symbol": "CountExpression::PreviousEffectRevealedCount",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1/DamagePlayer/amount/Count"
+    },
+    {
+      "symbol": "PlayerRecipient::Controller",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1/DamagePlayer/who"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_audacious_reshapers::activated_player_uses_their_library_and_takes_the_damage_in_a_three_player_game",
+      "covers": "the activating player controls which library is revealed and takes the damage in a three-player game; other players are unaffected"
+    },
+    {
+      "test": "scenario deck_coverage_audacious_reshapers::audacious_reshapers_has_a_complete_card_definition",
+      "covers": "exact single-face name, mana cost, creature types, 3/3 characteristics, and one activated ability"
+    },
+    {
+      "test": "scenario deck_coverage_audacious_reshapers::reveal_until_artifact_puts_first_match_into_play_and_deals_revealed_count_damage",
+      "covers": "reveals through the first artifact, puts that noncreature artifact onto the battlefield, bottoms only the other revealed card, advances its generation, and deals damage equal to the prefix count"
+    },
+    {
+      "test": "scenario deck_coverage_audacious_reshapers::no_match_randomizes_all_revealed_cards_and_renews_their_generations",
+      "covers": "no-match path reveals and randomizes the whole library prefix, advances every reordered card generation, preserves original reveal generations, deals count damage, and replays deterministically"
+    },
+    {
+      "test": "scenario deck_coverage_audacious_reshapers::empty_library_reveals_no_cards_and_deals_no_damage",
+      "covers": "empty library produces no reveal event and zero damage"
+    },
+    {
+      "test": "scenario deck_coverage_audacious_reshapers::revealed_count_survives_a_parked_battlefield_entry_choice",
+      "covers": "ordinary Black Vise as-enters opponent choice parks the entry, then the same ability count resumes for damage after entry completes"
+    },
+    {
+      "test": "scenario deck_coverage_audacious_reshapers::source_departure_after_activation_uses_last_known_damage_source",
+      "covers": "the activated ability resolves after Lightning Bolt destroys its source, puts the artifact into play, and deals the recorded damage"
+    },
+    {
+      "test": "scenario deck_coverage_audacious_reshapers::damage_prevention_applies_to_the_revealed_count_damage",
+      "covers": "the count result is damage that consumes an existing prevention shield"
+    },
+    {
+      "test": "scenario deck_coverage_audacious_reshapers::artifact_cost_rejects_nonartifact_and_opponent_permanents_atomically",
+      "covers": "a nonartifact or opponent artifact cannot pay the controller's artifact-sacrifice cost and rejected commands preserve state"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -71,6 +71,9 @@ mod deck_coverage_myr_battlesphere;
 mod deck_coverage_standstill;
 #[path = "scenario/deck_coverage_thassa_oracle.rs"]
 mod deck_coverage_thassa_oracle;
+
+#[path = "scenario/deck_coverage_audacious_reshapers.rs"]
+mod deck_coverage_audacious_reshapers;
 #[path = "scenario/myr_damage_prerequisites.rs"]
 mod myr_damage_prerequisites;
 #[path = "scenario/myriad_search_prerequisites.rs"]

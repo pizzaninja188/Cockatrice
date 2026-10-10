@@ -209,6 +209,7 @@ pub(crate) struct CounterPlacementReceipt {
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ResolutionReceipt {
     CounterUnlessPaid { paid: bool },
+    RevealedCardsCount(u32),
 }
 
 impl From<CardResultCohort> for EffectResult {
@@ -1915,6 +1916,13 @@ pub(crate) enum ZoneEntryCompletion {
     DeployRandomBottom {
         library_owner: PlayerId,
         looked_refs: Vec<(ObjectId, u64)>,
+    },
+    /// Audacious Reshapers returns the first revealed artifact through normal entry processing,
+    /// then randomizes only the rest of the original prefix to the library bottom.
+    RevealUntilArtifact {
+        library_owner: PlayerId,
+        found_ref: (ObjectId, u64),
+        revealed_refs: Vec<(ObjectId, u64)>,
     },
 }
 

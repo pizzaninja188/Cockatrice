@@ -1055,6 +1055,11 @@ pub enum SpellEffectKind {
         count: Amount,
         target: TargetFilter,
     },
+    /// Audacious Reshapers reveals its controller's library through the first artifact, puts that
+    /// card onto the battlefield, and randomizes the rest of the revealed prefix to the bottom.
+    /// This specialized sequence returns an immediate revealed-count receipt for its following
+    /// damage instruction; no second admitted card needs this exact algorithm.
+    RevealUntilArtifact,
     /// Blue Sun's Zenith and Black Sun's Zenith: execute the resolving spell's self-shuffle
     /// instruction in printed order, independently of its target or caster (CR 701.24c).
     ShuffleResolvingSpellIntoOwnersLibrary,
@@ -3393,6 +3398,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Scry { .. }
             | SpellEffectKind::LibraryPartition { .. }
             | SpellEffectKind::RevealTopCardToHandIfMatches { .. }
+            | SpellEffectKind::RevealUntilArtifact
             | SpellEffectKind::ManifestDread
             | SpellEffectKind::IntoTheWilds
             | SpellEffectKind::DeployTheGatewatch
@@ -4099,6 +4105,23 @@ impl SpellEffectKind {
                 {
                     return Err(
                         "PreviousMillManaValueSum requires an immediately preceding controller Mill and direct DamagePlayer consumer"
+                            .into(),
+                    );
+                }
+            }
+            if amount.is_some_and(Amount::uses_previous_effect_revealed_count) {
+                let exact_damage_consumer = matches!(
+                    effect,
+                    SpellEffectKind::DamagePlayer {
+                        amount: Amount::Count(CountExpression::PreviousEffectRevealedCount),
+                        who: PlayerRecipient::Controller,
+                    }
+                );
+                if !exact_damage_consumer
+                    || !matches!(previous, Some(SpellEffectKind::RevealUntilArtifact))
+                {
+                    return Err(
+                        "PreviousEffectRevealedCount requires an immediately preceding RevealUntilArtifact and direct controller DamagePlayer consumer"
                             .into(),
                     );
                 }
@@ -6746,6 +6769,47 @@ mod conditional_mass_untap_tests {
         };
 
         assert!(effect.validate(EffectContext::Ability).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod previous_effect_revealed_count_tests {
+    use super::*;
+
+    fn damage(who: PlayerRecipient, amount: Amount) -> SpellEffectKind {
+        SpellEffectKind::DamagePlayer { amount, who }
+    }
+
+    fn revealed_count() -> Amount {
+        Amount::Count(CountExpression::PreviousEffectRevealedCount)
+    }
+
+    #[test]
+    fn revealed_count_requires_the_direct_controller_damage_consumer() {
+        let valid = [
+            SpellEffectKind::RevealUntilArtifact,
+            damage(PlayerRecipient::Controller, revealed_count()),
+        ];
+        assert!(SpellEffectKind::validate_list(&valid).is_ok());
+
+        let wrong_player = [
+            SpellEffectKind::RevealUntilArtifact,
+            damage(PlayerRecipient::AffectedPlayer, revealed_count()),
+        ];
+        assert!(SpellEffectKind::validate_list(&wrong_player).is_err());
+
+        let missing_producer = [damage(PlayerRecipient::Controller, revealed_count())];
+        assert!(SpellEffectKind::validate_list(&missing_producer).is_err());
+
+        let intervening_effect = [
+            SpellEffectKind::RevealUntilArtifact,
+            SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            },
+            damage(PlayerRecipient::Controller, revealed_count()),
+        ];
+        assert!(SpellEffectKind::validate_list(&intervening_effect).is_err());
     }
 }
 
