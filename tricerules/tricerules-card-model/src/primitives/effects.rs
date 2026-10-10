@@ -3025,6 +3025,46 @@ impl SpellEffectKind {
                     | TriggeredCardReference::ExactTriggerObject,
                 ..
             }
+        ) || matches!(
+            self,
+            Self::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    mana_value_less_than_trigger_object: true,
+                    ..
+                },
+                ..
+            }
+        )
+    }
+
+    pub(crate) fn uses_trigger_object_mana_value_graveyard_filter(&self) -> bool {
+        if let Self::ChooseResolutionBranch {
+            branches,
+            otherwise,
+            ..
+        } = self
+        {
+            if branches.iter().any(|branch| {
+                branch
+                    .effects
+                    .iter()
+                    .any(Self::uses_trigger_object_mana_value_graveyard_filter)
+            }) || otherwise
+                .iter()
+                .any(Self::uses_trigger_object_mana_value_graveyard_filter)
+            {
+                return true;
+            }
+        }
+        matches!(
+            self,
+            Self::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    mana_value_less_than_trigger_object: true,
+                    ..
+                },
+                ..
+            }
         )
     }
 

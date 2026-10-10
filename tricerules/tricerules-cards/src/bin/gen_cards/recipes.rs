@@ -16310,6 +16310,7 @@ fn match_triggered_etb_descend_4_return_target_permanent_card_to_hand(
                         excluded_objects: Vec::new(),
                         owner: GraveyardOwner::Controller,
                         card: Some(permanent_card.clone()),
+                        mana_value_less_than_trigger_object: false,
                     },
                     destination: GraveyardDestination::Hand,
                     linked_exile_id: None,

@@ -1172,3 +1172,6 @@ mod deck_coverage_nesting_grounds;
 
 #[path = "scenario/deck_coverage_mycosynth_gardens.rs"]
 mod deck_coverage_mycosynth_gardens;
+
+#[path = "scenario/deck_coverage_scrap_trawler.rs"]
+mod deck_coverage_scrap_trawler;

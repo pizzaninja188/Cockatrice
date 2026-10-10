@@ -1176,6 +1176,90 @@ fn trigger_object_copy_is_nested_trigger_context_scoped() {
 }
 
 #[test]
+fn graveyard_trigger_object_mana_value_predicate_is_context_scoped() {
+    let default_filter = ron::to_string(&super::GraveyardFilter::default()).unwrap();
+    assert!(
+        !default_filter.contains("mana_value_less_than_trigger_object"),
+        "the default predicate must not change canonical RON for existing cards"
+    );
+
+    let effect: super::SpellEffectKind = ron::from_str(
+        "MoveGraveyardCards(filter: (mana_value_less_than_trigger_object: true), destination: Hand)",
+    )
+    .unwrap();
+    assert!(effect.uses_trigger_object_reference());
+    assert!(effect.uses_trigger_object_mana_value_graveyard_filter());
+    assert!(effect
+        .validate(super::EffectContext::Spell)
+        .unwrap_err()
+        .contains("trigger object"));
+
+    let filter =
+        ron::from_str::<super::GraveyardFilter>("(mana_value_less_than_trigger_object: true)")
+            .unwrap();
+    assert!(super::TargetMatchFilter::Graveyard(filter)
+        .validate()
+        .unwrap_err()
+        .contains("cost reductions"));
+
+    let activated = r#"(
+        id: "test", name: "Test", face_id: "test", mana_cost: "{3}",
+        types: ["Artifact", "Creature"], power: 3, toughness: 2,
+        activated_abilities: [(
+            ability_id: "activated_01", presentation: Fallback,
+            source_zone: Battlefield, costs: [Tap],
+            effect: [MoveGraveyardCards(
+                filter: (mana_value_less_than_trigger_object: true),
+                destination: Hand)],
+            targeting: Some((groups: [(min: 1, max: 1,
+                prompt: "Choose target", effect_indices: [0])]))
+        )]
+    )"#;
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[activated], &[]).is_err(),
+        "an activated ability cannot use a trigger-object value"
+    );
+
+    let card = |trigger: &str| {
+        format!(
+            r#"(
+                id: "test", name: "Test", face_id: "test", mana_cost: "{{3}}",
+                types: ["Artifact", "Creature"], power: 3, toughness: 2,
+                triggered_abilities: [(
+                    ability_id: "triggered_01", presentation: Fallback,
+                    trigger: {trigger},
+                    effect: [MoveGraveyardCards(
+                        filter: (card: Some((card_type: Some(Artifact))),
+                                 mana_value_less_than_trigger_object: true),
+                        destination: Hand)],
+                    targeting: Some((groups: [(min: 1, max: 1,
+                        prompt: "Choose target", effect_indices: [0])]))
+                )]
+            )"#
+        )
+    };
+    for trigger in [
+        "WhenSelfDies",
+        "WheneverPermanentLeavesBattlefield(controller: Controller, filter: (permanent_type: Some(Artifact)), destination: OneOf([Graveyard]), cardinality: EachObject)",
+    ] {
+        let definition = card(trigger);
+        crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+            .unwrap_or_else(|error| panic!("supported event source {trigger}: {error}"));
+    }
+    for trigger in [
+        "WhenSelfLeavesBattlefield",
+        "WhenSelfEntersOrIsPutIntoGraveyardFromBattlefield",
+        "WheneverPermanentLeavesBattlefield(controller: Controller, filter: (permanent_type: Some(Artifact)), destination: OneOf([Graveyard]), cardinality: OneOrMorePerAction)",
+    ] {
+        let definition = card(trigger);
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[]).is_err(),
+            "unsupported event source accepted: {trigger}"
+        );
+    }
+}
+
+#[test]
 fn arena_opponent_chooser_survives_ron_roundtrip() {
     let ability = arena_opponent_chooser_ability();
     let encoded = ron::ser::to_string(&ability).unwrap();

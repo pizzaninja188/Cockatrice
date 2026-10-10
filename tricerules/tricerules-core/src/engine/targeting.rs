@@ -429,6 +429,33 @@ fn any_battlefield_permanent_target_legal(state: &GameState, tid: ObjectId) -> b
 
 /// Check if `oid` is a legal graveyard target for a [`GraveyardFilter`].
 /// Graveyard cards have no Hexproof/Shroud (those keywords only apply on the battlefield).
+fn trigger_object_mana_value(engine: &GameEngine, trigger_context: TriggerContext) -> Option<u32> {
+    let observed = trigger_context.observed_object?;
+    let current_generation = engine
+        .state
+        .zone_change_generation
+        .get(&observed.object_id)
+        .copied()
+        .unwrap_or(0);
+    if current_generation == observed.zone_change_generation
+        && engine
+            .state
+            .objects
+            .get(&observed.object_id)
+            .is_some_and(|object| object.zone == Zone::Battlefield)
+    {
+        engine
+            .characteristics(observed.object_id)
+            .map(|characteristics| characteristics.mana_value)
+    } else {
+        engine
+            .state
+            .last_known_mana_value_by_generation
+            .get(&(observed.object_id, observed.zone_change_generation))
+            .copied()
+    }
+}
+
 pub(super) fn graveyard_target_legal(
     engine: &GameEngine,
     filter: &GraveyardFilter,
@@ -469,10 +496,22 @@ pub(super) fn graveyard_target_legal(
     let Some(definition) = engine.registry.get(&obj.card_id) else {
         return false;
     };
-    filter
+    if !filter
         .card
         .as_ref()
         .is_none_or(|card| definition.matches_zone_card_filter(card))
+    {
+        return false;
+    }
+    if filter.mana_value_less_than_trigger_object {
+        let Some(event_mana_value) = trigger_object_mana_value(engine, trigger_context) else {
+            return false;
+        };
+        if definition.mana_value_outside_stack() >= event_mana_value {
+            return false;
+        }
+    }
+    true
 }
 
 /// CR 702.16 / CR 702.18: returns false when `tid` is a permanent that the `caster` cannot

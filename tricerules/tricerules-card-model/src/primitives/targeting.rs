@@ -1025,9 +1025,21 @@ impl TargetMatchFilter {
                 }
                 Ok(())
             }
-            Self::Graveyard(filter) => filter.validate(),
+            Self::Graveyard(filter) => {
+                if filter.mana_value_less_than_trigger_object {
+                    return Err(
+                        "trigger-object mana value predicates cannot be used by cost reductions"
+                            .into(),
+                    );
+                }
+                filter.validate()
+            }
         }
     }
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 /// Graveyard target context, composed with a non-targeting printed-card predicate.
@@ -1042,6 +1054,10 @@ pub struct GraveyardFilter {
     /// None permits any printed card; context checks still apply.
     #[serde(default)]
     pub card: Option<ZoneCardFilter>,
+    /// Restrict to cards with strictly lower mana value than the exact battlefield event object.
+    /// Only supported by `WhenSelfDies` and per-object battlefield departure triggers.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub mana_value_less_than_trigger_object: bool,
 }
 
 impl GraveyardFilter {

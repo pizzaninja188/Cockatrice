@@ -1463,9 +1463,17 @@ impl GameEngine {
                             | TriggerCondition::WhenSelfEntersOrIsPutIntoGraveyardFromBattlefield
                     )
                 });
+                let dying_ref = TriggerObjectRef {
+                    object_id: dying.object_id,
+                    zone_change_generation: dying.zone_change_generation,
+                    controller_at_event: dying.controller,
+                };
                 // The committed battlefield-to-graveyard move advances exactly one generation.
                 // Derive from the event snapshot, never the possibly newer current object.
                 for trigger in &mut out {
+                    if matches!(&trigger.ability.trigger, TriggerCondition::WhenSelfDies) {
+                        trigger.trigger_context.observed_object = Some(dying_ref);
+                    }
                     trigger.trigger_context.source_after_zone_change = Some(TriggerObjectRef {
                         object_id: dying.object_id,
                         zone_change_generation: dying.zone_change_generation + 1,
@@ -1475,11 +1483,6 @@ impl GameEngine {
                 if !was_creature {
                     return out;
                 }
-                let dying_ref = TriggerObjectRef {
-                    object_id: dying.object_id,
-                    zone_change_generation: dying.zone_change_generation,
-                    controller_at_event: dying.controller,
-                };
                 for source in sources {
                     if source.attached_to
                         == Some(AttachmentSnapshot::Object(

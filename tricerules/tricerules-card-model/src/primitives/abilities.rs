@@ -1123,7 +1123,8 @@ impl TriggerCondition {
     pub(crate) fn supplies_trigger_object(&self) -> bool {
         matches!(
             self,
-            Self::WheneverSelfBlocksCreature { .. }
+            Self::WhenSelfDies
+                | Self::WheneverSelfBlocksCreature { .. }
                 | Self::WheneverPermanentEntersBattlefield { .. }
                 | Self::WheneverSelfBecomesBlockedByCreature { .. }
                 | Self::WheneverAttachedObjectAttacks
@@ -1160,6 +1161,19 @@ impl TriggerCondition {
                 | Self::WhenControllerLosesControlOf
                 | Self::WhenWatchedObjectDiesThisTurn
                 | Self::WhenWatchedObjectDiesOrIsExiled
+        )
+    }
+
+    /// Whether this event supplies the battlefield object's mana value, including its exact
+    /// last-known value after departure.
+    pub(crate) fn supplies_battlefield_event_mana_value(&self) -> bool {
+        matches!(
+            self,
+            Self::WhenSelfDies
+                | Self::WheneverPermanentLeavesBattlefield {
+                    cardinality: ZoneEventCardinality::EachObject,
+                    ..
+                }
         )
     }
 
@@ -1682,6 +1696,17 @@ impl TriggeredAbilityDef {
         {
             return Err(
                 "trigger-object effect requires a trigger that supplies an observed object".into(),
+            );
+        }
+        if effects
+            .iter()
+            .copied()
+            .any(SpellEffectKind::uses_trigger_object_mana_value_graveyard_filter)
+            && !self.trigger.supplies_battlefield_event_mana_value()
+        {
+            return Err(
+                "trigger-object graveyard mana value requires a self-death or per-object battlefield departure trigger"
+                    .into(),
             );
         }
         if effects

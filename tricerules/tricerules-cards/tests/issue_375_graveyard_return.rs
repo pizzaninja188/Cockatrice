@@ -140,6 +140,7 @@ fn issue_375_coati_payload_is_exact() {
                 excluded_objects: Vec::new(),
                 owner: GraveyardOwner::Controller,
                 card: Some(permanent_card_filter()),
+                mana_value_less_than_trigger_object: false,
             },
             destination: GraveyardDestination::Hand,
             linked_exile_id: None,

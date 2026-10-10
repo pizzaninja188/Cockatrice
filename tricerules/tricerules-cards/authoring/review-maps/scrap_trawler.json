@@ -1,0 +1,137 @@
+{
+  "format_version": 1,
+  "oracle_id": "164f3f85-21fc-40b7-9871-4f303ba98428",
+  "spans": [
+    {
+      "face_id": "scrap_trawler",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentLeavesBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "ZoneEventCardinality::EachObject",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger/WheneverPermanentLeavesBattlefield/cardinality"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Artifact",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger/WheneverPermanentLeavesBattlefield/filter/permanent_type"
+    },
+    {
+      "symbol": "ZoneEventDestination::OneOf",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger/WheneverPermanentLeavesBattlefield/destination"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    },
+    {
+      "symbol": "GraveyardFilter",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/MoveGraveyardCards/filter"
+    },
+    {
+      "symbol": "GraveyardFilter",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0/MoveGraveyardCards/filter"
+    },
+    {
+      "symbol": "GraveyardOwner::Controller",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/MoveGraveyardCards/filter/owner"
+    },
+    {
+      "symbol": "ZoneCardFilter.card_type",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/MoveGraveyardCards/filter/card/card_type"
+    },
+    {
+      "symbol": "GraveyardFilter.mana_value_less_than_trigger_object",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/MoveGraveyardCards/filter/mana_value_less_than_trigger_object"
+    },
+    {
+      "symbol": "GraveyardDestination::Hand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/MoveGraveyardCards/destination"
+    },
+    {
+      "symbol": "GraveyardOwner::Controller",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0/MoveGraveyardCards/filter/owner"
+    },
+    {
+      "symbol": "ZoneCardFilter.card_type",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0/MoveGraveyardCards/filter/card/card_type"
+    },
+    {
+      "symbol": "GraveyardFilter.mana_value_less_than_trigger_object",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0/MoveGraveyardCards/filter/mana_value_less_than_trigger_object"
+    },
+    {
+      "symbol": "GraveyardDestination::Hand",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0/MoveGraveyardCards/destination"
+    },
+    {
+      "symbol": "AbilityTargeting",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "AbilityTargeting",
+      "typed_path": "/faces/0/triggered_abilities/1/targeting"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting/groups/0"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/triggered_abilities/1/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_coverage_scrap_trawler::scrap_trawler_registers_as_a_complete_card",
+      "covers": "exact Scrap Trawler identity, printed characteristics, both trigger conditions, artifact graveyard filters, strict event-value comparison, hand destination, and one required target per trigger"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_trawler::scrap_trawler_self_death_uses_its_exact_event_mana_value",
+      "covers": "self-death uses the old exact object generation and accepts only lower-value artifact cards from the controller's graveyard"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_trawler::scrap_trawler_observes_noncreature_artifacts_and_uses_the_event_value",
+      "covers": "a noncreature Trading Post event uses mana value 4, separate from Scrap Trawler's own value 3"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_trawler::scrap_trawler_tracks_the_controller_of_an_opponent_owned_artifact_event",
+      "covers": "an opponent-owned artifact controlled by the trigger source's controller triggers, while the target must come from the controller's graveyard"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_trawler::scrap_trawler_simultaneous_events_keep_three_independent_thresholds",
+      "covers": "simultaneous event triggers retain independent mana-value thresholds of 3, 4, and 7"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_trawler::scrap_trawler_uses_copied_event_value_and_zero_x_graveyard_value_after_reentry",
+      "covers": "a copied Cursed Mirror event uses copied mana value 7; after that exact object reenters as a mana-value-0 Ornithopter copy, the pending trigger still uses the old value; X is zero in the graveyard"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_trawler::scrap_trawler_rechecks_the_exact_target_generation_at_resolution",
+      "covers": "a target that leaves and returns before resolution is not moved from its new graveyard generation"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_trawler::scrap_trawler_removes_the_trigger_without_a_legal_target_and_ignores_exile",
+      "covers": "no legal graveyard target removes a trigger and a controlled artifact leaving for exile does not satisfy the trigger"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

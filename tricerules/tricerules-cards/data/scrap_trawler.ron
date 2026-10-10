@@ -1,0 +1,56 @@
+// Oracle and rulings checked against Scryfall on 2026-10-09. CR 202.3e, 603.2c, 603.3d,
+// 603.6c, 603.10a, 608.2b, 608.2h.
+(
+  id: "scrap_trawler",
+  name: "Scrap Trawler",
+  face_id: "scrap_trawler",
+  mana_cost: "{3}",
+  types: ["Artifact", "Creature", "Construct"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [MoveGraveyardCards(
+        filter: (
+          owner: Controller,
+          card: Some((card_type: Some(Artifact))),
+          mana_value_less_than_trigger_object: true,
+        ),
+        destination: Hand,
+      )],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target artifact card with lower mana value from your graveyard",
+        effect_indices: [0],
+      )])),
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([1]),
+      trigger: WheneverPermanentLeavesBattlefield(
+        controller: Controller,
+        filter: (permanent_type: Some(Artifact), exclude_source: true),
+        destination: OneOf([Graveyard]),
+        cardinality: EachObject,
+      ),
+      effect: [MoveGraveyardCards(
+        filter: (
+          owner: Controller,
+          card: Some((card_type: Some(Artifact))),
+          mana_value_less_than_trigger_object: true,
+        ),
+        destination: Hand,
+      )],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target artifact card with lower mana value from your graveyard",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)
