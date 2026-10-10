@@ -1,7 +1,7 @@
 //! Actual-card coverage for Molten Echoes' linked creature-type choice and token copy.
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::{GameEngine, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     dev_command, ChoiceKind, DevCommand, DevMoveCard, DevZone, ResolutionChoiceDecision,
 };
@@ -1156,4 +1156,132 @@ fn molten_echoes_chooses_a_creature_type_and_copies_a_matching_entry() {
         !engine.state.objects.contains_key(&tokens[0]),
         "the exact token ceases to exist after its next-end-step exile"
     );
+}
+
+#[test]
+fn molten_echoes_doubling_season_gives_each_token_haste_and_one_cohort_exile() {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2_026_101_015,
+        &[4, 9],
+        20,
+        None,
+        true,
+    )
+    .expect("new two-player game");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+
+    inject_card_into_hand(&mut engine, 0, "molten_echoes");
+    give_mana(
+        &mut engine,
+        4,
+        ManaGift {
+            r: 2,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let molten_index = hand_index_for_card(&engine, 0, "molten_echoes");
+    engine
+        .apply_command(4, &cast_spell(molten_index, vec![]))
+        .expect("cast Molten Echoes");
+    engine
+        .apply_command(4, &pass())
+        .expect("active player passes");
+    let entry_choice = engine
+        .apply_command(9, &pass())
+        .expect("Molten Echoes enters and asks for a creature type");
+    let choice = find_resolution_choice(&entry_choice).expect("choose a creature type");
+    let bear_type = choice
+        .resolution_branches
+        .iter()
+        .find(|option| option.label == "Bear")
+        .expect("Bear is a supported creature type");
+    engine
+        .apply_command(4, &choose_branch(bear_type.branch_index))
+        .expect("choose Bear");
+
+    let _bear = inject_card_into_hand(&mut engine, 0, "grizzly_bears");
+    give_mana(
+        &mut engine,
+        4,
+        ManaGift {
+            g: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let bear_index = hand_index_for_card(&engine, 0, "grizzly_bears");
+    engine
+        .apply_command(4, &cast_spell(bear_index, vec![]))
+        .expect("cast Grizzly Bears");
+    pass_priority_round(&mut engine);
+
+    let before = engine.state.players[0]
+        .battlefield
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>();
+    pass_priority_round(&mut engine);
+    answer_simultaneous_entry_order_in_engine_order(&mut engine);
+    let tokens = engine.state.players[0]
+        .battlefield
+        .iter()
+        .copied()
+        .filter(|object| {
+            !before.contains(object)
+                && engine.state.objects[object].card_id == "grizzly_bears"
+                && engine.state.objects[object].is_token()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        tokens.len(),
+        2,
+        "Doubling Season replaces one token with two"
+    );
+    for token in &tokens {
+        assert!(engine.effective_has_keyword(*token, tricerules_cards::Keyword::Haste));
+    }
+    assert_eq!(engine.state.observed_object_cohorts.len(), 1);
+    assert_eq!(
+        engine
+            .state
+            .active_event_observers
+            .iter()
+            .filter(|observer| {
+                matches!(
+                    observer.matcher,
+                    tricerules_core::state::EventObserverMatcher::AtBeginningOfNextEndStep
+                )
+            })
+            .count(),
+        1,
+        "one delayed trigger represents the complete token batch"
+    );
+
+    engine
+        .apply_command(4, &primitive_yield())
+        .expect("main one to combat");
+    engine
+        .apply_command(4, &primitive_yield())
+        .expect("begin combat");
+    if engine.state.turn_step == TurnStep::DeclareAttackers {
+        engine
+            .apply_command(4, &primitive_yield())
+            .expect("skip attackers");
+    }
+    engine
+        .apply_command(4, &primitive_yield())
+        .expect("end combat to main two");
+    engine
+        .apply_command(4, &primitive_yield())
+        .expect("main two to end step");
+    assert_eq!(engine.state.turn_step, TurnStep::EndStep);
+    assert_eq!(engine.state.stack.len(), 1);
+    resolve_entire_stack_two_player(&mut engine);
+    for token in tokens {
+        assert!(!engine.state.objects.contains_key(&token));
+    }
+    assert!(engine.state.observed_object_cohorts.is_empty());
 }

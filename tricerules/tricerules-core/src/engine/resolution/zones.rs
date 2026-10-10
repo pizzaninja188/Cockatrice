@@ -735,7 +735,7 @@ pub(super) fn exile_top_with_play_permission(
     Ok(EffectOutcome::Continue)
 }
 
-fn linked_exile_key(
+pub(super) fn linked_exile_key(
     engine: &GameEngine,
     top: &StackItem,
     ability_link_id: tricerules_card_model::AbilityLinkId,
@@ -769,6 +769,39 @@ fn linked_exile_key(
         ability_link_id,
         occurrence,
     })
+}
+
+pub(super) fn linked_exile_copy_snapshot(
+    engine: &GameEngine,
+    top: &StackItem,
+    ability_link_id: tricerules_card_model::AbilityLinkId,
+    producer_ability_id: tricerules_card_model::AbilityId,
+) -> Option<crate::state::TokenCopySnapshot> {
+    let key = linked_exile_key(engine, top, ability_link_id, producer_ability_id).ok()?;
+    engine
+        .state
+        .linked_exile_records
+        .get(&key)?
+        .iter()
+        .rev()
+        .find_map(|linked| {
+            let object = engine.state.objects.get(&linked.object_id)?;
+            let generation = engine
+                .state
+                .zone_change_generation
+                .get(&linked.object_id)
+                .copied()
+                .unwrap_or(0);
+            if object.zone != Zone::Exile || generation != linked.zone_change_generation {
+                return None;
+            }
+            let snapshot = super::super::copying::token_copy_snapshot_from(
+                &engine.state,
+                engine.registry,
+                linked.object_id,
+            )?;
+            snapshot.values.face.is_permanent().then_some(snapshot)
+        })
 }
 
 pub(super) fn exile(
@@ -1358,6 +1391,7 @@ pub(super) fn shuffle_permanents_into_owners_libraries(
             EffectSubject::AttachedObject
             | EffectSubject::TriggerObject
             | EffectSubject::PreviousEffectObject
+            | EffectSubject::PreviousEffectObjects
             | EffectSubject::SearchedObject(_) => {
                 return Err(EngineError::Illegal(
                     "unsupported subject for multi-subject library shuffle",
@@ -3028,6 +3062,102 @@ pub(super) fn return_linked_exiled_cards(
             EffectOutcome::Continue
         },
     )
+}
+
+pub(super) fn return_other_linked_exiled_cards(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ReturnOtherLinkedExiledCards {
+        producer_ability_id,
+        linked_exile_id,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let key = linked_exile_key(cx.engine, cx.top, linked_exile_id, producer_ability_id)?;
+    let linked = cx
+        .engine
+        .state
+        .linked_exile_records
+        .get(&key)
+        .cloned()
+        .unwrap_or_default();
+    let attempted_receipt = cx.previous_effect_result.produced_objects.first().copied();
+    let excluded_new_imprint = attempted_receipt
+        .filter(|receipt| {
+            cx.engine
+                .state
+                .objects
+                .get(&receipt.object_id)
+                .is_some_and(|object| object.zone == Zone::Exile)
+                && cx
+                    .engine
+                    .state
+                    .zone_change_generation
+                    .get(&receipt.object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == receipt.zone_change_generation
+                && linked.iter().any(|record| {
+                    record.object_id == receipt.object_id
+                        && record.zone_change_generation == receipt.zone_change_generation
+                })
+        })
+        .map(|receipt| (receipt.object_id, receipt.zone_change_generation));
+    let returnees = linked
+        .into_iter()
+        .filter(|record| {
+            Some((record.object_id, record.zone_change_generation)) != excluded_new_imprint
+                && cx
+                    .engine
+                    .state
+                    .objects
+                    .get(&record.object_id)
+                    .is_some_and(|object| object.zone == Zone::Exile)
+                && cx
+                    .engine
+                    .state
+                    .zone_change_generation
+                    .get(&record.object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == record.zone_change_generation
+        })
+        .filter_map(|record| {
+            let object = cx.engine.state.objects.get(&record.object_id)?;
+            Some((record.object_id, object.owner))
+        })
+        .collect::<Vec<_>>();
+    if returnees.is_empty() {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let engine = &mut *cx.engine;
+    let events = &mut *cx.events;
+    let snapshot = engine.snapshot_zone_event();
+    for (object_id, owner) in &returnees {
+        let name = object_display_name(&engine.state, engine.registry, *object_id);
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            *object_id,
+            Zone::Graveyard,
+            None,
+        )?;
+        events.push(ev_log(format!(
+            "{} returns {name} to its owner's graveyard.",
+            cx.spell_label
+        )));
+        events.push(permanent_moved_event(
+            &engine.state,
+            *object_id,
+            *owner,
+            rv1::permanent_moved::Destination::Graveyard,
+        ));
+    }
+    engine.fire_zone_triggers(snapshot, vec![], events);
+    Ok(EffectOutcome::Continue)
 }
 
 pub(super) fn return_triggered_card(

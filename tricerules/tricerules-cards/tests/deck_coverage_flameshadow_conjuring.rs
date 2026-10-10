@@ -46,18 +46,18 @@ fn flameshadow_conjuring_is_registered_as_a_complete_card() {
                     && matches!(branch.effects.as_slice(), [
                         SpellEffectKind::CreateTokenCopies { count: Amount::Fixed(1), source: TokenCopySource::TriggerObject },
                         SpellEffectKind::ApplyPermanentModifier {
-                            subject: EffectSubject::PreviousEffectObject,
+                            subject: EffectSubject::PreviousEffectObjects,
                             modifier: ResolvingPermanentModifier::GrantKeywords(keywords),
                             duration: ResolvingEffectDuration::Indefinite,
                         },
                         SpellEffectKind::CreateDelayedTrigger {
-                            subject: Some(EffectSubject::PreviousEffectObject),
+                            subject: Some(EffectSubject::PreviousEffectObjects),
                             ability,
                             ..
                         },
                     ] if keywords == &[tricerules_cards::Keyword::Haste]
                         && matches!(ability.trigger, TriggerCondition::AtBeginningOfNextEndStep)
-                        && matches!(ability.effect.as_slice(), [SpellEffectKind::Exile { subject: EffectSubject::TriggerObject, .. }])
+                        && matches!(ability.effect.as_slice(), [SpellEffectKind::ExileObservedObjects])
                     )
             )
     ));

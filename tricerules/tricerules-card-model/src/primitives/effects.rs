@@ -172,6 +172,10 @@ pub enum EffectSubject {
     /// single-object instruction. This is an untargeted CR 608 reference and may name an object
     /// outside the battlefield; battlefield-only consumers still require it to remain there.
     PreviousEffectObject,
+    /// The complete exact-generation receipt cohort from the immediately preceding compatible
+    /// token-copy instruction. Only the approved Haste modifier and one delayed cohort Exile use
+    /// this subject; single-object references keep using `PreviousEffectObject`.
+    PreviousEffectObjects,
     /// The exact post-entry incarnation published by an earlier, single-card battlefield
     /// [`SpellEffectKind::SearchLibrary`] instruction in this resolution.
     SearchedObject(SearchResultId),
@@ -187,6 +191,13 @@ pub enum TokenCopySource {
     /// The exact single permanent supplied by a compatible trigger event. Mirrorworks needs the
     /// entering artifact, including its event-time generation if it later leaves or blinks.
     TriggerObject,
+    /// The current permanent card linked to a paired Exile ability on this exact source
+    /// incarnation and copy occurrence. Mimic Vat, Prototype Portal, and Soul Foundry all read
+    /// their linked Exile card when the activated copy ability resolves.
+    LinkedExile {
+        producer_ability_id: AbilityId,
+        linked_exile_id: AbilityLinkId,
+    },
     Chosen(Box<TargetFilter>),
 }
 
@@ -1475,6 +1486,10 @@ pub enum SpellEffectKind {
     /// trigger. Mobilize uses this runtime context effect so one delayed ability handles all
     /// tokens made by one resolution without re-querying the battlefield by name.
     SacrificeObservedObjects,
+    /// Exile every still-current battlefield object in a token-copy cohort captured by one
+    /// engine-created delayed trigger. Mimic Vat, Flameshadow Conjuring, and Molten Echoes share
+    /// this one-shot follow-up after a token-copy replacement creates more than one token.
+    ExileObservedObjects,
     /// CR 702.185: exile the observed permanent incarnation and grant its owner Warp's
     /// later-turn permission. Runtime delayed effect shared by all Warp cards.
     ExileWarpedObject,
@@ -1624,6 +1639,13 @@ pub enum SpellEffectKind {
         entry_counters: Vec<CounterPlacement>,
         #[serde(default)]
         entry_modifiers: Vec<ResolvingPermanentModifier>,
+    },
+    /// Mimic Vat's imprint branch returns earlier linked Exile incarnations after attempting to
+    /// link the exact preceding graveyard object. The new Exile receipt is excluded only when it
+    /// actually reached Exile and registered under this producer/link occurrence.
+    ReturnOtherLinkedExiledCards {
+        producer_ability_id: AbilityId,
+        linked_exile_id: AbilityLinkId,
     },
     /// CR 701.13a: exile the complete matching graveyard cohort without targeting.
     /// Soul-Guide Lantern uses Opponents; Relic of Progenitus uses All. Selection
@@ -3214,6 +3236,7 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
+                    | EffectSubject::PreviousEffectObjects
                     | EffectSubject::SearchedObject(_) => None,
                 })
                 .collect(),
@@ -3228,6 +3251,7 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
+                    | EffectSubject::PreviousEffectObjects
                     | EffectSubject::SearchedObject(_) => None,
                 })
                 .collect(),
@@ -3239,6 +3263,7 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
+                    | EffectSubject::PreviousEffectObjects
                     | EffectSubject::SearchedObject(_) => None,
                 })
                 .collect(),
@@ -3271,6 +3296,7 @@ impl SpellEffectKind {
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
+                | EffectSubject::PreviousEffectObjects
                 | EffectSubject::SearchedObject(_) => Vec::new(),
             },
             SpellEffectKind::CreateDelayedTrigger { subject, .. } => match subject {
@@ -3280,6 +3306,7 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
+                    | EffectSubject::PreviousEffectObjects
                     | EffectSubject::SearchedObject(_),
                 )
                 | None => Vec::new(),
@@ -3338,7 +3365,10 @@ impl SpellEffectKind {
                 .unwrap_or_default(),
             SpellEffectKind::DamagePlayer { .. }
             | SpellEffectKind::CreateTokenCopies {
-                source: TokenCopySource::Source | TokenCopySource::TriggerObject,
+                source:
+                    TokenCopySource::Source
+                    | TokenCopySource::TriggerObject
+                    | TokenCopySource::LinkedExile { .. },
                 ..
             }
             | SpellEffectKind::CopyNextSpellThisTurn
@@ -3381,8 +3411,10 @@ impl SpellEffectKind {
             | SpellEffectKind::ReturnTriggeredCard { .. }
             | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
             | SpellEffectKind::SacrificeObservedObjects
+            | SpellEffectKind::ExileObservedObjects
             | SpellEffectKind::ExileWarpedObject
             | SpellEffectKind::ReturnLinkedExiledCards { .. }
+            | SpellEffectKind::ReturnOtherLinkedExiledCards { .. }
             | SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { .. }
             | SpellEffectKind::ReturnAllGraveyardPermanents { .. }
             | SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { .. }
@@ -3521,6 +3553,55 @@ impl SpellEffectKind {
                         .flat_map(|mode| &mode.effects)
                         .any(Self::contains_opponent_land_mana_output)
             }
+            _ => false,
+        }
+    }
+
+    /// The cohort exile is an internal delayed-trigger consumer. Only the exact approved
+    /// PreviousEffectObjects delayed-trigger wrapper may contain it; arbitrary direct or nested
+    /// uses would have no cohort identity to consume.
+    pub(crate) fn contains_unscoped_exile_observed_objects(&self) -> bool {
+        match self {
+            Self::ExileObservedObjects => true,
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.contains_unscoped_exile_observed_objects()
+            }
+            Self::MayBehold { if_beheld, .. } => if_beheld
+                .iter()
+                .any(Self::contains_unscoped_exile_observed_objects),
+            Self::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
+                branches.iter().any(|branch| {
+                    branch
+                        .effects
+                        .iter()
+                        .any(Self::contains_unscoped_exile_observed_objects)
+                }) || otherwise
+                    .iter()
+                    .any(Self::contains_unscoped_exile_observed_objects)
+            }
+            // The CreateDelayedTrigger validator owns validation of its nested ability, including
+            // the one approved cohort consumer. Do not walk into that nested ability here.
+            Self::CreateDelayedTrigger { .. } => false,
+            Self::GrantTriggeredAbility { ability, .. } => {
+                ability
+                    .effect
+                    .iter()
+                    .any(Self::contains_unscoped_exile_observed_objects)
+                    || ability
+                        .modal
+                        .iter()
+                        .flat_map(|modal| &modal.modes)
+                        .flat_map(|mode| &mode.effects)
+                        .any(Self::contains_unscoped_exile_observed_objects)
+            }
+            Self::CreateReflexiveTrigger { ability, .. } => ability
+                .effect
+                .iter()
+                .any(Self::contains_unscoped_exile_observed_objects),
             _ => false,
         }
     }
@@ -3687,15 +3768,20 @@ impl SpellEffectKind {
             OptionalOne,
             ExactlyOne,
             Many,
+            TokenCreationBatch,
         }
 
         fn produced_object_cardinality(effect: &SpellEffectKind) -> ProducedObjectCardinality {
             match effect {
                 SpellEffectKind::CreateTokenCopies {
                     count: Amount::Fixed(1),
-                    source: TokenCopySource::TriggerObject,
+                    source: TokenCopySource::TriggerObject | TokenCopySource::LinkedExile { .. },
                 }
                 | SpellEffectKind::ApplyPermanentModifier {
+                    subject: EffectSubject::PreviousEffectObjects,
+                    ..
+                } => ProducedObjectCardinality::TokenCreationBatch,
+                SpellEffectKind::ApplyPermanentModifier {
                     subject: EffectSubject::PreviousEffectObject,
                     ..
                 } => ProducedObjectCardinality::OptionalOne,
@@ -3715,23 +3801,43 @@ impl SpellEffectKind {
                         | ProducedObjectCardinality::ExactlyOne => {
                             ProducedObjectCardinality::OptionalOne
                         }
+                        ProducedObjectCardinality::TokenCreationBatch => {
+                            ProducedObjectCardinality::None
+                        }
                     }
                 }
                 _ => ProducedObjectCardinality::None,
             }
         }
 
-        fn previous_object_requirement(effect: &SpellEffectKind) -> Option<bool> {
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum PreviousObjectRequirement {
+            ExactlyOne,
+            OptionalOne,
+            TokenCreationBatch,
+        }
+
+        fn previous_object_requirement(
+            effect: &SpellEffectKind,
+        ) -> Option<PreviousObjectRequirement> {
             match effect {
                 SpellEffectKind::Conditional { effect, .. } => previous_object_requirement(effect),
                 SpellEffectKind::GrantKeywords {
                     subject: EffectSubject::PreviousEffectObject,
                     ..
-                } => Some(true),
+                } => Some(PreviousObjectRequirement::ExactlyOne),
                 SpellEffectKind::ApplyPermanentModifier {
                     subject: EffectSubject::PreviousEffectObject,
                     ..
-                } => Some(false),
+                } => Some(PreviousObjectRequirement::OptionalOne),
+                SpellEffectKind::ApplyPermanentModifier {
+                    subject: EffectSubject::PreviousEffectObjects,
+                    ..
+                }
+                | SpellEffectKind::CreateDelayedTrigger {
+                    subject: Some(EffectSubject::PreviousEffectObjects),
+                    ..
+                } => Some(PreviousObjectRequirement::TokenCreationBatch),
                 SpellEffectKind::AttachEquipment {
                     equipment: EffectSubject::PreviousEffectObject,
                     ..
@@ -3746,9 +3852,45 @@ impl SpellEffectKind {
                 | SpellEffectKind::CreateDelayedTrigger {
                     subject: Some(EffectSubject::PreviousEffectObject),
                     ..
-                } => Some(false),
+                } => Some(PreviousObjectRequirement::OptionalOne),
                 _ => None,
             }
+        }
+
+        fn is_token_copy_batch_producer(effect: &SpellEffectKind) -> bool {
+            matches!(
+                effect,
+                SpellEffectKind::CreateTokenCopies {
+                    count: Amount::Fixed(1),
+                    source: TokenCopySource::TriggerObject | TokenCopySource::LinkedExile { .. },
+                }
+            )
+        }
+
+        fn is_token_copy_batch_haste(effect: &SpellEffectKind) -> bool {
+            matches!(
+                effect,
+                SpellEffectKind::ApplyPermanentModifier {
+                    subject: EffectSubject::PreviousEffectObjects,
+                    modifier: ResolvingPermanentModifier::GrantKeywords(keywords),
+                    duration: ResolvingEffectDuration::Indefinite,
+                } if keywords.as_slice() == [Keyword::Haste]
+            )
+        }
+
+        fn is_token_copy_batch_exile_trigger(effect: &SpellEffectKind) -> bool {
+            matches!(
+                effect,
+                SpellEffectKind::CreateDelayedTrigger {
+                    subject: Some(EffectSubject::PreviousEffectObjects),
+                    affected_player: None,
+                    ability,
+                } if matches!(ability.trigger, TriggerCondition::AtBeginningOfNextEndStep)
+                    && ability.effect.as_slice() == [SpellEffectKind::ExileObservedObjects]
+                    && ability.modal.is_none()
+                    && ability.targeting.is_none()
+                    && !ability.may
+            )
         }
 
         fn searched_subjects<'a>(effect: &'a SpellEffectKind, out: &mut Vec<&'a SearchResultId>) {
@@ -3916,6 +4058,28 @@ impl SpellEffectKind {
             let previous = index
                 .checked_sub(1)
                 .and_then(|previous| effects.get(previous));
+            if let SpellEffectKind::ReturnOtherLinkedExiledCards {
+                linked_exile_id: return_link,
+                ..
+            } = effect
+            {
+                let Some(SpellEffectKind::Exile {
+                    subject: EffectSubject::TriggerObject,
+                    linked_exile_id: Some(exile_link),
+                }) = previous
+                else {
+                    return Err(
+                        "ReturnOtherLinkedExiledCards requires an immediately preceding linked TriggerObject Exile receipt"
+                            .into(),
+                    );
+                };
+                if return_link != exile_link {
+                    return Err(
+                        "ReturnOtherLinkedExiledCards must use the immediately preceding Exile link"
+                            .into(),
+                    );
+                }
+            }
             if amount.is_some_and(Amount::uses_previous_mill_mana_value_sum) {
                 let exact_damage_consumer = matches!(
                     effect,
@@ -4039,22 +4203,55 @@ impl SpellEffectKind {
             let previous_cardinality = previous
                 .map(produced_object_cardinality)
                 .unwrap_or(ProducedObjectCardinality::None);
-            if let Some(requires_exactly_one) = previous_object_requirement(effect) {
-                let valid = if requires_exactly_one {
-                    previous_cardinality == ProducedObjectCardinality::ExactlyOne
-                } else {
-                    matches!(
+            if let Some(requirement) = previous_object_requirement(effect) {
+                let valid = match requirement {
+                    PreviousObjectRequirement::ExactlyOne => {
+                        previous_cardinality == ProducedObjectCardinality::ExactlyOne
+                    }
+                    PreviousObjectRequirement::OptionalOne => matches!(
                         previous_cardinality,
                         ProducedObjectCardinality::OptionalOne
                             | ProducedObjectCardinality::ExactlyOne
-                    )
+                    ),
+                    PreviousObjectRequirement::TokenCreationBatch => {
+                        previous_cardinality == ProducedObjectCardinality::TokenCreationBatch
+                    }
                 };
                 if !valid {
-                    return Err(
-                        "PreviousEffectObject requires an immediately preceding compatible single-object producer"
-                            .into(),
-                    );
+                    return Err(match requirement {
+                        PreviousObjectRequirement::TokenCreationBatch => "PreviousEffectObjects requires an immediately preceding token-copy batch",
+                        PreviousObjectRequirement::ExactlyOne
+                        | PreviousObjectRequirement::OptionalOne => "PreviousEffectObject requires an immediately preceding compatible single-object producer",
+                    }
+                    .into());
                 }
+            }
+            if matches!(effect, SpellEffectKind::Conditional { effect, .. }
+                if previous_object_requirement(effect)
+                    == Some(PreviousObjectRequirement::TokenCreationBatch))
+            {
+                return Err(
+                    "PreviousEffectObjects cannot be wrapped in a conditional effect".into(),
+                );
+            }
+            if is_token_copy_batch_haste(effect)
+                && (!previous.is_some_and(is_token_copy_batch_producer)
+                    || !effects
+                        .get(index + 1)
+                        .is_some_and(is_token_copy_batch_exile_trigger))
+            {
+                return Err(
+                    "token-copy batch Haste must follow one token-copy instruction and immediately precede its delayed Exile cohort trigger"
+                        .into(),
+                );
+            }
+            if is_token_copy_batch_exile_trigger(effect)
+                && !previous.is_some_and(is_token_copy_batch_haste)
+            {
+                return Err(
+                    "token-copy batch Exile trigger must immediately follow the batch Haste modifier"
+                        .into(),
+                );
             }
             if let SpellEffectKind::Conditional { condition, .. } = effect {
                 if condition.references_previous_effect_object()
@@ -4138,6 +4335,9 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if matches!(self, Self::ExileObservedObjects) && context != EffectContext::Ability {
+            return Err("ExileObservedObjects requires an ability context".into());
+        }
         if self.has_unsupported_triggering_attacker_recipient() {
             return Err("TriggeringAttackingPlayer is supported only by Draw effects".into());
         }
@@ -4392,6 +4592,20 @@ impl SpellEffectKind {
                 modifier.validate()?;
             }
         }
+        if let SpellEffectKind::ReturnOtherLinkedExiledCards {
+            producer_ability_id,
+            linked_exile_id,
+        } = self
+        {
+            if context != EffectContext::Ability {
+                return Err(
+                    "returning other linked exile objects requires an activated or triggered ability"
+                        .into(),
+                );
+            }
+            producer_ability_id.validate()?;
+            linked_exile_id.validate()?;
+        }
         if let SpellEffectKind::ExileGraveyards {
             players,
             filter,
@@ -4478,6 +4692,7 @@ impl SpellEffectKind {
                 EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
+                | EffectSubject::PreviousEffectObjects
                 | EffectSubject::SearchedObject(_) => {
                     return Err("Explore requires Source or Chosen subject".into());
                 }
@@ -4490,6 +4705,19 @@ impl SpellEffectKind {
                 }
                 TokenCopySource::Source if context == EffectContext::Spell => {
                     return Err("source token copies require an ability source".into());
+                }
+                TokenCopySource::LinkedExile {
+                    producer_ability_id,
+                    linked_exile_id,
+                } => {
+                    if context != EffectContext::Ability {
+                        return Err(
+                            "linked-exile token copies require an activated or triggered ability"
+                                .into(),
+                        );
+                    }
+                    producer_ability_id.validate()?;
+                    linked_exile_id.validate()?;
                 }
                 _ => {}
             }
@@ -4538,6 +4766,7 @@ impl SpellEffectKind {
                     EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
                     | EffectSubject::PreviousEffectObject
+                    | EffectSubject::PreviousEffectObjects
                     | EffectSubject::SearchedObject(_) => {
                         return Err(
                             "ShufflePermanentsIntoOwnersLibraries supports only Source and Chosen subjects"
@@ -4623,6 +4852,18 @@ impl SpellEffectKind {
                     return Err("permanent modifiers require a battlefield-permanent target".into());
                 }
                 EffectSubject::PreviousEffectObject => {}
+                EffectSubject::PreviousEffectObjects
+                    if *duration == ResolvingEffectDuration::Indefinite
+                        && matches!(
+                            modifier,
+                            ResolvingPermanentModifier::GrantKeywords(keywords)
+                                if keywords.as_slice() == [Keyword::Haste]
+                        ) => {}
+                EffectSubject::PreviousEffectObjects => {
+                    return Err(
+                        "PreviousEffectObjects only supports the indefinite Haste modifier".into(),
+                    );
+                }
                 EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::SearchedObject(_) => {
@@ -5061,11 +5302,16 @@ impl SpellEffectKind {
                     if matches!(
                         branch.requirement,
                         ResolutionBranchRequirement::EffectsApplicable
-                    ) && !branch
-                        .effects
-                        .iter()
-                        .any(|effect| matches!(effect, SpellEffectKind::PutCounters { .. }))
-                    {
+                    ) && !branch.effects.iter().any(|effect| {
+                        matches!(effect, SpellEffectKind::PutCounters { .. })
+                            || matches!(
+                                effect,
+                                SpellEffectKind::Exile {
+                                    subject: EffectSubject::TriggerObject,
+                                    ..
+                                }
+                            )
+                    }) {
                         return Err(
                             "EffectsApplicable requires a supported applicability-sensitive effect"
                                 .into(),
@@ -5609,6 +5855,18 @@ impl SpellEffectKind {
                             .into(),
                     );
                 }
+                if matches!(subject, Some(EffectSubject::PreviousEffectObjects))
+                    && (!matches!(ability.trigger, TriggerCondition::AtBeginningOfNextEndStep)
+                        || ability.effect.as_slice() != [SpellEffectKind::ExileObservedObjects]
+                        || ability.modal.is_some()
+                        || ability.targeting.is_some()
+                        || ability.may)
+                {
+                    return Err(
+                        "PreviousEffectObjects delayed triggers require one next-end-step ExileObservedObjects effect"
+                            .into(),
+                    );
+                }
                 if affected_player.is_some_and(|recipient| {
                     recipient != PlayerRecipient::PreviousTargetedSpellController
                 }) {
@@ -5619,7 +5877,11 @@ impl SpellEffectKind {
                 if !ability.trigger.is_delayed_only() {
                     return Err("CreateDelayedTrigger requires a delayed trigger condition".into());
                 }
-                ability.validate_shape()
+                if matches!(subject, Some(EffectSubject::PreviousEffectObjects)) {
+                    ability.validate_token_copy_cohort_shape()
+                } else {
+                    ability.validate_shape()
+                }
             }
             SpellEffectKind::AddTypes { subject, addition } => {
                 if let EffectSubject::Chosen(target) = subject {

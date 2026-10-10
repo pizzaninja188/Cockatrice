@@ -25,8 +25,7 @@
         "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger",
         "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/ability",
         "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/ability/trigger",
-        "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/ability/effect/0",
-        "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/ability/effect/0/Exile"
+        "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/ability/effect/0"
       ]
     }
   ],
@@ -52,12 +51,20 @@
       "typed_path": "/faces/0/triggered_abilities/0/effect/1/ApplyPermanentModifier"
     },
     {
+      "symbol": "EffectSubject::PreviousEffectObjects",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1/ApplyPermanentModifier/subject"
+    },
+    {
       "symbol": "TriggerCondition::AtBeginningOfNextEndStep",
       "typed_path": "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/ability/trigger"
     },
     {
-      "symbol": "SpellEffectKind::Exile",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/ability/effect/0/Exile"
+      "symbol": "EffectSubject::PreviousEffectObjects",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/subject"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileObservedObjects",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/2/CreateDelayedTrigger/ability/effect/0"
     }
   ],
   "tokens": [],
@@ -73,6 +80,10 @@
     {
       "test": "scenario deck_coverage_molten_echoes::molten_echoes_observes_each_matching_simultaneous_entry",
       "covers": "observes each matching object in one simultaneous entry batch and creates an independent token copy for each"
+    },
+    {
+      "test": "scenario deck_coverage_molten_echoes::molten_echoes_doubling_season_gives_each_token_haste_and_one_cohort_exile",
+      "covers": "Doubling Season creates two hasty copied tokens that share one next-end-step Exile trigger and one exact cohort."
     },
     {
       "test": "scenario deck_coverage_molten_echoes::copied_molten_echoes_gets_an_independent_creature_type_choice",

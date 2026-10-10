@@ -332,6 +332,16 @@ impl ActivatedAbilityDef {
         if self.effect.is_empty() {
             return Err("activated ability must contain at least one effect".into());
         }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::contains_unscoped_exile_observed_objects)
+        {
+            return Err(
+                "ExileObservedObjects is only valid in the approved token-copy delayed ability, not a direct activated effect"
+                    .into(),
+            );
+        }
         let has_source_counter_scaled_mana = self
             .effect
             .iter()
@@ -1124,6 +1134,7 @@ impl TriggerCondition {
         matches!(
             self,
             Self::WhenSelfDies
+                | Self::WheneverCreatureDies { .. }
                 | Self::WheneverSelfBlocksCreature { .. }
                 | Self::WheneverPermanentEntersBattlefield { .. }
                 | Self::WheneverSelfBecomesBlockedByCreature { .. }
@@ -1614,12 +1625,35 @@ impl TriggeredAbilityDef {
     }
 
     pub(crate) fn validate_shape(&self) -> Result<(), String> {
+        self.validate_shape_with_token_copy_cohort_exile(false)
+    }
+
+    pub(crate) fn validate_token_copy_cohort_shape(&self) -> Result<(), String> {
+        self.validate_shape_with_token_copy_cohort_exile(true)
+    }
+
+    fn validate_shape_with_token_copy_cohort_exile(
+        &self,
+        allow_token_copy_cohort_exile: bool,
+    ) -> Result<(), String> {
         self.trigger.validate()?;
         self.validate_trigger_limit()?;
         self.ability_id.validate()?;
         self.presentation.validate()?;
         if self.effect.is_empty() == self.modal.is_none() {
             return Err("triggered ability requires exactly one of effect or modal".into());
+        }
+        if allow_token_copy_cohort_exile
+            && (!matches!(self.trigger, TriggerCondition::AtBeginningOfNextEndStep)
+                || self.effect.as_slice() != [SpellEffectKind::ExileObservedObjects]
+                || self.modal.is_some()
+                || self.targeting.is_some()
+                || self.may)
+        {
+            return Err(
+                "cohort exile ability requires one untargeted next-end-step ExileObservedObjects effect"
+                    .into(),
+            );
         }
         let effects = self
             .effect
@@ -1631,6 +1665,18 @@ impl TriggeredAbilityDef {
                     .flat_map(|mode| &mode.effects),
             )
             .collect::<Vec<_>>();
+        if !allow_token_copy_cohort_exile {
+            if let Some(_effect) = effects
+                .iter()
+                .copied()
+                .find(|effect| effect.contains_unscoped_exile_observed_objects())
+            {
+                return Err(
+                    "ExileObservedObjects is only valid in the approved token-copy delayed ability, not a direct triggered effect"
+                        .to_string(),
+                );
+            }
+        }
         if effects
             .iter()
             .any(|effect| effect.contains_source_counter_scaled_mana())
@@ -1859,6 +1905,16 @@ impl ReflexiveTriggeredAbilityDef {
         self.presentation.validate()?;
         if self.effect.is_empty() {
             return Err("reflexive triggered ability requires effects".into());
+        }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::contains_unscoped_exile_observed_objects)
+        {
+            return Err(
+                "ExileObservedObjects is only valid in the approved token-copy delayed ability, not a reflexive effect"
+                    .into(),
+            );
         }
         if self
             .effect

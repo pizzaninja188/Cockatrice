@@ -7,6 +7,13 @@ pub(super) fn create_token_copies(
     let SpellEffectKind::CreateTokenCopies { count, source } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    if matches!(
+        &source,
+        TokenCopySource::TriggerObject | TokenCopySource::LinkedExile { .. }
+    ) {
+        cx.effect_result.produced_object_provenance =
+            Some(crate::state::ProducedObjectProvenance::TokenCreationBatch);
+    }
     let count = cx.engine.resolve_amount(
         &count,
         AmountContext::for_stack_item(cx.top, cx.controller)
@@ -30,6 +37,31 @@ pub(super) fn create_token_copies(
     }
     if source == TokenCopySource::TriggerObject {
         if let Some(snapshot) = cx.engine.trigger_object_token_copy_snapshot(cx.top) {
+            let Some(produced_objects) = cx.engine.create_tokens_from_copy(
+                &snapshot,
+                count,
+                cx.top,
+                cx.spell_label,
+                cx.events,
+            )?
+            else {
+                return Ok(EffectOutcome::Suspended);
+            };
+            cx.effect_result.produced_objects = produced_objects;
+        }
+        return Ok(EffectOutcome::Continue);
+    }
+    if let TokenCopySource::LinkedExile {
+        producer_ability_id,
+        linked_exile_id,
+    } = &source
+    {
+        if let Some(snapshot) = zones::linked_exile_copy_snapshot(
+            cx.engine,
+            cx.top,
+            linked_exile_id.clone(),
+            producer_ability_id.clone(),
+        ) {
             let Some(produced_objects) = cx.engine.create_tokens_from_copy(
                 &snapshot,
                 count,
@@ -522,5 +554,67 @@ pub(super) fn sacrifice_observed_objects(
         "P{} sacrifices {sacrificed} delayed token(s).",
         cx.controller
     )));
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn exile_observed_objects(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    if effect != SpellEffectKind::ExileObservedObjects {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    }
+    let Some(primary) = cx.top.trigger_context.observed_object else {
+        return Err(EngineError::Illegal("delayed token cohort missing"));
+    };
+    let observed = cx
+        .engine
+        .state
+        .observed_object_cohorts
+        .remove(&(primary.object_id, primary.zone_change_generation))
+        .ok_or(EngineError::Illegal("delayed token cohort missing"))?;
+    let zone_snapshot = cx.engine.snapshot_zone_event();
+    let mut leave_events = Vec::new();
+    let mut departures = Vec::new();
+    for reference in observed {
+        let generation = cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&reference.object_id)
+            .copied()
+            .unwrap_or(0);
+        let Some(object) = cx.engine.state.objects.get(&reference.object_id) else {
+            continue;
+        };
+        if object.zone != Zone::Battlefield || generation != reference.zone_change_generation {
+            continue;
+        }
+        let owner = object.owner;
+        let name = object_display_name(&cx.engine.state, cx.engine.registry, reference.object_id);
+        leave_events.extend(cx.engine.battlefield_leave_event(reference.object_id));
+        departures.push((reference.object_id, owner, name));
+    }
+    for (object_id, owner, name) in &departures {
+        move_object_to_zone(
+            &mut cx.engine.state,
+            cx.engine.registry,
+            *object_id,
+            Zone::Exile,
+            None,
+        )?;
+        cx.events.push(permanent_moved_event(
+            &cx.engine.state,
+            *object_id,
+            *owner,
+            rv1::permanent_moved::Destination::Exile,
+        ));
+        cx.events.push(ev_log(format!(
+            "{} exiles {name} from its token-copy cohort.",
+            cx.spell_label
+        )));
+    }
+    cx.engine
+        .fire_zone_triggers(zone_snapshot, leave_events, cx.events);
     Ok(EffectOutcome::Continue)
 }

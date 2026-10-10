@@ -1,0 +1,67 @@
+// Oracle/rulings checked 2026-10-10 against the pinned Scryfall snapshot and WotC LCI Release Notes.
+// CR 111.12, 118.12, 400.7e, 603.5-603.7, 607.2a, and 707.2 govern the imprint and token copy.
+(
+  id: "mimic_vat",
+  name: "Mimic Vat",
+  face_id: "mimic_vat",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "imprint",
+    presentation: OracleLines([1]),
+    trigger: WheneverCreatureDies(
+      controller: AnyPlayer,
+      filter: (permanent_type: Some(Creature), token: Some(false)),
+    ),
+    effect: [ChooseResolutionBranch(
+      chooser: Controller,
+      optional: true,
+      selection: PlayerChoice,
+      branches: [(
+        branch_id: "imprint_creature",
+        presentation: OracleLines([1]),
+        cost: None,
+        requirement: EffectsApplicable,
+        effects: [
+          Exile(
+            subject: TriggerObject,
+            linked_exile_id: Some("imprinted_card"),
+          ),
+          ReturnOtherLinkedExiledCards(
+            producer_ability_id: "imprint",
+            linked_exile_id: "imprinted_card",
+          ),
+        ],
+      )],
+    )],
+  )],
+  activated_abilities: [(
+    ability_id: "create_copy",
+    presentation: OracleLines([2]),
+    source_zone: Battlefield,
+    costs: [Mana("{3}"), Tap],
+    effect: [
+      CreateTokenCopies(
+        count: 1,
+        source: LinkedExile(
+          producer_ability_id: "imprint",
+          linked_exile_id: "imprinted_card",
+        ),
+      ),
+      ApplyPermanentModifier(
+        subject: PreviousEffectObjects,
+        modifier: GrantKeywords([Haste]),
+        duration: Indefinite,
+      ),
+      CreateDelayedTrigger(
+        subject: Some(PreviousEffectObjects),
+        ability: (
+          ability_id: "exile_copy",
+          presentation: OracleLines([2]),
+          trigger: AtBeginningOfNextEndStep,
+          effect: [ExileObservedObjects],
+        ),
+      ),
+    ],
+  )],
+)

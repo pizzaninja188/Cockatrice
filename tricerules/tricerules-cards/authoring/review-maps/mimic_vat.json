@@ -1,0 +1,141 @@
+{
+  "format_version": 1,
+  "oracle_id": "6ebdc9f3-6b23-4716-8011-48f00d7e30c8",
+  "spans": [
+    {
+      "face_id": "mimic_vat",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    },
+    {
+      "face_id": "mimic_vat",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/effect/0",
+        "/faces/0/activated_abilities/0/effect/1",
+        "/faces/0/activated_abilities/0/effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverCreatureDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Creature",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverCreatureDies/filter/permanent_type"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseResolutionBranch",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnOtherLinkedExiledCards",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/1"
+    },
+    {
+      "symbol": "TokenCopySource::LinkedExile",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/CreateTokenCopies/source"
+    },
+    {
+      "symbol": "EffectSubject::PreviousEffectObjects",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1/ApplyPermanentModifier/subject"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfNextEndStep",
+      "typed_path": "/faces/0/activated_abilities/0/effect/2/CreateDelayedTrigger/ability/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileObservedObjects",
+      "typed_path": "/faces/0/activated_abilities/0/effect/2/CreateDelayedTrigger/ability/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_mimic_vat::creature_death_observer_retains_the_exact_event_object_for_imprint",
+      "covers": "The death trigger captures the exact card and battlefield generation before the event moves it to its next graveyard generation."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::mimic_vat_is_registered_with_the_expected_oracle_identity",
+      "covers": "The registered card has the exact Mimic Vat identity and complete card definition."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::mimic_vat_imprints_nontoken_deaths_from_any_player_and_replaces_the_previous_card",
+      "covers": "The controller may exile a nontoken creature card that died under either player's control, and a successful new imprint returns the prior linked card."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::queued_activation_uses_the_current_link_after_reimprint_and_vat_leaves",
+      "covers": "An activation queued while Savannah Lions is linked copies the Grizzly Bears linked before resolution, even after Mimic Vat leaves the battlefield."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::declining_a_new_imprint_preserves_the_previous_linked_card",
+      "covers": "Declining a later imprint leaves the currently linked card in Exile and the new event card in its graveyard."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::a_departed_death_event_card_cannot_be_imprinted_when_its_trigger_resolves",
+      "covers": "A death trigger cannot substitute a later zone incarnation after the exact event card leaves its graveyard."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::commander_death_triggers_vat_before_its_state_based_move_to_command",
+      "covers": "A commander death triggers Mimic Vat before its owner may move it from the graveyard to the command zone as a state-based action; the departed commander is not imprinted at resolution."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::mimic_vat_ignores_token_creature_deaths",
+      "covers": "Token creature deaths do not create an imprint trigger."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::simultaneous_deaths_keep_the_vat_pair_after_its_source_leaves",
+      "covers": "Two simultaneous creature deaths create independent triggers that retain the source's exact linked-exile pair after it leaves."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::simultaneous_disk_sweep_keeps_vat_triggers_when_all_sources_leave_together",
+      "covers": "One Nevinyrral's Disk resolution destroys Mimic Vat and both observed creatures together; the death triggers still resolve from last-known source information."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::an_empty_vat_creates_no_token_and_a_real_copy_exiles_at_the_next_end_step",
+      "covers": "An empty linked record creates no token; after an imprint, the token copies the current linked card, gains haste, and is exiled at the next end step."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::manifested_instant_can_be_imprinted_but_cannot_be_copied",
+      "covers": "Mimic Vat can imprint an instant manifested as a face-down creature, but its activation creates no token from that nonpermanent linked card."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::animated_nontoken_artifact_can_be_imprinted_and_copied_as_a_noncreature",
+      "covers": "A nontoken artifact that died while animated can be imprinted as a noncreature artifact, and its token copy still receives haste."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::activation_during_end_step_waits_for_the_following_turn_end_step",
+      "covers": "A token created after the current end step began waits for the following turn's end step before exile."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::linked_copy_entry_choice_resumes_before_haste_and_the_delayed_exile_are_added",
+      "covers": "A copied card's suspended as-enters choice completes before the exact token receives haste and enters the delayed-exile cohort."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::doubling_season_haste_and_one_delayed_exile_cover_the_complete_token_cohort",
+      "covers": "Doubling Season's extra token receives haste and one delayed ability exiles every still-current member of the cohort."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::countering_the_cohort_exile_keeps_both_hasty_tokens_and_releases_the_cohort",
+      "covers": "Countering the one delayed cohort trigger leaves both tokens and their haste in place and releases the cohort state."
+    },
+    {
+      "test": "scenario deck_coverage_mimic_vat::a_copied_vat_uses_its_own_linked_exile_occurrence",
+      "covers": "A copied Mimic Vat keeps an independent linked card while the original Vat replaces its own linked card; each later activation copies its own exact link."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

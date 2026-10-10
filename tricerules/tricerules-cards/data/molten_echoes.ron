@@ -24,17 +24,17 @@
     effect: [
       CreateTokenCopies(count: 1, source: TriggerObject),
       ApplyPermanentModifier(
-        subject: PreviousEffectObject,
+        subject: PreviousEffectObjects,
         modifier: GrantKeywords([Haste]),
         duration: Indefinite,
       ),
       CreateDelayedTrigger(
-        subject: Some(PreviousEffectObject),
+        subject: Some(PreviousEffectObjects),
         ability: (
           ability_id: "exile_copy",
           presentation: OracleLines([2]),
           trigger: AtBeginningOfNextEndStep,
-          effect: [Exile(subject: TriggerObject)],
+          effect: [ExileObservedObjects],
         ),
       ),
     ],

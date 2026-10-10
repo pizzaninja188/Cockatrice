@@ -1268,6 +1268,14 @@ fn validate_effect_targets(
                 return Err(EngineError::Illegal("source token copy does not target"));
             }
         }
+        SpellEffectKind::CreateTokenCopies {
+            source: TokenCopySource::LinkedExile { .. },
+            ..
+        } => {
+            if !targets.is_empty() {
+                return Err(EngineError::Illegal("linked-exile token copy does not target"));
+            }
+        }
         SpellEffectKind::CreateTokenCopies { source: TokenCopySource::TriggerObject, .. } => {
             if !targets.is_empty() {
                 return Err(EngineError::Illegal("trigger-object token copy does not target"));
@@ -1343,6 +1351,7 @@ fn validate_effect_targets(
             | EffectSubject::AttachedObject
             | EffectSubject::TriggerObject
             | EffectSubject::PreviousEffectObject
+            | EffectSubject::PreviousEffectObjects
             | EffectSubject::SearchedObject(_) => {
                 if !targets.is_empty() {
                     return Err(EngineError::Illegal("this effect takes no targets"));
@@ -1387,6 +1396,7 @@ fn validate_effect_targets(
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
+                | EffectSubject::PreviousEffectObjects
                 | EffectSubject::SearchedObject(_),
             )
             | None => {
@@ -1587,18 +1597,21 @@ fn validate_effect_targets(
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
+                | EffectSubject::PreviousEffectObjects
                 | EffectSubject::SearchedObject(_),
         }
         | SpellEffectKind::SetPrepared { subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
+                | EffectSubject::PreviousEffectObjects
                 | EffectSubject::SearchedObject(_), .. }
         | SpellEffectKind::Tap {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
+                | EffectSubject::PreviousEffectObjects
                 | EffectSubject::SearchedObject(_),
         }
         | SpellEffectKind::ReturnToOwnersHand {
@@ -1606,6 +1619,7 @@ fn validate_effect_targets(
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
+                | EffectSubject::PreviousEffectObjects
                 | EffectSubject::SearchedObject(_),
         }
         | SpellEffectKind::Exile {
@@ -1613,6 +1627,7 @@ fn validate_effect_targets(
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
+                | EffectSubject::PreviousEffectObjects
                 | EffectSubject::SearchedObject(_),
             ..
         }
@@ -1621,6 +1636,7 @@ fn validate_effect_targets(
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
+                | EffectSubject::PreviousEffectObjects
                 | EffectSubject::SearchedObject(_),
             ..
         }
@@ -1629,6 +1645,7 @@ fn validate_effect_targets(
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
+                | EffectSubject::PreviousEffectObjects
                 | EffectSubject::SearchedObject(_),
             ..
         }
@@ -1646,6 +1663,7 @@ fn validate_effect_targets(
         | SpellEffectKind::Populate
         | SpellEffectKind::CreateAttackingTokens { .. }
         | SpellEffectKind::SacrificeObservedObjects
+        | SpellEffectKind::ExileObservedObjects
         | SpellEffectKind::ExileWarpedObject
         | SpellEffectKind::AnimateSelf { .. }
         | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
@@ -1687,6 +1705,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ChangeSourceFace { .. }
         | SpellEffectKind::ReturnTriggeredCard { .. }
         | SpellEffectKind::ReturnLinkedExiledCards { .. }
+        | SpellEffectKind::ReturnOtherLinkedExiledCards { .. }
         | SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { .. }
         | SpellEffectKind::ReturnAllGraveyardPermanents { .. }
         | SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { .. }

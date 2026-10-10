@@ -1011,6 +1011,8 @@ pub enum EngineError {
 #[derive(serde::Serialize, Clone, Debug)]
 struct TriggerSourceSnapshot {
     copy_snapshot: Option<Box<TokenCopySnapshot>>,
+    /// Exact linked-exile pair occurrence captured with the source's event-time abilities.
+    linked_exile_occurrence: Option<LinkedExileOccurrence>,
     chosen_creature_types: Vec<ChosenCreatureTypeRecord>,
     counters: BTreeMap<CounterKind, u32>,
     /// Derived event-time types, captured before any member of a simultaneous departure moves.

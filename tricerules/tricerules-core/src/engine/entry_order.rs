@@ -287,10 +287,8 @@ impl GameEngine {
                 if let Some(amass) = amass {
                     return self.finish_amass_after_token_entry(stack, amass, events);
                 }
-                let previous_result = EffectResult {
-                    produced_objects: self.token_entry_object_refs(&created_ids),
-                    ..EffectResult::default()
-                };
+                let mut previous_result = stack.previous_result.clone();
+                previous_result.produced_objects = self.token_entry_object_refs(&created_ids);
                 self.complete_parked_resolution_with_previous(
                     stack.item,
                     stack.resume_effect_index,

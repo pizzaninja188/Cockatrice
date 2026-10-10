@@ -146,7 +146,6 @@ fn flameshadow_copies_the_entry_object_and_schedules_exact_token_exile() {
         .expect("choose to pay {R} for the token copy");
     submit_mana_resolution_decision(&mut engine, 4, ResolutionChoiceDecision::PayMana)
         .expect("pay {R} while the trigger resolves");
-
     let created_tokens = engine.state.players[0]
         .battlefield
         .iter()
@@ -173,6 +172,84 @@ fn flameshadow_copies_the_entry_object_and_schedules_exact_token_exile() {
         "the delayed trigger watches the exact copied-token generation"
     );
     assert!(engine.state.stack.is_empty());
+}
+
+#[test]
+fn flameshadow_token_copy_follow_up_covers_doubling_season_replacements() {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        2_026_101_010,
+        &[4, 9],
+        20,
+        None,
+        true,
+    )
+    .expect("new two-player game");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_permanent_on_battlefield(&mut engine, 0, "flameshadow_conjuring");
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    let creature = inject_card_into_hand(&mut engine, 0, "grizzly_bears");
+    give_mana(
+        &mut engine,
+        4,
+        ManaGift {
+            g: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let hand_index = hand_index_for_object(&engine, 0, creature);
+    engine
+        .apply_command(4, &cast_spell(hand_index, vec![]))
+        .expect("cast a nontoken creature");
+    pass_priority_round(&mut engine);
+
+    let before_battlefield = engine.state.players[0]
+        .battlefield
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>();
+    pass_until_resolution_choice(&mut engine);
+    give_mana(
+        &mut engine,
+        4,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    engine
+        .apply_command(4, &select_branch())
+        .expect("choose to pay {R} for the token copy");
+    submit_mana_resolution_decision(&mut engine, 4, ResolutionChoiceDecision::PayMana)
+        .expect("pay {R} while the trigger resolves");
+    answer_simultaneous_entry_order_in_engine_order(&mut engine);
+
+    let created_tokens = engine.state.players[0]
+        .battlefield
+        .iter()
+        .copied()
+        .filter(|object_id| {
+            !before_battlefield.contains(object_id)
+                && engine.state.objects[object_id].token_origin.is_some()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(created_tokens.len(), 2);
+    for token in &created_tokens {
+        assert!(engine.effective_has_keyword(*token, tricerules_cards::Keyword::Haste));
+    }
+    let delayed_cohorts = engine
+        .state
+        .active_event_observers
+        .iter()
+        .filter(|observer| {
+            matches!(
+                observer.matcher,
+                tricerules_core::state::EventObserverMatcher::AtBeginningOfNextEndStep
+            )
+        })
+        .count();
+    assert_eq!(delayed_cohorts, 1, "one delay covers this copy batch");
 }
 
 #[test]

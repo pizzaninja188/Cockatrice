@@ -39,11 +39,19 @@
       "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/1/ApplyPermanentModifier/duration"
     },
     {
+      "symbol": "EffectSubject::PreviousEffectObjects",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/1/ApplyPermanentModifier/subject"
+    },
+    {
       "symbol": "TriggerCondition::AtBeginningOfNextEndStep",
       "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/2/CreateDelayedTrigger/ability/trigger"
     },
     {
-      "symbol": "SpellEffectKind::Exile",
+      "symbol": "EffectSubject::PreviousEffectObjects",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/2/CreateDelayedTrigger/subject"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileObservedObjects",
       "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/2/CreateDelayedTrigger/ability/effect/0"
     }
   ],

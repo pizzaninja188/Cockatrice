@@ -4,8 +4,8 @@ use crate::primitives::{
     CardResultAction, CardResultSource, CastCostGroupDef, CastCostOptionDef,
     CastCostReceiptCondition, EffectContext, FaceChangeAction, GameCondition,
     ObjectContributionKind, ResolutionBranchRequirement, SpecialActionAffected, SpellEffectKind,
-    StaticAbilityDef, TargetController, TargetFilter, TargetKind, TargetingDef, TriggerCondition,
-    ZoneCardFilter,
+    StaticAbilityDef, TargetController, TargetFilter, TargetKind, TargetingDef, TokenCopySource,
+    TriggerCondition, ZoneCardFilter,
 };
 use crate::token_def::TokenDefinition;
 use crate::ManaSymbol;
@@ -1616,9 +1616,21 @@ fn validate_nested_effect_metadata(effect: &SpellEffectKind) -> Result<(), Strin
             ability.validate_shape()?;
             validate_effect_list_metadata(&ability.effect)
         }
-        SpellEffectKind::GrantTriggeredAbility { ability, .. }
-        | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
+        SpellEffectKind::GrantTriggeredAbility { ability, .. } => {
             ability.validate_shape()?;
+            validate_effect_list_metadata(&ability.effect)
+        }
+        SpellEffectKind::CreateDelayedTrigger {
+            subject, ability, ..
+        } => {
+            if matches!(
+                subject,
+                Some(crate::primitives::EffectSubject::PreviousEffectObjects)
+            ) {
+                ability.validate_token_copy_cohort_shape()?;
+            } else {
+                ability.validate_shape()?;
+            }
             validate_effect_list_metadata(&ability.effect)
         }
         SpellEffectKind::ApplyPermanentModifier {
@@ -1660,6 +1672,9 @@ fn collect_linked_exile_uses(effect: &SpellEffectKind, uses: &mut HashMap<String
             ..
         } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
         SpellEffectKind::ReturnLinkedExiledCards {
+            linked_exile_id, ..
+        }
+        | SpellEffectKind::ReturnOtherLinkedExiledCards {
             linked_exile_id, ..
         } => {
             uses.entry(linked_exile_id.as_str().to_owned())
@@ -1774,6 +1789,25 @@ fn collect_return_linked_exile_uses(
     Ok(())
 }
 
+fn collect_return_other_linked_exile_uses(
+    effects: &[SpellEffectKind],
+    returns: &mut Vec<(crate::AbilityId, crate::AbilityLinkId)>,
+) -> Result<(), String> {
+    for effect in effects {
+        visit_scoped_grant_effect(effect, &mut |effect| {
+            if let SpellEffectKind::ReturnOtherLinkedExiledCards {
+                producer_ability_id,
+                linked_exile_id,
+            } = effect
+            {
+                returns.push((producer_ability_id.clone(), linked_exile_id.clone()));
+            }
+            Ok(())
+        })?;
+    }
+    Ok(())
+}
+
 fn ability_has_linked_graveyard_exile_producer(
     effects: &[SpellEffectKind],
     linked_exile_id: &crate::AbilityLinkId,
@@ -1798,8 +1832,10 @@ fn ability_has_linked_graveyard_exile_producer(
 fn validate_linked_exile_return_producers(face: &CardFace) -> Result<(), String> {
     let abilities = face_linked_exile_abilities(face);
     let mut returns = Vec::new();
+    let mut other_returns = Vec::new();
     for (_, effects) in &abilities {
         collect_return_linked_exile_uses(effects, &mut returns)?;
+        collect_return_other_linked_exile_uses(effects, &mut other_returns)?;
     }
     for (producer_ability_id, linked_exile_id) in returns {
         let mut matching_producers = 0;
@@ -1813,6 +1849,108 @@ fn validate_linked_exile_return_producers(face: &CardFace) -> Result<(), String>
         if matching_producers != 1 {
             return Err(
                 "linked exile return must name the linked-exile producer with matching ability and link ids"
+                    .into(),
+            );
+        }
+    }
+    for (producer_ability_id, linked_exile_id) in other_returns {
+        let mut matching_producers = 0;
+        for (ability_id, effects) in &abilities {
+            if **ability_id == producer_ability_id
+                && ability_has_trigger_object_linked_exile_producer(effects, &linked_exile_id)?
+            {
+                matching_producers += 1;
+            }
+        }
+        if matching_producers != 1 {
+            return Err(
+                "returning other linked exile objects must name the matching TriggerObject Exile producer"
+                    .into(),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn ability_has_trigger_object_linked_exile_producer(
+    effects: &[SpellEffectKind],
+    linked_exile_id: &crate::AbilityLinkId,
+) -> Result<bool, String> {
+    let mut found = false;
+    for effect in effects {
+        visit_scoped_grant_effect(effect, &mut |effect| {
+            if let SpellEffectKind::Exile {
+                subject: crate::primitives::EffectSubject::TriggerObject,
+                linked_exile_id: Some(effect_link_id),
+            } = effect
+            {
+                found |= effect_link_id == linked_exile_id;
+            }
+            Ok(())
+        })?;
+    }
+    Ok(found)
+}
+
+fn ability_has_linked_exile_copy_producer(
+    effects: &[SpellEffectKind],
+    linked_exile_id: &crate::AbilityLinkId,
+) -> Result<bool, String> {
+    let mut matches = 0;
+    for effect in effects {
+        visit_scoped_grant_effect(effect, &mut |effect| {
+            match effect {
+                SpellEffectKind::MoveGraveyardCards {
+                    destination: crate::primitives::GraveyardDestination::Exile,
+                    linked_exile_id: Some(effect_link_id),
+                    ..
+                }
+                | SpellEffectKind::Exile {
+                    linked_exile_id: Some(effect_link_id),
+                    ..
+                } if effect_link_id == linked_exile_id => matches += 1,
+                _ => {}
+            }
+            Ok(())
+        })?;
+    }
+    Ok(matches == 1)
+}
+
+fn validate_linked_exile_copy_sources(face: &CardFace) -> Result<(), String> {
+    let abilities = face_linked_exile_abilities(face);
+    let mut copy_sources = Vec::new();
+    for (_, effects) in &abilities {
+        for effect in *effects {
+            visit_scoped_grant_effect(effect, &mut |effect| {
+                if let SpellEffectKind::CreateTokenCopies {
+                    source:
+                        TokenCopySource::LinkedExile {
+                            producer_ability_id,
+                            linked_exile_id,
+                        },
+                    ..
+                } = effect
+                {
+                    copy_sources.push((producer_ability_id.clone(), linked_exile_id.clone()));
+                }
+                Ok(())
+            })?;
+        }
+    }
+
+    for (producer_ability_id, linked_exile_id) in copy_sources {
+        let mut matching = 0;
+        for (ability_id, effects) in &abilities {
+            if **ability_id == producer_ability_id
+                && ability_has_linked_exile_copy_producer(effects, &linked_exile_id)?
+            {
+                matching += 1;
+            }
+        }
+        if matching != 1 {
+            return Err(
+                "linked-exile token-copy source must name exactly one Exile producer with matching ability and link ids"
                     .into(),
             );
         }
@@ -1964,7 +2102,19 @@ fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
                                     linked_exile_id: Some(link_id),
                                     ..
                                 } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
+                                SpellEffectKind::Exile {
+                                    linked_exile_id: Some(link_id),
+                                    ..
+                                } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
                                 SpellEffectKind::ReturnLinkedExiledCards {
+                                    linked_exile_id,
+                                    ..
+                                } => {
+                                    uses.entry(linked_exile_id.as_str().to_owned())
+                                        .or_default()
+                                        .1 += 1
+                                }
+                                SpellEffectKind::ReturnOtherLinkedExiledCards {
                                     linked_exile_id,
                                     ..
                                 } => {
@@ -2344,6 +2494,7 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
         }
     }
     validate_linked_exile_pairs(face)?;
+    validate_linked_exile_copy_sources(face)?;
     validate_chosen_opponent_links(face)?;
     validate_chosen_creature_type_links(face)?;
     let mut cast_cost_group_ids = HashSet::new();

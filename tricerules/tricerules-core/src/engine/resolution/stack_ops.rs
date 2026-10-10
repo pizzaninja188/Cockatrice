@@ -430,6 +430,18 @@ pub(crate) fn counter_stack_object(
         return Ok(None);
     }
     let st = engine.state.stack.remove(pos);
+    if st
+        .triggered_ability
+        .as_ref()
+        .is_some_and(|ability| ability.effect.as_slice() == [SpellEffectKind::ExileObservedObjects])
+    {
+        if let Some(observed) = st.trigger_context.observed_object {
+            engine
+                .state
+                .observed_object_cohorts
+                .remove(&(observed.object_id, observed.zone_change_generation));
+        }
+    }
     engine.state.captured_spell_copies.remove(&target_id);
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::StackObjectCountered(

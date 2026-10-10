@@ -746,6 +746,240 @@ fn issue_234_linked_exile_schema_is_paired_and_fail_closed() {
 }
 
 #[test]
+fn linked_exile_token_copy_source_names_its_paired_ability_and_link() {
+    let fixture = r#"(
+        id: "test_linked_copy",
+        name: "Test Linked Copy",
+        face_id: "test_linked_copy",
+        types: ["Artifact"],
+        activated_abilities: [(
+            ability_id: "exile_card",
+            presentation: Fallback,
+            costs: [Tap],
+            effect: [MoveGraveyardCards(
+                filter: (owner: AnyPlayer),
+                destination: Exile,
+                linked_exile_id: Some("exiled_card"),
+            )],
+        ), (
+            ability_id: "make_copy",
+            presentation: Fallback,
+            costs: [],
+            effect: [CreateTokenCopies(
+                count: 1,
+                source: LinkedExile(
+                    producer_ability_id: "exile_card",
+                    linked_exile_id: "exiled_card",
+                ),
+            )],
+        ), (
+            ability_id: "return_card",
+            presentation: Fallback,
+            costs: [SacrificeSelf],
+            effect: [ReturnLinkedExiledCards(
+                producer_ability_id: "exile_card",
+                linked_exile_id: "exiled_card",
+                filter: (card_type: Some(Creature)),
+            )],
+        )],
+    )"#;
+    crate::CardRegistry::from_chunks_and_tokens(&[fixture], &[])
+        .expect("copy and return abilities share the exact linked exile producer");
+}
+
+#[test]
+fn token_copy_cohort_chain_uses_plural_previous_objects_and_one_exile_trigger() {
+    let fixture = r#"(
+        id: "test_copy_cohort",
+        name: "Test Copy Cohort",
+        face_id: "test_copy_cohort",
+        types: ["Enchantment"],
+        triggered_abilities: [(
+            ability_id: "copy_creature",
+            presentation: Fallback,
+            trigger: WheneverPermanentEntersBattlefield(
+                controller: Controller,
+                filter: (permanent_type: Some(Creature), token: Some(false)),
+            ),
+            effect: [
+                CreateTokenCopies(count: 1, source: TriggerObject),
+                ApplyPermanentModifier(
+                    subject: PreviousEffectObjects,
+                    modifier: GrantKeywords([Haste]),
+                    duration: Indefinite,
+                ),
+                CreateDelayedTrigger(
+                    subject: Some(PreviousEffectObjects),
+                    ability: (
+                        ability_id: "exile_copies",
+                        presentation: Fallback,
+                        trigger: AtBeginningOfNextEndStep,
+                        effect: [ExileObservedObjects],
+                    ),
+                ),
+            ],
+        )],
+    )"#;
+    crate::CardRegistry::from_chunks_and_tokens(&[fixture], &[])
+        .expect("one typed token-copy cohort can feed Haste and a delayed Exile effect");
+}
+
+#[test]
+fn token_copy_cohort_exile_rejects_unscoped_and_wrong_consumers() {
+    let direct_consumer = r#"(
+        id: "test_unscoped_cohort_exile",
+        name: "Test Unscoped Cohort Exile",
+        face_id: "test_unscoped_cohort_exile",
+        types: ["Enchantment"],
+        triggered_abilities: [(
+            ability_id: "exile_cohort",
+            presentation: Fallback,
+            trigger: WheneverPermanentEntersBattlefield(
+                controller: Controller,
+                filter: (permanent_type: Some(Creature), token: Some(false)),
+            ),
+            effect: [ExileObservedObjects],
+        )],
+    )"#;
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[direct_consumer], &[]).is_err());
+
+    let wrong_delayed_consumer = r#"(
+        id: "test_wrong_cohort_consumer",
+        name: "Test Wrong Cohort Consumer",
+        face_id: "test_wrong_cohort_consumer",
+        types: ["Enchantment"],
+        triggered_abilities: [(
+            ability_id: "copy_creature",
+            presentation: Fallback,
+            trigger: WheneverPermanentEntersBattlefield(
+                controller: Controller,
+                filter: (permanent_type: Some(Creature), token: Some(false)),
+            ),
+            effect: [
+                CreateTokenCopies(count: 1, source: TriggerObject),
+                ApplyPermanentModifier(
+                    subject: PreviousEffectObjects,
+                    modifier: GrantKeywords([Haste]),
+                    duration: Indefinite,
+                ),
+                CreateDelayedTrigger(
+                    subject: Some(PreviousEffectObjects),
+                    ability: (
+                        ability_id: "wrong_exile",
+                        presentation: Fallback,
+                        trigger: AtBeginningOfNextEndStep,
+                        effect: [Exile(subject: TriggerObject)],
+                    ),
+                ),
+            ],
+        )],
+    )"#;
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[wrong_delayed_consumer], &[]).is_err());
+
+    let wrong_modifier = r#"(
+        id: "test_wrong_cohort_modifier",
+        name: "Test Wrong Cohort Modifier",
+        face_id: "test_wrong_cohort_modifier",
+        types: ["Enchantment"],
+        triggered_abilities: [(
+            ability_id: "copy_creature",
+            presentation: Fallback,
+            trigger: WheneverPermanentEntersBattlefield(
+                controller: Controller,
+                filter: (permanent_type: Some(Creature), token: Some(false)),
+            ),
+            effect: [
+                CreateTokenCopies(count: 1, source: TriggerObject),
+                ApplyPermanentModifier(
+                    subject: PreviousEffectObjects,
+                    modifier: GrantKeywords([Flying]),
+                    duration: Indefinite,
+                ),
+                CreateDelayedTrigger(
+                    subject: Some(PreviousEffectObjects),
+                    ability: (
+                        ability_id: "exile_copies",
+                        presentation: Fallback,
+                        trigger: AtBeginningOfNextEndStep,
+                        effect: [ExileObservedObjects],
+                    ),
+                ),
+            ],
+        )],
+    )"#;
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[wrong_modifier], &[]).is_err());
+}
+
+#[test]
+fn return_other_linked_exiled_cards_requires_its_exact_imprint_producer_and_receipt() {
+    let definition = |producer: &str, link: &str, previous: &str| {
+        format!(
+            r#"(
+                id: "mimic_fixture",
+                name: "Mimic Fixture",
+                face_id: "mimic_fixture",
+                types: ["Artifact"],
+                triggered_abilities: [(
+                    ability_id: "imprint",
+                    presentation: Fallback,
+                    trigger: WheneverCreatureDies(
+                        controller: AnyPlayer,
+                        filter: (permanent_type: Some(Creature), token: Some(false)),
+                    ),
+                    effect: [ChooseResolutionBranch(
+                        chooser: Controller,
+                        optional: true,
+                        selection: PlayerChoice,
+                        branches: [(
+                            branch_id: "imprint_creature",
+                            presentation: Fallback,
+                            cost: None,
+                            requirement: EffectsApplicable,
+                            effects: [{previous}, ReturnOtherLinkedExiledCards(
+                                producer_ability_id: "{producer}",
+                                linked_exile_id: "{link}",
+                            )],
+                        )],
+                    )],
+                )],
+            )"#
+        )
+    };
+
+    let valid = definition(
+        "imprint",
+        "imprinted_card",
+        "Exile(subject: TriggerObject, linked_exile_id: Some(\"imprinted_card\"))",
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&valid], &[])
+        .expect("the exact adjacent linked Exile can preserve the new imprint");
+
+    for (producer, link, previous) in [
+        (
+            "missing_producer",
+            "imprinted_card",
+            "Exile(subject: TriggerObject, linked_exile_id: Some(\"imprinted_card\"))",
+        ),
+        (
+            "imprint",
+            "other_card",
+            "Exile(subject: TriggerObject, linked_exile_id: Some(\"imprinted_card\"))",
+        ),
+        (
+            "imprint",
+            "imprinted_card",
+            "Exile(subject: TriggerObject, linked_exile_id: None)",
+        ),
+    ] {
+        let invalid = definition(producer, link, previous);
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&invalid], &[]).is_err(),
+            "invalid return linkage must fail closed: {invalid}"
+        );
+    }
+}
+
+#[test]
 fn duplicant_targeted_linked_exile_pair_is_exact_and_fail_closed() {
     let valid = r#"(
         id: "duplicant",

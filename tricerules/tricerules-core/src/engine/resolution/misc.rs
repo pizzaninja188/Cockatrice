@@ -115,6 +115,11 @@ pub(super) fn destroy(
                 .into_iter()
                 .collect()
         }
+        EffectSubject::PreviousEffectObjects => {
+            return Err(EngineError::Illegal(
+                "plural previous-object subject is unsupported for destroy",
+            ));
+        }
     };
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
@@ -177,6 +182,11 @@ pub(super) fn sacrifice(
             resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
                 .into_iter()
                 .collect()
+        }
+        EffectSubject::PreviousEffectObjects => {
+            return Err(EngineError::Illegal(
+                "plural previous-object subject is unsupported for sacrifice",
+            ));
         }
     };
     // CR 701.21a: the instructed player cannot sacrifice a permanent they no longer control.
@@ -563,6 +573,22 @@ pub(super) fn create_delayed_trigger(
     } else {
         None
     };
+    let token_copy_cohort = if matches!(subject, Some(EffectSubject::PreviousEffectObjects)) {
+        if cx.previous_effect_result.produced_object_provenance
+            != Some(crate::state::ProducedObjectProvenance::TokenCreationBatch)
+        {
+            return Err(EngineError::Illegal(
+                "CreateDelayedTrigger PreviousEffectObjects requires a token-copy batch receipt",
+            ));
+        }
+        let cohort = cx.previous_effect_result.produced_objects.clone();
+        if cohort.is_empty() {
+            return Ok(EffectOutcome::Continue);
+        }
+        Some(cohort)
+    } else {
+        None
+    };
     let watched = if let Some(subject) = subject.as_ref() {
         let watched_id = match subject {
             EffectSubject::Source
@@ -572,6 +598,10 @@ pub(super) fn create_delayed_trigger(
                 resolve_effect_subject(cx.engine, cx.top, cx.targets, subject)
             }
             EffectSubject::PreviousEffectObject => exact_previous.map(|object| object.object_id),
+            EffectSubject::PreviousEffectObjects => token_copy_cohort
+                .as_ref()
+                .and_then(|cohort| cohort.first())
+                .map(|object| object.object_id),
             EffectSubject::Chosen(target) => cx.targets.first().copied().filter(|object_id| {
                 target_filter_legal_at_resolution(
                     cx.engine,
@@ -588,6 +618,12 @@ pub(super) fn create_delayed_trigger(
         };
         let watched = if let Some(previous) = exact_previous {
             previous
+        } else if let Some(primary) = token_copy_cohort
+            .as_ref()
+            .and_then(|cohort| cohort.first())
+            .copied()
+        {
+            primary
         } else {
             let Some(watched_object) = cx.engine.state.objects.get(&watched_id) else {
                 return Ok(EffectOutcome::Continue);
@@ -667,6 +703,14 @@ pub(super) fn create_delayed_trigger(
         &ability.presentation,
         ability_text,
     );
+    if let Some(cohort) = token_copy_cohort {
+        let primary = watched.ok_or(EngineError::Illegal("delayed token cohort missing"))?;
+        let key = (primary.object_id, primary.zone_change_generation);
+        if cx.engine.state.observed_object_cohorts.contains_key(&key) {
+            return Err(EngineError::Illegal("delayed token cohort already exists"));
+        }
+        cx.engine.state.observed_object_cohorts.insert(key, cohort);
+    }
     cx.engine
         .state
         .active_event_observers
@@ -763,6 +807,7 @@ fn attach_equipment_subject(
             object
         }
         EffectSubject::PreviousEffectObject => cx.previous_battlefield_object(),
+        EffectSubject::PreviousEffectObjects => None,
         EffectSubject::SearchedObject(_) => cx.resolve_battlefield_subject(subject),
         EffectSubject::Source => resolve_effect_subject(cx.engine, cx.top, &[], subject),
         EffectSubject::AttachedObject | EffectSubject::TriggerObject => None,

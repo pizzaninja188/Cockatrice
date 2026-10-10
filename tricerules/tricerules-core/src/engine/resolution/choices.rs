@@ -709,6 +709,16 @@ pub(in crate::engine) fn resolution_branch_is_live(
                     .is_some_and(|index| {
                         engine.state.players[index].library.len() >= *count as usize
                     }),
+                SpellEffectKind::Exile {
+                    subject: tricerules_card_model::primitives::EffectSubject::TriggerObject,
+                    ..
+                } => super::resolve_zone_effect_subject(
+                    engine,
+                    top,
+                    &[],
+                    &tricerules_card_model::primitives::EffectSubject::TriggerObject,
+                )
+                .is_some(),
                 _ => true,
             })
         }

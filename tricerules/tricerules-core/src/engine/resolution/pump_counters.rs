@@ -441,6 +441,63 @@ pub(super) fn apply_permanent_modifier(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    if matches!(subject, EffectSubject::PreviousEffectObjects) {
+        if cx.previous_effect_result.produced_object_provenance
+            != Some(crate::state::ProducedObjectProvenance::TokenCreationBatch)
+        {
+            return Err(EngineError::Illegal(
+                "ApplyPermanentModifier PreviousEffectObjects requires a token-copy batch receipt",
+            ));
+        }
+        let cohort = cx.previous_effect_result.produced_objects.clone();
+        cx.effect_result.produced_objects = cohort.clone();
+        cx.effect_result.produced_object_provenance =
+            Some(crate::state::ProducedObjectProvenance::TokenCreationBatch);
+        let Some((source_id, runtime_duration)) =
+            materialize_resolving_duration(cx, Some(cx.top.id), duration.clone())
+        else {
+            return Ok(EffectOutcome::Continue);
+        };
+        let kinds = materialize_resolving_modifier(modifier);
+        let mut modified = 0usize;
+        for reference in cohort {
+            let generation = cx
+                .engine
+                .state
+                .zone_change_generation
+                .get(&reference.object_id)
+                .copied()
+                .unwrap_or(0);
+            if generation != reference.zone_change_generation
+                || !cx
+                    .engine
+                    .state
+                    .objects
+                    .get(&reference.object_id)
+                    .is_some_and(|object| object.zone == Zone::Battlefield)
+            {
+                continue;
+            }
+            for kind in &kinds {
+                cx.engine.state.continuous_effects.push(ContinuousEffect {
+                    trigger_grant_origin: None,
+                    source_id,
+                    affected: AffectedScope::Single(reference.object_id),
+                    kind: kind.clone(),
+                    condition: None,
+                    duration: runtime_duration.clone(),
+                    timestamp: cx.engine.state.command_index,
+                });
+            }
+            modified += 1;
+        }
+        cx.events.push(ev_log(format!(
+            "{} modifies {modified} token(s){}",
+            cx.spell_label,
+            resolving_duration_label(&duration)
+        )));
+        return Ok(EffectOutcome::Continue);
+    }
     if matches!(subject, EffectSubject::PreviousEffectObject) {
         cx.effect_result.produced_objects = cx.previous_effect_result.produced_objects.clone();
     }

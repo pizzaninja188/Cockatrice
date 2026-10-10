@@ -156,6 +156,7 @@ impl EffectCx<'_> {
             | EffectSubject::TriggerObject
             | EffectSubject::PreviousEffectObject
             | EffectSubject::SearchedObject(_) => Some(self.top.id),
+            EffectSubject::PreviousEffectObjects => return None,
         };
         Some((object_id, source_id))
     }
@@ -771,6 +772,7 @@ fn resolve_effect_subject(
             .filter(|_| engine.source_is_current_object(top)),
         EffectSubject::Chosen(_) => targets.first().copied(),
         EffectSubject::PreviousEffectObject => None,
+        EffectSubject::PreviousEffectObjects => None,
         EffectSubject::SearchedObject(result_id) => {
             let searched = top.search_results.get(result_id)?;
             let current_generation = engine
@@ -836,6 +838,26 @@ fn resolve_zone_effect_subject(
     targets: &[ObjectId],
     subject: &EffectSubject,
 ) -> Option<ObjectId> {
+    if let EffectSubject::TriggerObject = subject {
+        let observed = top.trigger_context.observed_object?;
+        let current_generation = engine
+            .state
+            .zone_change_generation
+            .get(&observed.object_id)
+            .copied()
+            .unwrap_or(0);
+        let object = engine.state.objects.get(&observed.object_id)?;
+        let is_observed_battlefield_object = current_generation == observed.zone_change_generation
+            && object.zone == Zone::Battlefield;
+        let is_died_graveyard_incarnation = observed
+            .zone_change_generation
+            .checked_add(1)
+            .is_some_and(|graveyard_generation| {
+                current_generation == graveyard_generation && object.zone == Zone::Graveyard
+            });
+        return (is_observed_battlefield_object || is_died_graveyard_incarnation)
+            .then_some(observed.object_id);
+    }
     if !matches!(subject, EffectSubject::Source) {
         return resolve_effect_subject(engine, top, targets, subject);
     }

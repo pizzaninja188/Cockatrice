@@ -1498,7 +1498,7 @@ impl GameEngine {
                         }
                         out.extend(matching);
                     }
-                    out.extend(self.matching_snapshot_abilities(source, |tc| {
+                    let mut matching = self.matching_snapshot_abilities(source, |tc| {
                         let TriggerCondition::WheneverCreatureDies { controller, filter } = tc
                         else {
                             return false;
@@ -1511,7 +1511,11 @@ impl GameEngine {
                             dying.controller,
                             source.controller,
                         )
-                    }));
+                    });
+                    for trigger in &mut matching {
+                        trigger.trigger_context.observed_object = Some(dying_ref);
+                    }
+                    out.extend(matching);
                 }
                 out
             }
@@ -2491,6 +2495,7 @@ impl GameEngine {
         Some(TriggerSourceSnapshot {
             copy_snapshot: copying::token_copy_snapshot_from(&self.state, self.registry, source_id)
                 .map(Box::new),
+            linked_exile_occurrence: self.linked_exile_occurrence(source_id),
             chosen_creature_types,
             counters: object.counters.clone(),
             owner: object.owner,
@@ -2753,7 +2758,10 @@ impl GameEngine {
                     &source.face_name,
                     &trigger_ability_path(origin, ability),
                 ),
-                trigger_context: TriggerContext::default(),
+                trigger_context: TriggerContext {
+                    linked_exile_occurrence: source.linked_exile_occurrence,
+                    ..TriggerContext::default()
+                },
             })
             .collect()
     }
@@ -4102,6 +4110,7 @@ mod tests {
         let source = TriggerSourceSnapshot {
             source_concealed: false,
             copy_snapshot: None,
+            linked_exile_occurrence: None,
             chosen_creature_types: Vec::new(),
             counters: BTreeMap::new(),
             owner: 0,
@@ -4204,6 +4213,7 @@ mod tests {
         let watcher = TriggerSourceSnapshot {
             source_concealed: false,
             copy_snapshot: None,
+            linked_exile_occurrence: None,
             chosen_creature_types: Vec::new(),
             counters: BTreeMap::new(),
             owner: 1,
@@ -4747,6 +4757,7 @@ mod tests {
         let source = TriggerSourceSnapshot {
             source_concealed: false,
             copy_snapshot: None,
+            linked_exile_occurrence: None,
             chosen_creature_types: Vec::new(),
             counters: BTreeMap::new(),
             owner: 0,
@@ -4863,6 +4874,7 @@ mod tests {
         let source = TriggerSourceSnapshot {
             source_concealed: false,
             copy_snapshot: None,
+            linked_exile_occurrence: None,
             chosen_creature_types: Vec::new(),
             counters: BTreeMap::new(),
             owner: 0,
@@ -4963,6 +4975,7 @@ mod tests {
         let source = TriggerSourceSnapshot {
             source_concealed: false,
             copy_snapshot: None,
+            linked_exile_occurrence: None,
             chosen_creature_types: Vec::new(),
             counters: BTreeMap::new(),
             owner: 0,

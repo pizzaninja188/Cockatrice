@@ -160,6 +160,9 @@ pub(crate) struct CardResultCohort {
 pub(crate) struct EffectResult {
     pub cards: Vec<CardResultEntry>,
     pub produced_objects: Vec<TriggerObjectRef>,
+    /// Provenance required by plural token-copy follow-ups. A general many-object result is not
+    /// interchangeable with the exact cohort produced by one replacement-expanded copy effect.
+    pub produced_object_provenance: Option<ProducedObjectProvenance>,
     pub receipt: Option<ResolutionReceipt>,
     /// Total mana committed by an immediately preceding Join Forces instruction.
     pub mana_paid: Option<u32>,
@@ -171,6 +174,11 @@ pub(crate) struct EffectResult {
     /// Teferi's choice retains a control-membership receipt for 800.4i LKI if the target leaves.
     /// While the target remains in the game, later instructions read current battlefield state.
     pub targeted_player_control_cohort: Option<TargetedPlayerControlCohort>,
+}
+
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProducedObjectProvenance {
+    TokenCreationBatch,
 }
 
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
@@ -208,6 +216,7 @@ impl From<CardResultCohort> for EffectResult {
         Self {
             cards: cohort.cards,
             produced_objects: Vec::new(),
+            produced_object_provenance: None,
             receipt: None,
             mana_paid: None,
             counter_placements: Vec::new(),

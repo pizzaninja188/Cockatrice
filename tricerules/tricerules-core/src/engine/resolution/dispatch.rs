@@ -295,6 +295,9 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::SacrificeObservedObjects => {
             tokens::sacrifice_observed_objects(cx, effect)?
         }
+        effect @ SpellEffectKind::ExileObservedObjects => {
+            tokens::exile_observed_objects(cx, effect)?
+        }
         SpellEffectKind::ExileWarpedObject => {
             cx.engine.resolve_warp_exile(cx.top, cx.events)?;
             EffectOutcome::Continue
@@ -322,6 +325,9 @@ pub(super) fn execute_effect(
         }
         effect @ SpellEffectKind::ReturnLinkedExiledCards { .. } => {
             zones::return_linked_exiled_cards(cx, effect)?
+        }
+        effect @ SpellEffectKind::ReturnOtherLinkedExiledCards { .. } => {
+            zones::return_other_linked_exiled_cards(cx, effect)?
         }
         SpellEffectKind::ExileGraveyards {
             players,

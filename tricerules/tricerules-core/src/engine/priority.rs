@@ -3,6 +3,16 @@ use super::legal_actions::fill_legal;
 use super::resolution::move_object_to_zone;
 use super::*;
 
+fn observed_token_cohort_key(
+    ability: &TriggeredAbilityDef,
+    context: TriggerContext,
+) -> Option<(ObjectId, u64)> {
+    (ability.effect.as_slice() == [SpellEffectKind::ExileObservedObjects])
+        .then_some(context.observed_object)
+        .flatten()
+        .map(|object| (object.object_id, object.zone_change_generation))
+}
+
 /// Sorcery-speed window: your main phase, stack empty, you are the active player (CR 307.5,
 /// 601.2; lands CR 305.3).
 pub(super) fn sorcery_speed_available(state: &GameState, player: PlayerId) -> bool {
@@ -307,6 +317,18 @@ impl GameEngine {
                     .map(|_| item.id)
             })
             .collect();
+        let departing_stack_cohorts: Vec<_> = self
+            .state
+            .stack
+            .iter()
+            .filter(|item| owned.contains(&item.id) || item.controller == player)
+            .filter_map(|item| {
+                observed_token_cohort_key(item.triggered_ability.as_ref()?, item.trigger_context)
+            })
+            .collect();
+        for key in departing_stack_cohorts {
+            self.state.observed_object_cohorts.remove(&key);
+        }
         self.state
             .stack
             .retain(|item| !owned.contains(&item.id) && item.controller != player);
@@ -338,6 +360,54 @@ impl GameEngine {
             .filter(|player| !player.has_lost)
             .map(|player| player.id)
             .collect();
+        let mut discarded_cohorts = Vec::new();
+        for observer in &self.state.active_event_observers {
+            if let EventObserverPayload::StageDelayedTrigger(trigger) = &observer.payload {
+                if !live_players.contains(&trigger.controller)
+                    && trigger.ability.effect.as_slice() == [SpellEffectKind::ExileObservedObjects]
+                {
+                    discarded_cohorts.extend(
+                        observer
+                            .watched
+                            .map(|object| (object.object_id, object.zone_change_generation)),
+                    );
+                }
+            }
+        }
+        for trigger in self
+            .state
+            .staged_trigger_groups
+            .iter()
+            .flat_map(|group| &group.triggers)
+        {
+            if !live_players.contains(&trigger.controller) {
+                discarded_cohorts.extend(observed_token_cohort_key(
+                    &trigger.ability,
+                    trigger.trigger_context,
+                ));
+            }
+        }
+        if let Some(order) = self.state.pending_trigger_order.as_ref() {
+            for trigger in &order.candidates {
+                if !live_players.contains(&trigger.controller) {
+                    discarded_cohorts.extend(observed_token_cohort_key(
+                        &trigger.ability,
+                        trigger.trigger_context,
+                    ));
+                }
+            }
+        }
+        for trigger in &self.state.pending_triggers {
+            if !live_players.contains(&trigger.controller) {
+                discarded_cohorts.extend(observed_token_cohort_key(
+                    &trigger.ability,
+                    trigger.trigger_context,
+                ));
+            }
+        }
+        for key in discarded_cohorts {
+            self.state.observed_object_cohorts.remove(&key);
+        }
         self.state
             .active_event_observers
             .retain(|observer| match &observer.payload {
