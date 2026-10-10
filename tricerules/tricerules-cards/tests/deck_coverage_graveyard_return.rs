@@ -1,4 +1,4 @@
-use tricerules_cards::primitives::{CardTypeFilter, SpellEffectKind};
+use tricerules_cards::primitives::{CardTypeFilter, RelativePlayerSet, SpellEffectKind};
 use tricerules_cards::CardRegistry;
 
 #[test]
@@ -31,9 +31,12 @@ fn graveyard_return_registers_exact_single_faces_costs_types_and_filters() {
                 && face.triggered_abilities.is_empty()
                 && face.static_abilities.is_empty()
         );
-        let SpellEffectKind::ReturnAllGraveyardPermanents { filter } = &face.spell_effect[0] else {
+        let SpellEffectKind::ReturnAllGraveyardPermanents { players, filter } =
+            &face.spell_effect[0]
+        else {
             panic!("complete return instruction required");
         };
+        assert_eq!(*players, RelativePlayerSet::Controller);
         if legendary {
             assert_eq!(filter.required_supertypes, ["Legendary"]);
             assert!(filter.any_of.is_none());
@@ -55,15 +58,25 @@ fn graveyard_return_registers_exact_single_faces_costs_types_and_filters() {
 }
 
 #[test]
-fn all_graveyard_return_rejects_invalid_filter_and_ability_context() {
+fn all_graveyard_return_allows_an_ability_and_rejects_unsupported_scopes_and_filters() {
     let ability = r#"(id: "test", name: "Test", face_id: "test", types: ["Artifact"],
         activated_abilities: [(ability_id: "activated_01", presentation: Fallback,
-        costs: [], effect: [ReturnAllGraveyardPermanents(filter: (card_type: Some(Artifact)))])])"#;
-    let err = CardRegistry::from_chunks_and_tokens(&[ability], &[])
+        costs: [], effect: [ReturnAllGraveyardPermanents(players: All,
+        filter: (card_type: Some(Artifact)))])])"#;
+    CardRegistry::from_chunks_and_tokens(&[ability], &[])
+        .expect("the fixed return can be an activated ability effect");
+    let unsupported_scope = r#"(id: "test", name: "Test", face_id: "test", types: ["Sorcery"],
+        spell_effect: [ReturnAllGraveyardPermanents(players: Opponents,
+        filter: (card_type: Some(Artifact)))])"#;
+    let err = CardRegistry::from_chunks_and_tokens(&[unsupported_scope], &[])
         .unwrap_err()
         .to_string();
-    assert!(err.contains("requires a spell instruction"), "{err}");
+    assert!(
+        err.contains("supports only Controller or All players"),
+        "{err}"
+    );
     let bad_filter = r#"(id: "test", name: "Test", face_id: "test", types: ["Sorcery"],
-        spell_effect: [ReturnAllGraveyardPermanents(filter: (any_of: Some([(card_type: Some(Artifact))])))])"#;
+        spell_effect: [ReturnAllGraveyardPermanents(players: Controller,
+        filter: (any_of: Some([(card_type: Some(Artifact))])))])"#;
     assert!(CardRegistry::from_chunks_and_tokens(&[bad_filter], &[]).is_err());
 }

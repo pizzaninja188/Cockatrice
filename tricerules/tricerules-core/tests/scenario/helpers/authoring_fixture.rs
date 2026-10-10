@@ -198,20 +198,30 @@ pub(crate) fn ability_source(
         super::relocate_to_battlefield(e, player, card, false)
     };
     e.state.objects.get_mut(&oid).unwrap().face_up_index = face;
-    if card == "chandra,_novice_pyromancer" {
-        // Direct relocation skips entry. This is the printed starting loyalty, not an expectation.
-        e.state
-            .objects
-            .get_mut(&oid)
-            .unwrap()
-            .set_counter(tricerules_cards::CounterKind::Loyalty, 5);
-    }
-    if card == "jace,_wielder_of_mysteries" {
-        // Direct relocation skips intrinsic entry; the ultimate needs eight loyalty.
-        // Paid-card scenarios separately prove entry at four and rejection below eight.
+    let card_face = tricerules_cards::registry::global()
+        .get(card)
+        .and_then(|definition| definition.face(face))
+        .expect("conformance source face exists in the card registry");
+    let printed_loyalty = card_face.loyalty.unwrap_or_default();
+    let required_loyalty = card_face
+        .activated_abilities
+        .get(ability)
+        .into_iter()
+        .flat_map(|definition| &definition.costs)
+        .filter_map(|cost| match cost {
+            tricerules_cards::AbilityCost::Loyalty(delta) if *delta < 0 => {
+                Some(delta.unsigned_abs())
+            }
+            _ => None,
+        })
+        .max()
+        .unwrap_or_default();
+    if card_face.loyalty.is_some() || required_loyalty > 0 {
+        // Direct relocation skips entry. Seed printed loyalty, raising it only enough for this
+        // exact negative-cost ability so generic registry conformance can exercise ultimates.
         e.state.objects.get_mut(&oid).unwrap().set_counter(
             tricerules_cards::CounterKind::Loyalty,
-            if ability == 1 { 8 } else { 4 },
+            printed_loyalty.max(required_loyalty),
         );
     }
     if card == "pentad_prism" {

@@ -1651,8 +1651,8 @@ itll_quench_ya!	0	cast	unsupported: target group 0 needs a richer fixture
 izzet_guildgate	0	ability:0	exercised
 izzet_guildgate	0	land	exercised
 jace_beleren	0	ability:0	exercised
-jace_beleren	0	ability:1	unsupported: nonmana costs need additional fixture resources
-jace_beleren	0	ability:2	unsupported: nonmana costs need additional fixture resources
+jace_beleren	0	ability:1	exercised
+jace_beleren	0	ability:2	exercised
 jace_beleren	0	cast	exercised
 jaces_ingenuity	0	cast	exercised
 jade-cast_sentinel	0	ability:0	exercised
@@ -1689,7 +1689,7 @@ jwari_scuttler	0	cast	exercised
 kaito,_bane_of_nightmares	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 kaito,_bane_of_nightmares	0	ability:1	exercised
 kaito,_bane_of_nightmares	0	ability:2	exercised
-kaito,_bane_of_nightmares	0	ability:3	unsupported: nonmana costs need additional fixture resources
+kaito,_bane_of_nightmares	0	ability:3	exercised
 kaito,_bane_of_nightmares	0	cast	exercised
 kalakscion,_hunger_tyrant	0	cast	exercised
 kalonian_behemoth	0	cast	exercised
@@ -2420,8 +2420,8 @@ rakdos_ragemutt	0	cast	exercised
 rakdos_shred-freak	0	cast	exercised
 rakish_crew	0	cast	exercised
 ral,_crackling_wit	0	ability:0	exercised
-ral,_crackling_wit	0	ability:1	unsupported: nonmana costs need additional fixture resources
-ral,_crackling_wit	0	ability:2	unsupported: nonmana costs need additional fixture resources
+ral,_crackling_wit	0	ability:1	exercised
+ral,_crackling_wit	0	ability:2	exercised
 ral,_crackling_wit	0	cast	exercised
 rambunctious_mutt	0	cast	exercised
 rampaging_ceratops	0	cast	exercised
@@ -3150,8 +3150,8 @@ tcri_building	0	ability:0	exercised
 tcri_building	0	land	exercised
 teapot_slinger	0	cast	exercised
 teeming_dragonstorm	0	cast	exercised
-teferi,_temporal_pilgrim	0	ability:1	unsupported: nonmana costs need additional fixture resources
-teferi,_temporal_pilgrim	0	ability:2	unsupported: nonmana costs need additional fixture resources
+teferi,_temporal_pilgrim	0	ability:1	exercised
+teferi,_temporal_pilgrim	0	ability:2	exercised
 teferis_protege	0	ability:0	exercised
 teferis_protege	0	cast	exercised
 tempest_angler	0	cast	exercised

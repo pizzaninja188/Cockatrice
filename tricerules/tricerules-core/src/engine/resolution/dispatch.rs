@@ -338,8 +338,8 @@ pub(super) fn execute_effect(
         SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { cohort_id } => {
             zones::return_exiled_cohort_to_owners_battlefield(cx, &cohort_id)?
         }
-        SpellEffectKind::ReturnAllGraveyardPermanents { filter } => {
-            zones::return_all_graveyard_permanents(cx, &filter)?
+        SpellEffectKind::ReturnAllGraveyardPermanents { players, filter } => {
+            zones::return_all_graveyard_permanents(cx, players, &filter)?
         }
         SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { filter } => {
             zones::return_all_graveyard_permanents_with_mana_value_x_or_less(cx, &filter)?

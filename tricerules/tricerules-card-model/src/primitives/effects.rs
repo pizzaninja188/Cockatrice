@@ -1668,9 +1668,11 @@ pub enum SpellEffectKind {
     ReturnExiledCohortToOwnersBattlefield {
         cohort_id: ExiledCohortId,
     },
-    /// Primevals' Glorious Rebirth / Triumphant Reckoning: mandatory targetless simultaneous
-    /// return of all matching permanent cards in the spell controller's current graveyard.
+    /// Primevals' Glorious Rebirth / Triumphant Reckoning keep the `Controller` scope; Liliana
+    /// Vess and Rise of the Dark Realms demonstrate returning matching cards from `All` players.
+    /// The selected cards enter together under the resolving spell or ability's controller.
     ReturnAllGraveyardPermanents {
+        players: RelativePlayerSet,
         filter: ZoneCardFilter,
     },
     /// Ascend from Avernus: return matching permanent cards from the controller's graveyard
@@ -4668,10 +4670,20 @@ impl SpellEffectKind {
                 return Err("retained exile cohorts require a spell instruction".into());
             }
         }
-        if let SpellEffectKind::ReturnAllGraveyardPermanents { filter } = self {
+        if let SpellEffectKind::ReturnAllGraveyardPermanents { players, filter } = self {
             filter.validate()?;
-            if context != EffectContext::Spell {
-                return Err("all-graveyard permanent return requires a spell instruction".into());
+            if !matches!(
+                players,
+                RelativePlayerSet::Controller | RelativePlayerSet::All
+            ) {
+                return Err(
+                    "all-graveyard permanent return supports only Controller or All players".into(),
+                );
+            }
+            if !matches!(context, EffectContext::Spell | EffectContext::Ability) {
+                return Err(
+                    "all-graveyard permanent return requires a spell or ability instruction".into(),
+                );
             }
         }
         if let SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { filter } = self {
@@ -7125,6 +7137,74 @@ mod pupu_ufo_effect_validation_tests {
             effect.validate(EffectContext::Spell),
             Err("ChooseHandCards supports only discard or exile actions".into())
         );
+    }
+}
+
+#[cfg(test)]
+mod issue_513_graveyard_return_context_tests {
+    use super::*;
+
+    fn fixed_return(players: RelativePlayerSet) -> SpellEffectKind {
+        SpellEffectKind::ReturnAllGraveyardPermanents {
+            players,
+            filter: ZoneCardFilter {
+                card_type: Some(CardTypeFilter::Creature),
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn fixed_graveyard_return_can_be_a_loyalty_ability_effect() {
+        assert!(
+            fixed_return(RelativePlayerSet::All)
+                .validate(EffectContext::Ability)
+                .is_ok(),
+            "Liliana Vess's -8 is an activated ability, not a spell instruction"
+        );
+    }
+
+    #[test]
+    fn fixed_graveyard_return_accepts_only_controller_or_all_scopes_in_spell_and_ability_contexts()
+    {
+        for players in [RelativePlayerSet::Controller, RelativePlayerSet::All] {
+            assert!(fixed_return(players).validate(EffectContext::Spell).is_ok());
+            assert!(fixed_return(players)
+                .validate(EffectContext::Ability)
+                .is_ok());
+        }
+
+        for players in [
+            RelativePlayerSet::Opponents,
+            RelativePlayerSet::TargetedPlayer {
+                group_index: 0,
+                kind: TargetKind::OpponentPlayer,
+            },
+        ] {
+            assert!(fixed_return(players)
+                .validate(EffectContext::Spell)
+                .is_err());
+            assert!(fixed_return(players)
+                .validate(EffectContext::Ability)
+                .is_err());
+        }
+    }
+
+    #[test]
+    fn fixed_graveyard_return_requires_an_explicit_scope_and_x_bounded_return_stays_spell_only() {
+        assert!(ron::from_str::<SpellEffectKind>(
+            "ReturnAllGraveyardPermanents(filter: (card_type: Some(Creature)))"
+        )
+        .is_err());
+
+        let x_bounded = SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess {
+            filter: ZoneCardFilter {
+                card_type: Some(CardTypeFilter::Creature),
+                ..Default::default()
+            },
+        };
+        assert!(x_bounded.validate(EffectContext::Spell).is_ok());
+        assert!(x_bounded.validate(EffectContext::Ability).is_err());
     }
 }
 

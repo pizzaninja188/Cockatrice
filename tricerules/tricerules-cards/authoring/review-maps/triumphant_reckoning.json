@@ -19,12 +19,12 @@
   "complete_definition_review_confirmed": true,
   "semantic_fixtures": [
     {
-      "covers": "Exact single face, Oracle name, mana cost, Sorcery/Legendary type, complete targetless filter and no additional abilities",
+      "covers": "Exact single face, Oracle name, mana cost, Sorcery type, complete targetless filter and no additional abilities",
       "test": "deck_coverage_graveyard_return::graveyard_return_registers_exact_single_faces_costs_types_and_filters"
     },
     {
-      "covers": "Filter validation and spell-only context fail closed",
-      "test": "deck_coverage_graveyard_return::all_graveyard_return_rejects_invalid_filter_and_ability_context"
+      "covers": "Ability registry accepts All scope; spell registry rejects Opponents scope and a malformed filter",
+      "test": "deck_coverage_graveyard_return::all_graveyard_return_allows_an_ability_and_rejects_unsupported_scopes_and_filters"
     },
     {
       "covers": "graveyard return empty cohort finishes and extra targets reject atomically",

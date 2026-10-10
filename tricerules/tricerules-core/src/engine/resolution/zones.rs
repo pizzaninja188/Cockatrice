@@ -2595,28 +2595,31 @@ pub(super) fn return_exiled_cohort_to_owners_battlefield(
 
 pub(super) fn return_all_graveyard_permanents(
     cx: &mut EffectCx<'_>,
+    players: RelativePlayerSet,
     filter: &ZoneCardFilter,
 ) -> Result<EffectOutcome, EngineError> {
-    return_matching_graveyard_permanents(cx, filter, None)
+    return_matching_graveyard_permanents(cx, players, filter, None)
 }
 
 pub(super) fn return_all_graveyard_permanents_with_mana_value_x_or_less(
     cx: &mut EffectCx<'_>,
     filter: &ZoneCardFilter,
 ) -> Result<EffectOutcome, EngineError> {
-    return_matching_graveyard_permanents(cx, filter, Some(cx.top.chosen_x))
+    return_matching_graveyard_permanents(
+        cx,
+        RelativePlayerSet::Controller,
+        filter,
+        Some(cx.top.chosen_x),
+    )
 }
 
 fn return_matching_graveyard_permanents(
     cx: &mut EffectCx<'_>,
+    players: RelativePlayerSet,
     filter: &ZoneCardFilter,
     max_mana_value: Option<u32>,
 ) -> Result<EffectOutcome, EngineError> {
-    let player_index = cx
-        .engine
-        .state
-        .player_idx(cx.controller)
-        .ok_or(EngineError::UnknownPlayer(cx.controller))?;
+    let controller = cx.controller;
     let permanent_filter = ZoneCardFilter {
         any_of: Some(vec![
             ZoneCardFilter {
@@ -2630,39 +2633,53 @@ fn return_matching_graveyard_permanents(
         ]),
         ..Default::default()
     };
-    let entries = cx.engine.state.players[player_index]
-        .graveyard
-        .iter()
-        .copied()
-        .filter(|oid| {
-            cx.engine.state.objects.get(oid).is_some_and(|object| {
-                object.zone == Zone::Graveyard && object.owner == cx.controller
+    let entries = {
+        let engine = &*cx.engine;
+        engine
+            .state
+            .players
+            .iter()
+            .filter(|player| {
+                super::super::history::relative_player_set_contains(
+                    &engine.state,
+                    players,
+                    controller,
+                    player.id,
+                )
             })
-        })
-        .filter(|oid| {
-            zone_card_matches_filter(
-                &cx.engine.state,
-                cx.engine.registry,
-                *oid,
-                Some(&permanent_filter),
-            )
-        })
-        .filter(|oid| {
-            zone_card_matches_filter(&cx.engine.state, cx.engine.registry, *oid, Some(filter))
-        })
-        .filter(|oid| {
-            max_mana_value.is_none_or(|maximum| {
-                let Some(object) = cx.engine.state.objects.get(oid) else {
-                    return false;
-                };
-                cx.engine
-                    .registry
-                    .get(&object.card_id)
-                    .is_some_and(|definition| definition.mana_value_outside_stack() <= maximum)
+            .flat_map(|player| {
+                let graveyard_owner = player.id;
+                player.graveyard.iter().copied().filter(move |oid| {
+                    engine.state.objects.get(oid).is_some_and(|object| {
+                        object.zone == Zone::Graveyard && object.owner == graveyard_owner
+                    })
+                })
             })
-        })
-        .map(|oid| plain_return_entry(cx.engine, oid, cx.controller))
-        .collect();
+            .filter(|oid| {
+                zone_card_matches_filter(
+                    &engine.state,
+                    engine.registry,
+                    *oid,
+                    Some(&permanent_filter),
+                )
+            })
+            .filter(|oid| {
+                zone_card_matches_filter(&engine.state, engine.registry, *oid, Some(filter))
+            })
+            .filter(|oid| {
+                max_mana_value.is_none_or(|maximum| {
+                    let Some(object) = engine.state.objects.get(oid) else {
+                        return false;
+                    };
+                    engine
+                        .registry
+                        .get(&object.card_id)
+                        .is_some_and(|definition| definition.mana_value_outside_stack() <= maximum)
+                })
+            })
+            .map(|oid| plain_return_entry(engine, oid, controller))
+            .collect()
+    };
     Ok(
         if cx
             .engine
@@ -2693,7 +2710,7 @@ fn plain_return_entry(
         mana_colors_spent_to_cast: Default::default(),
         prepared: false,
         object_id,
-        deciding_player: engine.state.objects[&object_id].owner,
+        deciding_player: destination_controller,
         destination_controller,
         battle_protector: None,
         face_index: 0,

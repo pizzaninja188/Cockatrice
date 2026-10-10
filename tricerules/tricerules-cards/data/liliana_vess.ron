@@ -1,0 +1,57 @@
+// Exact Oracle card fetched 2026-10-10:
+// https://scryfall.com/card/m15/103/liliana-vess?utm_source=api
+// https://api.scryfall.com/cards/6087f146-f468-472a-b248-fc7386ea3e63/rulings
+(
+  id: "liliana_vess",
+  name: "Liliana Vess",
+  face_id: "liliana_vess",
+  mana_cost: "{3}{B}{B}",
+  supertypes: ["Legendary"],
+  types: ["Planeswalker", "Liliana"],
+  loyalty: 5,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Loyalty(1)],
+      effect: [ChooseHandCards(
+        action: Discard,
+        count: 1,
+        target: (kind: AnyPlayer),
+        chooser: AffectedPlayer,
+        card_filter: None,
+        optional: false,
+        visibility: PrivateLook,
+      )],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target player",
+        effect_indices: [0],
+        distinct_from: [],
+        same_graveyard: false,
+        cast_cost_expansion: None,
+      )])),
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Loyalty(-2)],
+      effect: [SearchLibrary(
+        filter: None,
+        destination: TopOfLibrary,
+        shuffle: true,
+        reveal: false,
+      )],
+    ),
+    (
+      ability_id: "activated_03",
+      presentation: OracleLines([3]),
+      costs: [Loyalty(-8)],
+      effect: [ReturnAllGraveyardPermanents(
+        players: All,
+        filter: (card_type: Some(Creature)),
+      )],
+    ),
+  ],
+)

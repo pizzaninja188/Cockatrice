@@ -1,7 +1,7 @@
 (
   id: "triumphant_reckoning", name: "Triumphant Reckoning",
   face_id: "triumphant_reckoning", mana_cost: "{6}{W}{W}{W}", types: ["Sorcery"],
-  spell_effect: [ReturnAllGraveyardPermanents(filter: (any_of: Some([
+  spell_effect: [ReturnAllGraveyardPermanents(players: Controller, filter: (any_of: Some([
     (card_type: Some(Artifact)), (card_type: Some(Enchantment)), (card_type: Some(Planeswalker)),
   ])))],
 )

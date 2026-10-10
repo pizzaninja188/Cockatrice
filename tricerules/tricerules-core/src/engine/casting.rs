@@ -3622,7 +3622,7 @@ mod cast_snapshot_tests {
             r#"(any_of: Some([(card_type: Some(Artifact)), (card_type: Some(Enchantment))]))"#,
         ] {
             let mut e = engine_with_extra(
-                &format!("spell_effect: [ReturnAllGraveyardPermanents(filter: {filter})]"),
+                &format!("spell_effect: [ReturnAllGraveyardPermanents(players: Controller, filter: {filter})]"),
                 &cards,
             );
             let ids: Vec<_> = [

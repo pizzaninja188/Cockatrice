@@ -170,3 +170,20 @@ fn shared_conformance_setup_seeds_search_recovery_and_loyalty_resources() {
         3
     );
 }
+
+#[test]
+fn planeswalker_conformance_sources_start_with_printed_and_payable_loyalty() {
+    for (ability, expected_loyalty) in [(0, 5), (1, 5), (2, 8)] {
+        let mut engine = authoring_fixture::game(711, &[0, 1], "liliana_vess", Some(ability));
+        let source = authoring_fixture::ability_source(&mut engine, 0, "liliana_vess", 0, ability);
+        assert_eq!(
+            engine.state.objects[&source].counter_count(tricerules_cards::CounterKind::Loyalty),
+            expected_loyalty,
+            "wrong fixture loyalty for Liliana ability {ability}"
+        );
+        assert!(
+            authoring_actions::activation(&mut engine, 0, source, ability as u32).is_ok(),
+            "Liliana ability {ability} should be payable in its generic fixture"
+        );
+    }
+}

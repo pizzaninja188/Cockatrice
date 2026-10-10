@@ -74,6 +74,8 @@ mod deck_coverage_thassa_oracle;
 
 #[path = "scenario/deck_coverage_audacious_reshapers.rs"]
 mod deck_coverage_audacious_reshapers;
+#[path = "scenario/deck_coverage_liliana_vess.rs"]
+mod deck_coverage_liliana_vess;
 #[path = "scenario/myr_damage_prerequisites.rs"]
 mod myr_damage_prerequisites;
 #[path = "scenario/myriad_search_prerequisites.rs"]

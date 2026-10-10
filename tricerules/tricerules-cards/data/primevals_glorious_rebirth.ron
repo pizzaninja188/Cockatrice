@@ -2,5 +2,5 @@
   id: "primevals_glorious_rebirth", name: "Primevals' Glorious Rebirth",
   face_id: "primevals_glorious_rebirth", mana_cost: "{5}{W}{B}",
   types: ["Sorcery"], supertypes: ["Legendary"],
-  spell_effect: [ReturnAllGraveyardPermanents(filter: (required_supertypes: ["Legendary"]))],
+  spell_effect: [ReturnAllGraveyardPermanents(players: Controller, filter: (required_supertypes: ["Legendary"]))],
 )

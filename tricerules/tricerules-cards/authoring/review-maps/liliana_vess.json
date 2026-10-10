@@ -1,0 +1,123 @@
+{
+  "format_version": 1,
+  "oracle_id": "a6c05941-2cfb-4dac-a7c0-ab808187eb7c",
+  "spans": [
+    {
+      "face_id": "liliana_vess",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/effect/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "liliana_vess",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/costs/0",
+        "/faces/0/activated_abilities/1/effect/0"
+      ]
+    },
+    {
+      "face_id": "liliana_vess",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2",
+        "/faces/0/activated_abilities/2/costs/0",
+        "/faces/0/activated_abilities/2/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseHandCards",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "HandCardChooser::AffectedPlayer",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ChooseHandCards/chooser"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    },
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "SearchDestination::TopOfLibrary",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/SearchLibrary/destination"
+    },
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/activated_abilities/2/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnAllGraveyardPermanents",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0"
+    },
+    {
+      "symbol": "RelativePlayerSet::All",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ReturnAllGraveyardPermanents/players"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_liliana_vess::liliana_vess_has_its_exact_printed_identity_and_three_loyalty_abilities",
+      "covers": "exact single-face identity, cost, type line, starting loyalty and +1/-2/-8 loyalty costs"
+    },
+    {
+      "test": "scenario deck_coverage_liliana_vess::liliana_vess_plus_one_targeted_player_chooses_the_discard",
+      "covers": "targeted AnyPlayer chooses the card discarded; the controller cannot submit for that player"
+    },
+    {
+      "test": "scenario deck_coverage_liliana_vess::liliana_vess_minus_one_skips_a_target_with_an_empty_hand",
+      "covers": "a legal target with no cards does not create a discard choice"
+    },
+    {
+      "test": "scenario deck_coverage_liliana_vess::liliana_vess_minus_one_does_nothing_if_its_target_leaves_before_resolution",
+      "covers": "the targeted player leaving before resolution makes that target illegal"
+    },
+    {
+      "test": "scenario deck_coverage_liliana_vess::liliana_vess_minus_two_shuffles_and_puts_the_private_search_result_on_top",
+      "covers": "controller-only hidden search choice, no reveal, library shuffle and selected card placed on top"
+    },
+    {
+      "test": "scenario deck_coverage_liliana_vess::liliana_vess_minus_two_replays_the_search_choice_and_shuffle_from_logged_commands",
+      "covers": "serialized activation, search-choice and shuffle commands replay with identical events and state"
+    },
+    {
+      "test": "scenario deck_coverage_liliana_vess::liliana_vess_minus_two_shuffles_an_empty_library_without_a_choice",
+      "covers": "empty library creates no required card selection and still follows the shuffle instruction"
+    },
+    {
+      "test": "scenario deck_coverage_liliana_vess::liliana_vess_minus_eight_returns_the_live_three_player_creature_cohort_together",
+      "covers": "resolution-time all-player creature cohort includes artifact and enchantment creatures, excludes noncreatures, enters in one batch under the activator with owners preserved, source-departure resolution, and ETB triggers"
+    },
+    {
+      "test": "scenario deck_coverage_liliana_vess::liliana_vess_minus_eight_finishes_with_an_empty_or_noncreature_only_cohort",
+      "covers": "empty or noncreature-only graveyards finish without a choice or moving ineligible cards"
+    },
+    {
+      "test": "scenario deck_coverage_liliana_vess::liliana_vess_minus_eight_assigns_cross_owner_entry_choice_to_destination_controller",
+      "covers": "CR 616.1 replacement-order choice for an opponent-owned returning creature is decided by Liliana's destination controller while card ownership is preserved"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
