@@ -91,9 +91,27 @@ fingerprint table, and checks Cargo's library artifact freshness. It restores ea
 bytes in `finally`, rebuilds restored inputs, and retains timings and Cargo logs. This is an
 explicit mutation test, not part of ordinary final verification.
 
+Every real run starts with `check-verification-environment.ps1`. It requires at least 20 GiB
+free on the repository, temporary-directory, and Cargo-target volumes, and probes Windows
+path canonicalization in the checkout and temporary directory. Replay uses this capability
+to reject capture paths that escape their root. Some host sandboxes permit file IO but deny
+canonicalization; retry through the supported approval route rather than weakening replay
+validation. A failed preflight retains a normal failure log and summary and stops all later gates.
+It never deletes artifacts or changes permissions. `CARGO_TARGET_DIR` overrides are included;
+relative overrides resolve from `tricerules`. The capacity check is a minimum headroom check,
+not a guarantee that an arbitrary build will fit. Standalone preflight accepts `-MinimumFreeGiB`.
+
+The workspace development profile (also inherited by tests) uses line-level debug information
+and disables incremental compilation. This reduces artifact growth across long engine-authoring
+campaigns and avoids the host's failed incremental-cache hard links. Release settings are unchanged.
+Explicit Cargo profile/environment overrides still take precedence. After changing profiles,
+old artifacts remain on disk: with no competing builds, verify the target path and use
+`cargo clean --profile dev` from `tricerules` to reclaim disposable debug output. Keep campaign
+checkpoints and verification logs outside that target directory; do not automatically clean them.
+
 Every selection ends with `git diff --check`. Preview prints argument arrays and working
 directories without running commands or creating artifacts.
-With `-CardData`, the complete read-only card check runs first, before the full suites.
+With `-CardData`, the complete read-only card check follows preflight, before the full suites.
 It rejects invalid evidence/presentation metadata and generated-data drift early; its own
 referenced-target compilation/listing still runs. All affected-side tests and lint remain
 mandatory afterward. Do not add a second routine standalone Check before this final gate.
@@ -207,6 +225,7 @@ powershell.exe -NoProfile -File tests/scripts/prepare_card_batch_test.ps1
 powershell.exe -NoProfile -File tests/scripts/card_evidence_test.ps1
 powershell.exe -NoProfile -File tests/scripts/card_evidence_workflow_test.ps1
 powershell.exe -NoProfile -File tests/scripts/verify_workflow_test.ps1
+powershell.exe -NoProfile -File tests/scripts/verification_environment_test.ps1
 powershell.exe -NoProfile -File tests/scripts/rust_format_workflow_test.ps1
 powershell.exe -NoProfile -File tests/scripts/launch_ruled_game_test.ps1
 ```

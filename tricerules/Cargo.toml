@@ -13,6 +13,13 @@ edition = "2021"
 license = "GPL-2.0-only"
 rust-version = "1.74"
 
+# Hundreds of card-test executables otherwise duplicate full debug information,
+# and incremental caches grow across every engine increment in long campaigns.
+# Keep line tables for failure diagnosis; explicit Cargo profile overrides still work.
+[profile.dev]
+debug = 1
+incremental = false
+
 [workspace.dependencies]
 prost = "0.13"
 prost-types = "0.13"

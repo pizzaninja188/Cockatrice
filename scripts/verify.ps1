@@ -43,6 +43,9 @@ function Add-VerificationStep {
     })
 }
 
+Add-VerificationStep 'Verification environment' $windowsPowerShell @(
+    '-NoProfile', '-File', (Join-Path $PSScriptRoot 'check-verification-environment.ps1')
+)
 if ($CardData) {
     # Reject incomplete maps, presentation metadata and generated-data drift before
     # the full suites. Check still builds/lists its referenced test targets.

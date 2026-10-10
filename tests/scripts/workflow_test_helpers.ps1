@@ -17,6 +17,11 @@ function New-WorkflowFixture {
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $root "scripts\$name") }
     }
     New-Item -ItemType Directory -Path (Join-Path $root 'tests/scripts') -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $root 'scripts/check-verification-environment.ps1') -Value @'
+if (Test-Path -LiteralPath (Join-Path $PSScriptRoot '../bad-environment')) { Write-Output 'fixture environment failed'; exit 21 }
+Write-Output 'fixture environment passed'
+exit 0
+'@
     Set-Content -LiteralPath (Join-Path $root 'tests/scripts/card_data_boundary_test.ps1') -Value "Write-Output 'fixture dependency boundary'"
     Copy-Item -LiteralPath (Join-Path $sourceRepo 'tricerules/Cargo.toml') -Destination (Join-Path $root 'tricerules/Cargo.toml')
     foreach ($package in @('tricerules-proto', 'tricerules-core', 'tricerules-card-model', 'tricerules-cards', 'tricerules-server')) {

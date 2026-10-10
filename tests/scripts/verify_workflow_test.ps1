@@ -2,6 +2,16 @@ param([string] $PowerShell = (Get-Process -Id $PID).Path)
 . (Join-Path $PSScriptRoot 'workflow_test_helpers.ps1')
 $fixture = New-WorkflowFixture
 try {
+    Set-Content -LiteralPath (Join-Path $fixture 'bad-environment') -Value 'invalid'
+    $environmentFailure = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Both', '-CardData')
+    Assert-Workflow ($environmentFailure.ExitCode -eq 21) "Environment failure code was lost: $($environmentFailure.Output)"
+    Assert-Workflow (@(Read-WorkflowTrace $fixture).Count -eq 0) 'Builds ran after environment preflight failed.'
+    $environmentSummary = Get-ChildItem -LiteralPath (Join-Path $fixture 'build/verification-logs') -Filter summary.json -Recurse |
+        ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json }
+    Assert-Workflow ($environmentSummary.Steps[0].Label -eq 'Verification environment' -and $environmentSummary.Steps[0].Status -eq 'Fail') 'Environment preflight was not first.'
+    Assert-Workflow (@($environmentSummary.Steps | Select-Object -Skip 1 | Where-Object Status -ne 'NotRun').Count -eq 0) 'Preflight failure did not stop every later gate.'
+    Remove-WorkflowFixture $fixture
+    $fixture = New-WorkflowFixture
     # Invalid card evidence must stop before the full Rust suite or C++ work.
     Set-Content -LiteralPath (Join-Path $fixture 'bad-evidence') -Value 'invalid'
     $earlyFailure = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Both', '-CardData')
@@ -9,8 +19,8 @@ try {
     Assert-Workflow (@(Read-WorkflowTrace $fixture).Count -eq 0) 'Expensive gates ran before invalid card evidence was rejected.'
     $earlySummary = Get-ChildItem -LiteralPath (Join-Path $fixture 'build/verification-logs') -Filter summary.json -Recurse |
         ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json }
-    Assert-Workflow ($earlySummary.Steps[0].Label -eq 'Card data' -and $earlySummary.Steps[0].Status -eq 'Fail') 'Card gate was not first.'
-    foreach ($step in $earlySummary.Steps | Select-Object -Skip 1) {
+    Assert-Workflow ($earlySummary.Steps[1].Label -eq 'Card data' -and $earlySummary.Steps[1].Status -eq 'Fail') 'Card gate did not immediately follow preflight.'
+    foreach ($step in $earlySummary.Steps | Select-Object -Skip 2) {
         Assert-Workflow ($step.Status -eq 'NotRun') 'Failed card gate did not stop verification.'
     }
     Remove-Item -LiteralPath (Join-Path $fixture 'bad-evidence')
@@ -51,7 +61,7 @@ try {
     Assert-Workflow ($summaries.Count -eq 1) 'Combined run did not save one summary.'
     $summary = Get-Content -LiteralPath $summaries[0].FullName -Raw | ConvertFrom-Json
     Assert-Workflow ($summary.ExitCode -eq 0 -and $summary.Status -eq 'Pass') 'Summary did not report success.'
-    Assert-Workflow ($summary.Steps.Count -eq 12) 'Summary omitted a gate.'
+    Assert-Workflow ($summary.Steps.Count -eq 13) 'Summary omitted a gate.'
     foreach ($step in $summary.Steps) {
         Assert-Workflow ($step.Status -eq 'Pass' -and $step.ExitCode -eq 0) 'Summary reported a successful gate incorrectly.'
         Assert-Workflow (Test-Path -LiteralPath $step.LogPath) 'Summary points to a missing log.'
@@ -69,7 +79,7 @@ try {
     $failureSummary = Get-ChildItem -LiteralPath (Join-Path $fixture 'build\verification-logs') -Filter summary.json -Recurse |
         ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json } |
         Where-Object { $_.ExitCode -eq 7 }
-    Assert-Workflow ($failureSummary.Steps[2].Status -eq 'Fail' -and $failureSummary.Steps[3].Status -eq 'NotRun') 'Failure summary is misleading.'
+    Assert-Workflow ($failureSummary.Steps[3].Status -eq 'Fail' -and $failureSummary.Steps[4].Status -eq 'NotRun') 'Failure summary is misleading.'
 
     # Check restoration in the same PowerShell process, on success and failure.
     Set-Content -LiteralPath (Join-Path $fixture 'scripts\environment-probe.ps1') -Value @'
