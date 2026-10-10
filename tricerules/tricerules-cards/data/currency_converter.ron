@@ -1,0 +1,91 @@
+// Oracle and rulings checked 2026-10-10 against the pinned Scryfall snapshot and official card gallery.
+// CR 400.7, 603.2c, 603.5, 607.2a, and 608.2d govern discard triggers and linked-card choices.
+(
+  id: "currency_converter",
+  name: "Currency Converter",
+  face_id: "currency_converter",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "discard_to_exile",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerDiscardsCard(player: Controller),
+    effect: [ChooseResolutionBranch(
+      chooser: Controller,
+      optional: true,
+      selection: PlayerChoice,
+      branches: [(
+        branch_id: "exile_discarded_card",
+        presentation: OracleLines([1]),
+        cost: None,
+        requirement: EffectsApplicable,
+        effects: [Exile(
+          subject: TriggerObject,
+          linked_exile_id: Some("exiled_cards"),
+        )],
+      )],
+    )],
+  )],
+  activated_abilities: [(
+    ability_id: "draw_then_discard",
+    presentation: OracleLines([2]),
+    source_zone: Battlefield,
+    costs: [Mana("{2}"), Tap],
+    effect: [DrawDiscard(
+      draw_count: 1,
+      discard_count: 1,
+      order: DrawThenDiscard,
+    )],
+  ), (
+    ability_id: "return_linked_card",
+    presentation: OracleLines([3]),
+    source_zone: Battlefield,
+    costs: [Tap],
+    effect: [
+      ChooseLinkedExiledCard(
+        producer_ability_id: "discard_to_exile",
+        linked_exile_id: "exiled_cards",
+        filter: (any_of: Some([
+          (card_type: Some(Creature)),
+          (card_type: Some(Noncreature)),
+        ])),
+        destination: OwnerGraveyard,
+        optional: false,
+      ),
+      ChooseResolutionBranch(
+        chooser: Controller,
+        selection: FirstApplicable,
+        branches: [
+          (
+            branch_id: "create_treasure",
+            presentation: OracleLines([3]),
+            cost: None,
+            requirement: CardResultCount(
+              filter: (source: PreviousEffect, action: ChooseLinkedExiledCard, players: All, card_type: Some(Land)),
+              min: Some(1),
+            ),
+            effects: [CreateTokens(token: "treasure", count: 1, who: Controller, tapped: false, sacrifice_timing: None)],
+          ),
+          (
+            branch_id: "create_rogue",
+            presentation: OracleLines([3]),
+            cost: None,
+            requirement: CardResultCount(
+              filter: (source: PreviousEffect, action: ChooseLinkedExiledCard, players: All, card_type: Some(Nonland)),
+              min: Some(1),
+            ),
+            effects: [CreateTokens(token: "rogue_b_2_2", count: 1, who: Controller, tapped: false, sacrifice_timing: None)],
+          ),
+          (
+            branch_id: "no_linked_card",
+            // Synthetic FirstApplicable fallback with no effect or independent Oracle instruction.
+            presentation: Fallback,
+            cost: None,
+            requirement: Always,
+            effects: [],
+          ),
+        ],
+      ),
+    ],
+  )],
+)

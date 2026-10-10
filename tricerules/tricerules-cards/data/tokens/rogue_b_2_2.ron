@@ -1,0 +1,10 @@
+// 2/2 black Rogue creature token (Currency Converter).
+(
+  id: "rogue_b_2_2",
+  name: "Rogue",
+  face_id: "rogue",
+  types: ["Creature", "Rogue"],
+  colors: [Black],
+  power: 2,
+  toughness: 2,
+)

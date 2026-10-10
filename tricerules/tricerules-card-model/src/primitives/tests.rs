@@ -911,6 +911,68 @@ fn token_copy_cohort_exile_rejects_unscoped_and_wrong_consumers() {
 }
 
 #[test]
+fn linked_exile_choice_requires_its_exact_trigger_object_or_graveyard_exile_producer() {
+    let choose = r#"ChooseLinkedExiledCard(
+        producer_ability_id: "exile_cards",
+        linked_exile_id: "linked_cards",
+        filter: (any_of: Some([
+            (card_type: Some(Creature)),
+            (card_type: Some(Noncreature)),
+        ])),
+        destination: OwnerGraveyard,
+        optional: false,
+    )"#;
+    let valid_trigger_object = format!(
+        r#"(
+            id: "linked_choice_trigger_object", name: "Linked Choice Fixture", face_id: "linked_choice_fixture",
+            types: ["Artifact"],
+            triggered_abilities: [(
+                ability_id: "exile_cards", presentation: Fallback,
+                trigger: WheneverPlayerDiscardsCard(player: Controller),
+                effect: [Exile(subject: TriggerObject, linked_exile_id: Some("linked_cards"))],
+            )],
+            activated_abilities: [(
+                ability_id: "choose_card", presentation: Fallback, costs: [Tap],
+                effect: [{choose}],
+            )],
+        )"#
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&valid_trigger_object], &[])
+        .expect("a discard-bound linked Exile producer can feed one linked-card chooser");
+
+    let valid_graveyard_cohort = format!(
+        r#"(
+            id: "linked_choice_graveyard", name: "Linked Choice Fixture", face_id: "linked_choice_fixture",
+            types: ["Artifact"],
+            triggered_abilities: [(
+                ability_id: "exile_cards", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield,
+                effect: [ExileGraveyards(players: All, linked_exile_id: Some("linked_cards"))],
+            )],
+            activated_abilities: [(
+                ability_id: "choose_card", presentation: Fallback, costs: [Tap],
+                effect: [{choose}],
+            )],
+        )"#
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&valid_graveyard_cohort], &[])
+        .expect("linked graveyard exile can feed the same linked-card chooser");
+
+    let mismatched_producer = valid_trigger_object.replace(
+        "producer_ability_id: \"exile_cards\"",
+        "producer_ability_id: \"other_ability\"",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&mismatched_producer], &[])
+        .expect_err("the chooser must name the exact linked-exile producer ability");
+    assert!(
+        error.to_string().contains(
+            "linked Exile choice must name its matching TriggerObject or graveyard-exile producer"
+        ),
+        "unexpected linked-choice validation error: {error}"
+    );
+}
+
+#[test]
 fn return_other_linked_exiled_cards_requires_its_exact_imprint_producer_and_receipt() {
     let definition = |producer: &str, link: &str, previous: &str| {
         format!(

@@ -1584,6 +1584,9 @@ enum ChoiceKind {
   // CR 613.7m: chooser-private order of simultaneous battlefield entrants before they enter.
   // Candidate ids are engine ObjectIds and remain private until the public entry events commit.
   CHOICE_KIND_SIMULTANEOUS_ENTRY_ORDER = 25;
+  // A linked Exile card chosen during resolution. Private to the chooser while pending even
+  // though the candidates are in the public Exile zone, so only the decision snapshot is hidden.
+  CHOICE_KIND_LINKED_EXILE_CARDS = 26;
 }
 
 enum ChoiceCandidateSourceZone {

@@ -1671,6 +1671,17 @@ fn collect_linked_exile_uses(effect: &SpellEffectKind, uses: &mut HashMap<String
             linked_exile_id: Some(link_id),
             ..
         } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
+        SpellEffectKind::ExileGraveyards {
+            linked_exile_id: Some(link_id),
+            ..
+        } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
+        SpellEffectKind::ChooseLinkedExiledCard {
+            linked_exile_id, ..
+        } => {
+            uses.entry(linked_exile_id.as_str().to_owned())
+                .or_default()
+                .1 += 1
+        }
         SpellEffectKind::ReturnLinkedExiledCards {
             linked_exile_id, ..
         }
@@ -1808,6 +1819,26 @@ fn collect_return_other_linked_exile_uses(
     Ok(())
 }
 
+fn collect_choose_linked_exile_uses(
+    effects: &[SpellEffectKind],
+    choices: &mut Vec<(crate::AbilityId, crate::AbilityLinkId)>,
+) -> Result<(), String> {
+    for effect in effects {
+        visit_scoped_grant_effect(effect, &mut |effect| {
+            if let SpellEffectKind::ChooseLinkedExiledCard {
+                producer_ability_id,
+                linked_exile_id,
+                ..
+            } = effect
+            {
+                choices.push((producer_ability_id.clone(), linked_exile_id.clone()));
+            }
+            Ok(())
+        })?;
+    }
+    Ok(())
+}
+
 fn ability_has_linked_graveyard_exile_producer(
     effects: &[SpellEffectKind],
     linked_exile_id: &crate::AbilityLinkId,
@@ -1890,6 +1921,55 @@ fn ability_has_trigger_object_linked_exile_producer(
         })?;
     }
     Ok(found)
+}
+
+fn ability_has_linked_exile_choice_producer(
+    effects: &[SpellEffectKind],
+    linked_exile_id: &crate::AbilityLinkId,
+) -> Result<bool, String> {
+    let mut found = false;
+    for effect in effects {
+        visit_scoped_grant_effect(effect, &mut |effect| {
+            match effect {
+                SpellEffectKind::Exile {
+                    subject: crate::primitives::EffectSubject::TriggerObject,
+                    linked_exile_id: Some(effect_link_id),
+                }
+                | SpellEffectKind::ExileGraveyards {
+                    linked_exile_id: Some(effect_link_id),
+                    ..
+                } => found |= effect_link_id == linked_exile_id,
+                _ => {}
+            }
+            Ok(())
+        })?;
+    }
+    Ok(found)
+}
+
+fn validate_linked_exile_choice_producers(face: &CardFace) -> Result<(), String> {
+    let abilities = face_linked_exile_abilities(face);
+    let mut choices = Vec::new();
+    for (_, effects) in &abilities {
+        collect_choose_linked_exile_uses(effects, &mut choices)?;
+    }
+    for (producer_ability_id, linked_exile_id) in choices {
+        let mut matching_producers = 0;
+        for (ability_id, effects) in &abilities {
+            if **ability_id == producer_ability_id
+                && ability_has_linked_exile_choice_producer(effects, &linked_exile_id)?
+            {
+                matching_producers += 1;
+            }
+        }
+        if matching_producers != 1 {
+            return Err(
+                "linked Exile choice must name its matching TriggerObject or graveyard-exile producer ability and link ids"
+                    .into(),
+            );
+        }
+    }
+    Ok(())
 }
 
 fn ability_has_linked_exile_copy_producer(
@@ -2106,6 +2186,10 @@ fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
                                     linked_exile_id: Some(link_id),
                                     ..
                                 } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
+                                SpellEffectKind::ExileGraveyards {
+                                    linked_exile_id: Some(link_id),
+                                    ..
+                                } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
                                 SpellEffectKind::ReturnLinkedExiledCards {
                                     linked_exile_id,
                                     ..
@@ -2117,6 +2201,13 @@ fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
                                 SpellEffectKind::ReturnOtherLinkedExiledCards {
                                     linked_exile_id,
                                     ..
+                                } => {
+                                    uses.entry(linked_exile_id.as_str().to_owned())
+                                        .or_default()
+                                        .1 += 1
+                                }
+                                SpellEffectKind::ChooseLinkedExiledCard {
+                                    linked_exile_id, ..
                                 } => {
                                     uses.entry(linked_exile_id.as_str().to_owned())
                                         .or_default()
@@ -3061,6 +3152,12 @@ impl CardRegistry {
                     })?;
                 }
                 validate_linked_exile_return_producers(face).map_err(|reason| {
+                    RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    }
+                })?;
+                validate_linked_exile_choice_producers(face).map_err(|reason| {
                     RegistryError::InvalidCard {
                         id: card.id.clone(),
                         reason,

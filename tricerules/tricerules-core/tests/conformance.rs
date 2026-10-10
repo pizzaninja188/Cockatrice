@@ -444,6 +444,10 @@ fn fixture(case: &Case) -> GameEngine {
         _ => None,
     };
     let mut e = helpers::authoring_fixture::game(SEED, &[0, 1], &case.card, case.ability);
+    if case.card == "nautiloid_ship" && case.ability == Some(0) {
+        helpers::inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+        helpers::inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    }
     if let Some(card) = stack_fixture {
         helpers::relocate_to_hand(&mut e, 0, card);
         let slot = helpers::hand_index_for_card(&e, 0, card);
@@ -624,6 +628,21 @@ fn arena_land_and_opponent_chosen_activation_have_complete_fixtures() {
 fn pentad_prism_counter_mana_ability_has_a_complete_fixture() {
     let case = Case {
         card: "pentad_prism".into(),
+        face: 0,
+        ability: Some(0),
+    };
+    assert_eq!(
+        evaluate(&case).unwrap(),
+        Outcome::Exercised,
+        "{}",
+        case.key()
+    );
+}
+
+#[test]
+fn nautiloid_ship_crew_has_a_complete_conformance_fixture() {
+    let case = Case {
+        card: "nautiloid_ship".into(),
         face: 0,
         ability: Some(0),
     };

@@ -733,8 +733,19 @@ pub enum CardResultAction {
     Exile,
     PutOnLibraryBottom,
     Sacrifice,
+    /// The exact linked Exile card selected by a resolution-time choice. This receipt is captured
+    /// before the selected card's destination move so later type branches can use that card's
+    /// event-time characteristics even when the move is replaced or prevented.
+    ChooseLinkedExiledCard,
     Mill,
     Tap,
+}
+
+/// Destination vocabulary for one selected object from a source-incarnation-linked Exile set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LinkedExiledCardDestination {
+    OwnerGraveyard,
+    ControllerBattlefield,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -1659,6 +1670,9 @@ pub enum SpellEffectKind {
         players: RelativePlayerSet,
         #[serde(default)]
         filter: Option<ZoneCardFilter>,
+        /// Link cards that actually reach Exile to this ability's source incarnation and ability.
+        #[serde(default)]
+        linked_exile_id: Option<AbilityLinkId>,
         /// Scrap Mastery / Living Death retain only this instruction's actual post-exile
         /// incarnations through later instructions of the same resolving spell.
         #[serde(default)]
@@ -1694,6 +1708,17 @@ pub enum SpellEffectKind {
         /// preceding card-moving instruction rather than the whole current graveyard.
         #[serde(default)]
         from_result: Option<CardResultFilter>,
+    },
+    /// Choose one currently present card from a source-incarnation-linked Exile set at
+    /// resolution. Currency Converter and Nautiloid Ship demonstrate the two bounded
+    /// destinations: the card owner's graveyard or the ability controller's battlefield.
+    ChooseLinkedExiledCard {
+        producer_ability_id: AbilityId,
+        linked_exile_id: AbilityLinkId,
+        filter: ZoneCardFilter,
+        destination: LinkedExiledCardDestination,
+        #[serde(default)]
+        optional: bool,
     },
     MillTargetPlayer {
         count: u32,
@@ -2837,6 +2862,10 @@ impl SpellEffectKind {
             }
             | Self::ShuffleNonlandPermanentsIntoOwnersLibraries {
                 players: RelativePlayerSet::TargetedPlayer { group_index, kind },
+            }
+            | Self::ExileGraveyards {
+                players: RelativePlayerSet::TargetedPlayer { group_index, kind },
+                ..
             } => Some((*group_index, *kind)),
             Self::DamageAll {
                 players: MassPlayerSet::TargetedPlayer { group_index, kind },
@@ -3427,6 +3456,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ReturnAllGraveyardPermanents { .. }
             | SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { .. }
             | SpellEffectKind::ChooseGraveyardCard { .. }
+            | SpellEffectKind::ChooseLinkedExiledCard { .. }
             | SpellEffectKind::GrantKeywordsAllPermanents { .. }
             | SpellEffectKind::ProtectAllPermanentsYouControlWithCounters
             | SpellEffectKind::GainLife { .. }
@@ -3996,6 +4026,9 @@ impl SpellEffectKind {
                         }
                 ),
                 CardResultAction::PutOnLibraryBottom => false,
+                CardResultAction::ChooseLinkedExiledCard => {
+                    matches!(effect, SpellEffectKind::ChooseLinkedExiledCard { .. })
+                }
                 CardResultAction::Sacrifice => {
                     matches!(
                         effect,
@@ -4631,9 +4664,27 @@ impl SpellEffectKind {
             producer_ability_id.validate()?;
             linked_exile_id.validate()?;
         }
+        if let SpellEffectKind::ChooseLinkedExiledCard {
+            producer_ability_id,
+            linked_exile_id,
+            filter,
+            ..
+        } = self
+        {
+            if context != EffectContext::Ability {
+                return Err(
+                    "choosing a linked Exile card requires an activated or triggered ability"
+                        .into(),
+                );
+            }
+            producer_ability_id.validate()?;
+            linked_exile_id.validate()?;
+            filter.validate()?;
+        }
         if let SpellEffectKind::ExileGraveyards {
             players,
             filter,
+            linked_exile_id,
             capture_exile_cohort,
         } = self
         {
@@ -4660,6 +4711,14 @@ impl SpellEffectKind {
                     return Err(
                         "retained exile cohorts require a pure Artifact or Creature card filter"
                             .into(),
+                    );
+                }
+            }
+            if let Some(link_id) = linked_exile_id {
+                link_id.validate()?;
+                if context != EffectContext::Ability {
+                    return Err(
+                        "linked graveyard exile requires an activated or triggered ability".into(),
                     );
                 }
             }

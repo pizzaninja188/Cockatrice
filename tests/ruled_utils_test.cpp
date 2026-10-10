@@ -45,6 +45,8 @@ TEST(RuledUtilsTest, PrivateChoiceKindsAreTheConcealedZoneOnes)
     EXPECT_TRUE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS));
     EXPECT_TRUE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_COST_OBJECTS));
     EXPECT_TRUE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_BEHOLD));
+    EXPECT_TRUE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_LINKED_EXILE_CARDS));
+    EXPECT_EQ(26, static_cast<int>(ruled::v1::CHOICE_KIND_LINKED_EXILE_CARDS));
     // Public: already revealed to the table, or on the battlefield.
     EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_REVEALED));
     EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS));

@@ -855,7 +855,17 @@ fn resolve_zone_effect_subject(
             .is_some_and(|graveyard_generation| {
                 current_generation == graveyard_generation && object.zone == Zone::Graveyard
             });
-        return (is_observed_battlefield_object || is_died_graveyard_incarnation)
+        let is_discarded_graveyard_incarnation =
+            top.triggered_ability.as_ref().is_some_and(|ability| {
+                matches!(
+                    &ability.trigger,
+                    tricerules_card_model::TriggerCondition::WheneverPlayerDiscardsCard { .. }
+                )
+            }) && current_generation == observed.zone_change_generation
+                && object.zone == Zone::Graveyard;
+        return (is_observed_battlefield_object
+            || is_died_graveyard_incarnation
+            || is_discarded_graveyard_incarnation)
             .then_some(observed.object_id);
     }
     if !matches!(subject, EffectSubject::Source) {

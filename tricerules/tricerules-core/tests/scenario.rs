@@ -59,6 +59,8 @@ mod deck_coverage_boompile;
 mod deck_coverage_coveted_jewel;
 #[path = "scenario/deck_coverage_gratuitous_violence.rs"]
 mod deck_coverage_gratuitous_violence;
+#[path = "scenario/deck_coverage_linked_exile_choice.rs"]
+mod deck_coverage_linked_exile_choice;
 #[path = "scenario/deck_coverage_maze_of_ith.rs"]
 mod deck_coverage_maze_of_ith;
 #[path = "scenario/deck_coverage_mimic_vat.rs"]

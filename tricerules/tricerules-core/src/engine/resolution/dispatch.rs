@@ -333,8 +333,15 @@ pub(super) fn execute_effect(
         SpellEffectKind::ExileGraveyards {
             players,
             filter,
+            linked_exile_id,
             capture_exile_cohort,
-        } => zones::exile_graveyards(cx, players, filter.as_ref(), capture_exile_cohort)?,
+        } => zones::exile_graveyards(
+            cx,
+            players,
+            filter.as_ref(),
+            linked_exile_id,
+            capture_exile_cohort,
+        )?,
         SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { cohort_id } => {
             zones::return_exiled_cohort_to_owners_battlefield(cx, &cohort_id)?
         }
@@ -346,6 +353,9 @@ pub(super) fn execute_effect(
         }
         effect @ SpellEffectKind::ChooseGraveyardCard { .. } => {
             zones::choose_graveyard_card(cx, effect)?
+        }
+        effect @ SpellEffectKind::ChooseLinkedExiledCard { .. } => {
+            zones::choose_linked_exiled_card(cx, effect)?
         }
         SpellEffectKind::Earthbend { count } => pump_counters::earthbend(cx, count)?,
         effect @ SpellEffectKind::AnimateSelf { .. } => pump_counters::animate_self(cx, effect)?,

@@ -2487,10 +2487,130 @@ pub(super) fn choose_graveyard_card(
     Ok(EffectOutcome::Suspended)
 }
 
+pub(super) fn choose_linked_exiled_card(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ChooseLinkedExiledCard {
+        producer_ability_id,
+        linked_exile_id,
+        filter,
+        destination,
+        optional,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let key = linked_exile_key(cx.engine, cx.top, linked_exile_id, producer_ability_id)?;
+    let mut seen = HashSet::new();
+    let candidates: Vec<_> = cx
+        .engine
+        .state
+        .linked_exile_records
+        .get(&key)
+        .into_iter()
+        .flatten()
+        .filter(|linked| seen.insert((linked.object_id, linked.zone_change_generation)))
+        .filter(|linked| {
+            cx.engine
+                .state
+                .objects
+                .get(&linked.object_id)
+                .is_some_and(|object| object.zone == Zone::Exile)
+                && cx
+                    .engine
+                    .state
+                    .zone_change_generation
+                    .get(&linked.object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == linked.zone_change_generation
+                && zone_card_matches_filter(
+                    &cx.engine.state,
+                    cx.engine.registry,
+                    linked.object_id,
+                    Some(&filter),
+                )
+        })
+        .map(|linked| (linked.object_id, linked.zone_change_generation))
+        .collect();
+    if candidates.is_empty() {
+        return Ok(EffectOutcome::Continue);
+    }
+    let controller = cx.controller;
+    let candidate_ids: Vec<_> = candidates.iter().map(|(object_id, _)| *object_id).collect();
+    let (candidate_card_ids, candidate_names) = candidate_identities(cx.engine, &candidate_ids);
+    let min = u32::from(!optional);
+    let prompt = if optional {
+        format!("P{controller}: you may choose a linked card in exile.")
+    } else {
+        format!("P{controller}: choose a linked card in exile.")
+    };
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                variable_mana_contribution: false,
+                candidate_token_identities: Vec::new(),
+                candidate_player_ids: Vec::new(),
+                deciding_player_id: controller,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: custom::ChoiceKind::LinkedExileCards as i32,
+                candidate_object_ids: candidate_ids.clone(),
+                candidate_card_ids,
+                min,
+                max: 1,
+                ordered: false,
+                candidate_names,
+                candidate_server_card_ids: Vec::new(),
+                unique_names: false,
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+                resolution_branches: Vec::new(),
+                mana_cost: String::new(),
+                candidate_selectable: Vec::new(),
+                public_reveal: None,
+                candidate_source_zones: vec![
+                    rv1::ChoiceCandidateSourceZone::Exile as i32;
+                    candidate_ids.len()
+                ],
+                combat_defender_options: Vec::new(),
+                waterbend: false,
+                selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
+            },
+        )),
+    });
+    cx.events.push(ev_log(prompt.clone()));
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player: controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates: candidate_ids,
+            min,
+            max: 1,
+            ordered: false,
+            prompt,
+            choice_kind: custom::ChoiceKind::LinkedExileCards,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::LinkedExileChoice {
+            stack: ParkedStackResolution::new(cx.top.clone()),
+            key,
+            destination,
+            candidate_generations: candidates,
+            spell_label: cx.spell_label.to_string(),
+        },
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
 pub(super) fn exile_graveyards(
     cx: &mut EffectCx<'_>,
     players: RelativePlayerSet,
     filter: Option<&ZoneCardFilter>,
+    linked_exile_id: Option<tricerules_card_model::AbilityLinkId>,
     capture_exile_cohort: Option<tricerules_card_model::ExiledCohortId>,
 ) -> Result<EffectOutcome, EngineError> {
     if capture_exile_cohort
@@ -2502,18 +2622,41 @@ pub(super) fn exile_graveyards(
         ));
     }
     let engine = &*cx.engine;
+    let target_players: Vec<_> = match players {
+        RelativePlayerSet::TargetedPlayer { group_index, .. } => {
+            let Some(player) =
+                super::target_player_from_group(cx.targets, cx.target_group_indices, group_index)
+            else {
+                return Ok(EffectOutcome::Continue);
+            };
+            let Some(index) = engine.state.player_idx(player) else {
+                return Ok(EffectOutcome::Continue);
+            };
+            if engine.state.players[index].has_lost {
+                return Ok(EffectOutcome::Continue);
+            }
+            vec![player]
+        }
+        _ => engine
+            .state
+            .players
+            .iter()
+            .filter(|player| {
+                super::super::history::relative_player_set_contains(
+                    &engine.state,
+                    players,
+                    cx.controller,
+                    player.id,
+                )
+            })
+            .map(|player| player.id)
+            .collect(),
+    };
     let cohort = engine
         .state
         .players
         .iter()
-        .filter(|player| {
-            super::super::history::relative_player_set_contains(
-                &engine.state,
-                players,
-                cx.controller,
-                player.id,
-            )
-        })
+        .filter(|player| target_players.contains(&player.id))
         .flat_map(|player| player.graveyard.iter().copied())
         .filter(|oid| engine.state.is_card_object(*oid))
         .filter(|oid| {
@@ -2525,7 +2668,26 @@ pub(super) fn exile_graveyards(
         })
         .filter(|oid| zone_card_matches_filter(&engine.state, engine.registry, *oid, filter))
         .collect();
-    exile_graveyard_cohort(cx, cohort, None)?;
+    let linked_key = linked_exile_id
+        .map(|ability_link_id| {
+            let producer_ability_id = cx
+                .top
+                .triggered_ability
+                .as_ref()
+                .map(|ability| ability.ability_id.clone())
+                .or_else(|| {
+                    cx.top
+                        .activated_ability
+                        .as_ref()
+                        .map(|ability| ability.ability_id.clone())
+                })
+                .ok_or(EngineError::Illegal(
+                    "linked graveyard exile requires an activated or triggered producer",
+                ))?;
+            linked_exile_key(cx.engine, cx.top, ability_link_id, producer_ability_id)
+        })
+        .transpose()?;
+    exile_graveyard_cohort(cx, cohort, linked_key)?;
     Ok(if let Some(id) = capture_exile_cohort {
         EffectOutcome::RetainedExile(
             id,
@@ -5395,6 +5557,84 @@ pub(super) fn search_library(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn linked_exile_test_item(occurrence: crate::state::LinkedExileOccurrence) -> StackItem {
+        StackItem {
+            mana_colors_spent_to_cast: Default::default(),
+            id: 90_100,
+            controller: 0,
+            card_id: "nautiloid_ship".into(),
+            targets: Vec::new(),
+            ability_text: Some("linked exile".into()),
+            source_permanent_id: Some(90_099),
+            source_owner: Some(0),
+            source_zone_change: 3,
+            source_face_change: 0,
+            ability_index: Some(0),
+            activated_ability: None,
+            triggered_ability: None,
+            is_triggered: true,
+            is_copy: false,
+            face_index: 0,
+            cast_method: crate::state::SpellCastMethod::Normal,
+            returned_attacker_assignment: None,
+            chosen_x: 0,
+            chosen_modes: Vec::new(),
+            cast_condition_results: Vec::new(),
+            cast_occurrence: None,
+            cast_by: None,
+            cast_cost_receipts: Vec::new(),
+            payment_result: Default::default(),
+            search_results: Default::default(),
+            exiled_cohorts: Default::default(),
+            chaos_warp_owner_instructions: Default::default(),
+            resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
+            trigger_context: crate::state::TriggerContext {
+                linked_exile_occurrence: Some(occurrence),
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn copied_nautiloid_occurrences_use_independent_linked_exile_sets() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            90_099,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("new game");
+        let link_id = tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap();
+        let producer = tricerules_card_model::AbilityId::new("exile_target_graveyard").unwrap();
+        let base_key = linked_exile_key(
+            &engine,
+            &linked_exile_test_item(crate::state::LinkedExileOccurrence::NativeOrTokenBase),
+            link_id.clone(),
+            producer.clone(),
+        )
+        .unwrap();
+        let copy_key = linked_exile_key(
+            &engine,
+            &linked_exile_test_item(crate::state::LinkedExileOccurrence::AcquiredCopy(1)),
+            link_id,
+            producer,
+        )
+        .unwrap();
+        assert_ne!(base_key, copy_key);
+        engine.state.linked_exile_records.insert(
+            base_key.clone(),
+            vec![crate::state::LinkedExiledObject {
+                object_id: 90_101,
+                zone_change_generation: 1,
+            }],
+        );
+        assert!(engine.state.linked_exile_records.contains_key(&base_key));
+        assert!(!engine.state.linked_exile_records.contains_key(&copy_key));
+    }
 
     #[test]
     fn shared_search_uses_all_actual_land_types_and_excludes_other_type_categories() {

@@ -1691,6 +1691,7 @@ fn validate_effect_targets(
         // acts on are the top of the controller's own library, decided at resolution.
         | SpellEffectKind::SearchLibrary { .. }
         | SpellEffectKind::ChooseGraveyardCard { .. }
+        | SpellEffectKind::ChooseLinkedExiledCard { .. }
         | SpellEffectKind::IntoTheWilds
         | SpellEffectKind::DeployTheGatewatch
         | SpellEffectKind::LookChooseToHand { .. }

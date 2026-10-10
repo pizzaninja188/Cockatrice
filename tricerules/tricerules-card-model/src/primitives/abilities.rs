@@ -1158,6 +1158,7 @@ impl TriggerCondition {
                 | Self::WheneverSelfBecomesTarget { .. }
                 | Self::WheneverPermanentBecomesTarget { .. }
                 | Self::WheneverPlayerSacrificesPermanent { .. }
+                | Self::WheneverPlayerDiscardsCard { .. }
                 | Self::WheneverPermanentLeavesBattlefield {
                     cardinality: ZoneEventCardinality::EachObject,
                     ..

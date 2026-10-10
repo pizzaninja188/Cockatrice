@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "oracle_id": "613a8774-165e-4cf6-ad43-124f9ffc9980",
+  "spans": [
+    {
+      "face_id": "nautiloid_ship",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords"]
+    },
+    {
+      "face_id": "nautiloid_ship",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    },
+    {
+      "face_id": "nautiloid_ship",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/triggered_abilities/1"]
+    },
+    {
+      "face_id": "nautiloid_ship",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::nautiloid_ship_is_registered_with_its_exact_card_identity",
+      "covers": "exact Nautiloid Ship identity resolves to its complete handwritten rules definition"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::nautiloid_ship_exiles_only_the_current_graveyard_of_its_target_player",
+      "covers": "the authored player target selects exactly that player's current graveyard cohort"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::nautiloid_ship_with_an_empty_target_graveyard_does_not_substitute_another_player",
+      "covers": "an empty targeted graveyard does not substitute another player's cards"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::nautiloid_ship_does_not_substitute_a_player_who_lost_before_resolution",
+      "covers": "a targeted player who leaves before resolution does not cause another graveyard to be exiled"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::nautiloid_returns_only_a_linked_creature_on_combat_damage",
+      "covers": "the combat-damage trigger offers only linked creature cards and returns the selected physical card under Nautiloid Ship's controller"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::nautiloid_return_preserves_object_through_nested_etb_library_choice",
+      "covers": "the returned Solemn Simulacrum keeps its object identity through its optional ETB branch and private basic-land search; the land enters tapped under the Vehicle controller"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::nautiloid_combat_trigger_can_be_declined",
+      "covers": "declining the optional combat-damage choice leaves all linked cards in Exile"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::nautiloid_reentry_cannot_return_a_creature_linked_to_its_prior_incarnation",
+      "covers": "a new Nautiloid Ship incarnation cannot return a creature linked to its prior incarnation"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

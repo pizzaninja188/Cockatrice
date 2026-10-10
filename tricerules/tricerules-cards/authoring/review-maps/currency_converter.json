@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "981298e6-ddee-49c0-9377-f47f019b4138",
+  "spans": [
+    {
+      "face_id": "currency_converter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    },
+    {
+      "face_id": "currency_converter",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "currency_converter",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "tokens": ["treasure", "rogue_b_2_2"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_is_registered_with_its_exact_card_identity",
+      "covers": "exact Currency Converter identity resolves to its complete handwritten rules definition"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_links_each_card_from_a_multi_card_discard_to_its_own_trigger",
+      "covers": "a multi-card discard creates one trigger per exact receipt, each optional branch links only its own discarded object"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_does_not_link_a_discard_replaced_to_the_library",
+      "covers": "a discard replacement that moves the card to the library creates no linked Exile record"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_returns_a_linked_land_to_its_owner_and_creates_treasure",
+      "covers": "choosing a linked land moves it to its owner's graveyard and creates one Treasure"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_returns_a_linked_nonland_and_creates_a_rogue",
+      "covers": "choosing a linked nonland moves it to its owner's graveyard and creates one black 2/2 Rogue"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_control_transfer_uses_the_exiled_cards_owner_for_its_type_result",
+      "covers": "after control transfer, the activating controller receives the type-based token while the selected card returns to its different owner's graveyard"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_declining_one_discard_trigger_does_not_exile_that_card",
+      "covers": "declining one optional discard trigger leaves that exact card in its graveyard"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_has_no_token_branch_when_no_linked_card_remains_in_exile",
+      "covers": "no remaining linked Exile candidate skips the type-based token branches"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::stale_discard_trigger_cannot_exile_a_card_that_returned_to_its_graveyard",
+      "covers": "a card that left and returned as a new graveyard generation is not exiled by its old discard trigger"
+    },
+    {
+      "test": "scenario deck_coverage_linked_exile_choice::currency_converter_rejects_a_stale_linked_exile_answer_without_consuming_the_choice",
+      "covers": "wrong-player, malformed and stale linked-choice answers fail without consuming the pending choice or changing state"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

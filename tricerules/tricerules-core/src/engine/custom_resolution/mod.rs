@@ -373,6 +373,9 @@ impl GameEngine {
             ResolutionContinuation::GraveyardChoice { .. } => {
                 return self.finish_graveyard_choice(pending, chosen);
             }
+            ResolutionContinuation::LinkedExileChoice { .. } => {
+                return self.finish_linked_exile_choice(pending, chosen);
+            }
             ResolutionContinuation::Sacrifice { .. } => {
                 return self.finish_sacrifice_chosen(pending, chosen);
             }

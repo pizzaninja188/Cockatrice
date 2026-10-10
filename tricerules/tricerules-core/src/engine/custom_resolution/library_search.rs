@@ -572,6 +572,156 @@ impl GameEngine {
         self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
     }
 
+    pub(super) fn finish_linked_exile_choice(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[ObjectId],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (mut stack, key, destination, generations, spell_label) = match &pending.continuation {
+            ResolutionContinuation::LinkedExileChoice {
+                stack,
+                key,
+                destination,
+                candidate_generations,
+                spell_label,
+            } => (
+                stack.clone(),
+                key.clone(),
+                *destination,
+                candidate_generations.clone(),
+                spell_label.clone(),
+            ),
+            _ => {
+                return Err(EngineError::Illegal(
+                    "linked-Exile-choice continuation missing",
+                ))
+            }
+        };
+        let controller = stack.item.controller;
+        let mut events = Vec::new();
+        let Some(&object_id) = chosen.first() else {
+            events.push(ev_log(format!(
+                "P{controller} declines the linked Exile choice."
+            )));
+            return self.complete_parked_resolution_with_previous(
+                stack.item,
+                stack.resume_effect_index,
+                crate::state::EffectResult::default(),
+                events,
+            );
+        };
+        let expected_generation = generations
+            .iter()
+            .find_map(|(candidate, generation)| (*candidate == object_id).then_some(*generation));
+        let current_generation = self
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        let linked_current = self
+            .state
+            .linked_exile_records
+            .get(&key)
+            .is_some_and(|records| {
+                records.iter().any(|record| {
+                    record.object_id == object_id
+                        && record.zone_change_generation == current_generation
+                })
+            });
+        let Some(object) = self.state.objects.get(&object_id) else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("linked Exile choice became stale"));
+        };
+        if expected_generation != Some(current_generation)
+            || object.zone != Zone::Exile
+            || !linked_current
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("linked Exile choice became stale"));
+        }
+        let owner = object.owner;
+        let card_label = object_display_name(&self.state, self.registry, object_id);
+        let receipt = super::super::payment::card_result_entry(
+            &self.state,
+            self.registry,
+            tricerules_card_model::primitives::CardResultAction::ChooseLinkedExiledCard,
+            owner,
+            object_id,
+        );
+        let previous_result = crate::state::EffectResult {
+            cards: vec![receipt],
+            ..crate::state::EffectResult::default()
+        };
+        match destination {
+            tricerules_card_model::primitives::LinkedExiledCardDestination::OwnerGraveyard => {
+                self.commit_observed_zone_move(object_id, Zone::Graveyard, None, &mut events)?;
+                events.push(ev_log(format!(
+                    "{spell_label} moves {card_label} to its owner's graveyard."
+                )));
+                events.push(permanent_moved_event(
+                    &self.state,
+                    object_id,
+                    owner,
+                    rv1::permanent_moved::Destination::Graveyard,
+                ));
+                self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    previous_result,
+                    events,
+                )
+            }
+            tricerules_card_model::primitives::LinkedExiledCardDestination::ControllerBattlefield => {
+                stack.previous_result = previous_result;
+                let entry = BattlefieldEntryEvent {
+                    entry_reveal_receipts: Vec::new(),
+                    mana_colors_spent_to_cast: Default::default(),
+                    prepared: false,
+                    object_id,
+                    deciding_player: controller,
+                    destination_controller: controller,
+                    battle_protector: None,
+                    face_index: 0,
+                    unlock_room_door: None,
+                    chosen_x: 0,
+                    cast_by: None,
+                    cast_cost_receipts: Vec::new(),
+                    player_life_snapshot: self.player_life_snapshot(),
+                    tapped: false,
+                    set_types: None,
+                    chosen_basic_land_type: None,
+                    chosen_opponents: Vec::new(),
+                    chosen_creature_types: Vec::new(),
+                    entry_counters: BTreeMap::new(),
+                    entry_modifiers: Vec::new(),
+                    attached_to: None,
+                    pending_copy_candidate: None,
+                    pending_aura_recipient: None,
+                    accepted_aura_recipient: None,
+                    applied_effects: Vec::new(),
+                };
+                if let Some(completed) = self.begin_zone_entry_batch(
+                    stack,
+                    vec![entry],
+                    Zone::Exile,
+                    &spell_label,
+                    None,
+                    &mut events,
+                )? {
+                    self.complete_parked_resolution_with_previous(
+                        completed.item,
+                        completed.resume_effect_index,
+                        completed.previous_result,
+                        events,
+                    )
+                } else {
+                    Ok(finish_with_events(self, events))
+                }
+            }
+        }
+    }
+
     /// CR 701.23: the controller submitted their library search choice. Move the found card to
     /// the declared destination, optionally reveal it publicly, then optionally shuffle.
     pub(super) fn finish_library_search(
@@ -992,6 +1142,82 @@ mod tests {
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: Default::default(),
+        }
+    }
+
+    #[test]
+    fn linked_exile_choice_receipt_drives_later_token_branch_without_a_graveyard_move() {
+        use crate::state::{CardResultCohort, CardResultEntry, ParkedStackResolution};
+        use tricerules_card_model::primitives::{CardResultAction, CardTypeFilter};
+
+        for (card_type, token_id) in [
+            (CardTypeFilter::Land, "treasure"),
+            (CardTypeFilter::Nonland, "rogue_b_2_2"),
+        ] {
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                90_041,
+                &[0, 1],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
+            engine.state.turn_step = TurnStep::Main1;
+            let mut item = test_stack_item();
+            item.card_id = "currency_converter".into();
+            item.ability_text = Some("return linked card".into());
+            item.ability_index = Some(1);
+            item.source_permanent_id = Some(90_002);
+            item.activated_ability = Some(
+                engine
+                    .registry
+                    .get("currency_converter")
+                    .unwrap()
+                    .primary_face()
+                    .activated_abilities[1]
+                    .clone(),
+            );
+
+            // The generic suspension path stores an empty result at effect index 1. This fixture
+            // models the accepted pre-move receipt replacing it; the selected object is absent
+            // and no graveyard movement result exists, as in a future move-replacement outcome.
+            let mut parked = ParkedStackResolution::new(item.clone());
+            parked.resume_effect_index = Some(1);
+            assert!(parked.previous_result.cards.is_empty());
+            let selected_object_id = 99_991;
+            let previous_result: crate::state::EffectResult = CardResultCohort {
+                cards: vec![CardResultEntry {
+                    action: CardResultAction::ChooseLinkedExiledCard,
+                    affected_player: 0,
+                    object_id: selected_object_id,
+                    zone_change_generation: 7,
+                    matched_card_types: vec![card_type],
+                }],
+            }
+            .into();
+
+            let batch = engine
+                .complete_parked_resolution_with_previous(
+                    parked.item,
+                    parked.resume_effect_index,
+                    previous_result,
+                    Vec::new(),
+                )
+                .expect("resume the type-dependent result branch");
+
+            assert!(!engine.state.objects.contains_key(&selected_object_id));
+            assert!(engine.state.players[0].graveyard.is_empty());
+            let tokens = engine.state.players[0]
+                .battlefield
+                .iter()
+                .filter(|object_id| engine.state.objects[object_id].card_id == token_id)
+                .count();
+            assert_eq!(
+                tokens, 1,
+                "saved {card_type:?} snapshot chooses {token_id}; events: {:?}",
+                batch.events
+            );
         }
     }
 

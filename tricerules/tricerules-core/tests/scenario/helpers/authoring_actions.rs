@@ -49,6 +49,49 @@ pub(crate) fn activation(
                 },
             )),
         }]
+    } else if e.state.objects[&object].card_id == "nautiloid_ship" && index == 0 {
+        // The generic conformance battlefield has no creatures to crew a Vehicle. Nautiloid
+        // supplies two 2-power creatures in that exact case fixture; select from its live offer
+        // until the independently specified Crew 3 threshold is met.
+        if !choices.non_mana_costs_payable || choices.choices.len() != 1 {
+            return Err("Nautiloid Ship Crew offer is not payable".into());
+        }
+        let choice = &choices.choices[0];
+        let aggregate = choice
+            .aggregate_minimum
+            .as_ref()
+            .ok_or("Nautiloid Ship omitted its Crew 3 aggregate")?;
+        if choice.kind() != CostChoiceKind::Tap
+            || choice.zone != CostChoiceZone::Battlefield as i32
+            || aggregate.minimum != 3
+            || aggregate.contribution_kind() != ObjectContributionKind::CurrentPower
+        {
+            return Err("Nautiloid Ship Crew 3 cost offer changed".into());
+        }
+        let mut objects = Vec::new();
+        let mut contribution = 0i64;
+        for candidate in &choice.candidate_objects {
+            let Some(object) = candidate.object else {
+                continue;
+            };
+            if candidate.contribution <= 0 {
+                continue;
+            }
+            objects.push(object);
+            contribution += candidate.contribution;
+            if contribution >= i64::from(aggregate.minimum) {
+                break;
+            }
+        }
+        if contribution < i64::from(aggregate.minimum) {
+            return Err("Nautiloid Ship Crew fixture lacks enough current power".into());
+        }
+        vec![CostSelection {
+            cost_index: choice.cost_index,
+            selection: Some(cost_selection::Selection::BattlefieldObjects(
+                CostObjectRefs { objects },
+            )),
+        }]
     } else {
         costs(Some(choices))?
     };

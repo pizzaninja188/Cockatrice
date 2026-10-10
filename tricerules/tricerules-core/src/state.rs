@@ -1266,6 +1266,13 @@ pub enum ResolutionContinuation {
         candidate_generations: Vec<(ObjectId, u64)>,
         spell_label: String,
     },
+    LinkedExileChoice {
+        stack: ParkedStackResolution,
+        key: LinkedExileKey,
+        destination: tricerules_card_model::primitives::LinkedExiledCardDestination,
+        candidate_generations: Vec<(ObjectId, u64)>,
+        spell_label: String,
+    },
     Sacrifice {
         stack: ParkedStackResolution,
     },
@@ -1478,6 +1485,7 @@ impl ResolutionContinuation {
             | Self::HandChoice { stack, .. }
             | Self::PlayerSetDiscard { stack, .. }
             | Self::GraveyardChoice { stack, .. }
+            | Self::LinkedExileChoice { stack, .. }
             | Self::Sacrifice { stack }
             | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
@@ -1532,6 +1540,7 @@ impl ResolutionContinuation {
             | Self::HandChoice { stack, .. }
             | Self::PlayerSetDiscard { stack, .. }
             | Self::GraveyardChoice { stack, .. }
+            | Self::LinkedExileChoice { stack, .. }
             | Self::Sacrifice { stack }
             | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }

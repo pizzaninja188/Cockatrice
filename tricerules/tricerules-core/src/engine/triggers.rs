@@ -1127,20 +1127,23 @@ impl GameEngine {
                         {
                             continue;
                         }
-                        let occurrences = batch
-                            .cards
-                            .iter()
-                            .filter(|receipt| {
-                                filter.as_ref().is_none_or(|filter| {
-                                    receipt
-                                        .known_card_id
-                                        .as_ref()
-                                        .and_then(|id| self.registry.get(id))
-                                        .is_some_and(|card| card.matches_zone_card_filter(filter))
-                                })
+                        for receipt in batch.cards.iter().filter(|receipt| {
+                            filter.as_ref().is_none_or(|filter| {
+                                receipt
+                                    .known_card_id
+                                    .as_ref()
+                                    .and_then(|id| self.registry.get(id))
+                                    .is_some_and(|card| card.matches_zone_card_filter(filter))
                             })
-                            .count();
-                        out.extend(std::iter::repeat_n(trigger, occurrences));
+                        }) {
+                            let mut occurrence = trigger.clone();
+                            occurrence.trigger_context.observed_object = Some(TriggerObjectRef {
+                                object_id: receipt.object_id,
+                                zone_change_generation: receipt.after_generation,
+                                controller_at_event: receipt.player,
+                            });
+                            out.push(occurrence);
+                        }
                     }
                     // The batch observer triggers once per committed discard action and carries
                     // the exact event-time count captured at collection.
