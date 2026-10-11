@@ -323,6 +323,7 @@ fn issue_343_hoverstone_pilgrim_keeps_flying_ward_and_any_graveyard_bottom() {
             },
             destination: GraveyardDestination::LibraryBottom,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         }]
     );
     let targeting = activated

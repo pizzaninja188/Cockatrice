@@ -7,5 +7,5 @@
   types: ["Creature", "Giant", "Sorcerer"],
   power: 4,
   toughness: 4,
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [MoveGraveyardCards(filter:(excluded_objects:[],owner:Controller,card:Some((any_of:None,exact_name:None,card_type:Some(InstantOrSorcery),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None))),destination:Hand,linked_exile_id:None)])],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [MoveGraveyardCards(filter:(excluded_objects:[],owner:Controller,card:Some((any_of:None,exact_name:None,card_type:Some(InstantOrSorcery),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None))),destination:Hand,linked_exile_id:None,entry_modifiers:[])])],
 )

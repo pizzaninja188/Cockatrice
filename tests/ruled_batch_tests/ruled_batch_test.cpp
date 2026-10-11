@@ -3029,6 +3029,44 @@ TEST_F(RuledBatchTest, ReplacementEffectChoiceSurvivesRedactionForEveryParticipa
     }
 }
 
+TEST_F(RuledBatchTest, AcceptedPermanentSelectionsRemainPublicAcrossRelayRedaction)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_source_object_id(900u);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+    choice->set_min(3);
+    choice->set_max(3);
+    choice->add_candidate_object_ids(101u);
+    choice->add_candidate_object_ids(102u);
+    choice->add_candidate_card_ids("bear_a");
+    choice->add_candidate_card_ids("bear_b");
+    choice->add_candidate_names("Bear");
+    choice->add_candidate_names("Bear");
+    choice->add_candidate_server_card_ids(11);
+    choice->add_candidate_server_card_ids(12);
+    auto *selection = choice->add_accepted_permanent_selections();
+    selection->set_selecting_player_id(p1->getPlayerId());
+    selection->set_object_id(77u);
+    selection->set_zone_change_generation(4u);
+    auto *progress = batch.add_events()->mutable_resolution_choice_progress();
+    progress->set_source_object_id(900u);
+
+    for (auto *participant : {static_cast<Server_AbstractParticipant *>(p1),
+                               static_cast<Server_AbstractParticipant *>(p2)}) {
+        const auto redacted = redactFor(batch, participant);
+        ASSERT_EQ(redacted.events_size(), 2);
+        ASSERT_TRUE(redacted.events(0).has_resolution_choice_required());
+        const auto &kept = redacted.events(0).resolution_choice_required();
+        ASSERT_EQ(kept.accepted_permanent_selections_size(), 1);
+        EXPECT_EQ(kept.accepted_permanent_selections(0).object_id(), 77u);
+        EXPECT_EQ(kept.accepted_permanent_selections(0).zone_change_generation(), 4u);
+        EXPECT_EQ(kept.candidate_object_ids_size(), 2);
+        EXPECT_TRUE(redacted.events(1).has_resolution_choice_progress());
+    }
+}
+
 TEST_F(RuledBatchTest, ReplacementImagesRestoreOnReconnectAndNeverDecoratePrivateChoices)
 {
     ruled::v1::IpcResponse response;

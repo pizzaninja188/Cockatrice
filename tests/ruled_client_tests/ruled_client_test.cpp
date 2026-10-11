@@ -8283,6 +8283,38 @@ TEST_F(RuledClientTest, PrivateHandChoiceMakesTheNonDecidingPlayerWait)
     EXPECT_FALSE(state->isWaitingForChoice());
 }
 
+TEST_F(RuledClientTest, AcceptedSacrificeSelectionsArePublicAndGenerationBound)
+{
+    constexpr quint32 sourceOid = 7000;
+    constexpr quint32 chosenOid = 8100;
+    constexpr quint64 generation = 12;
+    state->battlefieldGenerationByOid.insert(chosenOid, generation);
+
+    ruled::v1::RuledEventBatch pending;
+    auto *choice = pending.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kOpponent);
+    choice->set_source_object_id(sourceOid);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+    choice->set_prompt_text("Opponent is choosing creatures to sacrifice.");
+    auto *selection = choice->add_accepted_permanent_selections();
+    selection->set_selecting_player_id(kLocalPlayer + 1);
+    selection->set_object_id(chosenOid);
+    selection->set_zone_change_generation(generation);
+    apply(pending);
+
+    EXPECT_TRUE(state->isWaitingForChoice());
+    EXPECT_EQ(state->acceptedSacrificeChooserForEngineOid(chosenOid), kLocalPlayer + 1);
+    state->battlefieldGenerationByOid.insert(chosenOid, generation + 1);
+    EXPECT_EQ(state->acceptedSacrificeChooserForEngineOid(chosenOid), -1);
+
+    ruled::v1::RuledEventBatch completed;
+    auto *progress = completed.add_events()->mutable_resolution_choice_progress();
+    progress->set_source_object_id(sourceOid);
+    apply(completed);
+    EXPECT_EQ(state->acceptedSacrificeChooserForEngineOid(chosenOid), -1);
+    EXPECT_EQ(state->acceptedSacrificeSelectionSourceOid, 0u);
+}
+
 TEST_F(RuledClientTest, AlternativeDiscardRequiresOneMatchingCardOrTwoCards)
 {
     ruled::v1::RuledEventBatch batch;

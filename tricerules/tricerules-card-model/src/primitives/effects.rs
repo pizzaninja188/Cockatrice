@@ -1647,6 +1647,10 @@ pub enum SpellEffectKind {
         /// same card face. Omitted for ordinary graveyard movement.
         #[serde(default)]
         linked_exile_id: Option<AbilityLinkId>,
+        /// Modifiers applied to a card entering the battlefield from a graveyard. Portal to
+        /// Phyrexia adds Phyrexian to the returned permanent; omitted for other destinations.
+        #[serde(default)]
+        entry_modifiers: Vec<ResolvingPermanentModifier>,
     },
     /// CR 406.6 / 607.2a: return the exact cards still in exile from a paired source-incarnation
     /// link. The identity foundation is shared with cards such as Sisters of Stone Death; this
@@ -2091,6 +2095,15 @@ pub enum SpellEffectKind {
         /// Who must sacrifice — kind must be AnyPlayer or OpponentPlayer.
         target: TargetFilter,
         /// What kind of permanent may be sacrificed (default: Creature).
+        #[serde(default = "TargetFilter::default_creature")]
+        filter: TargetFilter,
+    },
+    /// CR 101.4/101.4b and 701.21a: each recipient chooses up to `count` matching permanents,
+    /// then all chosen permanents are sacrificed simultaneously. Portal to Phyrexia uses
+    /// EachOpponent/3/Creature; Fleshbag Marauder uses EachPlayer/1/Creature.
+    ChooseAndSacrifice {
+        players: PlayerRecipient,
+        count: u32,
         #[serde(default = "TargetFilter::default_creature")]
         filter: TargetFilter,
     },
@@ -3432,6 +3445,7 @@ impl SpellEffectKind {
             | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
             | SpellEffectKind::ChooseResolutionBranch { .. }
             | SpellEffectKind::ChoosePermanents { .. }
+            | SpellEffectKind::ChooseAndSacrifice { .. }
             | SpellEffectKind::CreateReflexiveTrigger { .. }
             | SpellEffectKind::Scry { .. }
             | SpellEffectKind::LibraryPartition { .. }
@@ -4601,9 +4615,20 @@ impl SpellEffectKind {
             filter,
             destination,
             linked_exile_id,
+            entry_modifiers,
         } = self
         {
             filter.validate()?;
+            if !entry_modifiers.is_empty()
+                && !matches!(destination, GraveyardDestination::Battlefield { .. })
+            {
+                return Err(
+                    "MoveGraveyardCards.entry_modifiers require the battlefield destination".into(),
+                );
+            }
+            for modifier in entry_modifiers {
+                modifier.validate()?;
+            }
             if let Some(link_id) = linked_exile_id {
                 link_id.validate()?;
                 if context != EffectContext::Ability {
@@ -5805,6 +5830,38 @@ impl SpellEffectKind {
                 if filter.any_terminal_filter_matches(|leaf| !leaf.excluded_objects.is_empty()) {
                     return Err(
                         "TargetPlayerSacrifices.filter cannot exclude the effect source".into(),
+                    );
+                }
+                Ok(())
+            }
+            SpellEffectKind::ChooseAndSacrifice {
+                players,
+                count,
+                filter,
+            } => {
+                filter.validate_characteristic_constraints()?;
+                if !matches!(
+                    players,
+                    PlayerRecipient::EachOpponent | PlayerRecipient::EachPlayer
+                ) {
+                    return Err(
+                        "ChooseAndSacrifice.players must be EachOpponent or EachPlayer".into(),
+                    );
+                }
+                if *count == 0 {
+                    return Err("ChooseAndSacrifice.count must be positive".into());
+                }
+                if !filter.is_permanent_only() {
+                    return Err("ChooseAndSacrifice.filter must select permanents".into());
+                }
+                if !filter.all_terminal_filters_match(|leaf| {
+                    leaf.controller == TargetController::Any
+                        && leaf.owner == super::TargetOwner::Any
+                        && leaf.excluded_objects.is_empty()
+                }) {
+                    return Err(
+                        "ChooseAndSacrifice.filter cannot constrain controller, owner, or exclude objects"
+                            .into(),
                     );
                 }
                 Ok(())

@@ -748,6 +748,7 @@ fn match_spell_return_graveyard_card_to_hand(
             filter: GraveyardFilter::default(),
             destination: GraveyardDestination::Hand,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         })
     })
 }
@@ -2635,6 +2636,7 @@ fn match_modal_return_creature_card_mana_value_two(
                 },
                 destination: GraveyardDestination::Hand,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }],
             modal_targeting(
                 "Choose target creature card with mana value 2 or less from your graveyard",
@@ -2663,6 +2665,7 @@ fn match_modal_return_card_mana_value_four(
                 },
                 destination: GraveyardDestination::Hand,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }],
             modal_targeting(
                 "Choose target card with mana value 4 or greater from your graveyard",
@@ -2825,6 +2828,7 @@ fn match_modal_return_artifact_card(text: &str, _: &RecipeContext) -> Option<Rec
                 },
                 destination: GraveyardDestination::Hand,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }],
             modal_targeting("Choose target artifact card from your graveyard", 0),
         )
@@ -2874,6 +2878,7 @@ fn match_modal_exile_up_to_two_single_graveyard(
                 },
                 destination: GraveyardDestination::Exile,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }],
             modal_targeting_range(
                 "Choose up to two target cards from a single graveyard",
@@ -3591,6 +3596,7 @@ fn match_modal_exile_graveyard_card_up_to_one_draw_one(
                     },
                     destination: GraveyardDestination::Exile,
                     linked_exile_id: None,
+                    entry_modifiers: Vec::new(),
                 },
                 SpellEffectKind::Draw {
                     who: PlayerRecipient::Controller,
@@ -4154,6 +4160,7 @@ fn match_modal_return_hero_card(text: &str, _: &RecipeContext) -> Option<RecipeE
                 },
                 destination: GraveyardDestination::Hand,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }],
             modal_targeting("Choose target Hero card from your graveyard", 0),
         )
@@ -4173,6 +4180,7 @@ fn match_modal_return_villain_card(text: &str, _: &RecipeContext) -> Option<Reci
                 },
                 destination: GraveyardDestination::Hand,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }],
             modal_targeting("Choose target Villain card from your graveyard", 0),
         )
@@ -4486,6 +4494,7 @@ fn match_modal_trystan_return_permanents(text: &str, _: &RecipeContext) -> Optio
                     },
                     destination: GraveyardDestination::Hand,
                     linked_exile_id: None,
+                    entry_modifiers: Vec::new(),
                 }],
                 modal_targeting_range(
                     "Choose one or two target permanent cards from your graveyard",
@@ -6151,6 +6160,7 @@ fn match_etb_exile_up_to_two_cards_from_single_graveyard(
                 },
                 destination: GraveyardDestination::Exile,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }],
         ) else {
             unreachable!("triggered_ability_with always returns a triggered ability")
@@ -6329,6 +6339,7 @@ fn match_spell_return_up_to_two_graveyard_creature_cards(
                 },
                 destination: GraveyardDestination::Hand,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }],
             targeting: exact_targeting(
                 0,
@@ -6589,6 +6600,7 @@ fn match_beginning_of_combat_exile_graveyard_card(
                     },
                     destination: GraveyardDestination::Exile,
                     linked_exile_id: None,
+                    entry_modifiers: Vec::new(),
                 }],
             ) else {
                 unreachable!("triggered_ability_with always returns a triggered ability")
@@ -9212,6 +9224,7 @@ fn creature_graveyard_card_to_hand_effect() -> SpellEffectKind {
         },
         destination: GraveyardDestination::Hand,
         linked_exile_id: None,
+        entry_modifiers: Vec::new(),
     }
 }
 
@@ -9235,6 +9248,7 @@ fn instant_or_sorcery_graveyard_card_to_hand_effect() -> SpellEffectKind {
         },
         destination: GraveyardDestination::Hand,
         linked_exile_id: None,
+        entry_modifiers: Vec::new(),
     }
 }
 
@@ -9704,6 +9718,7 @@ fn match_graveyard_card_to_library_bottom(
                     },
                     destination: GraveyardDestination::LibraryBottom,
                     linked_exile_id: None,
+                    entry_modifiers: Vec::new(),
                 }],
                 single_targeting("Choose target card from your graveyard"),
             )
@@ -11240,6 +11255,7 @@ fn match_triggered_etb_return_permanent_card_to_hand(
                 },
                 destination: GraveyardDestination::Hand,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             },
         )
     })
@@ -11814,6 +11830,7 @@ fn match_activated_exile_target_graveyard_card(
                 },
                 destination: GraveyardDestination::Exile,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }],
             single_targeting("Choose target card from a graveyard"),
         )
@@ -12434,6 +12451,7 @@ fn match_activated_mana_move_graveyard_card_to_library_bottom_any_graveyard(
                     },
                     destination: GraveyardDestination::LibraryBottom,
                     linked_exile_id: None,
+                    entry_modifiers: Vec::new(),
                 }],
                 single_targeting("Choose target card from a graveyard"),
             )
@@ -16318,6 +16336,7 @@ fn match_triggered_etb_descend_4_return_target_permanent_card_to_hand(
                     },
                     destination: GraveyardDestination::Hand,
                     linked_exile_id: None,
+                    entry_modifiers: Vec::new(),
                 },
             ) else {
                 unreachable!("triggered_ability always returns a triggered ability")
@@ -17674,6 +17693,7 @@ fn match_activated_remove_counter_return_small_creature_card(
                 },
                 destination: GraveyardDestination::Battlefield { tapped: false },
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }],
             targeting: Some(exact_targeting(
                 1,
@@ -29440,6 +29460,7 @@ mod tests {
                 },
                 destination: GraveyardDestination::LibraryBottom,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }]
         );
         let targeting = ability
@@ -32512,6 +32533,7 @@ mod tests {
                 },
                 destination: GraveyardDestination::Hand,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }]
         );
 
@@ -34530,6 +34552,7 @@ mod tests {
                     },
                     destination: GraveyardDestination::Exile,
                     linked_exile_id: None,
+                    entry_modifiers: Vec::new(),
                 }]
             );
             let targeting = ability.targeting.expect("exile must target optionally");
@@ -34930,6 +34953,7 @@ mod tests {
                     },
                     destination: GraveyardDestination::Hand,
                     linked_exile_id: None,
+                    entry_modifiers: Vec::new(),
                 }]
             );
             let [group] = targeting.groups.as_slice() else {
@@ -37048,6 +37072,7 @@ mod tests {
                     },
                     destination: GraveyardDestination::Hand,
                     linked_exile_id: None,
+                    entry_modifiers: Vec::new(),
                 }]
             );
             assert!(ability.targeting.is_none());
@@ -38862,6 +38887,7 @@ mod tests {
                 },
                 destination: GraveyardDestination::Exile,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }]
         );
         let targeting = exile.targeting.as_ref().expect("exile target group");
@@ -39953,6 +39979,7 @@ mod tests {
                 },
                 destination: GraveyardDestination::LibraryBottom,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }]
         );
         let targeting = ability.targeting.as_ref().expect("graveyard target group");
@@ -44840,9 +44867,11 @@ mod tests {
                     excluded_objects: Vec::new(),
                     owner: GraveyardOwner::Controller,
                     card: Some(issue_373_permanent_card_filter()),
+                    mana_value_less_than_trigger_object: false,
                 },
                 destination: GraveyardDestination::Hand,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }]
         );
         let targeting = ability.targeting.as_ref().expect("one target group");
@@ -46572,6 +46601,7 @@ mod tests {
                         },
                         destination: GraveyardDestination::Exile,
                         linked_exile_id: None,
+                        entry_modifiers: Vec::new(),
                     },
                     SpellEffectKind::Draw {
                         who: PlayerRecipient::Controller,
@@ -47230,6 +47260,7 @@ mod tests {
                 },
                 destination: GraveyardDestination::Battlefield { tapped: false },
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }]
         );
         assert_eq!(ability.timing, ActivationTiming::SorcerySpeed);
@@ -50353,6 +50384,7 @@ mod tests {
                     },
                     destination: GraveyardDestination::Hand,
                     linked_exile_id: None,
+                    entry_modifiers: Vec::new(),
                 }],
                 targeting: modal_targeting(
                     "Choose target creature card with mana value 2 or less from your graveyard",
@@ -50378,6 +50410,7 @@ mod tests {
                     },
                     destination: GraveyardDestination::Hand,
                     linked_exile_id: None,
+                    entry_modifiers: Vec::new(),
                 }],
                 targeting: modal_targeting(
                     "Choose target card with mana value 4 or greater from your graveyard",
@@ -50545,6 +50578,7 @@ mod tests {
                     },
                     destination: GraveyardDestination::Hand,
                     linked_exile_id: None,
+                    entry_modifiers: Vec::new(),
                 }],
                 targeting: modal_targeting("Choose target artifact card from your graveyard", 0),
             }
@@ -50597,6 +50631,7 @@ mod tests {
                     },
                     destination: GraveyardDestination::Exile,
                     linked_exile_id: None,
+                    entry_modifiers: Vec::new(),
                 }],
                 targeting: modal_targeting_range(
                     "Choose up to two target cards from a single graveyard",
@@ -51443,6 +51478,7 @@ mod tests {
                         },
                         destination: GraveyardDestination::Hand,
                         linked_exile_id: None,
+                        entry_modifiers: Vec::new(),
                     }],
                     targeting: modal_targeting(
                         &format!("Choose target {subtype} card from your graveyard"),

@@ -25,6 +25,7 @@ fn issue_301_registers_exactly_the_reviewed_two_card_cohort() {
                                 filter,
                                 destination: GraveyardDestination::Exile,
                                 linked_exile_id: None,
+                                ..
                             }] if filter.owner == GraveyardOwner::AnyPlayer
                                 && filter.card.is_none()
                                 && filter.excluded_objects.is_empty()

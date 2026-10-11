@@ -153,6 +153,7 @@ fn issue_317_fight_on_returns_up_to_two_creature_cards_from_own_graveyard() {
             },
             destination: GraveyardDestination::Hand,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         }]
     );
     let targeting = face

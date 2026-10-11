@@ -1,0 +1,104 @@
+{
+  "format_version": 1,
+  "oracle_id": "301d1d8e-d3fc-4010-8b29-4724fa0b31cd",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "portal_to_phyrexia",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0",
+        "/faces/0/triggered_abilities/0/effect/0/ChooseAndSacrifice/players",
+        "/faces/0/triggered_abilities/0/effect/0/ChooseAndSacrifice/count",
+        "/faces/0/triggered_abilities/0/effect/0/ChooseAndSacrifice/filter",
+        "/faces/0/triggered_abilities/0/effect/0/ChooseAndSacrifice/filter/kind"
+      ]
+    },
+    {
+      "face_id": "portal_to_phyrexia",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1",
+        "/faces/0/triggered_abilities/1/trigger",
+        "/faces/0/triggered_abilities/1/effect/0",
+        "/faces/0/triggered_abilities/1/effect/0/MoveGraveyardCards/filter",
+        "/faces/0/triggered_abilities/1/effect/0/MoveGraveyardCards/destination",
+        "/faces/0/triggered_abilities/1/effect/0/MoveGraveyardCards/entry_modifiers/0",
+        "/faces/0/triggered_abilities/1/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseAndSacrifice",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "PlayerRecipient::EachOpponent",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseAndSacrifice/players"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseAndSacrifice/filter"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseAndSacrifice/filter/kind"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfUpkeep",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/1/targeting"
+    },
+    {
+      "symbol": "ResolvingPermanentModifier::AddTypes",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0/MoveGraveyardCards/entry_modifiers/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_portal_to_phyrexia::portal_etb_collects_apnap_choices_before_one_simultaneous_sacrifice",
+      "covers": "three opponents choose in APNAP order, prior exact ObjectId and generation selections remain public, and all selected creatures move together after the final choice"
+    },
+    {
+      "test": "scenario deck_coverage_portal_to_phyrexia::portal_auto_selects_all_available_creatures_when_an_opponent_has_fewer_than_three",
+      "covers": "each opponent sacrifices all creatures they control when fewer than three are available; lands and artifacts are excluded from the creature count and remain on the battlefield"
+    },
+    {
+      "test": "scenario deck_coverage_portal_to_phyrexia::portal_current_chooser_concession_skips_only_that_players_choice",
+      "covers": "a conceding current chooser is skipped while later surviving opponents still make their choices"
+    },
+    {
+      "test": "scenario deck_coverage_portal_to_phyrexia::portal_effect_continues_after_its_controller_concedes_mid_choice",
+      "covers": "the resolving ability completes its ordered opponent choices and sacrifices after its source controller leaves"
+    },
+    {
+      "test": "scenario deck_coverage_portal_to_phyrexia::portal_sacrifice_choices_resume_after_concession_triggers_an_aura_return_choice",
+      "covers": "a concession-triggered Pacifism return and attachment choice resolve before Portal restores its accepted exact-object choices and continues with the next live opponent"
+    },
+    {
+      "test": "scenario deck_coverage_portal_to_phyrexia::portal_sacrifice_choices_resume_after_concession_return_batch_timestamp_order",
+      "covers": "two Banishing Light returns owned by one surviving player require timestamp ordering; after that choice Portal resumes its accepted choices and completes the simultaneous sacrifice"
+    },
+    {
+      "test": "scenario deck_coverage_portal_to_phyrexia::portal_upkeep_reanimates_a_target_from_an_opponents_graveyard_as_phyrexian",
+      "covers": "the upkeep trigger targets an opponent's creature card, returns it under Portal's controller, and adds Phyrexian until it changes zones"
+    }
+  ]
+}

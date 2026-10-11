@@ -606,6 +606,7 @@ pub(in crate::engine) fn park_player_set_discard_choice(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
@@ -1242,6 +1243,7 @@ pub(super) fn put_in_owners_library(
             cx.events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        accepted_permanent_selections: Vec::new(),
                         variable_mana_contribution: false,
                         candidate_token_identities: Vec::new(),
                         candidate_player_ids: Vec::new(),
@@ -1947,6 +1949,7 @@ fn choose_hand_cards_for_player(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
@@ -2283,6 +2286,7 @@ pub(super) fn target_player_sacrifices(
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            accepted_permanent_selections: Vec::new(),
                             variable_mana_contribution: false,
                             candidate_token_identities: Vec::new(),
                             candidate_player_ids: Vec::new(),
@@ -2418,6 +2422,7 @@ pub(super) fn choose_graveyard_card(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
@@ -2549,6 +2554,7 @@ pub(super) fn choose_linked_exiled_card(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
@@ -3036,6 +3042,7 @@ pub(super) fn move_graveyard_cards(
         filter,
         destination,
         linked_exile_id,
+        entry_modifiers,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -3101,7 +3108,7 @@ pub(super) fn move_graveyard_cards(
                 chosen_opponents: Vec::new(),
                 chosen_creature_types: Vec::new(),
                 entry_counters: BTreeMap::new(),
-                entry_modifiers: Vec::new(),
+                entry_modifiers: entry_modifiers.clone(),
                 attached_to: None,
                 pending_copy_candidate: None,
                 pending_aura_recipient: None,
@@ -4135,6 +4142,7 @@ pub(super) fn explore(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
@@ -4294,6 +4302,7 @@ pub(super) fn thassa_oracle(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engi
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
@@ -4437,6 +4446,7 @@ fn begin_library_partition(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
@@ -4611,6 +4621,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
@@ -4740,6 +4751,7 @@ fn look_choose_battlefield(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
@@ -4872,6 +4884,7 @@ pub(super) fn look_choose_to_hand(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
@@ -5225,6 +5238,7 @@ pub(in crate::engine) fn park_zone_search_choice(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
@@ -5356,6 +5370,7 @@ pub(in crate::engine) fn begin_search_request(
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        accepted_permanent_selections: Vec::new(),
                         variable_mana_contribution: false,
                         candidate_token_identities: Vec::new(),
                         candidate_player_ids: Vec::new(),
@@ -5466,6 +5481,7 @@ pub(super) fn search_library(
         cx.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),

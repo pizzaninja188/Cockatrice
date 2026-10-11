@@ -53,6 +53,7 @@ fn codex_shredder_registers_its_mill_and_recovery_abilities() {
             filter,
             destination: GraveyardDestination::Hand,
             linked_exile_id: None,
+            ..
         }] if filter.owner == GraveyardOwner::Controller && filter.card.is_none()
     ));
     assert!(recovery.targeting.is_some());

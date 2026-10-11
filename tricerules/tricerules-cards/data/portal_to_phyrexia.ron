@@ -1,0 +1,37 @@
+// Portal to Phyrexia Oracle 301d1d8e-d3fc-4010-8b29-4724fa0b31cd (BRO #240).
+// Saved Scryfall ruling snapshot contained no card-specific rulings.
+// CR 101.4/101.4b and 701.21a govern the ordered choices and simultaneous sacrifices; CR 603.2b
+// the upkeep trigger; CR 608.2b target revalidation; CR 400.7, 611.2a, and 613.1d the returned
+// creature's Phyrexian subtype through layer 4 until it changes zones.
+(
+  id: "portal_to_phyrexia",
+  name: "Portal to Phyrexia",
+  face_id: "portal_to_phyrexia",
+  mana_cost: "{9}",
+  types: ["Artifact"],
+  triggered_abilities: [
+    (
+      ability_id: "etb_each_opponent_sacrifices",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [ChooseAndSacrifice(
+        players: EachOpponent,
+        count: 3,
+        filter: (kind: Creature),
+      )],
+    ),
+    (
+      ability_id: "upkeep_return_creature",
+      presentation: OracleLines([2]),
+      trigger: AtBeginningOfUpkeep(player: Controller),
+      effect: [MoveGraveyardCards(
+        filter: (owner: AnyPlayer, card: Some((card_type: Some(Creature)))),
+        destination: Battlefield(tapped: false),
+        entry_modifiers: [AddTypes((creature_types: ["Phyrexian"]))],
+      )],
+      targeting: Some((groups: [
+        (min: 1, max: 1, prompt: "Choose target creature card from a graveyard", effect_indices: [0]),
+      ])),
+    ),
+  ],
+)

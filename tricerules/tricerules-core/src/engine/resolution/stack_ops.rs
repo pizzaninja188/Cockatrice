@@ -64,6 +64,7 @@ pub(super) fn counter_target_spell(
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        accepted_permanent_selections: Vec::new(),
                         variable_mana_contribution: false,
                         candidate_token_identities: Vec::new(),
                         candidate_player_ids: Vec::new(),
@@ -189,6 +190,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 unique_names: false,
             };
             let event = rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
@@ -274,6 +276,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 unique_names: false,
             };
             let event = rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),

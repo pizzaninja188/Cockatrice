@@ -438,6 +438,57 @@ pub(super) fn sacrifice_all(
     }
 }
 
+pub(super) fn choose_and_sacrifice(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ChooseAndSacrifice {
+        players,
+        count,
+        filter,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let choices = super::player_recipients(cx, players)
+        .into_iter()
+        .map(|player| crate::state::PendingPlayerSacrificeChoice {
+            player,
+            candidate_generations: Vec::new(),
+            required: 0,
+        })
+        .collect();
+    let mut sacrifice = crate::state::PendingPlayerSetSacrifice {
+        choices,
+        current: 0,
+        accepted: Vec::new(),
+        count,
+        filter,
+    };
+    let stack = ParkedStackResolution::new(cx.top.clone());
+    if cx
+        .engine
+        .advance_player_set_sacrifice_choices(&mut sacrifice)
+    {
+        cx.engine
+            .park_player_set_sacrifice_choice(stack, sacrifice, cx.events);
+        return Ok(EffectOutcome::Suspended);
+    }
+    let cohort = sacrifice
+        .accepted
+        .iter()
+        .map(|selection| selection.object_id)
+        .collect::<Vec<_>>();
+    if cx
+        .engine
+        .commit_player_set_sacrifice(stack, &cohort, cx.effect_result, cx.events)?
+    {
+        Ok(EffectOutcome::Suspended)
+    } else {
+        Ok(EffectOutcome::Continue)
+    }
+}
+
 pub(super) fn tap_all(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

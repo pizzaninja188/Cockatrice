@@ -219,6 +219,7 @@ fn issue_412_three_mode_spells_expose_every_bullet() {
                 },
                 destination: GraveyardDestination::Exile,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             },
             SpellEffectKind::Draw {
                 who: PlayerRecipient::Controller,

@@ -144,6 +144,7 @@ fn issue_375_coati_payload_is_exact() {
             },
             destination: GraveyardDestination::Hand,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         }]
     );
     let targeting = ability.targeting.as_ref().expect("one target group");

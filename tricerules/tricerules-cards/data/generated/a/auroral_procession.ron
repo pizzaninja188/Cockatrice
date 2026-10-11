@@ -5,5 +5,5 @@
   face_id: "auroral_procession",
   mana_cost: "{G}{U}",
   types: ["Instant"],
-  spell_effect: [MoveGraveyardCards(filter:(excluded_objects:[],owner:Controller,card:None),destination:Hand,linked_exile_id:None)],
+  spell_effect: [MoveGraveyardCards(filter:(excluded_objects:[],owner:Controller,card:None),destination:Hand,linked_exile_id:None,entry_modifiers:[])],
 )

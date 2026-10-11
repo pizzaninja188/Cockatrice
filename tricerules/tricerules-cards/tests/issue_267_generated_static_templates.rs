@@ -217,6 +217,7 @@ fn issue_267_trigger_and_spell_effects_keep_exact_filters_and_order() {
             filter,
             destination: GraveyardDestination::Hand,
             linked_exile_id: None,
+            ..
         }] if filter.card.as_ref().is_some_and(|card| card.card_type == Some(CardTypeFilter::Creature))
     ));
 

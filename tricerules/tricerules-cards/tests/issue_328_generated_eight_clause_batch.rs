@@ -246,6 +246,7 @@ fn issue_328_elvish_regrower_returns_a_permanent_card() {
             },
             destination: GraveyardDestination::Hand,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         }]
     );
     assert!(ability.targeting.is_none());

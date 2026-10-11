@@ -8,5 +8,5 @@
   power: 4,
   toughness: 4,
   keywords: [Trample, Lifelink],
-  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:AtBeginningOfCombat(player:Controller),effect:[MoveGraveyardCards(filter:(excluded_objects:[],owner:AnyPlayer,card:None),destination:Exile,linked_exile_id:None)],modal:None,targeting:Some((groups:[(min:0,max:1,prompt:"Choose up to one target card from a graveyard",effect_indices:[0],distinct_from:[],same_graveyard:false,cast_cost_expansion:None)])),may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:AtBeginningOfCombat(player:Controller),effect:[MoveGraveyardCards(filter:(excluded_objects:[],owner:AnyPlayer,card:None),destination:Exile,linked_exile_id:None,entry_modifiers:[])],modal:None,targeting:Some((groups:[(min:0,max:1,prompt:"Choose up to one target card from a graveyard",effect_indices:[0],distinct_from:[],same_graveyard:false,cast_cost_expansion:None)])),may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
 )

@@ -214,6 +214,7 @@ fn issue_168_reanimation_group_waits_for_all_replacement_choices() {
             filter: Default::default(),
             destination: GraveyardDestination::Battlefield { tapped: false },
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         },
         SpellEffectKind::GainLife {
             amount: Amount::Fixed(1),

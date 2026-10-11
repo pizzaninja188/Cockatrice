@@ -272,6 +272,7 @@ impl GameEngine {
         if matches!(
             pending.continuation,
             ResolutionContinuation::PlayerSetDiscard { .. }
+                | ResolutionContinuation::PlayerSetSacrifice { .. }
         ) && (!answer.chosen_player_ids.is_empty()
             || answer.selected_branch_index != 0
             || answer.cast_spell.is_some()
@@ -369,6 +370,9 @@ impl GameEngine {
             }
             ResolutionContinuation::PlayerSetDiscard { .. } => {
                 return self.finish_player_set_discard_choice(pending, chosen);
+            }
+            ResolutionContinuation::PlayerSetSacrifice { .. } => {
+                return self.finish_player_set_sacrifice_choice(pending, chosen);
             }
             ResolutionContinuation::GraveyardChoice { .. } => {
                 return self.finish_graveyard_choice(pending, chosen);
@@ -733,6 +737,7 @@ impl GameEngine {
                 ready: Vec::new(),
                 remaining: VecDeque::new(),
                 resume_stack: stack.clone(),
+                suspended_resolution: None,
             })
             .ready
             .push(ObserverReturnEntry {
@@ -1712,6 +1717,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),

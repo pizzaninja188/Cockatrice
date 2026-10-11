@@ -30,6 +30,7 @@ fn assert_graveyard_to_bottom_ability(
         filter,
         destination,
         linked_exile_id,
+        ..
     }] = ability.effect.as_slice()
     else {
         panic!("expected one controller-graveyard-to-library-bottom effect");
@@ -137,6 +138,7 @@ fn issue_283_matches_existing_authored_library_bottom_shape() {
         filter,
         destination,
         linked_exile_id,
+        ..
     }] = ability.effect.as_slice()
     else {
         panic!("Malevolent Chandelier should use the typed graveyard movement effect");

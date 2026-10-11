@@ -50,6 +50,7 @@ CardItem::CardItem(Player *_owner, QGraphicsItem *parent, const CardRef &cardRef
             connect(ruled, &RuledClientState::combatDamageUiChanged, this, [this]() { update(); });
             connect(ruled, &RuledClientState::spellTargetSelectionChanged, this, [this]() { update(); });
             connect(ruled, &RuledClientState::spellDamageAllocationUiChanged, this, [this]() { update(); });
+            connect(ruled, &RuledClientState::acceptedSacrificeSelectionsChanged, this, [this]() { update(); });
         }
     }
 }
@@ -163,6 +164,15 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
     // battlefield cards (TABLE zone); a lingering spell/ability card in the stack zone
     // may share an OID with a summoning-sick permanent but must never show the label there.
     const bool inTableZone = zone && zone->getName() == QLatin1String(ZoneNames::TABLE);
+    if (ruledHandler && ruledOid != 0 && inTableZone) {
+        const int chooser = ruledHandler->acceptedSacrificeChooserForEngineOid(ruledOid);
+        if (chooser >= 0) {
+            if (!renderedAnnotation.isEmpty()) {
+                renderedAnnotation += QLatin1Char('\n');
+            }
+            renderedAnnotation += tr("Chosen for sacrifice by P%1").arg(chooser);
+        }
+    }
     if (ruledHandler && ruledOid != 0 && inTableZone && ruledHandler->isEngineOidSummoningSick(ruledOid) &&
         !ruledHandler->isEngineOidHaste(ruledOid)) {
         if (!renderedAnnotation.contains(QStringLiteral("summoning sick"), Qt::CaseInsensitive)) {

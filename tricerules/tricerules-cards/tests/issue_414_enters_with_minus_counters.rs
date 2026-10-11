@@ -318,6 +318,7 @@ fn issue_414_reaping_willow_activation_payload_is_exact() {
             },
             destination: GraveyardDestination::Battlefield { tapped: false },
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         }]
     );
     assert_eq!(ability.timing, ActivationTiming::SorcerySpeed);

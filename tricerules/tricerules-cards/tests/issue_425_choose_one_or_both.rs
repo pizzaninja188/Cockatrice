@@ -217,6 +217,7 @@ fn issue_425_decoy_ploy_returns_only_the_printed_subtype() {
                 },
                 destination: GraveyardDestination::Hand,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }],
             "{subtype}"
         );
@@ -360,6 +361,7 @@ fn issue_425_scour_for_scrap_reveals_the_searched_artifact() {
             },
             destination: GraveyardDestination::Hand,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         }]
     );
 }

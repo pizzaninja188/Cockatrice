@@ -2214,6 +2214,7 @@ mod tests {
             filter: GraveyardFilter::default(),
             destination: GraveyardDestination::Hand,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         };
         assert!(matches!(
             permanent.target_roles().as_slice(),
@@ -2246,6 +2247,7 @@ mod tests {
             filter: GraveyardFilter::default(),
             destination: GraveyardDestination::Exile,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         }];
         let same_graveyard = TargetingDef {
             groups: vec![TargetGroupDef {

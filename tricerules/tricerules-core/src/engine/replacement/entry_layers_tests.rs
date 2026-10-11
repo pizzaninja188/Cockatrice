@@ -126,6 +126,129 @@ fn engine() -> GameEngine {
 }
 
 #[test]
+fn reanimated_multiversal_passage_as_enters_choice_belongs_to_its_controller() {
+    let mut engine = engine();
+    let passage = object(&mut engine, "multiversal_passage", Zone::Graveyard, 0);
+    let mut entry = event(&engine, passage);
+    entry.deciding_player = 0; // owner
+    entry.destination_controller = 1; // reanimation controller
+    let mut events = Vec::new();
+    let completion = BattlefieldEntryCompletion::ResolutionEffect {
+        owner: 0,
+        spell_label: "Portal to Phyrexia".to_owned(),
+        object_label: "Multiversal Passage".to_owned(),
+        from_zone: Zone::Graveyard,
+    };
+
+    let progress = engine.advance_or_park_battlefield_entry(
+        engine.observer_return_item(passage, 1),
+        entry,
+        completion,
+        &mut events,
+    );
+    assert!(matches!(progress, BattlefieldEntryProgress::Parked));
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .deciding_player,
+        1
+    );
+    assert!(events.iter().any(|event| matches!(
+        event.ev.as_ref(),
+        Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+            if choice.deciding_player_id == 1
+    )));
+}
+
+#[test]
+fn reanimated_battle_protector_choice_belongs_to_its_controller() {
+    let mut engine = engine();
+    let battle = object(
+        &mut engine,
+        "invasion_of_ulgrotha_grandmother_ravi_sengir",
+        Zone::Graveyard,
+        0,
+    );
+    let mut entry = event(&engine, battle);
+    entry.deciding_player = 0; // owner
+    entry.destination_controller = 1; // reanimation controller
+    let completion = BattlefieldEntryCompletion::ResolutionEffect {
+        owner: 0,
+        spell_label: "Portal to Phyrexia".to_owned(),
+        object_label: "Invasion of Ulgrotha".to_owned(),
+        from_zone: Zone::Graveyard,
+    };
+    let mut events = Vec::new();
+
+    let progress = engine.advance_or_park_battlefield_entry(
+        engine.observer_return_item(battle, 1),
+        entry,
+        completion,
+        &mut events,
+    );
+    assert!(matches!(progress, BattlefieldEntryProgress::Parked));
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .deciding_player,
+        1
+    );
+    assert!(events.iter().any(|event| matches!(
+        event.ev.as_ref(),
+        Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+            if choice.deciding_player_id == 1
+                && choice.choice_kind == rv1::ChoiceKind::BattleProtector as i32
+                && choice.candidate_object_ids == [0]
+    )));
+}
+
+#[test]
+fn reanimated_aura_recipient_choice_belongs_to_its_controller() {
+    let mut engine = engine();
+    let _recipient = object(&mut engine, "grizzly_bears", Zone::Battlefield, 1);
+    let aura = object(&mut engine, "pacifism", Zone::Graveyard, 0);
+    let mut entry = event(&engine, aura);
+    entry.deciding_player = 0; // owner
+    entry.destination_controller = 1; // reanimation controller
+    let completion = BattlefieldEntryCompletion::ResolutionEffect {
+        owner: 0,
+        spell_label: "Portal to Phyrexia".to_owned(),
+        object_label: "Pacifism".to_owned(),
+        from_zone: Zone::Graveyard,
+    };
+    let mut events = Vec::new();
+
+    let progress = engine.advance_or_park_battlefield_entry(
+        engine.observer_return_item(aura, 1),
+        entry,
+        completion,
+        &mut events,
+    );
+    assert!(matches!(progress, BattlefieldEntryProgress::Parked));
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .deciding_player,
+        1
+    );
+    assert!(events.iter().any(|event| matches!(
+        event.ev.as_ref(),
+        Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+            if choice.deciding_player_id == 1
+                && choice.choice_kind == rv1::ChoiceKind::AuraPermanent as i32
+    )));
+}
+
+#[test]
 fn entry_counter_doublers_use_a_shared_precommit_source_snapshot() {
     let mut engine = engine();
     let active_season = object(&mut engine, "doubling_season", Zone::Battlefield, 0);
@@ -1099,6 +1222,7 @@ fn entry_reveal_pair_internal_token_attachment_retains_ready_and_remaining_recei
         }],
         remaining: Default::default(),
         resume_stack: None,
+        suspended_resolution: None,
     };
     engine.state.pending_observer_return_batch = Some(observer.clone());
     assert_eq!(

@@ -8,6 +8,6 @@
   power: 3,
   toughness: 2,
   keywords: [Flying],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([3]), trigger: WhenSelfEntersBattlefield, effect: [MoveGraveyardCards(filter:(excluded_objects:[],owner:Controller,card:Some((any_of:None,exact_name:None,card_type:Some(Creature),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None))),destination:Hand,linked_exile_id:None)])],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([3]), trigger: WhenSelfEntersBattlefield, effect: [MoveGraveyardCards(filter:(excluded_objects:[],owner:Controller,card:Some((any_of:None,exact_name:None,card_type:Some(Creature),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None))),destination:Hand,linked_exile_id:None,entry_modifiers:[])])],
   static_abilities: [(ability_id:"static_01",presentation:OracleLines([2]),definition:SelfCombatRestriction(restriction:(cant_attack:false,cant_block:true,cant_be_blocked:false,cant_be_blocked_by:[],cant_block_creatures_matching:[],minimum_blockers:None,maximum_blockers:None),condition:None))],
 )

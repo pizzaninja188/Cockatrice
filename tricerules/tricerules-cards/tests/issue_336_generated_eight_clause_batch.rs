@@ -196,6 +196,7 @@ fn issue_336_magic_pot_exiles_any_graveyard_card_and_keeps_its_dies_treasure() {
             },
             destination: GraveyardDestination::Exile,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         }]
     );
     let targeting = ability.targeting.as_ref().expect("exile target group");
@@ -319,6 +320,7 @@ fn issue_336_graveshifter_keeps_changeling_and_the_optional_return() {
             },
             destination: GraveyardDestination::Hand,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         }]
     );
     let targeting = ability.targeting.as_ref().expect("return target group");

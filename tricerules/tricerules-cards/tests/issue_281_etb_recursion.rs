@@ -15,6 +15,7 @@ fn assert_recursion_ability(ability: &tricerules_cards::TriggeredAbilityDef, ora
         filter,
         destination,
         linked_exile_id,
+        ..
     }] = ability.effect.as_slice()
     else {
         panic!("expected one graveyard-to-hand effect");

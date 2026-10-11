@@ -43,6 +43,7 @@ class LifeChanged;
 class ManaPoolUpdated;
 class PhaseChanged;
 class ResolutionChoiceRequired;
+class ResolutionChoiceProgress;
 class RuledEventBatch;
 class StackPushed;
 class StackResolved;
@@ -105,6 +106,7 @@ private:
     void applyTriggerNeedsTarget(const ruled::v1::TriggerNeedsTarget &tnt, BatchContext &ctx);
     void applyTriggerOrderRequired(const ruled::v1::TriggerOrderRequired &tor, BatchContext &ctx);
     void applyResolutionChoiceRequired(const ruled::v1::ResolutionChoiceRequired &rcr, BatchContext &ctx);
+    void applyResolutionChoiceProgress(const ruled::v1::ResolutionChoiceProgress &progress);
     void applyBattlefieldObjectMap(const ruled::v1::BattlefieldObjectMap &map, BatchContext &ctx);
     void applyFaceDownObjectMap(const ruled::v1::FaceDownObjectMap &map, BatchContext &ctx);
     void applyHandSlotMap(const ruled::v1::HandSlotMap &map);

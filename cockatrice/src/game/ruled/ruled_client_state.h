@@ -37,6 +37,7 @@
 #include <QVector>
 #include <QtGlobal>
 #include <algorithm>
+#include <limits>
 // For ruled::v1::PhaseId only — the engine's turn-structure position is mirrored verbatim.
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <optional>
@@ -827,6 +828,10 @@ public:
     QHash<quint32, quint64> abilitySourceGenerationByOid;
     QHash<quint32, QSet<int>> zoneAbilityIndicesByOid;
     QHash<quint32, quint64> battlefieldGenerationByOid;
+    // Public, read-only selection markers for an ordered multi-player sacrifice choice.
+    // The zone generation prevents an old marker from attaching to a later incarnation.
+    QHash<quint32, QPair<int, quint64>> acceptedSacrificeSelectionByOid;
+    quint32 acceptedSacrificeSelectionSourceOid = 0;
     // Servatrice HandSlotMap: (owner player id, Server_Card.id) -> engine hand index for ruled commands.
     QHash<quint64, int> ownedCardToEngineHandSlot;
     // Servatrice GraveyardObjectMap: (owner player id, Server_Card.id) -> engine OID for graveyard
@@ -1135,6 +1140,15 @@ public:
     [[nodiscard]] int markedDamageForEngineOid(quint32 engineOid) const
     {
         return engineOidMarkedDamage.value(engineOid, 0);
+    }
+    [[nodiscard]] int acceptedSacrificeChooserForEngineOid(quint32 engineOid) const
+    {
+        const auto selection = acceptedSacrificeSelectionByOid.constFind(engineOid);
+        if (selection == acceptedSacrificeSelectionByOid.cend() ||
+            battlefieldGenerationByOid.value(engineOid, std::numeric_limits<quint64>::max()) != selection->second) {
+            return -1;
+        }
+        return selection->first;
     }
 
     // -----------------------------------------------------------------------------------
@@ -2068,6 +2082,8 @@ signals:
     void spellDamageAllocationUiChanged();
     void combatDamageUiChanged();
     void battlefieldMapUpdated();
+    /// Public accepted permanent choices changed; CardItems repaint their read-only marker.
+    void acceptedSacrificeSelectionsChanged();
     void stackHasItemsChanged(bool hasItems);
     /// Emitted each ruled batch with the local player's undoable mana activation count. This uses
     /// LegalActions.undoable_mana_abilities normally and the exact reversible attack receipts

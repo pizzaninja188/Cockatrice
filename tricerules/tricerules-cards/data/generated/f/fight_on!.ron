@@ -5,6 +5,6 @@
   face_id: "fight_on",
   mana_cost: "{2}{B}",
   types: ["Instant"],
-  spell_effect: [MoveGraveyardCards(filter:(excluded_objects:[],owner:Controller,card:Some((any_of:None,exact_name:None,card_type:Some(Creature),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None))),destination:Hand,linked_exile_id:None)],
+  spell_effect: [MoveGraveyardCards(filter:(excluded_objects:[],owner:Controller,card:Some((any_of:None,exact_name:None,card_type:Some(Creature),excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:[],excluded_subtypes:[],has_adventure:None,printed_power:None))),destination:Hand,linked_exile_id:None,entry_modifiers:[])],
   targeting: Some((groups:[(min:0,max:2,prompt:"Choose up to two target creature cards from your graveyard",effect_indices:[0],distinct_from:[],same_graveyard:false,cast_cost_expansion:None)])),
 )

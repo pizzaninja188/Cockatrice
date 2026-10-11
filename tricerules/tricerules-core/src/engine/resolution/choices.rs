@@ -218,7 +218,11 @@ pub(in crate::engine) fn current_targeted_player_permanent_candidates(
         .collect()
 }
 
-fn permanent_choice_prompt(filter: &TargetFilter, min: u32, max: u32) -> String {
+pub(in crate::engine) fn permanent_choice_prompt(
+    filter: &TargetFilter,
+    min: u32,
+    max: u32,
+) -> String {
     let (singular, plural) = if filter.any_of.is_none() && filter.kind == TargetKind::Creature {
         ("creature", "creatures")
     } else if filter.any_of.is_none()
@@ -243,6 +247,8 @@ fn permanent_choice_prompt(filter: &TargetFilter, min: u32, max: u32) -> String 
 
     if min == 1 && max == 1 {
         format!("Choose a {singular}{controller}.")
+    } else if min == max {
+        format!("Choose {min} {plural}{controller}.")
     } else {
         format!("Choose {min}–{max} {plural}{controller}.")
     }

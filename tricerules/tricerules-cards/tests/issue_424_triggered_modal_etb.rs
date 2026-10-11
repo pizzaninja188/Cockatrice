@@ -213,6 +213,7 @@ fn issue_424_typed_graveyard_returns_expose_printed_predicates() {
             },
             destination: GraveyardDestination::Hand,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         }]
     );
     assert_eq!(
@@ -239,6 +240,7 @@ fn issue_424_typed_graveyard_returns_expose_printed_predicates() {
             },
             destination: GraveyardDestination::Hand,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         }]
     );
 
@@ -255,6 +257,7 @@ fn issue_424_typed_graveyard_returns_expose_printed_predicates() {
             },
             destination: GraveyardDestination::Hand,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         }]
     );
     assert_eq!(
@@ -304,6 +307,7 @@ fn issue_424_exile_modes_use_the_printed_type_union_and_single_graveyard_group()
             },
             destination: GraveyardDestination::Exile,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         }]
     );
     let group = &qutrub.modes[1]

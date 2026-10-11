@@ -260,6 +260,7 @@ fn issue_316_griffnaut_tracker_exiles_up_to_two_from_one_graveyard() {
             },
             destination: GraveyardDestination::Exile,
             linked_exile_id: None,
+            entry_modifiers: Vec::new(),
         }]
     );
     let targeting = ability.targeting.as_ref().expect("ETB targets optionally");

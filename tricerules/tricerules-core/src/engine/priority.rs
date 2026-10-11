@@ -146,8 +146,13 @@ impl GameEngine {
                     // and all earlier contributions remain committed (CR 800.4f, 608.2m).
                     preserve = true;
                 }
-                ResolutionContinuation::MassSacrificeGraveyardOrder { stack, .. }
-                | ResolutionContinuation::AuraReturn { stack, .. } => {
+                ResolutionContinuation::MassSacrificeGraveyardOrder { .. }
+                | ResolutionContinuation::PlayerSetSacrifice { .. } => {
+                    // CR 608.2m: an instant, sorcery, or ability that leaves the stack after
+                    // starting to resolve still continues fully. Keep its parked continuation.
+                    preserve = true;
+                }
+                ResolutionContinuation::AuraReturn { stack, .. } => {
                     *stack = None;
                     preserve = true;
                 }
@@ -592,7 +597,7 @@ impl GameEngine {
         for id in stranded {
             move_object_to_zone(&mut self.state, self.registry, id, Zone::Exile, None)?;
         }
-        self.drain_immediate_observer_actions(None, events)?;
+        let observer_return_parked = self.drain_immediate_observer_actions(None, events)?;
         if self.state.turn_step == TurnStep::DeclareBlockers
             && self
                 .state
@@ -632,6 +637,9 @@ impl GameEngine {
                     events.push(ev_priority_changed(self));
                 }
             }
+        }
+        if !observer_return_parked {
+            self.refresh_player_set_sacrifice_departure(events)?;
         }
         self.refresh_mass_sacrifice_departure(events)?;
         self.refresh_damage_departure(events)?;

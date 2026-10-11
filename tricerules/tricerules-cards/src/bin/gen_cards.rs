@@ -7610,6 +7610,7 @@ mod tests {
                 },
                 destination: tricerules_cards::primitives::GraveyardDestination::Hand,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }]
         );
         let schema = TargetSchema::compile(&recursion.effect, recursion.targeting.as_ref())
@@ -10785,6 +10786,7 @@ mod tests {
                 },
                 destination: GraveyardDestination::Exile,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }]
         );
         let targeting = ability.targeting.as_ref().expect("ETB must target");
@@ -13342,6 +13344,7 @@ mod tests {
                 },
                 destination: GraveyardDestination::Hand,
                 linked_exile_id: None,
+                entry_modifiers: Vec::new(),
             }]
         );
         assert!(ability.targeting.is_none());

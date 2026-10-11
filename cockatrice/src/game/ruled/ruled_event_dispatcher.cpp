@@ -670,6 +670,9 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         if (e.has_resolution_choice_required()) {
             applyResolutionChoiceRequired(e.resolution_choice_required(), ctx);
         }
+        if (e.has_resolution_choice_progress()) {
+            applyResolutionChoiceProgress(e.resolution_choice_progress());
+        }
         if (e.has_cards_revealed()) {
             applyCardsRevealed(e.cards_revealed());
         }
@@ -1088,6 +1091,27 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     ctx.promptFeed += QString::fromStdString(rcr.prompt_text()) + QStringLiteral("\n");
     const bool isDecider = static_cast<int>(rcr.deciding_player_id()) == host->localPlayerId();
     const bool isPublicReveal = rcr.has_public_reveal();
+    QHash<quint32, QPair<int, quint64>> acceptedSelections;
+    bool acceptedSelectionsValid = true;
+    for (const auto &selection : rcr.accepted_permanent_selections()) {
+        const quint32 oid = selection.object_id();
+        if (oid == 0 || acceptedSelections.contains(oid) || selection.selecting_player_id() < 0) {
+            acceptedSelectionsValid = false;
+            break;
+        }
+        acceptedSelections.insert(oid, qMakePair(static_cast<int>(selection.selecting_player_id()),
+                                                  selection.zone_change_generation()));
+    }
+    if (!acceptedSelectionsValid) {
+        qWarning() << "Rejecting malformed public accepted-permanent selections";
+        acceptedSelections.clear();
+    }
+    if (state->acceptedSacrificeSelectionSourceOid != rcr.source_object_id() ||
+        state->acceptedSacrificeSelectionByOid != acceptedSelections) {
+        state->acceptedSacrificeSelectionSourceOid = rcr.source_object_id();
+        state->acceptedSacrificeSelectionByOid = std::move(acceptedSelections);
+        emit state->acceptedSacrificeSelectionsChanged();
+    }
     // Retire the previous resolution UI before publishing its replacement. A repeated public
     // reveal marks its pending pick as shared, so this does not close the existing popup.
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPick);
@@ -1711,6 +1735,35 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
                                         rcr.unique_names());
 }
 
+void RuledEventDispatcher::applyResolutionChoiceProgress(const ruled::v1::ResolutionChoiceProgress &progress)
+{
+    QHash<quint32, QPair<int, quint64>> acceptedSelections;
+    bool valid = true;
+    for (const auto &selection : progress.accepted_permanent_selections()) {
+        const quint32 oid = selection.object_id();
+        if (oid == 0 || acceptedSelections.contains(oid) || selection.selecting_player_id() < 0) {
+            valid = false;
+            break;
+        }
+        acceptedSelections.insert(oid, qMakePair(static_cast<int>(selection.selecting_player_id()),
+                                                  selection.zone_change_generation()));
+    }
+    if (!valid) {
+        qWarning() << "Rejecting malformed public resolution-choice progress";
+        return;
+    }
+    if (acceptedSelections.isEmpty() &&
+        state->acceptedSacrificeSelectionSourceOid != progress.source_object_id()) {
+        return;
+    }
+    if (state->acceptedSacrificeSelectionSourceOid != progress.source_object_id() ||
+        state->acceptedSacrificeSelectionByOid != acceptedSelections) {
+        state->acceptedSacrificeSelectionSourceOid = acceptedSelections.isEmpty() ? 0 : progress.source_object_id();
+        state->acceptedSacrificeSelectionByOid = std::move(acceptedSelections);
+        emit state->acceptedSacrificeSelectionsChanged();
+    }
+}
+
 void RuledEventDispatcher::applyBattlefieldObjectMap(const ruled::v1::BattlefieldObjectMap &map, BatchContext &ctx)
 {
     state->ownerCardIdToEngineOid.clear();
@@ -1915,6 +1968,22 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
                 }
             }
         }
+    }
+    bool prunedAcceptedSacrificeSelection = false;
+    for (auto it = state->acceptedSacrificeSelectionByOid.begin();
+         it != state->acceptedSacrificeSelectionByOid.end();) {
+        if (state->battlefieldGenerationByOid.value(it.key(), std::numeric_limits<quint64>::max()) != it->second) {
+            it = state->acceptedSacrificeSelectionByOid.erase(it);
+            prunedAcceptedSacrificeSelection = true;
+        } else {
+            ++it;
+        }
+    }
+    if (state->acceptedSacrificeSelectionByOid.isEmpty()) {
+        state->acceptedSacrificeSelectionSourceOid = 0;
+    }
+    if (prunedAcceptedSacrificeSelection) {
+        emit state->acceptedSacrificeSelectionsChanged();
     }
     if (anyFirstStrikePending != state->firstStrikeStepPending) {
         state->firstStrikeStepPending = anyFirstStrikePending;

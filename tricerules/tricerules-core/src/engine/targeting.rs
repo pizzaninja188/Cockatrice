@@ -1703,6 +1703,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ExileTopWithPlayPermission { .. }
         | SpellEffectKind::ChooseResolutionBranch { .. }
         | SpellEffectKind::ChoosePermanents { .. }
+        | SpellEffectKind::ChooseAndSacrifice { .. }
         | SpellEffectKind::CreateReflexiveTrigger { .. }
         | SpellEffectKind::ChangeSourceFace { .. }
         | SpellEffectKind::ReturnTriggeredCard { .. }

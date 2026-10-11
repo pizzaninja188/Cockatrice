@@ -217,9 +217,10 @@ fn scrap_mastery_caster_departure_preserves_committed_survivor_graveyard_order()
     assert_eq!(engine.state.players[1].graveyard, vec![b, a]);
     assert_eq!(
         engine.state.objects[&original].zone,
-        Zone::Exile,
-        "departed spell must not resume its return phase"
+        Zone::Battlefield,
+        "the resolving spell continues to return surviving owners' artifacts"
     );
+    assert_eq!(engine.state.objects[&original].controller, 27);
     assert!(!engine.state.objects.contains_key(&spell));
     assert!(engine.state.pending_resolution.is_none());
 }

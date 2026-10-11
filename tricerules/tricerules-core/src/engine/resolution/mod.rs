@@ -22,8 +22,8 @@ mod chaos_warp;
 mod choices;
 pub(super) use choices::{
     authored_resolution_branch_choice_event, authored_resolution_branch_has_selectable_option,
-    resolution_branch_is_selectable, resolution_choice_delegate_candidates,
-    targeted_player_permanent_choice_event,
+    permanent_choice_prompt, resolution_branch_is_selectable,
+    resolution_choice_delegate_candidates, targeted_player_permanent_choice_event,
 };
 pub(in crate::engine) use choices::{
     card_result_characteristic_sum, card_result_count, card_result_count_for_player,
@@ -48,6 +48,8 @@ mod join_forces;
 pub(super) mod life;
 mod mass;
 mod misc;
+#[cfg(test)]
+mod portal_sacrifice_tests;
 mod proliferate;
 mod pump_counters;
 mod restrictions;
@@ -2061,12 +2063,39 @@ impl GameEngine {
         {
             return Ok(false);
         }
+        let pending_player_set_sacrifice =
+            self.state
+                .pending_resolution
+                .as_ref()
+                .is_some_and(|pending| {
+                    matches!(
+                        pending.continuation,
+                        ResolutionContinuation::PlayerSetSacrifice { .. }
+                    )
+                });
         if self.state.pending_observer_return_batch.is_some()
             && self.state.pending_resolution.is_some()
+            && !pending_player_set_sacrifice
         {
             return Ok(true);
         }
+        if self.state.pending_observer_return_batch.is_none()
+            && self.state.pending_immediate_observer_actions.is_empty()
+        {
+            return Ok(false);
+        }
         let prior = self.state.pending_observer_return_batch.take();
+        let prior_suspended_resolution = prior
+            .as_ref()
+            .and_then(|batch| batch.suspended_resolution.clone());
+        let active_suspended_resolution = pending_player_set_sacrifice
+            .then(|| self.state.pending_resolution.take())
+            .flatten();
+        debug_assert!(
+            prior_suspended_resolution.is_none() || active_suspended_resolution.is_none(),
+            "an observer return batch cannot suspend two resolution prompts"
+        );
+        let suspended_resolution = prior_suspended_resolution.or(active_suspended_resolution);
         let mut actions = prior
             .as_ref()
             .map_or_else(VecDeque::new, |batch| batch.remaining.clone());
@@ -2076,7 +2105,8 @@ impl GameEngine {
         let mut entries = prior
             .as_ref()
             .map_or_else(Vec::new, |batch| batch.ready.clone());
-        let resume_stack = resume_stack.or_else(|| prior.and_then(|batch| batch.resume_stack));
+        let resume_stack =
+            resume_stack.or_else(|| prior.as_ref().and_then(|batch| batch.resume_stack.clone()));
         while let Some(action) = actions.pop_front() {
             let ImmediateObserverAction::ReturnExiledObject { exiled } = action;
             let generation = self
@@ -2152,11 +2182,13 @@ impl GameEngine {
                     ready: entries,
                     remaining: actions,
                     resume_stack: resume_stack.clone(),
+                    suspended_resolution: suspended_resolution.clone(),
                 });
                 let prompt = format!("Choose what {label} will enchant as it returns.");
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            accepted_permanent_selections: Vec::new(),
                             variable_mana_contribution: false,
                             candidate_token_identities: Vec::new(),
                             candidate_player_ids: Vec::new(),
@@ -2288,6 +2320,7 @@ impl GameEngine {
                         ready: entries,
                         remaining: actions,
                         resume_stack: resume_stack.clone(),
+                        suspended_resolution: suspended_resolution.clone(),
                     });
                     return Ok(true);
                 }
@@ -2310,6 +2343,7 @@ impl GameEngine {
                 ready: entries,
                 remaining: VecDeque::new(),
                 resume_stack: resume_stack.clone(),
+                suspended_resolution: suspended_resolution.clone(),
             })),
             resume_stack,
             events,
@@ -2318,7 +2352,31 @@ impl GameEngine {
             return Ok(true);
         };
         self.commit_observer_return_batch(batch.ready, events)?;
+        if self.restore_suspended_observer_resolution(suspended_resolution, events)? {
+            return Ok(true);
+        }
         Ok(false)
+    }
+
+    pub(super) fn restore_suspended_observer_resolution(
+        &mut self,
+        suspended_resolution: Option<PendingResolution>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let Some(suspended_resolution) = suspended_resolution else {
+            return Ok(false);
+        };
+        self.state.pending_resolution = Some(suspended_resolution);
+        if matches!(
+            self.state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::PlayerSetSacrifice { .. })
+        ) {
+            self.refresh_player_set_sacrifice_departure(events)?;
+        }
+        Ok(true)
     }
 
     pub(super) fn commit_observer_return_batch(
@@ -2406,6 +2464,7 @@ impl GameEngine {
                 ready: Vec::new(),
                 remaining: VecDeque::new(),
                 resume_stack: stack.clone(),
+                suspended_resolution: None,
             });
         if decider_live {
             // The current action was popped before parking. Refresh it through the normal

@@ -1260,6 +1260,10 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         discard: PendingPlayerSetDiscard,
     },
+    PlayerSetSacrifice {
+        stack: ParkedStackResolution,
+        sacrifice: PendingPlayerSetSacrifice,
+    },
     GraveyardChoice {
         stack: ParkedStackResolution,
         destination: tricerules_card_model::primitives::GraveyardDestination,
@@ -1484,6 +1488,7 @@ impl ResolutionContinuation {
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
             | Self::PlayerSetDiscard { stack, .. }
+            | Self::PlayerSetSacrifice { stack, .. }
             | Self::GraveyardChoice { stack, .. }
             | Self::LinkedExileChoice { stack, .. }
             | Self::Sacrifice { stack }
@@ -1539,6 +1544,7 @@ impl ResolutionContinuation {
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
             | Self::PlayerSetDiscard { stack, .. }
+            | Self::PlayerSetSacrifice { stack, .. }
             | Self::GraveyardChoice { stack, .. }
             | Self::LinkedExileChoice { stack, .. }
             | Self::Sacrifice { stack }
@@ -1715,6 +1721,34 @@ pub struct PendingPlayerSetDiscard {
     pub selections: Vec<Vec<ObjectId>>,
 }
 
+/// One APNAP slot in a public choose-and-sacrifice instruction. Candidate generations are frozen
+/// before any player answers; all selected permanents remain on the battlefield until the full
+/// player set has chosen.
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct PendingPlayerSacrificeChoice {
+    pub player: PlayerId,
+    pub candidate_generations: Vec<(ObjectId, u64)>,
+    pub required: u32,
+}
+
+/// A public accepted selection, bound to the exact battlefield object incarnation.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AcceptedPermanentSelection {
+    pub player: PlayerId,
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+}
+
+/// Frozen public choices for one simultaneous player-set sacrifice effect (CR 101.4, 701.21a).
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct PendingPlayerSetSacrifice {
+    pub choices: Vec<PendingPlayerSacrificeChoice>,
+    pub current: usize,
+    pub accepted: Vec<AcceptedPermanentSelection>,
+    pub count: u32,
+    pub filter: TargetFilter,
+}
+
 /// CR 616.1 priority groups. The current card set exercises `Other`; the complete ordering
 /// vocabulary keeps entry-copy/control work from inventing a second chooser later.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -1875,6 +1909,9 @@ pub(crate) struct PendingObserverReturnBatch {
     pub ready: Vec<ObserverReturnEntry>,
     pub remaining: VecDeque<ImmediateObserverAction>,
     pub resume_stack: Option<ParkedStackResolution>,
+    /// A choice continuation temporarily suspended while a leave-the-battlefield observer return
+    /// asks its own choice. The observer batch resolves first, then restores this exact prompt.
+    pub suspended_resolution: Option<PendingResolution>,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]

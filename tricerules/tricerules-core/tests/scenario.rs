@@ -42,6 +42,9 @@ mod deck_coverage_natures_will;
 #[path = "scenario/deck_coverage_graveyard_return.rs"]
 mod deck_coverage_graveyard_return;
 
+#[path = "scenario/deck_coverage_portal_to_phyrexia.rs"]
+mod deck_coverage_portal_to_phyrexia;
+
 #[path = "scenario/deck_coverage_pupu_ufo.rs"]
 mod deck_coverage_pupu_ufo;
 

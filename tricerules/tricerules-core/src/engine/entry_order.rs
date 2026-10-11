@@ -298,6 +298,12 @@ impl GameEngine {
             }
             SimultaneousEntryBatch::Observer(batch) => {
                 self.commit_observer_return_batch(batch.ready, &mut events)?;
+                if self.restore_suspended_observer_resolution(
+                    batch.suspended_resolution,
+                    &mut events,
+                )? {
+                    return Ok(events::finish_with_events(self, events));
+                }
                 if let Some(stack) = batch.resume_stack {
                     self.complete_parked_resolution_with_previous(
                         stack.item,

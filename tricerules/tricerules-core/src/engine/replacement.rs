@@ -1506,10 +1506,11 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
-                    deciding_player_id: event.deciding_player,
+                    deciding_player_id: event.destination_controller,
                     source_object_id: event.object_id,
                     prompt_text: prompt.clone(),
                     choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
@@ -1536,7 +1537,7 @@ impl GameEngine {
                 },
             )),
         });
-        let deciding_player = event.deciding_player;
+        let deciding_player = event.destination_controller;
         self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
             Box::new(PendingBattlefieldEntry {
                 event,
@@ -1724,6 +1725,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
@@ -1815,10 +1817,11 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
-                    deciding_player_id: event.deciding_player,
+                    deciding_player_id: event.destination_controller,
                     source_object_id: event.object_id,
                     prompt_text: prompt.clone(),
                     choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
@@ -1846,7 +1849,7 @@ impl GameEngine {
             )),
         });
         events.push(ev_log(prompt.clone()));
-        let deciding_player = event.deciding_player;
+        let deciding_player = event.destination_controller;
         self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
             Box::new(PendingBattlefieldEntry {
                 event,
@@ -2399,7 +2402,7 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     variable_mana_contribution: false,
-                    deciding_player_id: event.deciding_player,
+                    deciding_player_id: event.destination_controller,
                     source_object_id: event.object_id,
                     prompt_text: prompt.clone(),
                     choice_kind: choice_kind as i32,
@@ -2414,7 +2417,7 @@ impl GameEngine {
             )),
         });
         events.push(ev_log(prompt.clone()));
-        let deciding_player = event.deciding_player;
+        let deciding_player = event.destination_controller;
         self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
             Box::new(PendingBattlefieldEntry {
                 event,
@@ -2711,6 +2714,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
@@ -2973,10 +2977,11 @@ impl GameEngine {
                             events.push(rv1::RuledEvent {
                                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                                     rv1::ResolutionChoiceRequired {
+                                        accepted_permanent_selections: Vec::new(),
                                         variable_mana_contribution: false,
                                         candidate_token_identities: Vec::new(),
                                         candidate_player_ids: Vec::new(),
-                                        deciding_player_id: event.deciding_player,
+                                        deciding_player_id: event.destination_controller,
                                         source_object_id: event.object_id,
                                         prompt_text: prompt.clone(),
                                         choice_kind: rv1::ChoiceKind::BattleProtector as i32,
@@ -3007,7 +3012,7 @@ impl GameEngine {
                                 )),
                             });
                             events.push(ev_log(prompt.clone()));
-                            let deciding_player = event.deciding_player;
+                            let deciding_player = event.destination_controller;
                             self.state.pending_replacement_event =
                                 Some(PendingReplacementEvent::BattlefieldEntry(Box::new(
                                     PendingBattlefieldEntry {
@@ -3166,6 +3171,7 @@ impl GameEngine {
                     events.push(rv1::RuledEvent {
                         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                             rv1::ResolutionChoiceRequired {
+                                accepted_permanent_selections: Vec::new(),
                                 variable_mana_contribution: false,
                                 candidate_token_identities: Vec::new(),
                                 candidate_player_ids: Vec::new(),
@@ -3927,6 +3933,7 @@ impl GameEngine {
                         ready: Vec::new(),
                         remaining: VecDeque::new(),
                         resume_stack: observer_stack.clone(),
+                        suspended_resolution: None,
                     })
                     .ready
                     .push(ObserverReturnEntry {

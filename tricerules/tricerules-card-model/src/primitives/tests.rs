@@ -3834,3 +3834,42 @@ fn windfall_maximum_card_result_roundtrip_and_context_boundaries() {
         "{error}"
     );
 }
+
+#[test]
+fn portal_to_phyrexia_effects_are_representable() {
+    let portal = r#"(
+        id: "portal_to_phyrexia",
+        name: "Portal to Phyrexia",
+        face_id: "portal_to_phyrexia",
+        mana_cost: "{9}",
+        types: ["Artifact"],
+        triggered_abilities: [(
+            ability_id: "etb",
+            presentation: OracleLines([1]),
+            trigger: WhenSelfEntersBattlefield,
+            effect: [ChooseAndSacrifice(
+                players: EachOpponent,
+                count: 3,
+                filter: (kind: AnyPermanent, permanent_types: [Creature]),
+            )],
+        ), (
+            ability_id: "upkeep",
+            presentation: OracleLines([2]),
+            trigger: AtBeginningOfUpkeep(player: Controller),
+            effect: [MoveGraveyardCards(
+                filter: (owner: AnyPlayer, card: Some((card_type: Some(Creature)))),
+                destination: Battlefield(tapped: false),
+                entry_modifiers: [AddTypes((creature_types: ["Phyrexian"]))],
+            )],
+            targeting: Some((groups: [(
+                min: 1,
+                max: 1,
+                prompt: "Choose target creature card from a graveyard",
+                effect_indices: [0],
+            )])),
+        )],
+    )"#;
+
+    crate::CardRegistry::from_chunks_and_tokens(&[portal], &[])
+        .expect("Portal's simultaneous counted sacrifice and modified return must be typed");
+}
