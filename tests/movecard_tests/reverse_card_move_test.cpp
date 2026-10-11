@@ -85,6 +85,28 @@ TEST(ReverseCardMoveTest, MoveCardFromBottomTest)
     EXPECT_EQ(positionD, 0);
 }
 
+TEST(ReverseCardMoveTest, FaceDownExileCardInfoHidesProviderIdentity)
+{
+    ServerInfo_User user;
+    user.set_name("test-user");
+    FakeServer server;
+    Server_Room room(0, 0, "", "", "", "", false, "", {}, &server);
+    Server_Game game(user, 1, "", "", 2, QList<int>(), false, false, false, false, false, false, 20, false, false,
+                     &room);
+    Server_AbstractPlayer player(&game, 1, user, false, nullptr);
+    Server_CardZone exileZone(&player, ZoneNames::EXILE, true, ServerInfo_Zone::PublicZone);
+    auto *card = new Server_Card({"Island", "card-island"}, player.newCardId(), 0, 0, &exileZone);
+    exileZone.insertCard(card, 0, 0);
+    card->setFaceDown(true);
+
+    ServerInfo_Card info;
+    card->getInfo(&info);
+
+    EXPECT_TRUE(info.face_down());
+    EXPECT_TRUE(info.name().empty());
+    EXPECT_TRUE(info.provider_id().empty());
+}
+
 int main(int argc, char **argv)
 {
     ::testing::InitGoogleTest(&argc, argv);

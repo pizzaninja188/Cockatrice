@@ -1849,6 +1849,8 @@ impl GameEngine {
             prepare_spell_sources: Default::default(),
             captured_spell_copies: Default::default(),
             linked_exile_records: Default::default(),
+            pending_linked_exile_play: None,
+            hideaway_look_permissions: Default::default(),
             chosen_opponents: Vec::new(),
             chosen_creature_types: Vec::new(),
             active_temporary_copies: Vec::new(),
@@ -2918,6 +2920,12 @@ impl GameEngine {
                 }
                 BlockingChoice::Resolution => {
                     matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitResolutionChoice(_)))
+                        || self
+                            .special_cast_permission(player)
+                            .is_some_and(|permission| {
+                                permission.scope == ExilePlayPermissionScope::PlayCard
+                            })
+                            && matches!(cmd.cmd.as_ref(), Some(Cmd::PlayLand(_)))
                         || self.state.pending_spell_cast.is_some()
                             && matches!(
                                 cmd.cmd.as_ref(),

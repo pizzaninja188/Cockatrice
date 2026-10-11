@@ -2116,9 +2116,10 @@ void TabGame::newCardAdded(AbstractCardItem *card)
         auto *cardItem = dynamic_cast<CardItem *>(hovered);
         if (cardItem && cardItem->getFaceDown() && RuledActions::isRuledGame(game)) {
             RuledClientState *state = game->getGameEventHandler()->ruled();
-            const int playerId = cardItem->getOwner() ? cardItem->getOwner()->getPlayerInfo()->getId() : -1;
+            Player *const zonePlayer = cardItem->getZone() ? cardItem->getZone()->getPlayer() : nullptr;
+            const int zonePlayerId = zonePlayer ? zonePlayer->getPlayerInfo()->getId() : -1;
             const QString privateName =
-                state ? state->privateFaceDownNameForCard(playerId, cardItem->getId()) : QString{};
+                state ? state->privateFaceDownNameForCard(zonePlayerId, cardItem->getId()) : QString{};
             if (!privateName.isEmpty()) {
                 cardInfoFrameWidget->setCard(privateName);
                 return;

@@ -5,6 +5,7 @@ use super::super::presentation::{
 };
 use super::candidate_identities;
 use super::*;
+use crate::state::PendingLinkedExileAction;
 
 pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
     let Some(source_id) = cx.top.source_permanent_id else {
@@ -100,6 +101,8 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
             method: SpellCastMethod::SiegeDefeat,
             cost: ManaCost::default(),
             undo_history_start: cx.engine.state.undoable_mana_abilities.len(),
+            permission_scope: None,
+            return_source_to_owner_hand_if_cast: false,
         },
     });
     cx.events.push(
@@ -160,6 +163,8 @@ pub(super) fn madness_cast(
             method: SpellCastMethod::Madness,
             cost,
             undo_history_start: cx.engine.state.undoable_mana_abilities.len(),
+            permission_scope: None,
+            return_source_to_owner_hand_if_cast: false,
         },
     });
     cx.events.push(
@@ -2587,7 +2592,60 @@ pub(super) fn choose_linked_exiled_card(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    choose_linked_exiled_card_action(
+        cx,
+        producer_ability_id,
+        linked_exile_id,
+        Some(filter),
+        PendingLinkedExileAction::Move {
+            destination,
+            optional,
+        },
+    )
+}
+
+pub(super) fn play_linked_exiled_card(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::PlayLinkedExiledCard {
+        producer_ability_id,
+        linked_exile_id,
+        filter,
+        play_kind,
+        return_source_to_owner_hand_if_cast,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    if return_source_to_owner_hand_if_cast
+        && play_kind != tricerules_card_model::primitives::LinkedExiledCardPlayKind::Cast
+    {
+        return Err(EngineError::Illegal(
+            "source return after casting requires a cast-only linked permission",
+        ));
+    }
+    choose_linked_exiled_card_action(
+        cx,
+        producer_ability_id,
+        linked_exile_id,
+        filter,
+        PendingLinkedExileAction::Play {
+            kind: play_kind,
+            return_source_to_owner_hand_if_cast,
+        },
+    )
+}
+
+fn choose_linked_exiled_card_action(
+    cx: &mut EffectCx<'_>,
+    producer_ability_id: tricerules_card_model::AbilityId,
+    linked_exile_id: tricerules_card_model::AbilityLinkId,
+    filter: Option<ZoneCardFilter>,
+    action: PendingLinkedExileAction,
+) -> Result<EffectOutcome, EngineError> {
     let key = linked_exile_key(cx.engine, cx.top, linked_exile_id, producer_ability_id)?;
+    let controller = cx.controller;
     let mut seen = HashSet::new();
     let candidates: Vec<_> = cx
         .engine
@@ -2611,11 +2669,14 @@ pub(super) fn choose_linked_exiled_card(
                     .copied()
                     .unwrap_or(0)
                     == linked.zone_change_generation
-                && zone_card_matches_filter(
+                && super::super::card_predicates::linked_exile_card_matches_filter(
                     &cx.engine.state,
                     cx.engine.registry,
+                    &key,
+                    controller,
                     linked.object_id,
-                    Some(&filter),
+                    linked.zone_change_generation,
+                    filter.as_ref(),
                 )
         })
         .map(|linked| (linked.object_id, linked.zone_change_generation))
@@ -2623,15 +2684,64 @@ pub(super) fn choose_linked_exiled_card(
     if candidates.is_empty() {
         return Ok(EffectOutcome::Continue);
     }
-    let controller = cx.controller;
     let candidate_ids: Vec<_> = candidates.iter().map(|(object_id, _)| *object_id).collect();
     let (candidate_card_ids, candidate_names) = candidate_identities(cx.engine, &candidate_ids);
-    let min = u32::from(!optional);
-    let prompt = if optional {
-        format!("P{controller}: you may choose a linked card in exile.")
-    } else {
-        format!("P{controller}: choose a linked card in exile.")
+    let (min, prompt) = match action {
+        PendingLinkedExileAction::Move { optional, .. } => (
+            u32::from(!optional),
+            if optional {
+                format!("P{controller}: you may choose a linked card in exile.")
+            } else {
+                format!("P{controller}: choose a linked card in exile.")
+            },
+        ),
+        PendingLinkedExileAction::Play {
+            kind: tricerules_card_model::primitives::LinkedExiledCardPlayKind::Cast,
+            ..
+        } => (
+            0,
+            format!("P{controller}: you may cast one linked card in exile without paying its mana cost."),
+        ),
+        PendingLinkedExileAction::Play {
+            kind: tricerules_card_model::primitives::LinkedExiledCardPlayKind::Play,
+            ..
+        } => (
+            0,
+            format!("P{controller}: you may play one linked card in exile without paying its mana cost."),
+        ),
     };
+    let mut stack = ParkedStackResolution::new(cx.top.clone());
+    stack.resume_effect_index = Some(cx.effect_index + 1);
+    if let PendingLinkedExileAction::Play {
+        kind,
+        return_source_to_owner_hand_if_cast,
+    } = action
+    {
+        if cx.engine.state.pending_linked_exile_play.is_some() {
+            return Err(EngineError::Illegal(
+                "another linked exile play occurrence is already resolving",
+            ));
+        }
+        cx.engine.state.pending_linked_exile_play =
+            Some(Box::new(crate::state::PendingLinkedExilePlay {
+                stack: stack.clone(),
+                key: key.clone(),
+                remaining: candidates
+                    .iter()
+                    .map(|(object_id, zone_change_generation)| TriggerObjectRef {
+                        object_id: *object_id,
+                        zone_change_generation: *zone_change_generation,
+                        controller_at_event: controller,
+                    })
+                    .collect(),
+                in_flight: None,
+                filter: filter.clone(),
+                kind,
+                return_source_to_owner_hand_if_cast,
+                any_cast_committed: false,
+                spell_label: cx.spell_label.to_string(),
+            }));
+    }
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
@@ -2683,14 +2793,311 @@ pub(super) fn choose_linked_exiled_card(
             unique_names: false,
         },
         continuation: ResolutionContinuation::LinkedExileChoice {
-            stack: ParkedStackResolution::new(cx.top.clone()),
+            stack,
             key,
-            destination,
+            action,
             candidate_generations: candidates,
             spell_label: cx.spell_label.to_string(),
         },
     });
     Ok(EffectOutcome::Suspended)
+}
+
+impl GameEngine {
+    /// Rebuild the live linked-play prompt after a player leaves. A chooser who has left cannot
+    /// make further choices, so its already-started instruction continues through the saved tail.
+    pub(in crate::engine) fn reconcile_pending_linked_exile_after_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(cohort) = self.state.pending_linked_exile_play.as_ref() else {
+            return Ok(());
+        };
+        let root_id = cohort.stack.item.id;
+        let root_generation = cohort.stack.item.source_zone_change;
+        let key = cohort.key.clone();
+        let chooser = cohort.stack.item.controller;
+        let chooser_is_live = self
+            .state
+            .player_idx(chooser)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let pending = self.state.pending_resolution.as_ref();
+        let pending_matches_root = pending
+            .and_then(|pending| pending.continuation.stack())
+            .is_some_and(|stack| {
+                stack.item.id == root_id && stack.item.source_zone_change == root_generation
+            });
+        let linked_choice_matches = pending.is_some_and(|pending| {
+            matches!(
+                &pending.continuation,
+                ResolutionContinuation::LinkedExileChoice { stack, key: pending_key, action: PendingLinkedExileAction::Play { .. }, .. }
+                    if stack.item.id == root_id
+                        && stack.item.source_zone_change == root_generation
+                        && *pending_key == key
+            )
+        });
+        let invalid_special_cast_matches = pending.is_some_and(|pending| {
+            let ResolutionContinuation::SpecialCast { stack, exiled, .. } = &pending.continuation
+            else {
+                return false;
+            };
+            if stack.item.id != root_id || stack.item.source_zone_change != root_generation {
+                return false;
+            }
+            let live_reservation = self.state.pending_spell_cast.as_ref().is_some_and(|cast| {
+                cast.resolution_time_offer
+                    && cast.caster == chooser
+                    && cast.reserved_object_id == exiled.object_id
+            });
+            let linked_exile_is_current =
+                self.state
+                    .linked_exile_records
+                    .get(&key)
+                    .is_some_and(|records| {
+                        records.iter().any(|record| {
+                            record.object_id == exiled.object_id
+                                && record.zone_change_generation == exiled.zone_change_generation
+                        })
+                    })
+                    && self
+                        .state
+                        .objects
+                        .get(&exiled.object_id)
+                        .is_some_and(|object| object.zone == Zone::Exile)
+                    && self
+                        .state
+                        .zone_change_generation
+                        .get(&exiled.object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == exiled.zone_change_generation;
+            !live_reservation && !linked_exile_is_current
+        });
+        let invalid_linked_land_entry_matches = self
+            .state
+            .pending_replacement_event
+            .as_ref()
+            .and_then(|event| match event {
+                super::replacement::PendingReplacementEvent::BattlefieldEntry(entry)
+                    if matches!(
+                        entry.completion,
+                        BattlefieldEntryCompletion::LandPlay { player, .. }
+                            if player == chooser
+                    ) =>
+                {
+                    Some((entry.event.object_id, entry.event.destination_controller))
+                }
+                _ => None,
+            })
+            .zip(cohort.in_flight)
+            .is_some_and(|((entry_object, destination_controller), current)| {
+                entry_object == current.object_id
+                    && (destination_controller != chooser
+                        || self
+                            .state
+                            .objects
+                            .get(&current.object_id)
+                            .is_none_or(|object| object.zone != Zone::Exile)
+                        || self
+                            .state
+                            .zone_change_generation
+                            .get(&current.object_id)
+                            .copied()
+                            != Some(current.zone_change_generation))
+            });
+
+        if chooser_is_live
+            && !linked_choice_matches
+            && !invalid_special_cast_matches
+            && !invalid_linked_land_entry_matches
+        {
+            return Ok(());
+        }
+        if !chooser_is_live
+            && pending_matches_root
+            && self
+                .state
+                .pending_resolution
+                .as_ref()
+                .is_some_and(|pending| pending.deciding_player != chooser)
+        {
+            // A live observer/replacement choice is part of the already-started instruction.
+            // Its completion will come back through the normal root continuation.
+            return Ok(());
+        }
+
+        if linked_choice_matches
+            || invalid_special_cast_matches
+            || invalid_linked_land_entry_matches
+            || (!chooser_is_live
+                && (pending_matches_root || self.state.pending_resolution.is_none()))
+        {
+            self.state.pending_resolution = None;
+            if invalid_linked_land_entry_matches {
+                // Retire this exact stale land-entry transaction before advancing its cohort;
+                // otherwise a later, unrelated concession could mistake its saved stack for
+                // the active resolution.
+                self.state.pending_replacement_event = None;
+            }
+            let cohort = *self
+                .state
+                .pending_linked_exile_play
+                .take()
+                .expect("linked play cohort checked above");
+            let batch = self.advance_pending_linked_exile_play(cohort, Vec::new())?;
+            events.extend(batch.events);
+        }
+        Ok(())
+    }
+
+    /// Continue a linked play occurrence after a card's play/cast transaction or an explicit
+    /// decline. The cohort is a snapshot for this resolving occurrence; linked records remain
+    /// available to later trigger occurrences.
+    pub(in crate::engine) fn advance_pending_linked_exile_play(
+        &mut self,
+        mut cohort: crate::state::PendingLinkedExilePlay,
+        mut events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        cohort.in_flight = None;
+        let chooser = cohort.stack.item.controller;
+        let chooser_is_live = self
+            .state
+            .player_idx(chooser)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let linked_records = self
+            .state
+            .linked_exile_records
+            .get(&cohort.key)
+            .cloned()
+            .unwrap_or_default();
+        let mut seen = HashSet::new();
+        cohort.remaining.retain(|candidate| {
+            if !seen.insert((candidate.object_id, candidate.zone_change_generation)) {
+                return false;
+            }
+            let linked = linked_records.iter().any(|record| {
+                record.object_id == candidate.object_id
+                    && record.zone_change_generation == candidate.zone_change_generation
+            });
+            linked
+                && self
+                    .state
+                    .objects
+                    .get(&candidate.object_id)
+                    .is_some_and(|object| object.zone == Zone::Exile)
+                && self
+                    .state
+                    .zone_change_generation
+                    .get(&candidate.object_id)
+                    .copied()
+                    == Some(candidate.zone_change_generation)
+                && super::super::card_predicates::linked_exile_card_matches_filter(
+                    &self.state,
+                    self.registry,
+                    &cohort.key,
+                    chooser,
+                    candidate.object_id,
+                    candidate.zone_change_generation,
+                    cohort.filter.as_ref(),
+                )
+        });
+
+        if chooser_is_live && !cohort.remaining.is_empty() {
+            let candidate_ids: Vec<_> = cohort
+                .remaining
+                .iter()
+                .map(|candidate| candidate.object_id)
+                .collect();
+            let candidate_generations: Vec<_> = cohort
+                .remaining
+                .iter()
+                .map(|candidate| (candidate.object_id, candidate.zone_change_generation))
+                .collect();
+            let (candidate_card_ids, candidate_names) = candidate_identities(self, &candidate_ids);
+            let verb = match cohort.kind {
+                tricerules_card_model::primitives::LinkedExiledCardPlayKind::Cast => "cast",
+                tricerules_card_model::primitives::LinkedExiledCardPlayKind::Play => "play",
+            };
+            let prompt = format!(
+                "P{chooser}: you may choose another linked card to {verb} without paying its mana cost, or finish."
+            );
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                    rv1::ResolutionChoiceRequired {
+                        accepted_permanent_selections: Vec::new(),
+                        variable_mana_contribution: false,
+                        candidate_token_identities: Vec::new(),
+                        candidate_player_ids: Vec::new(),
+                        deciding_player_id: chooser,
+                        source_object_id: cohort.stack.item.id,
+                        prompt_text: prompt.clone(),
+                        choice_kind: custom::ChoiceKind::LinkedExileCards as i32,
+                        candidate_object_ids: candidate_ids.clone(),
+                        candidate_card_ids,
+                        min: 0,
+                        max: 1,
+                        ordered: false,
+                        candidate_names,
+                        candidate_server_card_ids: Vec::new(),
+                        unique_names: false,
+                        generic_mana_cost: 0,
+                        payment_currently_legal: false,
+                        resolution_branches: Vec::new(),
+                        mana_cost: String::new(),
+                        candidate_selectable: Vec::new(),
+                        public_reveal: None,
+                        candidate_source_zones: vec![
+                            rv1::ChoiceCandidateSourceZone::Exile as i32;
+                            candidate_ids.len()
+                        ],
+                        combat_defender_options: Vec::new(),
+                        waterbend: false,
+                        selection_slots: Vec::new(),
+                        replacement_options: Vec::new(),
+                        selection_alternatives: Vec::new(),
+                    },
+                )),
+            });
+            events.push(ev_log(prompt.clone()));
+            self.state.pending_resolution = Some(PendingResolution {
+                deciding_player: chooser,
+                presentation: PendingResolutionPresentation {
+                    source_object_id: cohort.stack.item.id,
+                    candidates: candidate_ids,
+                    min: 0,
+                    max: 1,
+                    ordered: false,
+                    prompt,
+                    choice_kind: custom::ChoiceKind::LinkedExileCards,
+                    unique_names: false,
+                },
+                continuation: ResolutionContinuation::LinkedExileChoice {
+                    stack: cohort.stack.clone(),
+                    key: cohort.key.clone(),
+                    action: PendingLinkedExileAction::Play {
+                        kind: cohort.kind,
+                        return_source_to_owner_hand_if_cast: cohort
+                            .return_source_to_owner_hand_if_cast,
+                    },
+                    candidate_generations,
+                    spell_label: cohort.spell_label.clone(),
+                },
+            });
+            self.state.pending_linked_exile_play = Some(Box::new(cohort));
+            return Ok(finish_with_events(self, events));
+        }
+
+        self.state.pending_linked_exile_play = None;
+        if cohort.any_cast_committed && cohort.return_source_to_owner_hand_if_cast {
+            self.return_linked_cast_source_to_owner_hand(&cohort.stack.item, &mut events)?;
+        }
+        self.complete_parked_resolution_with_previous(
+            cohort.stack.item,
+            cohort.stack.resume_effect_index,
+            cohort.stack.previous_result,
+            events,
+        )
+    }
 }
 
 pub(super) fn exile_graveyards(
@@ -5043,6 +5450,118 @@ pub(super) fn look_choose_to_hand(
                 looked_at: looked,
                 bottom_order,
                 reveal,
+            },
+        },
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
+/// CR 702.75a / 406.3: perform one bounded Hideaway look, select a card to exile face down,
+/// bind that exact exile generation to the source-incarnation pair, and randomly bottom the rest.
+pub(super) fn hideaway(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::Hideaway {
+        count,
+        linked_exile_id,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let producer_ability_id = cx
+        .top
+        .triggered_ability
+        .as_ref()
+        .map(|ability| ability.ability_id.clone())
+        .ok_or(EngineError::Illegal(
+            "Hideaway requires a triggered-ability source",
+        ))?;
+    let linked_exile_key =
+        linked_exile_key(cx.engine, cx.top, linked_exile_id, producer_ability_id)?;
+    let controller = cx.controller;
+    let Some(player_index) = cx.engine.state.player_idx(controller) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let looked_at = cx.engine.state.players[player_index]
+        .library
+        .iter()
+        .take(count as usize)
+        .copied()
+        .collect::<Vec<_>>();
+    if looked_at.is_empty() {
+        cx.events.push(ev_log(format!(
+            "P{controller} looks at an empty library ({}).",
+            cx.spell_label
+        )));
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let (candidate_card_ids, candidate_names) = candidate_identities(cx.engine, &looked_at);
+    let looked_count = looked_at.len() as u32;
+    let prompt = format!(
+        "Look at the top {looked_count} cards. Exile one face down and put the rest on the bottom in a random order."
+    );
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
+                variable_mana_contribution: false,
+                candidate_token_identities: Vec::new(),
+                candidate_player_ids: Vec::new(),
+                deciding_player_id: controller,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: custom::ChoiceKind::LibraryLook as i32,
+                candidate_object_ids: looked_at.clone(),
+                candidate_card_ids,
+                candidate_names: candidate_names.clone(),
+                min: 1,
+                max: 1,
+                ordered: false,
+                unique_names: false,
+                candidate_server_card_ids: Vec::new(),
+                resolution_branches: Vec::new(),
+                mana_cost: String::new(),
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+                candidate_selectable: vec![true; looked_at.len()],
+                public_reveal: None,
+                candidate_source_zones: Vec::new(),
+                combat_defender_options: Vec::new(),
+                waterbend: false,
+                selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
+            },
+        )),
+    });
+    cx.events.push(ev_log(format!(
+        "P{controller} looks at the top {looked_count} cards of their library ({}) and exiles one face down.",
+        cx.spell_label
+    )));
+    cx.events.push(ev_log_private(
+        format!("P{controller} looks at {}.", candidate_names.join(", ")),
+        controller,
+    ));
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player: controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates: looked_at.clone(),
+            min: 1,
+            max: 1,
+            ordered: false,
+            unique_names: false,
+            prompt,
+            choice_kind: custom::ChoiceKind::LibraryLook,
+        },
+        continuation: ResolutionContinuation::LibraryLook {
+            stack: ParkedStackResolution::new(cx.top.clone()),
+            candidates: crate::engine::library_choices::capture(cx.engine, &looked_at),
+            stage: PendingLibraryLookStage::Hideaway {
+                looked_at,
+                linked_exile_key,
             },
         },
     });

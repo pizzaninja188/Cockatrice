@@ -1226,6 +1226,7 @@ fn entry_reveal_pair_internal_token_attachment_retains_ready_and_remaining_recei
         remaining: Default::default(),
         resume_stack: None,
         suspended_resolution: None,
+        suspended_replacement_event: None,
     };
     engine.state.pending_observer_return_batch = Some(observer.clone());
     assert_eq!(

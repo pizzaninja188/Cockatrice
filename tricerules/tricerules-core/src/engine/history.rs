@@ -1867,8 +1867,10 @@ impl GameEngine {
             ),
             BattlefieldAggregate::TotalPower => matching
                 .iter()
-                .filter_map(|(_, characteristics)| characteristics.power)
-                .fold(0u32, u32::saturating_add),
+                .filter_map(|(_, characteristics)| characteristics.signed_power)
+                .fold(0_i64, i64::saturating_add)
+                .clamp(0, i64::from(u32::MAX))
+                as u32,
             BattlefieldAggregate::MaximumPower => matching
                 .iter()
                 .filter_map(|(_, characteristics)| characteristics.power)
@@ -4751,6 +4753,87 @@ mod tests {
             6,
             "the same physical id after a zone change is a new object and counts as another"
         );
+    }
+
+    #[test]
+    fn battlefield_total_power_includes_negative_creature_power_in_thresholds() {
+        let deck = deck_with_cards(
+            &[
+                "grizzly_bears",
+                "grizzly_bears",
+                "grizzly_bears",
+                "grizzly_bears",
+                "grizzly_bears",
+                "grizzly_bears",
+            ],
+            "forest",
+        );
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            67_012,
+            &[0, 1],
+            20,
+            Some(vec![deck, deck_with_cards(&[], "island")]),
+            true,
+        )
+        .expect("engine");
+        let bears: Vec<_> = (0..6)
+            .map(|_| move_to_battlefield(&mut engine, 0, "grizzly_bears"))
+            .collect();
+        let negative = bears[5];
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            trigger_grant_origin: None,
+            affected: AffectedScope::Single(negative),
+            kind: ContinuousEffectKind::PtModify {
+                delta_power: -3,
+                delta_toughness: 0,
+            },
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 1,
+        });
+        assert_eq!(
+            engine.characteristics(negative).unwrap().signed_power,
+            Some(-1)
+        );
+
+        let filter = BattlefieldPermanentFilter {
+            required_supertypes: Vec::new(),
+            token: None,
+            any_of: None,
+            controllers: RelativePlayerSet::Controller,
+            card_type: Some(CardTypeFilter::Creature),
+            color: None,
+            name: None,
+            required_subtypes: Vec::new(),
+            exclude_source: false,
+        };
+        let condition = GameCondition::BattlefieldAggregate {
+            filter: filter.clone(),
+            aggregate: BattlefieldAggregate::TotalPower,
+            min: Some(10),
+            max: None,
+            exclude_observed_object: false,
+        };
+        let condition_context = ConditionContext {
+            controller: 0,
+            source_object_id: bears[0],
+            source_zone_change: 0,
+            resolving_spell_id: None,
+            stack_item: None,
+            previous_effect_result: None,
+        };
+
+        assert_eq!(
+            engine.battlefield_aggregate_value(
+                &filter,
+                BattlefieldAggregate::TotalPower,
+                condition_context,
+            ),
+            9
+        );
+        assert!(!engine.condition_holds(&condition, condition_context));
     }
 
     #[test]

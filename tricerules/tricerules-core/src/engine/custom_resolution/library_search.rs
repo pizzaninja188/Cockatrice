@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::state::LibrarySearchEntryProgress;
+use crate::state::{LibrarySearchEntryProgress, PendingLinkedExileAction};
 
 fn selection_admits_distinct_slots(chosen: &[ObjectId], slots: &[Vec<ObjectId>]) -> bool {
     fn assign(
@@ -579,17 +579,17 @@ impl GameEngine {
         pending: PendingResolution,
         chosen: &[ObjectId],
     ) -> Result<RuledEventBatch, EngineError> {
-        let (mut stack, key, destination, generations, spell_label) = match &pending.continuation {
+        let (mut stack, key, action, generations, spell_label) = match &pending.continuation {
             ResolutionContinuation::LinkedExileChoice {
                 stack,
                 key,
-                destination,
+                action,
                 candidate_generations,
                 spell_label,
             } => (
                 stack.clone(),
                 key.clone(),
-                *destination,
+                *action,
                 candidate_generations.clone(),
                 spell_label.clone(),
             ),
@@ -602,6 +602,18 @@ impl GameEngine {
         let controller = stack.item.controller;
         let mut events = Vec::new();
         let Some(&object_id) = chosen.first() else {
+            if matches!(action, PendingLinkedExileAction::Play { .. }) {
+                if let Some(cohort) = self
+                    .state
+                    .pending_linked_exile_play
+                    .as_mut()
+                    .filter(|cohort| cohort.stack.item.id == stack.item.id && cohort.key == key)
+                {
+                    // Declining the next-card prompt ends this occurrence. The persistent linked
+                    // record remains available to later trigger occurrences.
+                    cohort.remaining.clear();
+                }
+            }
             events.push(ev_log(format!(
                 "P{controller} declines the linked Exile choice."
             )));
@@ -655,8 +667,33 @@ impl GameEngine {
             cards: vec![receipt],
             ..crate::state::EffectResult::default()
         };
-        match destination {
-            tricerules_card_model::primitives::LinkedExiledCardDestination::OwnerGraveyard => {
+        if matches!(action, PendingLinkedExileAction::Play { .. }) {
+            if let Some(cohort) = self
+                .state
+                .pending_linked_exile_play
+                .as_mut()
+                .filter(|cohort| cohort.stack.item.id == stack.item.id && cohort.key == key)
+            {
+                cohort.in_flight = Some(crate::state::TriggerObjectRef {
+                    object_id,
+                    zone_change_generation: current_generation,
+                    controller_at_event: controller,
+                });
+                cohort.remaining.retain(|candidate| {
+                    candidate.object_id != object_id
+                        || candidate.zone_change_generation != current_generation
+                });
+            } else {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("linked play cohort disappeared"));
+            }
+        }
+        match action {
+            PendingLinkedExileAction::Move {
+                destination:
+                    tricerules_card_model::primitives::LinkedExiledCardDestination::OwnerGraveyard,
+                ..
+            } => {
                 self.commit_observed_zone_move(object_id, Zone::Graveyard, None, &mut events)?;
                 events.push(ev_log(format!(
                     "{spell_label} moves {card_label} to its owner's graveyard."
@@ -674,7 +711,10 @@ impl GameEngine {
                     events,
                 )
             }
-            tricerules_card_model::primitives::LinkedExiledCardDestination::ControllerBattlefield => {
+            PendingLinkedExileAction::Move {
+                destination: tricerules_card_model::primitives::LinkedExiledCardDestination::ControllerBattlefield,
+                ..
+            } => {
                 stack.previous_result = previous_result;
                 let entry = BattlefieldEntryEvent {
                     entry_reveal_receipts: Vec::new(),
@@ -721,6 +761,60 @@ impl GameEngine {
                 } else {
                     Ok(finish_with_events(self, events))
                 }
+            }
+            PendingLinkedExileAction::Play {
+                kind,
+                return_source_to_owner_hand_if_cast,
+            } => {
+                let permission_scope = match kind {
+                    tricerules_card_model::primitives::LinkedExiledCardPlayKind::Cast => {
+                        ExilePlayPermissionScope::CastCard
+                    }
+                    tricerules_card_model::primitives::LinkedExiledCardPlayKind::Play => {
+                        ExilePlayPermissionScope::PlayCard
+                    }
+                };
+                let prompt = match kind {
+                    tricerules_card_model::primitives::LinkedExiledCardPlayKind::Cast => {
+                        format!("P{controller}: cast {card_label} without paying its mana cost?")
+                    }
+                    tricerules_card_model::primitives::LinkedExiledCardPlayKind::Play => {
+                        format!("P{controller}: play {card_label} without paying its mana cost?")
+                    }
+                };
+                self.state.pending_resolution = Some(PendingResolution {
+                    deciding_player: controller,
+                    presentation: PendingResolutionPresentation {
+                        source_object_id: stack.item.id,
+                        candidates: vec![object_id],
+                        min: 0,
+                        max: 1,
+                        ordered: false,
+                        prompt: prompt.clone(),
+                        choice_kind: rv1::ChoiceKind::SpecialCast,
+                        unique_names: false,
+                    },
+                    continuation: ResolutionContinuation::SpecialCast {
+                        stack,
+                        exiled: TriggerObjectRef {
+                            object_id,
+                            zone_change_generation: current_generation,
+                            controller_at_event: controller,
+                        },
+                        face_index: 0,
+                        method: SpellCastMethod::Permission,
+                        cost: ManaCost::default(),
+                        undo_history_start: self.state.undoable_mana_abilities.len(),
+                        permission_scope: Some(permission_scope),
+                        return_source_to_owner_hand_if_cast,
+                    },
+                });
+                events.push(
+                    self.resolution_payment_choice_event()
+                        .expect("linked exile play offer"),
+                );
+                events.push(ev_log(prompt));
+                Ok(finish_with_events(self, events))
             }
         }
     }

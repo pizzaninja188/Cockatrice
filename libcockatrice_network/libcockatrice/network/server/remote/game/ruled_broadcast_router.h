@@ -28,6 +28,7 @@ public:
 
 private:
     void appendServerObjectMaps(ruled::v1::IpcResponse &response);
+    void appendFaceDownObjectMap(ruled::v1::IpcResponse &response);
     void updatePendingResolutionChoiceCache(const ruled::v1::IpcResponse &response);
     ruled::v1::RuledEventBatch redactBatchForParticipant(const ruled::v1::RuledEventBatch &batch,
                                                          Server_AbstractParticipant *participant);

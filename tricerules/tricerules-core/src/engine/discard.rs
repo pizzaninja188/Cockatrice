@@ -600,6 +600,7 @@ impl GameEngine {
             exiled,
             face_index,
             cost,
+            permission_scope,
             ..
         } = &pending.continuation
         else {
@@ -611,7 +612,7 @@ impl GameEngine {
             source_label: pending.presentation.prompt.clone(),
             object_id: exiled.object_id,
             zone_change_generation: exiled.zone_change_generation,
-            scope: ExilePlayPermissionScope::CastFace(*face_index),
+            scope: permission_scope.unwrap_or(ExilePlayPermissionScope::CastFace(*face_index)),
             cast_cost: crate::state::ExilePermissionCastCost::AlternativeManaCost(cost.clone()),
             origin: crate::state::ExilePlayPermissionOrigin::Effect,
             available_after_turn_instance: None,

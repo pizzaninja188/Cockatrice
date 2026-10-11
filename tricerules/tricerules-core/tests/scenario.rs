@@ -48,6 +48,8 @@ mod deck_coverage_portal_to_phyrexia;
 #[path = "scenario/deck_coverage_pupu_ufo.rs"]
 mod deck_coverage_pupu_ufo;
 
+#[path = "scenario/deck_coverage_hideaway_four.rs"]
+mod deck_coverage_hideaway_four;
 #[path = "scenario/deck_coverage_kodama_of_the_east_tree.rs"]
 mod deck_coverage_kodama_of_the_east_tree;
 

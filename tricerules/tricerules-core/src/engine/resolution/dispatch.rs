@@ -108,6 +108,7 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::LookChooseToHand { .. } => {
             zones::look_choose_to_hand(cx, effect)?
         }
+        effect @ SpellEffectKind::Hideaway { .. } => zones::hideaway(cx, effect)?,
         effect @ SpellEffectKind::PumpTarget { .. } => pump_counters::pump_target(cx, effect)?,
         effect @ SpellEffectKind::SetBasePowerToughness { .. } => {
             pump_counters::set_base_power_toughness(cx, effect)?
@@ -357,6 +358,9 @@ pub(super) fn execute_effect(
         }
         effect @ SpellEffectKind::ChooseLinkedExiledCard { .. } => {
             zones::choose_linked_exiled_card(cx, effect)?
+        }
+        effect @ SpellEffectKind::PlayLinkedExiledCard { .. } => {
+            zones::play_linked_exiled_card(cx, effect)?
         }
         SpellEffectKind::Earthbend { count } => pump_counters::earthbend(cx, count)?,
         effect @ SpellEffectKind::AnimateSelf { .. } => pump_counters::animate_self(cx, effect)?,

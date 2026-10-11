@@ -105,6 +105,36 @@ fn issue_198_existing_zone_leaves_and_or_match_printed_cards() {
 }
 
 #[test]
+fn face_down_exile_has_no_printed_characteristics_for_zone_filters() {
+    let mut engine = fixture();
+    let hidden = object(&engine, "grizzly_bears");
+    let object = engine.state.objects.get_mut(&hidden).unwrap();
+    object.zone = Zone::Exile;
+    object.face_down = true;
+
+    let creature = zone_filter("(card_type: Some(Creature))");
+    let exact_name = zone_filter("(exact_name: Some(\"Grizzly Bears\"))");
+    assert!(!zone_card_matches_filter(
+        &engine.state,
+        engine.registry,
+        hidden,
+        Some(&creature)
+    ));
+    assert!(!zone_card_matches_filter(
+        &engine.state,
+        engine.registry,
+        hidden,
+        Some(&exact_name)
+    ));
+    assert!(zone_card_matches_filter(
+        &engine.state,
+        engine.registry,
+        hidden,
+        None
+    ));
+}
+
+#[test]
 fn issue_198_existing_graveyard_leaves_match_printed_cards() {
     let mut engine = fixture();
     for card in [

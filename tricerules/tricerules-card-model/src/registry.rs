@@ -1675,7 +1675,18 @@ fn collect_linked_exile_uses(effect: &SpellEffectKind, uses: &mut HashMap<String
             linked_exile_id: Some(link_id),
             ..
         } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
+        SpellEffectKind::Hideaway {
+            linked_exile_id: link_id,
+            ..
+        } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
         SpellEffectKind::ChooseLinkedExiledCard {
+            linked_exile_id, ..
+        } => {
+            uses.entry(linked_exile_id.as_str().to_owned())
+                .or_default()
+                .1 += 1
+        }
+        SpellEffectKind::PlayLinkedExiledCard {
             linked_exile_id, ..
         } => {
             uses.entry(linked_exile_id.as_str().to_owned())
@@ -1829,6 +1840,11 @@ fn collect_choose_linked_exile_uses(
                 producer_ability_id,
                 linked_exile_id,
                 ..
+            }
+            | SpellEffectKind::PlayLinkedExiledCard {
+                producer_ability_id,
+                linked_exile_id,
+                ..
             } = effect
             {
                 choices.push((producer_ability_id.clone(), linked_exile_id.clone()));
@@ -1937,6 +1953,10 @@ fn ability_has_linked_exile_choice_producer(
                 }
                 | SpellEffectKind::ExileGraveyards {
                     linked_exile_id: Some(effect_link_id),
+                    ..
+                }
+                | SpellEffectKind::Hideaway {
+                    linked_exile_id: effect_link_id,
                     ..
                 } => found |= effect_link_id == linked_exile_id,
                 _ => {}
@@ -2207,6 +2227,13 @@ fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
                                         .1 += 1
                                 }
                                 SpellEffectKind::ChooseLinkedExiledCard {
+                                    linked_exile_id, ..
+                                } => {
+                                    uses.entry(linked_exile_id.as_str().to_owned())
+                                        .or_default()
+                                        .1 += 1
+                                }
+                                SpellEffectKind::PlayLinkedExiledCard {
                                     linked_exile_id, ..
                                 } => {
                                     uses.entry(linked_exile_id.as_str().to_owned())

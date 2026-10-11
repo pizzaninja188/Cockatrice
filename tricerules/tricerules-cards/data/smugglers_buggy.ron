@@ -1,0 +1,53 @@
+// Oracle and WotC rulings checked 2026-10-11 against the pinned named-card API responses.
+// Oracle ID e19e1e83-75e5-4cfa-8d50-8ed0b027a202; source SHA-256
+// B1E39113EEA2BF42BC3DC51C29BD3A0E1F1E65ED84A2F8B3FC51C4AA37FAA88D; rulings SHA-256
+// 19206D76E37B7C87B949241B6697B9D5BF349CB85D048FB411BAAC544375C748.
+// CR 702.75a/406.3 (Hideaway), 607.2a/607.3 (linked objects), 608.2 (cast during resolution),
+// and 702.122a (Crew). WotC Streets of New Capenna release notes confirm Hideaway no longer
+// makes the permanent enter tapped; this Vehicle has no separate tapped-entry instruction.
+(
+  id: "smugglers_buggy",
+  name: "Smuggler's Buggy",
+  face_id: "smugglers_buggy",
+  mana_cost: "{4}",
+  types: ["Artifact", "Vehicle"],
+  power: 5,
+  toughness: 5,
+  triggered_abilities: [
+    (
+      ability_id: "hideaway",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Hideaway(
+        count: 4,
+        linked_exile_id: "exiled_cards",
+      )],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfDealsCombatDamageToPlayer,
+      effect: [PlayLinkedExiledCard(
+        producer_ability_id: "hideaway",
+        linked_exile_id: "exiled_cards",
+        filter: None,
+        play_kind: Cast,
+        return_source_to_owner_hand_if_cast: true,
+      )],
+    ),
+  ],
+  activated_abilities: [(
+    ability_id: "crew",
+    presentation: OracleLines([3]),
+    source_zone: Battlefield,
+    costs: [TapPermanents(
+      constraint: AggregateMinimum(minimum: 2, contribution: CurrentPower),
+      filter: (kind: Creature, controller: You),
+      exclude_source: true,
+    )],
+    effect: [AddTypes(
+      subject: Source,
+      addition: (card_types: [Creature], creature_types: [], land_types: []),
+    )],
+  )],
+)

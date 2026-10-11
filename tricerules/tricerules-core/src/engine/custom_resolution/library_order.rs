@@ -366,6 +366,111 @@ impl GameEngine {
             return self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev);
         }
 
+        if let PendingLibraryLookStage::Hideaway {
+            looked_at,
+            linked_exile_key,
+        } = stage.clone()
+        {
+            let ResolutionContinuation::LibraryLook { candidates, .. } = &pending.continuation
+            else {
+                unreachable!("validated library-look continuation")
+            };
+            let current_top = !looked_at.is_empty()
+                && looked_at.iter().copied().eq(self.state.players[idx]
+                    .library
+                    .iter()
+                    .take(looked_at.len())
+                    .copied());
+            let valid_choice = chosen.len() == 1
+                && looked_at.contains(&chosen[0])
+                && candidates
+                    .iter()
+                    .any(|(object_id, _)| *object_id == chosen[0]);
+            if !current_top || !valid_choice {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("stale Hideaway look or choice"));
+            }
+
+            let selected = chosen[0];
+            let selected_name = object_display_name(&self.state, self.registry, selected);
+            let owner = self
+                .state
+                .objects
+                .get(&selected)
+                .map(|object| object.owner)
+                .ok_or(EngineError::Illegal("Hideaway selected card is stale"))?;
+            let previous_generation = self
+                .state
+                .zone_change_generation
+                .get(&selected)
+                .copied()
+                .unwrap_or(0);
+            self.commit_observed_zone_move(selected, Zone::Exile, None, &mut ev)?;
+            let generation = self
+                .state
+                .zone_change_generation
+                .get(&selected)
+                .copied()
+                .unwrap_or(previous_generation);
+            if generation <= previous_generation
+                || !self
+                    .state
+                    .objects
+                    .get(&selected)
+                    .is_some_and(|object| object.zone == Zone::Exile)
+            {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("Hideaway exile did not complete"));
+            }
+            self.state
+                .objects
+                .get_mut(&selected)
+                .expect("validated Hideaway object")
+                .face_down = true;
+            self.state
+                .linked_exile_records
+                .entry(linked_exile_key.clone())
+                .or_default()
+                .push(crate::state::LinkedExiledObject {
+                    object_id: selected,
+                    zone_change_generation: generation,
+                });
+            self.state
+                .hideaway_look_permissions
+                .entry((linked_exile_key, selected, generation))
+                .or_default()
+                .insert(controller);
+            self.refresh_hideaway_look_permissions();
+
+            let mut bottom = looked_at
+                .iter()
+                .copied()
+                .filter(|object_id| *object_id != selected)
+                .collect::<Vec<_>>();
+            shuffle_object_ids_for_current_command(&self.state, controller, &mut bottom);
+            self.state.players[idx]
+                .library
+                .retain(|object_id| !bottom.contains(object_id));
+            self.state.players[idx]
+                .library
+                .extend(bottom.iter().copied());
+            ev.push(ev_log(format!(
+                "P{controller} exiles a card face down and puts {} cards on the bottom of their library in a random order.",
+                bottom.len()
+            )));
+            ev.push(ev_log_private(
+                format!("P{controller} exiles {selected_name} face down."),
+                controller,
+            ));
+            ev.push(permanent_moved_event(
+                &self.state,
+                selected,
+                owner,
+                rv1::permanent_moved::Destination::Exile,
+            ));
+            return self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev);
+        }
+
         if matches!(
             stage,
             PendingLibraryLookStage::IntoTheWilds | PendingLibraryLookStage::DeployTheGatewatch

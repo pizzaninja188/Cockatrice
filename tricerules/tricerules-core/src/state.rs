@@ -4,10 +4,11 @@ use tricerules_card_model::primitives::{
     CastCostReceiptCondition, Color, ConditionalSearchDestination, ContinuousEffectKind,
     CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, HandCardAction, Keyword,
-    LibraryBottomOrder, LibraryPlacement, ManaAmount, ManaSpendingRestriction, ObjectCastCostKind,
-    PermanentChoiceConstraint, PermanentTypeFilter, ResolvingPermanentModifier, SearchDestination,
-    SearchSelectionConstraint, SearchSelectionSlot, SearchZoneSelection, StaticEmblemEffect,
-    TargetFilter, TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
+    LibraryBottomOrder, LibraryPlacement, LinkedExiledCardDestination, LinkedExiledCardPlayKind,
+    ManaAmount, ManaSpendingRestriction, ObjectCastCostKind, PermanentChoiceConstraint,
+    PermanentTypeFilter, ResolvingPermanentModifier, SearchDestination, SearchSelectionConstraint,
+    SearchSelectionSlot, SearchZoneSelection, StaticEmblemEffect, TargetFilter,
+    TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
 };
 use tricerules_card_model::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_card_model::{
@@ -1157,6 +1158,7 @@ pub enum PendingLibraryPartitionKind {
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
+#[allow(private_interfaces)]
 pub enum PendingLibraryLookStage {
     IntoTheWilds,
     DeployTheGatewatch,
@@ -1164,12 +1166,46 @@ pub enum PendingLibraryLookStage {
     ThassaOracle {
         devotion_x: u32,
     },
+    Hideaway {
+        looked_at: Vec<ObjectId>,
+        linked_exile_key: LinkedExileKey,
+    },
     ChooseToHand {
         looked_at: Vec<ObjectId>,
         bottom_order: LibraryBottomOrder,
         reveal: bool,
     },
     OrderBottom,
+}
+
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PendingLinkedExileAction {
+    Move {
+        destination: LinkedExiledCardDestination,
+        optional: bool,
+    },
+    Play {
+        kind: LinkedExiledCardPlayKind,
+        return_source_to_owner_hand_if_cast: bool,
+    },
+}
+
+/// One resolving occurrence of a linked exile play instruction. The frozen generation-bound
+/// cohort survives the individual play/cast transactions; the persistent linked record itself is
+/// left intact when a card is declined or selected for this occurrence.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingLinkedExilePlay {
+    pub(crate) stack: ParkedStackResolution,
+    pub(crate) key: LinkedExileKey,
+    pub(crate) remaining: Vec<TriggerObjectRef>,
+    /// Exact linked card currently being played/cast. A land can remain in an entry replacement
+    /// continuation while nested observer choices resolve, so retain its original incarnation.
+    pub(crate) in_flight: Option<TriggerObjectRef>,
+    pub(crate) filter: Option<ZoneCardFilter>,
+    pub(crate) kind: LinkedExiledCardPlayKind,
+    pub(crate) return_source_to_owner_hand_if_cast: bool,
+    pub(crate) any_cast_committed: bool,
+    pub(crate) spell_label: String,
 }
 
 /// The exact work to resume after a resolution choice. Each variant owns only the metadata its
@@ -1276,7 +1312,7 @@ pub enum ResolutionContinuation {
     LinkedExileChoice {
         stack: ParkedStackResolution,
         key: LinkedExileKey,
-        destination: tricerules_card_model::primitives::LinkedExiledCardDestination,
+        action: PendingLinkedExileAction,
         candidate_generations: Vec<(ObjectId, u64)>,
         spell_label: String,
     },
@@ -1464,6 +1500,12 @@ pub enum ResolutionContinuation {
         method: SpellCastMethod,
         cost: ManaCost,
         undo_history_start: usize,
+        /// Permission for all legal faces, used by Hideaway rather than a fixed-face
+        /// alternative-cost offer.
+        permission_scope: Option<ExilePlayPermissionScope>,
+        /// Smuggler's Buggy returns only after a linked spell cast commits, and only if the
+        /// source permanent is still the same battlefield incarnation.
+        return_source_to_owner_hand_if_cast: bool,
     },
     /// CR 704.3: all choices that affect one frozen SBA set are collected before any action in
     /// that set is committed. This continuation is deliberately independent of the stack.
@@ -1919,6 +1961,9 @@ pub(crate) struct PendingObserverReturnBatch {
     /// A choice continuation temporarily suspended while a leave-the-battlefield observer return
     /// asks its own choice. The observer batch resolves first, then restores this exact prompt.
     pub suspended_resolution: Option<PendingResolution>,
+    /// Replacement event paired with `suspended_resolution` when the choice is an as-enters or
+    /// replacement choice. Both pieces must be restored together after the observer batch.
+    pub suspended_replacement_event: Option<crate::engine::replacement::PendingReplacementEvent>,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -2004,6 +2049,9 @@ pub(crate) enum BattlefieldEntryCompletion {
     LandPlay {
         player: PlayerId,
         land_name: String,
+        /// Hideaway's resolution-time permission resumes the parked ability only after any
+        /// battlefield-entry replacements for the land have completed.
+        resume_stack: Option<Box<ParkedStackResolution>>,
     },
     PermanentSpell {
         attached_to: Option<AttachmentRecipient>,
@@ -2790,6 +2838,12 @@ pub struct GameState {
     pub captured_spell_copies: BTreeMap<ObjectId, StackItem>,
     /// CR 406.6 / 607.2a source-incarnation links to exact objects exiled by the paired ability.
     pub(crate) linked_exile_records: BTreeMap<LinkedExileKey, Vec<LinkedExiledObject>>,
+    /// A single resolving linked-play occurrence remains open across nested cast/entry choices.
+    pub(crate) pending_linked_exile_play: Option<Box<PendingLinkedExilePlay>>,
+    /// CR 702.75a: players who may privately look at each exact face-down Hideaway exile.
+    /// Permission is independent of the linked ability's authority to play or cast the card.
+    pub(crate) hideaway_look_permissions:
+        BTreeMap<(LinkedExileKey, ObjectId, u64), BTreeSet<PlayerId>>,
     /// Small deterministic entry-ordered collection; designations are not copiable values.
     pub(crate) chosen_opponents: Vec<ChosenOpponentRecord>,
     /// Creature-type designations remain separate from copiable values and copy snapshots.

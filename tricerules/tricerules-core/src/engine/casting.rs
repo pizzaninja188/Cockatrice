@@ -1,5 +1,5 @@
 use super::combat::priority_locked_for_combat_declaration;
-use super::events::{ev_log, ev_priority_changed, format_spell_targets_log};
+use super::events::{ev_log, ev_priority_changed, finish_with_events, format_spell_targets_log};
 use super::legal_actions::fill_legal;
 use super::payment::PaidCardCost;
 #[cfg(test)]
@@ -517,13 +517,19 @@ impl GameEngine {
                 .pending_resolution
                 .as_ref()
                 .ok_or(EngineError::Illegal("special cast resolution disappeared"))?;
-            let ResolutionContinuation::SpecialCast { stack, .. } = &pending.continuation else {
+            let ResolutionContinuation::SpecialCast {
+                stack,
+                return_source_to_owner_hand_if_cast,
+                ..
+            } = &pending.continuation
+            else {
                 return Err(EngineError::Illegal("special cast resolution changed"));
             };
             Some((
                 stack.item.clone(),
                 stack.resume_effect_index,
                 stack.previous_result.clone(),
+                *return_source_to_owner_hand_if_cast,
             ))
         } else {
             None
@@ -532,8 +538,23 @@ impl GameEngine {
         self.state.undoable_mana_abilities.clear();
         self.state.pending_spell_cast = None;
         self.pending_spell_cast_internal = None;
-        if let Some((item, resume_effect_index, previous_result)) = special_continuation {
+        if let Some((item, resume_effect_index, previous_result, return_source)) =
+            special_continuation
+        {
             self.state.pending_resolution = None;
+            let linked_cohort = self
+                .state
+                .pending_linked_exile_play
+                .as_mut()
+                .filter(|cohort| {
+                    cohort.stack.item.id == item.id
+                        && cohort.stack.item.source_zone_change == item.source_zone_change
+                });
+            if let Some(cohort) = linked_cohort {
+                cohort.any_cast_committed = true;
+            } else if return_source {
+                self.return_linked_cast_source_to_owner_hand(&item, &mut batch.events)?;
+            }
             batch = self.complete_parked_resolution_with_previous(
                 item,
                 resume_effect_index,
@@ -542,6 +563,54 @@ impl GameEngine {
             )?;
         }
         Ok(batch)
+    }
+
+    pub(in crate::engine) fn return_linked_cast_source_to_owner_hand(
+        &mut self,
+        item: &StackItem,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(source_id) = item.source_permanent_id else {
+            return Ok(());
+        };
+        let current_generation = self
+            .state
+            .zone_change_generation
+            .get(&source_id)
+            .copied()
+            .unwrap_or(0);
+        let Some(source) = self.state.objects.get(&source_id) else {
+            return Ok(());
+        };
+        if source.zone != Zone::Battlefield || current_generation != item.source_zone_change {
+            return Ok(());
+        }
+        let owner = source.owner;
+        let source_name = self
+            .registry
+            .get(&source.card_id)
+            .map(|definition| definition.name.clone())
+            .unwrap_or_else(|| "the source permanent".to_string());
+        let zone_snapshot = self.snapshot_zone_event();
+        let leave_event = self.battlefield_leave_event(source_id);
+        crate::engine::resolution::move_object_to_zone(
+            &mut self.state,
+            self.registry,
+            source_id,
+            Zone::Hand,
+            None,
+        )?;
+        events.push(crate::engine::resolution::permanent_moved_event(
+            &self.state,
+            source_id,
+            owner,
+            rv1::permanent_moved::Destination::Hand,
+        ));
+        events.push(ev_log(format!(
+            "{source_name} returns to its owner's hand after the linked card is cast."
+        )));
+        self.fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect(), events);
+        Ok(())
     }
 
     pub(super) fn cancel_spell_cast(
@@ -567,6 +636,24 @@ impl GameEngine {
             .pending_spell_cast_internal
             .take()
             .ok_or(EngineError::Illegal("missing reserved spell state"))?;
+        self.restore_spell_cast_reservation(&state, internal)?;
+        let mut batch = RuledEventBatch::default();
+        batch.events.push(ev_log(format!(
+            "P{player} cancels the spell-casting proposal."
+        )));
+        if state.resolution_time_offer {
+            if let Some(event) = self.resolution_payment_choice_event() {
+                batch.events.push(event);
+            }
+        }
+        Ok(batch)
+    }
+
+    fn restore_spell_cast_reservation(
+        &mut self,
+        state: &crate::state::PendingSpellCastState,
+        internal: PendingSpellCastInternal,
+    ) -> Result<(), EngineError> {
         let oid = state.reserved_object_id;
         for participant in &mut self.state.players {
             participant.hand.retain(|candidate| *candidate != oid);
@@ -627,16 +714,59 @@ impl GameEngine {
         for (key, value) in internal.restored_discard_successors {
             self.state.discard_reference_successors.insert(key, value);
         }
-        let mut batch = RuledEventBatch::default();
-        batch.events.push(ev_log(format!(
-            "P{player} cancels the spell-casting proposal."
-        )));
-        if state.resolution_time_offer {
-            if let Some(event) = self.resolution_payment_choice_event() {
-                batch.events.push(event);
-            }
+        Ok(())
+    }
+
+    /// Abandon an uncommitted spell proposal when either the caster or the card's owner leaves.
+    /// Restore the exact original incarnation only while its owner remains in the game; keeping
+    /// the reservation alive would block every surviving player, while restoring a departed
+    /// owner's snapshot would recreate a card that CR 800.4a removed.
+    pub(super) fn reconcile_spell_cast_departure(
+        &mut self,
+        departed: &HashSet<PlayerId>,
+    ) -> Result<bool, EngineError> {
+        let Some(pending) = self.state.pending_spell_cast.as_ref() else {
+            return Ok(false);
+        };
+        if !departed.contains(&pending.caster) && !departed.contains(&pending.original_holder) {
+            return Ok(false);
         }
-        Ok(batch)
+
+        let state = self
+            .state
+            .pending_spell_cast
+            .take()
+            .expect("pending spell cast was checked above");
+        let internal = self
+            .pending_spell_cast_internal
+            .take()
+            .ok_or(EngineError::Illegal("missing reserved spell state"))?;
+        if departed.contains(&state.original_holder)
+            || departed.contains(&internal.original_object.owner)
+        {
+            let object_id = state.reserved_object_id;
+            for participant in &mut self.state.players {
+                participant.hand.retain(|candidate| *candidate != object_id);
+                participant
+                    .graveyard
+                    .retain(|candidate| *candidate != object_id);
+                participant
+                    .exile
+                    .retain(|candidate| *candidate != object_id);
+            }
+            self.state.objects.remove(&object_id);
+            self.state.zone_change_generation.remove(&object_id);
+            self.state
+                .active_exile_play_permissions
+                .retain(|permission| permission.object_id != object_id);
+            self.state
+                .discard_reference_successors
+                .retain(|(candidate, _), _| *candidate != object_id);
+            // `internal` deliberately drops the saved original object and proposal-only triggers.
+        } else {
+            self.restore_spell_cast_reservation(&state, internal)?;
+        }
+        Ok(true)
     }
 
     /// CR 601.2i / 608.2i: freeze automatic public conditions after all costs and cast facts
@@ -3237,7 +3367,18 @@ impl GameEngine {
         command: &rv1::PlayLand,
     ) -> Result<RuledEventBatch, EngineError> {
         let face_index = command.face_index as usize;
-        if self.state.priority_player_id() != player {
+        let special_permission = self
+            .special_cast_permission(player)
+            .filter(|permission| permission.scope == ExilePlayPermissionScope::PlayCard);
+        let special_resume_stack = special_permission.as_ref().and_then(|_| {
+            self.state
+                .pending_resolution
+                .as_ref()
+                .and_then(|pending| pending.continuation.stack())
+                .cloned()
+        });
+        let special = special_permission.is_some();
+        if self.state.priority_player_id() != player && !special {
             return Err(EngineError::Illegal("not your priority"));
         }
         let max_lands = 1 + self.extra_land_plays_for(player);
@@ -3246,7 +3387,12 @@ impl GameEngine {
                 "land play limit reached for this turn",
             ));
         }
-        if !super::priority::sorcery_speed_available(&self.state, player) {
+        if special && self.state.active_player_id() != player {
+            return Err(EngineError::Illegal(
+                "resolution-time land play requires the player's turn",
+            ));
+        }
+        if !special && !super::priority::sorcery_speed_available(&self.state, player) {
             return Err(EngineError::Illegal("play land only at sorcery speed"));
         }
         let idx = self
@@ -3262,13 +3408,20 @@ impl GameEngine {
             .as_ref()
             .ok_or(EngineError::Illegal("missing land source"))?;
         let (oid, require_graveyard_land_card) = match location {
-            rv1::land_source::Location::HandIndex(hand_index) => (
-                *self.state.players[idx]
-                    .hand
-                    .get(*hand_index as usize)
-                    .ok_or(EngineError::Illegal("bad hand index"))?,
-                false,
-            ),
+            rv1::land_source::Location::HandIndex(hand_index) => {
+                if special {
+                    return Err(EngineError::Illegal(
+                        "resolution-time land play must use the selected exile object",
+                    ));
+                }
+                (
+                    *self.state.players[idx]
+                        .hand
+                        .get(*hand_index as usize)
+                        .ok_or(EngineError::Illegal("bad hand index"))?,
+                    false,
+                )
+            }
             rv1::land_source::Location::ExileObjectId(object_id) => {
                 let object = self
                     .state
@@ -3284,22 +3437,32 @@ impl GameEngine {
                 if source.expected_zone_change_generation != Some(generation) {
                     return Err(EngineError::Illegal("stale exile land source"));
                 }
-                let permitted = self
-                    .state
-                    .active_exile_play_permissions
-                    .iter()
-                    .any(|permission| {
-                        permission.player_id == player
-                            && permission.object_id == *object_id
-                            && permission.zone_change_generation == generation
-                            && permission.scope == ExilePlayPermissionScope::PlayCard
-                    });
+                let permitted = if let Some(permission) = special_permission.as_ref() {
+                    permission.object_id == *object_id
+                        && permission.zone_change_generation == generation
+                        && permission.scope == ExilePlayPermissionScope::PlayCard
+                } else {
+                    self.state
+                        .active_exile_play_permissions
+                        .iter()
+                        .any(|permission| {
+                            permission.player_id == player
+                                && permission.object_id == *object_id
+                                && permission.zone_change_generation == generation
+                                && permission.scope == ExilePlayPermissionScope::PlayCard
+                        })
+                };
                 if object.zone != Zone::Exile || !permitted {
                     return Err(EngineError::Illegal("illegal land play from exile"));
                 }
                 (*object_id, false)
             }
             rv1::land_source::Location::GraveyardObjectId(object_id) => {
+                if special {
+                    return Err(EngineError::Illegal(
+                        "resolution-time land play must use the selected exile object",
+                    ));
+                }
                 let object = self
                     .state
                     .objects
@@ -3389,6 +3552,9 @@ impl GameEngine {
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
         };
+        if special {
+            self.state.pending_resolution = None;
+        }
         match self.begin_battlefield_entry(
             item,
             BattlefieldEntryEvent {
@@ -3422,6 +3588,7 @@ impl GameEngine {
             BattlefieldEntryCompletion::LandPlay {
                 player,
                 land_name: land_name.clone(),
+                resume_stack: special_resume_stack.clone().map(Box::new),
             },
             &mut batch.events,
         ) {
@@ -3440,10 +3607,24 @@ impl GameEngine {
                 ));
             }
         }
-        self.state.passes_since_stack_change = 0;
         batch
             .events
             .push(ev_log(format!("P{player} played {land_name}")));
+        if special {
+            self.state.passes_since_stack_change = 0;
+            let resume_stack = special_resume_stack;
+            return if let Some(stack) = resume_stack {
+                self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    stack.previous_result,
+                    batch.events,
+                )
+            } else {
+                Ok(finish_with_events(self, batch.events))
+            };
+        }
+        self.state.passes_since_stack_change = 0;
         fill_legal(&mut batch, self);
         Ok(batch)
     }

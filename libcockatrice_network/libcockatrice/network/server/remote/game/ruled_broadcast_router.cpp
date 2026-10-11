@@ -159,7 +159,7 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
                                            [](const auto &player) { return player.has_public_hand(); });
     const bool hasActiveReveal = activePublicRevealSnapshot && activePublicRevealSnapshot->reveals_size() > 0;
     const bool hasPublicSnapshot = hasPublicHand || hasActiveReveal;
-    if (!participant || (!opening && !casting && !pendingResolutionChoice.has_value() && !hasPublicSnapshot)) {
+    if (!participant) {
         return;
     }
     ruled::v1::IpcResponse snapshot;
@@ -176,20 +176,30 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
         *batch->mutable_legal_by_player() = pendingResolutionState.legal_by_player();
         for (const auto &event : pendingResolutionState.events())
             batch->add_events()->CopyFrom(event);
-    } else if (currentPublicZoneView) {
+    } else if (currentPublicZoneView && hasPublicSnapshot) {
         batch->add_events()->mutable_zone_view()->CopyFrom(*currentPublicZoneView);
     }
     if (activePublicRevealSnapshot)
         batch->add_events()->mutable_active_public_reveal_snapshot()->CopyFrom(*activePublicRevealSnapshot);
-    if (opening || casting ||
-        (pendingResolutionChoice && pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST)) {
+    const bool restoreFullIdentityMaps =
+        opening || casting ||
+        (pendingResolutionChoice && pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+    if (restoreFullIdentityMaps) {
         appendServerObjectMaps(snapshot);
-        // Reconnecting an existing seat does not change the broadcast participant set.
-        // Still restore its hand identities if the normal delta map was elided.
+        // Reconnecting an existing seat does not change the broadcast participant set. Still
+        // restore its hand identities if the normal delta map was elided.
         const bool hasHandMap = std::any_of(batch->events().begin(), batch->events().end(),
                                             [](const auto &event) { return event.has_hand_slot_map(); });
         if (!hasHandMap && hasLastBroadcastHandSlotMap)
             batch->add_events()->mutable_hand_slot_map()->CopyFrom(lastBroadcastHandSlotMap);
+    } else {
+        // Reconnects need the complete private face-down map even when idle and even when it is
+        // empty. That full replacement restores authorized Hideaway identities and prunes stale
+        // lookups retained by a reconnecting client.
+        const bool hasFaceDownMap = std::any_of(batch->events().begin(), batch->events().end(),
+                                                [](const auto &event) { return event.has_face_down_object_map(); });
+        if (!hasFaceDownMap)
+            appendFaceDownObjectMap(snapshot);
     }
     const ruled::v1::RuledEventBatch filtered = redactBatchForParticipant(*batch, participant);
 
@@ -200,6 +210,69 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
     filtered.SerializeToString(&bytes);
     event.set_payload(bytes);
     rc.enqueuePostResponseItem(ServerMessage::GAME_EVENT_CONTAINER, game->prepareGameEvent(event, -1));
+}
+
+void RuledBroadcastRouter::appendFaceDownObjectMap(ruled::v1::IpcResponse &toSend)
+{
+    ruled::v1::RuledEvent faceDownEvent;
+    auto *faceDownMap = faceDownEvent.mutable_face_down_object_map();
+    for (Server_AbstractPlayer *ab : game->getPlayers().values()) {
+        if (!ab) {
+            continue;
+        }
+        auto *player = static_cast<Server_Player *>(ab);
+        const int playerId = player->getPlayerId();
+        const RuledPlayerBinding &binding = synchronizer->playerBinding(playerId);
+        for (auto it = binding.engineOidToServerCardId.constBegin();
+             it != binding.engineOidToServerCardId.constEnd(); ++it) {
+            const quint32 oid = it.key();
+            if (!binding.isEngineOidFaceDown(oid)) {
+                continue;
+            }
+            Server_Card *card = binding.findCardByEngineOid(player, oid);
+            if (!card || !card->getZone() || card->getZone()->getName() != ZoneNames::TABLE) {
+                continue;
+            }
+            auto *entry = faceDownMap->add_entries();
+            entry->set_viewer_player_id(playerId);
+            entry->set_engine_object_id(oid);
+            entry->set_zone_change_generation(binding.engineOidZoneChangeGeneration(oid));
+            entry->set_server_card_id(card->getId());
+            if (card->getZone()->getPlayer()) {
+                entry->set_zone_player_id(card->getZone()->getPlayer()->getPlayerId());
+            }
+            const QString cardId = binding.engineOidUnderlyingCardId(oid);
+            const QString cardName = synchronizer->faceDisplayName(cardId, 0);
+            entry->set_card_name((cardName.isEmpty() ? card->getName() : cardName).toStdString());
+        }
+    }
+    if (currentPublicZoneView) {
+        for (const auto &viewer : currentPublicZoneView->per_player()) {
+            const int viewerId = viewer.player_id();
+            for (const auto &hidden : viewer.hideaway_exile_cards()) {
+                auto *owner = static_cast<Server_Player *>(game->getPlayer(hidden.owner_player_id()));
+                if (!owner) {
+                    continue;
+                }
+                const RuledPlayerBinding &binding = synchronizer->playerBinding(hidden.owner_player_id());
+                const int serverCardId = binding.exileEngineOidToServerCardId.value(hidden.object_id(), -1);
+                Server_CardZone *exile = owner->getZones().value(ZoneNames::EXILE);
+                Server_Card *card = exile && serverCardId >= 0 ? exile->getCard(serverCardId, nullptr, false) : nullptr;
+                if (!card) {
+                    continue;
+                }
+                auto *entry = faceDownMap->add_entries();
+                entry->set_viewer_player_id(viewerId);
+                entry->set_engine_object_id(hidden.object_id());
+                entry->set_zone_change_generation(hidden.zone_change_generation());
+                entry->set_server_card_id(card->getId());
+                entry->set_zone_player_id(hidden.owner_player_id());
+                const QString cardName = synchronizer->faceDisplayName(QString::fromStdString(hidden.card_id()), 0);
+                entry->set_card_name((cardName.isEmpty() ? card->getName() : cardName).toStdString());
+            }
+        }
+    }
+    *toSend.mutable_batch()->add_events() = faceDownEvent;
 }
 
 // Appends the server-built identity-map events to the outgoing batch: a
@@ -308,40 +381,7 @@ void RuledBroadcastRouter::appendServerObjectMaps(ruled::v1::IpcResponse &toSend
             *toSend.mutable_batch()->add_events() = mapEvent;
         }
     }
-    // Controller-private identity for face-down battlefield objects. Always include the complete
-    // replacement, even when empty, so leave-zone and control-change batches prune stale lookup.
-    {
-        ruled::v1::RuledEvent faceDownEvent;
-        auto *faceDownMap = faceDownEvent.mutable_face_down_object_map();
-        for (Server_AbstractPlayer *ab : game->getPlayers().values()) {
-            if (!ab) {
-                continue;
-            }
-            auto *player = static_cast<Server_Player *>(ab);
-            const int playerId = player->getPlayerId();
-            const RuledPlayerBinding &binding = synchronizer->playerBinding(playerId);
-            for (auto it = binding.engineOidToServerCardId.constBegin();
-                 it != binding.engineOidToServerCardId.constEnd(); ++it) {
-                const quint32 oid = it.key();
-                if (!binding.isEngineOidFaceDown(oid)) {
-                    continue;
-                }
-                Server_Card *card = binding.findCardByEngineOid(player, oid);
-                if (!card || !card->getZone() || card->getZone()->getName() != ZoneNames::TABLE) {
-                    continue;
-                }
-                auto *entry = faceDownMap->add_entries();
-                entry->set_controller_player_id(playerId);
-                entry->set_engine_object_id(oid);
-                entry->set_zone_change_generation(binding.engineOidZoneChangeGeneration(oid));
-                entry->set_server_card_id(card->getId());
-                const QString cardId = binding.engineOidUnderlyingCardId(oid);
-                const QString cardName = synchronizer->faceDisplayName(cardId, 0);
-                entry->set_card_name((cardName.isEmpty() ? card->getName() : cardName).toStdString());
-            }
-        }
-        *toSend.mutable_batch()->add_events() = faceDownEvent;
-    }
+    appendFaceDownObjectMap(toSend);
     // zone_view hand/lib fields are cleared before broadcast; publish hand index <-> Server_Card.id separately for
     // ruled UI intents. Injected only when the mapping actually changed since the last broadcast:
     // the client keeps the previous map when the event is absent and replaces it wholesale when it
@@ -464,14 +504,14 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
             filtered.mutable_events()->DeleteSubrange(ei, 1);
         }
     }
-    QHash<quint32, int> faceDownControllerByObjectId;
+    QHash<quint32, QSet<int>> faceDownViewersByObjectId;
     for (int ei = batch.events_size() - 1; ei >= 0; --ei) {
         const auto &event = batch.events(ei);
         if (!event.has_face_down_object_map()) {
             continue;
         }
         for (const auto &entry : event.face_down_object_map().entries()) {
-            faceDownControllerByObjectId.insert(entry.engine_object_id(), entry.controller_player_id());
+            faceDownViewersByObjectId[entry.engine_object_id()].insert(entry.viewer_player_id());
         }
         break;
     }
@@ -656,13 +696,12 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                 }
 
                 // Public permanent choices keep candidate OIDs visible so every client can
-                // render the pending selection. Face-down identity belongs to the permanent's
-                // current controller, not necessarily the target or delegated chooser, so mask
-                // every identity-bearing parallel field for all other recipients.
+                // render the pending selection. Face-down identity belongs only to viewers who
+                // have rules-granted access, which can include former Hideaway controllers.
                 for (int ci = 0; ci < rcr->candidate_object_ids_size(); ++ci) {
-                    const auto faceDown = faceDownControllerByObjectId.constFind(rcr->candidate_object_ids(ci));
-                    if (faceDown == faceDownControllerByObjectId.constEnd() ||
-                        faceDown.value() == participant->getPlayerId()) {
+                    const auto faceDown = faceDownViewersByObjectId.constFind(rcr->candidate_object_ids(ci));
+                    if (faceDown == faceDownViewersByObjectId.constEnd() ||
+                        faceDown.value().contains(participant->getPlayerId())) {
                         continue;
                     }
                     if (ci < rcr->candidate_card_ids_size())
@@ -691,7 +730,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
         if (filtered.events(ei).has_face_down_object_map()) {
             auto *entries = filtered.mutable_events(ei)->mutable_face_down_object_map()->mutable_entries();
             for (int i = entries->size() - 1; i >= 0; --i) {
-                if (entries->Get(i).controller_player_id() != participant->getPlayerId()) {
+                if (entries->Get(i).viewer_player_id() != participant->getPlayerId()) {
                     entries->DeleteSubrange(i, 1);
                 }
             }

@@ -21,9 +21,24 @@ TEST_F(RuledE2ESmokeTest, DiagnosticCaptureReconstructsAndResumesPendingOpeningC
     original2.sendReady();
     ASSERT_TRUE(original1.pumpUntil([&] { return original1.stateVersion > 0; }, 20000, "captured startup"));
     ASSERT_TRUE(original2.pumpUntil([&] { return original2.stateVersion > 0; }, 20000, "captured observer"));
+    const auto hasStartingPlayerOffer = [](const OpeningDriver &client) {
+        const auto &opening = client.latestLegal.opening();
+        return opening.stage() == ruled::v1::OPENING_STAGE_CHOOSE_STARTING_PLAYER &&
+               opening.eligible_starting_player_ids_size() > 0;
+    };
+    QElapsedTimer startingPlayerTimer;
+    startingPlayerTimer.start();
+    while (!hasStartingPlayerOffer(original1) && !hasStartingPlayerOffer(original2) &&
+           startingPlayerTimer.elapsed() < 20000) {
+        original1.pump(25);
+        original2.pump(25);
+    }
+    const bool original1CanChoose = hasStartingPlayerOffer(original1);
+    const bool original2CanChoose = hasStartingPlayerOffer(original2);
+    ASSERT_TRUE(original1CanChoose || original2CanChoose) << "timed out waiting for captured starting-player offer";
     ruled::v1::RuledCommand choose;
     choose.mutable_choose_starting_player()->set_starting_player_id(original1.myId);
-    auto &chooser = !original1.latestLegal.opening().eligible_starting_player_ids().empty() ? original1 : original2;
+    auto &chooser = original1CanChoose ? original1 : original2;
     chooser.sendRuled(choose, "captured starting player choice");
     ASSERT_TRUE(original1.pumpUntil([&] { return original1.latestLegal.opening().can_keep(); }, 10000,
                                     "captured mulligan choice"));

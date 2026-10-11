@@ -1922,6 +1922,7 @@ impl GameEngine {
                 };
                 dispatch::execute_effect(&mut cx, effect)?
             };
+            self.refresh_hideaway_look_permissions();
             if outcome == EffectOutcome::GameEnded {
                 self.state
                     .millennium_calendar_state_trigger_stack_keys
@@ -1978,6 +1979,7 @@ impl GameEngine {
             if self.drain_immediate_observer_actions(Some(observer_stack), events)? {
                 return Ok(ResolutionProgress::Parked);
             }
+            self.refresh_hideaway_look_permissions();
             self.check_millennium_calendar_state_triggers();
             match outcome {
                 EffectOutcome::Blighted(_) | EffectOutcome::RetainedExile(..) => {
@@ -2089,14 +2091,23 @@ impl GameEngine {
         let prior_suspended_resolution = prior
             .as_ref()
             .and_then(|batch| batch.suspended_resolution.clone());
-        let active_suspended_resolution = pending_player_set_sacrifice
-            .then(|| self.state.pending_resolution.take())
-            .flatten();
+        // A paired observer return can interrupt any already-parked resolution choice. Preserve
+        // the complete continuation (including a linked-play cohort's current prompt) so the
+        // observer's Aura or timestamp choice can finish before the original choice is restored.
+        let active_suspended_resolution = self.state.pending_resolution.take();
         debug_assert!(
             prior_suspended_resolution.is_none() || active_suspended_resolution.is_none(),
             "an observer return batch cannot suspend two resolution prompts"
         );
         let suspended_resolution = prior_suspended_resolution.or(active_suspended_resolution);
+        let prior_suspended_replacement_event = prior
+            .as_ref()
+            .and_then(|batch| batch.suspended_replacement_event.clone());
+        let active_suspended_replacement_event = suspended_resolution
+            .as_ref()
+            .and_then(|_| self.state.pending_replacement_event.take());
+        let suspended_replacement_event =
+            prior_suspended_replacement_event.or(active_suspended_replacement_event);
         let mut actions = prior
             .as_ref()
             .map_or_else(VecDeque::new, |batch| batch.remaining.clone());
@@ -2184,6 +2195,7 @@ impl GameEngine {
                     remaining: actions,
                     resume_stack: resume_stack.clone(),
                     suspended_resolution: suspended_resolution.clone(),
+                    suspended_replacement_event: suspended_replacement_event.clone(),
                 });
                 let prompt = format!("Choose what {label} will enchant as it returns.");
                 events.push(rv1::RuledEvent {
@@ -2323,6 +2335,7 @@ impl GameEngine {
                         remaining: actions,
                         resume_stack: resume_stack.clone(),
                         suspended_resolution: suspended_resolution.clone(),
+                        suspended_replacement_event: suspended_replacement_event.clone(),
                     });
                     return Ok(true);
                 }
@@ -2346,6 +2359,7 @@ impl GameEngine {
                 remaining: VecDeque::new(),
                 resume_stack: resume_stack.clone(),
                 suspended_resolution: suspended_resolution.clone(),
+                suspended_replacement_event: suspended_replacement_event.clone(),
             })),
             resume_stack,
             events,
@@ -2354,7 +2368,11 @@ impl GameEngine {
             return Ok(true);
         };
         self.commit_observer_return_batch(batch.ready, events)?;
-        if self.restore_suspended_observer_resolution(suspended_resolution, events)? {
+        if self.restore_suspended_observer_resolution(
+            suspended_resolution,
+            suspended_replacement_event,
+            events,
+        )? {
             return Ok(true);
         }
         Ok(false)
@@ -2363,12 +2381,14 @@ impl GameEngine {
     pub(super) fn restore_suspended_observer_resolution(
         &mut self,
         suspended_resolution: Option<PendingResolution>,
+        suspended_replacement_event: Option<crate::engine::replacement::PendingReplacementEvent>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
         let Some(suspended_resolution) = suspended_resolution else {
             return Ok(false);
         };
         self.state.pending_resolution = Some(suspended_resolution);
+        self.state.pending_replacement_event = suspended_replacement_event;
         if matches!(
             self.state
                 .pending_resolution
@@ -2377,6 +2397,197 @@ impl GameEngine {
             Some(ResolutionContinuation::PlayerSetSacrifice { .. })
         ) {
             self.refresh_player_set_sacrifice_departure(events)?;
+        }
+        if self.reprocess_suspended_battlefield_entry(events)? {
+            return Ok(true);
+        }
+        // A player may have left while the observer's own choice was parked. Rebuild a restored
+        // linked-play offer against the surviving cohort now that its original continuation is
+        // visible again.
+        self.reconcile_pending_linked_exile_after_departure(events)?;
+        if let Some(pending) = self.state.pending_resolution.as_ref() {
+            if let ResolutionContinuation::SpecialCast { .. } = &pending.continuation {
+                if let Some(event) = self.resolution_payment_choice_event() {
+                    events.push(event);
+                }
+            }
+        }
+        Ok(true)
+    }
+
+    /// Re-run a suspended as-enters transaction after observer choices. This rebuilds the live
+    /// prompt from its saved event and currently applicable replacement effects, instead of
+    /// restoring a pending choice whose candidates or entrant may have become stale.
+    fn reprocess_suspended_battlefield_entry(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let Some(pending) = self.state.pending_resolution.clone() else {
+            return Ok(false);
+        };
+        if !matches!(
+            pending.continuation,
+            ResolutionContinuation::EntryCopySource { .. }
+                | ResolutionContinuation::EntryAuraRecipient { .. }
+                | ResolutionContinuation::EntryReplacement { .. }
+                | ResolutionContinuation::EntryCost { .. }
+                | ResolutionContinuation::EntryReveal { .. }
+                | ResolutionContinuation::EntryBasicLandType { .. }
+                | ResolutionContinuation::EntryChooseOpponent { .. }
+                | ResolutionContinuation::EntryChooseCreatureType { .. }
+                | ResolutionContinuation::SagaReadAhead { .. }
+                | ResolutionContinuation::BattleProtector { .. }
+        ) {
+            return Ok(false);
+        }
+        let Some(replacement_event) = self.state.pending_replacement_event.take() else {
+            return Ok(false);
+        };
+        let crate::engine::replacement::PendingReplacementEvent::BattlefieldEntry(entry) =
+            replacement_event
+        else {
+            self.state.pending_replacement_event = Some(replacement_event);
+            return Ok(false);
+        };
+        let mut entry = *entry;
+        let Some(stack) = pending.continuation.stack().cloned() else {
+            self.state.pending_replacement_event = Some(
+                crate::engine::replacement::PendingReplacementEvent::BattlefieldEntry(Box::new(
+                    entry,
+                )),
+            );
+            return Ok(false);
+        };
+        let linked_current = self
+            .state
+            .pending_linked_exile_play
+            .as_ref()
+            .filter(|cohort| {
+                cohort
+                    .in_flight
+                    .is_some_and(|current| current.object_id == entry.event.object_id)
+            })
+            .and_then(|cohort| {
+                cohort
+                    .in_flight
+                    .map(|current| (cohort.stack.item.controller, current))
+            });
+        let linked_entry_is_current = linked_current.is_none_or(|(chooser, current)| {
+            let object_current = self
+                .state
+                .objects
+                .get(&current.object_id)
+                .is_some_and(|object| object.zone == Zone::Exile);
+            let generation_current = self
+                .state
+                .zone_change_generation
+                .get(&current.object_id)
+                .copied()
+                == Some(current.zone_change_generation);
+            let chooser_live = self
+                .state
+                .player_idx(chooser)
+                .is_some_and(|index| !self.state.players[index].has_lost);
+            object_current
+                && generation_current
+                && chooser_live
+                && entry.event.destination_controller == chooser
+        });
+        if !self.state.objects.contains_key(&entry.event.object_id) || !linked_entry_is_current {
+            self.state.pending_resolution = None;
+            self.state.pending_replacement_event = None;
+            let matching_linked_entry =
+                self.state
+                    .pending_linked_exile_play
+                    .as_ref()
+                    .is_some_and(|cohort| {
+                        cohort
+                            .in_flight
+                            .is_some_and(|current| current.object_id == entry.event.object_id)
+                    });
+            if matching_linked_entry {
+                let cohort = self
+                    .state
+                    .pending_linked_exile_play
+                    .take()
+                    .expect("matching linked entry checked above");
+                let resumed = self.advance_pending_linked_exile_play(*cohort, Vec::new())?;
+                events.extend(resumed.events);
+                return Ok(true);
+            }
+            // The stale event can never commit. Avoid rolling its provisional copy onto a newer
+            // incarnation that reused the object ID.
+            entry.event.pending_copy_candidate = None;
+            entry.event.pending_aura_recipient = None;
+            entry.event.accepted_aura_recipient = None;
+            let resumed = self.finish_entry_copy_without_recipient(
+                stack,
+                entry.event,
+                entry.completion,
+                Vec::new(),
+            )?;
+            events.extend(resumed.events);
+            return Ok(true);
+        }
+
+        // An Aura recipient prompt stores a prospective copy receipt on the event. Return that
+        // exact receipt to the entry pipeline so it can recompute legal recipients and republish
+        // the prompt without granting a new zone incarnation.
+        if let Some(recipient) = entry.event.pending_aura_recipient.take() {
+            if entry.event.pending_copy_candidate.is_none() {
+                entry.event.pending_copy_candidate = recipient.copy_candidate;
+            }
+        }
+        let resumed_prompt = match &pending.continuation {
+            ResolutionContinuation::EntryBasicLandType { .. } => {
+                self.resumed_basic_land_type_choice_event(&pending, &entry)
+            }
+            ResolutionContinuation::EntryCost { .. } => {
+                self.resumed_entry_cost_choice_event(&pending, &entry)
+            }
+            _ => None,
+        };
+        if let Some(prompt) = resumed_prompt {
+            self.state.pending_resolution = Some(pending);
+            self.state.pending_replacement_event = Some(
+                crate::engine::replacement::PendingReplacementEvent::BattlefieldEntry(Box::new(
+                    entry,
+                )),
+            );
+            events.push(prompt);
+            return Ok(true);
+        }
+        self.state.pending_resolution = None;
+        self.state.pending_replacement_event = None;
+        let completion = entry.completion;
+        let progress = self.advance_or_park_battlefield_entry(
+            stack.item.clone(),
+            entry.event,
+            completion.clone(),
+            events,
+        );
+        match progress {
+            super::replacement::BattlefieldEntryProgress::Parked => {
+                self.transfer_entry_choice_resume(&stack);
+            }
+            super::replacement::BattlefieldEntryProgress::Skipped(event) => {
+                let resumed = self.finish_entry_copy_without_recipient(
+                    stack,
+                    *event,
+                    completion,
+                    Vec::new(),
+                )?;
+                events.extend(resumed.events);
+            }
+            super::replacement::BattlefieldEntryProgress::Ready(event) => {
+                let resumed = self.complete_pending_battlefield_entry(
+                    pending,
+                    *event,
+                    completion,
+                    Vec::new(),
+                )?;
+                events.extend(resumed.events);
+            }
         }
         Ok(true)
     }
@@ -2469,6 +2680,7 @@ impl GameEngine {
                 remaining: VecDeque::new(),
                 resume_stack: stack.clone(),
                 suspended_resolution: None,
+                suspended_replacement_event: None,
             });
         if decider_live {
             // The current action was popped before parking. Refresh it through the normal
@@ -2813,11 +3025,19 @@ pub(crate) fn permanent_moved_event(
     {
         destination = rv1::permanent_moved::Destination::Exile;
     }
-    let card_id = state
+    let face_down_exile = state
         .objects
         .get(&oid)
-        .map(|o| o.card_id.clone())
-        .unwrap_or_default();
+        .is_some_and(|object| object.zone == Zone::Exile && object.face_down);
+    let card_id = if face_down_exile {
+        String::new()
+    } else {
+        state
+            .objects
+            .get(&oid)
+            .map(|o| o.card_id.clone())
+            .unwrap_or_default()
+    };
     // Callers emit this *after* the move, so the object already carries its post-move controller:
     // the new controller for a battlefield entry, and the owner again everywhere else (CR 400.7).
     // Always populated — proto3 scalars have no presence and player id 0 is valid, so a defaulted
@@ -2834,10 +3054,9 @@ pub(crate) fn permanent_moved_event(
             destination: destination as i32,
             card_id,
             controller_player_id,
-            face_down: state
-                .objects
-                .get(&oid)
-                .is_some_and(|object| object.zone == Zone::Battlefield && object.face_down),
+            face_down: state.objects.get(&oid).is_some_and(|object| {
+                object.face_down && matches!(object.zone, Zone::Battlefield | Zone::Exile)
+            }),
             source_library_position: None,
         })),
     }
@@ -3920,6 +4139,181 @@ mod attached_subject_tests {
         }
     }
 
+    fn begin_linked_play_fixture(
+        engine: &mut GameEngine,
+        linked_cards: &[ObjectId],
+        play_kind: tricerules_card_model::primitives::LinkedExiledCardPlayKind,
+    ) -> (ObjectId, StackItem) {
+        begin_linked_play_fixture_for(engine, 0, linked_cards, play_kind)
+    }
+
+    fn begin_linked_play_fixture_for(
+        engine: &mut GameEngine,
+        chooser: PlayerId,
+        linked_cards: &[ObjectId],
+        play_kind: tricerules_card_model::primitives::LinkedExiledCardPlayKind,
+    ) -> (ObjectId, StackItem) {
+        let source = add_battlefield_object(engine, chooser, "nautiloid_ship");
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, source_generation);
+        item.controller = chooser;
+        item.source_owner = Some(chooser);
+        item.card_id = "nautiloid_ship".to_string();
+        item.trigger_context.linked_exile_occurrence =
+            Some(crate::state::LinkedExileOccurrence::NativeOrTokenBase);
+        let mut ability = engine
+            .registry
+            .get("nautiloid_ship")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[1]
+            .clone();
+        ability.effect = vec![
+            SpellEffectKind::PlayLinkedExiledCard {
+                producer_ability_id: tricerules_card_model::AbilityId::new(
+                    "exile_target_graveyard",
+                )
+                .unwrap(),
+                linked_exile_id: tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+                filter: None,
+                play_kind,
+                return_source_to_owner_hand_if_cast: false,
+            },
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            },
+        ];
+        item.triggered_ability = Some(ability);
+
+        let key = zones::linked_exile_key(
+            engine,
+            &item,
+            tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+            tricerules_card_model::AbilityId::new("exile_target_graveyard").unwrap(),
+        )
+        .unwrap();
+        engine.state.linked_exile_records.insert(
+            key,
+            linked_cards
+                .iter()
+                .copied()
+                .map(|object_id| crate::state::LinkedExiledObject {
+                    object_id,
+                    zone_change_generation: engine.state.zone_change_generation[&object_id],
+                })
+                .collect(),
+        );
+
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        (source, item)
+    }
+
+    fn exile_for_fixture(engine: &mut GameEngine, owner: PlayerId, card_id: &str) -> ObjectId {
+        let object_id = add_battlefield_object(engine, owner, card_id);
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            object_id,
+            Zone::Exile,
+            None,
+        )
+        .unwrap();
+        object_id
+    }
+
+    fn queue_observer_aura_return(engine: &mut GameEngine, object_id: ObjectId) {
+        engine.state.pending_immediate_observer_actions.push(
+            ImmediateObserverAction::ReturnExiledObject {
+                exiled: TriggerObjectRef {
+                    object_id,
+                    zone_change_generation: engine.state.zone_change_generation[&object_id],
+                    controller_at_event: engine.state.objects[&object_id].owner,
+                },
+            },
+        );
+    }
+
+    fn observe_leave_and_return_aura(
+        engine: &mut GameEngine,
+        watched_source: ObjectId,
+        exiled_aura: ObjectId,
+    ) {
+        engine
+            .state
+            .active_event_observers
+            .push(ActiveEventObserver {
+                watched: Some(TriggerObjectRef {
+                    object_id: watched_source,
+                    zone_change_generation: engine
+                        .state
+                        .zone_change_generation
+                        .get(&watched_source)
+                        .copied()
+                        .unwrap_or(0),
+                    controller_at_event: engine.state.objects[&watched_source].controller,
+                }),
+                matcher: EventObserverMatcher::WhenWatchedObjectLeavesBattlefield,
+                payload: EventObserverPayload::ReturnExiledObject {
+                    exiled: TriggerObjectRef {
+                        object_id: exiled_aura,
+                        zone_change_generation: engine.state.zone_change_generation[&exiled_aura],
+                        controller_at_event: engine.state.objects[&exiled_aura].owner,
+                    },
+                },
+            });
+    }
+
+    fn reserve_linked_spell_for_test(engine: &mut GameEngine, object_id: ObjectId) -> u64 {
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![object_id],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let permission = engine.special_cast_permission(0).unwrap();
+        let generation = engine.state.zone_change_generation[&object_id];
+        let announcement = rv1::SpellCastAnnouncement {
+            source: Some(rv1::CastSource {
+                expected_zone_change_generation: Some(generation),
+                location: Some(rv1::cast_source::Location::ExileObjectId(object_id)),
+            }),
+            cast_method: rv1::CastMethod::Permission as i32,
+            casting_permission_id: Some(permission.group_id),
+            ..Default::default()
+        };
+        engine
+            .apply_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
+                            spell_cast_announcement: Some(announcement),
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .unwrap();
+        engine
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .unwrap()
+            .transaction_id
+    }
+
     #[test]
     fn winning_effect_stops_remaining_draw_and_life_tail_immediately() {
         let mut engine = GameEngine::new(
@@ -4137,6 +4531,2382 @@ mod attached_subject_tests {
         ability.effect = effects;
         item.triggered_ability = Some(ability);
         item
+    }
+
+    #[test]
+    fn hideaway_links_one_face_down_exile_and_does_not_log_random_bottom_order() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38109,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "nautiloid_ship");
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, source_generation);
+        item.card_id = "nautiloid_ship".to_string();
+        item.triggered_ability = Some(
+            engine
+                .registry
+                .get("nautiloid_ship")
+                .unwrap()
+                .primary_face()
+                .triggered_abilities[0]
+                .clone(),
+        );
+        let ability = item.triggered_ability.as_mut().unwrap();
+        ability.targeting = None;
+        ability.effect = vec![
+            SpellEffectKind::Hideaway {
+                count: 4,
+                linked_exile_id: tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+            },
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            },
+        ];
+        item.trigger_context.linked_exile_occurrence =
+            Some(crate::state::LinkedExileOccurrence::NativeOrTokenBase);
+        let looked_at = engine.state.players[0]
+            .library
+            .iter()
+            .take(4)
+            .copied()
+            .collect::<Vec<_>>();
+        let library_count_before = engine.state.players[0].library.len();
+        let selected = looked_at[1];
+        let remainder = looked_at
+            .iter()
+            .copied()
+            .filter(|object_id| *object_id != selected)
+            .collect::<std::collections::BTreeSet<_>>();
+
+        let (effects, label) = engine.build_resolution_effects(&item);
+        let mut events = Vec::new();
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut events)
+            .unwrap();
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(pending.presentation.candidates, looked_at);
+        assert_eq!(pending.presentation.min, 1);
+        assert_eq!(pending.presentation.max, 1);
+        assert_eq!(engine.state.players[0].life, 20);
+
+        let batch = engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![selected],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        let exiled = &engine.state.objects[&selected];
+        assert_eq!(engine.state.players[0].life, 22);
+        assert_eq!(exiled.zone, Zone::Exile);
+        assert!(exiled.face_down);
+        assert_eq!(engine.state.zone_change_generation[&selected], 1);
+        let linked = engine
+            .state
+            .linked_exile_records
+            .values()
+            .flatten()
+            .find(|linked| linked.object_id == selected)
+            .unwrap();
+        assert_eq!(linked.zone_change_generation, 1);
+        assert!(engine
+            .state
+            .hideaway_look_permissions
+            .values()
+            .any(|players| { players.contains(&0) }));
+        let library = engine.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        assert_eq!(library.len(), library_count_before - 1);
+        assert_eq!(
+            library[library.len() - 3..]
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>(),
+            remainder
+        );
+        assert!(batch.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+                if moved.object_id == selected && moved.face_down && moved.card_id.is_empty()
+        )));
+        assert!(!batch.events.iter().any(|event| match &event.ev {
+            Some(rv1::ruled_event::Ev::Log(log)) => {
+                log.visible_to_player_id.is_none() && log.text.contains("randomly bottoms")
+            }
+            _ => false,
+        }));
+        let permission_key = engine
+            .state
+            .hideaway_look_permissions
+            .keys()
+            .find(|(_, object_id, generation)| *object_id == selected && *generation == 1)
+            .cloned()
+            .unwrap();
+        assert_eq!(
+            engine.state.hideaway_look_permissions[&permission_key],
+            std::collections::BTreeSet::from([0])
+        );
+        let blank_copy = add_battlefield_object(&mut engine, 1, "grizzly_bears");
+        let blank_values = engine.copiable_values_for(blank_copy).unwrap();
+        let source_object = engine.state.objects.get_mut(&source).unwrap();
+        source_object.copiable_values = Some(blank_values);
+        source_object.copy_revision = source_object.copy_revision.saturating_add(1);
+        assert!(engine
+            .effective_triggered_abilities(source, "nautiloid_ship", 0)
+            .is_empty());
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .base_controller = 1;
+        engine.refresh_hideaway_look_permissions();
+        assert_eq!(
+            engine.state.hideaway_look_permissions[&permission_key],
+            std::collections::BTreeSet::from([0, 1])
+        );
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .base_controller = 0;
+        engine.refresh_hideaway_look_permissions();
+        assert_eq!(
+            engine.state.hideaway_look_permissions[&permission_key],
+            std::collections::BTreeSet::from([0, 1])
+        );
+    }
+
+    #[test]
+    fn declining_linked_cast_resumes_the_effect_tail_once() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38110,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "nautiloid_ship");
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, source_generation);
+        item.card_id = "nautiloid_ship".to_string();
+        item.trigger_context.linked_exile_occurrence =
+            Some(crate::state::LinkedExileOccurrence::NativeOrTokenBase);
+        let mut ability = engine
+            .registry
+            .get("nautiloid_ship")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[1]
+            .clone();
+        ability.effect = vec![
+            SpellEffectKind::PlayLinkedExiledCard {
+                producer_ability_id: tricerules_card_model::AbilityId::new(
+                    "exile_target_graveyard",
+                )
+                .unwrap(),
+                linked_exile_id: tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+                filter: None,
+                play_kind: LinkedExiledCardPlayKind::Cast,
+                return_source_to_owner_hand_if_cast: true,
+            },
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            },
+        ];
+        item.triggered_ability = Some(ability);
+
+        let linked_card = add_battlefield_object(&mut engine, 0, "opt");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            linked_card,
+            Zone::Exile,
+            None,
+        )
+        .unwrap();
+        engine
+            .state
+            .objects
+            .get_mut(&linked_card)
+            .unwrap()
+            .face_down = true;
+        let linked_generation = engine.state.zone_change_generation[&linked_card];
+        let key = zones::linked_exile_key(
+            &engine,
+            &item,
+            tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+            tricerules_card_model::AbilityId::new("exile_target_graveyard").unwrap(),
+        )
+        .unwrap();
+        engine.state.linked_exile_records.insert(
+            key.clone(),
+            vec![crate::state::LinkedExiledObject {
+                object_id: linked_card,
+                zone_change_generation: linked_generation,
+            }],
+        );
+        engine.state.hideaway_look_permissions.insert(
+            (key, linked_card, linked_generation),
+            std::collections::BTreeSet::from([0]),
+        );
+
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        let choice = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(choice.presentation.candidates, [linked_card]);
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![linked_card],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let offer = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(offer.presentation.choice_kind, rv1::ChoiceKind::SpecialCast);
+
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::Decline as i32,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        assert_eq!(engine.state.players[0].life, 22);
+        assert!(engine.state.pending_resolution.is_none());
+
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![linked_card],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let permission = engine
+            .special_cast_permission(0)
+            .expect("resolving linked-cast permission");
+        let cast = rv1::CastSpell {
+            cast_method: rv1::CastMethod::Permission as i32,
+            casting_permission_id: Some(permission.group_id),
+            source: Some(rv1::CastSource {
+                expected_zone_change_generation: Some(linked_generation),
+                location: Some(rv1::cast_source::Location::ExileObjectId(linked_card)),
+            }),
+            ..Default::default()
+        };
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
+                    cast_spell: Some(cast),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        assert_eq!(engine.state.players[0].life, 24);
+        assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
+        assert_eq!(engine.state.objects[&linked_card].zone, Zone::Stack);
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn linked_cast_does_not_return_a_source_that_left_during_cast_payment() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38112,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "nautiloid_ship");
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, source_generation);
+        item.card_id = "nautiloid_ship".to_string();
+        item.trigger_context.linked_exile_occurrence =
+            Some(crate::state::LinkedExileOccurrence::NativeOrTokenBase);
+        let mut ability = engine
+            .registry
+            .get("nautiloid_ship")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[1]
+            .clone();
+        ability.effect = vec![SpellEffectKind::PlayLinkedExiledCard {
+            producer_ability_id: tricerules_card_model::AbilityId::new("exile_target_graveyard")
+                .unwrap(),
+            linked_exile_id: tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+            filter: None,
+            play_kind: LinkedExiledCardPlayKind::Cast,
+            return_source_to_owner_hand_if_cast: true,
+        }];
+        item.triggered_ability = Some(ability);
+
+        let linked_card = add_battlefield_object(&mut engine, 0, "opt");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            linked_card,
+            Zone::Exile,
+            None,
+        )
+        .unwrap();
+        engine
+            .state
+            .objects
+            .get_mut(&linked_card)
+            .unwrap()
+            .face_down = true;
+        let linked_generation = engine.state.zone_change_generation[&linked_card];
+        let key = zones::linked_exile_key(
+            &engine,
+            &item,
+            tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+            tricerules_card_model::AbilityId::new("exile_target_graveyard").unwrap(),
+        )
+        .unwrap();
+        engine.state.linked_exile_records.insert(
+            key.clone(),
+            vec![crate::state::LinkedExiledObject {
+                object_id: linked_card,
+                zone_change_generation: linked_generation,
+            }],
+        );
+        engine.state.hideaway_look_permissions.insert(
+            (key, linked_card, linked_generation),
+            std::collections::BTreeSet::from([0]),
+        );
+
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![linked_card],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let permission = engine
+            .special_cast_permission(0)
+            .expect("resolving linked-cast permission");
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
+                    spell_cast_announcement: Some(rv1::SpellCastAnnouncement {
+                        cast_method: rv1::CastMethod::Permission as i32,
+                        casting_permission_id: Some(permission.group_id),
+                        source: Some(rv1::CastSource {
+                            expected_zone_change_generation: Some(linked_generation),
+                            location: Some(rv1::cast_source::Location::ExileObjectId(linked_card)),
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        let transaction_id = engine
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .unwrap()
+            .transaction_id;
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        let departed_generation = engine.state.zone_change_generation[&source];
+        assert!(departed_generation > source_generation);
+
+        engine
+            .commit_spell_cast(
+                0,
+                &rv1::CommitSpellCast {
+                    transaction_id,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+        assert_eq!(
+            engine.state.zone_change_generation[&source],
+            departed_generation
+        );
+        assert_eq!(engine.state.objects[&linked_card].zone, Zone::Stack);
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn linked_play_can_play_a_land_only_on_its_controller_turn_and_resumes_after_entry() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38111,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "nautiloid_ship");
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, source_generation);
+        item.card_id = "nautiloid_ship".to_string();
+        item.trigger_context.linked_exile_occurrence =
+            Some(crate::state::LinkedExileOccurrence::NativeOrTokenBase);
+        let mut ability = engine
+            .registry
+            .get("nautiloid_ship")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[1]
+            .clone();
+        ability.effect = vec![
+            SpellEffectKind::PlayLinkedExiledCard {
+                producer_ability_id: tricerules_card_model::AbilityId::new(
+                    "exile_target_graveyard",
+                )
+                .unwrap(),
+                linked_exile_id: tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+                filter: None,
+                play_kind: LinkedExiledCardPlayKind::Play,
+                return_source_to_owner_hand_if_cast: false,
+            },
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            },
+        ];
+        item.triggered_ability = Some(ability);
+
+        let land = add_battlefield_object(&mut engine, 0, "forest");
+        move_object_to_zone(&mut engine.state, engine.registry, land, Zone::Exile, None).unwrap();
+        let land_generation = engine.state.zone_change_generation[&land];
+        let key = zones::linked_exile_key(
+            &engine,
+            &item,
+            tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+            tricerules_card_model::AbilityId::new("exile_target_graveyard").unwrap(),
+        )
+        .unwrap();
+        engine.state.linked_exile_records.insert(
+            key,
+            vec![crate::state::LinkedExiledObject {
+                object_id: land,
+                zone_change_generation: land_generation,
+            }],
+        );
+
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![land],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            engine.special_cast_permission(0).unwrap().scope,
+            ExilePlayPermissionScope::PlayCard
+        );
+
+        let play_land = rv1::RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                source: Some(rv1::LandSource {
+                    location: Some(rv1::land_source::Location::ExileObjectId(land)),
+                    expected_zone_change_generation: Some(land_generation),
+                }),
+                face_index: 0,
+            })),
+        };
+        engine.state.active_player_idx = 1;
+        assert!(engine.initial_response_batch().legal_by_player[&0]
+            .zone_land_actions
+            .is_empty());
+        assert!(engine.apply_command(0, &play_land).is_err());
+        assert!(engine.state.pending_resolution.is_some());
+
+        engine.state.active_player_idx = 0;
+        engine.state.lands_played_this_turn = 1;
+        assert!(engine.initial_response_batch().legal_by_player[&0]
+            .zone_land_actions
+            .is_empty());
+        assert!(engine.apply_command(0, &play_land).is_err());
+        assert!(engine.state.pending_resolution.is_some());
+
+        engine.state.lands_played_this_turn = 0;
+        assert!(engine.initial_response_batch().legal_by_player[&0]
+            .zone_land_actions
+            .iter()
+            .any(|action| action.object_id == land));
+        engine.apply_command(0, &play_land).unwrap();
+        assert_eq!(engine.state.objects[&land].zone, Zone::Battlefield);
+        assert_eq!(engine.state.lands_played_this_turn, 1);
+        assert_eq!(engine.state.players[0].life, 22);
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn pending_linked_land_play_rejects_other_land_sources_and_hides_their_actions() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_112,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "nautiloid_ship");
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, source_generation);
+        item.card_id = "nautiloid_ship".to_string();
+        item.trigger_context.linked_exile_occurrence =
+            Some(crate::state::LinkedExileOccurrence::NativeOrTokenBase);
+        let mut ability = engine
+            .registry
+            .get("nautiloid_ship")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[1]
+            .clone();
+        ability.effect = vec![SpellEffectKind::PlayLinkedExiledCard {
+            producer_ability_id: tricerules_card_model::AbilityId::new("exile_target_graveyard")
+                .unwrap(),
+            linked_exile_id: tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+            filter: None,
+            play_kind: LinkedExiledCardPlayKind::Play,
+            return_source_to_owner_hand_if_cast: false,
+        }];
+        item.triggered_ability = Some(ability);
+
+        let linked_land = add_battlefield_object(&mut engine, 0, "forest");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            linked_land,
+            Zone::Exile,
+            None,
+        )
+        .unwrap();
+        let linked_generation = engine.state.zone_change_generation[&linked_land];
+        let key = zones::linked_exile_key(
+            &engine,
+            &item,
+            tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+            tricerules_card_model::AbilityId::new("exile_target_graveyard").unwrap(),
+        )
+        .unwrap();
+        engine.state.linked_exile_records.insert(
+            key,
+            vec![crate::state::LinkedExiledObject {
+                object_id: linked_land,
+                zone_change_generation: linked_generation,
+            }],
+        );
+
+        let hand_land = add_battlefield_object(&mut engine, 0, "forest");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            hand_land,
+            Zone::Hand,
+            None,
+        )
+        .unwrap();
+        let other_exile_land = add_battlefield_object(&mut engine, 0, "forest");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            other_exile_land,
+            Zone::Exile,
+            None,
+        )
+        .unwrap();
+        let other_exile_generation = engine.state.zone_change_generation[&other_exile_land];
+        engine
+            .grant_exile_play_permission(
+                0,
+                other_exile_land,
+                "unrelated play permission",
+                crate::state::ExilePlayPermissionGrant::printed(
+                    ExilePlayPermissionScope::PlayCard,
+                    false,
+                ),
+            )
+            .unwrap();
+        let graveyard_land = add_battlefield_object(&mut engine, 0, "forest");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            graveyard_land,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Player(0),
+            kind: ContinuousEffectKind::PlayLandsFromOwnGraveyard,
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 1,
+        });
+
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![linked_land],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        let hand_play = rv1::RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                source: Some(rv1::LandSource {
+                    location: Some(rv1::land_source::Location::HandIndex(0)),
+                    expected_zone_change_generation: None,
+                }),
+                face_index: 0,
+            })),
+        };
+        assert!(engine.apply_command(0, &hand_play).is_err());
+        assert_eq!(engine.state.objects[&hand_land].zone, Zone::Hand);
+        assert!(engine.state.pending_resolution.is_some());
+
+        for (object_id, generation, location) in [
+            (
+                other_exile_land,
+                other_exile_generation,
+                rv1::land_source::Location::ExileObjectId(other_exile_land),
+            ),
+            (
+                graveyard_land,
+                engine.state.zone_change_generation[&graveyard_land],
+                rv1::land_source::Location::GraveyardObjectId(graveyard_land),
+            ),
+        ] {
+            let play = rv1::RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                    source: Some(rv1::LandSource {
+                        location: Some(location),
+                        expected_zone_change_generation: Some(generation),
+                    }),
+                    face_index: 0,
+                })),
+            };
+            assert!(
+                engine.apply_command(0, &play).is_err(),
+                "object {object_id}"
+            );
+            assert!(engine.state.pending_resolution.is_some());
+        }
+
+        let action_ids = engine.initial_response_batch().legal_by_player[&0]
+            .zone_land_actions
+            .iter()
+            .map(|action| action.object_id)
+            .collect::<Vec<_>>();
+        assert_eq!(action_ids, [linked_land]);
+    }
+
+    #[test]
+    fn linked_play_processes_every_card_in_the_linked_exile_cohort_before_resuming() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_113,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "nautiloid_ship");
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, source_generation);
+        item.card_id = "nautiloid_ship".to_string();
+        item.trigger_context.linked_exile_occurrence =
+            Some(crate::state::LinkedExileOccurrence::NativeOrTokenBase);
+        let mut ability = engine
+            .registry
+            .get("nautiloid_ship")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[1]
+            .clone();
+        ability.effect = vec![
+            SpellEffectKind::PlayLinkedExiledCard {
+                producer_ability_id: tricerules_card_model::AbilityId::new(
+                    "exile_target_graveyard",
+                )
+                .unwrap(),
+                linked_exile_id: tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+                filter: None,
+                play_kind: LinkedExiledCardPlayKind::Play,
+                return_source_to_owner_hand_if_cast: false,
+            },
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            },
+        ];
+        item.triggered_ability = Some(ability);
+
+        let linked_lands = (0..2)
+            .map(|_| {
+                let land = add_battlefield_object(&mut engine, 0, "forest");
+                move_object_to_zone(&mut engine.state, engine.registry, land, Zone::Exile, None)
+                    .unwrap();
+                land
+            })
+            .collect::<Vec<_>>();
+        let generations = linked_lands
+            .iter()
+            .map(|object_id| engine.state.zone_change_generation[object_id])
+            .collect::<Vec<_>>();
+        let key = zones::linked_exile_key(
+            &engine,
+            &item,
+            tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+            tricerules_card_model::AbilityId::new("exile_target_graveyard").unwrap(),
+        )
+        .unwrap();
+        engine.state.linked_exile_records.insert(
+            key,
+            linked_lands
+                .iter()
+                .copied()
+                .zip(generations.iter().copied())
+                .map(
+                    |(object_id, zone_change_generation)| crate::state::LinkedExiledObject {
+                        object_id,
+                        zone_change_generation,
+                    },
+                )
+                .collect(),
+        );
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Player(0),
+            kind: ContinuousEffectKind::ExtraLandPlays(1),
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 1,
+        });
+
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        let initial_choice = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(initial_choice.presentation.min, 0);
+        assert_eq!(initial_choice.presentation.max, 1);
+        assert_eq!(initial_choice.presentation.candidates, linked_lands);
+
+        for (index, land) in linked_lands.iter().copied().enumerate() {
+            engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![land],
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            let play = rv1::RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                    source: Some(rv1::LandSource {
+                        location: Some(rv1::land_source::Location::ExileObjectId(land)),
+                        expected_zone_change_generation: Some(generations[index]),
+                    }),
+                    face_index: 0,
+                })),
+            };
+            engine.apply_command(0, &play).unwrap();
+            if index == 0 {
+                let next_choice = engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .expect("the second linked card remains available before the effect tail");
+                assert_eq!(
+                    next_choice.presentation.choice_kind,
+                    custom::ChoiceKind::LinkedExileCards
+                );
+                assert_eq!(next_choice.presentation.candidates, [linked_lands[1]]);
+                assert_eq!(engine.state.players[0].life, 20);
+            }
+        }
+
+        assert!(linked_lands
+            .iter()
+            .all(|land| engine.state.objects[land].zone == Zone::Battlefield));
+        assert_eq!(engine.state.lands_played_this_turn, 2);
+        assert_eq!(engine.state.players[0].life, 22);
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn observer_aura_return_restores_and_reconciles_linked_choice_after_concession() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_130,
+            &[0, 1, 2],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let linked_land = exile_for_fixture(&mut engine, 0, "forest");
+        let (_, _) =
+            begin_linked_play_fixture(&mut engine, &[linked_land], LinkedExiledCardPlayKind::Play);
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::LinkedExileChoice { .. })
+        ));
+
+        let creature = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let departing_source = add_battlefield_object(&mut engine, 2, "grizzly_bears");
+        let aura = exile_for_fixture(&mut engine, 1, "pacifism");
+        observe_leave_and_return_aura(&mut engine, departing_source, aura);
+        engine.concede_batch(2).unwrap();
+
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::AuraReturn { .. })
+        ));
+        assert!(engine.state.pending_observer_return_batch.is_some());
+        engine
+            .submit_resolution_choice(
+                1,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![creature],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the original linked choice resumes after the Aura returns");
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::LinkedExileCards
+        );
+        assert_eq!(pending.presentation.candidates, [linked_land]);
+        assert!(engine.state.pending_linked_exile_play.is_some());
+
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(engine.state.players[0].life, 22);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_linked_exile_play.is_none());
+    }
+
+    #[test]
+    fn observer_aura_return_restores_special_cast_choice_and_tail() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_131,
+            &[0, 1, 2],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let linked_spell = exile_for_fixture(&mut engine, 0, "opt");
+        begin_linked_play_fixture(&mut engine, &[linked_spell], LinkedExiledCardPlayKind::Cast);
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![linked_spell],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::SpecialCast { .. })
+        ));
+
+        let creature = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let aura = exile_for_fixture(&mut engine, 1, "pacifism");
+        queue_observer_aura_return(&mut engine, aura);
+        let mut events = Vec::new();
+        assert!(engine
+            .drain_immediate_observer_actions(None, &mut events)
+            .unwrap());
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::AuraReturn { .. })
+        ));
+        let restored_batch = engine
+            .submit_resolution_choice(
+                1,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![creature],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        assert!(
+            restored_batch.events.iter().any(|event| {
+                matches!(
+                    event.ev.as_ref(),
+                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(required))
+                        if required.deciding_player_id == 0
+                            && required.choice_kind == rv1::ChoiceKind::SpecialCast as i32
+                            && required.candidate_object_ids == [linked_spell]
+                )
+            }),
+            "the restored SpecialCast prompt must be republished to clients"
+        );
+
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::SpecialCast { .. })
+        ));
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::Decline as i32,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(engine.state.players[0].life, 22);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_linked_exile_play.is_none());
+    }
+
+    #[test]
+    fn linked_land_entry_replacement_resumes_the_remaining_cohort_and_tail_once() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_134,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let replaced_land = exile_for_fixture(&mut engine, 0, "multiversal_passage");
+        let remaining_land = exile_for_fixture(&mut engine, 0, "forest");
+        let generations = [
+            engine.state.zone_change_generation[&replaced_land],
+            engine.state.zone_change_generation[&remaining_land],
+        ];
+        begin_linked_play_fixture(
+            &mut engine,
+            &[replaced_land, remaining_land],
+            LinkedExiledCardPlayKind::Play,
+        );
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![replaced_land],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        engine
+            .apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        source: Some(rv1::LandSource {
+                            location: Some(rv1::land_source::Location::ExileObjectId(
+                                replaced_land,
+                            )),
+                            expected_zone_change_generation: Some(generations[0]),
+                        }),
+                        face_index: 0,
+                    })),
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::EntryBasicLandType { .. })
+        ));
+
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 4,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::EntryCost { .. })
+        ));
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::Decline as i32,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("entry replacement resumes the next linked land offer");
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::LinkedExileCards
+        );
+        assert_eq!(pending.presentation.candidates, [remaining_land]);
+        assert_eq!(engine.state.objects[&replaced_land].zone, Zone::Battlefield);
+        assert!(engine.state.objects[&replaced_land].tapped);
+        assert!(engine
+            .characteristics(replaced_land)
+            .unwrap()
+            .has_type("Forest"));
+        assert_eq!(engine.state.lands_played_this_turn, 1);
+        assert_eq!(engine.state.players[0].life, 20);
+
+        engine
+            .submit_resolution_choice(0, &rv1::SubmitResolutionChoice::default())
+            .unwrap();
+        assert_eq!(engine.state.players[0].life, 22);
+        assert_eq!(engine.state.lands_played_this_turn, 1);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_linked_exile_play.is_none());
+    }
+
+    #[test]
+    fn linked_land_entry_replacement_survives_observer_copy_choice_and_tail_once() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_135,
+            &[0, 1, 2],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let passage = exile_for_fixture(&mut engine, 0, "multiversal_passage");
+        let remaining_land = exile_for_fixture(&mut engine, 0, "forest");
+        let passage_generation = engine.state.zone_change_generation[&passage];
+        begin_linked_play_fixture(
+            &mut engine,
+            &[passage, remaining_land],
+            LinkedExiledCardPlayKind::Play,
+        );
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![passage],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        engine
+            .apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        source: Some(rv1::LandSource {
+                            location: Some(rv1::land_source::Location::ExileObjectId(passage)),
+                            expected_zone_change_generation: Some(passage_generation),
+                        }),
+                        face_index: 0,
+                    })),
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::EntryBasicLandType { .. })
+        ));
+
+        let artifact = add_battlefield_object(&mut engine, 0, "sol_ring");
+        let departing_source = add_battlefield_object(&mut engine, 2, "grizzly_bears");
+        let sculpting_steel = exile_for_fixture(&mut engine, 1, "sculpting_steel");
+        let observer_forest = exile_for_fixture(&mut engine, 1, "forest");
+        observe_leave_and_return_aura(&mut engine, departing_source, sculpting_steel);
+        observe_leave_and_return_aura(&mut engine, departing_source, observer_forest);
+        engine.concede_batch(2).unwrap();
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::EntryCopySource { .. })
+        ));
+
+        engine
+            .submit_resolution_choice(
+                1,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![artifact],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let timestamp_order = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the observer entrants require an APNAP timestamp choice");
+        assert_eq!(
+            timestamp_order.presentation.choice_kind,
+            rv1::ChoiceKind::SimultaneousEntryOrder
+        );
+
+        let restored_batch = engine
+            .submit_resolution_choice(
+                1,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![sculpting_steel, observer_forest],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let land_type_prompt = restored_batch
+            .events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(required))
+                    if required.deciding_player_id == 0
+                        && required.choice_kind == rv1::ChoiceKind::ResolutionBranch as i32 =>
+                {
+                    Some(required)
+                }
+                _ => None,
+            });
+        assert!(
+            land_type_prompt.is_some(),
+            "restoring the land entry choice must republish it to clients"
+        );
+        let land_type_prompt = land_type_prompt.unwrap();
+        assert_eq!(land_type_prompt.source_object_id, passage);
+        assert_eq!(land_type_prompt.resolution_branches.len(), 5);
+        let Some(crate::engine::replacement::PendingReplacementEvent::BattlefieldEntry(entry)) =
+            engine.state.pending_replacement_event.as_ref()
+        else {
+            panic!("the exact pending battlefield entry must be restored with its prompt");
+        };
+        assert_eq!(entry.event.object_id, passage);
+        assert_eq!(engine.state.objects[&passage].zone, Zone::Exile);
+        assert_eq!(
+            engine.state.zone_change_generation[&passage],
+            passage_generation
+        );
+        assert!(engine.state.pending_replacement_event.is_some());
+
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 4,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::EntryCost { .. })
+        ));
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::Decline as i32,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        assert_eq!(engine.state.objects[&passage].zone, Zone::Battlefield);
+        assert_eq!(
+            engine.state.zone_change_generation[&passage],
+            passage_generation + 1
+        );
+        assert_eq!(
+            engine.state.objects[&sculpting_steel].zone,
+            Zone::Battlefield
+        );
+        assert_eq!(
+            engine.state.objects[&observer_forest].zone,
+            Zone::Battlefield
+        );
+        assert_eq!(engine.state.lands_played_this_turn, 1);
+        let next_choice = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the remaining linked card is offered before the effect tail");
+        assert_eq!(next_choice.presentation.candidates, [remaining_land]);
+        assert_eq!(engine.state.players[0].life, 20);
+
+        engine
+            .submit_resolution_choice(0, &rv1::SubmitResolutionChoice::default())
+            .unwrap();
+        assert_eq!(engine.state.players[0].life, 22);
+        assert_eq!(engine.state.lands_played_this_turn, 1);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_linked_exile_play.is_none());
+    }
+
+    #[test]
+    fn linked_land_entry_cost_is_republished_after_observer_timestamp_choice() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_142,
+            &[0, 1, 2, 3],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let passage = exile_for_fixture(&mut engine, 0, "multiversal_passage");
+        let remaining_land = exile_for_fixture(&mut engine, 0, "forest");
+        let passage_generation = engine.state.zone_change_generation[&passage];
+        begin_linked_play_fixture(
+            &mut engine,
+            &[passage, remaining_land],
+            LinkedExiledCardPlayKind::Play,
+        );
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![passage],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        engine
+            .apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        source: Some(rv1::LandSource {
+                            location: Some(rv1::land_source::Location::ExileObjectId(passage)),
+                            expected_zone_change_generation: Some(passage_generation),
+                        }),
+                        face_index: 0,
+                    })),
+                },
+            )
+            .unwrap();
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 4,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::EntryCost { .. })
+        ));
+
+        let artifact = add_battlefield_object(&mut engine, 0, "sol_ring");
+        let departing_source = add_battlefield_object(&mut engine, 1, "grizzly_bears");
+        let observer_copy = exile_for_fixture(&mut engine, 0, "sculpting_steel");
+        let observer_forest = exile_for_fixture(&mut engine, 0, "forest");
+        observe_leave_and_return_aura(&mut engine, departing_source, observer_copy);
+        observe_leave_and_return_aura(&mut engine, departing_source, observer_forest);
+        engine.concede_batch(1).unwrap();
+
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![artifact],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .choice_kind,
+            rv1::ChoiceKind::SimultaneousEntryOrder
+        );
+        let restored = engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![observer_copy, observer_forest],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(restored.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(required))
+                if required.source_object_id == passage
+                    && required.choice_kind == rv1::ChoiceKind::ResolutionBranch as i32
+                    && required.resolution_branches.iter().any(|branch| branch.label == "Pay 2 life")
+        )), "restored EntryCost must republish its current pay-or-decline options");
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::EntryCost { .. })
+        ));
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::Decline as i32,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(engine.state.objects[&passage].zone, Zone::Battlefield);
+        let next = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(next.presentation.candidates, [remaining_land]);
+        assert_eq!(engine.state.players[0].life, 20);
+        engine
+            .submit_resolution_choice(0, &rv1::SubmitResolutionChoice::default())
+            .unwrap();
+        assert_eq!(engine.state.players[0].life, 22);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_linked_exile_play.is_none());
+    }
+
+    #[test]
+    fn linked_land_entry_is_retired_if_its_owner_concedes_while_suspended() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_143,
+            &[0, 1, 2, 3],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let passage = exile_for_fixture(&mut engine, 2, "multiversal_passage");
+        let remaining_land = exile_for_fixture(&mut engine, 0, "forest");
+        let passage_generation = engine.state.zone_change_generation[&passage];
+        begin_linked_play_fixture(
+            &mut engine,
+            &[passage, remaining_land],
+            LinkedExiledCardPlayKind::Play,
+        );
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![passage],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        engine
+            .apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        source: Some(rv1::LandSource {
+                            location: Some(rv1::land_source::Location::ExileObjectId(passage)),
+                            expected_zone_change_generation: Some(passage_generation),
+                        }),
+                        face_index: 0,
+                    })),
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::EntryBasicLandType { .. })
+        ));
+
+        let artifact = add_battlefield_object(&mut engine, 0, "sol_ring");
+        let departing_source = add_battlefield_object(&mut engine, 2, "grizzly_bears");
+        let observer_copy = exile_for_fixture(&mut engine, 0, "sculpting_steel");
+        let observer_forest = exile_for_fixture(&mut engine, 0, "forest");
+        observe_leave_and_return_aura(&mut engine, departing_source, observer_copy);
+        observe_leave_and_return_aura(&mut engine, departing_source, observer_forest);
+        engine.concede_batch(2).unwrap();
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![artifact],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let restored = engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![observer_copy, observer_forest],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(!engine.state.objects.contains_key(&passage));
+        assert!(
+            !restored.events.iter().any(|event| matches!(
+                &event.ev,
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(required))
+                    if required.source_object_id == passage
+            )),
+            "departure retires the absent entry instead of publishing an impossible mandatory choice"
+        );
+        let next = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the surviving linked card is offered after the lost entrant is retired");
+        assert_eq!(
+            next.presentation.choice_kind,
+            rv1::ChoiceKind::LinkedExileCards
+        );
+        assert_eq!(next.presentation.candidates, [remaining_land]);
+        engine
+            .submit_resolution_choice(0, &rv1::SubmitResolutionChoice::default())
+            .unwrap();
+        assert_eq!(engine.state.players[0].life, 22);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_linked_exile_play.is_none());
+    }
+
+    #[test]
+    fn linked_land_entry_owner_departure_during_suspended_observer_choice_advances_cohort() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_144,
+            &[0, 1, 2, 3],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let passage = exile_for_fixture(&mut engine, 2, "multiversal_passage");
+        let remaining_land = exile_for_fixture(&mut engine, 0, "forest");
+        let passage_generation = engine.state.zone_change_generation[&passage];
+        begin_linked_play_fixture(
+            &mut engine,
+            &[passage, remaining_land],
+            LinkedExiledCardPlayKind::Play,
+        );
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![passage],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        engine
+            .apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        source: Some(rv1::LandSource {
+                            location: Some(rv1::land_source::Location::ExileObjectId(passage)),
+                            expected_zone_change_generation: Some(passage_generation),
+                        }),
+                        face_index: 0,
+                    })),
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::EntryBasicLandType { .. })
+        ));
+
+        let artifact = add_battlefield_object(&mut engine, 0, "sol_ring");
+        let observer_copy = exile_for_fixture(&mut engine, 0, "sculpting_steel");
+        let observer_forest = exile_for_fixture(&mut engine, 0, "forest");
+        queue_observer_aura_return(&mut engine, observer_copy);
+        queue_observer_aura_return(&mut engine, observer_forest);
+        let mut observer_events = Vec::new();
+        assert!(engine
+            .drain_immediate_observer_actions(None, &mut observer_events)
+            .unwrap());
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::EntryCopySource { .. })
+        ));
+        assert!(matches!(
+            engine
+                .state
+                .pending_observer_return_batch
+                .as_ref()
+                .and_then(|batch| batch.suspended_resolution.as_ref())
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::EntryBasicLandType { .. })
+        ));
+
+        engine.concede_batch(2).unwrap();
+        assert!(!engine.state.objects.contains_key(&passage));
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![artifact],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let timestamp = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(
+            timestamp.presentation.choice_kind,
+            rv1::ChoiceKind::SimultaneousEntryOrder
+        );
+        let restored = engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![observer_copy, observer_forest],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(!restored.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(required))
+                if required.source_object_id == passage
+        )));
+        let next = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the surviving linked card is offered after the lost entrant is retired");
+        assert_eq!(
+            next.presentation.choice_kind,
+            rv1::ChoiceKind::LinkedExileCards
+        );
+        assert_eq!(next.presentation.candidates, [remaining_land]);
+        engine
+            .submit_resolution_choice(0, &rv1::SubmitResolutionChoice::default())
+            .unwrap();
+        assert_eq!(engine.state.players[0].life, 22);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_linked_exile_play.is_none());
+    }
+
+    #[test]
+    fn departed_linked_land_is_retired_without_observer_return() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_145,
+            &[0, 1, 2],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let passage = exile_for_fixture(&mut engine, 2, "multiversal_passage");
+        let remaining_land = exile_for_fixture(&mut engine, 0, "forest");
+        let passage_generation = engine.state.zone_change_generation[&passage];
+        begin_linked_play_fixture(
+            &mut engine,
+            &[passage, remaining_land],
+            LinkedExiledCardPlayKind::Play,
+        );
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![passage],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        engine
+            .apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        source: Some(rv1::LandSource {
+                            location: Some(rv1::land_source::Location::ExileObjectId(passage)),
+                            expected_zone_change_generation: Some(passage_generation),
+                        }),
+                        face_index: 0,
+                    })),
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::EntryBasicLandType { .. })
+        ));
+
+        engine.concede_batch(2).unwrap();
+        assert!(!engine.state.objects.contains_key(&passage));
+        assert!(
+            engine.state.pending_replacement_event.is_none(),
+            "retiring the linked land must clear its stale entry transaction"
+        );
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the departed entrant is retired and the linked choice resumes");
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::LinkedExileCards
+        );
+        assert_eq!(pending.presentation.candidates, [remaining_land]);
+        engine
+            .submit_resolution_choice(0, &rv1::SubmitResolutionChoice::default())
+            .unwrap();
+        assert_eq!(engine.state.players[0].life, 22);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_linked_exile_play.is_none());
+    }
+
+    #[test]
+    fn retired_linked_land_entry_does_not_mask_later_departed_resolution() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_146,
+            &[0, 1, 2, 3],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let passage = exile_for_fixture(&mut engine, 2, "multiversal_passage");
+        let remaining_land = exile_for_fixture(&mut engine, 0, "forest");
+        let passage_generation = engine.state.zone_change_generation[&passage];
+        begin_linked_play_fixture(
+            &mut engine,
+            &[passage, remaining_land],
+            LinkedExiledCardPlayKind::Play,
+        );
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![passage],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        engine
+            .apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        source: Some(rv1::LandSource {
+                            location: Some(rv1::land_source::Location::ExileObjectId(passage)),
+                            expected_zone_change_generation: Some(passage_generation),
+                        }),
+                        face_index: 0,
+                    })),
+                },
+            )
+            .unwrap();
+
+        let retired_entry = engine
+            .state
+            .pending_replacement_event
+            .clone()
+            .expect("the selected Passage has an active entry transaction");
+        engine.concede_batch(2).unwrap();
+        engine
+            .submit_resolution_choice(0, &rv1::SubmitResolutionChoice::default())
+            .unwrap();
+        assert!(engine.state.pending_linked_exile_play.is_none());
+        assert!(engine.state.pending_replacement_event.is_none());
+
+        // Reinstall the retired event to exercise the priority guard against stale serialized
+        // state in addition to checking that normal retirement clears it.
+        engine.state.pending_replacement_event = Some(retired_entry);
+        let later_source = add_battlefield_object(&mut engine, 3, "nautiloid_ship");
+        let later_source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&later_source)
+            .copied()
+            .unwrap_or(0);
+        let mut later_item = triggered_item(later_source, later_source_generation);
+        later_item.controller = 3;
+        later_item.source_owner = Some(3);
+        later_item.card_id = "nautiloid_ship".to_string();
+        later_item.trigger_context.linked_exile_occurrence =
+            Some(crate::state::LinkedExileOccurrence::NativeOrTokenBase);
+        let mut hideaway = engine
+            .registry
+            .get("nautiloid_ship")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .clone();
+        hideaway.targeting = None;
+        hideaway.effect = vec![
+            SpellEffectKind::Hideaway {
+                count: 4,
+                linked_exile_id: tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+            },
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            },
+        ];
+        later_item.triggered_ability = Some(hideaway);
+        let (effects, label) = engine.build_resolution_effects(&later_item);
+        engine
+            .run_effect_list(&later_item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            3
+        );
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .choice_kind,
+            rv1::ChoiceKind::LibraryLook
+        );
+
+        engine.concede_batch(3).unwrap();
+
+        assert!(engine.state.players[3].has_lost);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_linked_exile_play.is_none());
+        assert!(engine.state.pending_replacement_event.is_none());
+    }
+
+    #[test]
+    fn linked_cast_reservation_clears_when_exiled_card_owner_concedes() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_132,
+            &[0, 1, 2],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let departed_owner_spell = exile_for_fixture(&mut engine, 1, "opt");
+        let remaining_spell = exile_for_fixture(&mut engine, 0, "village_rites");
+        begin_linked_play_fixture(
+            &mut engine,
+            &[departed_owner_spell, remaining_spell],
+            LinkedExiledCardPlayKind::Cast,
+        );
+        let transaction_id = reserve_linked_spell_for_test(&mut engine, departed_owner_spell);
+        assert!(engine.state.pending_spell_cast.is_some());
+        assert!(engine.pending_spell_cast_internal.is_some());
+
+        engine.concede_batch(1).unwrap();
+
+        assert!(engine.state.players[1].has_lost);
+        assert!(engine.state.pending_spell_cast.is_none());
+        assert!(engine.pending_spell_cast_internal.is_none());
+        assert!(!engine.state.objects.contains_key(&departed_owner_spell));
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("surviving chooser receives the remaining linked card");
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::LinkedExileCards
+        );
+        assert_eq!(pending.presentation.candidates, [remaining_spell]);
+        assert!(engine
+            .apply_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CancelSpellCast(
+                        rv1::CancelSpellCast { transaction_id },
+                    )),
+                },
+            )
+            .is_err());
+        assert!(!engine.state.objects.contains_key(&departed_owner_spell));
+    }
+
+    #[test]
+    fn linked_cast_reservation_returns_live_owner_card_when_caster_concedes() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_133,
+            &[0, 1, 2],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let live_owner_spell = exile_for_fixture(&mut engine, 1, "opt");
+        let original_generation = engine.state.zone_change_generation[&live_owner_spell];
+        begin_linked_play_fixture(
+            &mut engine,
+            &[live_owner_spell],
+            LinkedExiledCardPlayKind::Cast,
+        );
+        reserve_linked_spell_for_test(&mut engine, live_owner_spell);
+
+        engine.concede_batch(0).unwrap();
+
+        assert!(engine.state.players[0].has_lost);
+        assert!(engine.state.pending_spell_cast.is_none());
+        assert!(engine.pending_spell_cast_internal.is_none());
+        assert_eq!(engine.state.objects[&live_owner_spell].zone, Zone::Exile);
+        assert_eq!(
+            engine.state.zone_change_generation[&live_owner_spell],
+            original_generation
+        );
+        assert_eq!(engine.state.players[0].life, 22);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_linked_exile_play.is_none());
+    }
+
+    #[test]
+    fn linked_cast_defers_buggy_return_until_later_cards_finish_the_cohort() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_114,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "smugglers_buggy");
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer4AddTypes(
+                tricerules_card_model::primitives::TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Creature],
+                    ..Default::default()
+                },
+            ),
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 1,
+        });
+
+        let mut item = triggered_item(source, source_generation);
+        item.card_id = "smugglers_buggy".to_string();
+        item.trigger_context.linked_exile_occurrence =
+            Some(crate::state::LinkedExileOccurrence::NativeOrTokenBase);
+        let mut ability = engine
+            .registry
+            .get("smugglers_buggy")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[1]
+            .clone();
+        ability.effect = vec![
+            SpellEffectKind::PlayLinkedExiledCard {
+                producer_ability_id: tricerules_card_model::AbilityId::new("hideaway").unwrap(),
+                linked_exile_id: tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+                filter: None,
+                play_kind: LinkedExiledCardPlayKind::Cast,
+                return_source_to_owner_hand_if_cast: true,
+            },
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            },
+        ];
+        item.triggered_ability = Some(ability);
+
+        let linked_cards = [
+            add_battlefield_object(&mut engine, 0, "opt"),
+            add_battlefield_object(&mut engine, 0, "village_rites"),
+        ];
+        for card in linked_cards {
+            move_object_to_zone(&mut engine.state, engine.registry, card, Zone::Exile, None)
+                .unwrap();
+        }
+        let generations = linked_cards.map(|card| engine.state.zone_change_generation[&card]);
+        let key = zones::linked_exile_key(
+            &engine,
+            &item,
+            tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+            tricerules_card_model::AbilityId::new("hideaway").unwrap(),
+        )
+        .unwrap();
+        engine.state.linked_exile_records.insert(
+            key,
+            linked_cards
+                .into_iter()
+                .zip(generations)
+                .map(
+                    |(object_id, zone_change_generation)| crate::state::LinkedExiledObject {
+                        object_id,
+                        zone_change_generation,
+                    },
+                )
+                .collect(),
+        );
+
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![linked_cards[0]],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let first_permission = engine.special_cast_permission(0).unwrap();
+        let announcement = rv1::SpellCastAnnouncement {
+            source: Some(rv1::CastSource {
+                expected_zone_change_generation: Some(generations[0]),
+                location: Some(rv1::cast_source::Location::ExileObjectId(linked_cards[0])),
+            }),
+            cast_method: rv1::CastMethod::Permission as i32,
+            casting_permission_id: Some(first_permission.group_id),
+            ..Default::default()
+        };
+        engine
+            .apply_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
+                            spell_cast_announcement: Some(announcement),
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect("announce the first linked spell before payment");
+        let transaction_id = engine
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .unwrap()
+            .transaction_id;
+        engine
+            .apply_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CancelSpellCast(
+                        rv1::CancelSpellCast { transaction_id },
+                    )),
+                },
+            )
+            .expect("cancel the first cast proposal without consuming the linked card");
+        assert_eq!(engine.state.objects[&linked_cards[0]].zone, Zone::Exile);
+        assert_eq!(
+            engine.state.zone_change_generation[&linked_cards[0]],
+            generations[0]
+        );
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .candidates,
+            [linked_cards[0]]
+        );
+
+        let first_permission = engine.special_cast_permission(0).unwrap();
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
+                    cast_spell: Some(rv1::CastSpell {
+                        source: Some(rv1::CastSource {
+                            expected_zone_change_generation: Some(generations[0]),
+                            location: Some(rv1::cast_source::Location::ExileObjectId(
+                                linked_cards[0],
+                            )),
+                        }),
+                        cast_method: rv1::CastMethod::Permission as i32,
+                        casting_permission_id: Some(first_permission.group_id),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        let next = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("Buggy remains available until every linked card has been handled");
+        assert_eq!(
+            next.presentation.choice_kind,
+            rv1::ChoiceKind::LinkedExileCards
+        );
+        assert_eq!(next.presentation.candidates, [linked_cards[1]]);
+        assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
+        assert_eq!(engine.state.players[0].life, 20);
+
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![linked_cards[1]],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let second_permission = engine.special_cast_permission(0).unwrap();
+        let cost = rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(rv1::cost_selection::Selection::PermanentId(source)),
+        };
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
+                    cast_spell: Some(rv1::CastSpell {
+                        source: Some(rv1::CastSource {
+                            expected_zone_change_generation: Some(generations[1]),
+                            location: Some(rv1::cast_source::Location::ExileObjectId(
+                                linked_cards[1],
+                            )),
+                        }),
+                        cost_selections: vec![cost],
+                        cast_method: rv1::CastMethod::Permission as i32,
+                        casting_permission_id: Some(second_permission.group_id),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            )
+            .expect("Buggy is a creature and can pay Village Rites' additional cost");
+
+        assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+        assert_eq!(engine.state.objects[&linked_cards[0]].zone, Zone::Stack);
+        assert_eq!(engine.state.objects[&linked_cards[1]].zone, Zone::Stack);
+        assert_eq!(engine.state.players[0].life, 22);
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn linked_play_prunes_a_card_owned_by_a_conceding_nonchooser() {
+        use tricerules_card_model::primitives::LinkedExiledCardPlayKind;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_115,
+            &[0, 1, 2],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "nautiloid_ship");
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, source_generation);
+        item.card_id = "nautiloid_ship".to_string();
+        item.trigger_context.linked_exile_occurrence =
+            Some(crate::state::LinkedExileOccurrence::NativeOrTokenBase);
+        let mut ability = engine
+            .registry
+            .get("nautiloid_ship")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[1]
+            .clone();
+        ability.effect = vec![
+            SpellEffectKind::PlayLinkedExiledCard {
+                producer_ability_id: tricerules_card_model::AbilityId::new(
+                    "exile_target_graveyard",
+                )
+                .unwrap(),
+                linked_exile_id: tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+                filter: None,
+                play_kind: LinkedExiledCardPlayKind::Play,
+                return_source_to_owner_hand_if_cast: false,
+            },
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            },
+        ];
+        item.triggered_ability = Some(ability);
+
+        let departed_owner_land = add_battlefield_object(&mut engine, 1, "forest");
+        let remaining_land = add_battlefield_object(&mut engine, 0, "forest");
+        for land in [departed_owner_land, remaining_land] {
+            move_object_to_zone(&mut engine.state, engine.registry, land, Zone::Exile, None)
+                .unwrap();
+        }
+        let key = zones::linked_exile_key(
+            &engine,
+            &item,
+            tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+            tricerules_card_model::AbilityId::new("exile_target_graveyard").unwrap(),
+        )
+        .unwrap();
+        engine.state.linked_exile_records.insert(
+            key,
+            [departed_owner_land, remaining_land]
+                .into_iter()
+                .map(|object_id| crate::state::LinkedExiledObject {
+                    object_id,
+                    zone_change_generation: engine.state.zone_change_generation[&object_id],
+                })
+                .collect(),
+        );
+
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .candidates,
+            [departed_owner_land, remaining_land]
+        );
+        engine
+            .apply_command(
+                1,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .unwrap();
+
+        assert!(engine.state.players[1].has_lost);
+        assert!(!engine.state.objects.contains_key(&departed_owner_land));
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the living trigger controller keeps choosing from the surviving cohort");
+        assert_eq!(pending.presentation.candidates, [remaining_land]);
     }
 
     #[test]
@@ -8589,5 +11359,25 @@ mod source_keyword_tests {
             assert_eq!(object.damage, 2);
             assert!(object.deathtouch_damage);
         }
+    }
+}
+
+#[cfg(test)]
+mod hideaway_authoring_tests {
+    use tricerules_card_model::CardRegistry;
+
+    #[test]
+    fn hideaway_and_its_linked_consumer_form_a_valid_card_pair() {
+        let registry = CardRegistry::from_chunks_and_tokens(
+            &[
+                r#"(id: "hideaway_fixture", name: "Hideaway Fixture", face_id: "hideaway_fixture", types: ["Artifact", "Vehicle"], power: 5, toughness: 5, triggered_abilities: [(ability_id: "hideaway", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Hideaway(count: 4, linked_exile_id: "hidden")]), (ability_id: "play_linked", presentation: OracleLines([2]), trigger: WheneverSelfDealsCombatDamageToPlayer, effect: [PlayLinkedExiledCard(producer_ability_id: "hideaway", linked_exile_id: "hidden", filter: Some((card_type: Some(Instant))), play_kind: Cast, return_source_to_owner_hand_if_cast: true)])])"#,
+            ],
+            &[],
+        );
+
+        assert!(
+            registry.is_ok(),
+            "Hideaway paired ability should validate: {registry:?}"
+        );
     }
 }

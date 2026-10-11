@@ -1519,7 +1519,10 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         choice.promptText = QString::fromStdString(rcr.prompt_text());
         choice.candidateOids.append(rcr.candidate_object_ids(0));
         choice.choiceOptions.append({0, tr("Decline"), true});
-        choice.choiceOptions.append({1, tr("Cast"),
+        const QString actionLabel = choice.promptText.contains(QStringLiteral(" play "), Qt::CaseInsensitive)
+                                        ? tr("Play")
+                                        : tr("Cast");
+        choice.choiceOptions.append({1, actionLabel,
                                     rcr.candidate_selectable_size() == 1 && rcr.candidate_selectable(0)});
         state->setPendingChoice(std::move(choice));
         emit state->combatStateChanged();
@@ -1860,7 +1863,7 @@ void RuledEventDispatcher::applyFaceDownObjectMap(const ruled::v1::FaceDownObjec
     state->privateFaceDownGenerationByOid.clear();
     for (const auto &entry : map.entries()) {
         state->privateFaceDownNameByOwnedCard.insert(
-            RuledClientState::makeOwnedCardKey(entry.controller_player_id(), entry.server_card_id()),
+            RuledClientState::makeOwnedCardKey(entry.zone_player_id(), entry.server_card_id()),
             QString::fromStdString(entry.card_name()));
         state->privateFaceDownGenerationByOid.insert(entry.engine_object_id(), entry.zone_change_generation());
     }

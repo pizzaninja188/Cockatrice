@@ -2325,8 +2325,10 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         actions->pendingActivatedAbility.abilityIndex = -1;
         actions->pendingActivatedAbility.abilityText = permanentAction.label;
         if (permanentAction.kind == ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP) {
+            Player *const zonePlayer = card->getZone() ? card->getZone()->getPlayer() : nullptr;
+            const int zonePlayerId = zonePlayer ? zonePlayer->getPlayerInfo()->getId() : -1;
             actions->pendingActivatedAbility.cardName =
-                handler->privateFaceDownNameForCard(ownerPlayerId, card->getId());
+                handler->privateFaceDownNameForCard(zonePlayerId, card->getId());
             if (actions->pendingActivatedAbility.cardName.isEmpty()) {
                 actions->pendingActivatedAbility.cardName = PlayerActions::tr("face-down permanent");
             }

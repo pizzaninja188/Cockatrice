@@ -1481,6 +1481,91 @@ impl GameEngine {
             })
     }
 
+    pub(super) fn resumed_basic_land_type_choice_event(
+        &self,
+        pending: &PendingResolution,
+        entry: &PendingBattlefieldEntry,
+    ) -> Option<rv1::RuledEvent> {
+        let ResolutionContinuation::EntryBasicLandType { effect_id, .. } = &pending.continuation
+        else {
+            return None;
+        };
+        if !self.entry_needs_basic_land_type_choice(&entry.event, effect_id) {
+            return None;
+        }
+        let options = BasicLandType::ALL
+            .into_iter()
+            .enumerate()
+            .map(|(index, land_type)| rv1::ResolutionBranchOption {
+                branch_index: index as u32,
+                label: land_type.as_str().to_string(),
+                cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                cost_text: String::new(),
+                selectable: true,
+                search_zones: Vec::new(),
+                presentation: None,
+            })
+            .collect();
+        Some(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    deciding_player_id: entry.event.destination_controller,
+                    source_object_id: entry.event.object_id,
+                    prompt_text: pending.presentation.prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                    min: 1,
+                    max: 1,
+                    resolution_branches: options,
+                    ..Default::default()
+                },
+            )),
+        })
+    }
+
+    pub(super) fn resumed_entry_cost_choice_event(
+        &self,
+        pending: &PendingResolution,
+        entry: &PendingBattlefieldEntry,
+    ) -> Option<rv1::RuledEvent> {
+        let ResolutionContinuation::EntryCost { effect_id, .. } = &pending.continuation else {
+            return None;
+        };
+        let EntryCost::PayLife { amount } = self.entry_unless_cost(&entry.event, effect_id)? else {
+            return None;
+        };
+        let payer = entry.event.destination_controller;
+        let selectable = self
+            .state
+            .player_idx(payer)
+            .is_some_and(|index| self.state.players[index].life >= amount as i32);
+        let name = self
+            .battlefield_entry_face(&entry.event)
+            .map(|face| face.name.clone())
+            .unwrap_or_else(|| "this permanent".to_string());
+        let prompt = format!("As {name} enters, you may pay {amount} life.");
+        Some(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    deciding_player_id: payer,
+                    source_object_id: entry.event.object_id,
+                    prompt_text: prompt,
+                    choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                    min: 0,
+                    max: 1,
+                    resolution_branches: vec![rv1::ResolutionBranchOption {
+                        branch_index: 0,
+                        label: format!("Pay {amount} life"),
+                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                        cost_text: format!("{amount} life"),
+                        selectable,
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+            )),
+        })
+    }
+
     fn park_basic_land_type_choice(
         &mut self,
         item: StackItem,
@@ -2565,9 +2650,18 @@ impl GameEngine {
                     events,
                 )
             }
-            BattlefieldEntryCompletion::LandPlay { .. } => {
+            BattlefieldEntryCompletion::LandPlay { resume_stack, .. } => {
                 self.state.passes_since_stack_change = 0;
-                Ok(finish_with_events(self, events))
+                if let Some(stack) = resume_stack {
+                    self.complete_parked_resolution_with_previous(
+                        stack.item,
+                        stack.resume_effect_index,
+                        stack.previous_result,
+                        events,
+                    )
+                } else {
+                    Ok(finish_with_events(self, events))
+                }
             }
             BattlefieldEntryCompletion::DevPlacement {
                 deferred_events,
@@ -2943,7 +3037,7 @@ impl GameEngine {
         self.advance_or_park_battlefield_entry(item, event, completion, events)
     }
 
-    fn advance_or_park_battlefield_entry(
+    pub(super) fn advance_or_park_battlefield_entry(
         &mut self,
         item: StackItem,
         mut event: BattlefieldEntryEvent,
@@ -3832,7 +3926,11 @@ impl GameEngine {
             return self.finish_entry_copy_without_recipient(stack, event, completion, events);
         }
         match completion {
-            BattlefieldEntryCompletion::LandPlay { player, land_name } => {
+            BattlefieldEntryCompletion::LandPlay {
+                player,
+                land_name,
+                resume_stack,
+            } => {
                 let object_id = event.object_id;
                 self.commit_battlefield_entry(event, None, &mut events)?;
                 events.push(permanent_moved_event(
@@ -3843,7 +3941,16 @@ impl GameEngine {
                 ));
                 self.state.passes_since_stack_change = 0;
                 events.push(ev_log(format!("P{player} played {land_name}")));
-                Ok(finish_with_events(self, events))
+                if let Some(resume_stack) = resume_stack {
+                    self.complete_parked_resolution_with_previous(
+                        resume_stack.item,
+                        resume_stack.resume_effect_index,
+                        resume_stack.previous_result,
+                        events,
+                    )
+                } else {
+                    Ok(finish_with_events(self, events))
+                }
             }
             BattlefieldEntryCompletion::PermanentSpell { attached_to } => {
                 events.push(rv1::RuledEvent {
@@ -3937,6 +4044,7 @@ impl GameEngine {
                         remaining: VecDeque::new(),
                         resume_stack: observer_stack.clone(),
                         suspended_resolution: None,
+                        suspended_replacement_event: None,
                     })
                     .ready
                     .push(ObserverReturnEntry {

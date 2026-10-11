@@ -525,6 +525,32 @@ impl GameEngine {
         first_strike_step_pending: bool,
     ) -> rv1::RuledPerPlayerView {
         let p = &self.state.players[idx];
+        let mut private_hideaway_exiles = BTreeMap::new();
+        for ((_, object_id, generation), viewers) in &self.state.hideaway_look_permissions {
+            if !viewers.contains(&p.id)
+                || self
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    != *generation
+            {
+                continue;
+            }
+            let Some(object) = self
+                .state
+                .objects
+                .get(object_id)
+                .filter(|object| object.zone == Zone::Exile && object.face_down)
+            else {
+                continue;
+            };
+            private_hideaway_exiles.insert(
+                (*object_id, *generation),
+                (object.card_id.clone(), object.owner),
+            );
+        }
         rv1::RuledPerPlayerView {
             player_id: p.id,
             public_hand: self.has_active_zur_weirding().then(|| rv1::PublicHandView {
@@ -809,6 +835,17 @@ impl GameEngine {
             graveyard_object_ids: p.graveyard.clone(),
             // Engine ObjectIds for each card in this player's public exile zone.
             exile_object_ids: p.exile.clone(),
+            hideaway_exile_cards: private_hideaway_exiles
+                .into_iter()
+                .map(|((object_id, generation), (card_id, owner_player_id))| {
+                    rv1::HideawayExileCard {
+                        card_id,
+                        object_id,
+                        zone_change_generation: generation,
+                        owner_player_id,
+                    }
+                })
+                .collect(),
             // Declared Commander cards are public, but are not part of this player's library.
             command_zone_object_ids: p.command_zone.clone(),
             prepare_spell_copies: p
@@ -1056,10 +1093,14 @@ pub(super) fn object_display_name(
         .objects
         .get(&oid)
         .and_then(|object| {
-            // Face-down permanents have no public name (CR 708); never fall through to the
-            // registry's printed identity when their derived characteristics are nameless.
-            if object.zone == Zone::Battlefield && object.face_down {
-                return Some("Face-down creature".to_string());
+            // Face-down permanents and exiled cards have no public identity (CR 708, 406.3a);
+            // never fall through to the registry's printed identity.
+            if object.face_down {
+                match object.zone {
+                    Zone::Battlefield => return Some("Face-down creature".to_string()),
+                    Zone::Exile => return Some("Face-down exiled card".to_string()),
+                    _ => {}
+                }
             }
             if object.zone == Zone::Battlefield {
                 if let Some(name) =
@@ -1277,13 +1318,75 @@ mod library_card_projection_tests {
     }
 
     fn view(event: &RuledEvent) -> &rv1::RuledPerPlayerView {
+        per_player(event, 0)
+    }
+
+    fn per_player(event: &RuledEvent, player_id: PlayerId) -> &rv1::RuledPerPlayerView {
         let Some(rv1::ruled_event::Ev::ZoneView(view)) = &event.ev else {
             panic!("zone view");
         };
         view.per_player
             .iter()
-            .find(|player| player.player_id == 0)
+            .find(|player| player.player_id == player_id)
             .unwrap()
+    }
+
+    #[test]
+    fn hideaway_exile_identity_is_projected_only_for_players_with_look_permission() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            700_114,
+            &[0, 1],
+            20,
+            Some(vec![vec!["island".into(); 10], vec!["forest".into(); 10]]),
+            true,
+        )
+        .unwrap();
+        engine.state.players.push(PlayerState::new(2, 20));
+        let hidden = engine.state.players[0].library.pop_front().unwrap();
+        engine.state.players[0].exile.push(hidden);
+        let object = engine.state.objects.get_mut(&hidden).unwrap();
+        object.zone = Zone::Exile;
+        object.face_down = true;
+        let generation = 17;
+        engine
+            .state
+            .zone_change_generation
+            .insert(hidden, generation);
+        let producer = engine
+            .registry
+            .get("nautiloid_ship")
+            .unwrap()
+            .primary_face();
+        let key = LinkedExileKey {
+            source_object_id: 900_114,
+            source_zone_change: 0,
+            producer: AbilityDefinitionId {
+                card_id: "nautiloid_ship".into(),
+                face_id: producer.face_id.clone(),
+                ability_path: vec![producer.triggered_abilities[0].ability_id.clone()],
+            },
+            ability_link_id: tricerules_card_model::AbilityLinkId::new("exiled_cards").unwrap(),
+            occurrence: LinkedExileOccurrence::NativeOrTokenBase,
+        };
+        engine
+            .state
+            .hideaway_look_permissions
+            .insert((key, hidden, generation), BTreeSet::from([0, 1]));
+
+        let event = engine.ev_zone_view_sync();
+
+        for viewer in [0, 1] {
+            let private = per_player(&event, viewer);
+            assert_eq!(private.hideaway_exile_cards.len(), 1);
+            assert_eq!(private.hideaway_exile_cards[0].object_id, hidden);
+            assert_eq!(
+                private.hideaway_exile_cards[0].zone_change_generation,
+                generation
+            );
+            assert_eq!(private.hideaway_exile_cards[0].card_id, "island");
+        }
+        assert!(per_player(&event, 2).hideaway_exile_cards.is_empty());
     }
 
     // Internal mid-resolution fixture: normal command completion runs the token SBA.
@@ -1353,6 +1456,33 @@ mod library_card_projection_tests {
         assert!(
             engine.state.objects.contains_key(&token),
             "projection never deletes tokens"
+        );
+    }
+}
+
+#[cfg(test)]
+mod face_down_exile_projection_tests {
+    use super::*;
+
+    #[test]
+    fn public_display_name_does_not_reveal_face_down_exile_identity() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            700_113,
+            &[0, 1],
+            20,
+            Some(vec![vec!["island".into(); 10], vec!["forest".into(); 10]]),
+            true,
+        )
+        .unwrap();
+        let hidden = engine.state.players[0].library[0];
+        let object = engine.state.objects.get_mut(&hidden).unwrap();
+        object.zone = Zone::Exile;
+        object.face_down = true;
+
+        assert_eq!(
+            object_display_name(&engine.state, engine.registry, hidden),
+            "Face-down exiled card"
         );
     }
 }

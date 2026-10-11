@@ -818,8 +818,8 @@ public:
     // Engine ObjectId -> creature-ness from BattlefieldObjectMap entries. Engine-authoritative
     // (tricerules registry), so engine tokens with no Oracle entry are still combat-eligible.
     QHash<quint32, bool> engineOidCreature;
-    // Current local-player-only face-down display identity. The physical table CardItem remains
-    // face down and retains its shared Server_Card identity; hover/menu consumers consult this map.
+    // Current viewer-private face-down display identity keyed by physical zone player and
+    // Server_Card.id. The CardItem remains face down; hover/menu consumers consult this map.
     QHash<quint64, QString> privateFaceDownNameByOwnedCard;
     QHash<quint32, quint64> privateFaceDownGenerationByOid;
     QHash<quint32, QVector<RuledPermanentAction>> permanentActionsByOid;

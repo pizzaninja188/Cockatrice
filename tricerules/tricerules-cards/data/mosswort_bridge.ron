@@ -1,0 +1,64 @@
+// Oracle and WotC rulings checked 2026-10-11 against the pinned named-card API responses.
+// Oracle ID 7cb9e29f-835f-4155-a2a5-4b778866c773; source SHA-256
+// 977A1186833326D3C5C125210002561455959FDA563D096B70EE176C9E86FE6F; rulings SHA-256
+// F6FE86F190EB85158C5466F6A4AB408163221D6E35256EF4D008C7875B3D2601.
+// CR 702.75a/406.3 (Hideaway), 608.2g (resolution-time power check/play), and 305.2-305.3
+// (land play permission and limit). WotC Streets of New Capenna notes: Hideaway puts unchosen
+// cards on the library bottom in a random order and does not itself make this land enter tapped.
+(
+  id: "mosswort_bridge",
+  name: "Mosswort Bridge",
+  face_id: "mosswort_bridge",
+  mana_cost: "",
+  types: ["Land"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: EntersTapped(affected: Self_),
+  )],
+  triggered_abilities: [(
+    ability_id: "hideaway",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Hideaway(
+      count: 4,
+      linked_exile_id: "exiled_cards",
+    )],
+  )],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([3]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(g: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([4]),
+      costs: [Mana("{G}"), Tap],
+      effect: [ChooseResolutionBranch(
+        chooser: Controller,
+        optional: true,
+        selection: PlayerChoice,
+        branches: [(
+          branch_id: "play_linked_card",
+          // Oracle line 4 names the complete activation; reusing it here would repeat its costs and 10-power condition.
+          presentation: Fallback,
+          cost: None,
+          requirement: GameCondition(BattlefieldAggregate(
+            filter: (controllers: Controller, card_type: Some(Creature)),
+            aggregate: TotalPower,
+            min: Some(10),
+          )),
+          effects: [PlayLinkedExiledCard(
+            producer_ability_id: "hideaway",
+            linked_exile_id: "exiled_cards",
+            filter: None,
+            play_kind: Play,
+            return_source_to_owner_hand_if_cast: false,
+          )],
+        )],
+      )],
+    ),
+  ],
+)

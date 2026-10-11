@@ -342,7 +342,7 @@ void SeededGameDriver::onRuledEvent(const ruled::v1::RuledEvent &ev)
 
     else if (ev.has_face_down_object_map()) {
         for (const auto &entry : ev.face_down_object_map().entries()) {
-            if (entry.controller_player_id() == myId && entry.card_name() == "Hill Giant") {
+            if (entry.viewer_player_id() == myId && entry.card_name() == "Hill Giant") {
                 manifestOid = entry.engine_object_id();
                 manifestGeneration = entry.zone_change_generation();
                 manifestServerCardId = entry.server_card_id();

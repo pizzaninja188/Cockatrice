@@ -752,6 +752,15 @@ pub enum LinkedExiledCardDestination {
     ControllerBattlefield,
 }
 
+/// Resolution-time permission granted for one exact source-incarnation-linked exiled card.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LinkedExiledCardPlayKind {
+    /// Cast a nonland spell face without paying its mana cost.
+    Cast,
+    /// Play a spell or land face without paying its mana cost when applicable.
+    Play,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ResolutionBranchRequirement {
     #[default]
@@ -1186,6 +1195,12 @@ pub enum SpellEffectKind {
     IntoTheWilds,
     /// Private top-seven look, optional simultaneous planeswalker entry, then random bottom.
     DeployTheGatewatch,
+    /// CR 702.75 / 406.3: look at the top `count`, exile one face down, and put the rest on the
+    /// bottom in a random order. Mosswort Bridge and Smuggler's Buggy use the same linked entry.
+    Hideaway {
+        count: u32,
+        linked_exile_id: AbilityLinkId,
+    },
     /// Chaos Warp's inseparable target-owner shuffle, public reveal and ordinary entry.
     ChaosWarp,
     /// Goblin Welder's inseparable same-player artifact sacrifice and graveyard return.
@@ -1739,6 +1754,19 @@ pub enum SpellEffectKind {
         destination: LinkedExiledCardDestination,
         #[serde(default)]
         optional: bool,
+    },
+    /// Offer one exact linked Exile object for casting/playing as the current resolving
+    /// instruction. Hideaway and Smuggler's Buggy share the authorization; Mosswort Bridge uses
+    /// Play and its land timing exception. The Buggy follow-up is narrowly bound to a successful
+    /// cast and the exact surviving source incarnation.
+    PlayLinkedExiledCard {
+        producer_ability_id: AbilityId,
+        linked_exile_id: AbilityLinkId,
+        #[serde(default)]
+        filter: Option<ZoneCardFilter>,
+        play_kind: LinkedExiledCardPlayKind,
+        #[serde(default)]
+        return_source_to_owner_hand_if_cast: bool,
     },
     MillTargetPlayer {
         count: u32,
@@ -3469,6 +3497,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ManifestDread
             | SpellEffectKind::IntoTheWilds
             | SpellEffectKind::DeployTheGatewatch
+            | SpellEffectKind::Hideaway { .. }
             | SpellEffectKind::PutPermanentFromHand { .. }
             | SpellEffectKind::LookChooseToHand { .. }
             | SpellEffectKind::TapAll { .. }
@@ -3493,6 +3522,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { .. }
             | SpellEffectKind::ChooseGraveyardCard { .. }
             | SpellEffectKind::ChooseLinkedExiledCard { .. }
+            | SpellEffectKind::PlayLinkedExiledCard { .. }
             | SpellEffectKind::GrantKeywordsAllPermanents { .. }
             | SpellEffectKind::ProtectAllPermanentsYouControlWithCounters
             | SpellEffectKind::GainLife { .. }
@@ -4719,22 +4749,40 @@ impl SpellEffectKind {
             producer_ability_id.validate()?;
             linked_exile_id.validate()?;
         }
-        if let SpellEffectKind::ChooseLinkedExiledCard {
-            producer_ability_id,
-            linked_exile_id,
-            filter,
-            ..
-        } = self
-        {
-            if context != EffectContext::Ability {
-                return Err(
-                    "choosing a linked Exile card requires an activated or triggered ability"
-                        .into(),
-                );
+        match self {
+            SpellEffectKind::ChooseLinkedExiledCard {
+                producer_ability_id,
+                linked_exile_id,
+                filter,
+                ..
+            } => {
+                if context != EffectContext::Ability {
+                    return Err(
+                        "linked Exile-card choices require an activated or triggered ability"
+                            .into(),
+                    );
+                }
+                producer_ability_id.validate()?;
+                linked_exile_id.validate()?;
+                filter.validate()?;
             }
-            producer_ability_id.validate()?;
-            linked_exile_id.validate()?;
-            filter.validate()?;
+            SpellEffectKind::PlayLinkedExiledCard {
+                producer_ability_id,
+                linked_exile_id,
+                filter,
+                ..
+            } => {
+                if context != EffectContext::Ability {
+                    return Err(
+                        "linked Exile-card choices require an activated or triggered ability"
+                            .into(),
+                    );
+                }
+                producer_ability_id.validate()?;
+                linked_exile_id.validate()?;
+                filter.as_ref().map_or(Ok(()), ZoneCardFilter::validate)?;
+            }
+            _ => {}
         }
         if let SpellEffectKind::ExileGraveyards {
             players,
@@ -6424,6 +6472,13 @@ impl SpellEffectKind {
             }
             SpellEffectKind::IntoTheWilds => Ok(()),
             SpellEffectKind::DeployTheGatewatch => Ok(()),
+            SpellEffectKind::Hideaway { count, .. } => {
+                if *count == 0 {
+                    Err("Hideaway requires a positive look count".into())
+                } else {
+                    Ok(())
+                }
+            }
             SpellEffectKind::ChaosWarp => Ok(()),
             SpellEffectKind::ExchangeArtifactWithGraveyard => Ok(()),
             SpellEffectKind::LookChooseToHand {

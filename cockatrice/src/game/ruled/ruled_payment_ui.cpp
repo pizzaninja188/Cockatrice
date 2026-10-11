@@ -1,5 +1,6 @@
 #include "ruled_payment_ui.h"
 
+#include "../../interface/widgets/tabs/tab_game.h"
 #include "../abstract_game.h"
 #include "../board/abstract_counter.h"
 #include "../board/card_item.h"
@@ -16,6 +17,7 @@
 #include <QCursor>
 #include <QMenu>
 #include <QPainter>
+#include <QPointer>
 #include <QScopedValueRollback>
 #include <QTimer>
 #include <algorithm>
@@ -27,16 +29,77 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
     QObject::connect(state, &RuledClientState::specialCastRequested, actions, [this, state](quint32 oid) {
         if (!actions->player->getPlayerInfo()->getLocal())
             return;
-        const auto offers = state->zoneCastActions.faceOptionsByIndex.value(static_cast<int>(oid));
-        for (const auto &offer : offers) {
-            if (offer.castMethod == ruled::v1::CAST_METHOD_MADNESS ||
-                offer.castMethod == ruled::v1::CAST_METHOD_SIEGE_DEFEAT) {
-                beginRuledSpellCast(nullptr, static_cast<int>(oid), offer.faceIndex, offer.faceName, offer.manaCost,
-                                    offer.genericCostReduction, RuledCastSource::Exile, offer.castMethod,
-                                    offer.castingPermissionId);
-                return;
-            }
+        if (!state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast) ||
+            !state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast, oid))
+            return;
+
+        struct SpecialOffer
+        {
+            RuledFaceOption face;
+            bool isLand = false;
+        };
+        QVector<SpecialOffer> options;
+        for (const auto &face : state->zoneActionFaceOptions(oid, RuledCastSource::Exile))
+            options.append({face, false});
+        for (const auto &face : state->zoneLandFaceOptions(oid, RuledCastSource::Exile))
+            options.append({face, true});
+        std::sort(options.begin(), options.end(), [](const SpecialOffer &left, const SpecialOffer &right) {
+            return std::tie(left.face.faceIndex, left.isLand) < std::tie(right.face.faceIndex, right.isLand);
+        });
+        if (options.isEmpty()) {
+            state->emitLocalLog(PlayerActions::tr("No legal cast or land play is available for that card."));
+            return;
         }
+
+        std::optional<SpecialOffer> selected;
+        if (options.size() == 1) {
+            selected = options.constFirst();
+        } else {
+            QMenu menu(actions->player->getGame()->getTab());
+            menu.setTitle(PlayerActions::tr("Choose how to play the exiled card"));
+            QVector<QAction *> actionsByOption;
+            actionsByOption.reserve(options.size());
+            for (const auto &option : options) {
+                actionsByOption.append(menu.addAction(
+                    option.isLand ? PlayerActions::tr("Play %1").arg(option.face.faceName)
+                                  : PlayerActions::tr("Cast %1").arg(option.face.faceName)));
+            }
+            const int index = actionsByOption.indexOf(menu.exec(QCursor::pos()));
+            if (index < 0)
+                return;
+            selected = options.at(index);
+        }
+
+        if (!selected.has_value())
+            return;
+        const auto &offer = selected->face;
+        if (!selected->isLand) {
+            beginRuledSpellCast(nullptr, static_cast<int>(oid), offer.faceIndex, offer.faceName, offer.manaCost,
+                                offer.genericCostReduction, RuledCastSource::Exile, offer.castMethod,
+                                offer.castingPermissionId);
+            return;
+        }
+
+        if (!state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast) ||
+            !state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast, oid))
+            return;
+        const RuledClientState::RuledPendingChoice restore = *state->pendingChoice;
+        state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast);
+        const auto submittedRevision = state->pendingChoiceRevision;
+        ruled::v1::RuledCommand command;
+        auto *play = command.mutable_play_land();
+        play->mutable_source()->set_exile_object_id(oid);
+        play->mutable_source()->set_expected_zone_change_generation(offer.zoneChangeGeneration);
+        play->set_face_index(static_cast<quint32>(offer.faceIndex));
+        RuledActions::sendRuledCommandExpectingAck(
+            actions->player->getGame(), command,
+            [clientState = QPointer<RuledClientState>(state), restore, submittedRevision](bool accepted) {
+                if (clientState && !accepted && clientState->pendingChoiceRevision == submittedRevision &&
+                    !clientState->pendingChoice.has_value()) {
+                    clientState->setPendingChoice(restore);
+                    emit clientState->combatStateChanged();
+                }
+            });
     });
     QObject::connect(state, &RuledClientState::paymentPreviewReceived, actions, [this] { received(); });
     QObject::connect(state, &RuledClientState::legalActionsChanged, actions, [this] {

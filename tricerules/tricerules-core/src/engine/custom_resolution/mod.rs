@@ -739,6 +739,7 @@ impl GameEngine {
                 remaining: VecDeque::new(),
                 resume_stack: stack.clone(),
                 suspended_resolution: None,
+                suspended_replacement_event: None,
             })
             .ready
             .push(ObserverReturnEntry {
@@ -1604,6 +1605,27 @@ impl GameEngine {
         previous_result: EffectResult,
         mut ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
+        let is_linked_play_root =
+            self.state
+                .pending_linked_exile_play
+                .as_ref()
+                .is_some_and(|cohort| {
+                    cohort.stack.item.id == item.id
+                        && cohort.stack.item.source_zone_change == item.source_zone_change
+                });
+        if is_linked_play_root {
+            let mut cohort = *self
+                .state
+                .pending_linked_exile_play
+                .take()
+                .expect("linked play cohort checked above");
+            cohort.stack = ParkedStackResolution {
+                item,
+                resume_effect_index,
+                previous_result,
+            };
+            return self.advance_pending_linked_exile_play(cohort, ev);
+        }
         if let Some(start) = resume_effect_index {
             let (effects, spell_label) = self.build_resolution_effects(&item);
             let progress = self.run_effect_list_with_previous(

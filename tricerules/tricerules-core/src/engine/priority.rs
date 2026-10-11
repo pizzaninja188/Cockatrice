@@ -84,28 +84,79 @@ impl GameEngine {
                     .get(&stack.item.id)
                     .is_some_and(|object| departed.contains(&object.owner))
         };
+        let surviving_linked_land_resume =
+            self.state
+                .pending_linked_exile_play
+                .as_ref()
+                .and_then(|cohort| {
+                    let current = cohort.in_flight?;
+                    let chooser = cohort.stack.item.controller;
+                    let Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(entry)) =
+                        self.state.pending_replacement_event.as_ref()
+                    else {
+                        return None;
+                    };
+                    let BattlefieldEntryCompletion::LandPlay {
+                        player,
+                        resume_stack: Some(stack),
+                        ..
+                    } = &entry.completion
+                    else {
+                        return None;
+                    };
+                    let linked_entry_is_current = entry.event.object_id == current.object_id
+                        && entry.event.destination_controller == chooser
+                        && self
+                            .state
+                            .objects
+                            .get(&current.object_id)
+                            .is_some_and(|object| object.zone == Zone::Exile)
+                        && self
+                            .state
+                            .zone_change_generation
+                            .get(&current.object_id)
+                            .copied()
+                            == Some(current.zone_change_generation);
+                    let saved_root_matches = stack.item.id == cohort.stack.item.id
+                        && stack.item.source_zone_change == cohort.stack.item.source_zone_change
+                        && stack.item.controller == cohort.stack.item.controller
+                        && stack.resume_effect_index == cohort.stack.resume_effect_index;
+                    (*player == chooser
+                        && !departed.contains(player)
+                        && linked_entry_is_current
+                        && saved_root_matches)
+                        .then(|| stack.as_ref().clone())
+                });
         let independent_entry = matches!(self.state.pending_replacement_event.as_ref(),
             Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(entry))
                 if matches!(entry.completion, BattlefieldEntryCompletion::ObserverReturn { resume_original_stack: false, .. }));
-        let outer = self
-            .state
-            .pending_resolution
-            .as_ref()
-            .and_then(|pending| {
-                (!independent_entry)
-                    .then(|| pending.continuation.stack())
-                    .flatten()
-            })
-            .filter(|stack| is_departed(stack))
-            .cloned()
-            .or_else(|| {
-                self.state
-                    .pending_observer_return_batch
-                    .as_ref()
-                    .and_then(|batch| batch.resume_stack.as_ref())
-                    .filter(|stack| is_departed(stack))
-                    .cloned()
-            });
+        let outer = if let Some(resume_stack) = surviving_linked_land_resume {
+            // A surviving player's resolution-time land play may currently be parked on a card
+            // owned by the player who leaves. The card will be removed, but the already-started
+            // resolving effect must survive long enough to retire that exact entry and continue
+            // its linked cohort. Judge departure against the saved resolving effect, not the
+            // selected land object.
+            is_departed(&resume_stack).then_some(resume_stack)
+        } else {
+            self.state
+                .pending_resolution
+                .as_ref()
+                .and_then(|pending| {
+                    (!independent_entry)
+                        .then(|| pending.continuation.stack())
+                        .flatten()
+                })
+                .filter(|stack| is_departed(stack))
+                .cloned()
+        }
+        .or_else(|| {
+            self.state
+                .pending_observer_return_batch
+                .as_ref()
+                .and_then(|batch| batch.resume_stack.as_ref())
+                .filter(|stack| is_departed(stack))
+                .cloned()
+        });
         let Some(outer) = outer else {
             return Ok(());
         };
@@ -479,6 +530,8 @@ impl GameEngine {
         if departed.is_empty() {
             return Ok(());
         }
+        let departed_set: HashSet<_> = departed.iter().copied().collect();
+        self.reconcile_spell_cast_departure(&departed_set)?;
         // Preserve actual owner removals across deletion; entry controllers/deciders may survive.
         let departed_objects: HashSet<_> = self
             .state
@@ -762,6 +815,7 @@ impl GameEngine {
             self.reconcile_opening_departure(player, &mut batch.events)?;
         }
         self.reconcile_departed_players(&mut batch.events)?;
+        self.reconcile_pending_linked_exile_after_departure(&mut batch.events)?;
         self.reindex_battlefield_control(&mut batch.events);
         self.reconcile_draw_departure(&mut batch.events)?;
         if self.state.is_terminal() {

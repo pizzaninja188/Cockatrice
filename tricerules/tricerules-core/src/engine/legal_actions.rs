@@ -2732,12 +2732,20 @@ pub(super) fn legal_zone_cast_actions(
     actions
 }
 
-fn legal_zone_land_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZoneLandAction> {
+pub(super) fn legal_zone_land_actions(
+    eng: &GameEngine,
+    pid: PlayerId,
+) -> Vec<rv1::LegalZoneLandAction> {
     let max_lands = 1 + eng.extra_land_plays_for(pid);
+    let special_permission = eng
+        .special_cast_permission(pid)
+        .filter(|permission| permission.scope == ExilePlayPermissionScope::PlayCard);
+    let special = special_permission.is_some();
     if eng.state.opening.is_some()
-        || eng.state.blocking_choice().is_some()
+        || (!special && eng.state.blocking_choice().is_some())
         || eng.state.lands_played_this_turn >= max_lands
-        || !sorcery_speed_available(&eng.state, pid)
+        || (special && eng.state.active_player_id() != pid)
+        || (!special && !sorcery_speed_available(&eng.state, pid))
     {
         return Vec::new();
     }
@@ -2747,8 +2755,12 @@ fn legal_zone_land_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
         .state
         .active_exile_play_permissions
         .iter()
+        .filter(|_| !special)
+        .chain(special_permission.iter())
         .filter(|permission| {
-            permission.player_id == pid && permission.scope == ExilePlayPermissionScope::PlayCard
+            eng.exile_permission_controller(permission) == Some(pid)
+                && permission.scope == ExilePlayPermissionScope::PlayCard
+                && permission.available_on_turn(eng.state.turn_instance)
         })
     {
         let Some(object) = eng.state.objects.get(&permission.object_id) else {
@@ -2782,7 +2794,7 @@ fn legal_zone_land_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
             });
         }
     }
-    if eng.can_play_lands_from_own_graveyard(pid) {
+    if !special && eng.can_play_lands_from_own_graveyard(pid) {
         let Some(player_index) = eng.state.player_idx(pid) else {
             return actions;
         };

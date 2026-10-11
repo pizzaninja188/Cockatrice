@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "7cb9e29f-835f-4155-a2a5-4b778866c773",
+  "spans": [
+    {
+      "face_id": "mosswort_bridge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    },
+    {
+      "face_id": "mosswort_bridge",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "mosswort_bridge",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "mosswort_bridge",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_hideaway_four::mosswort_bridge_and_smugglers_buggy_register_their_exact_rules_shapes",
+      "covers": "Exact Mosswort card identity, tapped entry, Hideaway 4, green mana ability, resolution branch, signed creature-power threshold, and linked play permission."
+    },
+    {
+      "test": "scenario deck_coverage_hideaway_four::mosswort_bridge_checks_power_when_its_ability_resolves_then_plays_the_linked_land",
+      "covers": "Threshold changes from eight to ten before resolution; the selected linked Forest is played during resolution and consumes the controller's land play."
+    },
+    {
+      "test": "scenario deck_coverage_hideaway_four::mosswort_bridge_does_not_offer_the_linked_card_below_ten_power",
+      "covers": "Four 2/2 creatures fail the ten-power branch and do not expose the linked exile choice."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

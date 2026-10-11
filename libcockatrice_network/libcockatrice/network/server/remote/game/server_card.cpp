@@ -19,6 +19,8 @@
  ***************************************************************************/
 #include "server_card.h"
 
+#include <libcockatrice/utility/zone_names.h>
+
 #include "server_cardzone.h"
 #include "server_player.h"
 
@@ -133,9 +135,15 @@ void Server_Card::setParentCard(Server_Card *_parentCard)
 void Server_Card::getInfo(ServerInfo_Card *info)
 {
     QString displayedName = facedown ? QString() : cardRef.name;
+    QString providerId = cardRef.providerId;
+    Server_CardZone *cardZone = getZone();
+    if (facedown && cardZone &&
+        (cardZone->getName() == ZoneNames::TABLE || cardZone->getName() == ZoneNames::EXILE)) {
+        providerId.clear();
+    }
 
     info->set_id(id);
-    info->set_provider_id(cardRef.providerId.toStdString());
+    info->set_provider_id(providerId.toStdString());
     info->set_name(displayedName.toStdString());
     info->set_x(coord_x);
     info->set_y(coord_y);

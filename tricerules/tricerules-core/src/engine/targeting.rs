@@ -1695,8 +1695,10 @@ fn validate_effect_targets(
         | SpellEffectKind::SearchLibrary { .. }
         | SpellEffectKind::ChooseGraveyardCard { .. }
         | SpellEffectKind::ChooseLinkedExiledCard { .. }
+        | SpellEffectKind::PlayLinkedExiledCard { .. }
         | SpellEffectKind::IntoTheWilds
         | SpellEffectKind::DeployTheGatewatch
+        | SpellEffectKind::Hideaway { .. }
         | SpellEffectKind::LookChooseToHand { .. }
         | SpellEffectKind::Scry { .. }
         | SpellEffectKind::LibraryPartition { .. }

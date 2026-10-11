@@ -8,14 +8,27 @@ impl GameEngine {
                 exiled, face_index, ..
             } = &pending.continuation
             {
-                let selectable = super::super::legal_actions::legal_zone_cast_actions(
+                let permission_scope = match &pending.continuation {
+                    ResolutionContinuation::SpecialCast {
+                        permission_scope, ..
+                    } => {
+                        permission_scope.unwrap_or(ExilePlayPermissionScope::CastFace(*face_index))
+                    }
+                    _ => unreachable!(),
+                };
+                let cast_selectable = super::super::legal_actions::legal_zone_cast_actions(
                     self,
                     pending.deciding_player,
                 )
                 .iter()
-                .any(|action| {
-                    action.object_id == exiled.object_id && action.face_index == *face_index as u32
-                });
+                .any(|action| action.object_id == exiled.object_id);
+                let land_selectable = permission_scope == ExilePlayPermissionScope::PlayCard
+                    && super::super::legal_actions::legal_zone_land_actions(
+                        self,
+                        pending.deciding_player,
+                    )
+                    .iter()
+                    .any(|action| action.object_id == exiled.object_id);
                 let object = self.state.objects.get(&exiled.object_id)?;
                 let face = self.registry.get(&object.card_id)?.face(*face_index)?;
                 return Some(rv1::RuledEvent {
@@ -31,7 +44,7 @@ impl GameEngine {
                             max: 1,
                             candidate_card_ids: vec![object.card_id.clone()],
                             candidate_names: vec![face.name.clone()],
-                            candidate_selectable: vec![selectable],
+                            candidate_selectable: vec![cast_selectable || land_selectable],
                             ..Default::default()
                         },
                     )),

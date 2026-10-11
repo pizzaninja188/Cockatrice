@@ -6216,21 +6216,33 @@ TEST_F(RuledClientTest, FaceDownObjectMapProvidesPrivateIdentityAndPrunesOnRepla
 {
     ruled::v1::RuledEventBatch batch;
     auto *entry = batch.add_events()->mutable_face_down_object_map()->add_entries();
-    entry->set_controller_player_id(kLocalPlayer);
+    entry->set_viewer_player_id(kLocalPlayer);
     entry->set_engine_object_id(9801u);
     entry->set_zone_change_generation(4u);
     entry->set_server_card_id(17);
     entry->set_card_name("Grizzly Bears");
+    entry->set_zone_player_id(kLocalPlayer);
+    auto *sameIdFromAnotherZone =
+        batch.mutable_events(0)->mutable_face_down_object_map()->add_entries();
+    sameIdFromAnotherZone->set_viewer_player_id(kLocalPlayer);
+    sameIdFromAnotherZone->set_engine_object_id(9803u);
+    sameIdFromAnotherZone->set_zone_change_generation(5u);
+    sameIdFromAnotherZone->set_server_card_id(17);
+    sameIdFromAnotherZone->set_card_name("Island");
+    sameIdFromAnotherZone->set_zone_player_id(kOpponent);
     apply(batch);
 
     EXPECT_EQ(state->privateFaceDownNameForCard(kLocalPlayer, 17), QString("Grizzly Bears"));
+    EXPECT_EQ(state->privateFaceDownNameForCard(kOpponent, 17), QString("Island"));
     EXPECT_EQ(state->privateFaceDownGenerationByOid.value(9801u), 4u);
-    EXPECT_TRUE(state->privateFaceDownNameForCard(kOpponent, 17).isEmpty());
+    EXPECT_EQ(state->privateFaceDownGenerationByOid.value(9803u), 5u);
+    EXPECT_TRUE(state->privateFaceDownNameForCard(-1, 17).isEmpty());
 
     ruled::v1::RuledEventBatch cleared;
     cleared.add_events()->mutable_face_down_object_map();
     apply(cleared);
     EXPECT_TRUE(state->privateFaceDownNameForCard(kLocalPlayer, 17).isEmpty());
+    EXPECT_TRUE(state->privateFaceDownNameForCard(kOpponent, 17).isEmpty());
     EXPECT_FALSE(state->privateFaceDownGenerationByOid.contains(9801u));
 }
 
@@ -6957,7 +6969,8 @@ TEST_F(RuledClientTest, PrivateDiscardOrderingUsesCardImagesAndClickOrder)
 
 TEST_F(RuledClientTest, MadnessPaymentDoesNotTreatItsOwnOfferAsABlockingChoice)
 {
-    for (const auto method : {ruled::v1::CAST_METHOD_MADNESS, ruled::v1::CAST_METHOD_SIEGE_DEFEAT}) {
+    for (const auto method : {ruled::v1::CAST_METHOD_MADNESS, ruled::v1::CAST_METHOD_SIEGE_DEFEAT,
+                              ruled::v1::CAST_METHOD_PERMISSION}) {
         ruled::v1::RuledEventBatch batch;
         auto *choice = batch.add_events()->mutable_resolution_choice_required();
         choice->set_deciding_player_id(kLocalPlayer);
@@ -7003,8 +7016,33 @@ TEST_F(RuledClientTest, MadnessPaymentDoesNotTreatItsOwnOfferAsABlockingChoice)
     }
 }
 
+TEST_F(RuledClientTest, SpecialPlayOfferUsesPlayLabel)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+    choice->set_prompt_text("P4: play linked Forest without paying its mana cost?");
+    choice->add_candidate_object_ids(700);
+    choice->add_candidate_selectable(true);
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast));
+    const auto options = state->pendingChoiceOptions();
+    ASSERT_EQ(options.size(), 2);
+    EXPECT_EQ(options.at(1).label, QStringLiteral("Play"));
+}
+
 TEST_F(RuledClientTest, SpecialCastKeepsOfferWhileStagingAndOnlyDeclinesExplicitly)
 {
+    ruled::v1::RuledEventBatch observerReturn;
+    auto *observerChoice = observerReturn.add_events()->mutable_resolution_choice_required();
+    observerChoice->set_deciding_player_id(kLocalPlayer);
+    observerChoice->set_choice_kind(ruled::v1::CHOICE_KIND_AURA_PERMANENT);
+    observerChoice->add_candidate_object_ids(601);
+    apply(observerReturn);
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::AuraPermanent));
+
     ruled::v1::RuledEventBatch batch;
     auto *choice = batch.add_events()->mutable_resolution_choice_required();
     choice->set_deciding_player_id(kLocalPlayer);
@@ -7015,6 +7053,7 @@ TEST_F(RuledClientTest, SpecialCastKeepsOfferWhileStagingAndOnlyDeclinesExplicit
     apply(batch);
 
     ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast));
+    EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::AuraPermanent));
     ASSERT_EQ(state->pendingChoiceOptions().size(), 2);
     quint32 requested = 0;
     QObject::connect(state, &RuledClientState::specialCastRequested, state,

@@ -300,6 +300,7 @@ impl GameEngine {
                 self.commit_observer_return_batch(batch.ready, &mut events)?;
                 if self.restore_suspended_observer_resolution(
                     batch.suspended_resolution,
+                    batch.suspended_replacement_event,
                     &mut events,
                 )? {
                     return Ok(events::finish_with_events(self, events));

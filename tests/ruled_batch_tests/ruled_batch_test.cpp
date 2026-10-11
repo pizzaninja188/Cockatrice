@@ -192,6 +192,29 @@ protected:
         bool phaseChanged = false;
     };
 
+    void expectReconnectRestoresFaceDownMap(ResponseContainer &response, int viewerId)
+    {
+        ASSERT_FALSE(response.getPostResponseQueue().isEmpty());
+        const auto *container = dynamic_cast<const GameEventContainer *>(response.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        bool foundMap = false;
+        for (const auto &payload : container->event_list()) {
+            ASSERT_TRUE(payload.HasExtension(Event_RuledPayload::ext));
+            ruled::v1::RuledEventBatch restored;
+            ASSERT_TRUE(restored.ParseFromString(payload.GetExtension(Event_RuledPayload::ext).payload()));
+            for (const auto &event : restored.events()) {
+                if (!event.has_face_down_object_map()) {
+                    continue;
+                }
+                foundMap = true;
+                for (const auto &entry : event.face_down_object_map().entries()) {
+                    EXPECT_EQ(entry.viewer_player_id(), viewerId);
+                }
+            }
+        }
+        EXPECT_TRUE(foundMap) << "every reconnect restores a complete, recipient-private face-down identity map";
+    }
+
     void SetUp() override
     {
         userA.set_name("alice");
@@ -1181,7 +1204,78 @@ TEST_F(RuledBatchTest, GenericResolutionChoiceReconnectRestoresCurrentPublicHand
     updatePendingResolutionChoiceCache(completed);
     ResponseContainer afterCompletion(-1);
     game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, afterCompletion);
-    EXPECT_TRUE(afterCompletion.getPostResponseQueue().isEmpty());
+    expectReconnectRestoresFaceDownMap(afterCompletion, p1->getPlayerId());
+}
+
+TEST_F(RuledBatchTest, ReissuedSpecialCastChoiceReplacesObserverPromptAndReconnects)
+{
+    ruled::v1::IpcResponse interrupted;
+    auto *observerChoice = interrupted.mutable_batch()->add_events()->mutable_resolution_choice_required();
+    observerChoice->set_deciding_player_id(p1->getPlayerId());
+    observerChoice->set_choice_kind(ruled::v1::CHOICE_KIND_AURA_PERMANENT);
+    observerChoice->set_prompt_text("Choose what Pacifism will enchant as it returns.");
+    observerChoice->add_candidate_object_ids(601u);
+    updatePendingResolutionChoiceCache(interrupted);
+
+    ruled::v1::IpcResponse resumed;
+    auto *specialCast = resumed.mutable_batch()->add_events()->mutable_resolution_choice_required();
+    specialCast->set_deciding_player_id(p1->getPlayerId());
+    specialCast->set_source_object_id(502u);
+    specialCast->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+    specialCast->set_prompt_text("Cast Opt without paying its mana cost?");
+    specialCast->add_candidate_object_ids(700u);
+    specialCast->add_candidate_card_ids("opt");
+    specialCast->add_candidate_names("Opt");
+    specialCast->add_candidate_selectable(true);
+    specialCast->set_min(0);
+    specialCast->set_max(1);
+    updatePendingResolutionChoiceCache(resumed);
+
+    for (Server_Player *recipient : {p1, p2}) {
+        const auto routed = redactFor(resumed.batch(), recipient);
+        const auto routedChoice = std::find_if(routed.events().begin(), routed.events().end(),
+                                               [](const auto &event) {
+                                                   return event.has_resolution_choice_required();
+                                               });
+        ASSERT_NE(routedChoice, routed.events().end());
+        EXPECT_EQ(routedChoice->resolution_choice_required().choice_kind(),
+                  ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+        if (recipient == p1) {
+            ASSERT_EQ(routedChoice->resolution_choice_required().candidate_object_ids_size(), 1);
+            EXPECT_EQ(routedChoice->resolution_choice_required().candidate_object_ids(0), 700u);
+            EXPECT_EQ(routedChoice->resolution_choice_required().prompt_text(),
+                      "Cast Opt without paying its mana cost?");
+        } else {
+            EXPECT_EQ(routedChoice->resolution_choice_required().candidate_object_ids_size(), 0);
+            EXPECT_EQ(routedChoice->resolution_choice_required().candidate_names_size(), 0);
+            EXPECT_EQ(routedChoice->resolution_choice_required().prompt_text(),
+                      "Opponent is making a resolution choice.");
+        }
+
+        ResponseContainer reconnect(-1);
+        game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, reconnect);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 1);
+        const auto *container =
+            dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        const auto restoredChoice = std::find_if(restored.events().begin(), restored.events().end(),
+                                                 [](const auto &event) {
+                                                     return event.has_resolution_choice_required();
+                                                 });
+        ASSERT_NE(restoredChoice, restored.events().end());
+        EXPECT_EQ(restoredChoice->resolution_choice_required().choice_kind(),
+                  ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+        EXPECT_EQ(restoredChoice->resolution_choice_required().deciding_player_id(), p1->getPlayerId());
+        if (recipient == p1) {
+            ASSERT_EQ(restoredChoice->resolution_choice_required().candidate_object_ids_size(), 1);
+            EXPECT_EQ(restoredChoice->resolution_choice_required().candidate_object_ids(0), 700u);
+        } else {
+            EXPECT_EQ(restoredChoice->resolution_choice_required().candidate_object_ids_size(), 0);
+            EXPECT_EQ(restoredChoice->resolution_choice_required().candidate_names_size(), 0);
+        }
+    }
 }
 
 TEST_F(RuledBatchTest, OrdinaryReconnectRestoresCurrentPublicHandAndRevealWithoutPrivateZones)
@@ -1972,9 +2066,13 @@ TEST_F(RuledBatchTest, PendingPublicRevealIsRestoredOnJoinAndClearedByNextAuthor
     ASSERT_TRUE(event.HasExtension(Event_RuledPayload::ext));
     ruled::v1::RuledEventBatch restored;
     ASSERT_TRUE(restored.ParseFromString(event.GetExtension(Event_RuledPayload::ext).payload()));
-    ASSERT_EQ(restored.events_size(), 1);
-    ASSERT_TRUE(restored.events(0).has_resolution_choice_required());
-    const auto &restoredChoice = restored.events(0).resolution_choice_required();
+    expectReconnectRestoresFaceDownMap(reconnect, p2->getPlayerId());
+    const auto restoredChoiceEvent = std::find_if(restored.events().begin(), restored.events().end(),
+                                                  [](const auto &candidate) {
+                                                      return candidate.has_resolution_choice_required();
+                                                  });
+    ASSERT_NE(restoredChoiceEvent, restored.events().end());
+    const auto &restoredChoice = restoredChoiceEvent->resolution_choice_required();
     ASSERT_EQ(restoredChoice.candidate_names_size(), 1);
     EXPECT_EQ(restoredChoice.candidate_names(0), "Grizzly Bears");
     ASSERT_EQ(restoredChoice.candidate_server_card_ids_size(), 1);
@@ -1997,8 +2095,11 @@ TEST_F(RuledBatchTest, PendingPublicRevealIsRestoredOnJoinAndClearedByNextAuthor
     ruled::v1::RuledEventBatch afterPreviewBatch;
     ASSERT_TRUE(afterPreviewBatch.ParseFromString(
         afterPreviewContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-    ASSERT_EQ(afterPreviewBatch.events_size(), 1);
-    EXPECT_TRUE(afterPreviewBatch.events(0).has_resolution_choice_required());
+    const auto afterPreviewChoice =
+        std::find_if(afterPreviewBatch.events().begin(), afterPreviewBatch.events().end(),
+                     [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(afterPreviewChoice, afterPreviewBatch.events().end());
+    expectReconnectRestoresFaceDownMap(afterPreview, p2->getPlayerId());
 
     ruled::v1::IpcResponse completed;
     completed.set_ok(true);
@@ -2007,7 +2108,7 @@ TEST_F(RuledBatchTest, PendingPublicRevealIsRestoredOnJoinAndClearedByNextAuthor
 
     ResponseContainer afterCompletion(-1);
     game->createGameJoinedEvent(p2, afterCompletion, true);
-    EXPECT_EQ(afterCompletion.getPostResponseQueue().size(), 2);
+    expectReconnectRestoresFaceDownMap(afterCompletion, p2->getPlayerId());
 }
 
 // CR 603.3b: which abilities triggered is public information, so unlike a resolution choice this
@@ -3091,8 +3192,13 @@ TEST_F(RuledBatchTest, ReplacementImagesRestoreOnReconnectAndNeverDecoratePrivat
         ASSERT_NE(container, nullptr);
         ruled::v1::RuledEventBatch restored;
         ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
-        ASSERT_EQ(restored.events_size(), 1);
-        const auto &restoredChoice = restored.events(0).resolution_choice_required();
+        expectReconnectRestoresFaceDownMap(reconnect, recipient->getPlayerId());
+        const auto restoredChoiceEvent = std::find_if(restored.events().begin(), restored.events().end(),
+                                                      [](const auto &event) {
+                                                          return event.has_resolution_choice_required();
+                                                      });
+        ASSERT_NE(restoredChoiceEvent, restored.events().end());
+        const auto &restoredChoice = restoredChoiceEvent->resolution_choice_required();
         ASSERT_EQ(restoredChoice.replacement_options_size(), 1);
         EXPECT_EQ(restoredChoice.replacement_options(0).SerializeAsString(), option->SerializeAsString());
         EXPECT_EQ(restoredChoice.candidate_server_card_ids_size(), 0);
@@ -3989,7 +4095,7 @@ TEST_F(RuledBatchTest, EntryRevealReconnectRestoresCoherentPrivateChoiceAndOnlyA
     game->ruled()->resetForNewGame();
     ResponseContainer reset(-1);
     game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, reset);
-    EXPECT_TRUE(reset.getPostResponseQueue().isEmpty());
+    expectReconnectRestoresFaceDownMap(reset, p1->getPlayerId());
 }
 
 TEST_F(RuledBatchTest, EntryRevealEmptyAndMatchingHandsHaveIdenticalOpponentAndSpectatorWaitingViews)
@@ -5735,6 +5841,138 @@ TEST_F(RuledBatchTest, FaceDownIdentityIsControllerOnlyAndFaceUpKeepsServerCard)
     EXPECT_EQ(findCardByEngineOid(p1, 9802u), card);
 }
 
+TEST_F(RuledBatchTest, HideawayExileIdentityUsesEngineLookRightsAndHidesReconnectPrintingIdentity)
+{
+    Server_Card *card = addCardToExile(p1, "Island");
+    const int serverId = card->getId();
+    card->setFaceDown(true);
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *zoneView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto ownerView = buildPerPlayerView(p1, {}, {});
+    auto *hidden = ownerView.add_hideaway_exile_cards();
+    hidden->set_object_id(9804u);
+    hidden->set_zone_change_generation(17u);
+    hidden->set_card_id("island");
+    hidden->set_owner_player_id(p1->getPlayerId());
+    ownerView.add_exile_object_ids(9804u);
+    auto opponentView = buildPerPlayerView(p2, {}, {});
+    opponentView.add_exile_object_ids(9804u);
+    *zoneView->add_per_player() = ownerView;
+    *zoneView->add_per_player() = opponentView;
+    ASSERT_TRUE(callBatchApply(seed).zoneViewApplied);
+    updatePendingResolutionChoiceCache(seed);
+    EXPECT_EQ(bindingFor(p1).findExileCardByEngineOid(p1, 9804u), card);
+
+    ServerInfo_Card reconnectInfo;
+    card->getInfo(&reconnectInfo);
+    EXPECT_TRUE(reconnectInfo.name().empty());
+    EXPECT_TRUE(reconnectInfo.provider_id().empty());
+
+    const auto maps = appendedServerMaps();
+    const auto forAuthorizedViewer = redactFor(maps, p1);
+    const auto forUnauthorizedViewer = redactFor(maps, p2);
+    const auto findFaceMap = [](const ruled::v1::RuledEventBatch &batch) -> const ruled::v1::FaceDownObjectMap * {
+        for (const auto &event : batch.events()) {
+            if (event.has_face_down_object_map()) {
+                return &event.face_down_object_map();
+            }
+        }
+        return nullptr;
+    };
+    const auto *authorizedMap = findFaceMap(forAuthorizedViewer);
+    const auto *unauthorizedMap = findFaceMap(forUnauthorizedViewer);
+    ASSERT_NE(authorizedMap, nullptr);
+    ASSERT_NE(unauthorizedMap, nullptr);
+    ASSERT_EQ(authorizedMap->entries_size(), 1);
+    EXPECT_EQ(authorizedMap->entries(0).viewer_player_id(), p1->getPlayerId());
+    EXPECT_EQ(authorizedMap->entries(0).engine_object_id(), 9804u);
+    EXPECT_EQ(authorizedMap->entries(0).zone_change_generation(), 17u);
+    EXPECT_EQ(authorizedMap->entries(0).server_card_id(), serverId);
+    EXPECT_EQ(authorizedMap->entries(0).card_name(), "Island");
+    EXPECT_EQ(authorizedMap->entries(0).zone_player_id(), p1->getPlayerId());
+    EXPECT_EQ(unauthorizedMap->entries_size(), 0);
+
+    for (auto *participant : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(participant, reconnect, true);
+        const auto *container =
+            dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ASSERT_EQ(container->event_list_size(), 1);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(
+            container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        const auto *restoredMap = findFaceMap(restored);
+        ASSERT_NE(restoredMap, nullptr);
+        if (participant == p1) {
+            ASSERT_EQ(restoredMap->entries_size(), 1);
+            EXPECT_EQ(restoredMap->entries(0).engine_object_id(), 9804u);
+            EXPECT_EQ(restoredMap->entries(0).card_name(), "Island");
+        } else {
+            EXPECT_EQ(restoredMap->entries_size(), 0);
+        }
+    }
+}
+
+TEST_F(RuledBatchTest, FaceDownLinkedCastOfferHidesItsPromptAndIdentityFromOtherPlayers)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+    choice->set_prompt_text("P1: cast Island without paying its mana cost?");
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(9805u);
+    choice->add_candidate_card_ids("island");
+    choice->add_candidate_names("Island");
+    choice->add_candidate_selectable(true);
+
+    auto *faceDown = batch.add_events()->mutable_face_down_object_map()->add_entries();
+    faceDown->set_viewer_player_id(p1->getPlayerId());
+    faceDown->set_engine_object_id(9805u);
+    faceDown->set_zone_change_generation(18u);
+    faceDown->set_server_card_id(5432);
+    faceDown->set_card_name("Island");
+
+    auto *log = batch.add_events()->mutable_log();
+    log->set_text("P1: cast Island without paying its mana cost?");
+    log->set_visible_to_player_id(p1->getPlayerId());
+
+    const auto forDecider = redactFor(batch, p1);
+    const auto forOpponent = redactFor(batch, p2);
+    const auto findChoice = [](const ruled::v1::RuledEventBatch &events) -> const ruled::v1::ResolutionChoiceRequired * {
+        for (const auto &event : events.events()) {
+            if (event.has_resolution_choice_required()) {
+                return &event.resolution_choice_required();
+            }
+        }
+        return nullptr;
+    };
+    const auto *deciderChoice = findChoice(forDecider);
+    const auto *opponentChoice = findChoice(forOpponent);
+    ASSERT_NE(deciderChoice, nullptr);
+    ASSERT_NE(opponentChoice, nullptr);
+    ASSERT_EQ(deciderChoice->candidate_names_size(), 1);
+    EXPECT_EQ(deciderChoice->candidate_names(0), "Island");
+    EXPECT_EQ(deciderChoice->prompt_text(), "P1: cast Island without paying its mana cost?");
+    EXPECT_EQ(opponentChoice->candidate_object_ids_size(), 0);
+    EXPECT_EQ(opponentChoice->candidate_card_ids_size(), 0);
+    EXPECT_EQ(opponentChoice->candidate_names_size(), 0);
+    EXPECT_EQ(opponentChoice->candidate_server_card_ids_size(), 0);
+    EXPECT_EQ(opponentChoice->prompt_text(), "Opponent is making a resolution choice.");
+    EXPECT_EQ(std::count_if(forDecider.events().begin(), forDecider.events().end(), [](const auto &event) {
+                  return event.has_log() && event.log().text().find("Island") != std::string::npos;
+              }),
+              1);
+    EXPECT_EQ(std::count_if(forOpponent.events().begin(), forOpponent.events().end(), [](const auto &event) {
+                  return event.has_log() && event.log().text().find("Island") != std::string::npos;
+              }),
+              0);
+}
+
 TEST_F(RuledBatchTest, FaceDownPermanentChoiceHidesIdentityFromANoncontrollingChooser)
 {
     const auto runChoice = [&](Server_Player *decider, int controllerId) {
@@ -5751,7 +5989,7 @@ TEST_F(RuledBatchTest, FaceDownPermanentChoiceHidesIdentityFromANoncontrollingCh
         choice->add_candidate_server_card_ids(4321);
 
         auto *faceDown = batch.add_events()->mutable_face_down_object_map()->add_entries();
-        faceDown->set_controller_player_id(controllerId);
+        faceDown->set_viewer_player_id(controllerId);
         faceDown->set_engine_object_id(9803u);
         faceDown->set_zone_change_generation(1);
         faceDown->set_server_card_id(4321);
@@ -6361,13 +6599,13 @@ TEST_F(RuledBatchTest, OpeningReconnectRestoresRemainingQuotaAndClearsOnCompleti
     game->ruled()->resetForNewGame();
     ResponseContainer reset(-1);
     game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, reset);
-    EXPECT_TRUE(reset.getPostResponseQueue().isEmpty());
+    expectReconnectRestoresFaceDownMap(reset, p1->getPlayerId());
     updatePendingResolutionChoiceCache(response);
     response.mutable_batch()->clear_legal_by_player();
     updatePendingResolutionChoiceCache(response);
     ResponseContainer finished(-1);
     game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, finished);
-    EXPECT_TRUE(finished.getPostResponseQueue().isEmpty());
+    expectReconnectRestoresFaceDownMap(finished, p1->getPlayerId());
 }
 
 TEST_F(RuledBatchTest, SpecialCastReconnectRestoresExactOfferAndRecipientLegalActions)
@@ -6480,7 +6718,7 @@ TEST_F(RuledBatchTest, PendingSpellCastReconnectRestoresOnlyTheCastersPrivateTra
     updatePendingResolutionChoiceCache(completed);
     ResponseContainer afterCompletion(-1);
     game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, afterCompletion);
-    EXPECT_TRUE(afterCompletion.getPostResponseQueue().isEmpty());
+    expectReconnectRestoresFaceDownMap(afterCompletion, p1->getPlayerId());
 }
 
 TEST_F(RuledBatchTest, PendingAttackDeclarationReconnectRestoresOnlyThePayersPrivateTransaction)
@@ -6542,7 +6780,7 @@ TEST_F(RuledBatchTest, PendingAttackDeclarationReconnectRestoresOnlyThePayersPri
     updatePendingResolutionChoiceCache(completed);
     ResponseContainer afterCompletion(-1);
     game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, afterCompletion);
-    EXPECT_TRUE(afterCompletion.getPostResponseQueue().isEmpty());
+    expectReconnectRestoresFaceDownMap(afterCompletion, p1->getPlayerId());
 }
 
 TEST_F(RuledBatchTest, PendingAbilityActivationReconnectRetainsPublicStageAndOnlyEachSeatsOffers)
@@ -6619,7 +6857,7 @@ TEST_F(RuledBatchTest, PendingAbilityActivationReconnectRetainsPublicStageAndOnl
     updatePendingResolutionChoiceCache(completed);
     ResponseContainer afterCompletion(-1);
     game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, afterCompletion);
-    EXPECT_TRUE(afterCompletion.getPostResponseQueue().isEmpty());
+    expectReconnectRestoresFaceDownMap(afterCompletion, p1->getPlayerId());
 }
 
 TEST_F(RuledBatchTest, DamageReplacementChoiceDuringSpellPaymentRestoresAlongsideCastOnReconnect)

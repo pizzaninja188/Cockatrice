@@ -289,7 +289,8 @@ bool RuledPendingCast::matchesSpecialCastOffer(const PendingRuledSpellCast &spel
 {
     return spell.valid && spell.source == RuledCastSource::Exile &&
            (spell.castMethod == ruled::v1::CAST_METHOD_MADNESS ||
-            spell.castMethod == ruled::v1::CAST_METHOD_SIEGE_DEFEAT) &&
+            spell.castMethod == ruled::v1::CAST_METHOD_SIEGE_DEFEAT ||
+            spell.castMethod == ruled::v1::CAST_METHOD_PERMISSION) &&
            state.isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast,
                                           static_cast<quint32>(spell.handIndex)) &&
            state.isZoneCastActionLegal(static_cast<quint32>(spell.handIndex), spell.faceIndex, spell.source,

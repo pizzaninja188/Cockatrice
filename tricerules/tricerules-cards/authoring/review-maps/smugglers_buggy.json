@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "e19e1e83-75e5-4cfa-8d50-8ed0b027a202",
+  "spans": [
+    {
+      "face_id": "smugglers_buggy",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    },
+    {
+      "face_id": "smugglers_buggy",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/triggered_abilities/1"]
+    },
+    {
+      "face_id": "smugglers_buggy",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_hideaway_four::mosswort_bridge_and_smugglers_buggy_register_their_exact_rules_shapes",
+      "covers": "Exact Buggy mana cost, Artifact Vehicle types, 5/5 characteristics, Hideaway 4, combat-damage trigger, and Crew 2."
+    },
+    {
+      "test": "scenario deck_coverage_hideaway_four::smugglers_buggy_casts_its_linked_card_after_combat_damage_then_returns_itself",
+      "covers": "Crewed Buggy deals player combat damage, casts its exact linked card during resolution, and returns the original source generation after a completed cast."
+    },
+    {
+      "test": "scenario deck_coverage_hideaway_four::smugglers_buggy_decline_keeps_the_vehicle_and_linked_card_in_place",
+      "covers": "Declining the optional linked cast leaves the face-down card in exile and the same Buggy incarnation on the battlefield."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

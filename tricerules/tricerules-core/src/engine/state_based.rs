@@ -1147,6 +1147,52 @@ impl GameEngine {
         Ok(performed)
     }
 
+    /// CR 702.75a: each player who has controlled a live Hideaway source since its linked card
+    /// was exiled retains private look permission for that exact exile generation.
+    pub(super) fn refresh_hideaway_look_permissions(&mut self) {
+        let sources = self
+            .state
+            .hideaway_look_permissions
+            .keys()
+            .map(|(key, _, _)| (key.source_object_id, key.source_zone_change))
+            .collect::<BTreeSet<_>>();
+        let mut current_controllers = Vec::new();
+        for (source_id, source_generation) in sources {
+            let Some(object) = self.state.objects.get(&source_id) else {
+                continue;
+            };
+            if object.zone != Zone::Battlefield
+                || self
+                    .state
+                    .zone_change_generation
+                    .get(&source_id)
+                    .copied()
+                    .unwrap_or(0)
+                    != source_generation
+            {
+                continue;
+            }
+            // CR 702.75a tracks the exact source object that created the permission. Losing the
+            // Hideaway ability does not revoke the permission while that same object remains on
+            // the battlefield; leaving and returning creates a new object and fails the generation
+            // check above.
+            if let Some(controller) = self.controller_of(source_id) {
+                current_controllers.push((source_id, source_generation, controller));
+            }
+        }
+        for ((key, _, _), players) in &mut self.state.hideaway_look_permissions {
+            if let Some((_, _, controller)) =
+                current_controllers
+                    .iter()
+                    .find(|(source_id, generation, _)| {
+                        *source_id == key.source_object_id && *generation == key.source_zone_change
+                    })
+            {
+                players.insert(*controller);
+            }
+        }
+    }
+
     /// Materialize CR 613 layer-2 control into the battlefield control index. Characteristics
     /// remain the authority; `GameObject::controller` is the settled cache used by hot paths.
     pub(super) fn reindex_battlefield_control(&mut self, out: &mut Vec<rv1::RuledEvent>) -> bool {
@@ -1264,6 +1310,7 @@ impl GameEngine {
             }
         }
         if changed_ids.is_empty() {
+            self.refresh_hideaway_look_permissions();
             self.reconcile_combat_characteristics(out);
             return expired_source_control_duration;
         }
@@ -1299,6 +1346,7 @@ impl GameEngine {
                     });
             self.state.stage_delayed_batch(delayed);
         }
+        self.refresh_hideaway_look_permissions();
         true
     }
 }
