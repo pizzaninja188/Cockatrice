@@ -2,9 +2,9 @@
 
 use super::{
     AbilityCost, ActivatedCostModifier, Amount, CardTypeFilter, CastCostReceiptCondition, Color,
-    CounterKind, EffectContext, GameCondition, Keyword, ObjectCastCostKind, PermanentEventFilter,
-    PowerComparison, RelativePlayerSet, SpellCostFilter, SpellEffectKind, StackSpellFilter,
-    TargetController, TargetFilter, TargetKind, TargetingDef,
+    CounterKind, EffectContext, GameCondition, Keyword, ManaSpendingRestriction,
+    ObjectCastCostKind, PermanentEventFilter, PowerComparison, RelativePlayerSet, SpellCostFilter,
+    SpellEffectKind, StackSpellFilter, TargetController, TargetFilter, TargetKind, TargetingDef,
 };
 use crate::{AbilityId, AbilityLinkId, AbilityPresentation, ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
@@ -211,9 +211,14 @@ impl ActivatedAbilityDef {
             [SpellEffectKind::ProduceMana {
                 options,
                 commander_color_identity: true,
-                restriction: None,
+                restriction,
                 conditional: None,
-            }] => Some(options),
+            }] if restriction
+                .as_ref()
+                .is_none_or(ManaSpendingRestriction::supports_commander_color_identity_mana) =>
+            {
+                Some(options)
+            }
             _ => None,
         }
     }

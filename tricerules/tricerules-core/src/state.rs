@@ -861,6 +861,21 @@ pub struct RestrictedManaContribution {
     pub amount: ManaAmount,
 }
 
+/// Source LKI retained for restricted mana whose spending effect creates a delayed trigger.
+/// These fields stay bound to the activation that produced the group, even if the source changes
+/// zones, changes face, or changes controller before the mana is spent.
+#[derive(serde::Serialize, Debug, Clone, PartialEq)]
+pub struct ManaSpendingOrigin {
+    pub source_object_id: ObjectId,
+    pub source_zone_change_generation: u64,
+    pub source_face_change_generation: u64,
+    pub source_face_index: usize,
+    pub controller: PlayerId,
+    pub card_id: String,
+    pub source_label: String,
+    pub ability_presentation: Option<tricerules_proto::ruled::v1::PresentationRef>,
+}
+
 #[derive(serde::Serialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ManaPool {
     pub white: u32,
@@ -3004,6 +3019,9 @@ pub struct GameState {
     /// one-based index is the stable public group id used by commands and UI snapshots.
     pub mana_restrictions: Vec<ManaSpendingRestriction>,
     pub mana_restriction_presentations: Vec<Option<tricerules_proto::ruled::v1::PresentationRef>>,
+    /// One source LKI entry per restriction group. Ordinary mana restrictions are interned with
+    /// `None`; source-bound delayed effects such as Path of Ancestry receive a unique group.
+    pub mana_restriction_origins: Vec<Option<ManaSpendingOrigin>>,
     /// Mana abilities the priority player has activated this priority window that are still
     /// inconsequential and may be rewound by `UndoManaAbility` (CR 605 float courtesy). Newest
     /// last. Cleared by any consequential action (see [`UndoableManaAbility`]); empty whenever no

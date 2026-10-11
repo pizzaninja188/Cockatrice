@@ -2496,6 +2496,9 @@ pub enum ManaSpendingEffect {
         filter: ManaSpendFilter,
         keywords: Vec<Keyword>,
     },
+    /// Path of Ancestry's per-mana delayed trigger. It checks the creature spell and the
+    /// caster's declared commanders when that spell is cast, then creates one Scry 1 trigger.
+    Scry1IfSpellSharesCreatureTypeWithCommander,
 }
 
 impl ManaSpendingEffect {
@@ -2515,6 +2518,7 @@ impl ManaSpendingEffect {
                 }
                 Ok(())
             }
+            Self::Scry1IfSpellSharesCreatureTypeWithCommander => Ok(()),
         }
     }
 
@@ -2529,6 +2533,9 @@ impl ManaSpendingEffect {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
+            Self::Scry1IfSpellSharesCreatureTypeWithCommander => {
+                "if you spend this mana to cast a creature spell that shares a creature type with your commander, scry 1".into()
+            }
         }
     }
 }
@@ -2566,6 +2573,17 @@ pub struct ManaSpendingRestriction {
 }
 
 impl ManaSpendingRestriction {
+    pub(crate) fn supports_commander_color_identity_mana(&self) -> bool {
+        self.unrestricted
+            && self.cast_spell.is_empty()
+            && self.activate_ability.is_empty()
+            && !self.activate_any_ability
+            && !self.all_nonspell_costs
+            && self.special_actions.is_empty()
+            && self.spending_effects.as_slice()
+                == [ManaSpendingEffect::Scry1IfSpellSharesCreatureTypeWithCommander]
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         self.restriction_id.validate()?;
         self.presentation.validate()?;
@@ -6216,8 +6234,15 @@ impl SpellEffectKind {
                 if options.is_empty() && !*commander_color_identity {
                     return Err("ProduceMana requires at least one mana option".into());
                 }
-                if *commander_color_identity && (restriction.is_some() || conditional.is_some()) {
-                    return Err("commander color identity mana cannot have output modifiers".into());
+                if *commander_color_identity
+                    && (conditional.is_some()
+                        || restriction.as_ref().is_some_and(|restriction| {
+                            !restriction.supports_commander_color_identity_mana()
+                        }))
+                {
+                    return Err(
+                        "commander color identity mana supports only Path of Ancestry's unrestricted commander-type scry effect".into(),
+                    );
                 }
                 if let Some(restriction) = restriction {
                     restriction.validate()?;

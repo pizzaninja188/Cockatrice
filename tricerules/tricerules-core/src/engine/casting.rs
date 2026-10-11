@@ -1678,6 +1678,8 @@ impl GameEngine {
             })),
         });
         let fact = self.record_spell_cast(player, oid, origin, mana_value, mana_spent);
+        target_triggers
+            .extend(self.collect_mana_spending_triggers(&fact, &payment.restricted_mana_spent));
         self.record_committed_events(&crime_events);
         target_triggers.extend(self.collect_event_triggers(&crime_events));
         target_triggers.extend(
@@ -3110,6 +3112,41 @@ impl GameEngine {
                 })
         };
 
+        let mana_restriction = ability.mana_restriction().cloned();
+        let mana_spending_origin = mana_restriction
+            .as_ref()
+            .filter(|restriction| {
+                super::mana_spending::restriction_requires_source_tracking(restriction)
+            })
+            .map(|_| {
+                let source_face_index = self
+                    .state
+                    .objects
+                    .get(&permanent_id)
+                    .map(|object| object.face_up_index)
+                    .unwrap_or(0);
+                crate::state::ManaSpendingOrigin {
+                    source_object_id: permanent_id,
+                    source_zone_change_generation: self
+                        .state
+                        .zone_change_generation
+                        .get(&permanent_id)
+                        .copied()
+                        .unwrap_or(0),
+                    source_face_change_generation: self
+                        .state
+                        .face_change_generation
+                        .get(&permanent_id)
+                        .copied()
+                        .unwrap_or(0),
+                    source_face_index,
+                    controller: player,
+                    card_id: card_id.to_owned(),
+                    source_label: card_name.clone(),
+                    ability_presentation: primary_presentation.clone(),
+                }
+            });
+
         let prepared = self.prepare_ability_costs(
             player,
             idx,
@@ -3128,30 +3165,26 @@ impl GameEngine {
         let payment_receipt = payment.clone();
         self.record_limited_activations(activation_uses.clone());
 
-        let restriction_group_id = ability.mana_restriction().map(|restriction| {
-            if let Some(position) = self
-                .state
-                .mana_restrictions
-                .iter()
-                .position(|candidate| candidate == restriction)
-            {
-                (position + 1) as u32
-            } else {
-                let restriction_presentation = primary_presentation.as_ref().map(|parent| {
-                    child_presentation_ref(
-                        parent,
-                        PresentationPath::ManaRestriction(&restriction.restriction_id),
-                        &restriction.presentation,
-                        restriction.fallback_label(),
-                    )
-                });
-                self.state.mana_restrictions.push(restriction.clone());
-                self.state
-                    .mana_restriction_presentations
-                    .push(restriction_presentation);
-                self.state.mana_restrictions.len() as u32
-            }
+        let restriction_presentation = mana_restriction.as_ref().and_then(|restriction| {
+            primary_presentation.as_ref().map(|parent| {
+                child_presentation_ref(
+                    parent,
+                    PresentationPath::ManaRestriction(&restriction.restriction_id),
+                    &restriction.presentation,
+                    restriction.fallback_label(),
+                )
+            })
         });
+        let restriction_group_id = if let Some(restriction) = mana_restriction.as_ref() {
+            Some(self.register_mana_restriction_group(
+                restriction,
+                restriction_presentation,
+                mana_spending_origin.clone(),
+                None,
+            )?)
+        } else {
+            None
+        };
         if let Some(group_id) = restriction_group_id {
             self.state.players[idx].restricted_mana.push(
                 crate::state::RestrictedManaContribution {
@@ -3240,6 +3273,7 @@ impl GameEngine {
                 mana_damage_triggers: attack_mana_damage_triggers,
                 cost_triggers: event_time_cost_triggers,
                 has_cost_triggers,
+                mana_spending_origin,
             });
         }
         Ok(batch)

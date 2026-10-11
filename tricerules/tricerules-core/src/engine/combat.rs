@@ -46,6 +46,7 @@ pub(super) struct AttackManaAbilityReceipt {
     pub restriction_group_id: Option<u32>,
     pub mana_restriction: Option<tricerules_card_model::ManaSpendingRestriction>,
     pub restriction_presentation: Option<rv1::PresentationRef>,
+    pub mana_spending_origin: Option<crate::state::ManaSpendingOrigin>,
     /// Event-time trigger matches from paying this activation's costs, before use-limit filtering.
     pub cost_triggers: Vec<super::triggers::CollectedTrigger>,
     pub simple_tap: bool,
@@ -71,6 +72,7 @@ pub(super) struct AttackManaAbilityReceiptInput {
     pub mana_damage_triggers: Vec<super::triggers::CollectedTrigger>,
     pub cost_triggers: Vec<super::triggers::CollectedTrigger>,
     pub has_cost_triggers: bool,
+    pub mana_spending_origin: Option<crate::state::ManaSpendingOrigin>,
 }
 
 struct PendingAttackTaxPaymentStart<'a> {
@@ -389,6 +391,7 @@ impl GameEngine {
             mana_damage_triggers,
             cost_triggers,
             has_cost_triggers,
+            mana_spending_origin,
         } = input;
         let Some(payer) = before_state
             .pending_attack_declaration
@@ -466,6 +469,7 @@ impl GameEngine {
                 restriction_group_id,
                 mana_restriction,
                 restriction_presentation,
+                mana_spending_origin,
                 cost_triggers,
                 simple_tap,
                 reversible: !library_action,
@@ -544,6 +548,13 @@ impl GameEngine {
         // a true dependency such as a later cost that spent the selected activation's only mana.
         let mut candidate = self.clone();
         candidate.state = receipt.before_state.clone();
+        // Group identities are public session references and survive a payment rewind, even in
+        // this non-mutating reversibility preview. Later receipts are replayed against that stable
+        // registry under their original ids.
+        candidate.state.mana_restrictions = self.state.mana_restrictions.clone();
+        candidate.state.mana_restriction_presentations =
+            self.state.mana_restriction_presentations.clone();
+        candidate.state.mana_restriction_origins = self.state.mana_restriction_origins.clone();
         let Some(player) = candidate
             .state
             .pending_attack_declaration
@@ -739,6 +750,14 @@ impl GameEngine {
                 .next_game_rule_timestamp
                 .max(receipt.before_state.next_game_rule_timestamp);
             self.state = receipt.before_state.clone();
+            // Public restriction group ids are session-stable presentation references. A receipt
+            // rewind removes its mana contribution, not the identity already published for the
+            // source-bound group. Preserve the append-only registry so retained receipts can be
+            // replayed under their original ids without aliasing an undone source.
+            self.state.mana_restrictions = after_state.mana_restrictions.clone();
+            self.state.mana_restriction_presentations =
+                after_state.mana_restriction_presentations.clone();
+            self.state.mana_restriction_origins = after_state.mana_restriction_origins.clone();
             self.state.command_index = command_index;
             self.state.next_object_id = next_object_id;
             self.state.next_trigger_grant_id = next_trigger_grant_id;
@@ -822,21 +841,12 @@ impl GameEngine {
         self.record_limited_activations(receipt.activation_uses.clone());
 
         let restriction_group_id = if let Some(restriction) = &receipt.mana_restriction {
-            let group_id = if let Some(index) = self
-                .state
-                .mana_restrictions
-                .iter()
-                .position(|candidate| candidate == restriction)
-            {
-                index as u32 + 1
-            } else {
-                self.state.mana_restrictions.push(restriction.clone());
-                self.state
-                    .mana_restriction_presentations
-                    .push(receipt.restriction_presentation.clone());
-                self.state.mana_restrictions.len() as u32
-            };
-            Some(group_id)
+            Some(self.register_mana_restriction_group(
+                restriction,
+                receipt.restriction_presentation.clone(),
+                receipt.mana_spending_origin.clone(),
+                receipt.restriction_group_id,
+            )?)
         } else {
             None
         };

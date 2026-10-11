@@ -1,0 +1,31 @@
+// WOTC Commander Masters Release Notes, Path of Ancestry, checked 2026-10-11:
+// https://magic.wizards.com/en/news/feature/commander-masters-release-notes
+// Current MagicCompRules 20260925: 106.6/106.6a/106.13, 109.5, 601.2i, 603.7e, 903.3e, 406.3a.
+(
+    id: "path_of_ancestry",
+    name: "Path of Ancestry",
+    face_id: "path_of_ancestry",
+    mana_cost: "",
+    types: ["Land"],
+    static_abilities: [(
+        ability_id: "enters_tapped",
+        presentation: OracleLines([1]),
+        definition: EntersTapped(affected: Self_),
+    )],
+    activated_abilities: [(
+        ability_id: "commander_mana",
+        presentation: OracleLines([2]),
+        costs: [Tap],
+        effect: [ProduceMana(
+            options: [],
+            commander_color_identity: true,
+            restriction: Some((
+                restriction_id: "commander_creature_scry",
+                // This structured restriction is a child of the single printed mana ability; its wording is already mapped on the parent.
+                presentation: Fallback,
+                unrestricted: true,
+                spending_effects: [Scry1IfSpellSharesCreatureTypeWithCommander],
+            )),
+        )],
+    )],
+)

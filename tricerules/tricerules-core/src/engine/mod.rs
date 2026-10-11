@@ -218,6 +218,7 @@ mod issue_169_taps;
 mod legal_actions;
 mod library_choices;
 mod life_numeric;
+mod mana_spending;
 mod mass_sacrifice;
 #[cfg(test)]
 mod multikicker_tests;
@@ -1927,6 +1928,7 @@ impl GameEngine {
             next_replacement_application_id: 1,
             mana_restrictions: Vec::new(),
             mana_restriction_presentations: Vec::new(),
+            mana_restriction_origins: Vec::new(),
             undoable_mana_abilities: Vec::new(),
             untapped_this_command: Vec::new(),
         };

@@ -264,14 +264,16 @@ impl GameEngine {
                 continue;
             };
             for effect in &rule.spending_effects {
-                let tricerules_card_model::ManaSpendingEffect::GrantKeywordsToSpellUntilEndOfTurn {
+                if let tricerules_card_model::ManaSpendingEffect::GrantKeywordsToSpellUntilEndOfTurn {
                     filter,
                     keywords: granted,
-                } = effect;
-                if mana_filter_matches_face(filter, face) {
-                    for keyword in granted {
-                        if !keywords.contains(keyword) {
-                            keywords.push(*keyword);
+                } = effect
+                {
+                    if mana_filter_matches_face(filter, face) {
+                        for keyword in granted {
+                            if !keywords.contains(keyword) {
+                                keywords.push(*keyword);
+                            }
                         }
                     }
                 }

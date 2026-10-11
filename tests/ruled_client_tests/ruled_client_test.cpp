@@ -3318,6 +3318,36 @@ TEST_F(RuledClientTest, RestrictedManaSnapshotsAndPaymentEligibilityStaySeparate
     EXPECT_TRUE(state->eligibleRestrictedManaForAbility(100, 2).isEmpty());
 }
 
+TEST_F(RuledClientTest, RestrictedManaGroupsKeepDistinctEngineSourcePresentations)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *pool = batch.add_events()->mutable_mana_pool_updated();
+    pool->set_player_id(kLocalPlayer);
+    for (quint32 groupId = 7; groupId <= 8; ++groupId) {
+        const quint32 sourceObject = groupId + 34;
+        auto *group = pool->add_restricted_groups();
+        group->set_restriction_group_id(groupId);
+        group->set_g(1);
+        group->set_display_label(
+            "Scry 1 when you cast a creature spell that shares a creature type with your commander.");
+        auto *presentation = group->mutable_presentation();
+        presentation->set_fallback_text(
+            QStringLiteral("Path of Ancestry (player %1, source object %2)")
+                .arg(kLocalPlayer)
+                .arg(sourceObject)
+                .toStdString());
+    }
+    apply(batch);
+
+    const auto groups = state->restrictedManaForPlayer(kLocalPlayer);
+    ASSERT_EQ(groups.size(), 2);
+    EXPECT_EQ(groups.at(0).groupId, 7u);
+    EXPECT_EQ(groups.at(1).groupId, 8u);
+    EXPECT_NE(groups.at(0).displayLabel, groups.at(1).displayLabel);
+    EXPECT_TRUE(groups.at(0).displayLabel.contains(QStringLiteral("source object 41")));
+    EXPECT_TRUE(groups.at(1).displayLabel.contains(QStringLiteral("source object 42")));
+}
+
 // ---------------------------------------------------------------------------------------
 // Stack tracking
 // ---------------------------------------------------------------------------------------

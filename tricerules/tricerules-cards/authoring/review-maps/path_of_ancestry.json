@@ -1,0 +1,116 @@
+{
+  "format_version": 1,
+  "complete_definition_review_confirmed": true,
+  "oracle_id": "b473e293-59e3-4e04-acf2-622604aeb25f",
+  "spans": [
+    {
+      "face_id": "path_of_ancestry",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "path_of_ancestry",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ManaSpendingEffect::Scry1IfSpellSharesCreatureTypeWithCommander",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_coverage_commander_mana::path_of_ancestry_maps_as_a_complete_handwritten_commander_mana_definition",
+      "covers": "the exact Path of Ancestry land, enters-tapped ability, tap-for-commander-identity mana, and its spending rider"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::path_of_ancestry_enters_tapped",
+      "covers": "Path of Ancestry enters tapped"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::path_of_ancestry_triggers_once_for_each_mana_spent_to_cast_the_commander",
+      "covers": "spending Path mana to cast the commander checks its current creature types and resolves one scry choice per spent mana unit"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::path_of_ancestry_does_not_scry_for_nonmatching_or_noncreature_spells",
+      "covers": "nonmatching creature and noncreature spells do not receive the scry rider"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::path_of_ancestry_checks_current_commander_types_at_cast_time",
+      "covers": "commander creature types are read after casting, not when the mana ability resolves"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::path_of_ancestry_ignores_a_face_down_commander_in_exile",
+      "covers": "a face-down exiled commander has no characteristics for the type comparison"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::path_of_ancestry_checks_each_declared_commander_for_a_matching_type",
+      "covers": "either declared commander can supply the matching creature type"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::transferred_path_mana_uses_the_path_activators_commander_and_controls_the_trigger",
+      "covers": "a transferred Path mana unit checks the mana ability controller's commander and controls its delayed trigger"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::identical_path_sources_keep_separate_mana_groups_and_source_lki",
+      "covers": "identical source cards retain separate spending groups and the producing source's LKI"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::doubled_path_mana_creates_one_scry_trigger_per_mana_unit",
+      "covers": "replacement-doubled mana creates one independent scry trigger for each unit"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::path_of_ancestry_triggers_for_a_changeling_creature_spell",
+      "covers": "a creature spell with Changeling shares a creature type with the commander"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::path_of_ancestry_uses_current_stack_spell_types_for_its_scry_trigger",
+      "covers": "the creature spell's derived types at the cast event determine whether it shares a type"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::path_of_ancestry_ignores_an_unselected_adventure_creature_face",
+      "covers": "an Adventure spell uses the selected noncreature face rather than the backing card's front-face characteristics"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::path_of_ancestry_checks_the_selected_adventure_face_of_a_commander_on_the_stack",
+      "covers": "a commander on the stack uses its selected Adventure face's current characteristics for Path's creature-type comparison"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::identical_path_groups_publish_distinct_source_labels",
+      "covers": "identical Path sources retain distinct group labels for the player"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::attack_payment_undo_keeps_the_later_path_mana_group_bound_to_its_source",
+      "covers": "attack payment rollback preserves later Path group's stable source identity"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::path_mana_spent_on_an_activated_ability_does_not_scry",
+      "covers": "the rider triggers only when the mana is spent on a creature spell"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::undoing_a_path_mana_activation_removes_its_unspent_restricted_mana",
+      "covers": "undoing the mana ability removes the floated unit without creating a trigger"
+    }
+  ]
+}

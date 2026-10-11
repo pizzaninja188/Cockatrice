@@ -382,10 +382,34 @@ impl GameEngine {
         let restricted_groups = grouped
             .into_iter()
             .filter_map(|(restriction_group_id, amount)| {
-                let restriction = self
+                let index = restriction_group_id.checked_sub(1)? as usize;
+                let restriction = self.state.mana_restrictions.get(index)?;
+                let origin = self
                     .state
-                    .mana_restrictions
-                    .get(restriction_group_id.checked_sub(1)? as usize)?;
+                    .mana_restriction_origins
+                    .get(index)
+                    .and_then(Option::as_ref);
+                let display_label = origin.map_or_else(
+                    || restriction.fallback_label(),
+                    |origin| {
+                        super::mana_spending::source_bound_mana_group_label(restriction, origin)
+                    },
+                );
+                let mut presentation = self
+                    .state
+                    .mana_restriction_presentations
+                    .get(index)
+                    .cloned()
+                    .flatten();
+                if let Some(presentation) = presentation.as_mut() {
+                    if origin.is_some() {
+                        // A static Oracle line describes every physical copy of Path alike. The
+                        // source-bound pool column needs the concrete producer to distinguish
+                        // otherwise identical restriction groups.
+                        presentation.oracle_line_indices.clear();
+                        presentation.fallback_text = display_label.clone();
+                    }
+                }
                 Some(rv1::RestrictedManaGroup {
                     restriction_group_id,
                     w: amount.w,
@@ -394,13 +418,8 @@ impl GameEngine {
                     r: amount.r,
                     g: amount.g,
                     c: amount.c,
-                    display_label: restriction.fallback_label(),
-                    presentation: self
-                        .state
-                        .mana_restriction_presentations
-                        .get(restriction_group_id.checked_sub(1)? as usize)
-                        .cloned()
-                        .flatten(),
+                    display_label,
+                    presentation,
                 })
             })
             .collect();
