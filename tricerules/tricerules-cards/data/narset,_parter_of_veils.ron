@@ -1,0 +1,29 @@
+// Oracle and rulings verified against the CMM printing on 2026-10-11.
+// CR 121.2, 121.3a, and 121.5 govern the draw limit and the optional top-four selection.
+(
+  id: "narset,_parter_of_veils",
+  name: "Narset, Parter of Veils",
+  face_id: "narset_parter_of_veils",
+  mana_cost: "{1}{U}{U}",
+  supertypes: ["Legendary"],
+  types: ["Planeswalker", "Narset"],
+  loyalty: 5,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: LimitDrawsPerTurn(players: Opponents, maximum: 1),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Loyalty(-2)],
+    effect: [LookChooseToHand(
+      count: 4,
+      min: 0,
+      max: 1,
+      reveal: true,
+      filter: Some((excluded_card_types: [Creature, Land])),
+      bottom_order: Random,
+    )],
+  )],
+)

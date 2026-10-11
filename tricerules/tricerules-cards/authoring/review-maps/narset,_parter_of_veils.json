@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "ab26fbe2-e808-48b9-8d0d-3fbb6c3d554f",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "narset_parter_of_veils",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "narset_parter_of_veils",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "typed_path": "/faces/0/static_abilities/0/definition",
+      "symbol": "StaticAbilityDef::LimitDrawsPerTurn"
+    },
+    {
+      "typed_path": "/faces/0/activated_abilities/0/effect/0",
+      "symbol": "SpellEffectKind::LookChooseToHand"
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_opponent_draw::narset_limits_each_opponents_draws_during_her_controllers_turn",
+      "covers": "Narset's cap applies to each opponent during both turn cycles, while her controller remains unrestricted."
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::narset_keeps_arcane_denials_zero_and_one_draw_options_but_hides_two",
+      "covers": "The direct draw option is offered only when the affected player can draw its full amount; zero remains available, and stale one-card choices are rejected."
+    },
+    {
+      "test": "scenario deck_coverage_combustible_gearhulk::narset_checks_gearhulks_controller_draw_instead_of_its_unrestricted_chooser",
+      "covers": "Draw capacity is checked for the actual drawer when another player chooses the branch."
+    },
+    {
+      "test": "scenario deck_coverage_opponent_draw::narset_makes_consecrated_sphinx_optional_draw_unavailable_after_the_limit",
+      "covers": "Narset suppresses an optional Draw 2 trigger after the opponent has drawn once."
+    },
+    {
+      "test": "scenario deck_coverage_opponent_draw::narset_minus_two_finds_only_noncreature_nonland_cards_among_the_top_four",
+      "covers": "The −2 looks at four cards, permits zero or one matching choice, reveals the selected card, moves it to hand, and bottoms the remainder."
+    }
+  ],
+  "tokens": []
+}

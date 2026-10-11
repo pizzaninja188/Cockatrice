@@ -2330,6 +2330,12 @@ pub enum StaticAbilityDef {
     DoubleControllerDraws {
         condition: DrawReplacementCondition,
     },
+    /// CR 121.2: each selected player's successful draws are limited per turn. Narset, Parter
+    /// of Veils limits opponents; Spirit of the Labyrinth applies the same limit to all players.
+    LimitDrawsPerTurn {
+        players: RelativePlayerSet,
+        maximum: u32,
+    },
     /// Laboratory Maniac and Jace, Wielder of Mysteries replace an empty-library draw.
     WinControllerInsteadOfEmptyLibraryDraw,
     ReplaceControllerDrawWithLibraryChoice {

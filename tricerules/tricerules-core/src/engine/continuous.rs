@@ -778,6 +778,7 @@ impl GameEngine {
                 | StaticAbilityDef::GraveyardAnthemKeyword { .. }
                 | StaticAbilityDef::DiscardToLibrary
                 | StaticAbilityDef::DoubleControllerDraws { .. }
+                | StaticAbilityDef::LimitDrawsPerTurn { .. }
                 | StaticAbilityDef::DoubleControllerLifeGain
                 | StaticAbilityDef::WinControllerInsteadOfEmptyLibraryDraw
                 | StaticAbilityDef::ReplaceControllerDrawWithLibraryChoice { .. }

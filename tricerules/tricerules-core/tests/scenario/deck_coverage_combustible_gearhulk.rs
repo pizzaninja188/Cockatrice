@@ -214,6 +214,40 @@ fn targeted_opponent_may_choose_the_draw_branch_with_fewer_than_three_cards() {
 }
 
 #[test]
+fn narset_checks_gearhulks_controller_draw_instead_of_its_unrestricted_chooser() {
+    let mut engine = engine(202_610_704);
+    inject_card_into_hand(&mut engine, 1, "narset,_parter_of_veils");
+    move_ready_to_battlefield(&mut engine, 1, "narset,_parter_of_veils");
+    let milled = set_library_top(&mut engine, &["opt", "arcane_denial", "island"]);
+    let controller_hand_before = engine.state.players[0].hand.len();
+    let chooser_life_before = engine.state.players[1].life;
+
+    cast_gearhulk_and_choose_target(&mut engine, 1);
+    for _ in 0..12 {
+        if engine.state.stack.is_empty() {
+            break;
+        }
+        assert!(
+            engine.state.pending_resolution.is_none(),
+            "Narset makes the controller's draw-three branch unavailable, so its unrestricted chooser gets no prompt"
+        );
+        pass_priority_round(&mut engine);
+    }
+
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.players[0].hand.len(), controller_hand_before);
+    assert!(milled
+        .iter()
+        .all(|object_id| engine.state.players[0].graveyard.contains(object_id)));
+    assert_eq!(
+        engine.state.players[1].life,
+        chooser_life_before - 3,
+        "the eligible target chooses the otherwise mill-and-damage branch"
+    );
+}
+
+#[test]
 fn trigger_does_not_resolve_if_its_target_opponent_leaves_before_resolution() {
     let mut engine = engine(202_610_703);
     let library = set_library_top(&mut engine, &["island", "mountain", "forest"]);

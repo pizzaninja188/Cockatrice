@@ -657,6 +657,156 @@ mod zurs_weirding_tests {
     }
 
     #[test]
+    fn replaced_draw_does_not_consume_narsets_successful_draw_capacity() {
+        let mut engine = fixture(&[0, 1, 2], 1);
+        add_permanent(&mut engine, 0, "narset,_parter_of_veils");
+        let replaced_card = engine.state.players[1].library[0];
+        let succeeding_card = engine.state.players[1].library[1];
+        let hand = engine.state.players[1].hand.len();
+        let library = engine.state.players[1].library.len();
+        let mut events = Vec::new();
+        let progress = engine
+            .start_draw_transaction(
+                vec![(1, 2)],
+                DrawCompletion::FinishDrawStep {
+                    active_player: 1,
+                    occurrence: 0,
+                },
+                "Narset replacement-cap regression",
+                &mut events,
+            )
+            .unwrap();
+        assert!(matches!(progress, DrawProgress::Parked));
+
+        // The first attempted draw is replaced by Zur's Weirding: its owner and another opponent
+        // pay life to put the revealed card into its owner's graveyard. No card was drawn, so the
+        // next individual draw still has Narset's one successful-draw allowance available.
+        choose(&mut engine, 0, 0);
+        choose(&mut engine, 2, 1);
+        assert_eq!(engine.state.objects[&replaced_card].zone, Zone::Graveyard);
+        assert_eq!(engine.state.turn_history.current.player(1).cards_drawn, 0);
+        assert!(
+            engine.state.pending_resolution.is_some(),
+            "the second draw is still processed and asks for its replacement decision"
+        );
+
+        // Declining to replace the second draw lets that card be drawn under the still-unused
+        // Narset allowance.
+        choose(&mut engine, 0, 1);
+        let done = choose(&mut engine, 2, 1);
+        assert_eq!(engine.state.players[1].hand.len(), hand + 1);
+        assert_eq!(engine.state.players[1].library.len(), library - 2);
+        assert_eq!(engine.state.objects[&succeeding_card].zone, Zone::Hand);
+        assert_eq!(engine.state.turn_history.current.player(1).cards_drawn, 1);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(!engine.state.players[1].has_lost);
+        assert!(!done.events.iter().any(|event| matches!(
+            event.ev.as_ref(),
+            Some(rv1::ruled_event::Ev::LifeChanged(_))
+        )));
+    }
+
+    #[test]
+    fn narset_applies_turn_history_drawn_before_she_entered() {
+        let mut engine = fixture(&[0, 1, 2], 1);
+        let zur = engine.state.players[0].battlefield[0];
+        resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            zur,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        let mut events = Vec::new();
+        let prior_draw = engine
+            .start_draw_transaction(
+                vec![(1, 1)],
+                DrawCompletion::FinishDrawStep {
+                    active_player: 1,
+                    occurrence: 0,
+                },
+                "Successful draw before Narset entered",
+                &mut events,
+            )
+            .unwrap();
+        assert!(matches!(prior_draw, DrawProgress::Complete(_)));
+        assert_eq!(engine.state.turn_history.current.player(1).cards_drawn, 1);
+
+        add_permanent(&mut engine, 0, "narset,_parter_of_veils");
+        let hand = engine.state.players[1].hand.clone();
+        let library = engine.state.players[1].library.clone();
+        assert_eq!(engine.draw_limit_remaining(1), Some(0));
+
+        let progress = engine
+            .start_draw_transaction(
+                vec![(1, 1)],
+                DrawCompletion::FinishDrawStep {
+                    active_player: 1,
+                    occurrence: 0,
+                },
+                "Narset prior-success count regression",
+                &mut events,
+            )
+            .unwrap();
+
+        assert!(matches!(progress, DrawProgress::Complete(_)));
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.players[1].hand, hand);
+        assert_eq!(engine.state.players[1].library, library);
+        assert_eq!(engine.state.turn_history.current.player(1).cards_drawn, 1);
+        assert!(!engine.state.players[1].has_lost);
+        assert!(!events.iter().any(|event| matches!(
+            event.ev.as_ref(),
+            Some(rv1::ruled_event::Ev::CardsRevealed(_))
+        )));
+    }
+
+    #[test]
+    fn narset_prohibited_draw_never_opens_a_replacement_or_causes_empty_library_loss() {
+        let mut engine = fixture(&[0, 1, 2], 1);
+        add_permanent(&mut engine, 0, "narset,_parter_of_veils");
+        engine.state.turn_history.current.player_mut(1).cards_drawn = 1;
+        let library = std::mem::take(&mut engine.state.players[1].library);
+        for object in library {
+            resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                object,
+                Zone::Exile,
+                None,
+            )
+            .unwrap();
+        }
+        let hand = engine.state.players[1].hand.clone();
+        let mut events = Vec::new();
+        let progress = engine
+            .start_draw_transaction(
+                vec![(1, 1)],
+                DrawCompletion::FinishDrawStep {
+                    active_player: 1,
+                    occurrence: 0,
+                },
+                "Narset prohibited-draw regression",
+                &mut events,
+            )
+            .unwrap();
+
+        assert!(matches!(progress, DrawProgress::Complete(_)));
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_replacement_event.is_none());
+        assert!(engine.draw_action_reveal().is_none());
+        assert!(engine.state.players[1].library.is_empty());
+        assert_eq!(engine.state.players[1].hand, hand);
+        assert_eq!(engine.state.turn_history.current.player(1).cards_drawn, 1);
+        assert!(!engine.state.players[1].has_lost);
+        assert!(!events.iter().any(|event| matches!(
+            event.ev.as_ref(),
+            Some(rv1::ruled_event::Ev::CardsRevealed(_))
+        )));
+    }
+
+    #[test]
     fn zurs_weirding_zone_views_publish_each_current_hand_and_clear_when_the_source_leaves() {
         let mut engine = fixture(&[0, 1, 2], 1);
         let Some(rv1::ruled_event::Ev::ZoneView(first)) = engine.ev_zone_view_sync_tracked().ev
@@ -1160,6 +1310,45 @@ pub(super) fn controller_library_empty(state: &GameState, controller: PlayerId) 
 }
 
 impl GameEngine {
+    fn draw_is_limited_out(&self, drawer: PlayerId) -> bool {
+        self.draw_limit_remaining(drawer) == Some(0)
+    }
+
+    pub(in crate::engine) fn draw_limit_remaining(&self, drawer: PlayerId) -> Option<u32> {
+        let drawn = self.state.turn_history.current.player(drawer).cards_drawn;
+        let mut maximum = None;
+        for source in self
+            .state
+            .players
+            .iter()
+            .flat_map(|player| player.battlefield.iter().copied())
+        {
+            let Some(controller) = self.characteristics(source).map(|value| value.controller)
+            else {
+                continue;
+            };
+            let abilities = self.active_static_ability_definitions(source);
+            for ability in abilities {
+                let StaticAbilityDef::LimitDrawsPerTurn {
+                    players,
+                    maximum: limit,
+                } = ability
+                else {
+                    continue;
+                };
+                if super::history::relative_player_set_contains(
+                    &self.state,
+                    players,
+                    controller,
+                    drawer,
+                ) {
+                    maximum = Some(maximum.map_or(limit, |current: u32| current.min(limit)));
+                }
+            }
+        }
+        maximum.map(|limit| limit.saturating_sub(drawn))
+    }
+
     fn draw_candidates(
         &self,
         drawer: PlayerId,
@@ -1306,6 +1495,10 @@ impl GameEngine {
                 work.nodes.push(DrawNode {
                     applied: Vec::new(),
                 });
+            }
+            if self.draw_is_limited_out(request.player) {
+                work.nodes.pop().expect("current draw node");
+                continue;
             }
             let node = work.nodes.last().expect("current draw node");
             let candidates = self.draw_candidates(request.player, node);
@@ -1706,9 +1899,11 @@ impl GameEngine {
                 .front()
                 .zip(work.nodes.last())
                 .is_some_and(|(request, node)| {
-                    self.draw_candidates(request.player, node)
-                        .iter()
-                        .any(|(identity, _)| identity == &selected.identity)
+                    !self.draw_is_limited_out(request.player)
+                        && self
+                            .draw_candidates(request.player, node)
+                            .iter()
+                            .any(|(identity, _)| identity == &selected.identity)
                 });
         if !current {
             self.state.pending_resolution = Some(pending);

@@ -789,3 +789,92 @@ fn arcane_denial_reassigns_when_the_selected_delegate_leaves_during_their_choice
         .apply_command(ids[3], &choose_branch(1))
         .expect("the remaining eligible player receives the refreshed branch prompt");
 }
+
+#[test]
+fn narset_keeps_arcane_denials_zero_and_one_draw_options_but_hides_two() {
+    let (mut engine, _) = cast_arcane_denial_against_opt(84280);
+    inject_card_into_hand(&mut engine, 0, "narset,_parter_of_veils");
+    move_ready_to_battlefield(&mut engine, 0, "narset,_parter_of_veils");
+    let target_hand_before = engine.state.players[1].hand.len();
+
+    end_active_turn(&mut engine, PLAYER_IDS[0]);
+    assert_eq!(engine.state.active_player_id(), PLAYER_IDS[1]);
+    order_arcane_delayed_triggers(&mut engine, true);
+
+    let choice = loop {
+        if engine.state.pending_resolution.is_some() {
+            break None;
+        }
+        let actor = engine.state.priority_player_id();
+        let batch = engine
+            .apply_command(actor, &pass())
+            .expect("pass priority until the target draw choice is published");
+        if let Some(choice) = batch.events.iter().find_map(|event| match &event.ev {
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::ResolutionChoiceRequired(
+                choice,
+            )) => Some(choice.clone()),
+            _ => None,
+        }) {
+            break Some(choice);
+        }
+    }
+    .expect("Arcane Denial publishes its draw-count choice");
+
+    assert_eq!(choice.deciding_player_id, PLAYER_IDS[1]);
+    assert_eq!(
+        choice
+            .resolution_branches
+            .iter()
+            .map(|branch| branch.branch_index)
+            .collect::<Vec<_>>(),
+        [0, 1],
+        "Draw0 remains available, Draw1 fits Narset's limit, and Draw2 does not"
+    );
+    assert_eq!(
+        choice.resolution_branches[0].label,
+        "The affected player draws no cards."
+    );
+    assert_eq!(
+        choice.resolution_branches[1].label,
+        "The affected player draws a card."
+    );
+
+    engine
+        .state
+        .turn_history
+        .current
+        .player_mut(PLAYER_IDS[1])
+        .cards_drawn = 1;
+    let pending_after_limit_changed = format!("{:?}", engine.state.pending_resolution);
+    assert!(
+        engine
+            .apply_command(PLAYER_IDS[1], &choose_branch(1))
+            .is_err(),
+        "the previously published one-card branch is rejected after the cap is used"
+    );
+    assert_eq!(
+        format!("{:?}", engine.state.pending_resolution),
+        pending_after_limit_changed
+    );
+    assert_eq!(engine.state.players[1].hand.len(), target_hand_before);
+    engine
+        .state
+        .turn_history
+        .current
+        .player_mut(PLAYER_IDS[1])
+        .cards_drawn = 0;
+
+    engine
+        .apply_command(PLAYER_IDS[1], &choose_branch(1))
+        .expect("the affected player selects the legal one-card branch");
+    assert_eq!(engine.state.players[1].hand.len(), target_hand_before + 1);
+    assert_eq!(
+        engine
+            .state
+            .turn_history
+            .current
+            .player(PLAYER_IDS[1])
+            .cards_drawn,
+        1
+    );
+}

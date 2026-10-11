@@ -4,7 +4,7 @@ use crate::engine::presentation::{
     ability_presentation, stack_child_presentation_ref, PresentationPath, StackPresentationSource,
 };
 use crate::engine::targeting::{counter_move_target_pair_is_current, TargetSourceIdentity};
-use crate::engine::{rv1, ConditionContext, EngineError};
+use crate::engine::{rv1, AmountContext, ConditionContext, EngineError};
 use crate::state::{
     ParkedStackResolution, PendingCounterMove, PendingResolution, PendingResolutionBranch,
     PendingResolutionBranchStage, PendingResolutionPresentation, PendingTargetedPlayerChoiceStage,
@@ -285,6 +285,7 @@ pub(super) fn choose_resolution_branch(
                 *deciding_player,
                 *deciding_player,
                 branch,
+                selection == ResolutionBranchSelection::PlayerChoice,
             )
         })
         .collect::<Vec<_>>();
@@ -770,6 +771,7 @@ pub(in crate::engine) fn resolution_branch_is_selectable(
     deciding_player: i32,
     original_chooser: i32,
     branch: &ResolutionBranchDef,
+    check_draw_capacity: bool,
 ) -> bool {
     let original_chooser_live = engine
         .state
@@ -777,6 +779,224 @@ pub(in crate::engine) fn resolution_branch_is_selectable(
         .is_some_and(|index| !engine.state.players[index].has_lost);
     (original_chooser_live || branch.cost == ResolutionCost::None)
         && resolution_branch_is_live(engine, top, previous_result, deciding_player, branch)
+        && (!check_draw_capacity
+            || branch.cost != ResolutionCost::None
+            || direct_draw_effect_is_selectable(engine, top, previous_result, &branch.effects)
+                .unwrap_or(true))
+}
+
+/// Whether one direct, cost-free draw instruction in a player-selected branch can be carried out
+/// in full under the active draw limits. A multi-effect branch keeps its normal applicability;
+/// the individual draw instruction still enforces limits when it resolves.
+pub(in crate::engine) fn direct_draw_effect_is_selectable(
+    engine: &GameEngine,
+    top: &StackItem,
+    previous_result: &crate::state::EffectResult,
+    effects: &[SpellEffectKind],
+) -> Option<bool> {
+    let [effect] = effects else {
+        return None;
+    };
+    let (drawers, count) = match effect {
+        SpellEffectKind::Draw { who, count } => (
+            branch_draw_recipients(engine, top, previous_result, *who),
+            count,
+        ),
+        SpellEffectKind::TargetPlayerDraws { count, .. } => {
+            let targets = top
+                .targets
+                .iter()
+                .chain(top.chosen_modes.iter().flat_map(|mode| mode.targets.iter()));
+            let player = targets
+                .filter_map(|target| engine.state.player_idx(target.object_id as PlayerId))
+                .map(|index| engine.state.players[index].id)
+                .find(|player| {
+                    engine
+                        .state
+                        .player_idx(*player)
+                        .is_some_and(|index| !engine.state.players[index].has_lost)
+                });
+            (player.into_iter().collect(), count)
+        }
+        _ => return None,
+    };
+
+    if matches!(count, Amount::Fixed(0)) || drawers.is_empty() {
+        return Some(true);
+    }
+    Some(drawers.into_iter().any(|drawer| {
+        let requested = engine.resolve_amount(
+            count,
+            AmountContext::for_stack_item(top, top.controller)
+                .with_affected_player(drawer)
+                .with_previous_effect_result(previous_result),
+        );
+        requested == 0
+            || engine
+                .draw_limit_remaining(drawer)
+                .is_none_or(|remaining| requested <= remaining)
+    }))
+}
+
+fn branch_draw_recipients(
+    engine: &GameEngine,
+    top: &StackItem,
+    previous_result: &crate::state::EffectResult,
+    who: PlayerRecipient,
+) -> Vec<PlayerId> {
+    let targets = top
+        .targets
+        .iter()
+        .chain(top.chosen_modes.iter().flat_map(|mode| mode.targets.iter()))
+        .copied()
+        .collect::<Vec<_>>();
+    let target_ids = targets
+        .iter()
+        .map(|target| target.object_id)
+        .collect::<Vec<_>>();
+    let target_groups = targets
+        .iter()
+        .map(|target| target.group_index)
+        .collect::<Vec<_>>();
+
+    match who {
+        PlayerRecipient::TargetedPlayer { group_index, .. } => {
+            super::target_player_from_group(&target_ids, &target_groups, group_index)
+                .into_iter()
+                .collect()
+        }
+        PlayerRecipient::ControllerOfTargetGroup { group_index } => targets
+            .iter()
+            .find(|target| target.group_index == group_index)
+            .and_then(|target| {
+                let generation = target.zone_change_generation?;
+                let current = engine
+                    .state
+                    .zone_change_generation
+                    .get(&target.object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == generation
+                    && engine
+                        .state
+                        .objects
+                        .get(&target.object_id)
+                        .is_some_and(|object| object.zone == Zone::Battlefield);
+                if current {
+                    engine.controller_of(target.object_id)
+                } else {
+                    engine
+                        .state
+                        .last_known_controller_by_generation
+                        .get(&(target.object_id, generation))
+                        .copied()
+                }
+            })
+            .into_iter()
+            .collect(),
+        PlayerRecipient::PreviousTargetedSpellController => previous_result
+            .targeted_spell_controller
+            .into_iter()
+            .collect(),
+        PlayerRecipient::EachOtherPlayerThanAffectedPlayer => {
+            let Some(affected) = top.trigger_context.affected_player else {
+                return Vec::new();
+            };
+            let mut players = engine
+                .state
+                .players
+                .iter()
+                .filter(|player| !player.has_lost && player.id != affected)
+                .map(|player| player.id)
+                .collect::<Vec<_>>();
+            players.sort_by_key(|player| engine.state.apnap_rank(*player));
+            players
+        }
+        PlayerRecipient::DefendingPlayer => top
+            .trigger_context
+            .defending_player
+            .filter(|player| {
+                engine
+                    .state
+                    .player_idx(*player)
+                    .is_some_and(|index| !engine.state.players[index].has_lost)
+            })
+            .into_iter()
+            .collect(),
+        PlayerRecipient::TriggeringAttackingPlayer => {
+            let Some((attacker, defender)) = top
+                .trigger_context
+                .attacking_player
+                .zip(top.trigger_context.defending_player)
+            else {
+                return Vec::new();
+            };
+            (engine
+                .state
+                .player_idx(attacker)
+                .is_some_and(|index| !engine.state.players[index].has_lost)
+                && engine.state.are_opponents(attacker, defender))
+            .then_some(attacker)
+            .into_iter()
+            .collect()
+        }
+        PlayerRecipient::AttackingOpponentsOfDefendingPlayer => {
+            let Some(defender) = top.trigger_context.defending_player else {
+                return Vec::new();
+            };
+            let Some(combat) = engine.state.combat.as_ref() else {
+                return Vec::new();
+            };
+            let mut recipients = Vec::new();
+            for attacker in &combat.attacking {
+                let Some(assignment) = combat.attack_assignments.get(attacker) else {
+                    continue;
+                };
+                if assignment.attacker.object_id != *attacker
+                    || assignment.defending_player != defender
+                    || assignment.defender != crate::state::CombatDefenderTarget::Player(defender)
+                    || engine
+                        .state
+                        .zone_change_generation
+                        .get(attacker)
+                        .copied()
+                        .unwrap_or(0)
+                        != assignment.attacker.zone_change_generation
+                    || !engine
+                        .state
+                        .objects
+                        .get(attacker)
+                        .is_some_and(|object| object.zone == Zone::Battlefield)
+                {
+                    continue;
+                }
+                let Some(player) = engine.controller_of(*attacker) else {
+                    continue;
+                };
+                if engine
+                    .state
+                    .player_idx(player)
+                    .is_some_and(|index| !engine.state.players[index].has_lost)
+                    && engine.state.are_opponents(player, defender)
+                    && !recipients.contains(&player)
+                {
+                    recipients.push(player);
+                }
+            }
+            recipients.sort_by_key(|player| engine.state.apnap_rank(*player));
+            recipients
+        }
+        _ => super::simple_player_recipients(
+            &engine.state,
+            top.controller,
+            top.trigger_context
+                .affected_player
+                .unwrap_or(top.controller),
+            super::trigger_object_controller(engine, top),
+            super::source_controller(engine, top),
+            who,
+        ),
+    }
 }
 
 fn previous_result_receipt_matches(
@@ -1180,6 +1400,7 @@ pub(in crate::engine) fn authored_resolution_branch_choice_event(
                     pending.deciding_player,
                     branch.original_chooser,
                     option,
+                    true,
                 )
             })
             .map(|(index, option)| {
@@ -1442,6 +1663,7 @@ pub(in crate::engine) fn authored_resolution_branch_has_selectable_option(
                 pending.deciding_player,
                 branch.original_chooser,
                 option,
+                true,
             )
         })
 }

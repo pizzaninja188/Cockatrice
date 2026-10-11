@@ -22,7 +22,7 @@ mod chaos_warp;
 mod choices;
 pub(super) use choices::{
     authored_resolution_branch_choice_event, authored_resolution_branch_has_selectable_option,
-    permanent_choice_prompt, resolution_branch_is_selectable,
+    direct_draw_effect_is_selectable, permanent_choice_prompt, resolution_branch_is_selectable,
     resolution_choice_delegate_candidates, targeted_player_permanent_choice_event,
 };
 pub(in crate::engine) use choices::{
@@ -1400,6 +1400,20 @@ impl GameEngine {
             && had_chosen_targets
             && !targeted_effects.is_empty()
         {
+            if top.triggered_ability.as_ref().is_some_and(|ability| {
+                direct_draw_effect_is_selectable(
+                    self,
+                    &top,
+                    &crate::state::EffectResult::default(),
+                    &ability.effect,
+                ) == Some(false)
+            }) {
+                events.push(ev_log(format!(
+                    "{spell_label} has no legal optional draw under the current draw limit."
+                )));
+                self.finish_deferred_stack_exit(&top, DeferredStackExit::Resolved, events)?;
+                return Ok(ResolutionProgress::Completed);
+            }
             let prompt = format!("{spell_label}: apply the optional effect?");
             let apply_label = "Apply the optional effect".to_string();
             self.state.pending_resolution = Some(PendingResolution {

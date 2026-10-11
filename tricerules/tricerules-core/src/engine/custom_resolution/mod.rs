@@ -564,7 +564,27 @@ impl GameEngine {
             .get(&stack.item.id)
             .and_then(|presentation| presentation.primary.clone());
         let resume_index = match decision {
-            rv1::ResolutionChoiceDecision::SelectBranch => Some(0),
+            rv1::ResolutionChoiceDecision::SelectBranch => {
+                if stack
+                    .item
+                    .triggered_ability
+                    .as_ref()
+                    .is_some_and(|ability| {
+                        super::resolution::direct_draw_effect_is_selectable(
+                            self,
+                            &stack.item,
+                            &stack.previous_result,
+                            &ability.effect,
+                        ) == Some(false)
+                    })
+                {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "the optional draw is no longer legal under the current draw limit",
+                    ));
+                }
+                Some(0)
+            }
             rv1::ResolutionChoiceDecision::Decline => {
                 events.push(ev_log_ability(
                     format!("P{} declines optional trigger: ", pending.deciding_player),

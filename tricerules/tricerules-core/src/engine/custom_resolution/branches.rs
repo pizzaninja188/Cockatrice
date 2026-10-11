@@ -375,6 +375,7 @@ impl GameEngine {
             pending.deciding_player,
             branch_state.original_chooser,
             &branch,
+            true,
         ) {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
@@ -784,6 +785,7 @@ impl GameEngine {
                         *delegate,
                         branch.original_chooser,
                         option,
+                        true,
                     )
                 })
             });
