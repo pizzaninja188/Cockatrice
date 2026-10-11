@@ -180,6 +180,14 @@ impl GameEngine {
         let source_owner = pending.source_owner;
         let source_face_index = pending.source_face_index;
         let source_zone_change = pending.source_zone_change;
+        let trigger_use_key = pending
+            .ability_origin
+            .clone()
+            .map(|ability_origin| TriggerUseKey {
+                object_id: source_id,
+                zone_change_generation: source_zone_change,
+                ability_origin,
+            });
         let source_face_change = pending.source_face_change;
         let ability_index = pending.ability_index;
         let ability = pending.ability;
@@ -223,6 +231,7 @@ impl GameEngine {
             source_permanent_id: Some(source_id),
             source_owner: Some(source_owner),
             source_zone_change,
+            trigger_use_key,
             source_face_change,
             ability_index: Some(ability_index),
             activated_ability: None,

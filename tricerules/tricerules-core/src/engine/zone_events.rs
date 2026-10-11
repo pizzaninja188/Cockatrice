@@ -327,6 +327,7 @@ impl GameEngine {
             triggers.push(GameEvent::EntersBattlefield {
                 object_id: oid,
                 chosen_x,
+                entry_cause: entry.entry_cause.clone(),
             });
             committed.insert(oid);
             if let Some(crate::state::ZoneEntryCompletion::LibrarySearch(completion)) =
@@ -871,6 +872,7 @@ mod timestamp_order_tests {
             chosen_creature_types: Vec::new(),
             entry_counters: Default::default(),
             entry_modifiers: vec![],
+            entry_cause: None,
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,

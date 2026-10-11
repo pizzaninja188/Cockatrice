@@ -13,7 +13,10 @@
       presentation: OracleLines([1]),
       source_zone: Battlefield,
       costs: [Tap],
-      effect: [PutLandFromHandOntoBattlefield],
+      effect: [PutPermanentFromHand(
+        filter: Some((card_type: Some(Land))),
+        max_mana_value: None,
+      )],
     ),
     (
       ability_id: "set_power_to_towns",

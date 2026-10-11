@@ -3568,6 +3568,7 @@ mod tests {
             source_permanent_id: Some(source),
             source_owner: Some(0),
             source_zone_change: generation,
+            trigger_use_key: None,
             source_face_change: 0,
             ability_index: None,
             activated_ability: None,

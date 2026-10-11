@@ -1214,6 +1214,7 @@ impl GameEngine {
                         chosen_creature_types: Vec::new(),
                         entry_counters: BTreeMap::new(),
                         entry_modifiers: Vec::new(),
+                        entry_cause: None,
                         attached_to: None,
                         pending_copy_candidate: None,
                         pending_aura_recipient: None,
@@ -2284,6 +2285,7 @@ impl GameEngine {
                 chosen_creature_types: Vec::new(),
                 entry_counters: BTreeMap::new(),
                 entry_modifiers: Vec::new(),
+                entry_cause: None,
                 attached_to: None,
                 pending_copy_candidate: None,
                 pending_aura_recipient: None,
@@ -2392,6 +2394,7 @@ impl GameEngine {
         for entry in entries {
             let object_id = entry.event.object_id;
             let chosen_x = entry.event.chosen_x;
+            let entry_cause = entry.event.entry_cause.clone();
             // Observer returns are independent one-shot effects. Entry replacement ordering is
             // added in the Aura/choice increment; the base path still uses the canonical commit
             // reset and static-registration machinery.
@@ -2400,6 +2403,7 @@ impl GameEngine {
             trigger_events.push(GameEvent::EntersBattlefield {
                 object_id,
                 chosen_x,
+                entry_cause,
             });
             trigger_events.extend(door_event);
             events.push(permanent_moved_event(
@@ -2511,6 +2515,7 @@ impl GameEngine {
             source_permanent_id: None,
             source_owner: None,
             source_zone_change: 0,
+            trigger_use_key: None,
             source_face_change: 0,
             ability_index: None,
             activated_ability: None,
@@ -2705,6 +2710,7 @@ impl GameEngine {
                         chosen_creature_types: Vec::new(),
                         entry_counters: BTreeMap::new(),
                         entry_modifiers: Vec::new(),
+                        entry_cause: None,
                         attached_to: None,
                         pending_copy_candidate: None,
                         pending_aura_recipient: None,
@@ -3888,6 +3894,7 @@ mod attached_subject_tests {
             source_permanent_id: Some(source),
             source_owner: Some(0),
             source_zone_change: generation,
+            trigger_use_key: None,
             source_face_change: 0,
             ability_index: Some(0),
             activated_ability: None,
@@ -6502,10 +6509,12 @@ mod attached_subject_tests {
                 GameEvent::EntersBattlefield {
                     object_id: ferocidon,
                     chosen_x: 0,
+                    entry_cause: None,
                 },
                 GameEvent::EntersBattlefield {
                     object_id: creature,
                     chosen_x: 0,
+                    entry_cause: None,
                 },
             ]);
             assert_eq!(triggers.len(), 1, "another creature triggers even during simultaneous entry; Ferocidon excludes itself");
@@ -8309,6 +8318,7 @@ mod source_keyword_tests {
             source_permanent_id: Some(source),
             source_owner: Some(0),
             source_zone_change: generation,
+            trigger_use_key: None,
             source_face_change: 0,
             ability_index: Some(0),
             activated_ability: None,
@@ -8345,6 +8355,7 @@ mod source_keyword_tests {
             source_permanent_id: None,
             source_owner: None,
             source_zone_change: 0,
+            trigger_use_key: None,
             source_face_change: 0,
             ability_index: None,
             activated_ability: None,

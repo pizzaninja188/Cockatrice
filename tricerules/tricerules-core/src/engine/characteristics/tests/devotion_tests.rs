@@ -281,10 +281,12 @@ fn devotion_committed_cohort_registers_all_statics_before_reconciling_combat() {
             GameEvent::EntersBattlefield {
                 object_id: first,
                 chosen_x: 0,
+                entry_cause: None,
             },
             GameEvent::EntersBattlefield {
                 object_id: second,
                 chosen_x: 0,
+                entry_cause: None,
             },
         ],
         &mut events,
@@ -942,6 +944,7 @@ fn devotion_projected_entry_excludes_own_pip_and_uses_destination_controller() {
         chosen_creature_types: vec![],
         entry_counters: BTreeMap::new(),
         entry_modifiers: vec![],
+        entry_cause: None,
         attached_to: None,
         pending_copy_candidate: None,
         pending_aura_recipient: None,

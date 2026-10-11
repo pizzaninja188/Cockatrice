@@ -45,6 +45,9 @@ pub enum GameCondition {
     /// A copy of a bargained spell inherits this choice (CR 707.2); a permanent copy effect does
     /// not.
     SelfWasBargained,
+    /// Kodama of the East Tree's CR 603.4 condition: the exact permanent observed on entry was
+    /// not put onto the battlefield by this same triggered ability occurrence.
+    TriggerObjectWasNotPutWithThisAbility,
     /// Compare the actual mana paid for the spell whose cast event created this triggered
     /// ability. The value is frozen at CR 601.2i and follows the trigger through resolution;
     /// printed mana value and aggregate Expend history are deliberately unrelated.
@@ -349,6 +352,7 @@ impl GameCondition {
                     exclude_observed_object: true,
                     ..
                 } | Self::ObservedObjectNameIsUnique
+                    | Self::TriggerObjectWasNotPutWithThisAbility
             )
         })
     }
@@ -466,6 +470,7 @@ impl GameCondition {
             | GameCondition::CastOrigin { .. }
             | GameCondition::SelfWasCast
             | GameCondition::SelfWasBargained
+            | GameCondition::TriggerObjectWasNotPutWithThisAbility
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ObjectTapped { .. } => Ok(()),
             GameCondition::ControlsCreatureTiedForGreatestPower => Ok(()),
@@ -563,6 +568,7 @@ impl GameCondition {
             | GameCondition::CastOrigin { .. }
             | GameCondition::SelfWasCast
             | GameCondition::SelfWasBargained
+            | GameCondition::TriggerObjectWasNotPutWithThisAbility
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ActivePlayer { .. }
             | GameCondition::OpponentHasMoreThanYou { .. }

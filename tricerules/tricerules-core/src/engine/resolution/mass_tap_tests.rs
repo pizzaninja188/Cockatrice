@@ -94,6 +94,7 @@ fn resolve_with_source_and_target(
         source_permanent_id: source,
         source_owner: None,
         source_zone_change: 0,
+        trigger_use_key: None,
         source_face_change: 0,
         ability_index: None,
         activated_ability: None,

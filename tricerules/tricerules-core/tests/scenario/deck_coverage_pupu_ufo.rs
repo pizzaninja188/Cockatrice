@@ -157,7 +157,7 @@ fn pupu_ufo_may_put_a_private_land_choice_onto_the_battlefield_without_playing_i
 }
 
 #[test]
-fn pupu_ufo_can_decline_its_land_choice_and_does_not_prompt_without_a_land() {
+fn pupu_ufo_can_decline_its_land_choice_and_keeps_public_bounds_when_no_land_qualifies() {
     let mut engine = pupu_engine(20_261_007);
     let pupu = inject_permanent_on_battlefield(&mut engine, 0, "pupu_ufo");
     let land = inject_card_into_hand(&mut engine, 0, "forest");
@@ -181,8 +181,19 @@ fn pupu_ufo_can_decline_its_land_choice_and_does_not_prompt_without_a_land() {
     let activation = activate_ability_for(&no_land, source, 0, Vec::new());
     semantic::accepted(&mut no_land, 0, &activation);
     semantic::accepted(&mut no_land, 0, &pass());
-    let resolved = semantic::accepted(&mut no_land, 1, &pass());
-    assert!(find_resolution_choice(&resolved).is_none());
+    let parked = semantic::accepted(&mut no_land, 1, &pass());
+    let choice = find_resolution_choice(&parked).expect("fixed-bound optional land choice");
+    assert_eq!((choice.min, choice.max), (0, 1));
+    assert_eq!(
+        choice.candidate_selectable.len(),
+        choice.candidate_object_ids.len()
+    );
+    assert!(choice
+        .candidate_selectable
+        .iter()
+        .all(|selectable| !selectable));
+    assert!(no_land.state.pending_resolution.is_some());
+    semantic::accepted(&mut no_land, 0, &submit_resolution_choice(Vec::new()));
     assert!(no_land.state.pending_resolution.is_none());
     assert!(no_land.state.stack.is_empty());
     assert!(no_land.state.objects[&source].tapped);

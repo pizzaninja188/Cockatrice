@@ -1,0 +1,33 @@
+// Oracle and rulings checked against Scryfall on 2026-10-11:
+// https://scryfall.com/card/cmr/239/kodama-of-the-east-tree
+// https://api.scryfall.com/cards/cb1afab6-b9c8-4b9c-840b-24106523a783/rulings
+// Wizards' Commander Legends release notes confirm X=0 for permanents and permanent cards in hand:
+// https://magic.wizards.com/en/news/feature/commander-legends-release-notes-2020-11-06
+// Current Comprehensive Rules (2026-09-25): CR 202.3e, 603.4, 603.6a, 702.124a.
+// https://media.wizards.com/2026/downloads/MagicCompRules%2020260925.pdf
+// Partner is represented as printed card text; Commander deck-construction validation remains
+// outside this in-game card slice, as current setup accepts declarations without validating it.
+(
+  id: "kodama_of_the_east_tree",
+  name: "Kodama of the East Tree",
+  face_id: "kodama_of_the_east_tree",
+  mana_cost: "{4}{G}{G}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Spirit"],
+  power: 6,
+  toughness: 6,
+  keywords: [Reach, Partner],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: None, exclude_source: true),
+    ),
+    intervening_if: Some(TriggerObjectWasNotPutWithThisAbility),
+    effect: [PutPermanentFromHand(
+      filter: None,
+      max_mana_value: Some(TriggerObject),
+    )],
+  )],
+)

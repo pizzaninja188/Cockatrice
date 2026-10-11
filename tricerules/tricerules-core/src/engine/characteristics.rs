@@ -1159,6 +1159,7 @@ impl CharacteristicsEvaluator<'_> {
             | GameCondition::SelfWasBargained
             | GameCondition::CastOrigin { .. }
             | GameCondition::TriggeringSpellManaSpent { .. }
+            | GameCondition::TriggerObjectWasNotPutWithThisAbility
             | GameCondition::ObjectMatches { .. }
             | GameCondition::ObjectManaValue { .. } => false,
             GameCondition::Void => self.state.turn_history.current.void_holds(),

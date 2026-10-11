@@ -1097,6 +1097,7 @@ enum GameEvent {
     EntersBattlefield {
         object_id: ObjectId,
         chosen_x: u32,
+        entry_cause: Option<crate::state::TriggerUseKey>,
     },
     /// One completed search operation. Keep the searcher distinct from the library owner so
     /// "an opponent searches their library" cannot match a search of somebody else's library.

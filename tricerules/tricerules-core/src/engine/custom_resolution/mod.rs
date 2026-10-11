@@ -663,6 +663,7 @@ impl GameEngine {
             chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
+            entry_cause: None,
             attached_to: Some(recipient),
             pending_copy_candidate: None,
             pending_aura_recipient: None,

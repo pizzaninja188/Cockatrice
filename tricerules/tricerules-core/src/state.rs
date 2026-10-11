@@ -361,6 +361,9 @@ pub struct TriggerContext {
     /// read by `Amount::EventCount` ("that many"). Only triggers whose condition names a
     /// committed batch publish it; `None` everywhere else.
     pub event_count: Option<u32>,
+    /// Whether the exact permanent observed on entry was put onto the battlefield by this same
+    /// triggered ability occurrence. Captured once at the event boundary for CR 603.4 rechecks.
+    pub entry_cause_matches_trigger_ability: Option<bool>,
 }
 
 /// Cast-time facts retained for the permanent that a spell becomes. Copies of spells inherit
@@ -1673,6 +1676,8 @@ pub struct PendingHandChoice {
     pub draw_after: u32,
     pub revealed: bool,
     pub draw_only_if_discarded: bool,
+    /// Exact triggered-ability occurrence that directly instructed the selected object to enter.
+    pub entry_cause: Option<TriggerUseKey>,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -1841,6 +1846,8 @@ pub struct BattlefieldEntryEvent {
     /// CR 611.2e continuous effects created by the instruction putting this object onto the
     /// battlefield. They apply simultaneously with entry and persist for this incarnation.
     pub entry_modifiers: Vec<ResolvingPermanentModifier>,
+    /// Exact triggered-ability occurrence that directly instructed this object to enter.
+    pub entry_cause: Option<TriggerUseKey>,
     pub applied_effects: Vec<EntryReplacementEffectId>,
     /// Copy values installed provisionally while other entry replacements are processed, before
     /// further choices finish and the permanent is committed. Retains rollback identity for
@@ -2228,6 +2235,9 @@ pub struct StackItem {
     /// A matching ObjectId after a leave-and-return is a different object and must not receive
     /// the old ability's self-bound effect.
     pub source_zone_change: u64,
+    /// Exact triggered-ability occurrence captured at event time. Used only for effects whose
+    /// resulting entry must retain "with this ability" provenance across a parked choice.
+    pub trigger_use_key: Option<TriggerUseKey>,
     /// Face-change generation captured when an ability was put on the stack (CR 701.27f).
     pub source_face_change: u64,
     /// Index in the source's effective activated- or triggered-ability list. `None` for spells.

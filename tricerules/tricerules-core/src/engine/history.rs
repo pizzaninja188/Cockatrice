@@ -1200,6 +1200,10 @@ impl GameEngine {
                         && fact.zone_change_generation == context.source_zone_change
                         && fact.bargained
                 }),
+            GameCondition::TriggerObjectWasNotPutWithThisAbility => trigger_context
+                .or_else(|| context.stack_item.map(|item| &item.trigger_context))
+                .and_then(|trigger| trigger.entry_cause_matches_trigger_ability)
+                .is_some_and(|matches| !matches),
             GameCondition::TriggeringSpellManaSpent { comparison } => {
                 let spent = trigger_context
                     .or_else(|| context.stack_item.map(|item| &item.trigger_context))
@@ -2442,10 +2446,12 @@ mod tests {
         engine.record_committed_events(&[GameEvent::EntersBattlefield {
             object_id: land,
             chosen_x: 0,
+            entry_cause: None,
         }]);
         engine.record_committed_events(&[GameEvent::EntersBattlefield {
             object_id: land,
             chosen_x: 0,
+            entry_cause: None,
         }]);
         let context = ConditionContext {
             controller: 0,
@@ -3624,6 +3630,7 @@ mod tests {
             source_permanent_id: Some(ours),
             source_owner: Some(0),
             source_zone_change: 0,
+            trigger_use_key: None,
             source_face_change: 0,
             ability_index: Some(0),
             activated_ability: None,
@@ -3937,6 +3944,7 @@ mod tests {
                 &[GameEvent::EntersBattlefield {
                     object_id: source,
                     chosen_x: 0,
+                    entry_cause: None,
                 }],
                 &mut Vec::new(),
             );
@@ -4111,6 +4119,7 @@ mod tests {
             GameEvent::EntersBattlefield {
                 object_id: artifact,
                 chosen_x: 0,
+                entry_cause: None,
             },
             GameEvent::CardDrawn {
                 drawer: 0,

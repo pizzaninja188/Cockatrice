@@ -3246,10 +3246,12 @@ impl GameEngine {
         let attached_to = attached_to.or(event.attached_to);
         let object_id = event.object_id;
         let chosen_x = event.chosen_x;
+        let entry_cause = event.entry_cause.clone();
         let door_event = self.commit_battlefield_entry_state(event, attached_to)?;
         let mut trigger_events = vec![GameEvent::EntersBattlefield {
             object_id,
             chosen_x,
+            entry_cause,
         }];
         trigger_events.extend(door_event);
         self.fire_triggers(&trigger_events, out);
@@ -3679,6 +3681,7 @@ impl GameEngine {
             trigger_events.push(GameEvent::EntersBattlefield {
                 object_id: entry.event.object_id,
                 chosen_x: entry.event.chosen_x,
+                entry_cause: entry.event.entry_cause.clone(),
             });
             trigger_events.extend(
                 self.commit_battlefield_entry_state(entry.event.clone(), entry.event.attached_to)?,
@@ -5490,6 +5493,7 @@ mod tests {
                 (CounterKind::Stun, 2),
             ]),
             entry_modifiers: Vec::new(),
+            entry_cause: None,
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
@@ -5548,6 +5552,7 @@ mod tests {
             chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
+            entry_cause: None,
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
@@ -5635,6 +5640,7 @@ mod tests {
             chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
+            entry_cause: None,
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
@@ -5713,6 +5719,7 @@ mod tests {
                     creature_types: vec!["Dragon".into()],
                 },
             )],
+            entry_cause: None,
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,

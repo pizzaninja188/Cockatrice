@@ -1418,6 +1418,7 @@ impl GameEngine {
             source_permanent_id: None,
             source_owner: None,
             source_zone_change: 0,
+            trigger_use_key: None,
             source_face_change: 0,
             ability_index: None,
             activated_ability: None,
@@ -2329,6 +2330,7 @@ impl GameEngine {
             source_permanent_id: Some(permanent_id),
             source_owner: Some(source_owner),
             source_zone_change,
+            trigger_use_key: None,
             source_face_change,
             ability_index: Some(ability_index),
             activated_ability: Some(ability.clone()),
@@ -3363,6 +3365,7 @@ impl GameEngine {
                 .get(&oid)
                 .copied()
                 .unwrap_or(0),
+            trigger_use_key: None,
             source_face_change: 0,
             ability_index: None,
             activated_ability: None,
@@ -3409,6 +3412,7 @@ impl GameEngine {
                 chosen_creature_types: Vec::new(),
                 entry_counters: BTreeMap::new(),
                 entry_modifiers: Vec::new(),
+                entry_cause: None,
                 attached_to: None,
                 pending_copy_candidate: None,
                 pending_aura_recipient: None,
@@ -4591,6 +4595,7 @@ mod cast_snapshot_tests {
             &[GameEvent::EntersBattlefield {
                 object_id: permanent,
                 chosen_x: 0,
+                entry_cause: None,
             }],
             &mut Vec::new(),
         );

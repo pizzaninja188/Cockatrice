@@ -608,6 +608,7 @@ impl GameEngine {
                 if let GameEvent::EntersBattlefield {
                     object_id,
                     chosen_x,
+                    entry_cause,
                 } = event
                 {
                     if trigger.source_id == *object_id
@@ -627,6 +628,17 @@ impl GameEngine {
                     ) {
                         trigger.trigger_context.observed_object =
                             self.trigger_object_ref(*object_id);
+                        trigger.trigger_context.entry_cause_matches_trigger_ability =
+                            Some(entry_cause.as_ref().is_some_and(|cause| {
+                                trigger.ability_origin.as_ref().is_some_and(|origin| {
+                                    cause
+                                        == &TriggerUseKey {
+                                            object_id: trigger.source_id,
+                                            zone_change_generation: trigger.source_zone_change,
+                                            ability_origin: origin.clone(),
+                                        }
+                                })
+                            }));
                     }
                 }
             }
@@ -3219,6 +3231,11 @@ impl GameEngine {
                 source_permanent_id: Some(source_id),
                 source_owner: Some(source_owner),
                 source_zone_change,
+                trigger_use_key: ability_origin.clone().map(|ability_origin| TriggerUseKey {
+                    object_id: source_id,
+                    zone_change_generation: source_zone_change,
+                    ability_origin,
+                }),
                 source_face_change,
                 ability_index: Some(ability_index),
                 activated_ability: None,
@@ -3647,6 +3664,7 @@ mod tests {
         let triggers = engine.collect_event_triggers(&[GameEvent::EntersBattlefield {
             object_id: source,
             chosen_x: 7,
+            entry_cause: None,
         }]);
         assert_eq!(triggers.len(), 1);
         assert_eq!(triggers[0].trigger_context.entering_chosen_x, None);
@@ -3780,6 +3798,7 @@ mod tests {
                 .collect_event_triggers(&[GameEvent::EntersBattlefield {
                     object_id: source,
                     chosen_x: 0,
+                    entry_cause: None,
                 }])
                 .is_empty(),
             "a Bear is neither a Bird nor a Fish"
@@ -4710,6 +4729,7 @@ mod tests {
             source_permanent_id: None,
             source_owner: None,
             source_zone_change: 0,
+            trigger_use_key: None,
             source_face_change: 0,
             ability_index: None,
             activated_ability: None,
@@ -5337,10 +5357,12 @@ mod tests {
                 GameEvent::EntersBattlefield {
                     object_id: wardens[0],
                     chosen_x: 0,
+                    entry_cause: None,
                 },
                 GameEvent::EntersBattlefield {
                     object_id: wardens[1],
                     chosen_x: 0,
+                    entry_cause: None,
                 },
             ],
             &mut Vec::new(),
@@ -5407,6 +5429,7 @@ mod tests {
             GameEvent::EntersBattlefield {
                 object_id: incoming,
                 chosen_x: 0,
+                entry_cause: None,
             },
             engine.finish_zone_event(snapshot),
         ]);
@@ -5757,6 +5780,7 @@ mod tests {
         let entry = |object_id| GameEvent::EntersBattlefield {
             object_id,
             chosen_x: 0,
+            entry_cause: None,
         };
         assert_eq!(engine.collect_event_triggers(&[entry(bird)]).len(), 1);
         assert!(engine.collect_event_triggers(&[entry(enemy)]).is_empty());
@@ -5880,6 +5904,7 @@ mod tests {
                 .collect_event_triggers(&[GameEvent::EntersBattlefield {
                     object_id: bear,
                     chosen_x: 0,
+                    entry_cause: None,
                 }])
                 .len(),
             1,
@@ -5892,6 +5917,7 @@ mod tests {
                 .collect_event_triggers(&[GameEvent::EntersBattlefield {
                     object_id: opponent_bear,
                     chosen_x: 0,
+                    entry_cause: None,
                 }])
                 .is_empty(),
             "controller: Controller excludes the opponent's Bear"

@@ -904,6 +904,13 @@ impl CreatureTypeChange {
     }
 }
 
+/// Public event value used as a dynamic upper bound for a hand-card choice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ManaValueLimit {
+    /// The mana value of the permanent observed by the resolving triggered ability.
+    TriggerObject,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
     /// Triskaidekaphile and Twenty-Toed Toad check public thresholds as their triggers resolve.
@@ -975,10 +982,15 @@ pub enum SpellEffectKind {
     /// Put this hand-activated land's exact source object onto the battlefield through ordinary
     /// entry replacement and trigger processing. Urban Retreat is the first consumer.
     PutAbilitySourceOntoBattlefield,
-    /// PuPu UFO: optionally choose a land from the ability controller's hand and put it onto the
-    /// battlefield through the ordinary replacement and entry-trigger pipeline. This is a
-    /// dedicated action because it is neither playing a land nor an opponent-hand instruction.
-    PutLandFromHandOntoBattlefield,
+    /// Optionally put a permanent card from the resolving ability controller's hand onto the
+    /// battlefield. PuPu UFO narrows the private choice to lands; Kodama of the East Tree adds an
+    /// observed-object mana-value ceiling and retains exact trigger provenance through the choice.
+    PutPermanentFromHand {
+        #[serde(default)]
+        filter: Option<ZoneCardFilter>,
+        #[serde(default)]
+        max_mana_value: Option<ManaValueLimit>,
+    },
     /// Create a persistent, nonpermanent emblem marker and its controller-scoped static effects.
     /// Effects remain active after the source planeswalker leaves.
     CreateStaticEmblem {
@@ -3102,6 +3114,9 @@ impl SpellEffectKind {
             } | SpellEffectKind::CreateTokenCopies {
                 source: TokenCopySource::TriggerObject,
                 ..
+            } | SpellEffectKind::PutPermanentFromHand {
+                max_mana_value: Some(ManaValueLimit::TriggerObject),
+                ..
             } | SpellEffectKind::Mill {
                 who: PlayerRecipient::TriggerObjectController,
                 ..
@@ -3454,7 +3469,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ManifestDread
             | SpellEffectKind::IntoTheWilds
             | SpellEffectKind::DeployTheGatewatch
-            | SpellEffectKind::PutLandFromHandOntoBattlefield
+            | SpellEffectKind::PutPermanentFromHand { .. }
             | SpellEffectKind::LookChooseToHand { .. }
             | SpellEffectKind::TapAll { .. }
             | SpellEffectKind::UntapAll { .. }
@@ -4442,12 +4457,12 @@ impl SpellEffectKind {
         {
             return Err("GiveControlOfSourceToAttackingPlayer requires a triggered ability".into());
         }
-        if matches!(
-            self,
-            Self::PutLandFromHandOntoBattlefield | Self::SetSourceBasePowerToTownCount
-        ) && context != EffectContext::Ability
+        if matches!(self, Self::SetSourceBasePowerToTownCount) && context != EffectContext::Ability
         {
             return Err("PuPu UFO source effects require an activated ability".into());
+        }
+        if matches!(self, Self::PutPermanentFromHand { .. }) && context != EffectContext::Ability {
+            return Err("PutPermanentFromHand requires an activated or triggered ability".into());
         }
         if matches!(
             self,
@@ -4640,6 +4655,13 @@ impl SpellEffectKind {
                     return Err("linked graveyard exile requires the exile destination".into());
                 }
             }
+        }
+        if let SpellEffectKind::PutPermanentFromHand {
+            filter: Some(filter),
+            ..
+        } = self
+        {
+            filter.validate()?;
         }
         if let SpellEffectKind::Exile {
             linked_exile_id: Some(link_id),
@@ -7238,7 +7260,13 @@ mod pupu_ufo_effect_validation_tests {
     #[test]
     fn source_only_pupu_effects_cannot_be_authored_as_spells() {
         for effect in [
-            SpellEffectKind::PutLandFromHandOntoBattlefield,
+            SpellEffectKind::PutPermanentFromHand {
+                filter: Some(ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::Land),
+                    ..Default::default()
+                }),
+                max_mana_value: None,
+            },
             SpellEffectKind::SetSourceBasePowerToTownCount,
         ] {
             assert!(effect.validate(EffectContext::Ability).is_ok());

@@ -159,6 +159,8 @@ pub enum Keyword {
     Flash,
     /// CR 702.155: as this Saga enters, its controller chooses its starting chapter.
     ReadAhead,
+    /// CR 702.124: Partner is a pregame Commander deck-construction ability, not an in-game action.
+    Partner,
 }
 
 impl Keyword {
@@ -207,6 +209,7 @@ impl Keyword {
             Keyword::Flash => "Flash",
             Keyword::Convoke => "Convoke",
             Keyword::ReadAhead => "Read ahead",
+            Keyword::Partner => "Partner",
         }
     }
 }

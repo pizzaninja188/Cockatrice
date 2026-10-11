@@ -25,10 +25,12 @@ fn devotion_actual_nylea_and_supporter_simultaneous_entry_use_complete_committed
         GameEvent::EntersBattlefield {
             object_id: god,
             chosen_x: 0,
+            entry_cause: None,
         },
         GameEvent::EntersBattlefield {
             object_id: support,
             chosen_x: 0,
+            entry_cause: None,
         },
     ]);
     let mut events = vec![];
@@ -408,6 +410,7 @@ fn event(engine: &GameEngine, oid: ObjectId) -> BattlefieldEntryEvent {
         chosen_creature_types: Vec::new(),
         entry_counters: BTreeMap::new(),
         entry_modifiers: Vec::new(),
+        entry_cause: None,
         attached_to: None,
         pending_copy_candidate: None,
         pending_aura_recipient: None,

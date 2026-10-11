@@ -130,6 +130,7 @@ impl GameEngine {
                 chosen_creature_types: Vec::new(),
                 entry_counters: Default::default(),
                 entry_modifiers: Vec::new(),
+                entry_cause: hand_choice.entry_cause,
                 attached_to: None,
                 pending_copy_candidate: None,
                 pending_aura_recipient: None,

@@ -39,7 +39,7 @@
       "typed_path": "/faces/0/activated_abilities/0/costs/0"
     },
     {
-      "symbol": "SpellEffectKind::PutLandFromHandOntoBattlefield",
+      "symbol": "SpellEffectKind::PutPermanentFromHand",
       "typed_path": "/faces/0/activated_abilities/0/effect/0"
     },
     {
@@ -62,8 +62,8 @@
       "covers": "private optional land-only hand choice, nonland rejection, tap cost, ordinary land play limit unchanged, land enters tapped and its life-gain trigger resolves"
     },
     {
-      "test": "scenario deck_coverage_pupu_ufo::pupu_ufo_can_decline_its_land_choice_and_does_not_prompt_without_a_land",
-      "covers": "declining leaves hand cards untouched; no eligible land skips the choice and completes the ability"
+      "test": "scenario deck_coverage_pupu_ufo::pupu_ufo_can_decline_its_land_choice_and_keeps_public_bounds_when_no_land_qualifies",
+      "covers": "declining leaves hand cards untouched; no eligible land still uses fixed public choice bounds without revealing hand eligibility"
     },
     {
       "test": "scenario deck_coverage_pupu_ufo::pupu_ufo_snapshots_its_controllers_towns_as_base_power_until_cleanup",

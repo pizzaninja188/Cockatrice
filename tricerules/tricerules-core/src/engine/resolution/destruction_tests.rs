@@ -131,6 +131,7 @@ fn resolve(
         source_permanent_id: subjects.first().copied(),
         source_owner: None,
         source_zone_change: 0,
+        trigger_use_key: None,
         source_face_change: 0,
         ability_index: None,
         activated_ability: None,

@@ -1615,32 +1615,86 @@ pub(super) fn choose_hand_cards(
             count,
             chooser,
             card_filter: card_filter.as_ref(),
+            eligible_override: None,
             optional,
             visibility,
             draw_after: 0,
             action,
+            put_prompt: None,
+            entry_cause: None,
         },
     )
 }
 
-pub(super) fn put_land_from_hand_onto_battlefield(
+pub(super) fn put_permanent_from_hand(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    if !matches!(effect, SpellEffectKind::PutLandFromHandOntoBattlefield) {
-        return Err(EngineError::Illegal("resolution dispatch mismatch"));
-    }
+    let (filter, max_mana_value) = match effect {
+        SpellEffectKind::PutPermanentFromHand {
+            filter,
+            max_mana_value,
+        } => (filter, max_mana_value),
+        _ => return Err(EngineError::Illegal("resolution dispatch mismatch")),
+    };
+    let trigger_object_max_mana_value = max_mana_value.and_then(|_| {
+        super::super::targeting::trigger_object_mana_value(cx.engine, cx.top.trigger_context)
+    });
+    let missing_trigger_object =
+        max_mana_value.is_some() && trigger_object_max_mana_value.is_none();
+    let candidates = if missing_trigger_object {
+        Vec::new()
+    } else {
+        cx.engine
+            .state
+            .player_idx(cx.controller)
+            .map(|index| cx.engine.state.players[index].hand.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|object_id| {
+                let Some(object) = cx.engine.state.objects.get(object_id) else {
+                    return false;
+                };
+                let Some(definition) = cx.engine.registry.get(&object.card_id) else {
+                    return false;
+                };
+                let is_permanent = definition.matches_card_type_outside_stack(CardTypeFilter::Land)
+                    || definition.matches_card_type_outside_stack(CardTypeFilter::NonlandPermanent);
+                is_permanent
+                    && trigger_object_max_mana_value
+                        .is_none_or(|maximum| definition.mana_value_outside_stack() <= maximum)
+                    && zone_card_matches_filter(
+                        &cx.engine.state,
+                        cx.engine.registry,
+                        *object_id,
+                        filter.as_ref(),
+                    )
+            })
+            .collect()
+    };
+    let put_prompt = if filter
+        .as_ref()
+        .is_some_and(|filter| filter.card_type == Some(CardTypeFilter::Land))
+    {
+        "land card"
+    } else {
+        "permanent card"
+    };
+    let entry_cause = cx.top.trigger_use_key.clone();
     choose_hand_cards_for_player(
         cx,
         cx.controller,
         HandCardChoiceSpec {
             count: 1,
             chooser: HandCardChooser::AffectedPlayer,
-            card_filter: Some(&CardTypeFilter::Land),
+            card_filter: None,
+            eligible_override: Some(candidates),
             optional: true,
             visibility: HandChoiceVisibility::PrivateLook,
             draw_after: 0,
             action: HandCardAction::PutOntoBattlefield,
+            put_prompt: Some(put_prompt),
+            entry_cause,
         },
     )
 }
@@ -1698,10 +1752,13 @@ pub(super) fn draw_discard(
                     count: discard_count,
                     chooser: HandCardChooser::AffectedPlayer,
                     card_filter: None,
+                    eligible_override: None,
                     optional: false,
                     visibility: HandChoiceVisibility::PrivateLook,
                     draw_after: 0,
                     action: HandCardAction::Discard,
+                    put_prompt: None,
+                    entry_cause: None,
                 },
             )
         }
@@ -1712,10 +1769,13 @@ pub(super) fn draw_discard(
                 count: discard_count,
                 chooser: HandCardChooser::AffectedPlayer,
                 card_filter: None,
+                eligible_override: None,
                 optional,
                 visibility: HandChoiceVisibility::PrivateLook,
                 draw_after: draw_count,
                 action: HandCardAction::Discard,
+                put_prompt: None,
+                entry_cause: None,
             },
         ),
     }
@@ -1725,10 +1785,13 @@ struct HandCardChoiceSpec<'a> {
     count: u32,
     chooser: HandCardChooser,
     card_filter: Option<&'a CardTypeFilter>,
+    eligible_override: Option<Vec<ObjectId>>,
     optional: bool,
     visibility: HandChoiceVisibility,
     draw_after: u32,
     action: HandCardAction,
+    put_prompt: Option<&'a str>,
+    entry_cause: Option<TriggerUseKey>,
 }
 
 pub(in crate::engine) fn resume_draw_then_discard(
@@ -1769,10 +1832,13 @@ pub(in crate::engine) fn resume_draw_then_discard(
             count,
             chooser: HandCardChooser::AffectedPlayer,
             card_filter: None,
+            eligible_override: None,
             optional: false,
             visibility: HandChoiceVisibility::PrivateLook,
             draw_after: 0,
             action: HandCardAction::Discard,
+            put_prompt: None,
+            entry_cause: None,
         },
     )?;
     if matches!(outcome, EffectOutcome::Suspended) {
@@ -1804,10 +1870,13 @@ fn choose_hand_cards_for_player(
         count,
         chooser,
         card_filter,
+        eligible_override,
         optional,
         visibility,
         draw_after,
         action,
+        put_prompt,
+        entry_cause,
     } = spec;
     let controller = cx.controller;
     let top = cx.top;
@@ -1818,13 +1887,14 @@ fn choose_hand_cards_for_player(
         return Ok(EffectOutcome::Continue);
     };
     let hand = engine.state.players[pi].hand.clone();
-    let eligible: Vec<ObjectId> = hand
-        .iter()
-        .copied()
-        .filter(|object_id| {
-            card_matches_type_filter(&engine.state, engine.registry, *object_id, card_filter)
-        })
-        .collect();
+    let eligible: Vec<ObjectId> = eligible_override.unwrap_or_else(|| {
+        hand.iter()
+            .copied()
+            .filter(|object_id| {
+                card_matches_type_filter(&engine.state, engine.registry, *object_id, card_filter)
+            })
+            .collect()
+    });
 
     if visibility == HandChoiceVisibility::PublicReveal
         && (eligible.is_empty() || chooser == HandCardChooser::Random)
@@ -1893,7 +1963,8 @@ fn choose_hand_cards_for_player(
         return Ok(EffectOutcome::Continue);
     }
 
-    if eligible.is_empty() {
+    let optional_battlefield_choice = optional && action == HandCardAction::PutOntoBattlefield;
+    if eligible.is_empty() && !optional_battlefield_choice {
         events.push(ev_log(format!(
             "P{affected_player} has no eligible cards to {} ({spell_label}).",
             hand_action_verb(action)
@@ -1921,6 +1992,14 @@ fn choose_hand_cards_for_player(
 
     let n = (eligible.len() as u32).min(count);
     let min = if optional { 0 } else { n };
+    // Hand contents are private. Keep an optional battlefield instruction's public upper bound
+    // stable even when no card currently qualifies; the chooser's private selectable mask carries
+    // the legal cohort.
+    let max = if optional_battlefield_choice {
+        count
+    } else {
+        n
+    };
     let deciding_player = match chooser {
         HandCardChooser::AffectedPlayer => affected_player,
         HandCardChooser::Controller => controller,
@@ -1939,7 +2018,8 @@ fn choose_hand_cards_for_player(
     let verb = hand_action_verb(action);
     let prompt = if action == HandCardAction::PutOntoBattlefield {
         format!(
-            "P{deciding_player}: you may choose a land card from your hand to put onto the battlefield."
+            "P{deciding_player}: you may choose a {} from your hand to put onto the battlefield.",
+            put_prompt.unwrap_or("permanent card")
         )
     } else if optional {
         format!("P{deciding_player}: you may choose a card for P{affected_player} to {verb}.")
@@ -1961,7 +2041,7 @@ fn choose_hand_cards_for_player(
                 candidate_card_ids,
                 candidate_names,
                 min,
-                max: n,
+                max,
                 ordered: false,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
@@ -1997,7 +2077,7 @@ fn choose_hand_cards_for_player(
             source_object_id: top.id,
             candidates: eligible.clone(),
             min,
-            max: n,
+            max,
             ordered: false,
             unique_names: false,
             prompt,
@@ -2025,6 +2105,7 @@ fn choose_hand_cards_for_player(
                 draw_after,
                 revealed: visibility == HandChoiceVisibility::PublicReveal,
                 draw_only_if_discarded: optional,
+                entry_cause,
             },
         },
     });
@@ -2894,6 +2975,7 @@ fn plain_return_entry(
         chosen_creature_types: Vec::new(),
         entry_counters: Default::default(),
         entry_modifiers: Vec::new(),
+        entry_cause: None,
         attached_to: None,
         pending_copy_candidate: None,
         pending_aura_recipient: None,
@@ -3109,6 +3191,7 @@ pub(super) fn move_graveyard_cards(
                 chosen_creature_types: Vec::new(),
                 entry_counters: BTreeMap::new(),
                 entry_modifiers: entry_modifiers.clone(),
+                entry_cause: None,
                 attached_to: None,
                 pending_copy_candidate: None,
                 pending_aura_recipient: None,
@@ -3466,6 +3549,7 @@ pub(super) fn return_triggered_card(
             chosen_creature_types: Vec::new(),
             entry_counters,
             entry_modifiers: Vec::new(),
+            entry_cause: None,
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
@@ -3562,6 +3646,7 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
             chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
+            entry_cause: None,
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
@@ -3654,6 +3739,7 @@ pub(super) fn put_ability_source_onto_battlefield(
             chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
+            entry_cause: None,
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
@@ -3802,6 +3888,7 @@ pub(super) fn exile_source_then_return_transformed(
             chosen_creature_types: Vec::new(),
             entry_counters,
             entry_modifiers: Vec::new(),
+            entry_cause: None,
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
@@ -4564,6 +4651,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 chosen_creature_types: Vec::new(),
                 entry_counters: BTreeMap::new(),
                 entry_modifiers: Vec::new(),
+                entry_cause: None,
                 attached_to: None,
                 pending_copy_candidate: None,
                 pending_aura_recipient: None,
@@ -5585,6 +5673,7 @@ mod tests {
             source_permanent_id: Some(90_099),
             source_owner: Some(0),
             source_zone_change: 3,
+            trigger_use_key: None,
             source_face_change: 0,
             ability_index: Some(0),
             activated_ability: None,

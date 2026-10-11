@@ -1,0 +1,79 @@
+{
+  "format_version": 1,
+  "oracle_id": "cb1afab6-b9c8-4b9c-840b-24106523a783",
+  "spans": [
+    {
+      "face_id": "kodama_of_the_east_tree",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords/0"]
+    },
+    {
+      "face_id": "kodama_of_the_east_tree",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/intervening_if",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    },
+    {
+      "face_id": "kodama_of_the_east_tree",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/keywords/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::TriggerObjectWasNotPutWithThisAbility",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::PutPermanentFromHand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ManaValueLimit::TriggerObject",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_kodama_of_the_east_tree::kodama_registers_its_complete_printed_identity",
+      "covers": "exact mana cost, legendary Spirit type line, 6/6 stats, Reach, the entry trigger mapping, and Partner's pregame-only N/A disposition with the current declaration-validation limitation"
+    },
+    {
+      "test": "scenario deck_coverage_kodama_of_the_east_tree::kodama_only_observes_another_permanent_entering_under_its_controllers_control",
+      "covers": "Kodama does not observe itself entering and does not trigger for an opponent's permanent"
+    },
+    {
+      "test": "scenario deck_coverage_kodama_of_the_east_tree::kodama_bounds_its_private_choice_by_the_entering_permanents_mana_value",
+      "covers": "private optional 0..1 choice, lower and equal mana value legality, higher mana value and nonpermanent exclusions, atomic rejection, direct hand-to-battlefield entry, and no recursive trigger from the same ability occurrence"
+    },
+    {
+      "test": "scenario deck_coverage_kodama_of_the_east_tree::kodama_trigger_object_ceiling_composes_with_an_or_card_filter",
+      "covers": "an independent trigger-object mana-value ceiling remains enforced when the optional hand choice composes it with a valid any_of card filter"
+    },
+    {
+      "test": "scenario deck_coverage_kodama_of_the_east_tree::kodama_x_cost_trigger_object_has_zero_mana_value_and_may_decline",
+      "covers": "an X-cost permanent entering the battlefield has mana value zero for the ceiling and the optional choice can be declined"
+    },
+    {
+      "test": "scenario deck_coverage_kodama_of_the_east_tree::kodama_keeps_fixed_optional_bounds_when_no_permanent_qualifies",
+      "covers": "no qualifying permanent retains fixed public bounds and an all-unselectable private candidate mask"
+    },
+    {
+      "test": "scenario deck_coverage_kodama_of_the_east_tree::kodama_reentry_generation_does_not_confuse_an_older_ability_use",
+      "covers": "the selected card retains the original trigger-use key across a parked choice, while the same physical Kodama after a zone change is a new ability generation"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

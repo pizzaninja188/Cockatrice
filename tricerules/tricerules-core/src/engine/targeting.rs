@@ -429,7 +429,10 @@ fn any_battlefield_permanent_target_legal(state: &GameState, tid: ObjectId) -> b
 
 /// Check if `oid` is a legal graveyard target for a [`GraveyardFilter`].
 /// Graveyard cards have no Hexproof/Shroud (those keywords only apply on the battlefield).
-fn trigger_object_mana_value(engine: &GameEngine, trigger_context: TriggerContext) -> Option<u32> {
+pub(super) fn trigger_object_mana_value(
+    engine: &GameEngine,
+    trigger_context: TriggerContext,
+) -> Option<u32> {
     let observed = trigger_context.observed_object?;
     let current_generation = engine
         .state
@@ -1668,7 +1671,7 @@ fn validate_effect_targets(
         | SpellEffectKind::AnimateSelf { .. }
         | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
         | SpellEffectKind::PutAbilitySourceOntoBattlefield
-        | SpellEffectKind::PutLandFromHandOntoBattlefield
+        | SpellEffectKind::PutPermanentFromHand { .. }
         | SpellEffectKind::SetSourceBasePowerToTownCount
         | SpellEffectKind::SetClassLevel { .. }
         | SpellEffectKind::CreateStaticEmblem { .. }
@@ -2675,6 +2678,7 @@ mod tests {
             source_permanent_id: None,
             source_owner: None,
             source_zone_change: 0,
+            trigger_use_key: None,
             source_face_change: 0,
             ability_index: None,
             activated_ability: None,
