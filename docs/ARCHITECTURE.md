@@ -7,6 +7,10 @@ workflow. Current work and dependencies live in GitHub Issues, not a historical 
 For local structured evidence, privacy boundaries, deterministic reconstruction, and live resume,
 see [RULED-DIAGNOSTICS.md](RULED-DIAGNOSTICS.md).
 
+The proposed [composable card execution and authoring contract](COMPOSABLE-CARD-EXECUTION.md)
+describes the next composition redesign. It is a design target; the runtime described below remains
+the shipped architecture until its migration is implemented and verified.
+
 ---
 
 ## 1. System
