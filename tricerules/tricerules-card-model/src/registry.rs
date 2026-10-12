@@ -696,6 +696,14 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     reason,
                 })?;
         }
+        if let StaticAbilityDef::GrantSpellKeyword { filter, .. } = ability {
+            filter
+                .validate()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+        }
         if let StaticAbilityDef::UntapControlledPermanentsDuringOtherPlayersUntapSteps {
             permanent_types,
         } = ability

@@ -4,7 +4,8 @@ use super::{
     AbilityCost, ActivatedCostModifier, Amount, CardTypeFilter, CastCostReceiptCondition, Color,
     CounterKind, EffectContext, GameCondition, Keyword, ManaSpendingRestriction,
     ObjectCastCostKind, PermanentEventFilter, PowerComparison, RelativePlayerSet, SpellCostFilter,
-    SpellEffectKind, StackSpellFilter, TargetController, TargetFilter, TargetKind, TargetingDef,
+    SpellEffectKind, SpellKeyword, StackSpellFilter, TargetController, TargetFilter, TargetKind,
+    TargetingDef,
 };
 use crate::{AbilityId, AbilityLinkId, AbilityPresentation, ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
@@ -2364,6 +2365,13 @@ pub enum StaticAbilityDef {
     /// spells and abilities can still legally target it and any optional payment still occurs.
     /// Surrak, Elusive Hunter and Abrupt Decay share this intrinsic stack-active prohibition.
     SpellCannotBeCountered,
+    /// CR 610.5: qualifying spells gain the selected keyword as they're put on the stack. This
+    /// covers Wildsear's hand-enchantment Cascade grant and Imoti's creature-spell Cascade grant.
+    GrantSpellKeyword {
+        #[serde(default)]
+        filter: SpellCastFilter,
+        keyword: SpellKeyword,
+    },
     /// Chimil, the Inner Sun and Rhythm of the Wild prevent matching spells their controller
     /// controls from being countered. Chimil and Rhythm of the Wild share this controller-scoped
     /// rule with optional stack-face filtering. The restriction is checked when the countering

@@ -96,6 +96,7 @@ pub(super) fn execute_effect(
         }
         SpellEffectKind::RevealUntilArtifact => zones::reveal_until_artifact(cx)?,
         effect @ SpellEffectKind::Discover { .. } => zones::discover(cx, effect)?,
+        effect @ SpellEffectKind::Cascade { .. } => zones::cascade(cx, effect)?,
         effect @ SpellEffectKind::Explore { .. } => zones::explore(cx, effect)?,
         SpellEffectKind::ManifestDread => zones::manifest_dread(cx)?,
         SpellEffectKind::IntoTheWilds => zones::into_the_wilds(cx)?,

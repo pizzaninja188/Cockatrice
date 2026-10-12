@@ -466,7 +466,9 @@ fn discover_departed_owner_observer_engine(
                 .pending_resolution
                 .as_ref()
                 .map(|pending| &pending.continuation),
-            Some(tricerules_core::state::ResolutionContinuation::DiscoverCommanderCleanup { .. })
+            Some(
+                tricerules_core::state::ResolutionContinuation::SpecialCastCommanderCleanup { .. }
+            )
         ));
     }
 

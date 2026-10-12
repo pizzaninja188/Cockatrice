@@ -1764,6 +1764,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ManifestDread
         | SpellEffectKind::ExileTopWithPlayPermission { .. }
         | SpellEffectKind::Discover { .. }
+        | SpellEffectKind::Cascade { .. }
         | SpellEffectKind::ChooseResolutionBranch { .. }
         | SpellEffectKind::ChoosePermanents { .. }
         | SpellEffectKind::ChooseAndSacrifice { .. }

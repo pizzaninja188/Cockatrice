@@ -1639,6 +1639,12 @@ pub enum SpellEffectKind {
     Discover {
         value: u32,
     },
+    /// CR 702.85: resolve one captured Cascade instance using the source spell's cast-time
+    /// mana value. Unlike Discover, the nonland hit and resulting spell must both be strictly
+    /// lower in mana value, and every uncast exiled card returns to the library bottom.
+    Cascade {
+        source_mana_value: u32,
+    },
     /// Return a battlefield permanent to its owner's hand. A chosen subject uses the normal
     /// targeting contract (Unsummon, Boomerang); a source-bound subject is untargeted and keeps
     /// CR 400.7 generation identity (Wingspan Stride).
@@ -3561,6 +3567,7 @@ impl SpellEffectKind {
             | SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. }
             | SpellEffectKind::ExileTopWithPlayPermission { .. }
             | SpellEffectKind::Discover { .. }
+            | SpellEffectKind::Cascade { .. }
             | SpellEffectKind::Mill { .. }
             | SpellEffectKind::MillEachOpponentByHandSize
             | SpellEffectKind::WinGameIf { .. }

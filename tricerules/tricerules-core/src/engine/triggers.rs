@@ -58,7 +58,9 @@ fn trigger_ability_path(
     match origin {
         TriggerAbilityOrigin::Printed(definition)
         | TriggerAbilityOrigin::StaticGrant { definition, .. } => definition.ability_path.clone(),
-        TriggerAbilityOrigin::ResolvingGrant(_) => vec![ability.ability_id.clone()],
+        TriggerAbilityOrigin::SpellKeyword(_) | TriggerAbilityOrigin::ResolvingGrant(_) => {
+            vec![ability.ability_id.clone()]
+        }
     }
 }
 
@@ -79,7 +81,9 @@ impl GameEngine {
             .and_then(|origin| match origin {
                 TriggerAbilityOrigin::Printed(definition)
                 | TriggerAbilityOrigin::StaticGrant { definition, .. } => Some(definition.clone()),
-                TriggerAbilityOrigin::ResolvingGrant(_) => None,
+                TriggerAbilityOrigin::SpellKeyword(_) | TriggerAbilityOrigin::ResolvingGrant(_) => {
+                    None
+                }
             })
             .unwrap_or_else(|| {
                 self.ability_definition(source_id, face_index, vec![ability.ability_id.clone()])

@@ -1,0 +1,92 @@
+{
+  "format_version": 1,
+  "oracle_id": "9ceac4c6-e62e-4445-852c-b2c621e4a83b",
+  "spans": [
+    {
+      "face_id": "wildsear_scouring_maw",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "wildsear_scouring_maw",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::GrantSpellKeyword",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellKeyword::Cascade",
+      "typed_path": "/faces/0/static_abilities/0/definition/GrantSpellKeyword/keyword"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "covers": "Exact Wildsear identity and its enchantment-from-hand Cascade grant",
+      "test": "deck_registry::deck_coverage_wildsear::wildsear_registers_its_exact_card_identity_and_hand_enchantment_cascade_grant"
+    },
+    {
+      "covers": "Typed spell-keyword filter validation and Cascade RON round trip",
+      "test": "deck_registry::deck_coverage_wildsear::wildsear_spell_keyword_filter_and_cascade_keyword_round_trip"
+    },
+    {
+      "covers": "A hand-cast enchantment receives Cascade, strict mana-value filtering applies, and a declined hit plus the exact prefix are randomized to library bottom",
+      "test": "scenario deck_coverage_wildsear::wildsear_grants_cascade_to_hand_enchantments_and_decline_random_bottoms_the_exact_exile_prefix"
+    },
+    {
+      "covers": "A canceled Cascade cast reopens the same offer, then a committed free cast leaves only the uncast prefix on the library bottom",
+      "test": "scenario deck_coverage_wildsear::wildsear_cascade_casts_the_hit_for_free_and_bottoms_only_the_uncast_prefix"
+    },
+    {
+      "covers": "When no lower-mana-value nonland is found, the full exiled prefix returns to the library bottom",
+      "test": "scenario deck_coverage_wildsear::wildsear_cascade_without_a_qualifying_card_bottoms_the_entire_revealed_prefix"
+    },
+    {
+      "covers": "The hand-origin and enchantment-type restrictions reject a hand-cast instant",
+      "test": "scenario deck_coverage_wildsear::wildsear_does_not_grant_cascade_to_hand_cast_instants"
+    },
+    {
+      "covers": "Printed Cascade and two distinct static grants remain three separate trigger instances with source OID, generation, and authored ability provenance after a mandatory additional sacrifice",
+      "test": "scenario deck_coverage_wildsear::wildsear_cascade_instances_keep_printed_and_exact_grant_provenance_after_additional_costs"
+    },
+    {
+      "covers": "A grant source sacrificed as an additional cost is absent at the cast boundary while the remaining source still grants Cascade",
+      "test": "scenario deck_coverage_wildsear::wildsear_cascade_grant_ends_when_its_source_is_paid_as_an_additional_cost"
+    },
+    {
+      "covers": "The hand-origin restriction rejects a graveyard cast even when the enchantment has printed Cascade",
+      "test": "scenario deck_coverage_wildsear::wildsear_does_not_grant_cascade_to_an_enchantment_cast_from_the_graveyard"
+    },
+    {
+      "covers": "A Cascade trigger survives the source enchantment being countered and uses the committed source mana value",
+      "test": "scenario deck_coverage_wildsear::wildsear_trigger_resolves_after_its_source_enchantment_is_countered"
+    },
+    {
+      "covers": "Cascade exposes only an Adventure face within the captured mana-value bound",
+      "test": "scenario deck_coverage_wildsear::wildsear_cascade_restricts_adventure_faces_by_the_committed_spells_mana_value"
+    },
+    {
+      "covers": "A found hit with an unpayable mandatory additional cost offers no illegal cast and returns through Cascade cleanup",
+      "test": "scenario deck_coverage_wildsear::wildsear_cascade_bottoms_a_hit_when_its_mandatory_additional_cost_cannot_be_paid"
+    },
+    {
+      "covers": "A printed Cascade trigger from the free exile cast resolves as a nested trigger with the hit spell's captured mana value",
+      "test": "scenario deck_coverage_wildsear::wildsear_cascade_on_a_cascade_hit_resolves_as_a_nested_trigger"
+    },
+    {
+      "covers": "Declining a Cascade commander hit performs the command-zone replacement before cohort cleanup",
+      "test": "scenario deck_coverage_wildsear::wildsear_cascade_declined_commander_hit_offers_the_command_zone_replacement"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

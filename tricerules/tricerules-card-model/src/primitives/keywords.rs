@@ -220,4 +220,7 @@ impl Keyword {
 pub enum SpellKeyword {
     /// CR 702.40: when this spell is cast, copy it for each earlier spell cast that turn.
     Storm,
+    /// CR 702.85: when this spell is cast, exile through the first nonland with lower mana value;
+    /// the resulting spell must also be lower mana value, and all uncast cards go to library bottom.
+    Cascade,
 }

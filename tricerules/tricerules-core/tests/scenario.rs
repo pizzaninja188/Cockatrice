@@ -277,6 +277,9 @@ mod copy_effects;
 #[path = "scenario/deck_coverage_bello.rs"]
 mod deck_coverage_bello;
 
+#[path = "scenario/deck_coverage_wildsear.rs"]
+mod deck_coverage_wildsear;
+
 #[path = "scenario/deck_coverage_cursed_mirror.rs"]
 mod deck_coverage_cursed_mirror;
 #[path = "scenario/deck_coverage_guardian_project.rs"]

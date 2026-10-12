@@ -4610,9 +4610,56 @@ pub(super) fn reveal_until_artifact(cx: &mut EffectCx<'_>) -> Result<EffectOutco
     Ok(EffectOutcome::Continue)
 }
 
-/// CR 701.57: exile the top cards through the first nonland whose outside-the-stack mana value
-/// meets the Discover value. A qualifying hit receives a typed free-cast offer; the exact prefix
-/// stays bound to its zone generations until the player casts or declines.
+#[derive(Clone, Copy)]
+enum LibraryCastOffer {
+    Discover { value: u32 },
+    Cascade { source_mana_value: u32 },
+}
+
+impl LibraryCastOffer {
+    fn matches_outside_stack_mana_value(self, mana_value: u32) -> bool {
+        match self {
+            Self::Discover { value } => mana_value <= value,
+            Self::Cascade { source_mana_value } => mana_value < source_mana_value,
+        }
+    }
+
+    fn max_face_mana_value(self) -> Option<u32> {
+        match self {
+            Self::Discover { value } => Some(value),
+            Self::Cascade { source_mana_value } => source_mana_value.checked_sub(1),
+        }
+    }
+
+    fn completion(
+        self,
+        library_owner: PlayerId,
+        found: Option<TriggerObjectRef>,
+        cohort: Vec<TriggerObjectRef>,
+    ) -> SpecialCastCompletion {
+        match self {
+            Self::Discover { .. } => SpecialCastCompletion::Discover {
+                library_owner,
+                found,
+                cohort,
+            },
+            Self::Cascade { .. } => SpecialCastCompletion::Cascade {
+                library_owner,
+                found,
+                cohort,
+            },
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Discover { .. } => "Discover",
+            Self::Cascade { .. } => "Cascade",
+        }
+    }
+}
+
+/// CR 701.57: Discover exiles through the first nonland at or below its value.
 pub(super) fn discover(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -4620,6 +4667,25 @@ pub(super) fn discover(
     let SpellEffectKind::Discover { value } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    resolve_library_cast_offer(cx, LibraryCastOffer::Discover { value })
+}
+
+/// CR 702.85a: Cascade exiles through the first nonland with mana value strictly below the
+/// captured source spell value. Its resulting spell face must also be strictly below that value.
+pub(super) fn cascade(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::Cascade { source_mana_value } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    resolve_library_cast_offer(cx, LibraryCastOffer::Cascade { source_mana_value })
+}
+
+fn resolve_library_cast_offer(
+    cx: &mut EffectCx<'_>,
+    offer: LibraryCastOffer,
+) -> Result<EffectOutcome, EngineError> {
     let controller = cx.controller;
     let top = cx.top.clone();
     let resume_effect_index = cx.effect_index + 1;
@@ -4656,7 +4722,7 @@ pub(super) fn discover(
             .ok_or_else(|| EngineError::MissingCard(object.card_id.clone()))?;
         prefix.push((object_id, generation));
         if !definition.matches_card_type_outside_stack(CardTypeFilter::Land)
-            && definition.mana_value_outside_stack() <= value
+            && offer.matches_outside_stack_mana_value(definition.mana_value_outside_stack())
         {
             found = Some((object_id, generation));
             break;
@@ -4664,7 +4730,7 @@ pub(super) fn discover(
     }
 
     let revealed_count = u32::try_from(prefix.len())
-        .map_err(|_| EngineError::Illegal("Discover prefix is too large"))?;
+        .map_err(|_| EngineError::Illegal("library cast prefix is too large"))?;
     cx.effect_result.receipt = Some(crate::state::ResolutionReceipt::RevealedCardsCount(
         revealed_count,
     ));
@@ -4717,7 +4783,8 @@ pub(super) fn discover(
                 rv1::permanent_moved::Destination::Exile,
             ));
             cx.events.push(ev_log(format!(
-                "{spell_label} exiles {name} while discovering."
+                "{spell_label} exiles {name} while resolving {}.",
+                offer.label()
             )));
         }
         cx.engine
@@ -4748,11 +4815,7 @@ pub(super) fn discover(
             .copied()
             .find(|reference| reference.object_id == object_id)
     });
-    let completion = SpecialCastCompletion::Discover {
-        library_owner: controller,
-        found,
-        cohort,
-    };
+    let completion = offer.completion(controller, found, cohort);
     let mut stack =
         ParkedStackResolution::new(top.clone()).with_previous_result(cx.effect_result.clone());
     stack.resume_effect_index = Some(resume_effect_index);
@@ -4792,7 +4855,7 @@ pub(super) fn discover(
             undo_history_start: cx.engine.state.undoable_mana_abilities.len(),
             permission_scope: Some(ExilePlayPermissionScope::CastCard),
             return_source_to_owner_hand_if_cast: false,
-            max_face_mana_value: Some(value),
+            max_face_mana_value: offer.max_face_mana_value(),
             completion,
         },
     });
@@ -4816,7 +4879,7 @@ pub(super) fn discover(
     cx.events.push(
         cx.engine
             .resolution_payment_choice_event()
-            .expect("Discover cast offer"),
+            .expect("library cast offer"),
     );
     cx.events.push(ev_log(prompt));
     Ok(EffectOutcome::Suspended)

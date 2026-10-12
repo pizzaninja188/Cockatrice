@@ -184,6 +184,22 @@ fn storm_is_a_spell_keyword_and_static_emblems_require_typed_effects() {
     .expect("spell keywords parse independently from permanent keywords");
     assert_eq!(face.spell_keywords, vec![super::SpellKeyword::Storm]);
 
+    let cascade: super::SpellKeyword =
+        ron::from_str("Cascade").expect("Cascade parses as a spell keyword");
+    assert_eq!(format!("{cascade:?}"), "Cascade");
+
+    let _wildsear: crate::IdentifiedStaticAbility = ron::from_str(
+        r#"(
+            ability_id: "wildsear_cascade",
+            presentation: Fallback,
+            definition: GrantSpellKeyword(
+                filter: (card_type: Some(Enchantment), origin: Some(Hand)),
+                keyword: Cascade,
+            ),
+        )"#,
+    )
+    .expect("a permanent static ability can grant a filtered spell keyword");
+
     let emblem: super::SpellEffectKind = ron::from_str(
         r#"CreateStaticEmblem(
             emblem_id: "ral_crackling_wit_emblem",

@@ -1740,7 +1740,7 @@ impl GameEngine {
         );
         target_triggers.extend(payment.expend_triggers);
         self.snapshot_completed_cast(oid);
-        target_triggers.extend(self.collect_storm_triggers(&fact));
+        target_triggers.extend(self.collect_spell_keyword_triggers(&fact));
         target_triggers.extend(self.collect_delayed_copy_triggers(&fact));
         target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast { fact }]));
         // Both kinds of triggers are waiting when the cast completes, so they form one CR 603.3b

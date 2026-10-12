@@ -141,6 +141,8 @@ mod deck_coverage_voltaic_key;
 mod deck_coverage_wash_out;
 #[path = "../deck_coverage_waterlogged_grove.rs"]
 mod deck_coverage_waterlogged_grove;
+#[path = "../deck_coverage_wildsear.rs"]
+mod deck_coverage_wildsear;
 #[path = "../deck_coverage_wizard_class.rs"]
 mod deck_coverage_wizard_class;
 #[path = "../deck_coverage_words_of_wisdom.rs"]

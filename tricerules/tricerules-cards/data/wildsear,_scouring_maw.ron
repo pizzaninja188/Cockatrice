@@ -1,0 +1,21 @@
+// Scryfall Oracle/rulings and official Bloomburrow release notes checked 2026-10-12.
+// CR 601.2a, 601.3, 610.5, 702.85a, 702.85c, and 903.9b apply; no 702.85b action is present.
+(
+    id: "wildsear,_scouring_maw",
+    name: "Wildsear, Scouring Maw",
+    face_id: "wildsear_scouring_maw",
+    mana_cost: "{3}{R}{G}",
+    supertypes: ["Legendary"],
+    types: ["Creature", "Elemental", "Wolf"],
+    power: 6,
+    toughness: 6,
+    keywords: [Trample],
+    static_abilities: [(
+        ability_id: "wildsear_cascade",
+        presentation: OracleLines([1]),
+        definition: GrantSpellKeyword(
+            filter: (card_type: Some(Enchantment), origin: Some(Hand)),
+            keyword: Cascade,
+        ),
+    )],
+)

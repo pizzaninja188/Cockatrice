@@ -36,7 +36,7 @@ mod sacrifice_choices;
 mod trigger_choices;
 mod ward;
 
-struct DiscoverCleanupPlan {
+struct SpecialCastCleanupPlan {
     stack: ParkedStackResolution,
     library_owner: PlayerId,
     completion: SpecialCastCompletion,
@@ -47,9 +47,9 @@ struct DiscoverCleanupPlan {
 }
 
 impl GameEngine {
-    /// Finish the typed follow-up attached to a special-cast offer. Discover's exact exile cohort
-    /// returns in a stable event sequence; only the final owner-private zone view exposes its new
-    /// randomized library order.
+    /// Finish the typed follow-up attached to a special-cast offer. The exact exile cohort returns
+    /// in a stable event sequence; only the final owner-private zone view exposes any new library
+    /// order.
     pub(in crate::engine) fn finish_special_cast_completion(
         &mut self,
         completion: &SpecialCastCompletion,
@@ -57,37 +57,42 @@ impl GameEngine {
         stack: ParkedStackResolution,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
-        let SpecialCastCompletion::Discover {
-            library_owner,
-            found,
-            cohort,
-        } = completion
-        else {
-            return Ok(false);
+        let (library_owner, found, cohort, uncast_found_destination) = match completion {
+            SpecialCastCompletion::Discover {
+                library_owner,
+                found,
+                cohort,
+            } => (*library_owner, *found, cohort, Zone::Hand),
+            SpecialCastCompletion::Cascade {
+                library_owner,
+                found,
+                cohort,
+            } => (*library_owner, *found, cohort, Zone::Library),
+            SpecialCastCompletion::ResumeStack => return Ok(false),
         };
 
         let mut destinations = Vec::new();
         if !cast_committed {
-            if let Some(reference) = found
-                .filter(|reference| self.discover_reference_is_current(*library_owner, reference))
-            {
-                destinations.push((reference, Zone::Hand));
+            if let Some(reference) = found.filter(|reference| {
+                self.special_cast_reference_is_current(library_owner, reference)
+            }) {
+                destinations.push((reference, uncast_found_destination));
             }
         }
 
         for reference in cohort {
             if found.is_some_and(|found| found.object_id == reference.object_id)
-                || !self.discover_reference_is_current(*library_owner, reference)
+                || !self.special_cast_reference_is_current(library_owner, reference)
             {
                 continue;
             }
             destinations.push((*reference, Zone::Library));
         }
 
-        self.continue_discover_cleanup(
-            DiscoverCleanupPlan {
+        self.continue_special_cast_cleanup(
+            SpecialCastCleanupPlan {
                 stack,
-                library_owner: *library_owner,
+                library_owner,
                 completion: completion.clone(),
                 cast_committed,
                 destinations,
@@ -98,7 +103,7 @@ impl GameEngine {
         )
     }
 
-    fn discover_reference_is_current(
+    fn special_cast_reference_is_current(
         &self,
         library_owner: PlayerId,
         reference: &TriggerObjectRef,
@@ -119,10 +124,10 @@ impl GameEngine {
             })
     }
 
-    /// A resolution-time Discover cast temporarily reserves its offered exile incarnation on the
+    /// A resolution-time special cast temporarily reserves its offered exile incarnation on the
     /// stack while the caster pays. Keep that offer parked only when both halves of the exact cast
     /// transaction still bind it to the same owner, object, and zone generation.
-    fn discover_cast_reservation_is_current(
+    fn special_cast_cast_reservation_is_current(
         &self,
         deciding_player: PlayerId,
         library_owner: PlayerId,
@@ -157,10 +162,10 @@ impl GameEngine {
                 .is_some_and(|internal| internal.prepared.oid == reference.object_id)
     }
 
-    /// Retire a Discover choice whose library owner or exact exiled incarnation left while its
+    /// Retire a special-cast choice whose library owner or exact exiled incarnation left while its
     /// resolution was suspended. The remaining cleanup and parent tail still belong to the
     /// already-started resolving ability (CR 608.2m), even when the player who chose it leaves.
-    pub(in crate::engine) fn reconcile_departed_discover_resolution(
+    pub(in crate::engine) fn reconcile_departed_special_cast_resolution(
         &mut self,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
@@ -168,7 +173,7 @@ impl GameEngine {
             return Ok(false);
         };
         match pending.continuation.clone() {
-            ResolutionContinuation::DiscoverCommanderCleanup {
+            ResolutionContinuation::SpecialCastCommanderCleanup {
                 stack,
                 library_owner,
                 completion,
@@ -184,15 +189,15 @@ impl GameEngine {
                 let offered_reference_is_current = destinations
                     .get(commander_choice_index)
                     .is_some_and(|(reference, _)| {
-                        self.discover_reference_is_current(library_owner, reference)
+                        self.special_cast_reference_is_current(library_owner, reference)
                     });
                 if owner_live && offered_reference_is_current {
                     self.state.pending_resolution = Some(pending);
                     return Ok(false);
                 }
 
-                if self.continue_discover_cleanup(
-                    DiscoverCleanupPlan {
+                if self.continue_special_cast_cleanup(
+                    SpecialCastCleanupPlan {
                         stack: stack.clone(),
                         library_owner,
                         completion,
@@ -217,20 +222,28 @@ impl GameEngine {
             ResolutionContinuation::SpecialCast {
                 stack,
                 exiled,
-                completion: completion @ SpecialCastCompletion::Discover { library_owner, .. },
+                completion,
                 ..
             } => {
+                let library_owner = match &completion {
+                    SpecialCastCompletion::Discover { library_owner, .. }
+                    | SpecialCastCompletion::Cascade { library_owner, .. } => *library_owner,
+                    SpecialCastCompletion::ResumeStack => {
+                        self.state.pending_resolution = Some(pending);
+                        return Ok(false);
+                    }
+                };
                 let owner_live = self
                     .state
                     .player_idx(library_owner)
                     .is_some_and(|index| !self.state.players[index].has_lost);
-                let reserved_cast_is_current = self.discover_cast_reservation_is_current(
+                let reserved_cast_is_current = self.special_cast_cast_reservation_is_current(
                     pending.deciding_player,
                     library_owner,
                     &exiled,
                 );
                 if owner_live
-                    && (self.discover_reference_is_current(library_owner, &exiled)
+                    && (self.special_cast_reference_is_current(library_owner, &exiled)
                         || reserved_cast_is_current)
                 {
                     self.state.pending_resolution = Some(pending);
@@ -259,12 +272,12 @@ impl GameEngine {
         }
     }
 
-    fn continue_discover_cleanup(
+    fn continue_special_cast_cleanup(
         &mut self,
-        plan: DiscoverCleanupPlan,
+        plan: SpecialCastCleanupPlan,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
-        let DiscoverCleanupPlan {
+        let SpecialCastCleanupPlan {
             stack,
             library_owner,
             completion,
@@ -284,7 +297,7 @@ impl GameEngine {
                     .enumerate()
                     .skip(next_destination_index)
                     .find_map(|(index, (reference, _))| {
-                        (self.discover_reference_is_current(library_owner, reference)
+                        (self.special_cast_reference_is_current(library_owner, reference)
                             && player
                                 .declared_commander_object_ids
                                 .contains(&reference.object_id))
@@ -292,7 +305,7 @@ impl GameEngine {
                     })
             });
         let Some(commander_choice_index) = commander_choice_index else {
-            self.apply_discover_cleanup(
+            self.apply_special_cast_cleanup(
                 library_owner,
                 &completion,
                 cast_committed,
@@ -309,7 +322,7 @@ impl GameEngine {
             Zone::Library => "the bottom of their library",
             _ => {
                 return Err(EngineError::Illegal(
-                    "invalid Discover commander destination",
+                    "invalid special-cast commander destination",
                 ))
             }
         };
@@ -328,7 +341,7 @@ impl GameEngine {
                 prompt: prompt.clone(),
                 choice_kind: rv1::ChoiceKind::ResolutionBranch,
             },
-            continuation: ResolutionContinuation::DiscoverCommanderCleanup {
+            continuation: ResolutionContinuation::SpecialCastCommanderCleanup {
                 stack,
                 library_owner,
                 completion,
@@ -339,16 +352,16 @@ impl GameEngine {
             },
         });
         events.push(
-            self.discover_commander_choice_event()
-                .expect("Discover commander prompt was installed"),
+            self.special_cast_commander_choice_event()
+                .expect("special-cast commander prompt was installed"),
         );
         events.push(ev_log(prompt));
         Ok(true)
     }
 
-    pub(in crate::engine) fn discover_commander_choice_event(&self) -> Option<rv1::RuledEvent> {
+    pub(in crate::engine) fn special_cast_commander_choice_event(&self) -> Option<rv1::RuledEvent> {
         let pending = self.state.pending_resolution.as_ref()?;
-        let ResolutionContinuation::DiscoverCommanderCleanup {
+        let ResolutionContinuation::SpecialCastCommanderCleanup {
             destinations,
             commander_choice_index,
             ..
@@ -388,7 +401,7 @@ impl GameEngine {
         })
     }
 
-    fn apply_discover_cleanup(
+    fn apply_special_cast_cleanup(
         &mut self,
         library_owner: PlayerId,
         completion: &SpecialCastCompletion,
@@ -397,13 +410,17 @@ impl GameEngine {
         command_zone_objects: &[ObjectId],
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
-        let SpecialCastCompletion::Discover { found, .. } = completion else {
-            return Ok(());
+        let (found, effect_label) = match completion {
+            SpecialCastCompletion::Discover { found, .. } => (*found, "Discover"),
+            SpecialCastCompletion::Cascade { found, .. } => (*found, "Cascade"),
+            SpecialCastCompletion::ResumeStack => return Ok(()),
         };
         let live_destinations = destinations
             .iter()
             .copied()
-            .filter(|(reference, _)| self.discover_reference_is_current(library_owner, reference))
+            .filter(|(reference, _)| {
+                self.special_cast_reference_is_current(library_owner, reference)
+            })
             .collect::<Vec<_>>();
         if live_destinations.is_empty() {
             return Ok(());
@@ -422,7 +439,11 @@ impl GameEngine {
                 Zone::Hand => rv1::permanent_moved::Destination::Hand,
                 Zone::Library => rv1::permanent_moved::Destination::Library,
                 Zone::Command => rv1::permanent_moved::Destination::Command,
-                _ => return Err(EngineError::Illegal("invalid Discover cleanup destination")),
+                _ => {
+                    return Err(EngineError::Illegal(
+                        "invalid special-cast cleanup destination",
+                    ))
+                }
             };
             move_object_to_zone(&mut self.state, self.registry, object_id, destination, None)?;
             events.push(permanent_moved_event(
@@ -435,12 +456,17 @@ impl GameEngine {
                 bottom.push(object_id);
             } else if destination == Zone::Command {
                 events.push(ev_log(format!(
-                    "P{library_owner} moves {name} to the command zone instead of its Discover destination."
+                    "P{library_owner} moves {name} to the command zone instead of its {effect_label} destination."
                 )));
             } else if !cast_committed && found.is_some_and(|found| found.object_id == object_id) {
-                events.push(ev_log(format!(
-                    "P{library_owner} puts {name} into their hand after declining Discover."
-                )));
+                let description = match destination {
+                    Zone::Hand => format!("puts {name} into their hand after declining Discover"),
+                    Zone::Library => format!(
+                        "puts {name} on the bottom of their library after declining Cascade"
+                    ),
+                    _ => unreachable!("destination was validated above"),
+                };
+                events.push(ev_log(format!("P{library_owner} {description}.")));
             }
         }
 
@@ -457,8 +483,8 @@ impl GameEngine {
                 .library
                 .extend(bottom.iter().copied());
             events.push(ev_log(format!(
-                "P{library_owner} puts {} cards on the bottom of their library in a random order after Discover.",
-                bottom.len()
+                "P{library_owner} puts {} cards on the bottom of their library in a random order after {effect_label}.",
+                bottom.len(),
             )));
         }
 
@@ -647,9 +673,9 @@ impl GameEngine {
         }
         if matches!(
             pending.continuation,
-            ResolutionContinuation::DiscoverCommanderCleanup { .. }
+            ResolutionContinuation::SpecialCastCommanderCleanup { .. }
         ) {
-            return self.finish_discover_commander_cleanup(pending, answer, decision);
+            return self.finish_special_cast_commander_cleanup(pending, answer, decision);
         }
         if let Some(payment) = pending.continuation.mana_payment().cloned() {
             return self.finish_resolution_mana_payment(pending, payment, answer, decision, player);
@@ -795,9 +821,9 @@ impl GameEngine {
             ResolutionContinuation::ChaosWarpCommander { .. } => {
                 unreachable!("commander replacement handled before object-choice validation")
             }
-            ResolutionContinuation::DiscoverCommanderCleanup { .. } => {
+            ResolutionContinuation::SpecialCastCommanderCleanup { .. } => {
                 unreachable!(
-                    "Discover commander replacement handled before object-choice validation"
+                    "special-cast commander replacement handled before object-choice validation"
                 )
             }
             ResolutionContinuation::LibraryPartition { .. } => {
@@ -1404,13 +1430,13 @@ impl GameEngine {
         )
     }
 
-    fn finish_discover_commander_cleanup(
+    fn finish_special_cast_commander_cleanup(
         &mut self,
         pending: PendingResolution,
         answer: &rv1::SubmitResolutionChoice,
         decision: rv1::ResolutionChoiceDecision,
     ) -> Result<RuledEventBatch, EngineError> {
-        let ResolutionContinuation::DiscoverCommanderCleanup {
+        let ResolutionContinuation::SpecialCastCommanderCleanup {
             stack,
             library_owner,
             completion,
@@ -1422,13 +1448,13 @@ impl GameEngine {
         else {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "Discover commander continuation missing",
+                "special-cast commander continuation missing",
             ));
         };
         let Some((commander, _)) = destinations.get(commander_choice_index).copied() else {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "Discover commander choice no longer matches its cohort",
+                "special-cast commander choice no longer matches its cohort",
             ));
         };
         let correct_shape = decision == rv1::ResolutionChoiceDecision::SelectBranch
@@ -1449,11 +1475,11 @@ impl GameEngine {
         if !correct_shape
             || pending.deciding_player != library_owner
             || !owner_live
-            || !self.discover_reference_is_current(library_owner, &commander)
+            || !self.special_cast_reference_is_current(library_owner, &commander)
         {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "invalid or stale Discover commander replacement choice",
+                "invalid or stale special-cast commander replacement choice",
             ));
         }
 
@@ -1461,8 +1487,8 @@ impl GameEngine {
             command_zone_objects.push(commander.object_id);
         }
         let mut events = Vec::new();
-        if self.continue_discover_cleanup(
-            DiscoverCleanupPlan {
+        if self.continue_special_cast_cleanup(
+            SpecialCastCleanupPlan {
                 stack: stack.clone(),
                 library_owner,
                 completion: completion.clone(),

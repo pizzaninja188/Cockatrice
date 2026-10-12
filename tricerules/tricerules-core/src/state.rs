@@ -265,7 +265,30 @@ pub enum TriggerAbilityOrigin {
         source_zone_change: u64,
         definition: AbilityDefinitionId,
     },
+    /// A spell keyword instance belongs to the cast spell, while this nested value records which
+    /// printed or granting occurrence supplied that instance at the cast boundary.
+    SpellKeyword(SpellKeywordOrigin),
     ResolvingGrant(u64),
+}
+
+/// Provenance for one spell-keyword trigger instance captured when a spell becomes cast.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SpellKeywordOrigin {
+    Printed {
+        keyword: tricerules_card_model::SpellKeyword,
+        instance_index: u32,
+    },
+    StaticGrant {
+        keyword: tricerules_card_model::SpellKeyword,
+        source_id: ObjectId,
+        source_zone_change: u64,
+        definition: AbilityDefinitionId,
+    },
+    StaticEmblemGrant {
+        keyword: tricerules_card_model::SpellKeyword,
+        emblem_id: ObjectId,
+        effect_index: usize,
+    },
 }
 
 /// An activated ability occurrence on one recipient incarnation. Suppression and expiry do
@@ -1410,8 +1433,8 @@ pub enum ResolutionContinuation {
         stack_generation: u64,
         effect_index: u32,
     },
-    /// CR 903.9b replacement choices interrupt Discover's cleanup before any cohort movement.
-    DiscoverCommanderCleanup {
+    /// CR 903.9b replacement choices interrupt special-cast cohort cleanup before movement.
+    SpecialCastCommanderCleanup {
         stack: ParkedStackResolution,
         library_owner: PlayerId,
         completion: SpecialCastCompletion,
@@ -1557,12 +1580,17 @@ pub enum ResolutionContinuation {
     },
 }
 
-/// Follow-up owned by a temporary special-cast offer. Discover keeps the exact revealed cohort
-/// so accepting the cast bottoms the rest, while declining puts only the hit in hand first.
+/// Follow-up owned by a temporary special-cast offer. Each variant keeps the exact revealed
+/// cohort so its rule-specific cleanup can run after a cast or decline.
 #[derive(serde::Serialize, Debug, Clone)]
 pub enum SpecialCastCompletion {
     ResumeStack,
     Discover {
+        library_owner: PlayerId,
+        found: Option<TriggerObjectRef>,
+        cohort: Vec<TriggerObjectRef>,
+    },
+    Cascade {
         library_owner: PlayerId,
         found: Option<TriggerObjectRef>,
         cohort: Vec<TriggerObjectRef>,
@@ -1599,7 +1627,7 @@ impl ResolutionContinuation {
             | Self::OptionalSearch { stack, .. }
             | Self::OwnerLibraryPlacement { stack, .. }
             | Self::ChaosWarpCommander { stack, .. }
-            | Self::DiscoverCommanderCleanup { stack, .. }
+            | Self::SpecialCastCommanderCleanup { stack, .. }
             | Self::LibraryPartition { stack, .. }
             | Self::LibraryLook { stack, .. }
             | Self::Explore { stack, .. }
@@ -1657,7 +1685,7 @@ impl ResolutionContinuation {
             | Self::OptionalSearch { stack, .. }
             | Self::OwnerLibraryPlacement { stack, .. }
             | Self::ChaosWarpCommander { stack, .. }
-            | Self::DiscoverCommanderCleanup { stack, .. }
+            | Self::SpecialCastCommanderCleanup { stack, .. }
             | Self::LibraryPartition { stack, .. }
             | Self::LibraryLook { stack, .. }
             | Self::Explore { stack, .. }

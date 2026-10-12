@@ -2428,10 +2428,10 @@ impl GameEngine {
         // linked-play offer against the surviving cohort now that its original continuation is
         // visible again.
         self.reconcile_pending_linked_exile_after_departure(events)?;
-        if self.reconcile_departed_discover_resolution(events)? {
+        if self.reconcile_departed_special_cast_resolution(events)? {
             return Ok(true);
         }
-        if let Some(event) = self.discover_commander_choice_event() {
+        if let Some(event) = self.special_cast_commander_choice_event() {
             events.push(event);
         } else if let Some(pending) = self.state.pending_resolution.as_ref() {
             if let ResolutionContinuation::SpecialCast { .. } = &pending.continuation {
