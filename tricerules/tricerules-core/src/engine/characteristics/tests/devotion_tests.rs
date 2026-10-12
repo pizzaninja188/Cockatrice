@@ -209,6 +209,7 @@ fn devotion_remove_creature_retains_kindred_subtypes_and_all_creature_types() {
             face.types.push("Kindred".into());
         }
         engine.state.objects.get_mut(&god).unwrap().copiable_values = Some(CopiableValues {
+            prototyped: false,
             source_card_id: "devotion_source".into(),
             source_face_index: 0,
             display_name: face.name.clone(),
@@ -240,6 +241,7 @@ fn fixture_copy(engine: &mut GameEngine, oid: ObjectId, text: &str, id: &str) {
     let registry = CardRegistry::from_chunks_and_tokens(&[text], &[]).unwrap();
     let face = registry.get(id).unwrap().primary_face().clone();
     engine.state.objects.get_mut(&oid).unwrap().copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: id.into(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -371,6 +373,7 @@ fn copy_cost(engine: &mut GameEngine, oid: ObjectId, cost: &str, token: bool) {
         .clone();
     face.mana_cost = tricerules_card_model::ManaCost::parse(cost).unwrap();
     let values = CopiableValues {
+        prototyped: false,
         source_card_id: "devotion_support".into(),
         source_face_index: 0,
         face,

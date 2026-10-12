@@ -83,7 +83,8 @@ public:
                              int genericCostReduction,
                              RuledCastSource source,
                              ruled::v1::CastMethod castMethod,
-                             quint64 castingPermissionId = 0);
+                             quint64 castingPermissionId = 0,
+                             bool prototyped = false);
     void autoApplyRestrictedManaToPendingCost(quint32 groupId, QChar symbol, int amount);
     void finalizePendingSpellManaCost();
     bool tryRuledActivateAbilityMenu(CardItem *card, bool leftClick);

@@ -960,6 +960,7 @@ fn mind_sculpt_rejects_self_target() {
         e.state.objects.insert(
             id,
             tricerules_core::state::GameObject {
+                prototyped: false,
                 id,
                 owner: 0,
                 base_controller: 0,

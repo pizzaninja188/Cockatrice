@@ -294,6 +294,7 @@ impl GameEngine {
         let card_id = stack.item.card_id.clone();
         let face_index = stack.item.face_index;
         let controller = stack.item.controller;
+        let prototyped = stack.item.prototyped;
 
         // Validate before consuming `pending`: this choice was already taken out of
         // `state.pending_resolution`, so any early return has to put it back or the copy is lost
@@ -432,6 +433,7 @@ impl GameEngine {
                     primary_presentation: copy_presentation.primary,
                     chosen_mode_presentations: copy_presentation.chosen_modes,
                     chosen_cast_cost_presentations: copy_presentation.chosen_cast_costs,
+                    prototyped,
                 })),
             },
             ev_log(format!(

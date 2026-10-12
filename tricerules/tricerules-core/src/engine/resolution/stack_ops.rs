@@ -638,6 +638,7 @@ pub(super) fn copy_target_spell(
                 id: copy_id,
                 controller,
                 card_id: src.card_id.clone(),
+                prototyped: src.prototyped,
                 targets: src.targets.clone(),
                 ability_text: None,
                 source_permanent_id: None,
@@ -722,6 +723,7 @@ pub(super) fn copy_target_spell(
                         primary_presentation: copy_presentation.primary,
                         chosen_mode_presentations: copy_presentation.chosen_modes,
                         chosen_cast_cost_presentations: copy_presentation.chosen_cast_costs,
+                        prototyped: src.prototyped,
                     })),
                 });
                 events.push(ev_log(format!(

@@ -157,6 +157,7 @@ fn mirrorworks_pays_per_trigger_and_copies_the_exact_entering_artifact_lki() {
         .get_mut(&sol_ring)
         .unwrap()
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "mirrorworks".into(),
         source_face_index: 0,
         face: mirrorworks.primary_face().clone(),

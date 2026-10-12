@@ -277,6 +277,7 @@ fn exotic_orchard_ignores_opponent_land_activation_conditions_and_limits() {
         .get_mut(&conditional_land)
         .unwrap()
         .copiable_values = Some(crate::state::CopiableValues {
+        prototyped: false,
         source_card_id: "terrain_generator".into(),
         source_face_index: 0,
         face,
@@ -348,6 +349,7 @@ fn exotic_orchard_ignores_sorcery_speed_activation_legality() {
         .get_mut(&conditional_land)
         .unwrap()
         .copiable_values = Some(crate::state::CopiableValues {
+        prototyped: false,
         source_card_id: "terrain_generator".into(),
         source_face_index: 0,
         face,
@@ -1182,6 +1184,7 @@ fn lantern_grant_slots_survive_copy_spans_and_returning_native_definitions() {
         .get_mut(&source)
         .unwrap()
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "fetid_pools".into(),
         source_face_index: 0,
         face: values.primary_face().clone(),

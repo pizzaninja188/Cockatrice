@@ -433,6 +433,7 @@ fn capped_phase_source(engine: &mut GameEngine, mut ability: TriggeredAbilityDef
         .get_mut(&source)
         .unwrap()
         .copiable_values = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: "grizzly_bears".into(),
         source_face_index: 0,
         display_name: face.name.clone(),

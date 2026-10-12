@@ -102,6 +102,7 @@ fn set_test_creature_power(engine: &mut GameEngine, object: u32, power: i32) {
     face.power = Some(0);
     face.toughness = Some(5);
     permanent.copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "grizzly_bears".into(),
         source_face_index: 0,
         face,
@@ -140,6 +141,7 @@ fn set_test_creature_power_undefined(engine: &mut GameEngine, object: u32) {
     face.power = None;
     face.toughness = Some(5);
     permanent.copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "grizzly_bears".into(),
         source_face_index: 0,
         face,

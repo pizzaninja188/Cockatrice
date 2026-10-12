@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "ff1dd9c1-d1e5-49dd-b8b2-df3e4a41d3e5",
+  "spans": [
+    {
+      "face_id": "skitterbeam_battalion",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/prototype"]
+    },
+    {
+      "face_id": "skitterbeam_battalion",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/keywords"]
+    },
+    {
+      "face_id": "skitterbeam_battalion",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_skitterbeam_battalion::skitterbeam_prototype_keeps_selected_characteristics_on_both_token_copies",
+      "covers": "normal and Prototype offers use their printed costs; a normal cast creates two colorless 4/4 copies, while a Prototype cast creates two red 2/2 copies with Prototype mana value and identity"
+    },
+    {
+      "test": "scenario deck_coverage_skitterbeam_battalion::skitterbeam_entering_without_being_cast_does_not_create_tokens",
+      "covers": "a noncast battlefield entry does not satisfy the intervening-if cast condition or create tokens"
+    },
+    {
+      "test": "scenario deck_coverage_skitterbeam_battalion::copied_prototype_creature_spell_resolves_as_a_prototyped_token_without_cast_triggers",
+      "covers": "a copy of the prototyped spell resolves as a red 2/2 token, retains Prototype mana value, and does not repeat the cast-gated ETB; the original cast still creates two copies"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

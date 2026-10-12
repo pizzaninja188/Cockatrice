@@ -177,6 +177,7 @@ fn return_trigger_rejects_tokens_and_stale_graveyard_generations() {
         .get_mut(&token)
         .unwrap()
         .token_origin = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "enduring_curiosity".into(),
         source_face_index: 0,
         face: definition.primary_face().clone(),

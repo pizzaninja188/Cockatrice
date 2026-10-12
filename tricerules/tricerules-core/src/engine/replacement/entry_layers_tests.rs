@@ -1,6 +1,48 @@
 use super::*;
 
 #[test]
+fn prototyped_entry_uses_selected_color_for_battlefield_counter_replacements() {
+    let mut engine = engine();
+    let counter_source = object(&mut engine, "mind_stone", Zone::Battlefield, 0);
+    copy_face(
+        &mut engine,
+        counter_source,
+        r#"(
+            id: "red_creature_entry_counter_fixture",
+            name: "Red Creature Entry Counter Fixture",
+            face_id: "red_creature_entry_counter_fixture",
+            types: ["Artifact"],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                definition: EntersWithCounters(
+                    affected: Creatures((controller: Some(YouControl), color: Some(Red))),
+                    counter: PlusOnePlusOne,
+                    amount: 1,
+                ))],
+        )"#,
+        "red_creature_entry_counter_fixture",
+    );
+    engine.emit_static_abilities_on_enter(counter_source);
+
+    let prototyped = object(&mut engine, "skitterbeam_battalion", Zone::Stack, 0);
+    engine
+        .state
+        .objects
+        .get_mut(&prototyped)
+        .unwrap()
+        .prototyped = true;
+    let entry = event(&engine, prototyped);
+    let preview = engine
+        .battlefield_entry_characteristics_through_layer_5(&entry)
+        .expect("Prototype entrant characteristics");
+    assert_eq!(preview.colors, [Color::Red]);
+    assert_eq!(preview.mana_value, 5);
+    assert!(
+        !engine.battlefield_entry_candidates(&entry).is_empty(),
+        "a red Prototype entrant matches a red-creature counter replacement"
+    );
+}
+
+#[test]
 fn devotion_actual_nylea_and_supporter_simultaneous_entry_use_complete_committed_cohort() {
     let mut engine = engine();
     object(&mut engine, "aggressive_mammoth", Zone::Battlefield, 0);
@@ -1502,6 +1544,7 @@ fn entry_early_layers_selected_face_and_copied_own_static_are_used() {
         .primary_face()
         .clone();
     engine.state.objects.get_mut(&oid).unwrap().copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "own_entry_land".into(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -1563,6 +1606,7 @@ fn entry_early_layers_provisional_entrant_does_not_satisfy_battlefield_count() {
         .primary_face()
         .clone();
     engine.state.objects.get_mut(&oid).unwrap().copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "count_entry_land".into(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -1614,6 +1658,7 @@ fn copy_face(engine: &mut GameEngine, oid: ObjectId, source: &str, card: &str) {
         .primary_face()
         .clone();
     engine.state.objects.get_mut(&oid).unwrap().copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: card.into(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -1740,6 +1785,7 @@ fn entry_early_layers_room_door_statics_and_locked_copy_match_commitment() {
     let copy = object(&mut engine, "first_room_second_room", Zone::Stack, 0);
     let card = engine.registry.get("first_room_second_room").unwrap();
     engine.state.objects.get_mut(&copy).unwrap().copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: card.id.clone(),
         source_face_index: 0,
         display_name: card.name.clone(),

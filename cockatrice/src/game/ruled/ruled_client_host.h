@@ -44,6 +44,8 @@ public:
         QString color;
         QStringList keywords;
         QStringList abilityTexts;
+        QString manaCost;
+        quint32 manaValue = 0;
     };
 
     virtual ~RuledClientHost() = default;

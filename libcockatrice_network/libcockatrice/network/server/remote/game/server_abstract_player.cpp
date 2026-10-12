@@ -161,6 +161,10 @@ makeCreateTokenEvent(Server_CardZone *zone, Server_Card *card, int xCoord, int y
         for (const QString &text : card->getTokenAbilityTexts()) {
             event.add_ability_texts(text.toStdString());
         }
+        if (card->getDestroyOnZoneChange()) {
+            event.set_mana_cost(card->getTokenBaseManaCost().toStdString());
+            event.set_mana_value(card->getTokenBaseManaValue());
+        }
     }
 
     event.set_color(card->getColor().toStdString());

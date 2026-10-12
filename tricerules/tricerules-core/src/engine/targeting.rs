@@ -1081,11 +1081,21 @@ pub(super) fn stack_spell_target_legal(
             .iter()
             .any(|branch| stack_spell_target_legal(state, registry, tid, branch));
     }
-    let Some(face) = registry
+    let Some(printed_face) = registry
         .get(&item.card_id)
         .and_then(|d| d.face(item.face_index))
     else {
         return false;
+    };
+    let prototype_face;
+    let face = if item.prototyped {
+        let Some(selected) = printed_face.prototyped_face() else {
+            return false;
+        };
+        prototype_face = selected;
+        &prototype_face
+    } else {
+        printed_face
     };
     let current_characteristics = super::characteristics::spell_cast_characteristics(
         state,
@@ -2719,6 +2729,7 @@ mod tests {
         chosen_x: u32,
     ) -> StackItem {
         StackItem {
+            prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id,
             controller: 1,
@@ -2763,6 +2774,7 @@ mod tests {
                 r#"(id: "mv_four", name: "MV Four", face_id: "mv_four", mana_cost: "{3}{U}", types: ["Instant"])"#,
                 r#"(id: "x_spell", name: "X Spell", face_id: "x_spell", mana_cost: "{X}{R}", types: ["Sorcery"])"#,
                 r#"(id: "split_spell", name: "Small // Large", layout: Split, faces: [(name: "Small", face_id: "small", mana_cost: "{U}", types: ["Instant"]), (name: "Large", face_id: "large", mana_cost: "{4}{U}", types: ["Instant"])])"#,
+                include_str!("../../../tricerules-cards/data/skitterbeam_battalion.ron"),
             ],
             &[],
         )
@@ -2875,6 +2887,32 @@ mod tests {
             registry,
             104,
             &at_most_two
+        ));
+
+        let mut prototyped_spell = issue_205_stack_item(109, "skitterbeam_battalion", 0, 0);
+        prototyped_spell.prototyped = true;
+        engine.state.stack.push(prototyped_spell);
+        let prototype_mana_value = StackSpellFilter {
+            min_mana_value: Some(5),
+            max_mana_value: Some(5),
+            ..Default::default()
+        };
+        assert!(stack_spell_target_legal(
+            &engine.state,
+            registry,
+            109,
+            &prototype_mana_value
+        ));
+        let printed_mana_value = StackSpellFilter {
+            min_mana_value: Some(9),
+            max_mana_value: Some(9),
+            ..Default::default()
+        };
+        assert!(!stack_spell_target_legal(
+            &engine.state,
+            registry,
+            109,
+            &printed_mana_value
         ));
     }
 

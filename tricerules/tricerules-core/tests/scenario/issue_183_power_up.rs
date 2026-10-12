@@ -72,6 +72,7 @@ fn power_up_reduces_fixed_symbols_then_overflows_to_generic() {
         .get_mut(&source)
         .expect("source")
         .token_origin = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "rough_rhino_cavalry".into(),
         source_face_index: 0,
         face,
@@ -340,6 +341,7 @@ fn copied_power_up_abilities_keep_independent_once_per_object_limits() {
     second.ability_id = AbilityId::new("activated_02").unwrap();
     face.activated_abilities.push(second);
     engine.state.objects.get_mut(&source).unwrap().token_origin = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "rough_rhino_cavalry".into(),
         source_face_index: 0,
         face,

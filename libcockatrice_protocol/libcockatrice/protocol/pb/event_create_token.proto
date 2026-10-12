@@ -22,4 +22,7 @@ message Event_CreateToken {
     // Ruled engine tokens only: Oracle-style text for printed non-keyword abilities. Display
     // identity only; clients must not infer rules behavior from it.
     repeated string ability_texts = 13;
+    // Ruled engine tokens only: copiable mana cost/value for exact Prototype-copy display identity.
+    optional string mana_cost = 14;
+    optional uint32 mana_value = 15;
 }

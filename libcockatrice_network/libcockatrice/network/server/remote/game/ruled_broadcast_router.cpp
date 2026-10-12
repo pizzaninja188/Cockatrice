@@ -737,6 +737,25 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
         }
     }
 
+    // The Prototype choice is public for a face-up permanent. A face-down permanent's current
+    // characteristics are anonymous, so do not expose its retained Prototype designation while
+    // the face-down replacement is active.
+    for (int ei = 0; ei < filtered.events_size(); ++ei) {
+        if (!filtered.events(ei).has_zone_view()) {
+            continue;
+        }
+        auto *view = filtered.mutable_events(ei)->mutable_zone_view();
+        for (int playerIndex = 0; playerIndex < view->per_player_size(); ++playerIndex) {
+            auto *playerView = view->mutable_per_player(playerIndex);
+            for (int objectIndex = 0; objectIndex < playerView->battlefield_objects_size(); ++objectIndex) {
+                auto *object = playerView->mutable_battlefield_objects(objectIndex);
+                if (object->face_down()) {
+                    object->set_prototyped(false);
+                }
+            }
+        }
+    }
+
     // Capture the explicitly authorized per-player values, clear every PER_PLAYER field
     // recursively by reflection (future classified fields therefore fail closed), then restore
     // only these reviewed cases.

@@ -126,6 +126,9 @@ bool isCombatPhase(RuledCombatPhase phase)
 QString resolvedStackAnnotation(const ruled::v1::StackPushed &event, const RuledPresentationResolver &resolver)
 {
     QStringList parts;
+    if (event.prototyped()) {
+        parts.append(QObject::tr("Prototype"));
+    }
     // Physical spells already render their card face. Their primary presentation describes that
     // spell for prompts and nested presentation paths; it is not an additional stack annotation.
     // Card-less stack objects are activated or triggered abilities, whose primary presentation is
@@ -506,14 +509,15 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         if (method != ruled::v1::CAST_METHOD_NORMAL && method != ruled::v1::CAST_METHOD_WARP &&
             method != ruled::v1::CAST_METHOD_SNEAK)
             continue;
-        const auto castKey = RuledClientState::handCastActionKey(handIndex, faceIndex, method);
+        const bool prototyped = action.prototyped();
+        const auto castKey = RuledClientState::handCastActionKey(handIndex, faceIndex, method, prototyped);
         RuledHandActionSet &set = parsed[action.kind()];
         set.handIndices.insert(handIndex);
         const QString cardName = QString::fromStdString(action.card_name());
         set.indicesByCardName.insert(cardName, handIndex);
         set.faceOptionsByIndex[handIndex].append({faceIndex, cardName, QString::fromStdString(action.cost()),
                                                   static_cast<int>(action.generic_cost_reduction()), method,
-                                                  action.has_convoke(), 0, 0, QString{}});
+                                                  action.has_convoke(), 0, 0, QString{}, prototyped});
         if (action.has_cost_choices()) {
             set.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices(), resolver));
         }
@@ -772,6 +776,7 @@ void RuledEventDispatcher::applyPhaseChanged(const ruled::v1::PhaseChanged &pc, 
     // logSetActivePhase); do not duplicate here.
     // Reaching a new phase guarantees the previous stack emptied.
     state->stackOidOrder.clear();
+    state->prototypedStackOids.clear();
     state->stackTargetsByStackOid.clear();
     state->stackTargetKindByStackAndTargetOid.clear();
     ctx.stackTrackingDirty = true;
@@ -827,6 +832,11 @@ void RuledEventDispatcher::applyPhaseChanged(const ruled::v1::PhaseChanged &pc, 
 
 void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, BatchContext &ctx)
 {
+    if (sp.prototyped()) {
+        state->prototypedStackOids.insert(sp.object_id());
+    } else {
+        state->prototypedStackOids.remove(sp.object_id());
+    }
     if (state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast) &&
         state->pendingChoice->candidateOids.contains(sp.object_id()))
         state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast);
@@ -912,6 +922,8 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
                 identity.name = QString::fromStdString(published.name());
                 identity.basePt = QString::fromStdString(published.pt());
                 identity.color = QString::fromStdString(published.color());
+                identity.manaCost = QString::fromStdString(published.mana_cost());
+                identity.manaValue = published.mana_value();
                 for (const auto &keyword : published.keywords()) {
                     identity.keywords.append(QString::fromStdString(keyword));
                 }
@@ -986,6 +998,7 @@ void RuledEventDispatcher::retireStackObject(quint32 objectId, BatchContext &ctx
         state->stackTargetKindByStackAndTargetOid.remove(RuledClientState::stackTargetKey(rid, t));
     }
     state->stackAnnotationByOid.remove(rid);
+    state->prototypedStackOids.remove(rid);
     state->stackSourceOidByStackOid.remove(rid);
     host->removeSyntheticStackCard(rid);
     ctx.stackTrackingDirty = true;
@@ -1907,6 +1920,7 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
     ctx.preparationCopies.clear();
     state->reveals.applyPublicHands(view);
     if (!view.battlefields_unchanged()) {
+        state->prototypedBattlefieldOids.clear();
         state->engineOidMarkedDamage.clear();
         state->engineOidBattlefieldPower.clear();
         state->engineOidBattlefieldToughness.clear();
@@ -1941,6 +1955,9 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
             }
             if (oid == 0) {
                 continue;
+            }
+            if (!battlefieldObject.face_down() && battlefieldObject.prototyped()) {
+                state->prototypedBattlefieldOids.insert(oid);
             }
             state->battlefieldGenerationByOid.insert(oid, battlefieldObject.zone_change_generation());
             if (battlefieldObject.has_preparation()) {
@@ -2189,8 +2206,9 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
                                            ? RuledCastSource::Exile
                                            : RuledCastSource::Graveyard;
         const quint64 castingPermissionId = action.has_casting_permission_id() ? action.casting_permission_id() : 0;
-        const auto castKey =
-            RuledClientState::zoneCastActionKey(objectId, faceIndex, source, castMethod, castingPermissionId);
+        const bool prototyped = action.prototyped();
+        const auto castKey = RuledClientState::zoneCastActionKey(objectId, faceIndex, source, castMethod,
+                                                                 castingPermissionId, prototyped);
         state->zoneCastActions.handIndices.insert(objectId);
         const QString cardName = QString::fromStdString(action.card_name());
         QString displayName = cardName;
@@ -2204,7 +2222,7 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
             {faceIndex, displayName, QString::fromStdString(action.cost()),
              static_cast<int>(action.generic_cost_reduction()), castMethod, action.has_convoke(),
              action.zone_change_generation(), castingPermissionId,
-             permissionGroups.value(castingPermissionId).sourceLabel});
+             permissionGroups.value(castingPermissionId).sourceLabel, prototyped});
         state->zoneCastSourceByOid.insert(objectId, source);
         if (source == RuledCastSource::Exile && action.has_preparation_source()) {
             const auto &preparedSource = action.preparation_source();

@@ -124,11 +124,21 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                                       : ruledOid;
     }
 
-    if (!pt.isEmpty()) {
+    const bool inTableZone = zone && zone->getName() == QLatin1String(ZoneNames::TABLE);
+    QString displayedPt = pt;
+    const bool prototyped = ruledHandler && ruledOid != 0 && ruledHandler->isPrototyped(ruledOid);
+    if (prototyped && inTableZone) {
+        const QString currentPt = ruledHandler->battlefieldPowerToughness(ruledOid);
+        if (!currentPt.isEmpty()) {
+            displayedPt = currentPt;
+        }
+    }
+
+    if (!displayedPt.isEmpty()) {
         painter->save();
         transformPainter(painter, translatedSize, tapAngle);
 
-        if (!getFaceDown() && pt == exactCard.getInfo().getPowTough()) {
+        if (!getFaceDown() && displayedPt == exactCard.getInfo().getPowTough()) {
             painter->setPen(Qt::white);
         } else {
             painter->setPen(QColor(255, 150, 0)); // dark orange
@@ -139,7 +149,7 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
 
         painter->drawText(QRectF(4 * scaleFactor, 4 * scaleFactor, translatedSize.width() - 10 * scaleFactor,
                                  translatedSize.height() - 8 * scaleFactor),
-                          Qt::AlignRight | Qt::AlignBottom, pt);
+                          Qt::AlignRight | Qt::AlignBottom, displayedPt);
         painter->restore();
     }
 
@@ -163,7 +173,6 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
     // show the "summoning sick" tag if the creature has Haste. Only show it for
     // battlefield cards (TABLE zone); a lingering spell/ability card in the stack zone
     // may share an OID with a summoning-sick permanent but must never show the label there.
-    const bool inTableZone = zone && zone->getName() == QLatin1String(ZoneNames::TABLE);
     if (ruledHandler && ruledOid != 0 && inTableZone) {
         const int chooser = ruledHandler->acceptedSacrificeChooserForEngineOid(ruledOid);
         if (chooser >= 0) {
@@ -172,6 +181,12 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             }
             renderedAnnotation += tr("Chosen for sacrifice by P%1").arg(chooser);
         }
+    }
+    if (prototyped && inTableZone && !renderedAnnotation.contains(QStringLiteral("Prototype"), Qt::CaseInsensitive)) {
+        if (!renderedAnnotation.isEmpty()) {
+            renderedAnnotation += QLatin1Char('\n');
+        }
+        renderedAnnotation += tr("Prototype");
     }
     if (ruledHandler && ruledOid != 0 && inTableZone && ruledHandler->isEngineOidSummoningSick(ruledOid) &&
         !ruledHandler->isEngineOidHaste(ruledOid)) {
@@ -512,13 +527,16 @@ void retargetRuledTokenCardRef(const CardItem *card,
                                const QString &pt,
                                const QString &color,
                                const QStringList &keywords,
-                               const QStringList &abilityTexts)
+                               const QStringList &abilityTexts,
+                               const QString &manaCost,
+                               quint32 manaValue)
 {
     if (ref.name.isEmpty() || !RuledActions::isRuledGameForCard(card)) {
         return;
     }
     CardRef resolved =
-        RuledTokenDisplay::resolve(CardDatabaseManager::query(), ref.name, pt, color, keywords, abilityTexts);
+        RuledTokenDisplay::resolve(CardDatabaseManager::query(), ref.name, pt, color, keywords, abilityTexts,
+                                   manaCost, manaValue);
     if (!resolved.name.isEmpty()) {
         ref = resolved;
     }
@@ -557,7 +575,9 @@ void CardItem::processCardInfo(const ServerInfo_Card &_info)
         const QString lookupPt = _info.has_token_base_pt() && !_info.token_base_pt().empty()
                                      ? QString::fromStdString(_info.token_base_pt())
                                      : QString::fromStdString(_info.pt());
-        retargetRuledTokenCardRef(this, ref, lookupPt, QString::fromStdString(_info.color()), keywords, abilityTexts);
+        retargetRuledTokenCardRef(this, ref, lookupPt, QString::fromStdString(_info.color()), keywords, abilityTexts,
+                                  QString::fromStdString(_info.token_base_mana_cost()),
+                                  _info.token_base_mana_value());
     }
     setCardRef(ref);
     setAttacking(_info.attacking());

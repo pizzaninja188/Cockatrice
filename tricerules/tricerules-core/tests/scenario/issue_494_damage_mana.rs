@@ -59,6 +59,7 @@ fn begin_spell_payment(engine: &mut GameEngine, player: i32, card_id: &str) -> u
         face_index: cast.face_index,
         selected_modes: cast.selected_modes,
         source: cast.source,
+        prototyped: cast.prototyped,
         cost_selections: cast.cost_selections,
         cast_cost_group_selections: cast.cast_cost_group_selections,
         cast_method: cast.cast_method,

@@ -103,6 +103,9 @@ static QString ruledCastOptionLabel(const RuledFaceOption &face)
     } else {
         label = QObject::tr("Cast %1").arg(face.faceName);
     }
+    if (face.prototyped) {
+        label = QObject::tr("Prototype %1").arg(label);
+    }
     if (!face.permissionSourceLabel.isEmpty()) {
         label += QObject::tr(" — %1").arg(face.permissionSourceLabel);
     }
@@ -125,7 +128,7 @@ RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFace
         if (manaAbilitiesOnly)
             break;
         options.append({RuledCardActionMenuOption::Kind::CastFace, face.faceIndex, ruledCastOptionLabel(face), true, 0,
-                        face.castMethod, face.castingPermissionId});
+                        face.castMethod, face.prototyped, face.castingPermissionId});
     }
     for (const int abilityIndex : abilityIndices) {
         const auto ability = state.activatedAbilityForOid(sourceOid, abilityIndex);
@@ -294,7 +297,8 @@ bool RuledPendingCast::matchesSpecialCastOffer(const PendingRuledSpellCast &spel
            state.isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast,
                                           static_cast<quint32>(spell.handIndex)) &&
            state.isZoneCastActionLegal(static_cast<quint32>(spell.handIndex), spell.faceIndex, spell.source,
-                                       spell.castMethod, spell.castingPermissionId, spell.sourceZoneChangeGeneration);
+                                       spell.castMethod, spell.castingPermissionId, spell.sourceZoneChangeGeneration,
+                                       spell.prototyped);
 }
 
 bool RuledPendingCast::resolutionChoiceBlocksSpell(const RuledClientState &state) const

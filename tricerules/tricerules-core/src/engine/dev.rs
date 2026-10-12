@@ -501,6 +501,7 @@ fn dev_entry_item(controller: PlayerId, object_id: ObjectId, card_id: &str) -> S
         id: object_id,
         controller,
         card_id: card_id.to_string(),
+        prototyped: false,
         targets: Vec::new(),
         ability_text: Some("Dev battlefield placement".to_string()),
         source_permanent_id: None,

@@ -249,6 +249,7 @@ mod tests {
         engine.state.objects.get_mut(&id).unwrap().face_down = false;
         let bear = engine.registry.get("grizzly_bears").unwrap();
         engine.state.objects.get_mut(&id).unwrap().copiable_values = Some(CopiableValues {
+            prototyped: false,
             source_card_id: bear.id.clone(),
             source_face_index: 0,
             face: bear.primary_face().clone(),

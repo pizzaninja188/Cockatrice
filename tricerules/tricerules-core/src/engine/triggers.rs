@@ -3226,6 +3226,7 @@ impl GameEngine {
                 id: virtual_id,
                 controller,
                 card_id,
+                prototyped: false,
                 targets: vec![],
                 ability_text: Some(ability_text.clone()),
                 source_permanent_id: Some(source_id),
@@ -3284,6 +3285,7 @@ impl GameEngine {
                     primary_presentation: presentation.clone(),
                     chosen_mode_presentations: vec![],
                     chosen_cast_cost_presentations: vec![],
+                    prototyped: false,
                 })),
             });
             events.push(ev_log_ability(
@@ -3682,6 +3684,7 @@ mod tests {
         let object = engine.state.objects.get_mut(&source).expect("source");
         object.card_id = "burn,_burn,_tree_and_fern".into();
         object.copiable_values = Some(CopiableValues {
+            prototyped: false,
             source_card_id: "burn,_burn,_tree_and_fern".into(),
             source_face_index: 0,
             display_name: "Burn, Burn, Tree and Fern".into(),
@@ -4720,6 +4723,7 @@ mod tests {
         is_copy: bool,
     ) -> StackItem {
         StackItem {
+            prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id,
             controller,

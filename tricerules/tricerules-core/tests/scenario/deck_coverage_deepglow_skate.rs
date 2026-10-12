@@ -276,6 +276,7 @@ fn deepglow_skate_uses_effect_placement_replacement_and_prohibition_for_each_kin
         .get_mut(&replacement)
         .unwrap()
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "deepglow_replacement_fixture".into(),
         source_face_index: 0,
         face: registry

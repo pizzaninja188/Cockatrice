@@ -183,13 +183,19 @@ impl GameEngine {
         let values = CopiableValues {
             source_card_id: item.card_id.clone(),
             source_face_index: item.face_index,
-            face: face.clone(),
+            face: if item.prototyped {
+                face.prototyped_face().unwrap_or_else(|| face.clone())
+            } else {
+                face.clone()
+            },
+            prototyped: item.prototyped,
             room_faces: (definition.layout == Layout::Room).then(|| definition.faces.clone()),
             display_name: face.name.clone(),
         };
         let mut object =
             new_object_from_card(item.id, item.controller, &item.card_id, Zone::Stack, face);
         object.face_up_index = item.face_index;
+        object.prototyped = item.prototyped;
         object.token_origin = Some(values);
         // CR 707.10g: a copy of a double-faced permanent spell also has both faces.
         object.token_faces = copying::double_faced_values(definition);
@@ -385,6 +391,8 @@ pub(super) fn token_identity(values: &CopiableValues) -> rv1::TokenIdentity {
                 )
             }))
             .collect(),
+        mana_cost: face.mana_cost.to_string(),
+        mana_value: face.mana_cost.mana_value(),
     }
 }
 
@@ -2742,6 +2750,7 @@ impl GameEngine {
             id: object_id,
             controller,
             card_id,
+            prototyped: false,
             targets: Vec::new(),
             ability_text: Some("paired one-shot return".into()),
             source_permanent_id: None,
@@ -2859,6 +2868,7 @@ impl GameEngine {
                 source_card_id: token_id.to_string(),
                 source_face_index: 0,
                 face: def.primary_face().clone(),
+                prototyped: false,
                 display_name: def.name.clone(),
                 room_faces: None,
             }
@@ -2890,6 +2900,7 @@ impl GameEngine {
                         base_controller: pid,
                         controller: pid,
                         card_id: token_id.to_string(),
+                        prototyped: values.prototyped,
                         token_origin: Some(values.clone()),
                         token_faces: copy.and_then(|snapshot| snapshot.faces.clone()),
                         copiable_values: None,
@@ -3627,6 +3638,9 @@ pub(super) fn commit_zone_move(
     }
     if let Some(o) = state.objects.get_mut(&oid) {
         o.zone = z;
+        if z != Zone::Battlefield {
+            o.prototyped = false;
+        }
         // CR 110.2 / 400.7: control is a battlefield-only property, and a zone change makes this a
         // new object — so entering sets the new controller and leaving resets it to the owner.
         let controller = if z == Zone::Battlefield {
@@ -3985,6 +3999,7 @@ mod anthem_scope_tests {
         engine.state.objects.insert(
             id,
             GameObject {
+                prototyped: false,
                 id,
                 owner: controller,
                 base_controller: controller,
@@ -4091,6 +4106,7 @@ mod attached_subject_tests {
         engine.state.objects.insert(
             id,
             GameObject {
+                prototyped: false,
                 id,
                 owner: controller,
                 base_controller: controller,
@@ -4125,6 +4141,7 @@ mod attached_subject_tests {
 
     fn triggered_item(source: ObjectId, generation: u64) -> StackItem {
         StackItem {
+            prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: source + 10_000,
             controller: 0,
@@ -11100,6 +11117,7 @@ mod source_keyword_tests {
 
     fn ability_item(source: ObjectId, generation: u64) -> StackItem {
         StackItem {
+            prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: source + 1,
             controller: 0,
@@ -11137,6 +11155,7 @@ mod source_keyword_tests {
 
     fn deathtouch_spell_item(chosen_x: u32) -> StackItem {
         StackItem {
+            prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: u32::MAX,
             controller: 0,
@@ -11178,6 +11197,7 @@ mod source_keyword_tests {
         engine.state.objects.insert(
             id,
             GameObject {
+                prototyped: false,
                 id,
                 owner: controller,
                 base_controller: controller,
@@ -11224,6 +11244,7 @@ mod source_keyword_tests {
         engine.state.objects.insert(
             source,
             GameObject {
+                prototyped: false,
                 id: source,
                 owner: 0,
                 base_controller: 0,

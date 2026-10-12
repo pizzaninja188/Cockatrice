@@ -236,8 +236,9 @@ fn select_source<'a>(
 
 fn source_layout(layout: &str) -> Option<&'static str> {
     match layout {
-        // Scryfall's Class label is a rules-text treatment on a single physical face.
-        "normal" | "class" => Some("Normal"),
+        // Class and Prototype are rules treatments on one physical face. Prototype's
+        // alternative mana cost/P/T live in CardFace.prototype, not in the layout enum.
+        "normal" | "class" | "prototype" => Some("Normal"),
         "split" => Some("Split"),
         "room" => Some("Room"),
         "modal_dfc" => Some("ModalDfc"),
@@ -958,6 +959,12 @@ fn run_with_confirmation(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn prototype_source_layout_uses_the_single_face_definition_model() {
+        assert_eq!(source_layout("prototype"), Some("Normal"));
+        assert_eq!(source_layout("transform"), Some("Transform"));
+    }
 
     #[test]
     fn heterogeneous_token_batch_requires_every_review_dependency() {

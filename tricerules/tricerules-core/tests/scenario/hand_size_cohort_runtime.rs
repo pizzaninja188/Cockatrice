@@ -46,6 +46,7 @@ fn activated_double_x_cost_pays_twice_and_preserves_chosen_x_for_draw() {
         .get_mut(&source)
         .unwrap()
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "codex_shredder".into(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -125,6 +126,7 @@ fn conditional_upkeep_win_uses_the_trigger_controller() {
         .get_mut(&source)
         .unwrap()
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "ebony_owl_netsuke".into(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -183,6 +185,7 @@ fn source_total_counter_condition_counts_mixed_kinds_at_resolution() {
     }];
     let object = engine.state.objects.get_mut(&source).unwrap();
     object.copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "ebony_owl_netsuke".into(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -237,6 +240,7 @@ fn source_total_counter_condition_uses_departed_generations_last_known_counters(
     }];
     let object = engine.state.objects.get_mut(&source).unwrap();
     object.copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "ebony_owl_netsuke".into(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -330,6 +334,7 @@ fn each_opponent_mills_its_own_hand_count_in_three_player_game() {
         .get_mut(&source)
         .unwrap()
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "codex_shredder".into(),
         source_face_index: 0,
         display_name: face.name.clone(),

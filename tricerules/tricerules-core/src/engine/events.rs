@@ -684,6 +684,7 @@ impl GameEngine {
                             characteristics.as_ref(),
                             face.as_deref(),
                         );
+                        let copiable_values = self.copiable_values_for(oid);
                         let activated_abilities = self
                             .effective_activated_abilities(oid)
                             .into_iter()
@@ -840,10 +841,12 @@ impl GameEngine {
                             preparation: self.preparation_view(oid),
                             token_identity: object
                                 .is_token()
-                                .then(|| self.copiable_values_for(oid))
+                                .then_some(copiable_values.as_ref())
                                 .flatten()
-                                .as_ref()
                                 .map(super::resolution::token_identity),
+                            prototyped: copiable_values
+                                .as_ref()
+                                .map_or(object.prototyped, |values| values.prototyped),
                         }
                     })
                     .collect()

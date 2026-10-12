@@ -434,6 +434,7 @@ fn anger_clone_loses_copied_static_but_physical_anger_recovers_its_own_after_dea
         .get_mut(&source)
         .unwrap()
         .copiable_values = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: "grizzly_bears".into(),
         source_face_index: 0,
         display_name: face.name.clone(),

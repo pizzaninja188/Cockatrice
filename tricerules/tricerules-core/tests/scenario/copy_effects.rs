@@ -16,6 +16,7 @@ fn copy_snapshot_does_not_require_a_registry_definition() {
     let object = engine.state.objects.get_mut(&source).unwrap();
     object.card_id = "runtime_token_without_registry_definition".into();
     object.copiable_values = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: String::new(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -255,6 +256,7 @@ fn token_copy_inline_ability_preserves_explicit_target_groups() {
     let object = engine.state.objects.get_mut(&source).unwrap();
     object.card_id = "inline_pinger".into();
     object.token_origin = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: String::new(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -338,6 +340,7 @@ fn populate_resumes_effect_tail_after_a_copied_entry_choice() {
         .clone();
     engine.state.objects.get_mut(&source).unwrap().token_origin =
         Some(tricerules_core::state::CopiableValues {
+            prototyped: false,
             source_card_id: "prodigal_sorcerer".into(),
             source_face_index: 0,
             display_name: face.name.clone(),
@@ -407,6 +410,7 @@ fn issue_164_token_copy_has_its_own_cap_and_accepted_commands_replay_identically
             .get_mut(&source)
             .unwrap()
             .copiable_values = Some(tricerules_core::state::CopiableValues {
+            prototyped: false,
             source_card_id: "soul_warden".into(),
             source_face_index: 0,
             display_name: face.name.clone(),
@@ -487,6 +491,7 @@ fn token_copy_inline_ability_revalidates_targets_after_source_disappears() {
     let object = engine.state.objects.get_mut(&source).unwrap();
     object.card_id = "inline_pinger".into();
     object.token_origin = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: String::new(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -539,6 +544,7 @@ fn token_copy_inline_display_and_live_ability_survive_registry_absence() {
     let object = engine.state.objects.get_mut(&source).unwrap();
     object.card_id = "inline_pinger".into();
     object.token_origin = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: String::new(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -696,6 +702,7 @@ fn token_copy_of_an_existing_copy_freezes_values_and_keeps_token_status() {
         .get_mut(&source)
         .unwrap()
         .copiable_values = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: "grizzly_bears".into(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -1407,6 +1414,7 @@ fn issue_237_double_faced_entry_choice_freezes_both_faces_before_suspending() {
         .get_mut(&source)
         .unwrap()
         .copiable_values = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: "reckless_waif_merciless_predator".into(),
         source_face_index: 0,
         display_name: face.name.clone(),

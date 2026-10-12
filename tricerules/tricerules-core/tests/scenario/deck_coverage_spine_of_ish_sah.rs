@@ -393,6 +393,7 @@ fn spine_token_copy_cannot_return_but_real_sculpting_steel_copy_returns_its_unde
         .get_mut(&token)
         .unwrap()
         .token_origin = Some(CopiableValues {
+        prototyped: false,
         source_card_id: SPINE.into(),
         source_face_index: 0,
         face: tricerules_cards::registry::global()

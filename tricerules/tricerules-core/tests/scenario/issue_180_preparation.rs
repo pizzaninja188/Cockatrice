@@ -79,6 +79,7 @@ fn preparation_logged_instructions_reprepare_once_and_invalidate_old_copy() {
         .get_mut(&permanent)
         .unwrap()
         .copiable_values = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: definition.id.clone(),
         source_face_index: 0,
         display_name: definition.name.clone(),

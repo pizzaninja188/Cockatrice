@@ -138,6 +138,7 @@ fn token_with_owed_return(engine: &mut GameEngine, returning_card: &str) -> (u32
         .get("grizzly_bears")
         .unwrap();
     engine.state.objects.get_mut(&source).unwrap().token_origin = Some(CopiableValues {
+        prototyped: false,
         source_card_id: definition.id.clone(),
         source_face_index: 0,
         face: definition.primary_face().clone(),
@@ -179,6 +180,7 @@ fn owner_token(engine: &mut GameEngine) -> u32 {
         .get("grizzly_bears")
         .unwrap();
     engine.state.objects.get_mut(&target).unwrap().token_origin = Some(CopiableValues {
+        prototyped: false,
         source_card_id: definition.id.clone(),
         source_face_index: 0,
         face: definition.primary_face().clone(),
@@ -651,6 +653,7 @@ fn paid_chaos_warp_aura_attachment_is_not_targeting_but_obeys_protection() {
             .get("grizzly_bears")
             .unwrap();
         let values = || CopiableValues {
+            prototyped: false,
             source_card_id: definition.id.clone(),
             source_face_index: 0,
             face: definition.primary_face().clone(),
@@ -1354,6 +1357,7 @@ fn paid_chaos_warp_token_target_uses_owner_library_and_reveals_nonpermanent_with
         .get("grizzly_bears")
         .unwrap();
     engine.state.objects.get_mut(&target).unwrap().token_origin = Some(CopiableValues {
+        prototyped: false,
         source_card_id: definition.id.clone(),
         source_face_index: 0,
         face: definition.primary_face().clone(),

@@ -42,6 +42,7 @@ fn quantity_land(engine: &mut GameEngine, player: usize, subtype: &str) -> u32 {
     face.supertypes.clear();
     engine.state.objects.get_mut(&id).unwrap().copiable_values =
         Some(tricerules_core::state::CopiableValues {
+            prototyped: false,
             source_card_id: "forest".into(),
             source_face_index: 0,
             face,

@@ -437,6 +437,7 @@ fn issue_234_copied_release_and_permanent_or_token_copies_keep_source_links() {
         .get("ghost_vacuum")
         .unwrap();
     engine.state.objects.get_mut(&token).unwrap().token_origin = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "ghost_vacuum".into(),
         source_face_index: 0,
         face: vacuum.primary_face().clone(),
@@ -469,6 +470,7 @@ fn issue_234_copied_release_and_permanent_or_token_copies_keep_source_links() {
         .get_mut(&permanent_copy)
         .unwrap()
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "ghost_vacuum".into(),
         source_face_index: 0,
         face: vacuum.primary_face().clone(),

@@ -150,6 +150,7 @@ fn install_static_fixture(engine: &mut GameEngine, source: u32, definition: Stat
         .get_mut(&source)
         .expect("replacement fixture")
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "island".into(),
         source_face_index: 0,
         face,
@@ -604,6 +605,7 @@ fn begin_opt_cast(engine: &mut GameEngine) -> u64 {
         face_index: cast.face_index,
         selected_modes: cast.selected_modes,
         source: cast.source,
+        prototyped: cast.prototyped,
         cost_selections: cast.cost_selections,
         cast_cost_group_selections: cast.cast_cost_group_selections,
         cast_method: cast.cast_method,

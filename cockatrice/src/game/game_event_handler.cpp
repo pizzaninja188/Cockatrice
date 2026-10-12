@@ -133,7 +133,7 @@ void GameEventHandler::createSyntheticStackCard(quint32 virtualOid,
         const auto &identity = *sourceTokenIdentity;
         const CardRef tokenRef =
             RuledTokenDisplay::resolve(CardDatabaseManager::query(), identity.name, identity.basePt, identity.color,
-                                       identity.keywords, identity.abilityTexts);
+                                       identity.keywords, identity.abilityTexts, identity.manaCost, identity.manaValue);
         if (!tokenRef.name.isEmpty()) {
             ref = tokenRef;
         }

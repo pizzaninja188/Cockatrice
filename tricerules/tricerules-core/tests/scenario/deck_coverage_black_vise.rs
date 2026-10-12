@@ -194,6 +194,7 @@ fn black_vise_acquired_copy_is_undefined_and_native_choice_restores() {
         .get_mut(&source)
         .unwrap()
         .copiable_values = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: "black_vise".into(),
         source_face_index: 0,
         face,

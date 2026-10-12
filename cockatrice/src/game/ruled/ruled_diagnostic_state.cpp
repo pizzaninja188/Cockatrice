@@ -445,6 +445,7 @@ QJsonValue value(const RuledCastActionKey &v)
     result.insert("source", value(v.source));
     result.insert("method", value(v.method));
     result.insert("castingPermissionId", value(v.castingPermissionId));
+    result.insert("prototyped", value(v.prototyped));
     return result;
 }
 QJsonValue value(const RuledFaceOption &v)
@@ -459,6 +460,7 @@ QJsonValue value(const RuledFaceOption &v)
     result.insert("zoneChangeGeneration", value(v.zoneChangeGeneration));
     result.insert("castingPermissionId", value(v.castingPermissionId));
     result.insert("permissionSourceLabel", value(v.permissionSourceLabel));
+    result.insert("prototyped", value(v.prototyped));
     return result;
 }
 QJsonValue value(const RuledExilePlayPermissionGroup &v)
@@ -616,6 +618,7 @@ QJsonValue value(const PendingRuledSpellCast &v)
     result.insert("castMethod", value(v.castMethod));
     result.insert("sourceZoneChangeGeneration", value(v.sourceZoneChangeGeneration));
     result.insert("castingPermissionId", value(v.castingPermissionId));
+    result.insert("prototyped", value(v.prototyped));
     result.insert("damageDivision", value(v.damageDivision));
     result.insert("faceIndex", value(v.faceIndex));
     result.insert("cardName", value(v.cardName));

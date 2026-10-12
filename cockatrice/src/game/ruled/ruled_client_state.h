@@ -465,12 +465,14 @@ struct RuledCastActionKey
     RuledCastSource source = RuledCastSource::Hand;
     ruled::v1::CastMethod method = ruled::v1::CAST_METHOD_NORMAL;
     quint64 castingPermissionId = 0;
+    bool prototyped = false;
 
     bool operator==(const RuledCastActionKey &) const = default;
     bool operator<(const RuledCastActionKey &other) const
     {
-        return std::tie(sourceId, faceIndex, source, method, castingPermissionId) <
-               std::tie(other.sourceId, other.faceIndex, other.source, other.method, other.castingPermissionId);
+        return std::tie(sourceId, faceIndex, source, method, castingPermissionId, prototyped) <
+               std::tie(other.sourceId, other.faceIndex, other.source, other.method, other.castingPermissionId,
+                        other.prototyped);
     }
 };
 
@@ -488,6 +490,7 @@ struct RuledFaceOption
     quint64 zoneChangeGeneration = 0;
     quint64 castingPermissionId = 0;
     QString permissionSourceLabel;
+    bool prototyped = false;
 };
 
 struct RuledExilePlayPermissionGroup
@@ -930,6 +933,10 @@ public:
     // -----------------------------------------------------------------------------------
     // Rule-engine stack object ids in push order: front = most recently pushed = resolves first (LIFO).
     QList<quint32> stackOidOrder;
+    /// Public prototype choice for live stack objects, refreshed by StackPushed/StackResolved.
+    QSet<quint32> prototypedStackOids;
+    /// Public prototype choice for battlefield permanents, replaced with each full battlefield view.
+    QSet<quint32> prototypedBattlefieldOids;
     /// Oids offered by the most recent CR 603.3b ordering prompt. The engine reserves a trigger's
     /// stack oid before the prompt, so seeing one of these arrive in StackPushed is proof the
     /// prompt has been answered — the safety net that closes the window if the answer came from
@@ -1032,17 +1039,21 @@ public:
     {
         return (static_cast<quint64>(objectId) << 8) | static_cast<quint64>(faceIndex & 0xff);
     }
-    [[nodiscard]] static RuledCastActionKey handCastActionKey(int slot, int faceIndex, ruled::v1::CastMethod method)
+    [[nodiscard]] static RuledCastActionKey handCastActionKey(int slot,
+                                                               int faceIndex,
+                                                               ruled::v1::CastMethod method,
+                                                               bool prototyped = false)
     {
-        return {slot, faceIndex, RuledCastSource::Hand, method, 0};
+        return {slot, faceIndex, RuledCastSource::Hand, method, 0, prototyped};
     }
     [[nodiscard]] static RuledCastActionKey zoneCastActionKey(int objectId,
                                                               int faceIndex,
                                                               RuledCastSource source,
                                                               ruled::v1::CastMethod method,
-                                                              quint64 castingPermissionId = 0)
+                                                              quint64 castingPermissionId = 0,
+                                                              bool prototyped = false)
     {
-        return {objectId, faceIndex, source, method, castingPermissionId};
+        return {objectId, faceIndex, source, method, castingPermissionId, prototyped};
     }
     [[nodiscard]] static quint64 abilityTargetKey(quint32 permanentOid, int abilityIndex)
     {
@@ -1174,11 +1185,14 @@ public:
     [[nodiscard]] QVector<RuledFaceOption> handActionFaceOptions(RuledHandActionKind kind, int handIndex) const;
     /// True when this exact castable face needs a cast-time target (CastSpell).
     [[nodiscard]] bool handActionNeedsTarget(RuledHandActionKind kind, int handIndex, int faceIndex = 0) const;
-    [[nodiscard]] bool isHandCastActionLegal(int slot, int faceIndex, ruled::v1::CastMethod method) const
+    [[nodiscard]] bool isHandCastActionLegal(int slot,
+                                             int faceIndex,
+                                             ruled::v1::CastMethod method,
+                                             bool prototyped = false) const
     {
         const auto options = handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, slot);
         return std::any_of(options.cbegin(), options.cend(), [=](const RuledFaceOption &option) {
-            return option.faceIndex == faceIndex && option.castMethod == method;
+            return option.faceIndex == faceIndex && option.castMethod == method && option.prototyped == prototyped;
         });
     }
     [[nodiscard]] QVector<RuledFaceOption> zoneActionFaceOptions(quint32 objectId, RuledCastSource source) const
@@ -1188,8 +1202,8 @@ public:
         }
         QVector<RuledFaceOption> options = zoneCastActions.faceOptionsByIndex.value(static_cast<int>(objectId));
         std::sort(options.begin(), options.end(), [](const RuledFaceOption &a, const RuledFaceOption &b) {
-            return std::tie(a.faceIndex, a.castMethod, a.castingPermissionId) <
-                   std::tie(b.faceIndex, b.castMethod, b.castingPermissionId);
+            return std::tie(a.faceIndex, a.castMethod, a.castingPermissionId, a.prototyped) <
+                   std::tie(b.faceIndex, b.castMethod, b.castingPermissionId, b.prototyped);
         });
         return options;
     }
@@ -1206,10 +1220,11 @@ public:
                                          int faceIndex,
                                          RuledCastSource source,
                                          ruled::v1::CastMethod method = ruled::v1::CAST_METHOD_NORMAL,
-                                         quint64 castingPermissionId = 0) const
+                                         quint64 castingPermissionId = 0,
+                                         bool prototyped = false) const
     {
         return zoneCastCostsByCastKey.value(
-            zoneCastActionKey(static_cast<int>(objectId), faceIndex, source, method, castingPermissionId));
+            zoneCastActionKey(static_cast<int>(objectId), faceIndex, source, method, castingPermissionId, prototyped));
     }
     [[nodiscard]] RuledCastSource zoneActionSource(quint32 objectId) const
     {
@@ -1239,13 +1254,14 @@ public:
                                               int faceIndex,
                                               RuledCastSource source = RuledCastSource::Hand,
                                               ruled::v1::CastMethod method = ruled::v1::CAST_METHOD_NORMAL,
-                                              quint64 castingPermissionId = 0) const
+                                              quint64 castingPermissionId = 0,
+                                              bool prototyped = false) const
     {
         const auto &set =
             source == RuledCastSource::Hand ? handActionSet(ruled::v1::HAND_ACTION_CAST_SPELL) : zoneCastActions;
         const auto key = source == RuledCastSource::Hand
-                             ? handCastActionKey(sourceId, faceIndex, method)
-                             : zoneCastActionKey(sourceId, faceIndex, source, method, castingPermissionId);
+                             ? handCastActionKey(sourceId, faceIndex, method, prototyped)
+                             : zoneCastActionKey(sourceId, faceIndex, source, method, castingPermissionId, prototyped);
         return set.costDataByCastKey.value(key);
     }
     [[nodiscard]] bool isZoneCastActionLegal(quint32 objectId,
@@ -1253,7 +1269,8 @@ public:
                                              RuledCastSource source,
                                              ruled::v1::CastMethod method,
                                              quint64 castingPermissionId = 0,
-                                             std::optional<quint64> expectedGeneration = std::nullopt) const
+                                             std::optional<quint64> expectedGeneration = std::nullopt,
+                                             bool prototyped = false) const
     {
         if (!isZoneActionLegal(objectId, source)) {
             return false;
@@ -1262,6 +1279,7 @@ public:
         return std::any_of(options.cbegin(), options.cend(), [=](const RuledFaceOption &option) {
             return option.faceIndex == faceIndex && option.castMethod == method &&
                    option.castingPermissionId == castingPermissionId &&
+                   option.prototyped == prototyped &&
                    (!expectedGeneration || option.zoneChangeGeneration == *expectedGeneration);
         });
     }
@@ -1270,13 +1288,14 @@ public:
                                   int faceIndex,
                                   RuledCastSource source,
                                   ruled::v1::CastMethod method = ruled::v1::CAST_METHOD_NORMAL,
-                                  quint64 castingPermissionId = 0) const
+                                  quint64 castingPermissionId = 0,
+                                  bool prototyped = false) const
     {
         const auto &set =
             source == RuledCastSource::Hand ? handActionSet(ruled::v1::HAND_ACTION_CAST_SPELL) : zoneCastActions;
         const auto key = source == RuledCastSource::Hand
-                             ? handCastActionKey(sourceId, faceIndex, method)
-                             : zoneCastActionKey(sourceId, faceIndex, source, method, castingPermissionId);
+                             ? handCastActionKey(sourceId, faceIndex, method, prototyped)
+                             : zoneCastActionKey(sourceId, faceIndex, source, method, castingPermissionId, prototyped);
         return set.eligibleRestrictedManaByCastKey.value(key);
     }
     [[nodiscard]] QSet<quint32> eligibleRestrictedManaForAbility(quint32 oid, int abilityIndex) const
@@ -1305,11 +1324,12 @@ public:
                          int modeIndex,
                          RuledCastSource source,
                          ruled::v1::CastMethod method = ruled::v1::CAST_METHOD_NORMAL,
-                         quint64 castingPermissionId = 0) const
+                         quint64 castingPermissionId = 0,
+                         bool prototyped = false) const
     {
         const auto key = source == RuledCastSource::Hand
-                             ? handCastActionKey(slot, faceIndex, method)
-                             : zoneCastActionKey(slot, faceIndex, source, method, castingPermissionId);
+                             ? handCastActionKey(slot, faceIndex, method, prototyped)
+                             : zoneCastActionKey(slot, faceIndex, source, method, castingPermissionId, prototyped);
         const RuledHandActionSet *set = nullptr;
         if (source == RuledCastSource::Hand) {
             const auto it = handActions.constFind(ruled::v1::HAND_ACTION_CAST_SPELL);
@@ -1640,6 +1660,17 @@ public:
     [[nodiscard]] QString stackAnnotation(quint32 oid) const
     {
         return stackAnnotationByOid.value(oid);
+    }
+    [[nodiscard]] bool isPrototyped(quint32 oid) const
+    {
+        return prototypedStackOids.contains(oid) || prototypedBattlefieldOids.contains(oid);
+    }
+    [[nodiscard]] QString battlefieldPowerToughness(quint32 oid) const
+    {
+        if (!engineOidBattlefieldPower.contains(oid) || !engineOidBattlefieldToughness.contains(oid)) {
+            return {};
+        }
+        return QStringLiteral("%1/%2").arg(engineOidBattlefieldPower.value(oid)).arg(engineOidBattlefieldToughness.value(oid));
     }
     /// Called by the host when it materialises a synthetic stack card, so the OID mapping can be
     /// re-registered after every BattlefieldObjectMap clear.

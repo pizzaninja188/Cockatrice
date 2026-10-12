@@ -371,6 +371,8 @@ message CastSpell {
   // Required for casts authorized by an exile permission. The engine validates this opaque id
   // together with the exact object and zone-change generation before committing any costs.
   optional uint64 casting_permission_id = 14;
+  // CR 718.2a: select the secondary Prototype characteristics independently of cast method.
+  bool prototyped = 15;
 }
 
 // Payment-free CR 601.2a-e announcement. `CastSpell` remains the legacy atomic request shape
@@ -386,6 +388,7 @@ message SpellCastAnnouncement {
   repeated CastCostGroupSelection cast_cost_group_selections = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   CastMethod cast_method = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   optional uint64 casting_permission_id = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool prototyped = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message BeginSpellCast {
@@ -836,6 +839,8 @@ message LegalHandAction {
   bool has_convoke = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   CastMethod cast_method = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   LinkedCastCostOption all_modes_cast_cost = 16 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // CR 718.2a: one of the two cast-characteristic choices for a Prototype face.
+  bool prototyped = 17 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A public source zone for engine-authored cast and land-play actions.
@@ -866,6 +871,7 @@ message LegalZoneCastAction {
   optional uint64 casting_permission_id = 17 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   LinkedCastCostOption all_modes_cast_cost = 18 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   PreparationSource preparation_source = 19 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool prototyped = 20 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message ManaPaymentEligibility {
@@ -1785,6 +1791,9 @@ message TokenIdentity {
   // Oracle-style text for printed non-keyword abilities. This is display identity, not a client
   // rules source; the engine remains authoritative for every ability's behavior.
   repeated string ability_texts = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Copiable Prototype identity; empty cost means the token has no mana cost.
+  string mana_cost = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 mana_value = 9 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // The single source of card identity for a ruled session: Servatrice sends Oracle names
@@ -1901,6 +1910,7 @@ message StackPushed {
   // Card-database identity for spell artwork/details, distinct from the rules-facing description.
   // Empty for abilities without a physical card face.
   string card_display_name = 17 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  bool prototyped = 18 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message ActivePublicRevealSnapshot {
@@ -2127,6 +2137,7 @@ message BattlefieldObject {
   // remains above; this identity supplies printed stats and abilities for token display/art.
   // Absent for nontokens. Face-down tokens contain only anonymous public characteristics.
   TokenIdentity token_identity = 30 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  bool prototyped = 31 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message RoomDoorState {

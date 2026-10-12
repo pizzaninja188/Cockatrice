@@ -916,6 +916,8 @@ bool RuledPlayerBinding::updateTokenIdentity(Server_Card *card, const ruled::v1:
     }
     const QString color = QString::fromStdString(identity.color());
     const QString basePt = QString::fromStdString(identity.pt());
+    const QString baseManaCost = QString::fromStdString(identity.mana_cost());
+    const quint32 baseManaValue = identity.mana_value();
     QStringList keywords;
     for (const auto &keyword : identity.keywords()) {
         keywords.append(QString::fromStdString(keyword));
@@ -925,9 +927,13 @@ bool RuledPlayerBinding::updateTokenIdentity(Server_Card *card, const ruled::v1:
         texts.append(QString::fromStdString(text));
     }
     const bool changed = card->getColor() != color || card->getTokenBasePt() != basePt ||
+                         card->getTokenBaseManaCost() != baseManaCost ||
+                         card->getTokenBaseManaValue() != baseManaValue ||
                          card->getTokenAbilityKeywords() != keywords || card->getTokenAbilityTexts() != texts;
     card->setColor(color);
     card->setTokenBasePt(basePt);
+    card->setTokenBaseManaCost(baseManaCost);
+    card->setTokenBaseManaValue(baseManaValue);
     card->setTokenAbilityKeywords(keywords);
     card->setTokenAbilityTexts(texts);
     return changed;

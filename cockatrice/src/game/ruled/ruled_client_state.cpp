@@ -245,7 +245,8 @@ QVector<RuledFaceOption> RuledClientState::handActionFaceOptions(RuledHandAction
 {
     QVector<RuledFaceOption> options = handActionSet(kind).faceOptionsByIndex.value(handIndex);
     std::sort(options.begin(), options.end(), [](const RuledFaceOption &a, const RuledFaceOption &b) {
-        return std::tie(a.faceIndex, a.castMethod) < std::tie(b.faceIndex, b.castMethod);
+        return std::tie(a.faceIndex, a.castMethod, a.prototyped) <
+               std::tie(b.faceIndex, b.castMethod, b.prototyped);
     });
     return options;
 }
@@ -2135,6 +2136,8 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     // Stack tracking — the host removes the synthetic ability CardItems from their zones (which
     // calls back into unregisterSyntheticStackCard) before invoking this.
     stackOidOrder.clear();
+    prototypedStackOids.clear();
+    prototypedBattlefieldOids.clear();
     triggerOrderCandidateOids.clear();
     stackTargetsByStackOid.clear();
     stackTargetKindByStackAndTargetOid.clear();

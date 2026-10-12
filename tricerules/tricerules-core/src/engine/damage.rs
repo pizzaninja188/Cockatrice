@@ -3559,6 +3559,7 @@ mod tests {
 
     fn source_item(source: ObjectId, generation: u64) -> StackItem {
         StackItem {
+            prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: source,
             controller: 0,

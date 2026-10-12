@@ -174,7 +174,8 @@ void PlayerEventHandler::eventCreateToken(const Event_CreateToken &event)
         }
         CardRef tokenRef =
             RuledTokenDisplay::resolve(CardDatabaseManager::query(), cardRef.name, QString::fromStdString(event.pt()),
-                                       QString::fromStdString(event.color()), engineKeywords, abilityTexts);
+                                       QString::fromStdString(event.color()), engineKeywords, abilityTexts,
+                                       QString::fromStdString(event.mana_cost()), event.mana_value());
         if (!tokenRef.name.isEmpty()) {
             cardRef = tokenRef;
         }

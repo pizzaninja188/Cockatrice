@@ -2005,6 +2005,7 @@ mod issue_461_activation_prohibition_tests {
         attached_to: Option<AttachmentRecipient>,
     ) -> GameObject {
         GameObject {
+            prototyped: false,
             id,
             owner: 0,
             base_controller: 0,
@@ -2968,6 +2969,7 @@ mod issue_499_effect_counter_replacement_tests {
 
     fn fixture_object(id: ObjectId, card_id: &str) -> GameObject {
         GameObject {
+            prototyped: false,
             id,
             owner: 0,
             base_controller: 0,

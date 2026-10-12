@@ -33,6 +33,7 @@ fn fixed_twenty_hand_limit_does_not_request_cleanup_discard_at_twenty() {
         .get_mut(&source)
         .unwrap()
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "spellbook".into(),
         source_face_index: 0,
         display_name: face.name.clone(),

@@ -72,6 +72,7 @@ fn add_clone_as_enters_copy_values(engine: &mut GameEngine, object_id: u32) {
         .get_mut(&object_id)
         .expect("the live Grizzly Bears")
         .copiable_values = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: "grizzly_bears".into(),
         source_face_index: 0,
         display_name: face.name.clone(),

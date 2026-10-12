@@ -19,6 +19,7 @@ fn fixture_token_origin(card_id: &str) -> Option<tricerules_core::state::Copiabl
     }
     let definition = registry.get(card_id).unwrap();
     Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: card_id.into(),
         source_face_index: 0,
         face: definition.primary_face().clone(),
@@ -880,6 +881,7 @@ pub(crate) fn inject_creature_on_battlefield(
     e.state.objects.insert(
         id,
         tricerules_core::state::GameObject {
+            prototyped: false,
             id,
             owner: player_id,
             base_controller: player_id,
@@ -927,6 +929,7 @@ pub(crate) fn inject_permanent_on_battlefield(
     e.state.objects.insert(
         id,
         tricerules_core::state::GameObject {
+            prototyped: false,
             id,
             owner: player_id,
             base_controller: player_id,
@@ -968,6 +971,7 @@ pub(crate) fn inject_card_into_hand(e: &mut GameEngine, player: usize, card_id: 
     e.state.objects.insert(
         id,
         tricerules_core::state::GameObject {
+            prototyped: false,
             id,
             owner: player_id,
             base_controller: player_id,
@@ -1008,6 +1012,7 @@ pub(crate) fn inject_library_card(e: &mut GameEngine, player: usize, card_id: &s
     e.state.objects.insert(
         id,
         tricerules_core::state::GameObject {
+            prototyped: false,
             id,
             owner: player_id,
             base_controller: player_id,
@@ -1055,6 +1060,7 @@ pub(crate) fn inject_creature_under_foreign_control(
     e.state.objects.insert(
         id,
         tricerules_core::state::GameObject {
+            prototyped: false,
             id,
             owner: owner_id,
             base_controller: controller_id,
@@ -1098,6 +1104,7 @@ pub(crate) fn inject_graveyard_card(e: &mut GameEngine, player: usize, card_id: 
     e.state.objects.insert(
         id,
         tricerules_core::state::GameObject {
+            prototyped: false,
             id,
             owner: player_id,
             base_controller: player_id,
@@ -1320,6 +1327,7 @@ pub(crate) fn inject_creature_with_stats(
     e.state.objects.insert(
         id,
         tricerules_core::state::GameObject {
+            prototyped: false,
             id,
             owner: player_id,
             base_controller: player_id,

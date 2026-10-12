@@ -589,6 +589,10 @@ pub struct CardFace {
     /// Scryfall brace syntax, copied verbatim from this face's `card_faces[i].mana_cost`.
     #[serde(default)]
     pub mana_cost: ManaCost,
+    /// CR 702.160 / 718.2a: the secondary cost and power/toughness used when this face is cast
+    /// as a prototyped spell. Types, abilities, and all other face characteristics remain shared.
+    #[serde(default)]
+    pub prototype: Option<PrototypeCharacteristics>,
     /// CR 702.34: optional cost to cast this face from its owner's graveyard.
     #[serde(default)]
     pub flashback_cost: Option<ManaCost>,
@@ -724,6 +728,15 @@ pub struct CardFace {
     pub is_aura: bool,
 }
 
+/// The inset characteristics printed beneath a prototype card's rules text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PrototypeCharacteristics {
+    pub mana_cost: ManaCost,
+    pub power: u32,
+    pub toughness: u32,
+}
+
 impl CardFace {
     /// Populate the `#[serde(skip)]` type/supertype flags from `types`/`supertypes`, the single
     /// source of truth. Called once per face at registry load. Idempotent.
@@ -817,6 +830,19 @@ impl CardFace {
         }
     }
 
+    /// CR 702.160 / 718.2a: return this face's Prototype characteristics while preserving its
+    /// types, abilities, and rules text. A prototyped face's color follows its inset mana cost.
+    pub fn prototyped_face(&self) -> Option<Self> {
+        let prototype = self.prototype.as_ref()?;
+        let mut face = self.clone();
+        face.mana_cost = prototype.mana_cost.clone();
+        face.power = Some(prototype.power);
+        face.toughness = Some(prototype.toughness);
+        face.color_indicator = None;
+        face.colors_override = None;
+        Some(face)
+    }
+
     /// CR 903.4: collect every colored mana symbol in this face's printed costs and supported
     /// rules-text costs, plus its color indicator and colors defined by a CDA. This is a separate
     /// query from `colors()`: a color indicator sets the face's colors, while color identity also
@@ -824,6 +850,9 @@ impl CardFace {
     pub fn color_identity(&self) -> Vec<Color> {
         let mut collected = Vec::new();
         push_mana_cost_colors(&mut collected, &self.mana_cost);
+        if let Some(prototype) = &self.prototype {
+            push_mana_cost_colors(&mut collected, &prototype.mana_cost);
+        }
         for cost in [
             &self.flashback_cost,
             &self.harmonize_cost,
@@ -1007,6 +1036,8 @@ pub struct RawCardDefinition {
     /// Scryfall brace syntax, copied verbatim (e.g. `"{1}{R}"`, `""` for lands). See [`ManaCost`].
     #[serde(default)]
     pub mana_cost: ManaCost,
+    #[serde(default)]
+    pub prototype: Option<PrototypeCharacteristics>,
     /// CR 702.34: optional cost to cast this face from its owner's graveyard.
     #[serde(default)]
     pub flashback_cost: Option<ManaCost>,
@@ -1108,6 +1139,7 @@ impl RawCardDefinition {
                 face_id: self.face_id,
                 name: self.name.clone(),
                 mana_cost: self.mana_cost,
+                prototype: self.prototype,
                 flashback_cost: self.flashback_cost,
                 harmonize_cost: self.harmonize_cost,
                 warp_cost: self.warp_cost,
@@ -1737,6 +1769,24 @@ mod tests {
                 Color::Green
             ]
         );
+    }
+
+    #[test]
+    fn prototype_inset_is_authored_on_the_face_and_contributes_to_color_identity() {
+        let raw: RawCardDefinition = ron::from_str(
+            r#"(id: "skitterbeam_battalion", name: "Skitterbeam Battalion", mana_cost: "{9}", types: ["Artifact", "Creature", "Construct"], power: Some(4), toughness: Some(4), prototype: Some((mana_cost: "{3}{R}{R}", power: 2, toughness: 2)))"#,
+        )
+        .expect("prototype card data should parse");
+        let definition = raw.into_definition().expect("normal card definition");
+        let prototype = definition
+            .primary_face()
+            .prototype
+            .as_ref()
+            .expect("prototype inset");
+
+        assert_eq!(prototype.mana_cost, ManaCost::parse("{3}{R}{R}").unwrap());
+        assert_eq!((prototype.power, prototype.toughness), (2, 2));
+        assert_eq!(definition.color_identity(), vec![Color::Red]);
     }
 
     #[test]

@@ -179,6 +179,10 @@ void Server_Card::getInfo(ServerInfo_Card *info)
         if (!tokenBasePt.isEmpty()) {
             info->set_token_base_pt(tokenBasePt.toStdString());
         }
+        if (destroyOnZoneChange) {
+            info->set_token_base_mana_cost(tokenBaseManaCost.toStdString());
+            info->set_token_base_mana_value(tokenBaseManaValue);
+        }
     }
 
     QMapIterator<int, int> cardCounterIterator(counters);

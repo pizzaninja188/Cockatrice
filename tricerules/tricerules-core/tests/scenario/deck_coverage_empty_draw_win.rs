@@ -492,6 +492,7 @@ fn winning_draw_static_uses_copied_face_and_current_control_or_suppression() {
                 .get_mut(&source)
                 .unwrap()
                 .copiable_values = Some(tricerules_core::state::CopiableValues {
+                prototyped: false,
                 source_card_id: "laboratory_maniac".into(),
                 source_face_index: 0,
                 face,
@@ -558,6 +559,7 @@ fn parked_empty_draw_win_revalidates_face_control_suppression_copy_and_library()
                     .clone();
                 let object = engine.state.objects.get_mut(&source).unwrap();
                 object.copiable_values = Some(tricerules_core::state::CopiableValues {
+                    prototyped: false,
                     source_card_id: "jace,_wielder_of_mysteries".into(),
                     source_face_index: 0,
                     display_name: face.name.clone(),

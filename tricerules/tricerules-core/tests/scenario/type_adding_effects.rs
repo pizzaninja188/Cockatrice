@@ -212,6 +212,7 @@ fn earthbend_preserves_mana_and_haste_but_cannot_return_a_token() {
         .clone();
     e.state.objects.get_mut(&land).unwrap().token_origin =
         Some(tricerules_core::state::CopiableValues {
+            prototyped: false,
             source_card_id: "forest".into(),
             source_face_index: 0,
             display_name: face.name.clone(),

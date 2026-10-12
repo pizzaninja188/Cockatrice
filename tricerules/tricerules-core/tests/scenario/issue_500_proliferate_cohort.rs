@@ -92,6 +92,7 @@ fn attach_counter_replacement_fixture(engine: &mut GameEngine, object_id: u32) {
         .get_mut(&object_id)
         .expect("counter replacement fixture permanent")
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: COUNTER_REPLACEMENT_FIXTURE_ID.into(),
         source_face_index: 0,
         face: counter_replacement_fixture_face(),

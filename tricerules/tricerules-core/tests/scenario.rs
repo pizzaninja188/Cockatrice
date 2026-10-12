@@ -1200,3 +1200,6 @@ mod deck_coverage_mycosynth_gardens;
 
 #[path = "scenario/deck_coverage_scrap_trawler.rs"]
 mod deck_coverage_scrap_trawler;
+
+#[path = "scenario/deck_coverage_skitterbeam_battalion.rs"]
+mod deck_coverage_skitterbeam_battalion;

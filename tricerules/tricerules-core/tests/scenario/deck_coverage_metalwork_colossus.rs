@@ -57,6 +57,7 @@ fn begin_command(e: &GameEngine) -> RuledCommand {
         cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
             announcement: Some(SpellCastAnnouncement {
                 source: cast.source,
+                prototyped: cast.prototyped,
                 cast_method: cast.cast_method,
                 ..Default::default()
             }),
@@ -199,6 +200,7 @@ fn metalwork_uses_derived_types_control_copy_and_battlefield_x_mana_value() {
         .clone();
     e.state.objects.get_mut(&token).unwrap().copiable_values =
         Some(tricerules_core::state::CopiableValues {
+            prototyped: false,
             source_card_id: "krark-clan_ironworks".into(),
             source_face_index: 0,
             display_name: face.name.clone(),

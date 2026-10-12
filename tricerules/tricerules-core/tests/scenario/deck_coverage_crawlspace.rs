@@ -79,6 +79,7 @@ fn limit_fixture(
         .get_mut(&source)
         .unwrap()
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "crawlspace".into(),
         source_face_index: 0,
         face,

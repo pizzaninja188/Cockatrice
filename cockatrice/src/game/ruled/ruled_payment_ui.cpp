@@ -76,7 +76,7 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
         if (!selected->isLand) {
             beginRuledSpellCast(nullptr, static_cast<int>(oid), offer.faceIndex, offer.faceName, offer.manaCost,
                                 offer.genericCostReduction, RuledCastSource::Exile, offer.castMethod,
-                                offer.castingPermissionId);
+                                offer.castingPermissionId, offer.prototyped);
             return;
         }
 
@@ -940,6 +940,7 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(PlayerAction
     }
     auto *cast = ruledCommand.mutable_begin_spell_cast()->mutable_announcement();
     cast->set_cast_method(pendingRuledSpellCast.castMethod);
+    cast->set_prototyped(pendingRuledSpellCast.prototyped);
     if (pendingRuledSpellCast.castingPermissionId != 0) {
         cast->set_casting_permission_id(pendingRuledSpellCast.castingPermissionId);
     }

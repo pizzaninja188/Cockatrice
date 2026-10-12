@@ -444,12 +444,12 @@ bool RuledPendingCast::reconcileSpellCosts(const RuledClientState &state, int lo
     if (spell.valid) {
         const bool sourceStillLegal =
             spell.source == RuledCastSource::Hand
-                ? state.isHandCastActionLegal(spell.handIndex, spell.faceIndex, spell.castMethod)
+                ? state.isHandCastActionLegal(spell.handIndex, spell.faceIndex, spell.castMethod, spell.prototyped)
                 : state.isZoneCastActionLegal(static_cast<quint32>(spell.handIndex), spell.faceIndex, spell.source,
                                               spell.castMethod, spell.castingPermissionId,
-                                              spell.sourceZoneChangeGeneration);
+                                              spell.sourceZoneChangeGeneration, spell.prototyped);
         const auto latest = state.spellCostData(spell.handIndex, spell.faceIndex, spell.source, spell.castMethod,
-                                                spell.castingPermissionId);
+                                                spell.castingPermissionId, spell.prototyped);
         const bool castCostSelectionsStillLegal =
             std::all_of(spell.castCostSelections.cbegin(), spell.castCostSelections.cend(), [&](const auto &selection) {
                 const auto group =

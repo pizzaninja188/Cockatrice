@@ -69,4 +69,9 @@ message ServerInfo_Card {
     // Ruled engine tokens only: mirrors Event_CreateToken.ability_texts so a full-state resync
     // resolves the same token printing selected at creation time.
     repeated string ability_texts = 20;
+
+    // Ruled engine tokens only: immutable copied mana characteristics used to resolve Oracle art
+    // without confusing a Prototype copy with a same-name token of another mana value.
+    optional string token_base_mana_cost = 21;
+    optional uint32 token_base_mana_value = 22;
 }

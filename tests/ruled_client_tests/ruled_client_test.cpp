@@ -2486,6 +2486,44 @@ TEST_F(RuledClientTest, PhysicalSpellPrimaryPresentationDoesNotBecomeStackAnnota
     EXPECT_EQ(state->stackAnnotation(702u), QStringLiteral("Fire"));
 }
 
+TEST_F(RuledClientTest, PrototypePublicStateTracksStackResolutionAndBattlefieldReplacement)
+{
+    ruled::v1::RuledEventBatch cast;
+    auto *push = cast.add_events()->mutable_stack_pushed();
+    push->set_object_id(9820u);
+    push->set_card_id("skitterbeam_battalion");
+    push->set_prototyped(true);
+    apply(cast);
+    EXPECT_TRUE(state->isPrototyped(9820u));
+    EXPECT_EQ(state->stackAnnotation(9820u), QStringLiteral("Prototype"));
+
+    ruled::v1::RuledEventBatch resolved;
+    resolved.add_events()->mutable_stack_resolved()->set_object_id(9820u);
+    apply(resolved);
+    EXPECT_FALSE(state->isPrototyped(9820u));
+
+    ruled::v1::RuledEventBatch battlefield;
+    auto *zoneView = battlefield.add_events()->mutable_zone_view();
+    auto *playerView = zoneView->add_per_player();
+    auto *object = playerView->add_battlefield_objects();
+    object->set_object_id(9821u);
+    object->set_power(2);
+    object->set_toughness(2);
+    object->set_prototyped(true);
+    apply(battlefield);
+    EXPECT_TRUE(state->isPrototyped(9821u));
+    EXPECT_EQ(state->battlefieldPowerToughness(9821u), QStringLiteral("2/2"));
+
+    ruled::v1::RuledEventBatch facedown;
+    auto *replacementView = facedown.add_events()->mutable_zone_view()->add_per_player();
+    auto *hidden = replacementView->add_battlefield_objects();
+    hidden->set_object_id(9821u);
+    hidden->set_face_down(true);
+    hidden->set_prototyped(true);
+    apply(facedown);
+    EXPECT_FALSE(state->isPrototyped(9821u));
+}
+
 TEST_F(RuledClientTest, StackAnnotationKeepsAbilityAndStructuredChoicePresentation)
 {
     ruled::v1::RuledEventBatch abilityBatch;
@@ -3953,6 +3991,8 @@ TEST_F(RuledClientTest, TokenActivatedAbilityForwardsItsDisplayIdentityToTheSynt
     sp->set_is_triggered(false);
     auto *identity = sp->mutable_source_token_identity();
     identity->set_name("Clue");
+    identity->set_mana_cost("{3}{R}{R}");
+    identity->set_mana_value(5);
     identity->add_types("Artifact");
     identity->add_ability_texts("{2}, Sacrifice this token: Draw a card.");
 
@@ -3964,6 +4004,8 @@ TEST_F(RuledClientTest, TokenActivatedAbilityForwardsItsDisplayIdentityToTheSynt
     EXPECT_EQ(forwarded.name, QStringLiteral("Clue"));
     EXPECT_TRUE(forwarded.basePt.isEmpty());
     EXPECT_TRUE(forwarded.color.isEmpty());
+    EXPECT_EQ(forwarded.manaCost, QStringLiteral("{3}{R}{R}"));
+    EXPECT_EQ(forwarded.manaValue, 5u);
     EXPECT_TRUE(forwarded.keywords.isEmpty());
     EXPECT_EQ(forwarded.abilityTexts, QStringList({QStringLiteral("{2}, Sacrifice this token: Draw a card.")}));
 }
@@ -7392,6 +7434,33 @@ TEST_F(RuledClientTest, NormalWarpAndSneakHandOffersKeepDistinctMethodsAndCostCh
               QSet<quint32>{static_cast<quint32>(ruled::v1::CAST_METHOD_WARP)});
     EXPECT_NE(RuledClientState::handCastActionKey(3, 0, ruled::v1::CAST_METHOD_NORMAL),
               RuledClientState::handCastActionKey(4, 0, ruled::v1::CAST_METHOD_NORMAL));
+}
+
+TEST_F(RuledClientTest, PrototypeHandOfferRemainsDistinctFromNormalCast)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 12, "Skitterbeam Battalion", 0, false, "{9}");
+    auto *prototype = addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 12, "Skitterbeam Battalion", 0,
+                                    false, "{3}{R}{R}");
+    prototype->set_prototyped(true);
+    apply(batch);
+
+    const auto options = state->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, 12);
+    ASSERT_EQ(options.size(), 2);
+    EXPECT_FALSE(options[0].prototyped);
+    EXPECT_TRUE(options[1].prototyped);
+    EXPECT_EQ(options[0].manaCost, QStringLiteral("{9}"));
+    EXPECT_EQ(options[1].manaCost, QStringLiteral("{3}{R}{R}"));
+    EXPECT_TRUE(state->isHandCastActionLegal(12, 0, ruled::v1::CAST_METHOD_NORMAL, false));
+    EXPECT_TRUE(state->isHandCastActionLegal(12, 0, ruled::v1::CAST_METHOD_NORMAL, true));
+
+    const auto menu = RuledPendingCast::cardActionMenuOptions(options, *state, 0);
+    ASSERT_EQ(menu.size(), 2);
+    EXPECT_EQ(menu[0].label, QStringLiteral("Cast Skitterbeam Battalion ({9})"));
+    EXPECT_FALSE(menu[0].prototyped);
+    EXPECT_EQ(menu[1].label, QStringLiteral("Prototype Cast Skitterbeam Battalion ({3}{R}{R})"));
+    EXPECT_TRUE(menu[1].prototyped);
 }
 
 TEST(RuledPendingCostSelectionTest, SneakReturnIsGenerationBoundAndExclusive)

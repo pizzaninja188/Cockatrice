@@ -56,6 +56,9 @@ private:
     // Ruled engine tokens only: immutable printed P/T (e.g. "1/1"). ptString is updated by
     // zone-view syncs to the effective P/T; this stays at the base value for Oracle art lookup.
     QString tokenBasePt;
+    // Copiable Prototype mana characteristics, retained for token art resolution after full resync.
+    QString tokenBaseManaCost;
+    quint32 tokenBaseManaValue = 0;
     bool destroyOnZoneChange;
     bool doesntUntap;
 
@@ -198,6 +201,22 @@ public:
     void setTokenBasePt(const QString &_basePt)
     {
         tokenBasePt = _basePt;
+    }
+    const QString &getTokenBaseManaCost() const
+    {
+        return tokenBaseManaCost;
+    }
+    void setTokenBaseManaCost(const QString &_manaCost)
+    {
+        tokenBaseManaCost = _manaCost;
+    }
+    quint32 getTokenBaseManaValue() const
+    {
+        return tokenBaseManaValue;
+    }
+    void setTokenBaseManaValue(quint32 _manaValue)
+    {
+        tokenBaseManaValue = _manaValue;
     }
     void setTokenAbilityKeywords(const QStringList &_keywords)
     {

@@ -782,6 +782,7 @@ fn boseiju_target_union_accepts_enchantment_nonbasic_and_basic_artifact_land() {
                 .get_mut(&target)
                 .unwrap()
                 .copiable_values = Some(tricerules_core::state::CopiableValues {
+                prototyped: false,
                 source_card_id: card.into(),
                 source_face_index: 0,
                 display_name: "Basic artifact land fixture".into(),

@@ -267,6 +267,7 @@ fn issue_231_get_out_rechecks_types_and_generations_for_each_target() {
                     let definition = tricerules_cards::registry::global().get("forest").unwrap();
                     e.state.objects.get_mut(&oid).unwrap().copiable_values =
                         Some(tricerules_core::state::CopiableValues {
+                            prototyped: false,
                             source_card_id: "forest".into(),
                             source_face_index: 0,
                             face: definition.primary_face().clone(),

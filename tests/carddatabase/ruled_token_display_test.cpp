@@ -61,6 +61,7 @@ TEST(RuledTokenDisplayTest, QualifiedMyrRulesNameResolvesExactTokenArtwork)
     EXPECT_EQ(unqualified.name, QStringLiteral("Myr Token"));
     EXPECT_TRUE(RuledTokenDisplay::resolve(db->query(), "Myr Token", "2/2", "", {}, {}).name.isEmpty());
     EXPECT_TRUE(RuledTokenDisplay::resolve(db->query(), "Myr Token", "1/1", "r", {}, {}).name.isEmpty());
+    EXPECT_TRUE(RuledTokenDisplay::resolve(db->query(), "Myr Token", "1/1", "", {}, {}, "{1}", 1).name.isEmpty());
     ruled::v1::TokenIdentity identity;
     identity.set_name("Myr Token");
     identity.set_pt("1/1");

@@ -58,6 +58,7 @@ fn attach_roads_face(engine: &mut GameEngine, object_id: u32) {
         .get_mut(&object_id)
         .expect("fixture object")
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: FIXTURE_ID.into(),
         source_face_index: 0,
         face: roads_fixture_face(),

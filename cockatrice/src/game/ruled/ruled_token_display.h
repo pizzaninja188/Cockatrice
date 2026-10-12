@@ -3,6 +3,7 @@
 
 #include <QString>
 #include <QStringList>
+#include <QtGlobal>
 #include <libcockatrice/utility/card_ref.h>
 
 class CardDatabaseQuerier;
@@ -22,7 +23,9 @@ CardRef resolve(const CardDatabaseQuerier *db,
                 const QString &basePt,
                 const QString &color,
                 const QStringList &keywords,
-                const QStringList &abilityTexts);
+                const QStringList &abilityTexts,
+                const QString &manaCost = {},
+                quint32 manaValue = 0);
 } // namespace RuledTokenDisplay
 
 #endif

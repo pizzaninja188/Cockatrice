@@ -1009,6 +1009,7 @@ fn tome_scour_mills_five_cards_from_target_player() {
         e.state.objects.insert(
             id,
             tricerules_core::state::GameObject {
+                prototyped: false,
                 id,
                 owner: 0,
                 base_controller: 0,
@@ -1106,6 +1107,7 @@ fn tome_scour_caps_at_library_size() {
         e.state.objects.insert(
             id,
             tricerules_core::state::GameObject {
+                prototyped: false,
                 id,
                 owner: 0,
                 base_controller: 0,
@@ -1177,6 +1179,7 @@ fn tome_scour_can_target_controller() {
         e.state.objects.insert(
             id,
             tricerules_core::state::GameObject {
+                prototyped: false,
                 id,
                 owner: 0,
                 base_controller: 0,
@@ -1253,6 +1256,7 @@ fn tome_scour_self_mill_puts_the_spell_under_the_milled_cards() {
         e.state.objects.insert(
             id,
             tricerules_core::state::GameObject {
+                prototyped: false,
                 id,
                 owner: 0,
                 base_controller: 0,
@@ -1634,6 +1638,7 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
         e.state.objects.insert(
             id,
             tricerules_core::state::GameObject {
+                prototyped: false,
                 id,
                 owner: 0,
                 base_controller: 0,
@@ -1670,6 +1675,7 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
         e.state.objects.insert(
             id,
             tricerules_core::state::GameObject {
+                prototyped: false,
                 id,
                 owner: 0,
                 base_controller: 0,
@@ -1782,6 +1788,7 @@ fn move_graveyard_cards_fizzles_when_target_removed_before_resolution() {
         e.state.objects.insert(
             id,
             tricerules_core::state::GameObject {
+                prototyped: false,
                 id,
                 owner: 0,
                 base_controller: 0,
@@ -1820,6 +1827,7 @@ fn move_graveyard_cards_fizzles_when_target_removed_before_resolution() {
         e.state.objects.insert(
             id,
             tricerules_core::state::GameObject {
+                prototyped: false,
                 id,
                 owner: 0,
                 base_controller: 0,
@@ -1929,6 +1937,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
         e.state.objects.insert(
             id,
             tricerules_core::state::GameObject {
+                prototyped: false,
                 id,
                 owner: 0,
                 base_controller: 0,
@@ -1965,6 +1974,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
         e.state.objects.insert(
             id,
             tricerules_core::state::GameObject {
+                prototyped: false,
                 id,
                 owner: 0,
                 base_controller: 0,
@@ -2436,6 +2446,7 @@ fn inject_card_into_hand(e: &mut GameEngine, player: usize, player_id: i32, card
     e.state.objects.insert(
         id,
         tricerules_core::state::GameObject {
+            prototyped: false,
             id,
             owner: player_id,
             base_controller: player_id,

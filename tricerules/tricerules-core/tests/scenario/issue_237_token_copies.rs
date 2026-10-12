@@ -219,6 +219,7 @@ fn issue_237_stallion_copy_uses_current_values_or_the_last_values_before_departu
             .get_mut(&source)
             .unwrap()
             .copiable_values = Some(tricerules_core::state::CopiableValues {
+            prototyped: false,
             source_card_id: "grizzly_bears".into(),
             source_face_index: 0,
             display_name: face.name.clone(),
@@ -408,6 +409,7 @@ fn issue_237_departed_token_source_survives_cessation_as_last_known_values() {
         .clone();
     engine.state.objects.get_mut(&source).unwrap().token_origin =
         Some(tricerules_core::state::CopiableValues {
+            prototyped: false,
             source_card_id: "colorstorm_stallion".into(),
             source_face_index: 0,
             display_name: face.name.clone(),

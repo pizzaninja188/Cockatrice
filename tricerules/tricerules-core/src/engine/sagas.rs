@@ -82,6 +82,7 @@ mod tests {
         object.zone = Zone::Battlefield;
         object.card_id = "burn,_burn,_tree_and_fern".into();
         object.copiable_values = Some(CopiableValues {
+            prototyped: false,
             source_card_id: "burn,_burn,_tree_and_fern".into(),
             source_face_index: 0,
             display_name: "Burn, Burn, Tree and Fern".into(),

@@ -1618,6 +1618,7 @@ fn new_object_from_card(
         base_controller: owner,
         controller: owner,
         card_id: card_id.to_string(),
+        prototyped: false,
         token_origin: None,
         token_faces: None,
         copiable_values: None,
@@ -3244,8 +3245,10 @@ fn effective_face_from<'a>(
     {
         return Some(Cow::Borrowed(&values.face));
     }
-    registry
-        .get(&object.card_id)?
-        .face(object.face_up_index)
-        .map(Cow::Borrowed)
+    let face = registry.get(&object.card_id)?.face(object.face_up_index)?;
+    if object.prototyped && matches!(object.zone, Zone::Stack | Zone::Battlefield) {
+        Some(Cow::Owned(face.prototyped_face()?))
+    } else {
+        Some(Cow::Borrowed(face))
+    }
 }

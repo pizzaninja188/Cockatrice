@@ -224,10 +224,11 @@ impl GameEngine {
         {
             return Some(Cow::Borrowed(&values.face));
         }
-        self.registry
-            .get(&object.card_id)?
-            .face(event.face_index)
-            .map(Cow::Borrowed)
+        let printed = self.registry.get(&object.card_id)?.face(event.face_index)?;
+        if object.prototyped {
+            return printed.prototyped_face().map(Cow::Owned);
+        }
+        Some(Cow::Borrowed(printed))
     }
 
     fn battlefield_entry_cast_cost_origin(

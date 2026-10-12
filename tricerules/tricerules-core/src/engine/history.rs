@@ -2380,6 +2380,7 @@ mod tests {
         token_object.base_controller = 1;
         token_object.controller = 1;
         token_object.token_origin = Some(CopiableValues {
+            prototyped: false,
             source_card_id: "grizzly_bears".into(),
             source_face_index: 0,
             face: token_face,
@@ -2622,6 +2623,7 @@ mod tests {
                         .clone();
                     engine.state.objects.get_mut(&bear).unwrap().token_origin =
                         Some(CopiableValues {
+                            prototyped: false,
                             source_card_id: "grizzly_bears".into(),
                             source_face_index: 0,
                             face,
@@ -2744,6 +2746,7 @@ mod tests {
 
         let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
         engine.state.objects.get_mut(&bear).unwrap().copiable_values = Some(CopiableValues {
+            prototyped: false,
             source_card_id: "island".into(),
             source_face_index: 0,
             face: engine
@@ -3126,6 +3129,7 @@ mod tests {
             .get_mut(&angel)
             .unwrap()
             .copiable_values = Some(CopiableValues {
+            prototyped: false,
             source_card_id: "serra_angel".into(),
             source_face_index: 0,
             face,
@@ -3172,6 +3176,7 @@ mod tests {
             include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
         ], &[]).unwrap()));
         let values = CopiableValues {
+            prototyped: false,
             source_card_id: "test_cave".into(),
             source_face_index: 0,
             face: registry.get("test_cave").unwrap().primary_face().clone(),
@@ -3623,6 +3628,7 @@ mod tests {
         e.state.objects.get_mut(&grave).unwrap().controller = 0;
         let virtual_id = e.state.next_object_id;
         e.state.stack.push(StackItem {
+            prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: virtual_id,
             controller: 2,

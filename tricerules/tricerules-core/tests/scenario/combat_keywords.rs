@@ -941,6 +941,7 @@ fn haste_creature_can_attack_same_turn_it_enters() {
     e.state.objects.insert(
         goblin,
         tricerules_core::state::GameObject {
+            prototyped: false,
             id: goblin,
             owner: pid,
             base_controller: pid,
@@ -1001,6 +1002,7 @@ fn non_haste_summoning_sick_creature_cannot_attack() {
     e.state.objects.insert(
         bears,
         tricerules_core::state::GameObject {
+            prototyped: false,
             id: bears,
             owner: pid,
             base_controller: pid,

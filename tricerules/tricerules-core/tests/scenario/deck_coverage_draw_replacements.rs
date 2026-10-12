@@ -382,6 +382,7 @@ fn copied_replacement_uses_live_conditional_ability_availability_and_foreign_dra
             .clone();
         engine.state.objects.get_mut(&copy).unwrap().copiable_values =
             Some(tricerules_core::state::CopiableValues {
+                prototyped: false,
                 source_card_id: "thought_reflection".into(),
                 source_face_index: 0,
                 display_name: face.name.clone(),

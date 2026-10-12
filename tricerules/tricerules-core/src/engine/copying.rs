@@ -11,6 +11,7 @@ pub(super) fn double_faced_values(definition: &CardDefinition) -> Option<Box<Dou
             source_face_index: index,
             display_name: definition.face_display_name(index)?.to_string(),
             face: definition.face(index)?.clone(),
+            prototyped: false,
             room_faces: None,
         })
     };
@@ -128,6 +129,7 @@ pub(super) fn copiable_values_from(
                 toughness: Some(2),
                 ..Default::default()
             },
+            prototyped: false,
             room_faces: None,
             display_name: "Face-down creature".into(),
         });
@@ -141,6 +143,9 @@ pub(super) fn copiable_values_from(
     }
     let definition = registry.get(&object.card_id)?;
     let mut face = definition.face(object.face_up_index)?.clone();
+    if object.prototyped && matches!(object.zone, Zone::Stack | Zone::Battlefield) {
+        face = face.prototyped_face()?;
+    }
     if definition.layout == Layout::Flip && object.face_up_index > 0 {
         // Flipping replaces only the alternative characteristics; mana cost is retained.
         face.mana_cost = definition.primary_face().mana_cost.clone();
@@ -150,6 +155,7 @@ pub(super) fn copiable_values_from(
         source_card_id: object.card_id.clone(),
         source_face_index: object.face_up_index,
         face,
+        prototyped: object.prototyped,
         room_faces: (definition.layout == Layout::Room).then(|| definition.faces.clone()),
         display_name: definition
             .face_display_name(object.face_up_index)?
@@ -169,6 +175,7 @@ mod tests {
         TokenCopySnapshot {
             token_id: card_id.into(),
             values: CopiableValues {
+                prototyped: false,
                 source_card_id: card_id.into(),
                 source_face_index: 0,
                 face: definition.primary_face().clone(),

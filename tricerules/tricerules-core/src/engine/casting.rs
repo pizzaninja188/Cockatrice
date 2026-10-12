@@ -240,6 +240,7 @@ fn cast_from_announcement(announcement: &rv1::SpellCastAnnouncement) -> rv1::Cas
         cast_method: announcement.cast_method,
         payment: None,
         casting_permission_id: announcement.casting_permission_id,
+        prototyped: announcement.prototyped,
     }
 }
 
@@ -257,6 +258,7 @@ pub(in crate::engine) fn announcement_from_cast(
         cast_cost_group_selections: cast.cast_cost_group_selections.clone(),
         cast_method: cast.cast_method,
         casting_permission_id: cast.casting_permission_id,
+        prototyped: cast.prototyped,
     }
 }
 
@@ -322,7 +324,13 @@ impl GameEngine {
             .get(&prepared.card_id)
             .and_then(|definition| definition.face(pending.announcement.face_index as usize))
             .ok_or(EngineError::Illegal("locked spell face is unavailable"))?;
-        Ok(self.eligible_restricted_mana_for_spell(prepared.idx, face))
+        let face = if pending.announcement.prototyped {
+            face.prototyped_face()
+                .ok_or(EngineError::Illegal("locked spell has no Prototype mode"))?
+        } else {
+            (*face).clone()
+        };
+        Ok(self.eligible_restricted_mana_for_spell(prepared.idx, &face))
     }
 
     pub(super) fn begin_spell_cast(
@@ -943,6 +951,13 @@ impl GameEngine {
                     self.registry
                         .get(&object.card_id)
                         .and_then(|definition| definition.face(face_index))
+                        .and_then(|face| {
+                            if command.prototyped {
+                                face.prototyped_face()
+                            } else {
+                                Some((*face).clone())
+                            }
+                        })
                         .is_none_or(|face| face.mana_cost.mana_value() > maximum)
                 }) {
                     return Err(EngineError::Illegal(
@@ -1000,6 +1015,12 @@ impl GameEngine {
         let face = def
             .face(face_index)
             .ok_or(EngineError::Illegal("bad face index"))?;
+        let characteristic_face = if command.prototyped {
+            face.prototyped_face()
+                .ok_or(EngineError::Illegal("card has no Prototype mode"))?
+        } else {
+            (*face).clone()
+        };
         if !self.legendary_spell_cast_allowed(player, face) {
             return Err(EngineError::Illegal(
                 "legendary spell requires a legendary creature or planeswalker",
@@ -1041,7 +1062,7 @@ impl GameEngine {
         let face_is_sorcery = face.is_sorcery;
         let face_instant_speed = castable_at_instant_speed(&face);
         let face_mana = match cast_method {
-            SpellCastMethod::Normal => face.mana_cost.clone(),
+            SpellCastMethod::Normal => characteristic_face.mana_cost.clone(),
             SpellCastMethod::Warp => face
                 .warp_cost
                 .clone()
@@ -1090,7 +1111,8 @@ impl GameEngine {
         let additional_costs = face.additional_costs.clone();
         let cast_cost_groups = face.cast_cost_groups.clone();
         let cost_modifiers = face.cost_modifiers.clone();
-        let eligible_restricted_mana = self.eligible_restricted_mana_for_spell(idx, face);
+        let eligible_restricted_mana =
+            self.eligible_restricted_mana_for_spell(idx, &characteristic_face);
         let sorcery_ok = super::priority::sorcery_speed_available(&self.state, player);
         let instant_ok = super::priority::instant_timing_step_allowed(&self.state);
         let conditional_instant = face
@@ -1363,7 +1385,12 @@ impl GameEngine {
         ));
 
         let generic_cost_reduction = self
-            .spell_generic_reduction(player, oid, face, &cost_modifiers)
+            .spell_generic_reduction(
+                player,
+                oid,
+                &characteristic_face,
+                &characteristic_face.cost_modifiers,
+            )
             .saturating_add(self.spell_target_generic_reduction(
                 player,
                 target_source,
@@ -1406,7 +1433,7 @@ impl GameEngine {
             chosen_modes,
             chosen_mode_indices,
             chosen_mode_labels,
-            mana_value: face.mana_cost.mana_value_on_stack(x_value),
+            mana_value: characteristic_face.mana_cost.mana_value_on_stack(x_value),
             convoke: face.keywords.contains(&Keyword::Convoke),
             payment: payment_plan,
         })
@@ -1559,11 +1586,15 @@ impl GameEngine {
                 timestamp: self.state.command_index,
             });
         }
+        if let Some(object) = self.state.objects.get_mut(&oid) {
+            object.prototyped = command.prototyped;
+        }
         self.state.stack.push(StackItem {
             mana_colors_spent_to_cast: payment.mana_colors_spent,
             id: oid,
             controller: player,
             card_id: card_id.clone(),
+            prototyped: command.prototyped,
             targets: stack_targets,
             ability_text: None,
             source_permanent_id: None,
@@ -1696,6 +1727,7 @@ impl GameEngine {
                 primary_presentation: stack_presentation.primary,
                 chosen_mode_presentations: stack_presentation.chosen_modes,
                 chosen_cast_cost_presentations: stack_presentation.chosen_cast_costs,
+                prototyped: command.prototyped,
             })),
         });
         let fact = self.record_spell_cast(player, oid, origin, mana_value, mana_spent);
@@ -2478,6 +2510,7 @@ impl GameEngine {
             id: virtual_id,
             controller: player,
             card_id: card_id.clone(),
+            prototyped: false,
             targets: stack_targets,
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(permanent_id),
@@ -2564,6 +2597,7 @@ impl GameEngine {
                 primary_presentation,
                 chosen_mode_presentations: vec![],
                 chosen_cast_cost_presentations: vec![],
+                prototyped: false,
             })),
         });
         // CR 603.3b: a trigger that fired while the cost was being paid goes on the stack *above*
@@ -3573,6 +3607,7 @@ impl GameEngine {
             id: oid,
             controller: player,
             card_id,
+            prototyped: false,
             targets: Vec::new(),
             ability_text: Some("land play".to_string()),
             source_permanent_id: None,
@@ -3688,6 +3723,69 @@ impl GameEngine {
 #[cfg(test)]
 mod cast_snapshot_tests {
     use super::*;
+
+    #[test]
+    fn prototype_is_offered_as_a_choice_separate_from_cast_method() {
+        let mut e = engine_with_extra(
+            "",
+            &[
+                r#"(id: "prototype_test", name: "Prototype Test", face_id: "prototype_test",
+                mana_cost: "{9}", types: ["Artifact", "Creature"], power: 4, toughness: 4,
+                prototype: Some((mana_cost: "{3}{R}{R}", power: 2, toughness: 2)))"#,
+            ],
+        );
+        let oid = add(&mut e, 0, "prototype_test", Zone::Hand);
+        let slot = e.state.players[0]
+            .hand
+            .iter()
+            .position(|id| *id == oid)
+            .expect("prototype card in hand") as u32;
+        let offers = e.initial_response_batch().legal_by_player[&0]
+            .hand_actions
+            .iter()
+            .filter(|action| {
+                action.hand_index == slot
+                    && action.kind == rv1::HandActionKind::HandActionCastSpell as i32
+            })
+            .map(|action| (action.cast_method, action.prototyped, action.cost.clone()))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            offers,
+            [
+                (rv1::CastMethod::Normal as i32, false, "{9}".into()),
+                (rv1::CastMethod::Normal as i32, true, "{3}{R}{R}".into()),
+            ]
+        );
+
+        e.state.players[0].mana_pool.red = 2;
+        e.state.players[0].mana_pool.colorless = 3;
+        let mut cast = command(&e, oid);
+        let Some(rv1::ruled_command::Cmd::CastSpell(cast_spell)) = cast.cmd.as_mut() else {
+            unreachable!()
+        };
+        cast_spell.prototyped = true;
+        e.apply_command(0, &cast)
+            .expect("the inset cost casts the Prototype mode");
+        let stack_item = e.state.stack.last().expect("spell on stack");
+        assert!(stack_item.prototyped);
+        let characteristics = e.characteristics(oid).expect("stack characteristics");
+        assert_eq!(characteristics.mana_value, 5);
+        assert_eq!(characteristics.colors, vec![Color::Red]);
+        assert_eq!(
+            (characteristics.power, characteristics.toughness),
+            (Some(2), Some(2))
+        );
+
+        resolve(&mut e);
+        assert_eq!(e.state.objects[&oid].zone, Zone::Battlefield);
+        let characteristics = e.characteristics(oid).expect("battlefield characteristics");
+        assert_eq!(characteristics.mana_value, 5);
+        assert_eq!(
+            (characteristics.power, characteristics.toughness),
+            (Some(2), Some(2))
+        );
+    }
 
     fn legendary_cast_fixture() -> GameEngine {
         engine_with_extra(
@@ -5412,6 +5510,7 @@ mod mana_payment_tests {
         let display_name = face.name.clone();
         e.state.objects.get_mut(&source).unwrap().copiable_values =
             Some(crate::state::CopiableValues {
+                prototyped: false,
                 source_card_id: "island".into(),
                 source_face_index: 0,
                 face,

@@ -137,6 +137,7 @@ fn begin_cast_transaction(engine: &mut GameEngine, player: i32, command: RuledCo
         face_index: cast.face_index,
         selected_modes: cast.selected_modes,
         source: cast.source,
+        prototyped: cast.prototyped,
         cost_selections: cast.cost_selections,
         cast_cost_group_selections: cast.cast_cost_group_selections,
         cast_method: cast.cast_method,
@@ -175,6 +176,7 @@ fn begin_cast_command(command: RuledCommand) -> RuledCommand {
                 face_index: cast.face_index,
                 selected_modes: cast.selected_modes,
                 source: cast.source,
+                prototyped: cast.prototyped,
                 cost_selections: cast.cost_selections,
                 cast_cost_group_selections: cast.cast_cost_group_selections,
                 cast_method: cast.cast_method,
@@ -208,6 +210,7 @@ fn issue_239_sunderflock_cost_stays_locked_while_activating_mana_abilities() {
         face_index: cast.face_index,
         selected_modes: cast.selected_modes,
         source: cast.source,
+        prototyped: cast.prototyped,
         cost_selections: cast.cost_selections,
         cast_cost_group_selections: cast.cast_cost_group_selections,
         cast_method: cast.cast_method,
@@ -907,6 +910,7 @@ fn copy_characteristics(engine: &mut GameEngine, oid: u32, card: &str) {
     let definition = tricerules_cards::registry::global().get(card).unwrap();
     engine.state.objects.get_mut(&oid).unwrap().copiable_values =
         Some(tricerules_core::state::CopiableValues {
+            prototyped: false,
             source_card_id: card.into(),
             source_face_index: 0,
             face: definition.primary_face().clone(),

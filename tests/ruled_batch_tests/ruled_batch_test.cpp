@@ -5146,6 +5146,8 @@ TEST_F(RuledBatchTest, Issue237TokenFaceSnapshotRefreshesIdentityInPlaceAndOnRec
     back.set_name("Merciless Predator");
     back.set_pt("3/2");
     back.set_color("r");
+    back.set_mana_cost("{3}{R}{R}");
+    back.set_mana_value(5);
     back.set_is_creature(true);
     back.add_ability_texts("Merciless Predator — triggered ability (triggered_01)");
     *object->mutable_token_identity() = back;
@@ -5164,6 +5166,8 @@ TEST_F(RuledBatchTest, Issue237TokenFaceSnapshotRefreshesIdentityInPlaceAndOnRec
     token->getInfo(&reconnect);
     EXPECT_EQ(reconnect.name(), "Merciless Predator");
     EXPECT_EQ(reconnect.token_base_pt(), "3/2");
+    EXPECT_EQ(reconnect.token_base_mana_cost(), "{3}{R}{R}");
+    EXPECT_EQ(reconnect.token_base_mana_value(), 5u);
     ASSERT_EQ(reconnect.ability_texts_size(), 1);
     EXPECT_EQ(reconnect.ability_texts(0), back.ability_texts(0));
     EXPECT_FALSE(callBatchApply(changed).battlefieldDisplayChanged)
@@ -5175,12 +5179,16 @@ TEST_F(RuledBatchTest, Issue237TokenFaceSnapshotRefreshesIdentityInPlaceAndOnRec
     updated->clear_ability_texts();
     updated->set_color("u");
     updated->set_pt("2/2");
+    updated->set_mana_cost("{2}{U}");
+    updated->set_mana_value(3);
     EXPECT_TRUE(callBatchApply(changed).battlefieldDisplayChanged);
     reconnect.Clear();
     token->getInfo(&reconnect);
     EXPECT_EQ(reconnect.name(), "Merciless Predator");
     EXPECT_EQ(reconnect.color(), "u");
     EXPECT_EQ(reconnect.token_base_pt(), "2/2");
+    EXPECT_EQ(reconnect.token_base_mana_cost(), "{2}{U}");
+    EXPECT_EQ(reconnect.token_base_mana_value(), 3u);
     EXPECT_EQ(reconnect.ability_texts_size(), 0);
     EXPECT_EQ(token->getId(), serverId);
 }
@@ -5839,6 +5847,42 @@ TEST_F(RuledBatchTest, FaceDownIdentityIsControllerOnlyAndFaceUpKeepsServerCard)
     EXPECT_FALSE(card->getFaceDown());
     EXPECT_EQ(card->getId(), serverId);
     EXPECT_EQ(findCardByEngineOid(p1, 9802u), card);
+}
+
+TEST_F(RuledBatchTest, FaceDownBattlefieldViewHidesRetainedPrototypeDesignation)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view();
+    auto *ownerView = view->add_per_player();
+    ownerView->set_player_id(p1->getPlayerId());
+    auto *object = ownerView->add_battlefield_objects();
+    object->set_object_id(9810u);
+    object->set_face_down(true);
+    object->set_prototyped(true);
+    auto *opponentView = view->add_per_player();
+    opponentView->set_player_id(p2->getPlayerId());
+
+    const auto verifyRedacted = [&](Server_AbstractParticipant *recipient) {
+        const auto filtered = redactFor(batch, recipient);
+        const ruled::v1::BattlefieldObject *seen = nullptr;
+        for (const auto &event : filtered.events()) {
+            if (!event.has_zone_view()) {
+                continue;
+            }
+            for (const auto &playerView : event.zone_view().per_player()) {
+                for (const auto &candidate : playerView.battlefield_objects()) {
+                    if (candidate.object_id() == 9810u) {
+                        seen = &candidate;
+                    }
+                }
+            }
+        }
+        ASSERT_NE(seen, nullptr);
+        EXPECT_TRUE(seen->face_down());
+        EXPECT_FALSE(seen->prototyped());
+    };
+    verifyRedacted(p1);
+    verifyRedacted(p2);
 }
 
 TEST_F(RuledBatchTest, HideawayExileIdentityUsesEngineLookRightsAndHidesReconnectPrintingIdentity)

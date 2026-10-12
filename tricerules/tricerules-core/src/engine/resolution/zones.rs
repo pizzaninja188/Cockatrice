@@ -6399,6 +6399,7 @@ mod tests {
 
     fn linked_exile_test_item(occurrence: crate::state::LinkedExileOccurrence) -> StackItem {
         StackItem {
+            prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: 90_100,
             controller: 0,

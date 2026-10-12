@@ -47,6 +47,7 @@ struct RuledCardActionMenuOption
     bool enabled = true;
     int manaOptionIndex = 0;
     ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL;
+    bool prototyped = false;
     quint64 castingPermissionId = 0;
 };
 
@@ -434,6 +435,7 @@ struct PendingRuledSpellCast
     ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL;
     quint64 sourceZoneChangeGeneration = 0;
     quint64 castingPermissionId = 0;
+    bool prototyped = false;
     /// Mirrors the current spell or modal option; only ChooseAtCast collects allocations.
     ruled::v1::DamageDivision damageDivision = ruled::v1::DAMAGE_DIVISION_CHOOSE_AT_CAST;
     int faceIndex = 0;
@@ -791,7 +793,7 @@ inline void ruledAccumulateTargetedCostReductions(const RuledSpellTargetData &da
     if (spell.activeModePosition >= 0 && spell.activeModePosition < spell.selectedModes.size()) {
         return state.modalSpellTargetData(spell.handIndex, spell.faceIndex,
                                           spell.selectedModes.at(spell.activeModePosition).modeIndex, spell.source,
-                                          spell.castMethod, spell.castingPermissionId);
+                                          spell.castMethod, spell.castingPermissionId, spell.prototyped);
     }
     return state.spellTargetData(spell.handIndex, spell.faceIndex, spell.source);
 }
@@ -1009,7 +1011,8 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
             for (int modePosition = 0; modePosition < spell.selectedModes.size(); ++modePosition) {
                 auto &mode = spell.selectedModes[modePosition];
                 const auto data = state.modalSpellTargetData(spell.handIndex, spell.faceIndex, mode.modeIndex,
-                                                             spell.source, spell.castMethod, spell.castingPermissionId);
+                                                             spell.source, spell.castMethod, spell.castingPermissionId,
+                                                             spell.prototyped);
                 if (!data.has_value()) {
                     continue;
                 }

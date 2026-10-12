@@ -2126,7 +2126,54 @@ fn hand_action(
         has_convoke: false,
         cast_method: rv1::CastMethod::Normal as i32,
         all_modes_cast_cost: None,
+        prototyped: false,
     }
+}
+
+fn hand_prototype_variant(
+    eng: &GameEngine,
+    pid: PlayerId,
+    player_index: usize,
+    oid: ObjectId,
+    face: &CardFace,
+    action: &rv1::LegalHandAction,
+) -> Option<rv1::LegalHandAction> {
+    let prototype_face = face.prototyped_face()?;
+    let mut prototype = action.clone();
+    prototype.prototyped = true;
+    if prototype.cast_method == rv1::CastMethod::Normal as i32 {
+        prototype.cost = prototype_face.mana_cost.to_string();
+    }
+    prototype.eligible_restricted_mana_group_ids =
+        eng.eligible_restricted_mana_for_spell(player_index, &prototype_face);
+    prototype.generic_cost_reduction =
+        eng.spell_generic_reduction(pid, oid, &prototype_face, &prototype_face.cost_modifiers);
+    Some(prototype)
+}
+
+fn zone_prototype_variant(
+    eng: &GameEngine,
+    pid: PlayerId,
+    player_index: usize,
+    oid: ObjectId,
+    face: &CardFace,
+    action: &rv1::LegalZoneCastAction,
+    maximum_mana_value: Option<u32>,
+) -> Option<rv1::LegalZoneCastAction> {
+    let prototype_face = face.prototyped_face()?;
+    if maximum_mana_value.is_some_and(|maximum| prototype_face.mana_cost.mana_value() > maximum) {
+        return None;
+    }
+    let mut prototype = action.clone();
+    prototype.prototyped = true;
+    if prototype.cast_method == rv1::CastMethod::Normal as i32 {
+        prototype.cost = prototype_face.mana_cost.to_string();
+    }
+    prototype.eligible_restricted_mana_group_ids =
+        eng.eligible_restricted_mana_for_spell(player_index, &prototype_face);
+    prototype.generic_cost_reduction =
+        eng.spell_generic_reduction(pid, oid, &prototype_face, &prototype_face.cost_modifiers);
+    Some(prototype)
 }
 
 fn spell_target_groups_are_selectable(targets: &rv1::SpellTargets) -> bool {
@@ -2378,11 +2425,20 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                     sneak.cost_choices = Some(choices);
                     Some(sneak)
                 });
+                let mut cast_actions = Vec::new();
                 if cast_ok {
-                    actions.push(action);
-                    actions.extend(warp);
+                    cast_actions.push(action);
+                    cast_actions.extend(warp);
                 }
-                actions.extend(sneak);
+                cast_actions.extend(sneak);
+                for cast_action in cast_actions {
+                    actions.push(cast_action.clone());
+                    if let Some(prototype) =
+                        hand_prototype_variant(eng, pid, player_index, oid, face, &cast_action)
+                    {
+                        actions.push(prototype);
+                    }
+                }
             }
         }
     }
@@ -2484,6 +2540,7 @@ pub(super) fn legal_zone_cast_actions(
                     casting_permission_id: None,
                     all_modes_cast_cost: None,
                     preparation_source: None,
+                    prototyped: false,
                 };
                 if !cost_choices.non_mana_costs_payable {
                     continue;
@@ -2555,7 +2612,12 @@ pub(super) fn legal_zone_cast_actions(
                         continue;
                     }
                 }
-                actions.push(action);
+                actions.push(action.clone());
+                if let Some(prototype) =
+                    zone_prototype_variant(eng, pid, player_index, oid, face, &action, None)
+                {
+                    actions.push(prototype);
+                }
             }
         }
     }
@@ -2601,10 +2663,15 @@ pub(super) fn legal_zone_cast_actions(
             let Some(face) = definition.face(face_index) else {
                 continue;
             };
-            if permission
+            let normal_within_mana_value = permission
                 .max_face_mana_value
-                .is_some_and(|maximum| face.mana_cost.mana_value() > maximum)
-            {
+                .is_none_or(|maximum| face.mana_cost.mana_value() <= maximum);
+            let prototype_within_mana_value = face.prototype.as_ref().is_some_and(|prototype| {
+                permission
+                    .max_face_mana_value
+                    .is_none_or(|maximum| prototype.mana_cost.mana_value() <= maximum)
+            });
+            if !normal_within_mana_value && !prototype_within_mana_value {
                 continue;
             }
             if face.is_land {
@@ -2665,6 +2732,7 @@ pub(super) fn legal_zone_cast_actions(
                     }),
                     _ => None,
                 },
+                prototyped: false,
             };
             if action.needs_target && face.modal_spell.is_none() {
                 let target_source = TargetSourceIdentity::spell_face(eng, object.id, face_index);
@@ -2759,7 +2827,20 @@ pub(super) fn legal_zone_cast_actions(
                     continue;
                 }
             }
-            actions.push(action);
+            if normal_within_mana_value {
+                actions.push(action.clone());
+            }
+            if let Some(prototype) = zone_prototype_variant(
+                eng,
+                pid,
+                player_index,
+                object.id,
+                face,
+                &action,
+                permission.max_face_mana_value,
+            ) {
+                actions.push(prototype);
+            }
         }
     }
     actions

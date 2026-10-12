@@ -714,6 +714,7 @@ fn flameshadow_copy_entry_choice_fixture_resumes_with_the_exact_token_reference(
         .get_mut(&creature)
         .expect("the observed creature")
         .copiable_values = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: "grizzly_bears".into(),
         source_face_index: 0,
         display_name: face.name.clone(),

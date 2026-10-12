@@ -119,6 +119,7 @@ fn tainted_treats_uses_copied_battlefield_mana_value_after_destroy() {
         .get_mut(&target)
         .unwrap()
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "serra_angel".into(),
         source_face_index: 0,
         display_name: copied.name.clone(),

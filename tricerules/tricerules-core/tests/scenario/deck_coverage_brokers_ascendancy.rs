@@ -281,6 +281,7 @@ fn a_dual_creature_planeswalker_gets_both_counter_types() {
         .get_mut(&dual)
         .expect("dual-type permanent")
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "jace_beleren".to_string(),
         source_face_index: 0,
         face,

@@ -1,6 +1,8 @@
 #include "ruled_token_display.h"
 
 #include <QChar>
+#include <QObject>
+#include <QRegularExpression>
 #include <algorithm>
 #include <libcockatrice/card/database/card_database_querier.h>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
@@ -18,6 +20,14 @@ QString normalizeColors(const QString &colors)
     }
     std::sort(out.begin(), out.end());
     return out;
+}
+
+QString normalizeManaCost(QString cost)
+{
+    cost.remove(QLatin1Char('{'));
+    cost.remove(QLatin1Char('}'));
+    cost.remove(QRegularExpression(QStringLiteral("\\s+")));
+    return cost.toUpper();
 }
 
 QString normalizeAbilityText(const QString &text)
@@ -58,6 +68,10 @@ QString RuledTokenDisplay::describe(const ruled::v1::TokenIdentity &identity)
     QStringList parts{QString::fromStdString(identity.name())};
     if (!identity.pt().empty())
         parts.append(QString::fromStdString(identity.pt()));
+    if (!identity.mana_cost().empty())
+        parts.append(QString::fromStdString(identity.mana_cost()));
+    if (identity.mana_value() > 0)
+        parts.append(QObject::tr("MV %1").arg(identity.mana_value()));
     parts.append(identity.color().empty() ? QStringLiteral("Colorless") : QString::fromStdString(identity.color()));
     QStringList types;
     for (const auto &type : identity.types())
@@ -82,7 +96,8 @@ void RuledTokenDisplay::applyProposal(ServerInfo_Card &card,
     for (const auto &text : identity.ability_texts())
         abilityTexts.append(QString::fromStdString(text));
     const CardRef art = resolve(db, QString::fromStdString(identity.name()), QString::fromStdString(identity.pt()),
-                                QString::fromStdString(identity.color()), keywords, abilityTexts);
+                                QString::fromStdString(identity.color()), keywords, abilityTexts,
+                                QString::fromStdString(identity.mana_cost()), identity.mana_value());
     card.set_name(art.name.isEmpty() ? identity.name() : art.name.toStdString());
     card.set_pt(identity.pt());
     card.set_color(identity.color());
@@ -94,7 +109,9 @@ CardRef RuledTokenDisplay::resolve(const CardDatabaseQuerier *db,
                                    const QString &basePt,
                                    const QString &color,
                                    const QStringList &keywords,
-                                   const QStringList &abilityTexts)
+                                   const QStringList &abilityTexts,
+                                   const QString &manaCost,
+                                   quint32 manaValue)
 {
     if (!db || tokenName.isEmpty()) {
         return {};
@@ -131,6 +148,10 @@ CardRef RuledTokenDisplay::resolve(const CardDatabaseQuerier *db,
         CardInfoPtr info = db->getCardInfo(baseName + QString(spaces, QLatin1Char(' ')));
         if (!info || info->getPowTough().trimmed() != basePt.trimmed() ||
             normalizeColors(info->getColors()) != expectedColors) {
+            continue;
+        }
+        if ((!manaCost.isEmpty() && normalizeManaCost(info->getManaCost()) != normalizeManaCost(manaCost)) ||
+            (manaValue > 0 && info->getCmc().toUInt() != manaValue)) {
             continue;
         }
 

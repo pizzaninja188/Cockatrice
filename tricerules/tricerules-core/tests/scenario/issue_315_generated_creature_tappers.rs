@@ -52,6 +52,7 @@ fn install_brightfield_mustang_face(engine: &mut GameEngine, object_id: u32) {
     object.power = face.power;
     object.toughness = face.toughness;
     object.copiable_values = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: "brightfield_mustang".into(),
         source_face_index: 0,
         display_name: face.name.clone(),

@@ -278,7 +278,14 @@ pub(super) fn stack_spell_colors(
     registry: &'static CardRegistry,
     item: &StackItem,
 ) -> Option<Vec<Color>> {
-    let face = registry.get(&item.card_id)?.face(item.face_index)?;
+    let printed_face = registry.get(&item.card_id)?.face(item.face_index)?;
+    let prototype_face;
+    let face = if item.prototyped {
+        prototype_face = printed_face.prototyped_face()?;
+        &prototype_face
+    } else {
+        printed_face
+    };
     let mut characteristics = Characteristics {
         mana_value: face.mana_cost.mana_value_on_stack(item.chosen_x),
         controller: item.controller,
@@ -598,12 +605,12 @@ impl CharacteristicsEvaluator<'_> {
             evasions: face.evasions.to_vec(),
             // Object snapshots take precedence for tokens and scenario overrides. Multi-face
             // objects leave these unset and read the active face.
-            power: if copied.is_some() {
+            power: if copied.is_some() || object.prototyped {
                 face.power
             } else {
                 object.power.or(face.power)
             },
-            toughness: if copied.is_some() {
+            toughness: if copied.is_some() || object.prototyped {
                 face.toughness
             } else {
                 object.toughness.or(face.toughness)
@@ -3800,6 +3807,7 @@ mod tests {
         object.zone = Zone::Battlefield;
         object.face_down = face_down;
         object.copiable_values = Some(CopiableValues {
+            prototyped: false,
             source_card_id: "cavalry_drillmaster".into(),
             source_face_index: 0,
             face,
@@ -3837,6 +3845,7 @@ mod tests {
         let object = engine.state.objects.get_mut(&oid).expect("library object");
         object.zone = Zone::Battlefield;
         object.copiable_values = Some(CopiableValues {
+            prototyped: false,
             source_card_id: "grizzly_bears".into(),
             source_face_index: 0,
             face,
@@ -3892,6 +3901,7 @@ mod tests {
         let object = engine.state.objects.get_mut(&oid).expect("library object");
         object.zone = Zone::Battlefield;
         object.copiable_values = Some(CopiableValues {
+            prototyped: false,
             source_card_id: "spyglass_siren".into(),
             source_face_index: 0,
             face,
@@ -4030,6 +4040,7 @@ mod tests {
         engine.state.objects.insert(
             oid,
             GameObject {
+                prototyped: false,
                 id: oid,
                 owner: 0,
                 base_controller: 0,
@@ -4150,6 +4161,7 @@ mod tests {
         engine.state.objects.insert(
             oid,
             GameObject {
+                prototyped: false,
                 id: oid,
                 owner: 0,
                 base_controller: 0,
@@ -4225,6 +4237,7 @@ mod tests {
         engine.state.objects.insert(
             oid,
             GameObject {
+                prototyped: false,
                 id: oid,
                 owner: 0,
                 base_controller: 0,
@@ -4283,6 +4296,7 @@ mod tests {
         )
         .expect("new engine");
         let make_object = |id, owner, attached_to| GameObject {
+            prototyped: false,
             id,
             owner,
             base_controller: owner,
@@ -4372,6 +4386,7 @@ mod tests {
         engine.state.objects.insert(
             oid,
             GameObject {
+                prototyped: false,
                 id: oid,
                 owner: 0,
                 base_controller: 0,
@@ -4431,6 +4446,7 @@ mod tests {
                            card_id: &str,
                            power: Option<u32>,
                            toughness: Option<u32>| GameObject {
+            prototyped: false,
             id,
             owner: controller,
             base_controller: controller,
@@ -4568,6 +4584,7 @@ mod tests {
         engine.state.objects.insert(
             oid,
             GameObject {
+                prototyped: false,
                 id: oid,
                 owner: controller,
                 base_controller: controller,

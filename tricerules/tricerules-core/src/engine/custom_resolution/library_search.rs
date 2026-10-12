@@ -1211,6 +1211,7 @@ mod tests {
 
     fn test_stack_item() -> StackItem {
         StackItem {
+            prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: 90_001,
             controller: 0,

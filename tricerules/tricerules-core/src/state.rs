@@ -516,6 +516,9 @@ pub struct GameObject {
     /// the corresponding control index; other per-player zone lists are ownership indexes.
     pub controller: PlayerId,
     pub card_id: String,
+    /// CR 702.160 / 718.3: selected Prototype characteristics for this spell or battlefield
+    /// incarnation. This is intrinsic state, separate from an acquired copy-layer override.
+    pub prototyped: bool,
     /// CR 707.2 layer-1 values replacing the physical card's printed face while this object
     /// remains on the battlefield. Physical identity stays in `card_id`.
     pub copiable_values: Option<CopiableValues>,
@@ -584,6 +587,9 @@ pub struct CopiableValues {
     pub source_card_id: String,
     pub source_face_index: usize,
     pub face: CardFace,
+    /// CR 718.3d: the copied permanent or token has the Prototype characteristics selected for
+    /// the source object's current copiable values.
+    pub prototyped: bool,
     /// CR 707.2 / 709.5: copied Rooms retain both printed door definitions. Unlock
     /// designations are status, not copiable values, so they live in [`GameState::room_states`].
     pub room_faces: Option<Vec<CardFace>>,
@@ -2317,6 +2323,8 @@ pub struct StackItem {
     pub id: ObjectId,
     pub controller: PlayerId,
     pub card_id: String,
+    /// The cast selected Prototype characteristics. Spell copies retain this CR 718 choice.
+    pub prototyped: bool,
     pub targets: Vec<StackTarget>,
     /// `None` = spell; `Some(text)` = activated or triggered ability annotation shown on stack card.
     pub ability_text: Option<String>,

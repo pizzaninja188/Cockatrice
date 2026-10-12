@@ -39,6 +39,7 @@ fn remove_all_charge_counters_preserves_other_kinds_and_zero_is_noop() {
     .expect("remove-all counter instruction")];
     let object = engine.state.objects.get_mut(&source).unwrap();
     object.copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "codex_shredder".into(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -94,6 +95,7 @@ fn source_counter_condition_uses_exact_departed_generation_lki() {
     }];
     let object = engine.state.objects.get_mut(&source).unwrap();
     object.copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "ebony_owl_netsuke".into(),
         source_face_index: 0,
         display_name: face.name.clone(),

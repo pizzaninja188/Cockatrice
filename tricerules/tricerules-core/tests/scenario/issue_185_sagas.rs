@@ -192,6 +192,7 @@ fn read_ahead_uses_a_logged_branch_and_suppresses_skipped_chapters() {
         .get_mut(&saga)
         .expect("Saga")
         .copiable_values = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "burn,_burn,_tree_and_fern".into(),
         source_face_index: 0,
         display_name: "Burn, Burn, Tree and Fern".into(),

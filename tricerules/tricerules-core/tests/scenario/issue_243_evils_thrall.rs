@@ -47,6 +47,7 @@ fn copy_characteristics(engine: &mut GameEngine, object_id: u32, card_id: &str) 
         .get_mut(&object_id)
         .unwrap()
         .copiable_values = Some(tricerules_core::state::CopiableValues {
+        prototyped: false,
         source_card_id: card_id.into(),
         source_face_index: 0,
         face: definition.primary_face().clone(),

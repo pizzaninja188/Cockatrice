@@ -243,6 +243,7 @@ fn issue_201_departed_token_source_still_shuffles_its_owners_library() {
         .primary_face()
         .clone();
     engine.state.objects.get_mut(&source).unwrap().token_origin = Some(CopiableValues {
+        prototyped: false,
         source_card_id: "floodpits_drowner".into(),
         source_face_index: 0,
         face,

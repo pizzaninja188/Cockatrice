@@ -2015,6 +2015,7 @@ mod sba_tests {
         e.state.objects.insert(
             id,
             GameObject {
+                prototyped: false,
                 id,
                 owner,
                 base_controller: owner,
@@ -2072,6 +2073,7 @@ mod sba_tests {
             let object = e.state.objects.get_mut(&attachment).unwrap();
             object.card_id = base_card.into();
             object.copiable_values = Some(CopiableValues {
+                prototyped: false,
                 source_card_id: base_card.into(),
                 source_face_index: 0,
                 display_name: face.name.clone(),
@@ -2096,6 +2098,7 @@ mod sba_tests {
             let object = e.state.objects.get_mut(&outer).unwrap();
             object.card_id = "hermetic_study".into();
             object.copiable_values = Some(CopiableValues {
+                prototyped: false,
                 source_card_id: "hermetic_study".into(),
                 source_face_index: 0,
                 display_name: outer_face.name.clone(),

@@ -226,6 +226,7 @@ impl GameEngine {
             id: virtual_id,
             controller,
             card_id: card_id.clone(),
+            prototyped: false,
             targets: stack_targets.clone(),
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(source_id),
@@ -280,6 +281,7 @@ impl GameEngine {
                 primary_presentation,
                 chosen_mode_presentations,
                 chosen_cast_cost_presentations: vec![],
+                prototyped: false,
             })),
         });
 
