@@ -1673,13 +1673,15 @@ fn effect_affects_with_view(
     // Resolved removal is independent of subsequent source ability loss for every duration.
     let resolved_removal = matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities)
         && component_group(state, registry, effect).is_none();
+    let recipient_started =
+        static_component_started_for_in_early_view(state, registry, effect, oid, early_view);
     let independent_at_this_layer = is_earlier_characteristic_component(&effect.kind)
         || resolved_removal
         || matches!(
             effect.kind,
             ContinuousEffectKind::Layer6AddKeywordFromStatic { .. }
         )
-        || static_component_started_for_in_early_view(state, registry, effect, oid, early_view);
+        || recipient_started;
     if !independent_at_this_layer
         && component_group(state, registry, effect).is_some()
         && effect
@@ -1710,6 +1712,13 @@ fn effect_affects_with_view(
     if !(CharacteristicsEvaluator { state, registry }).static_keyword_grant_source_is_active(effect)
     {
         return false;
+    }
+    // CR 613.6: once this grouped static effect starts applying to an object in layer 4, its
+    // later-layer components affect that same object during this characteristics evaluation even
+    // if its own layer-4 type addition makes the dynamic scope filter fail. A new evaluation
+    // rebuilds the early view, so game-state changes immediately recalculate membership.
+    if recipient_started {
+        return true;
     }
     effect_scope_affects(state, registry, effect, oid, characteristics)
 }
@@ -3004,6 +3013,283 @@ mod tests {
             }),
             exclude: None,
         }
+    }
+
+    #[test]
+    fn grouped_transformation_keeps_layer4_recipient_after_its_filter_changes() {
+        let source = r#"(
+            id: "layered_transformer_fixture",
+            name: "Layered Transformer Fixture",
+            face_id: "layered_transformer_fixture",
+            types: ["Creature"], power: 1, toughness: 1,
+            static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                definition: ConditionalPermanentTransformation(
+                    filter: (kind: AnyPermanent, controller: You,
+                        excluded_permanent_types: [Creature]),
+                    condition: ActivePlayer(players: Controller),
+                    add_types: (card_types: [Creature]),
+                    base_power: Some(4), base_toughness: Some(4),
+                    keywords: [Haste],
+                    triggered_abilities: [(ability_id: "triggered_01",
+                        presentation: Fallback,
+                        trigger: WheneverSelfDealsCombatDamageToPlayer,
+                        effect: [Draw(count: 1)])],
+                ))],
+        )"#;
+        let target = r#"(
+            id: "layered_artifact_fixture", name: "Layered Artifact Fixture",
+            face_id: "layered_artifact_fixture", types: ["Artifact"]
+        )"#;
+        let registry = Box::leak(Box::new(
+            tricerules_cards::CardRegistry::from_chunks_and_tokens(&[source, target], &[])
+                .expect("grouped transformation fixtures are valid"),
+        ));
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            305_009,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
+        engine.registry = registry;
+        let source = insert_fixture(
+            &mut engine,
+            0,
+            "layered_transformer_fixture",
+            Zone::Battlefield,
+        );
+        let target = insert_fixture(
+            &mut engine,
+            0,
+            "layered_artifact_fixture",
+            Zone::Battlefield,
+        );
+        engine.emit_static_abilities_on_enter(source);
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 0,
+        });
+
+        let characteristics = engine.characteristics(target).unwrap();
+        assert!(characteristics.is_creature());
+        assert_eq!(
+            (characteristics.power, characteristics.toughness),
+            (Some(4), Some(4))
+        );
+        assert!(characteristics.has_keyword(Keyword::Haste));
+        assert_eq!(
+            engine.effective_triggered_abilities(target, "layered_artifact_fixture", 0).len(),
+            1,
+            "the self-trigger keeps the same CR 613.6 recipient even after its added type excludes it"
+        );
+
+        engine.state.active_player_idx = 1;
+        let next_turn = engine.characteristics(target).unwrap();
+        assert!(!next_turn.is_creature());
+        assert_eq!((next_turn.power, next_turn.toughness), (None, None));
+        assert!(!next_turn.has_keyword(Keyword::Haste));
+        assert!(engine
+            .effective_triggered_abilities(target, "layered_artifact_fixture", 0)
+            .is_empty());
+    }
+
+    #[test]
+    fn separate_static_origins_grant_distinct_triggered_abilities() {
+        // Bello is legendary, so two literal copies cannot coexist under CR 704.5j. Use two
+        // differently named nonlegendary fixture sources to verify that independent ability
+        // occurrences each grant their own trigger to a shared recipient.
+        const STATIC_SOURCE: &str = r#"
+            types: ["Enchantment"],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                definition: ConditionalPermanentTransformation(
+                    filter: (kind: AnyPermanent, controller: You, permanent_types: [Artifact]),
+                    condition: ActivePlayer(players: Controller),
+                    add_types: (card_types: [Creature]),
+                    base_power: Some(4), base_toughness: Some(4),
+                    keywords: [Haste],
+                    triggered_abilities: [(ability_id: "triggered_01",
+                        presentation: Fallback,
+                        trigger: WheneverSelfDealsCombatDamageToPlayer,
+                        effect: [Draw(count: 1)])],
+                ))],
+        "#;
+        let first = format!(
+            "(id: \"first_transformer_fixture\", name: \"First Transformer Fixture\", face_id: \"first_transformer_fixture\", {STATIC_SOURCE})"
+        );
+        let second = format!(
+            "(id: \"second_transformer_fixture\", name: \"Second Transformer Fixture\", face_id: \"second_transformer_fixture\", {STATIC_SOURCE})"
+        );
+        let target = r#"(
+            id: "shared_artifact_fixture", name: "Shared Artifact Fixture",
+            face_id: "shared_artifact_fixture", types: ["Artifact"]
+        )"#;
+        let registry = Box::leak(Box::new(
+            tricerules_cards::CardRegistry::from_chunks_and_tokens(&[&first, &second, target], &[])
+                .expect("separate-origin transformation fixtures are valid"),
+        ));
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            305_011,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
+        engine.registry = registry;
+        let first_source = insert_fixture(
+            &mut engine,
+            0,
+            "first_transformer_fixture",
+            Zone::Battlefield,
+        );
+        let second_source = insert_fixture(
+            &mut engine,
+            0,
+            "second_transformer_fixture",
+            Zone::Battlefield,
+        );
+        let target = insert_fixture(&mut engine, 0, "shared_artifact_fixture", Zone::Battlefield);
+        engine.emit_static_abilities_on_enter(first_source);
+        engine.emit_static_abilities_on_enter(second_source);
+
+        let characteristics = engine.characteristics(target).unwrap();
+        assert!(characteristics.is_creature());
+        assert_eq!(
+            (characteristics.power, characteristics.toughness),
+            (Some(4), Some(4))
+        );
+        let grants = engine.effective_triggered_abilities(target, "shared_artifact_fixture", 0);
+        assert_eq!(grants.len(), 2);
+        assert_ne!(grants[0].2, grants[1].2);
+        assert!(grants.iter().any(|(_, _, origin)| matches!(
+            origin,
+            TriggerAbilityOrigin::StaticGrant { source_id, .. } if *source_id == first_source
+        )));
+        assert!(grants.iter().any(|(_, _, origin)| matches!(
+            origin,
+            TriggerAbilityOrigin::StaticGrant { source_id, .. } if *source_id == second_source
+        )));
+    }
+
+    #[test]
+    fn bello_filter_preserves_its_artifact_and_enchantment_branches() {
+        const FIXTURES: [&str; 6] = [
+            r#"(id: "bello_artifact_four", name: "Bello Artifact Four", face_id: "bello_artifact_four", mana_cost: "{4}", types: ["Artifact"])"#,
+            r#"(id: "bello_enchantment_four", name: "Bello Enchantment Four", face_id: "bello_enchantment_four", mana_cost: "{3}{G}", types: ["Enchantment"])"#,
+            r#"(id: "bello_equipment_four", name: "Bello Equipment Four", face_id: "bello_equipment_four", mana_cost: "{4}", types: ["Artifact", "Equipment"])"#,
+            r#"(id: "bello_aura_four", name: "Bello Aura Four", face_id: "bello_aura_four", mana_cost: "{3}{W}", types: ["Enchantment", "Aura"], spell_effect: [AuraAttach(target: (kind: Creature))])"#,
+            r#"(id: "bello_dual_equipment_four", name: "Bello Dual Equipment Four", face_id: "bello_dual_equipment_four", mana_cost: "{4}", types: ["Artifact", "Enchantment", "Equipment"])"#,
+            r#"(id: "bello_artifact_three", name: "Bello Artifact Three", face_id: "bello_artifact_three", mana_cost: "{3}", types: ["Artifact"])"#,
+        ];
+        let chunks = [
+            include_str!("../../../tricerules-cards/data/bello,_bard_of_the_brambles.ron"),
+            FIXTURES[0],
+            FIXTURES[1],
+            FIXTURES[2],
+            FIXTURES[3],
+            FIXTURES[4],
+            FIXTURES[5],
+        ];
+        let registry = Box::leak(Box::new(
+            tricerules_cards::CardRegistry::from_chunks_and_tokens(&chunks, &[])
+                .expect("Bello filter fixtures are valid"),
+        ));
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            305_010,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
+        engine.registry = registry;
+        let bello = insert_fixture(
+            &mut engine,
+            0,
+            "bello,_bard_of_the_brambles",
+            Zone::Battlefield,
+        );
+        let artifact = insert_fixture(&mut engine, 0, "bello_artifact_four", Zone::Battlefield);
+        let enchantment =
+            insert_fixture(&mut engine, 0, "bello_enchantment_four", Zone::Battlefield);
+        let equipment = insert_fixture(&mut engine, 0, "bello_equipment_four", Zone::Battlefield);
+        let aura = insert_fixture(&mut engine, 0, "bello_aura_four", Zone::Battlefield);
+        let dual = insert_fixture(
+            &mut engine,
+            0,
+            "bello_dual_equipment_four",
+            Zone::Battlefield,
+        );
+        let cheap = insert_fixture(&mut engine, 0, "bello_artifact_three", Zone::Battlefield);
+        let opponent = insert_fixture(&mut engine, 1, "bello_artifact_four", Zone::Battlefield);
+        engine.state.objects.get_mut(&aura).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(bello));
+        engine.emit_static_abilities_on_enter(bello);
+
+        for recipient in [artifact, enchantment, dual] {
+            let result = engine.characteristics(recipient).unwrap();
+            assert!(
+                result.is_creature(),
+                "{recipient} is an eligible OR-branch recipient"
+            );
+            assert_eq!((result.power, result.toughness), (Some(4), Some(4)));
+        }
+        for excluded in [equipment, aura, cheap, opponent] {
+            let result = engine.characteristics(excluded).unwrap();
+            assert!(
+                !result.is_creature(),
+                "{excluded} fails the exact Bello recipient filter: {:?}",
+                result.types
+            );
+            assert_eq!((result.power, result.toughness), (None, None));
+        }
+    }
+
+    #[test]
+    fn bello_scope_tracks_its_current_controller() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            305_012,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
+        let bello = insert_fixture(
+            &mut engine,
+            0,
+            "bello,_bard_of_the_brambles",
+            Zone::Battlefield,
+        );
+        let previous_controller_artifact =
+            insert_fixture(&mut engine, 0, "gilded_lotus", Zone::Battlefield);
+        let current_controller_artifact =
+            insert_fixture(&mut engine, 1, "gilded_lotus", Zone::Battlefield);
+        engine.emit_static_abilities_on_enter(bello);
+
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(bello),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(1),
+            },
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1,
+        });
+        engine.state.active_player_idx = 1;
+
+        assert!(!engine
+            .characteristics(previous_controller_artifact)
+            .unwrap()
+            .is_creature());
+        assert!(engine
+            .characteristics(current_controller_artifact)
+            .unwrap()
+            .is_creature());
     }
 
     #[test]

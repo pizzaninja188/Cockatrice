@@ -1,0 +1,34 @@
+{
+  "format_version": 1,
+  "oracle_id": "fb773114-6161-46a3-ab30-1853958fbcb0",
+  "spans": [
+    {
+      "face_id": "bello_bard_of_the_brambles",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::ConditionalPermanentTransformation",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_bello::bello_animates_qualifying_artifacts_and_enchantments_only_during_its_controllers_turn",
+      "covers": "the exact artifact and enchantment cohorts receive Elemental creature type, base 4/4, indestructible, haste, and a public creature-type annotation only during Bello's controller's turn"
+    },
+    {
+      "test": "scenario deck_coverage_bello::bello_respects_layer_four_scope_changes_that_precede_its_effect",
+      "covers": "a prior layer-four type change removes a permanent from Bello's dynamic recipient set before the transformation applies"
+    },
+    {
+      "test": "scenario deck_coverage_bello::bello_damage_trigger_resolves_after_bello_and_recipient_leave",
+      "covers": "combat damage creates one draw trigger, and the trigger resolves after both Bello and the damaged permanent leave the battlefield"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

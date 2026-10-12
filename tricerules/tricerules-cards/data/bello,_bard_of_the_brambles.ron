@@ -1,8 +1,7 @@
-// Exact Oracle card and rulings fetched 2026-09-28:
-// https://scryfall.com/card/blc/1/bello-bard-of-the-brambles?utm_source=api
-// https://api.scryfall.com/cards/31e4b7a1-b377-49d2-a92e-4bcb0db35f16/rulings
-// This setup-only definition records printed characteristics for Commander identity binding.
-// Bello's continuous creature grant, combat trigger, and related rulings are not implemented.
+// Oracle: https://scryfall.com/card/blc/1/bello-bard-of-the-brambles
+// Rulings: https://api.scryfall.com/cards/31e4b7a1-b377-49d2-a92e-4bcb0db35f16/rulings
+// WotC release notes: https://magic.wizards.com/en/news/feature/bloomburrow-release-notes
+// Checked 2026-10-12. CR 611.3 and 613.1d/f, 613.4b, 613.6 govern this shared multi-layer static.
 (
     id: "bello,_bard_of_the_brambles",
     name: "Bello, Bard of the Brambles",
@@ -12,5 +11,27 @@
     types: ["Creature", "Raccoon", "Bard"],
     power: 3,
     toughness: 3,
-    commander_setup_only: true,
+    static_abilities: [(
+        ability_id: "static_01",
+        presentation: OracleLines([1]),
+        definition: ConditionalPermanentTransformation(
+            filter: (any_of: Some([
+                (kind: AnyPermanent, controller: You, permanent_types: [Artifact],
+                    excluded_subtypes: ["Equipment"], min_mana_value: Some(4)),
+                (kind: AnyPermanent, controller: You, permanent_types: [Enchantment],
+                    excluded_subtypes: ["Aura"], min_mana_value: Some(4)),
+            ])),
+            condition: ActivePlayer(players: Controller),
+            add_types: (card_types: [Creature], creature_types: ["Elemental"]),
+            base_power: Some(4),
+            base_toughness: Some(4),
+            keywords: [Indestructible, Haste],
+            triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: OracleLines([1]),
+                trigger: WheneverSelfDealsCombatDamageToPlayer,
+                effect: [Draw(count: 1)],
+            )],
+        ),
+    )],
 )

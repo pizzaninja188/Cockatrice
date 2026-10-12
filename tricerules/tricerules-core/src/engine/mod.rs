@@ -588,7 +588,7 @@ mod face_change_tests {
             &[0, 1],
             20,
             Some(vec![
-                commander_engine_deck(&["bello,_bard_of_the_brambles"], &[]),
+                commander_engine_deck(&["daretti,_scrap_savant"], &[]),
                 commander_engine_deck(&[], &[]),
             ]),
             false,

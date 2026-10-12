@@ -2708,6 +2708,23 @@ pub enum StaticAbilityDef {
         condition: Option<GameCondition>,
         triggered_abilities: Vec<TriggeredAbilityDef>,
     },
+    /// Bello, Bard of the Brambles' live multi-layer transformation. One static origin and
+    /// recipient set spans layer 4, layer 6, and layer 7b (CR 613.6); independent AddTypes,
+    /// keyword, trigger, and P/T statics would not preserve that shared start boundary when
+    /// later layer-4 effects change recipient eligibility or the source loses abilities.
+    ConditionalPermanentTransformation {
+        filter: TargetFilter,
+        condition: GameCondition,
+        add_types: TypeLineAddition,
+        #[serde(default)]
+        base_power: Option<i64>,
+        #[serde(default)]
+        base_toughness: Option<i64>,
+        #[serde(default)]
+        keywords: Vec<Keyword>,
+        #[serde(default)]
+        triggered_abilities: Vec<TriggeredAbilityDef>,
+    },
     /// A self-scoped static effect whose condition is continuously reevaluated. Characteristic
     /// changes apply in their normal layers; the defender exception changes only attack legality.
     /// Daggersail Aeronaut and Gearsmith Guardian exercise modifiers, while Wurmwall Sweeper and

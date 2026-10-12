@@ -873,6 +873,87 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     })?;
             }
         }
+        if let StaticAbilityDef::ConditionalPermanentTransformation {
+            filter,
+            condition,
+            add_types,
+            base_power,
+            base_toughness,
+            triggered_abilities,
+            ..
+        } = ability
+        {
+            condition
+                .validate_live()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+            if !matches!(
+                condition,
+                GameCondition::ActivePlayer {
+                    players: crate::primitives::RelativePlayerSet::Controller
+                }
+            ) {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "ConditionalPermanentTransformation currently requires an active-controller-turn condition".into(),
+                });
+            }
+            filter
+                .validate_characteristic_constraints()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+            if !filter.is_permanent_only()
+                || !filter.all_terminal_filters_match(|leaf| {
+                    matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                        && leaf.controller != crate::primitives::TargetController::DefendingPlayer
+                        && leaf.tapped.is_none()
+                        && leaf.power.is_none()
+                        && leaf.toughness.is_none()
+                        && leaf.required_keywords.is_empty()
+                        && leaf.excluded_keywords.is_empty()
+                        && leaf.excluded_objects.iter().all(|excluded| {
+                            *excluded == crate::primitives::TargetObjectExclusion::Source
+                        })
+                })
+            {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "ConditionalPermanentTransformation requires a permanent-only earlier-layer filter without tapped, keyword, P/T, defending-player or attached-object constraints".into(),
+                });
+            }
+            add_types
+                .validate()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+            if base_power.is_some() != base_toughness.is_some() {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "ConditionalPermanentTransformation requires both base power and toughness or neither".into(),
+                });
+            }
+            for granted in triggered_abilities {
+                if granted.trigger.is_delayed_only()
+                    || matches!(granted.trigger, TriggerCondition::SagaChapter { .. })
+                {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "ConditionalPermanentTransformation requires ordinary non-Saga triggered abilities".into(),
+                    });
+                }
+                granted
+                    .validate_shape()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+        }
         if let StaticAbilityDef::EntersTapped {
             affected,
             condition,
@@ -1793,6 +1874,14 @@ fn face_linked_exile_abilities(face: &CardFace) -> Vec<(&crate::AbilityId, &[Spe
                     abilities.push((&granted.ability_id, granted.effect.as_slice()));
                 }
             }
+            StaticAbilityDef::ConditionalPermanentTransformation {
+                triggered_abilities,
+                ..
+            } => {
+                for granted in triggered_abilities {
+                    abilities.push((&granted.ability_id, granted.effect.as_slice()));
+                }
+            }
             _ => {}
         }
     }
@@ -2196,6 +2285,14 @@ fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
                     collect(&ability.effect, &mut uses);
                 }
             }
+            StaticAbilityDef::ConditionalPermanentTransformation {
+                triggered_abilities,
+                ..
+            } => {
+                for ability in triggered_abilities {
+                    collect(&ability.effect, &mut uses);
+                }
+            }
             StaticAbilityDef::GrantActivatedAbilityToPermanents {
                 activated_abilities,
                 ..
@@ -2590,6 +2687,17 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
                 }
             }
             StaticAbilityDef::GrantTriggeredAbilityToPermanents {
+                triggered_abilities,
+                ..
+            } => {
+                for nested_ability in triggered_abilities {
+                    insert_ability_id(&mut nested, &nested_ability.ability_id)?;
+                    validate_granted_chosen_opponent(nested_ability)?;
+                    nested_ability.validate_shape()?;
+                    validate_effect_list_metadata(&nested_ability.effect)?;
+                }
+            }
+            StaticAbilityDef::ConditionalPermanentTransformation {
                 triggered_abilities,
                 ..
             } => {

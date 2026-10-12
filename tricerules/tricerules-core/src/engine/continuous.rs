@@ -1259,6 +1259,62 @@ impl GameEngine {
                         });
                     }
                 }
+                StaticAbilityDef::ConditionalPermanentTransformation {
+                    filter,
+                    condition,
+                    base_power,
+                    base_toughness,
+                    keywords,
+                    triggered_abilities,
+                    ..
+                } => {
+                    let affected = AffectedScope::PermanentsMatching {
+                        reference_player: controller,
+                        filter: Box::new(filter),
+                        exclude: None,
+                    };
+                    if let (Some(power), Some(toughness)) = (base_power, base_toughness) {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: Some(static_origin.clone()),
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::Layer7bSetPt { power, toughness },
+                            condition: Some(condition.clone()),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    for keyword in keywords {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: Some(static_origin.clone()),
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                            condition: Some(condition.clone()),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    for ability in triggered_abilities {
+                        let mut granted_definition = definition.clone();
+                        granted_definition
+                            .ability_path
+                            .push(ability.ability_id.clone());
+                        self.state.add_triggered_ability_grant(ContinuousEffect {
+                            trigger_grant_origin: Some(TriggerAbilityOrigin::StaticGrant {
+                                source_id: object_id,
+                                source_zone_change,
+                                definition: granted_definition,
+                            }),
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
+                            condition: Some(condition.clone()),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                }
                 StaticAbilityDef::ConditionalSelfModifier {
                     condition,
                     remove_creature: _,

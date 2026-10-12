@@ -35,6 +35,20 @@ pub(in crate::engine) fn materialize_early_static_components(
             ContinuousEffectKind::Layer4AddTypes(addition.clone()),
             None,
         ),
+        StaticAbilityDef::ConditionalPermanentTransformation {
+            filter,
+            condition,
+            add_types,
+            ..
+        } => emit(
+            AffectedScope::PermanentsMatching {
+                reference_player: controller,
+                filter: Box::new(filter.clone()),
+                exclude: None,
+            },
+            ContinuousEffectKind::Layer4AddTypes(add_types.clone()),
+            Some(condition.clone()),
+        ),
         StaticAbilityDef::AttachedModifier {
             set_name,
             add_types,

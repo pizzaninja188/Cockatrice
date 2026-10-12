@@ -441,12 +441,12 @@ mod tests {
 
     #[test]
     fn resolve_deck_names_rejects_setup_only_commanders_from_mainboards() {
-        let err = resolve_deck_names(&[0], &[deck(0, &["Bello, Bard of the Brambles"])])
+        let err = resolve_deck_names(&[0], &[deck(0, &["Daretti, Scrap Savant"])])
             .expect_err("setup-only records do not imply mainboard gameplay support");
         assert_eq!(
             err,
             DeckResolveError::Invalid(
-                "Bello, Bard of the Brambles is available only for Commander setup and cannot be in a mainboard".into()
+                "Daretti, Scrap Savant is available only for Commander setup and cannot be in a mainboard".into()
             )
         );
     }

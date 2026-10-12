@@ -41,6 +41,71 @@ fn multikicker_counted_entry_schema_is_linked_and_fail_closed() {
 }
 
 #[test]
+fn conditional_permanent_transformation_rejects_later_layer_and_unpaired_shapes() {
+    let definition = |filter: &str,
+                      condition: &str,
+                      base_power: &str,
+                      base_toughness: &str,
+                      triggered_abilities: &str| {
+        format!(
+            r#"(id: "conditional_transform_fixture", name: "Conditional Transform Fixture",
+                face_id: "conditional_transform_fixture", types: ["Creature"],
+                static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                    definition: ConditionalPermanentTransformation(
+                        filter: {filter}, condition: {condition},
+                        add_types: (card_types: [Creature]),
+                        base_power: {base_power}, base_toughness: {base_toughness},
+                        triggered_abilities: {triggered_abilities},
+                    ))])"#
+        )
+    };
+    let valid_filter = "(kind: AnyPermanent, controller: You, min_mana_value: Some(4))";
+    let valid_condition = "ActivePlayer(players: Controller)";
+    let valid_trigger = r#"[(ability_id: "triggered_01", presentation: Fallback,
+        trigger: WheneverSelfDealsCombatDamageToPlayer, effect: [Draw(count: 1)])]"#;
+    let valid = definition(
+        valid_filter,
+        valid_condition,
+        "Some(4)",
+        "Some(4)",
+        valid_trigger,
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&valid], &[])
+        .expect("the supported early filter and paired base P/T are valid");
+
+    for invalid in [
+        definition(
+            "(kind: AnyPermanent, controller: You, tapped: Some(false))",
+            valid_condition,
+            "Some(4)",
+            "Some(4)",
+            "[]",
+        ),
+        definition(
+            valid_filter,
+            "ObjectTapped(object: Source, tapped: true)",
+            "Some(4)",
+            "Some(4)",
+            "[]",
+        ),
+        definition(valid_filter, valid_condition, "Some(4)", "None", "[]"),
+        definition(
+            valid_filter,
+            valid_condition,
+            "Some(4)",
+            "Some(4)",
+            r#"[(ability_id: "triggered_01", presentation: Fallback,
+                trigger: WheneverSelfDealsCombatDamageToPlayer, effect: [ExileObservedObjects])]"#,
+        ),
+    ] {
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&invalid], &[]).is_err(),
+            "unsupported transformation shape was accepted: {invalid}"
+        );
+    }
+}
+
+#[test]
 fn mana_amount_ron_omits_zero_fields_and_round_trips() {
     let amount = super::ManaAmount {
         w: 1,

@@ -20,7 +20,7 @@ fn four_deck_commanders_resolve_with_source_backed_identity() {
             "bello,_bard_of_the_brambles",
             "Bello, Bard of the Brambles",
             vec![Color::Red, Color::Green],
-            true,
+            false,
         ),
         (
             "daretti,_scrap_savant",

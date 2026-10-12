@@ -267,12 +267,15 @@ mod combat_keywords;
 mod composite_activated_costs;
 #[path = "scenario/conditional_characteristics.rs"]
 mod conditional_characteristics;
+
 #[path = "scenario/conditional_spell_costs.rs"]
 mod conditional_spell_costs;
 #[path = "scenario/control.rs"]
 mod control;
 #[path = "scenario/copy_effects.rs"]
 mod copy_effects;
+#[path = "scenario/deck_coverage_bello.rs"]
+mod deck_coverage_bello;
 
 #[path = "scenario/deck_coverage_cursed_mirror.rs"]
 mod deck_coverage_cursed_mirror;
