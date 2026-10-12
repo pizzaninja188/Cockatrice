@@ -371,6 +371,7 @@ impl GameEngine {
                 Zone::Hand => candidate.hand.contains(&oid),
                 Zone::Graveyard => candidate.graveyard.contains(&oid),
                 Zone::Exile => candidate.exile.contains(&oid),
+                Zone::Library => candidate.library.contains(&oid),
                 _ => false,
             })
             .map(|candidate| candidate.id)
@@ -392,6 +393,10 @@ impl GameEngine {
                 .position(|id| *id == oid),
             Zone::Exile => self.state.players[holder_idx]
                 .exile
+                .iter()
+                .position(|id| *id == oid),
+            Zone::Library => self.state.players[holder_idx]
+                .library
                 .iter()
                 .position(|id| *id == oid),
             _ => None,
@@ -678,6 +683,7 @@ impl GameEngine {
             participant.hand.retain(|candidate| *candidate != oid);
             participant.graveyard.retain(|candidate| *candidate != oid);
             participant.exile.retain(|candidate| *candidate != oid);
+            participant.library.retain(|candidate| *candidate != oid);
         }
         let holder_idx = self
             .state
@@ -703,6 +709,12 @@ impl GameEngine {
                     .original_position
                     .min(self.state.players[holder_idx].exile.len());
                 self.state.players[holder_idx].exile.insert(position, oid);
+            }
+            Zone::Library => {
+                let position = state
+                    .original_position
+                    .min(self.state.players[holder_idx].library.len());
+                self.state.players[holder_idx].library.insert(position, oid);
             }
             _ => {
                 return Err(EngineError::Illegal(
@@ -987,6 +999,45 @@ impl GameEngine {
                     *source_oid,
                     Some((permission.scope, permission.cast_cost.clone())),
                 )
+            }
+            rv1::cast_source::Location::LibraryObjectId(source_oid) => {
+                if special
+                    || command.casting_permission_id.is_some()
+                    || cast_method != SpellCastMethod::Normal
+                {
+                    return Err(EngineError::Illegal(
+                        "library-top casts use a normal cast without an exile permission id",
+                    ));
+                }
+                let object = self
+                    .state
+                    .objects
+                    .get(source_oid)
+                    .ok_or(EngineError::Illegal("unknown library object"))?;
+                if object.zone != Zone::Library
+                    || object.owner != player
+                    || self.state.players[idx].library.front() != Some(source_oid)
+                {
+                    return Err(EngineError::Illegal(
+                        "library cast source is not the current top card",
+                    ));
+                }
+                let definition = self
+                    .registry
+                    .get(&object.card_id)
+                    .ok_or_else(|| EngineError::MissingCard(object.card_id.clone()))?;
+                let face = definition
+                    .face(face_index)
+                    .ok_or(EngineError::Illegal("bad face index"))?;
+                if face.is_land
+                    || !definition.face_available_from_hand(face_index)
+                    || !self.may_cast_library_top_face(player, definition, face_index)
+                {
+                    return Err(EngineError::Illegal(
+                        "selected face has no active cast-from-library permission",
+                    ));
+                }
+                (*source_oid, None)
             }
         };
         if !from_hand
@@ -3574,6 +3625,35 @@ impl GameEngine {
                     return Err(EngineError::Illegal("illegal land play from graveyard"));
                 }
                 (*object_id, true)
+            }
+            rv1::land_source::Location::LibraryObjectId(object_id) => {
+                if special {
+                    return Err(EngineError::Illegal(
+                        "resolution-time land play must use the selected exile object",
+                    ));
+                }
+                let object = self
+                    .state
+                    .objects
+                    .get(object_id)
+                    .ok_or(EngineError::Illegal("unknown library object"))?;
+                let generation = self
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0);
+                if source.expected_zone_change_generation != Some(generation) {
+                    return Err(EngineError::Illegal("stale library land source"));
+                }
+                if object.zone != Zone::Library
+                    || object.owner != player
+                    || self.state.players[idx].library.front() != Some(object_id)
+                    || !self.may_play_library_top_land(player)
+                {
+                    return Err(EngineError::Illegal("illegal land play from library"));
+                }
+                (*object_id, false)
             }
         };
         let card_id = self.state.objects.get(&oid).unwrap().card_id.clone();

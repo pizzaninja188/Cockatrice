@@ -2207,12 +2207,15 @@ pub(super) fn cast_face_count_for_source(
             .collect::<std::collections::BTreeSet<_>>()
             .len(),
         rv1::cast_source::Location::GraveyardObjectId(object_id)
-        | rv1::cast_source::Location::ExileObjectId(object_id) => legal_zone_cast_actions(eng, pid)
-            .iter()
-            .filter(|action| action.object_id == *object_id)
-            .map(|action| action.face_index)
-            .collect::<std::collections::BTreeSet<_>>()
-            .len(),
+        | rv1::cast_source::Location::ExileObjectId(object_id)
+        | rv1::cast_source::Location::LibraryObjectId(object_id) => {
+            legal_zone_cast_actions(eng, pid)
+                .iter()
+                .filter(|action| action.object_id == *object_id)
+                .map(|action| action.face_index)
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+        }
     }
 }
 
@@ -2843,6 +2846,211 @@ pub(super) fn legal_zone_cast_actions(
             }
         }
     }
+
+    // The active continuous permission applies to the current top object and each chosen face is
+    // checked against it. A second library action is not offered while another command transaction
+    // is awaiting a choice or payment. This is a normal cast, so timing and cost choices follow the
+    // ordinary spell pipeline.
+    let library_action_blocked = eng
+        .state
+        .pending_spell_cast
+        .as_ref()
+        .is_some_and(|pending| pending.caster == pid)
+        || eng
+            .state
+            .pending_ability_activation
+            .as_ref()
+            .is_some_and(|pending| pending.actor_player_id == pid);
+    if !special && !library_action_blocked && eng.may_look_at_library_top(pid) {
+        if let Some(&object_id) = eng.state.players[player_index].library.front() {
+            let Some(object) = eng
+                .state
+                .objects
+                .get(&object_id)
+                .filter(|object| object.zone == Zone::Library && object.owner == pid)
+            else {
+                return actions;
+            };
+            let card_id = object.card_id.clone();
+            let Some(definition) = eng.registry.get(&card_id) else {
+                return actions;
+            };
+            let generation = eng
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0);
+            for (face_index, face) in definition.faces_iter().enumerate() {
+                if face.is_land
+                    || !definition.face_available_from_hand(face_index)
+                    || !eng.may_cast_library_top_face(pid, definition, face_index)
+                {
+                    continue;
+                }
+                actions.extend(legal_library_top_face_cast_actions(
+                    eng,
+                    pid,
+                    player_index,
+                    object_id,
+                    generation,
+                    face_index,
+                    face,
+                ));
+            }
+        }
+    }
+    actions
+}
+
+fn legal_library_top_face_cast_actions(
+    eng: &GameEngine,
+    pid: PlayerId,
+    player_index: usize,
+    object_id: ObjectId,
+    generation: u64,
+    face_index: usize,
+    face: &CardFace,
+) -> Vec<rv1::LegalZoneCastAction> {
+    let cost_choices = legal_spell_cost_choices(
+        eng,
+        pid,
+        object_id,
+        &eng.state.objects[&object_id].card_id,
+        face,
+        None,
+    );
+    if !eng.legendary_spell_cast_allowed(pid, face)
+        || !face_cast_timing_available(
+            face,
+            &cost_choices,
+            instant_timing_step_allowed(&eng.state),
+            sorcery_speed_available(&eng.state, pid),
+        )
+        || !cost_choices.non_mana_costs_payable
+    {
+        return Vec::new();
+    }
+
+    let card_id = &eng.state.objects[&object_id].card_id;
+    let needs_target = target_schema(&face.spell_effect, face.targeting.as_ref()).has_targets();
+    let mut action = rv1::LegalZoneCastAction {
+        source_zone: rv1::CastSourceZone::Library as i32,
+        object_id,
+        zone_change_generation: generation,
+        card_name: face.name.clone(),
+        face_index: face_index as u32,
+        needs_target,
+        min_modes: 0,
+        max_modes: 0,
+        modes: vec![],
+        cost: face.mana_cost.to_string(),
+        cost_choices: Some(cost_choices.clone()),
+        eligible_restricted_mana_group_ids: eng
+            .eligible_restricted_mana_for_spell(player_index, face),
+        generic_cost_reduction: eng.spell_generic_reduction(
+            pid,
+            object_id,
+            face,
+            &face.cost_modifiers,
+        ),
+        cast_method: rv1::CastMethod::Normal as i32,
+        has_convoke: face.keywords.contains(&Keyword::Convoke),
+        casting_permission_id: None,
+        all_modes_cast_cost: None,
+        preparation_source: None,
+        prototyped: false,
+    };
+    if needs_target && face.modal_spell.is_none() {
+        let target_source = TargetSourceIdentity::spell_face(eng, object_id, face_index);
+        let mut targets = compute_spell_targets(
+            eng,
+            pid,
+            target_source,
+            &face.spell_effect,
+            face.targeting.as_ref(),
+            &face.cost_modifiers,
+        );
+        apply_cast_cost_target_requirements(
+            eng,
+            pid,
+            target_source,
+            face,
+            &cost_choices,
+            face.targeting.as_ref(),
+            &mut targets,
+        );
+        if !spell_target_groups_are_selectable(&targets) {
+            return Vec::new();
+        }
+    }
+    if let Some(modal) = &face.modal_spell {
+        let (max_modes, all_modes_cost) = legal_all_modes_cast_cost(face, &cost_choices, modal);
+        action.all_modes_cast_cost = all_modes_cost;
+        action.min_modes = modal.min_modes;
+        action.max_modes = max_modes;
+        action.modes = modal
+            .modes
+            .iter()
+            .enumerate()
+            .map(|(mode_index, mode)| {
+                let needs_target =
+                    target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
+                let target_source = TargetSourceIdentity::spell_face(eng, object_id, face_index);
+                let mut targets = compute_spell_targets(
+                    eng,
+                    pid,
+                    target_source,
+                    &mode.effects,
+                    mode.targeting.as_ref(),
+                    &face.cost_modifiers,
+                );
+                apply_cast_cost_target_requirements(
+                    eng,
+                    pid,
+                    target_source,
+                    face,
+                    &cost_choices,
+                    mode.targeting.as_ref(),
+                    &mut targets,
+                );
+                let linked_cost = legal_mode_cast_cost_link(face, &cost_choices, mode);
+                rv1::LegalSpellMode {
+                    mode_index: mode_index as u32,
+                    label: mode_fallback(&face.name, &mode.mode_id),
+                    selectable: (!needs_target || spell_target_groups_are_selectable(&targets))
+                        && linked_cost
+                            .as_ref()
+                            .is_none_or(|(_, selectable)| *selectable),
+                    needs_target,
+                    targets: Some(targets),
+                    presentation: Some(presentation_ref(
+                        eng.registry,
+                        card_id,
+                        &face.face_id,
+                        [
+                            PresentationPath::Spell,
+                            PresentationPath::Mode(&mode.mode_id),
+                        ],
+                        &mode.presentation,
+                        mode_fallback(&face.name, &mode.mode_id),
+                    )),
+                    linked_cast_cost: linked_cost.map(|(link, _)| link),
+                }
+            })
+            .collect();
+        if action.modes.iter().filter(|mode| mode.selectable).count() < modal.min_modes as usize
+            || action.max_modes < action.min_modes
+        {
+            return Vec::new();
+        }
+    }
+    let mut actions = vec![action.clone()];
+    if let Some(prototype) =
+        zone_prototype_variant(eng, pid, player_index, object_id, face, &action, None)
+    {
+        actions.push(prototype);
+    }
     actions
 }
 
@@ -2945,6 +3153,54 @@ pub(super) fn legal_zone_land_actions(
                     face_index: face_index as u32,
                     zone_change_generation: generation,
                 });
+            }
+        }
+    }
+    let library_action_blocked = eng
+        .state
+        .pending_spell_cast
+        .as_ref()
+        .is_some_and(|pending| pending.caster == pid)
+        || eng
+            .state
+            .pending_ability_activation
+            .as_ref()
+            .is_some_and(|pending| pending.actor_player_id == pid);
+    if !special && !library_action_blocked && eng.may_play_library_top_land(pid) {
+        let Some(player_index) = eng.state.player_idx(pid) else {
+            return actions;
+        };
+        if let Some(&object_id) = eng.state.players[player_index].library.front() {
+            let Some(object) = eng
+                .state
+                .objects
+                .get(&object_id)
+                .filter(|object| object.zone == Zone::Library && object.owner == pid)
+            else {
+                return actions;
+            };
+            if let Some(definition) = eng.registry.get(&object.card_id) {
+                let generation = eng
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0);
+                for (face_index, face) in definition.faces_iter().enumerate() {
+                    if !definition.face_available_from_hand(face_index)
+                        || !face.is_land
+                        || !emitted.insert((object_id, face_index))
+                    {
+                        continue;
+                    }
+                    actions.push(rv1::LegalZoneLandAction {
+                        source_zone: rv1::CastSourceZone::Library as i32,
+                        object_id,
+                        card_name: face.name.clone(),
+                        face_index: face_index as u32,
+                        zone_change_generation: generation,
+                    });
+                }
             }
         }
     }

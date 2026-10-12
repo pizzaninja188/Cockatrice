@@ -236,9 +236,9 @@ fn select_source<'a>(
 
 fn source_layout(layout: &str) -> Option<&'static str> {
     match layout {
-        // Class and Prototype are rules treatments on one physical face. Prototype's
+        // Case, Class, and Prototype are rules treatments on one physical face. Prototype's
         // alternative mana cost/P/T live in CardFace.prototype, not in the layout enum.
-        "normal" | "class" | "prototype" => Some("Normal"),
+        "normal" | "case" | "class" | "prototype" => Some("Normal"),
         "split" => Some("Split"),
         "room" => Some("Room"),
         "modal_dfc" => Some("ModalDfc"),
@@ -963,6 +963,7 @@ mod tests {
     #[test]
     fn prototype_source_layout_uses_the_single_face_definition_model() {
         assert_eq!(source_layout("prototype"), Some("Normal"));
+        assert_eq!(source_layout("case"), Some("Normal"));
         assert_eq!(source_layout("transform"), Some("Transform"));
     }
 

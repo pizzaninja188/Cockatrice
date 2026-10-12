@@ -1731,6 +1731,7 @@ fn validate_effect_targets(
         | SpellEffectKind::PutPermanentFromHand { .. }
         | SpellEffectKind::SetSourceBasePowerToTownCount
         | SpellEffectKind::SetClassLevel { .. }
+        | SpellEffectKind::SolveCase
         | SpellEffectKind::CreateStaticEmblem { .. }
         | SpellEffectKind::PreventAllCombatDamageTurn
         | SpellEffectKind::DamageCantBePreventedThisTurn

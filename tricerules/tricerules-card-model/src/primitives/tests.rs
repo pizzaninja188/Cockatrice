@@ -146,6 +146,21 @@ fn permanent_event_filter_omits_unset_linked_creature_type_from_ron() {
 }
 
 #[test]
+fn zone_card_filter_omits_unset_color_match_from_ron() {
+    let filter = crate::primitives::ZoneCardFilter::default();
+    let encoded = ron::ser::to_string(&filter).expect("zone card filter should serialize");
+    assert!(
+        !encoded.contains("is_colorless"),
+        "an absent optional filter field must preserve existing generated RON"
+    );
+    assert_eq!(
+        ron::from_str::<crate::primitives::ZoneCardFilter>(&encoded)
+            .expect("zone card filter should round-trip"),
+        filter
+    );
+}
+
+#[test]
 fn land_type_additions_and_replacements_validate_distinct_subtype_rules() {
     let forest: super::TypeLineAddition = ron::from_str("(land_types: [Forest])").unwrap();
     assert!(

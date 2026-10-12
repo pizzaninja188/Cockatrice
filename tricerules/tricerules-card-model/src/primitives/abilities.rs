@@ -5,7 +5,7 @@ use super::{
     CounterKind, EffectContext, GameCondition, Keyword, ManaSpendingRestriction,
     ObjectCastCostKind, PermanentEventFilter, PowerComparison, RelativePlayerSet, SpellCostFilter,
     SpellEffectKind, SpellKeyword, StackSpellFilter, TargetController, TargetFilter, TargetKind,
-    TargetingDef,
+    TargetingDef, ZoneCardFilter,
 };
 use crate::{AbilityId, AbilityLinkId, AbilityPresentation, ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
@@ -2790,6 +2790,19 @@ pub enum StaticAbilityDef {
     /// CR 305.1 / 611.3: the controller may play lands from their own graveyard while this
     /// permanent is on the battlefield. Icetill Explorer, Crucible of Worlds.
     PlayLandsFromOwnGraveyard,
+    /// CR 401.5 / 601: look at the current top of your library and use the selected-face filter
+    /// to cast spells from it; lands are a separate permission. Case of the Locked Hothouse and
+    /// Mystic Forge share the top-library source, while supplying different face filters.
+    LibraryTopPermission {
+        #[serde(default)]
+        look_at_top: bool,
+        #[serde(default)]
+        cast_filter: Option<ZoneCardFilter>,
+        #[serde(default)]
+        play_lands: bool,
+        #[serde(default)]
+        condition: Option<GameCondition>,
+    },
 }
 
 /// Which players a maximum-hand-size static ability applies to.

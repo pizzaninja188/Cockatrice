@@ -1792,10 +1792,17 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
                                          bool prototyped)
 {
     RuledClientState *const geh = actions->player->getGame()->getGameEventHandler()->ruled();
-    if (source == RuledCastSource::Hand ? !geh->isHandCastActionLegal(ruledHandIndex, faceIndex, castMethod, prototyped)
-                                        : !geh->isZoneCastActionLegal(static_cast<quint32>(ruledHandIndex), faceIndex,
-                                                                      source, castMethod, castingPermissionId,
-                                                                      std::nullopt, prototyped)) {
+    std::optional<quint64> expectedGeneration;
+    if (source == RuledCastSource::Library) {
+        if (!geh->privateLibraryTop || geh->privateLibraryTop->objectId != static_cast<quint32>(ruledHandIndex)) {
+            return false;
+        }
+        expectedGeneration = geh->privateLibraryTop->zoneChangeGeneration;
+    }
+    if (source == RuledCastSource::Hand
+            ? !geh->isHandCastActionLegal(ruledHandIndex, faceIndex, castMethod, prototyped)
+            : !geh->isZoneCastActionLegal(static_cast<quint32>(ruledHandIndex), faceIndex, source, castMethod,
+                                          castingPermissionId, expectedGeneration, prototyped)) {
         return false;
     }
     if (actions->pendingRuledSpellCast.valid && actions->pendingRuledSpellCast.waitingForTarget &&

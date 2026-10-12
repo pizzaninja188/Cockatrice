@@ -114,6 +114,9 @@ private:
     QHash<quint32, QVector<quint32>> ruledStackTargetsByObjectId;
     QSet<quint32> ruledStackCopyObjectIds;
     QSet<quint32> ruledStackAbilityObjectIds;
+    /// Accepted PlayLand commands from the library must bind the exact engine OID to its
+    /// physical card; a missing binding cannot fall back to a same-name deck card.
+    QSet<quint32> exactLibraryLandMoveOids;
     QList<PendingRuledCastVisual> ruledPendingCastVisualQueue;
 };
 

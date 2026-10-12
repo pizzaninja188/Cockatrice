@@ -2399,6 +2399,61 @@ TEST_F(RuledClientTest, AppliesStructuredCastActionsAndTargetRequirement)
     EXPECT_EQ(state->handActionIndexForCard(kCast, "Nonexistent", 0), -1);
 }
 
+TEST_F(RuledClientTest, LibraryTopViewAndOffersAreAppliedAndClearedWithTheZoneSnapshot)
+{
+    QSignalSpy topChanged(state, &RuledClientState::privateLibraryTopChanged);
+    ruled::v1::RuledEventBatch batch;
+    auto *zoneView = batch.add_events()->mutable_zone_view();
+    auto *localView = zoneView->add_per_player();
+    localView->set_player_id(kLocalPlayer);
+    auto *top = localView->mutable_private_library_top();
+    top->set_object_id(800u);
+    top->set_zone_change_generation(12u);
+    top->set_card_id("akoum_warrior_akoum_teeth");
+    top->set_card_name("Akoum Warrior");
+    zoneView->add_per_player()->set_player_id(kOpponent);
+
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *cast = actions.add_zone_cast_actions();
+    cast->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_LIBRARY);
+    cast->set_object_id(800u);
+    cast->set_card_name("Akoum Warrior");
+    cast->set_face_index(0u);
+    cast->set_cost("{1}{U}");
+    cast->set_zone_change_generation(12u);
+    cast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    auto *land = actions.add_zone_land_actions();
+    land->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_LIBRARY);
+    land->set_object_id(800u);
+    land->set_card_name("Akoum Teeth");
+    land->set_face_index(1u);
+    land->set_zone_change_generation(12u);
+    apply(batch);
+
+    ASSERT_EQ(topChanged.count(), 1);
+    ASSERT_TRUE(state->privateLibraryTop.has_value());
+    EXPECT_EQ(state->privateLibraryTop->objectId, 800u);
+    EXPECT_EQ(state->privateLibraryTop->zoneChangeGeneration, 12u);
+    EXPECT_EQ(state->privateLibraryTop->cardName, QStringLiteral("Akoum Warrior"));
+    EXPECT_TRUE(state->isZoneCastActionLegal(800u, 0, RuledCastSource::Library,
+                                             ruled::v1::CAST_METHOD_NORMAL, 0, 12u));
+    const auto landFaces = state->zoneLandFaceOptions(800u, RuledCastSource::Library);
+    ASSERT_EQ(landFaces.size(), 1);
+    EXPECT_EQ(landFaces.first().faceIndex, 1);
+    EXPECT_EQ(landFaces.first().faceName, QStringLiteral("Akoum Teeth"));
+
+    ruled::v1::RuledEventBatch cleared;
+    auto *clearedView = cleared.add_events()->mutable_zone_view();
+    clearedView->add_per_player()->set_player_id(kLocalPlayer);
+    clearedView->add_per_player()->set_player_id(kOpponent);
+    apply(cleared);
+    EXPECT_EQ(topChanged.count(), 2);
+    EXPECT_FALSE(state->privateLibraryTop.has_value());
+    EXPECT_FALSE(state->isZoneCastActionLegal(800u, 0, RuledCastSource::Library,
+                                              ruled::v1::CAST_METHOD_NORMAL, 0, 12u));
+    EXPECT_FALSE(state->isZoneLandActionLegal(800u, RuledCastSource::Library));
+}
+
 TEST_F(RuledClientTest, AdventureCastFacesCarryEngineNamesAndCosts)
 {
     ruled::v1::RuledEventBatch batch;

@@ -454,6 +454,19 @@ enum class RuledCastSource : int
     Hand,
     Graveyard,
     Exile,
+    Library,
+};
+
+/// Participant-private identity of the current library top while an engine permission allows
+/// looking at it. An absent value clears any previously displayed top.
+struct RuledPrivateLibraryTop
+{
+    quint32 objectId = 0;
+    quint64 zoneChangeGeneration = 0;
+    QString cardId;
+    QString cardName;
+
+    bool operator==(const RuledPrivateLibraryTop &) const = default;
 };
 
 /// Lossless identity for one engine-published cast offer. Permission ids are 64-bit opaque
@@ -779,6 +792,8 @@ public:
     QHash<quint32, QVector<RuledFaceOption>> zoneLandFacesByOid;
     QHash<quint32, RuledCastSource> zoneLandSourceByOid;
     QHash<quint64, RuledExilePlayPermissionGroup> exilePlayPermissionGroups;
+    /// Current top card of this player's own library, only when the engine grants private access.
+    std::optional<RuledPrivateLibraryTop> privateLibraryTop;
     /// Caster-private engine-owned CR 601 transaction. Presence, identity, and locked cost come
     /// only from the latest authoritative LegalActions entry.
     std::optional<ruled::v1::PendingSpellCast> pendingSpellCast;
@@ -2108,6 +2123,8 @@ signals:
     /// Emitted once after each settled batch rebuilds the acting player's authoritative legal
     /// actions. Pending target UI uses it to discard selections that became stale mid-cast.
     void legalActionsChanged();
+    /// The engine's participant-private top-of-library view changed or was cleared.
+    void privateLibraryTopChanged();
     void exilePlayPermissionGroupsChanged();
     void spellTargetSelectionChanged();
     void spellDamageAllocationUiChanged();

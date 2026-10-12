@@ -3475,6 +3475,7 @@ pub(super) fn commit_zone_move(
         state.battlefield_entry_timestamps.remove(&oid);
         state.room_states.remove(&oid);
         state.class_levels.remove(&oid);
+        state.case_solved_generations.remove(&oid);
         super::preparation::unprepare_permanent(state, oid);
         state.battle_protectors.remove(&oid);
         state

@@ -17,6 +17,28 @@ pub(super) fn set_class_level(
     }
     Ok(EffectOutcome::Continue)
 }
+
+/// CR 719.3a: the triggered ability marks only the exact Case incarnation that created it.
+pub(super) fn solve_case(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    let Some(source_id) = cx.top.source_permanent_id else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let generation = cx.top.source_zone_change;
+    if cx.engine.source_is_current_object(cx.top)
+        && cx
+            .engine
+            .state
+            .objects
+            .get(&source_id)
+            .is_some_and(|source| source.zone == Zone::Battlefield)
+    {
+        cx.engine
+            .state
+            .case_solved_generations
+            .insert(source_id, generation);
+    }
+    Ok(EffectOutcome::Continue)
+}
 use crate::engine::presentation::{
     stack_child_presentation_ref, PresentationPath, StackPresentationSource,
 };

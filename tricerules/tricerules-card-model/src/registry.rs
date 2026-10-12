@@ -704,6 +704,36 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     reason,
                 })?;
         }
+        if let StaticAbilityDef::LibraryTopPermission {
+            look_at_top,
+            cast_filter,
+            play_lands,
+            condition,
+        } = ability
+        {
+            if !look_at_top && cast_filter.is_none() && !play_lands {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "library-top permission must grant at least one action".into(),
+                });
+            }
+            if let Some(filter) = cast_filter {
+                filter
+                    .validate()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+            if let Some(condition) = condition {
+                condition
+                    .validate_live()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+        }
         if let StaticAbilityDef::UntapControlledPermanentsDuringOtherPlayersUntapSteps {
             permanent_types,
         } = ability

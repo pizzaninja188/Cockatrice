@@ -36,6 +36,7 @@
 #include <QString>
 #include <QTemporaryDir>
 #include <algorithm>
+#include <array>
 #include <google/protobuf/dynamic_message.h>
 #include <gtest/gtest.h>
 #include <libcockatrice/protocol/pb/event_reveal_cards.pb.h>
@@ -364,6 +365,11 @@ protected:
                                                                                                card->getId());
     }
 
+    void unbindLibraryObject(Server_Player *p, quint32 engineOid)
+    {
+        game->ruled()->synchronizer->playerBinding(p->getPlayerId()).libraryEngineOidToServerCardId.remove(engineOid);
+    }
+
     void bindPublicObject(Server_Player *p, quint32 engineOid, Server_Card *card)
     {
         game->ruled()->synchronizer->playerBinding(p->getPlayerId()).registerEngineOid(engineOid, card->getId());
@@ -397,6 +403,14 @@ protected:
     void updatePendingResolutionChoiceCache(const ruled::v1::IpcResponse &response)
     {
         game->ruled()->broadcaster->updatePendingResolutionChoiceCache(response);
+    }
+
+    bool sharedReconnectViewHasNoPrivateLibraryTop() const
+    {
+        const auto &view = game->ruled()->broadcaster->currentPublicZoneView;
+        return view.has_value() &&
+               std::none_of(view->per_player().begin(), view->per_player().end(),
+                            [](const auto &playerView) { return playerView.has_private_library_top(); });
     }
 
     bool cacheAutoPassPolicy(int playerId, const ruled::v1::SetAutoPassPolicy &policy)
@@ -1342,6 +1356,227 @@ TEST_F(RuledBatchTest, OrdinaryReconnectRestoresCurrentPublicHandAndRevealWithou
         ASSERT_EQ(snapshot->active_public_reveal_snapshot().reveals_size(), 1);
         EXPECT_EQ(snapshot->active_public_reveal_snapshot().reveals(0).reveal_id(), "draw:52:801:1");
     }
+}
+
+TEST_F(RuledBatchTest, PrivateLibraryTopAndOffersAreRecipientScopedAndRestoredOnReconnect)
+{
+    ruled::v1::IpcResponse seed;
+    auto *batch = seed.mutable_batch();
+    auto *zoneView = batch->add_events()->mutable_zone_view();
+    auto *p1View = zoneView->add_per_player();
+    p1View->set_player_id(p1->getPlayerId());
+    auto *p1Top = p1View->mutable_private_library_top();
+    p1Top->set_object_id(810u);
+    p1Top->set_zone_change_generation(8u);
+    p1Top->set_card_id("grizzly_bears");
+    p1Top->set_card_name("Grizzly Bears");
+    auto *p2View = zoneView->add_per_player();
+    p2View->set_player_id(p2->getPlayerId());
+    auto *p2Top = p2View->mutable_private_library_top();
+    p2Top->set_object_id(910u);
+    p2Top->set_zone_change_generation(9u);
+    p2Top->set_card_id("grizzly_bears");
+    p2Top->set_card_name("Grizzly Bears");
+    auto *p1Offer = (*batch->mutable_legal_by_player())[p1->getPlayerId()].add_zone_cast_actions();
+    p1Offer->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_LIBRARY);
+    p1Offer->set_object_id(810u);
+    p1Offer->set_card_name("Grizzly Bears");
+    p1Offer->set_zone_change_generation(8u);
+    auto *p2Offer = (*batch->mutable_legal_by_player())[p2->getPlayerId()].add_zone_land_actions();
+    p2Offer->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_LIBRARY);
+    p2Offer->set_object_id(910u);
+    p2Offer->set_card_name("Grizzly Bears");
+    p2Offer->set_zone_change_generation(9u);
+    updatePendingResolutionChoiceCache(seed);
+    EXPECT_TRUE(sharedReconnectViewHasNoPrivateLibraryTop()) << "the shared reconnect cache stays identity-free";
+
+    for (Server_Player *recipient : {p1, p2}) {
+        const quint32 ownTopId = recipient == p1 ? 810u : 910u;
+        const auto routed = redactFor(seed.batch(), recipient);
+        const auto routedView = std::find_if(routed.events().begin(), routed.events().end(),
+                                             [](const auto &event) { return event.has_zone_view(); });
+        ASSERT_NE(routedView, routed.events().end());
+        const auto ownView = std::find_if(
+            routedView->zone_view().per_player().begin(), routedView->zone_view().per_player().end(),
+            [recipient](const auto &view) { return view.player_id() == recipient->getPlayerId(); });
+        const auto otherView = std::find_if(
+            routedView->zone_view().per_player().begin(), routedView->zone_view().per_player().end(),
+            [recipient](const auto &view) { return view.player_id() != recipient->getPlayerId(); });
+        ASSERT_NE(ownView, routedView->zone_view().per_player().end());
+        ASSERT_NE(otherView, routedView->zone_view().per_player().end());
+        ASSERT_TRUE(ownView->has_private_library_top());
+        EXPECT_EQ(ownView->private_library_top().object_id(), ownTopId);
+        EXPECT_FALSE(otherView->has_private_library_top());
+
+        ResponseContainer reconnect(-1);
+        game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, reconnect);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 1);
+        const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        const auto rawView = std::find_if(restored.events().begin(), restored.events().end(),
+                                          [](const auto &event) { return event.has_zone_view(); });
+        ASSERT_NE(rawView, restored.events().end());
+        const auto ownRestoredView = std::find_if(
+            rawView->zone_view().per_player().begin(), rawView->zone_view().per_player().end(),
+            [recipient](const auto &view) { return view.player_id() == recipient->getPlayerId(); });
+        const auto otherRestoredView = std::find_if(
+            rawView->zone_view().per_player().begin(), rawView->zone_view().per_player().end(),
+            [recipient](const auto &view) { return view.player_id() != recipient->getPlayerId(); });
+        ASSERT_NE(ownRestoredView, rawView->zone_view().per_player().end());
+        ASSERT_NE(otherRestoredView, rawView->zone_view().per_player().end());
+        ASSERT_TRUE(ownRestoredView->has_private_library_top());
+        EXPECT_EQ(ownRestoredView->private_library_top().object_id(), ownTopId);
+        EXPECT_FALSE(otherRestoredView->has_private_library_top());
+        const auto redactedReconnect = redactFor(restored, recipient);
+        const auto redactedView = std::find_if(redactedReconnect.events().begin(), redactedReconnect.events().end(),
+                                               [](const auto &event) { return event.has_zone_view(); });
+        ASSERT_NE(redactedView, redactedReconnect.events().end());
+        const auto restoredOwnView = std::find_if(
+            redactedView->zone_view().per_player().begin(), redactedView->zone_view().per_player().end(),
+            [recipient](const auto &view) { return view.player_id() == recipient->getPlayerId(); });
+        ASSERT_NE(restoredOwnView, redactedView->zone_view().per_player().end());
+        ASSERT_TRUE(restoredOwnView->has_private_library_top());
+        EXPECT_EQ(restoredOwnView->private_library_top().object_id(), ownTopId);
+        ASSERT_EQ(restored.legal_by_player_size(), 1);
+        EXPECT_NE(restored.legal_by_player().find(recipient->getPlayerId()), restored.legal_by_player().end());
+    }
+
+    ruled::v1::IpcResponse topReplaced;
+    auto *replacementZoneView = topReplaced.mutable_batch()->add_events()->mutable_zone_view();
+    const std::array<quint32, 2> replacementIds{811u, 911u};
+    const std::array<quint64, 2> replacementGenerations{18u, 19u};
+    const std::array<Server_Player *, 2> players{p1, p2};
+    for (std::size_t index = 0; index < players.size(); ++index) {
+        const auto *recipient = players[index];
+        auto *playerView = replacementZoneView->add_per_player();
+        playerView->set_player_id(recipient->getPlayerId());
+        auto *top = playerView->mutable_private_library_top();
+        top->set_object_id(replacementIds[index]);
+        top->set_zone_change_generation(replacementGenerations[index]);
+        top->set_card_id("grizzly_bears");
+        top->set_card_name("Grizzly Bears");
+        auto *offer = (*topReplaced.mutable_batch()->mutable_legal_by_player())[recipient->getPlayerId()]
+                          .add_zone_cast_actions();
+        offer->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_LIBRARY);
+        offer->set_object_id(replacementIds[index]);
+        offer->set_zone_change_generation(replacementGenerations[index]);
+        offer->set_card_name("Grizzly Bears");
+    }
+    updatePendingResolutionChoiceCache(topReplaced);
+    for (std::size_t index = 0; index < players.size(); ++index) {
+        Server_Player *recipient = players[index];
+        ResponseContainer replacedReconnect(-1);
+        game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, replacedReconnect);
+        ASSERT_EQ(replacedReconnect.getPostResponseQueue().size(), 1);
+        const auto *container = dynamic_cast<const GameEventContainer *>(replacedReconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        const auto view = std::find_if(restored.events().begin(), restored.events().end(),
+                                       [](const auto &event) { return event.has_zone_view(); });
+        ASSERT_NE(view, restored.events().end());
+        const auto ownView = std::find_if(view->zone_view().per_player().begin(), view->zone_view().per_player().end(),
+                                          [recipient](const auto &playerView) {
+                                              return playerView.player_id() == recipient->getPlayerId();
+                                          });
+        ASSERT_NE(ownView, view->zone_view().per_player().end());
+        ASSERT_TRUE(ownView->has_private_library_top());
+        EXPECT_EQ(ownView->private_library_top().object_id(), replacementIds[index]);
+        const auto ownLegal = restored.legal_by_player().find(recipient->getPlayerId());
+        ASSERT_NE(ownLegal, restored.legal_by_player().end());
+        EXPECT_TRUE(std::any_of(ownLegal->second.zone_cast_actions().begin(), ownLegal->second.zone_cast_actions().end(),
+                                [index, &replacementIds](const auto &action) {
+                                    return action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_LIBRARY &&
+                                           action.object_id() == replacementIds[index];
+                                }));
+    }
+
+    ruled::v1::IpcResponse permissionLost;
+    auto *clearedView = permissionLost.mutable_batch()->add_events()->mutable_zone_view();
+    clearedView->add_per_player()->set_player_id(p1->getPlayerId());
+    clearedView->add_per_player()->set_player_id(p2->getPlayerId());
+    updatePendingResolutionChoiceCache(permissionLost);
+    for (Server_Player *recipient : {p1, p2}) {
+        const auto cleared = redactFor(permissionLost.batch(), recipient);
+        const auto view = std::find_if(cleared.events().begin(), cleared.events().end(),
+                                       [](const auto &event) { return event.has_zone_view(); });
+        ASSERT_NE(view, cleared.events().end());
+        for (const auto &playerView : view->zone_view().per_player()) {
+            EXPECT_FALSE(playerView.has_private_library_top());
+        }
+    }
+
+    for (Server_Player *recipient : {p1, p2}) {
+        ResponseContainer afterPermissionLoss(-1);
+        game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, afterPermissionLoss);
+        ASSERT_EQ(afterPermissionLoss.getPostResponseQueue().size(), 1);
+        const auto *clearedContainer = dynamic_cast<const GameEventContainer *>(
+            afterPermissionLoss.getPostResponseQueue().last().second);
+        ASSERT_NE(clearedContainer, nullptr);
+        ruled::v1::RuledEventBatch clearedReconnect;
+        ASSERT_TRUE(clearedReconnect.ParseFromString(
+            clearedContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        const auto clearedReconnectView = std::find_if(
+            clearedReconnect.events().begin(), clearedReconnect.events().end(),
+            [](const auto &event) { return event.has_zone_view(); });
+        ASSERT_NE(clearedReconnectView, clearedReconnect.events().end())
+            << "reconnect must replace a formerly visible library top after permission loss";
+        const auto clearedReconnectOwnView = std::find_if(
+            clearedReconnectView->zone_view().per_player().begin(),
+            clearedReconnectView->zone_view().per_player().end(),
+            [recipient](const auto &view) { return view.player_id() == recipient->getPlayerId(); });
+        ASSERT_NE(clearedReconnectOwnView, clearedReconnectView->zone_view().per_player().end());
+        EXPECT_FALSE(clearedReconnectOwnView->has_private_library_top());
+        const auto clearedReconnectLegal = clearedReconnect.legal_by_player().find(recipient->getPlayerId());
+        ASSERT_NE(clearedReconnectLegal, clearedReconnect.legal_by_player().end());
+        EXPECT_TRUE(std::none_of(clearedReconnectLegal->second.zone_cast_actions().begin(),
+                                 clearedReconnectLegal->second.zone_cast_actions().end(),
+                                 [](const auto &action) {
+                                     return action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_LIBRARY;
+                                 }));
+        EXPECT_TRUE(std::none_of(clearedReconnectLegal->second.zone_land_actions().begin(),
+                                 clearedReconnectLegal->second.zone_land_actions().end(),
+                                 [](const auto &action) {
+                                     return action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_LIBRARY;
+                                 }));
+    }
+
+    updatePendingResolutionChoiceCache(topReplaced);
+    ruled::v1::IpcResponse castBarrier;
+    auto *barrierView = castBarrier.mutable_batch()->add_events()->mutable_zone_view();
+    barrierView->add_per_player()->set_player_id(p1->getPlayerId());
+    barrierView->add_per_player()->set_player_id(p2->getPlayerId());
+    auto *pendingCast = (*castBarrier.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()]
+                            .mutable_pending_spell_cast();
+    pendingCast->set_transaction_id(44u);
+    updatePendingResolutionChoiceCache(castBarrier);
+    ResponseContainer barrierReconnect(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, barrierReconnect);
+    ASSERT_EQ(barrierReconnect.getPostResponseQueue().size(), 1);
+    const auto *barrierContainer = dynamic_cast<const GameEventContainer *>(barrierReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(barrierContainer, nullptr);
+    ruled::v1::RuledEventBatch restoredBarrier;
+    ASSERT_TRUE(restoredBarrier.ParseFromString(
+        barrierContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    const auto restoredBarrierView = std::find_if(restoredBarrier.events().begin(), restoredBarrier.events().end(),
+                                                   [](const auto &event) { return event.has_zone_view(); });
+    ASSERT_NE(restoredBarrierView, restoredBarrier.events().end());
+    const auto barrierOwnView = std::find_if(
+        restoredBarrierView->zone_view().per_player().begin(), restoredBarrierView->zone_view().per_player().end(),
+        [this](const auto &view) { return view.player_id() == p1->getPlayerId(); });
+    ASSERT_NE(barrierOwnView, restoredBarrierView->zone_view().per_player().end());
+    EXPECT_FALSE(barrierOwnView->has_private_library_top())
+        << "a reconnect during CR 401.5 must not reveal the next top card";
+    const auto barrierLegal = restoredBarrier.legal_by_player().find(p1->getPlayerId());
+    ASSERT_NE(barrierLegal, restoredBarrier.legal_by_player().end());
+    EXPECT_TRUE(barrierLegal->second.has_pending_spell_cast());
+    EXPECT_TRUE(std::none_of(barrierLegal->second.zone_cast_actions().begin(),
+                             barrierLegal->second.zone_cast_actions().end(),
+                             [](const auto &action) {
+                                 return action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_LIBRARY;
+                             }));
 }
 
 // The HandSlotMap is re-sent only when the mapping changed. It rides on every ruled command
@@ -2521,6 +2756,140 @@ TEST_F(RuledBatchTest, SpellCastTransactionKeepsHandCardUntilCommit)
     EXPECT_EQ(stack->getCards().first()->getId(), secondPhysicalId);
     EXPECT_EQ(boundStackServerCardId(900u), secondPhysicalId);
     EXPECT_EQ(boundStackTargets(900u), QVector<quint32>({777u}));
+}
+
+TEST_F(RuledBatchTest, LibrarySpellCastKeepsTheExactTopPhysicalCardHiddenUntilCommit)
+{
+    seedCardCatalog({"Lightning Bolt"});
+    Server_Card *top = addCardToDeck(p1, "Lightning Bolt");
+    Server_Card *next = addCardToDeck(p1, "Lightning Bolt");
+    const int topPhysicalId = top->getId();
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Seed = buildPerPlayerView(p1, {}, {});
+    auto *topView = p1Seed.add_library_cards();
+    topView->set_object_id(701u);
+    topView->set_card_id("lightning_bolt");
+    auto *nextView = p1Seed.add_library_cards();
+    nextView->set_object_id(702u);
+    nextView->set_card_id("lightning_bolt");
+    *seedView->add_per_player() = p1Seed;
+    *seedView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+    ASSERT_EQ(bindingFor(p1).libraryEngineOidToServerCardId.value(701u), topPhysicalId);
+
+    ruled::v1::RuledCommand begin;
+    auto *announcement = begin.mutable_begin_spell_cast()->mutable_announcement();
+    announcement->mutable_source()->set_library_object_id(701u);
+    announcement->mutable_source()->set_expected_zone_change_generation(4u);
+    ruled::v1::IpcResponse begun;
+    begun.set_ok(true);
+    auto *pending = (*begun.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()].mutable_pending_spell_cast();
+    pending->set_transaction_id(70u);
+    pending->set_reserved_object_id(701u);
+    pending->mutable_announcement()->CopyFrom(*announcement);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), begin, begun);
+
+    auto *stack = p1->getZones().value(ZoneNames::STACK);
+    auto *deck = p1->getZones().value(ZoneNames::DECK);
+    EXPECT_TRUE(stack->getCards().isEmpty()) << "a library source stays concealed while the cast is paid";
+    EXPECT_EQ(deck->getCards(), (QList<Server_Card *>{top, next}));
+
+    auto *pendingView = begun.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Pending = buildPerPlayerView(p1, {}, {});
+    auto *remaining = p1Pending.add_library_cards();
+    remaining->set_object_id(702u);
+    remaining->set_card_id("lightning_bolt");
+    *pendingView->add_per_player() = p1Pending;
+    *pendingView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(begun);
+    EXPECT_EQ(deck->getCards(), (QList<Server_Card *>{top, next}));
+    EXPECT_EQ(bindingFor(p1).libraryEngineOidToServerCardId.value(701u), topPhysicalId);
+    EXPECT_EQ(bindingFor(p1).libraryEngineOidToServerCardId.value(702u), next->getId());
+
+    ruled::v1::RuledCommand cancel;
+    cancel.mutable_cancel_spell_cast()->set_transaction_id(70u);
+    ruled::v1::IpcResponse canceled;
+    canceled.set_ok(true);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), cancel, canceled);
+    auto *cancelView = canceled.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Cancel = buildPerPlayerView(p1, {}, {});
+    for (const auto &[oid, cardId] :
+         {std::pair{701u, "lightning_bolt"}, std::pair{702u, "lightning_bolt"}}) {
+        auto *libraryCard = p1Cancel.add_library_cards();
+        libraryCard->set_object_id(oid);
+        libraryCard->set_card_id(cardId);
+    }
+    *cancelView->add_per_player() = p1Cancel;
+    *cancelView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(canceled);
+    EXPECT_EQ(deck->getCards(), (QList<Server_Card *>{top, next}));
+    EXPECT_EQ(bindingFor(p1).libraryEngineOidToServerCardId.value(701u), topPhysicalId);
+    EXPECT_TRUE(stack->getCards().isEmpty());
+}
+
+TEST_F(RuledBatchTest, LibrarySpellCastCommitMovesTheReservedDuplicateByEngineObjectIdentity)
+{
+    seedCardCatalog({"Lightning Bolt"});
+    Server_Card *top = addCardToDeck(p1, "Lightning Bolt");
+    Server_Card *next = addCardToDeck(p1, "Lightning Bolt");
+    const int topPhysicalId = top->getId();
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Seed = buildPerPlayerView(p1, {}, {});
+    for (const quint32 oid : {801u, 802u}) {
+        auto *libraryCard = p1Seed.add_library_cards();
+        libraryCard->set_object_id(oid);
+        libraryCard->set_card_id("lightning_bolt");
+    }
+    *seedView->add_per_player() = p1Seed;
+    *seedView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+
+    ruled::v1::RuledCommand begin;
+    auto *announcement = begin.mutable_begin_spell_cast()->mutable_announcement();
+    announcement->mutable_source()->set_library_object_id(801u);
+    announcement->mutable_source()->set_expected_zone_change_generation(5u);
+    ruled::v1::IpcResponse begun;
+    begun.set_ok(true);
+    auto *pending = (*begun.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()].mutable_pending_spell_cast();
+    pending->set_transaction_id(71u);
+    pending->set_reserved_object_id(801u);
+    pending->mutable_announcement()->CopyFrom(*announcement);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), begin, begun);
+    auto *stack = p1->getZones().value(ZoneNames::STACK);
+    auto *deck = p1->getZones().value(ZoneNames::DECK);
+    EXPECT_TRUE(stack->getCards().isEmpty());
+    EXPECT_EQ(deck->getCards(), (QList<Server_Card *>{top, next}));
+
+    auto *pendingView = begun.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Pending = buildPerPlayerView(p1, {}, {});
+    auto *remaining = p1Pending.add_library_cards();
+    remaining->set_object_id(802u);
+    remaining->set_card_id("lightning_bolt");
+    *pendingView->add_per_player() = p1Pending;
+    *pendingView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(begun);
+
+    ruled::v1::RuledCommand commit;
+    commit.mutable_commit_spell_cast()->set_transaction_id(71u);
+    ruled::v1::IpcResponse committed;
+    committed.set_ok(true);
+    auto *pushed = committed.mutable_batch()->add_events()->mutable_stack_pushed();
+    pushed->set_object_id(801u);
+    pushed->set_card_id("lightning_bolt");
+    pushed->set_description("Lightning Bolt");
+    applyAcceptedCommandVisuals(p1->getPlayerId(), commit, committed);
+    callBatchApply(committed);
+
+    ASSERT_EQ(stack->getCards().size(), 1);
+    EXPECT_EQ(stack->getCards().first()->getId(), topPhysicalId);
+    EXPECT_EQ(boundStackServerCardId(801u), topPhysicalId);
+    EXPECT_EQ(deck->getCards(), (QList<Server_Card *>{next}));
 }
 
 TEST_F(RuledBatchTest, CancelSpellCastRestoresTheExactPhysicalCardAndHandOrder)
@@ -4896,6 +5265,7 @@ TEST_F(RuledBatchTest, RulesEffectsAnnotateOnlyTheBoundBattlefieldCardAndClearCl
         auto view = buildPerPlayerView(p1, {910u, 911u}, {false, false});
         auto *object = view.mutable_battlefield_objects(1);
         object->add_rules_annotation_labels("Loses all abilities");
+        object->add_rules_annotation_labels("Solved");
         object->add_rules_annotation_labels("Deathtouch");
         object->add_rules_annotation_labels("Can't be blocked");
         *evZv->add_per_player() = view;
@@ -4910,7 +5280,7 @@ TEST_F(RuledBatchTest, RulesEffectsAnnotateOnlyTheBoundBattlefieldCardAndClearCl
     ASSERT_NE(unaffected, enhanced);
     EXPECT_FALSE(unaffected->getAnnotation().contains(QStringLiteral("Effects:")));
     EXPECT_EQ(enhanced->getAnnotation(),
-              QStringLiteral("Keep me\nEffects: Loses all abilities, Deathtouch, Can't be blocked"));
+              QStringLiteral("Keep me\nEffects: Loses all abilities, Solved, Deathtouch, Can't be blocked"));
     EXPECT_FALSE(enhanced->getAnnotation().contains(QStringLiteral("Granted:")));
 
     {
@@ -5790,6 +6160,107 @@ TEST_F(RuledBatchTest, IndexedLibraryMoveUsesTheExactDuplicateAndEntersFaceDown)
     ASSERT_EQ(table->getCards().size(), 1);
     EXPECT_EQ(table->getCards().first(), second);
     EXPECT_TRUE(second->getFaceDown());
+}
+
+TEST_F(RuledBatchTest, LibraryTopLandMoveDoesNotSubstituteDuplicateWhenExactBindingIsMissing)
+{
+    seedCardCatalog({"Forest"});
+    Server_CardZone *deck = p1->getZones().value(ZoneNames::DECK);
+    Server_CardZone *table = p1->getZones().value(ZoneNames::TABLE);
+    ASSERT_NE(deck, nullptr);
+    ASSERT_NE(table, nullptr);
+    Server_Card *first = addCardToDeck(p1, "Forest");
+    Server_Card *selected = addCardToDeck(p1, "Forest");
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedZoneView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto ownerView = buildPerPlayerView(p1, {}, {});
+    auto *selectedLibraryCard = ownerView.add_library_cards();
+    selectedLibraryCard->set_object_id(9891u);
+    selectedLibraryCard->set_card_id("forest");
+    auto *nextLibraryCard = ownerView.add_library_cards();
+    nextLibraryCard->set_object_id(9890u);
+    nextLibraryCard->set_card_id("forest");
+    *seedZoneView->add_per_player() = ownerView;
+    *seedZoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    ASSERT_TRUE(callBatchApply(seed).zoneViewApplied);
+    bindLibraryObject(p1, 9891u, selected);
+    bindLibraryObject(p1, 9890u, first);
+    // Simulate a stale physical deck order: the accepted engine top is the second duplicate.
+    deck->removeCard(selected);
+    deck->removeCard(first);
+    deck->insertCard(first, -1, 0);
+    deck->insertCard(selected, -1, 0);
+    unbindLibraryObject(p1, 9891u);
+
+    ruled::v1::RuledCommand play;
+    auto *land = play.mutable_play_land();
+    land->mutable_source()->set_library_object_id(9891u);
+    land->mutable_source()->set_expected_zone_change_generation(0u);
+    land->set_face_index(0u);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *moved = response.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(9891u);
+    moved->set_owner_player_id(p1->getPlayerId());
+    moved->set_controller_player_id(p1->getPlayerId());
+    moved->set_card_id("forest");
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), play, response);
+    callBatchApply(response);
+
+    EXPECT_EQ(deck->getCards(), QList<Server_Card *>({first, selected}))
+        << "without the exact top binding, no same-name library card may be moved";
+    EXPECT_TRUE(table->getCards().isEmpty());
+}
+
+TEST_F(RuledBatchTest, LibraryTopLandMoveUsesTheExactPhysicalDuplicateWhenBound)
+{
+    seedCardCatalog({"Forest"});
+    Server_CardZone *deck = p1->getZones().value(ZoneNames::DECK);
+    Server_CardZone *table = p1->getZones().value(ZoneNames::TABLE);
+    ASSERT_NE(deck, nullptr);
+    ASSERT_NE(table, nullptr);
+    Server_Card *first = addCardToDeck(p1, "Forest");
+    Server_Card *selected = addCardToDeck(p1, "Forest");
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedZoneView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto ownerView = buildPerPlayerView(p1, {}, {});
+    auto *selectedLibraryCard = ownerView.add_library_cards();
+    selectedLibraryCard->set_object_id(9892u);
+    selectedLibraryCard->set_card_id("forest");
+    auto *nextLibraryCard = ownerView.add_library_cards();
+    nextLibraryCard->set_object_id(9893u);
+    nextLibraryCard->set_card_id("forest");
+    *seedZoneView->add_per_player() = ownerView;
+    *seedZoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    ASSERT_TRUE(callBatchApply(seed).zoneViewApplied);
+    bindLibraryObject(p1, 9892u, selected);
+    bindLibraryObject(p1, 9893u, first);
+
+    ruled::v1::RuledCommand play;
+    auto *land = play.mutable_play_land();
+    land->mutable_source()->set_library_object_id(9892u);
+    land->mutable_source()->set_expected_zone_change_generation(0u);
+    land->set_face_index(0u);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *moved = response.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(9892u);
+    moved->set_owner_player_id(p1->getPlayerId());
+    moved->set_controller_player_id(p1->getPlayerId());
+    moved->set_card_id("forest");
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), play, response);
+    callBatchApply(response);
+
+    EXPECT_EQ(deck->getCards(), QList<Server_Card *>({first}));
+    EXPECT_EQ(table->getCards(), QList<Server_Card *>({selected}));
 }
 
 TEST_F(RuledBatchTest, FaceDownIdentityIsControllerOnlyAndFaceUpKeepsServerCard)

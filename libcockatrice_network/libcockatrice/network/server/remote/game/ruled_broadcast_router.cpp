@@ -32,6 +32,9 @@ void RuledBroadcastRouter::resetForNewGame()
     pendingResolutionState.Clear();
     pendingAnnouncementState.Clear();
     currentPublicZoneView.reset();
+    privateLibraryTopByPlayer.clear();
+    privateLibraryTopClearPendingByPlayer.clear();
+    currentLegalActionsByPlayer.clear();
     activePublicRevealSnapshot.reset();
     pendingOpeningState.Clear();
 }
@@ -78,6 +81,10 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
         return;
     }
     const auto &legal = response.batch().legal_by_player();
+    currentLegalActionsByPlayer.clear();
+    for (const auto &entry : legal) {
+        currentLegalActionsByPlayer.insert(entry.first, entry.second);
+    }
     if (std::any_of(legal.begin(), legal.end(), [](const auto &entry) { return entry.second.has_opening(); })) {
         *pendingOpeningState.mutable_legal_by_player() = legal;
         for (const auto &event : response.batch().events()) {
@@ -103,7 +110,16 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
             // The reconnect copy needs public abilities and characteristics. Physical hand
             // identities come from the existing recipient-redacted server maps.
             for (auto &player : *view.mutable_per_player()) {
+                if (player.has_private_library_top()) {
+                    privateLibraryTopByPlayer.insert(player.player_id(), player.private_library_top());
+                    privateLibraryTopClearPendingByPlayer.remove(player.player_id());
+                } else {
+                    if (privateLibraryTopByPlayer.contains(player.player_id()))
+                        privateLibraryTopClearPendingByPlayer.insert(player.player_id());
+                    privateLibraryTopByPlayer.remove(player.player_id());
+                }
                 player.clear_hand_cards(); player.clear_library_cards(); player.set_private_zones_unchanged(true);
+                player.clear_private_library_top();
             }
             currentPublicZoneView = std::move(view);
         }
@@ -151,6 +167,9 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
 void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_AbstractParticipant *participant,
                                                                         ResponseContainer &rc)
 {
+    if (!participant) {
+        return;
+    }
     const bool opening = !pendingOpeningState.legal_by_player().empty();
     const bool casting = !pendingAnnouncementState.legal_by_player().empty();
     const bool hasPublicHand = currentPublicZoneView &&
@@ -158,10 +177,9 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
                                            currentPublicZoneView->per_player().end(),
                                            [](const auto &player) { return player.has_public_hand(); });
     const bool hasActiveReveal = activePublicRevealSnapshot && activePublicRevealSnapshot->reveals_size() > 0;
-    const bool hasPublicSnapshot = hasPublicHand || hasActiveReveal;
-    if (!participant) {
-        return;
-    }
+    const bool hasPrivateLibraryTop = privateLibraryTopByPlayer.contains(participant->getPlayerId());
+    const bool hasPrivateLibraryTopClear = privateLibraryTopClearPendingByPlayer.contains(participant->getPlayerId());
+    const bool hasPublicSnapshot = hasPublicHand || hasActiveReveal || hasPrivateLibraryTop || hasPrivateLibraryTopClear;
     ruled::v1::IpcResponse snapshot;
     auto *batch = snapshot.mutable_batch();
     if (opening) {
@@ -178,6 +196,24 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
             batch->add_events()->CopyFrom(event);
     } else if (currentPublicZoneView && hasPublicSnapshot) {
         batch->add_events()->mutable_zone_view()->CopyFrom(*currentPublicZoneView);
+        if (hasPrivateLibraryTop || hasPrivateLibraryTopClear) {
+            const auto legal = currentLegalActionsByPlayer.constFind(participant->getPlayerId());
+            if (legal != currentLegalActionsByPlayer.cend()) {
+                (*batch->mutable_legal_by_player())[participant->getPlayerId()].CopyFrom(legal.value());
+            } else {
+                // An empty entry authoritatively clears per-batch UI state if no action was
+                // offered at the snapshot point (for example because priority was elsewhere).
+                (*batch->mutable_legal_by_player())[participant->getPlayerId()].Clear();
+            }
+        }
+    }
+    if (hasPrivateLibraryTopClear && currentPublicZoneView) {
+        const bool hasZoneView = std::any_of(batch->events().begin(), batch->events().end(),
+                                             [](const auto &event) { return event.has_zone_view(); });
+        if (!hasZoneView)
+            batch->add_events()->mutable_zone_view()->CopyFrom(*currentPublicZoneView);
+        if (!batch->legal_by_player().contains(participant->getPlayerId()))
+            (*batch->mutable_legal_by_player())[participant->getPlayerId()].Clear();
     }
     if (activePublicRevealSnapshot)
         batch->add_events()->mutable_active_public_reveal_snapshot()->CopyFrom(*activePublicRevealSnapshot);
@@ -202,6 +238,11 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
             appendFaceDownObjectMap(snapshot);
     }
     const ruled::v1::RuledEventBatch filtered = redactBatchForParticipant(*batch, participant);
+    if (hasPrivateLibraryTopClear &&
+        std::any_of(filtered.events().begin(), filtered.events().end(),
+                    [](const auto &event) { return event.has_zone_view(); })) {
+        privateLibraryTopClearPendingByPlayer.remove(participant->getPlayerId());
+    }
 
     Event_RuledPayload event;
     if (game->ruled()->diagnostics())
@@ -755,7 +796,6 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
             }
         }
     }
-
     // Capture the explicitly authorized per-player values, clear every PER_PLAYER field
     // recursively by reflection (future classified fields therefore fail closed), then restore
     // only these reviewed cases.
@@ -790,6 +830,23 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
     clearRuledFieldsByVisibility(&filtered, ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
     if (hasOwnLegalActions) {
         (*filtered.mutable_legal_by_player())[participant->getPlayerId()] = ownLegalActions;
+    }
+    // The current top is private to its engine-authorized viewer. Restore it after recursive
+    // fail-closed clearing, including on idle reconnect snapshots sourced from the public cache.
+    const auto privateTop = privateLibraryTopByPlayer.constFind(participant->getPlayerId());
+    if (privateTop != privateLibraryTopByPlayer.cend()) {
+        for (int ei = 0; ei < filtered.events_size(); ++ei) {
+            if (!filtered.events(ei).has_zone_view()) {
+                continue;
+            }
+            auto *view = filtered.mutable_events(ei)->mutable_zone_view();
+            for (int pi = 0; pi < view->per_player_size(); ++pi) {
+                auto *playerView = view->mutable_per_player(pi);
+                if (playerView->player_id() == participant->getPlayerId()) {
+                    playerView->mutable_private_library_top()->CopyFrom(privateTop.value());
+                }
+            }
+        }
     }
     for (auto logIt = routedLogs.constBegin(); logIt != routedLogs.constEnd(); ++logIt) {
         auto *log = filtered.mutable_events(logIt.key())->mutable_log();

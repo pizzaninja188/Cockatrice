@@ -23,6 +23,7 @@
 #include "../game/ruled/ruled_client_state.h"
 #include "../game/ruled/ruled_dev_command_parser.h"
 #include "../game/ruled/ruled_dev_console.h"
+#include "../game/ruled/ruled_payment_ui.h"
 #include "../game/ruled/ruled_replacement_picker.h"
 #include "../game/ruled/ruled_resume_client.h"
 #include "../game/ruled/ruled_reveal_windows.h"
@@ -55,6 +56,7 @@
 #include <QStackedWidget>
 #include <QTextStream>
 #include <QTimer>
+#include <QToolButton>
 #include <QWidget>
 #include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
 #include <libcockatrice/utility/zone_names.h>
@@ -517,6 +519,10 @@ void TabGame::connectToGameEventHandler()
                 &TabGame::refreshRuledPromptState);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::exilePlayPermissionGroupsChanged, this,
                 &TabGame::onRuledExilePlayPermissionGroupsChanged);
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::privateLibraryTopChanged, this,
+                &TabGame::refreshRuledLibraryTopUi);
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::legalActionsChanged, this,
+                &TabGame::refreshRuledLibraryTopUi);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::triggerOrderUiChanged, this,
                 &TabGame::onRuledTriggerOrderUiChanged);
         connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget,
@@ -633,6 +639,7 @@ void TabGame::connectToGameEventHandler()
         gamePromptWidget->setFirstStrikeDamageStepActive(
             game->getGameEventHandler()->ruled()->inFirstStrikeDamageStep());
     }
+    refreshRuledLibraryTopUi();
 }
 
 void TabGame::connectMessageLogToGameEventHandler()
@@ -2518,8 +2525,37 @@ void TabGame::createMessageDock(bool bReplay)
         connect(gamePromptWidget, &GamePromptWidget::passPriorityRequested, game->getGameEventHandler(),
                 &GameEventHandler::handleNextTurn);
         messageLogLayout->addWidget(gamePromptWidget);
+
+        ruledLibraryTopWidget = new QWidget(this);
+        auto *libraryTopLayout = new QHBoxLayout(ruledLibraryTopWidget);
+        libraryTopLayout->setContentsMargins(6, 2, 6, 2);
+        ruledLibraryTopLabel = new QLabel(ruledLibraryTopWidget);
+        ruledLibraryTopInspect = new QToolButton(ruledLibraryTopWidget);
+        ruledLibraryTopInspect->setText(tr("Inspect"));
+        ruledLibraryTopInspect->setObjectName(QStringLiteral("ruledLibraryTopInspect"));
+        ruledLibraryTopActions = new QToolButton(ruledLibraryTopWidget);
+        ruledLibraryTopActions->setPopupMode(QToolButton::InstantPopup);
+        ruledLibraryTopActions->setText(tr("Choose action"));
+        libraryTopLayout->addWidget(ruledLibraryTopLabel, 1);
+        libraryTopLayout->addWidget(ruledLibraryTopInspect);
+        libraryTopLayout->addWidget(ruledLibraryTopActions);
+        messageLogLayout->addWidget(ruledLibraryTopWidget);
+        ruledLibraryTopWidget->hide();
+        connect(ruledLibraryTopInspect, &QToolButton::clicked, this, [this]() {
+            auto *state = game && game->getGameEventHandler() ? game->getGameEventHandler()->ruled() : nullptr;
+            if (!state || !state->privateLibraryTop || !cardInfoFrameWidget || !cardInfoDock) {
+                return;
+            }
+            cardInfoFrameWidget->setCard(state->privateLibraryTop->cardName);
+            cardInfoDock->show();
+            cardInfoDock->raise();
+        });
     } else {
         gamePromptWidget = nullptr;
+        ruledLibraryTopWidget = nullptr;
+        ruledLibraryTopLabel = nullptr;
+        ruledLibraryTopInspect = nullptr;
+        ruledLibraryTopActions = nullptr;
     }
 
     // Fork: dev-loop console, under the prompt panel in the same dock. Hidden unless explicitly
@@ -2890,4 +2926,68 @@ void TabGame::onRuledExilePlayPermissionGroupsChanged()
         view->setContentMinimumWidth(QFontMetricsF(view->font()).horizontalAdvance(title) + 80);
         qDeleteAll(previousCards);
     }
+}
+
+void TabGame::refreshRuledLibraryTopUi()
+{
+    if (!ruledLibraryTopWidget || !ruledLibraryTopLabel || !ruledLibraryTopInspect || !ruledLibraryTopActions) {
+        return;
+    }
+    auto *state = game && game->getGameEventHandler() ? game->getGameEventHandler()->ruled() : nullptr;
+    if (!state || !state->privateLibraryTop) {
+        ruledLibraryTopWidget->hide();
+        if (QMenu *const oldMenu = ruledLibraryTopActions->menu()) {
+            ruledLibraryTopActions->setMenu(nullptr);
+            oldMenu->deleteLater();
+        }
+        return;
+    }
+
+    const RuledPrivateLibraryTop top = *state->privateLibraryTop;
+    ruledLibraryTopLabel->setText(tr("Top of your library: %1").arg(top.cardName));
+    ruledLibraryTopWidget->show();
+
+    QMenu *const previousMenu = ruledLibraryTopActions->menu();
+    auto *menu = new QMenu(ruledLibraryTopActions);
+    if (previousMenu) {
+        previousMenu->deleteLater();
+    }
+    bool hasAction = false;
+    for (const RuledFaceOption &offer : state->zoneActionFaceOptions(top.objectId, RuledCastSource::Library)) {
+        QAction *const action = menu->addAction(tr("Cast %1").arg(offer.faceName));
+        hasAction = true;
+        connect(action, &QAction::triggered, this, [this, top, offer]() {
+            if (!game || RuledActions::gameplayInputLocked(game)) {
+                return;
+            }
+            const int localId = game->getPlayerManager()->getLocalPlayerId();
+            Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+            if (!localPlayer || !localPlayer->getPlayerActions()) {
+                return;
+            }
+            localPlayer->getPlayerActions()->tryRuledLibraryTopCast(top, offer);
+        });
+    }
+    for (const RuledFaceOption &offer : state->zoneLandFaceOptions(top.objectId, RuledCastSource::Library)) {
+        QAction *const action = menu->addAction(tr("Play %1").arg(offer.faceName));
+        hasAction = true;
+        connect(action, &QAction::triggered, this, [this, top, offer]() {
+            if (!game || RuledActions::gameplayInputLocked(game)) {
+                return;
+            }
+            if (Player *localPlayer = game->getPlayerManager()->getPlayers().value(
+                    game->getPlayerManager()->getLocalPlayerId(), nullptr)) {
+                if (localPlayer->getPlayerActions()) {
+                    localPlayer->getPlayerActions()->tryRuledLibraryTopLand(top, offer);
+                }
+            }
+        });
+    }
+    if (!hasAction) {
+        QAction *const unavailable = menu->addAction(tr("No legal cast or land play is available"));
+        unavailable->setEnabled(false);
+    }
+    ruledLibraryTopActions->setText(tr("Choose action"));
+    ruledLibraryTopActions->setEnabled(hasAction);
+    ruledLibraryTopActions->setMenu(menu);
 }

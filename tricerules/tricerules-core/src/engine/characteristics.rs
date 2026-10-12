@@ -1128,6 +1128,9 @@ impl CharacteristicsEvaluator<'_> {
         view: Option<&EarlyLayerView>,
     ) -> bool {
         match condition {
+            GameCondition::CaseSolved { solved } => {
+                self.state.is_case_solved(source_oid) == *solved
+            }
             GameCondition::ControllerLibraryEmpty => {
                 super::draw::controller_library_empty(self.state, controller)
             }

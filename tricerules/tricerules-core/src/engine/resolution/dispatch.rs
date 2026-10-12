@@ -119,6 +119,7 @@ pub(super) fn execute_effect(
             pump_counters::set_source_base_power_to_town_count(cx, effect)?
         }
         SpellEffectKind::SetClassLevel { level } => misc::set_class_level(cx, level)?,
+        SpellEffectKind::SolveCase => misc::solve_case(cx)?,
         effect @ SpellEffectKind::PumpAll { .. } => pump_counters::pump_all(cx, effect)?,
         effect @ SpellEffectKind::DoublePowerToughnessAll { .. } => {
             pump_counters::double_power_toughness_all(cx, effect)?

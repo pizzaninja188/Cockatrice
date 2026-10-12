@@ -975,6 +975,9 @@ pub enum SpellEffectKind {
     SetClassLevel {
         level: u32,
     },
+    /// CR 719.3a: mark the exact current source permanent incarnation as a solved Case.
+    /// This designation is independent of counters and copiable values and clears on zone change.
+    SolveCase,
     /// CR 611.2a/613: apply one allowlisted characteristic or ability modifier to one exact
     /// permanent. Hydro-Man composes a type replacement and an activated-ability grant; Wrenn
     /// and Realmbreaker composes type addition, base P/T, and keyword grants. Keeping each layer
@@ -2231,6 +2234,10 @@ pub struct ZoneCardFilter {
     pub card_type: Option<CardTypeFilter>,
     #[serde(default)]
     pub excluded_card_types: Vec<CardTypeFilter>,
+    /// Match the chosen face's colors. Mystic Forge's top-library rule includes colorless
+    /// spells in addition to artifacts, so this keeps the shared source filter reusable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_colorless: Option<bool>,
     /// No One Left Behind and Recommission use inclusive mana-value bounds.
     #[serde(default)]
     pub min_mana_value: Option<u32>,
@@ -3595,6 +3602,7 @@ impl SpellEffectKind {
             | SpellEffectKind::SetSourceBasePowerToTownCount
             | SpellEffectKind::DoubleTimeCounters
             | SpellEffectKind::SetClassLevel { .. }
+            | SpellEffectKind::SolveCase
             | SpellEffectKind::PreventAllCombatDamageTurn
             | SpellEffectKind::DamageCantBePreventedThisTurn
             | SpellEffectKind::ChangeSourceFace { .. }
@@ -4529,6 +4537,9 @@ impl SpellEffectKind {
         if matches!(self, Self::SetSourceBasePowerToTownCount) && context != EffectContext::Ability
         {
             return Err("PuPu UFO source effects require an activated ability".into());
+        }
+        if matches!(self, Self::SolveCase) && context != EffectContext::Ability {
+            return Err("SolveCase requires a permanent ability source".into());
         }
         if matches!(self, Self::PutPermanentFromHand { .. }) && context != EffectContext::Ability {
             return Err("PutPermanentFromHand requires an activated or triggered ability".into());
@@ -7340,6 +7351,14 @@ pub enum ContinuousEffectKind {
     /// CR 305.1 / 611.3: the affected player may play lands from their own graveyard while the
     /// source remains on the battlefield. Covers Icetill Explorer and Crucible of Worlds.
     PlayLandsFromOwnGraveyard,
+    /// CR 401.5 / 601: privately inspect the current top of the player's library and use the
+    /// selected-face filter to cast spells or play a land from that exact top object.
+    /// Case and Mystic Forge share the source with different face filters.
+    LibraryTopPermission {
+        look_at_top: bool,
+        cast_filter: Option<ZoneCardFilter>,
+        play_lands: bool,
+    },
 }
 
 #[cfg(test)]

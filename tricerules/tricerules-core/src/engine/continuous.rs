@@ -648,6 +648,23 @@ impl GameEngine {
                         ContinuousEffectKind::PlayLandsFromOwnGraveyard,
                         StaticAbilityDef::PlayLandsFromOwnGraveyard,
                     ) => true,
+                    (
+                        ContinuousEffectKind::LibraryTopPermission {
+                            look_at_top: effect_look,
+                            cast_filter: effect_filter,
+                            play_lands: effect_lands,
+                        },
+                        StaticAbilityDef::LibraryTopPermission {
+                            look_at_top: ability_look,
+                            cast_filter: ability_filter,
+                            play_lands: ability_lands,
+                            ..
+                        },
+                    ) => {
+                        effect_look == ability_look
+                            && effect_filter == ability_filter
+                            && effect_lands == ability_lands
+                    }
                     _ => false,
                 });
             if !source_still_has_rule_ability {
@@ -676,6 +693,68 @@ impl GameEngine {
             self.player_rule_effect_applies(effect, pid)
                 && effect.kind == ContinuousEffectKind::PlayLandsFromOwnGraveyard
         })
+    }
+
+    fn active_library_top_permissions(&self, pid: PlayerId) -> Vec<&ContinuousEffect> {
+        self.state
+            .continuous_effects
+            .iter()
+            .filter(|effect| self.player_rule_effect_applies(effect, pid))
+            .filter(|effect| {
+                matches!(
+                    effect.kind,
+                    ContinuousEffectKind::LibraryTopPermission { .. }
+                ) && self.continuous_effect_condition_holds(effect)
+            })
+            .collect()
+    }
+
+    pub(super) fn may_look_at_library_top(&self, pid: PlayerId) -> bool {
+        self.active_library_top_permissions(pid)
+            .iter()
+            .any(|effect| {
+                matches!(
+                    effect.kind,
+                    ContinuousEffectKind::LibraryTopPermission {
+                        look_at_top: true,
+                        ..
+                    }
+                )
+            })
+    }
+
+    pub(super) fn may_cast_library_top_face(
+        &self,
+        pid: PlayerId,
+        definition: &tricerules_card_model::CardDefinition,
+        face_index: usize,
+    ) -> bool {
+        self.active_library_top_permissions(pid)
+            .iter()
+            .any(|effect| {
+                let ContinuousEffectKind::LibraryTopPermission {
+                    cast_filter: Some(filter),
+                    ..
+                } = &effect.kind
+                else {
+                    return false;
+                };
+                definition.matches_zone_card_filter_for_face(face_index, filter)
+            })
+    }
+
+    pub(super) fn may_play_library_top_land(&self, pid: PlayerId) -> bool {
+        self.active_library_top_permissions(pid)
+            .iter()
+            .any(|effect| {
+                matches!(
+                    effect.kind,
+                    ContinuousEffectKind::LibraryTopPermission {
+                        play_lands: true,
+                        ..
+                    }
+                )
+            })
     }
 
     /// CR 604.3 / 611.3: when a permanent with static anthem abilities enters the battlefield,
@@ -1454,6 +1533,26 @@ impl GameEngine {
                         affected: AffectedScope::Player(controller),
                         kind: ContinuousEffectKind::PlayLandsFromOwnGraveyard,
                         condition: None,
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
+                StaticAbilityDef::LibraryTopPermission {
+                    look_at_top,
+                    cast_filter,
+                    play_lands,
+                    condition,
+                } => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
+                        source_id: Some(object_id),
+                        affected: AffectedScope::Player(controller),
+                        kind: ContinuousEffectKind::LibraryTopPermission {
+                            look_at_top,
+                            cast_filter,
+                            play_lands,
+                        },
+                        condition,
                         duration: EffectDuration::WhileSourceOnBattlefield,
                         timestamp,
                     });

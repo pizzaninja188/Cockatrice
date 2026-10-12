@@ -2919,6 +2919,9 @@ pub struct GameState {
     /// CR 716.2: noncopiable Class-level designations, bound to the current object generation.
     /// Absence means level 1; the zone-change funnel clears the designation on departure.
     pub class_levels: HashMap<ObjectId, ClassLevelDesignation>,
+    /// CR 719.3a: noncopiable solved Case designations bound to the current object generation.
+    /// Absence means unsolved; the zone-change funnel clears the designation on departure.
+    pub case_solved_generations: HashMap<ObjectId, u64>,
     /// CR 722.3: permanent -> linked exile copy. A designation is not a copiable value.
     pub prepared_permanents: BTreeMap<ObjectId, ObjectId>,
     /// Copies keep their prepare-spell classification on the stack, independently of the source.
@@ -3147,6 +3150,19 @@ impl GameState {
                 designation.zone_change_generation == generation && object.zone == Zone::Battlefield
             })
             .map_or(1, |designation| designation.level)
+    }
+
+    /// Whether this exact battlefield object incarnation has solved its Case.
+    pub fn is_case_solved(&self, object_id: ObjectId) -> bool {
+        let generation = self
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        self.objects
+            .get(&object_id)
+            .is_some_and(|object| object.zone == Zone::Battlefield)
+            && self.case_solved_generations.get(&object_id).copied() == Some(generation)
     }
 
     pub fn is_terminal(&self) -> bool {

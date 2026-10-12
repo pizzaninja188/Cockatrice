@@ -12,6 +12,9 @@ use serde::{Deserialize, Serialize};
 /// the identities of the cards that moved through a graveyard.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameCondition {
+    /// CR 719.3a: whether the current incarnation of this source permanent has solved its Case.
+    /// The designation is noncopiable and lasts until this permanent leaves the battlefield.
+    CaseSolved { solved: bool },
     /// Laboratory Maniac's replacement and Jace's resolving ultimate read only this count.
     ControllerLibraryEmpty,
     /// Boolean conjunction across otherwise independent public game-state predicates. Every
@@ -463,6 +466,7 @@ impl GameCondition {
                 Ok(())
             }
             GameCondition::HasEnduringStory { .. }
+            | GameCondition::CaseSolved { .. }
             | GameCondition::ControllerLibraryEmpty
             | GameCondition::Void
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
@@ -559,6 +563,7 @@ impl GameCondition {
     pub fn matches_value(&self, value: u32) -> bool {
         match self {
             GameCondition::AllOf(_)
+            | GameCondition::CaseSolved { .. }
             | GameCondition::ControllerLibraryEmpty
             | GameCondition::AnyOf(_)
             | GameCondition::HasEnduringStory { .. }

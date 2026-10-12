@@ -6,6 +6,7 @@
 
 #include "../server_response_containers.h"
 
+#include <QHash>
 #include <QSet>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <optional>
@@ -46,6 +47,16 @@ private:
     // reconnect. The fail-closed redactor removes each transaction for every other participant.
     ruled::v1::RuledEventBatch pendingAnnouncementState;
     std::optional<ruled::v1::ZoneViewSync> currentPublicZoneView;
+    // Latest engine-authorized top identity per player. It is never copied into the shared
+    // public reconnect cache; redactBatchForParticipant restores only the matching recipient.
+    QHash<int, ruled::v1::PrivateLibraryTopView> privateLibraryTopByPlayer;
+    // A reconnecting seat may still have the last private top cached locally after its live
+    // permission-loss batch was missed. Keep a participant-scoped full-replacement clear pending
+    // until that seat receives an authoritative zone view.
+    QSet<int> privateLibraryTopClearPendingByPlayer;
+    // Fresh per-player actions are retained so an idle reconnect can restore library-top offers
+    // together with the private top view; redaction still sends only the reconnecting seat's copy.
+    QHash<int, ruled::v1::LegalActions> currentLegalActionsByPlayer;
     // Opening legality/progress only; never replay one-shot logs or movement events.
     ruled::v1::RuledEventBatch pendingOpeningState;
 };

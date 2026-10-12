@@ -256,6 +256,7 @@ void RuledBatchSynchronizer::resetForNewGame()
     ruledStackTargetsByObjectId.clear();
     ruledStackCopyObjectIds.clear();
     ruledStackAbilityObjectIds.clear();
+    exactLibraryLandMoveOids.clear();
     ruledPendingCastVisualQueue.clear();
 }
 
@@ -287,6 +288,14 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
         return;
     }
 
+    // The accepted engine command identifies the exact library object that became a land.
+    // Retain that requirement if entry replacement choices defer its PermanentMoved event.
+    if (ruledCmd.has_play_land() && ruledCmd.play_land().has_source() &&
+        ruledCmd.play_land().source().location_case() == ruled::v1::LandSource::kLibraryObjectId) {
+        exactLibraryLandMoveOids.insert(
+            static_cast<quint32>(ruledCmd.play_land().source().library_object_id()));
+    }
+
     if (ruledCmd.has_cancel_spell_cast()) {
         const quint64 transactionId = ruledCmd.cancel_spell_cast().transaction_id();
         const auto pendingIt = std::find_if(
@@ -297,7 +306,7 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
         if (pendingIt == ruledPendingCastVisualQueue.end()) {
             return;
         }
-        if (pendingIt->sourceZoneName == ZoneNames::HAND) {
+        if (pendingIt->sourceZoneName == ZoneNames::HAND || pendingIt->sourceZoneName == ZoneNames::DECK) {
             ruledPendingCastVisualQueue.erase(pendingIt);
             return;
         }
@@ -336,14 +345,15 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
             ruledPendingCastVisualQueue.begin(), ruledPendingCastVisualQueue.end(),
             [playerId, transactionId](const PendingRuledCastVisual &entry) {
                 return entry.casterPlayerId == playerId && entry.transactionId == transactionId &&
-                       entry.sourceZoneName == ZoneNames::HAND;
+                       (entry.sourceZoneName == ZoneNames::HAND || entry.sourceZoneName == ZoneNames::DECK);
             });
         if (pendingIt != ruledPendingCastVisualQueue.end()) {
             Server_AbstractPlayer *sourcePlayer = game->getPlayer(pendingIt->sourcePlayerId);
-            Server_CardZone *hand = sourcePlayer ? sourcePlayer->getZones().value(ZoneNames::HAND) : nullptr;
+            Server_CardZone *sourceZone =
+                sourcePlayer ? sourcePlayer->getZones().value(pendingIt->sourceZoneName) : nullptr;
             Server_CardZone *stack = ruledCanonicalStackZone(game);
-            if (hand && stack) {
-                for (Server_Card *card : hand->getCards()) {
+            if (sourceZone && stack) {
+                for (Server_Card *card : sourceZone->getCards()) {
                     if (card && card->getId() == pendingIt->serverCardId) {
                         if (pendingIt->faceIndex > 0) {
                             const QString cardId = cardIdForName(card->getName());
@@ -352,9 +362,15 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
                                 card->setCardRef(CardRef{activeName});
                         }
                         CardToMove move;
-                        move.set_card_id(card->getId());
+                        const int sourcePosition = sourceZone->getName() == ZoneNames::DECK
+                                                       ? sourceZone->getCards().indexOf(card)
+                                                       : -1;
+                        if (sourceZone->getName() == ZoneNames::DECK && sourcePosition < 0) {
+                            break;
+                        }
+                        move.set_card_id(sourcePosition >= 0 ? sourcePosition : card->getId());
                         GameEventStorage events;
-                        if (ruledApplyMove(cmdPlayer, events, hand, stack, move, -1, 0, "commitCast"))
+                        if (ruledApplyMove(cmdPlayer, events, sourceZone, stack, move, -1, 0, "commitCast"))
                             events.sendToGame(game);
                         break;
                     }
@@ -421,6 +437,24 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
                     break;
                 }
             }
+        } else if (source.location_case() == ruled::v1::CastSource::kLibraryObjectId) {
+            const quint32 oid = static_cast<quint32>(source.library_object_id());
+            sourceLabel = QStringLiteral("library:%1").arg(oid);
+            auto *owner = dynamic_cast<Server_Player *>(cmdPlayer);
+            const auto &libraryBindings = playerBinding(playerId).libraryEngineOidToServerCardId;
+            const auto binding = libraryBindings.constFind(oid);
+            Server_CardZone *deck = owner ? owner->getZones().value(ZoneNames::DECK) : nullptr;
+            if (binding != libraryBindings.constEnd() && deck) {
+                const auto libraryCard = std::find_if(
+                    deck->getCards().begin(), deck->getCards().end(),
+                    [binding](const Server_Card *candidate) {
+                        return candidate && candidate->getId() == *binding;
+                    });
+                if (libraryCard != deck->getCards().end()) {
+                    card = *libraryCard;
+                    sourceZone = deck;
+                }
+            }
         }
         RULED_TRACE("relay") << "cast source=" << sourceLabel
                              << " sourceZone=" << (sourceZone ? sourceZone->getName() : QStringLiteral("<null>"))
@@ -445,7 +479,10 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
         pending.sourceCardRef = card->getCardRef();
         const int faceIndex = static_cast<int>(acceptedCast.face_index());
         pending.faceIndex = faceIndex;
-        if (faceIndex > 0 && (sourceZone->getName() != ZoneNames::HAND || legacyAtomic)) {
+        const bool deferredPrivateCast = !legacyAtomic &&
+                                         (sourceZone->getName() == ZoneNames::HAND ||
+                                          sourceZone->getName() == ZoneNames::DECK);
+        if (faceIndex > 0 && !deferredPrivateCast) {
             const QString cardId = cardIdForName(card->getName());
             const QString activeName = faceDisplayName(cardId, faceIndex);
             if (!activeName.isEmpty() && activeName != card->getName()) {
@@ -462,12 +499,19 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
             }
         }
 
-        if (sourceZone->getName() == ZoneNames::HAND && !legacyAtomic) {
+        if (deferredPrivateCast) {
             ruledPendingCastVisualQueue.append(pending);
             return;
         }
         CardToMove cardToMove;
-        cardToMove.set_card_id(card->getId());
+        const int libraryPosition = sourceZone->getName() == ZoneNames::DECK
+                                        ? sourceZone->getCards().indexOf(card)
+                                        : -1;
+        if (sourceZone->getName() == ZoneNames::DECK && libraryPosition < 0) {
+            card->setCardRef(pending.sourceCardRef);
+            return;
+        }
+        cardToMove.set_card_id(libraryPosition >= 0 ? libraryPosition : card->getId());
         GameEventStorage moveGes;
         if (ruledApplyMove(cmdPlayer, moveGes, sourceZone, stackZone, cardToMove, -1, 0, "beginCast")) {
             ruledPendingCastVisualQueue.append(pending);
@@ -821,6 +865,7 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
         const auto &pm = e.permanent_moved();
         const int ownerId = pm.owner_player_id();
         const quint32 oid = static_cast<quint32>(pm.object_id());
+        bool exactLibraryLandMove = exactLibraryLandMoveOids.contains(oid);
         Server_AbstractPlayer *owner = game->getPlayer(ownerId);
         if (!owner) {
             continue;
@@ -932,6 +977,40 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
                         }
                     }
                 }
+            }
+        }
+        if (exactLibraryLandMove) {
+            Server_CardZone *deck = owner->getZones().value(ZoneNames::DECK);
+            // A replacement may defer or skip the land move. If this ObjectId later reaches a
+            // PermanentMoved event from a different physical zone, retire the old source hint and
+            // let that zone's own identity map resolve it.
+            if (deck && card && card->getZone() != deck) {
+                exactLibraryLandMoveOids.remove(oid);
+                exactLibraryLandMove = false;
+            }
+        }
+        if (exactLibraryLandMove) {
+            Server_CardZone *deck = owner->getZones().value(ZoneNames::DECK);
+            const auto &libraryBindings = playerBinding(ownerId).libraryEngineOidToServerCardId;
+            const auto libraryId = libraryBindings.constFind(oid);
+            if (!deck || libraryId == libraryBindings.constEnd()) {
+                qWarning() << "ruled library land move missing exact physical binding for engine oid" << oid
+                           << "owner" << ownerId;
+                continue;
+            }
+            if (!card || card->getZone() != deck || card->getId() != *libraryId) {
+                card = nullptr;
+                for (Server_Card *candidate : deck->getCards()) {
+                    if (candidate && candidate->getId() == *libraryId) {
+                        card = candidate;
+                        break;
+                    }
+                }
+            }
+            if (!card) {
+                qWarning() << "ruled library land move exact physical card is absent from its deck for engine oid"
+                           << oid << "owner" << ownerId;
+                continue;
             }
         }
         if (!card && pm.has_source_library_position()) {
@@ -1112,6 +1191,7 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
         if (ruledApplyMove(mover, permanentMoveGes, startZone, targetZone, cardToMove, destX, destY,
                            "permanentMoved")) {
             permanentMoveGesHasEvents = true;
+            exactLibraryLandMoveOids.remove(oid);
             // Capture the post-move physical identity before any positional reconciliation.
             // Tokens destroyed on departure are no longer in the destination zone.
             if (targetZone->getCards().contains(card)) {
@@ -1418,11 +1498,25 @@ void RuledBatchSynchronizer::applyPhaseStackAndZoneViews(const ruled::v1::RuledE
                                                                                            : pendingHand->serverCardId;
                 const quint32 reservedOid = pendingHand == ruledPendingCastVisualQueue.cend() ? 0
                                                                                               : pendingHand->reservedObjectId;
+                const auto pendingLibrary = std::find_if(
+                    ruledPendingCastVisualQueue.cbegin(), ruledPendingCastVisualQueue.cend(), [&p](const auto &entry) {
+                        return entry.sourcePlayerId == p.player_id() && entry.sourceZoneName == ZoneNames::DECK;
+                    });
+                const int reservedLibraryCardId = pendingLibrary == ruledPendingCastVisualQueue.cend()
+                                                      ? -1
+                                                      : pendingLibrary->serverCardId;
+                const quint32 reservedLibraryOid = pendingLibrary == ruledPendingCastVisualQueue.cend()
+                                                       ? 0
+                                                       : pendingLibrary->reservedObjectId;
+                const int reservedLibraryPosition = pendingLibrary == ruledPendingCastVisualQueue.cend()
+                                                        ? 0
+                                                        : pendingLibrary->sourcePosition;
                 const RuledPlayerBinding::RuledZoneSyncResult sync =
                     playerBinding(p.player_id())
                         .applyRuledEngineZoneView(static_cast<Server_Player *>(ab), p, &tapSyncGes, perPlayerAllowUntap,
                                                   &engineUntappedOids, e.zone_view().battlefields_unchanged(),
-                                                  reservedCardId, reservedOid);
+                                                  reservedCardId, reservedOid, reservedLibraryCardId,
+                                                  reservedLibraryOid, reservedLibraryPosition);
                 result.handOrLibraryChanged = result.handOrLibraryChanged || sync.handOrLibraryChanged;
                 result.battlefieldOrderChanged = result.battlefieldOrderChanged || sync.battlefieldOrderChanged;
                 result.publicZoneOrderChanged = result.publicZoneOrderChanged || sync.publicZoneOrderChanged;

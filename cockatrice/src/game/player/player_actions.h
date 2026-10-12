@@ -40,6 +40,8 @@ class GameEventContext;
 class PendingCommand;
 class Player;
 class RuledPaymentUi;
+struct RuledFaceOption;
+struct RuledPrivateLibraryTop;
 
 class PlayerActions : public QObject
 {
@@ -145,6 +147,9 @@ public:
     /// multi-face (MDFC) land in hand and play the chosen face (CR 712). Returns true if the menu was
     /// shown (click consumed); false for single-face cards or when no land face is currently playable.
     bool tryRuledLandPlayFaceMenu(CardItem *card);
+    /// Start an engine-offered cast or land play from this player's authorized library top.
+    bool tryRuledLibraryTopCast(const RuledPrivateLibraryTop &top, const RuledFaceOption &offer);
+    bool tryRuledLibraryTopLand(const RuledPrivateLibraryTop &top, const RuledFaceOption &offer);
     /// Handle a target click for a pending activated ability activation or trigger target selection.
     bool tryHandleRuledAbilityTargetClick(CardItem *card);
     bool tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer);

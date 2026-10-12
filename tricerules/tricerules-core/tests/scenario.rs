@@ -77,6 +77,9 @@ mod deck_coverage_mimic_vat;
 #[path = "scenario/deck_coverage_chimil.rs"]
 mod deck_coverage_chimil;
 
+#[path = "scenario/deck_coverage_case.rs"]
+mod deck_coverage_case;
+
 #[path = "scenario/deck_coverage_millennium_calendar.rs"]
 mod deck_coverage_millennium_calendar;
 #[path = "scenario/deck_coverage_mutational_advantage.rs"]

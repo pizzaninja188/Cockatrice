@@ -1847,6 +1847,7 @@ impl GameEngine {
             face_change_generation: HashMap::new(),
             room_states: HashMap::new(),
             class_levels: HashMap::new(),
+            case_solved_generations: HashMap::new(),
             prepared_permanents: Default::default(),
             prepare_spell_sources: Default::default(),
             captured_spell_copies: Default::default(),

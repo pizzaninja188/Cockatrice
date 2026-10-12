@@ -58,6 +58,11 @@ impl GameEngine {
         {
             labels.push(format!("Level {}", self.state.class_level(oid)));
         }
+        // CR 719.3b: the solved designation belongs to this exact permanent incarnation and is
+        // public nonintrinsic state, so every controller's battlefield snapshot carries it.
+        if object.zone == Zone::Battlefield && self.state.is_case_solved(oid) {
+            labels.push("Solved".into());
+        }
         if self.state.prepared_permanents.contains_key(&oid) {
             labels.push("Prepared".into());
         } else if self.copiable_values_for(oid).is_some_and(|v| {
@@ -547,6 +552,45 @@ impl GameEngine {
         first_strike_step_pending: bool,
     ) -> rv1::RuledPerPlayerView {
         let p = &self.state.players[idx];
+        // CR 401.5: a pending cast from the top of this library has moved that top card to the
+        // stack, so its newly exposed successor stays concealed until the cast is committed or
+        // canceled. A hand cast or an announced ability whose costs have not changed this library
+        // does not hide its unchanged top. The view is a full replacement each batch, so `None`
+        // also clears a previously known top when permission ends.
+        let library_top_blocked = self
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .is_some_and(|pending| {
+                pending.original_zone == Zone::Library
+                    && pending.original_position == 0
+                    && pending.original_holder == p.id
+            });
+        let private_library_top = if !library_top_blocked && self.may_look_at_library_top(p.id) {
+            p.library.front().and_then(|object_id| {
+                let object = self.state.objects.get(object_id)?;
+                let generation = self
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0);
+                let card_id = object.card_id.clone();
+                let card_name = self
+                    .registry
+                    .get(&card_id)
+                    .map(|definition| definition.name.clone())
+                    .unwrap_or_else(|| card_id.clone());
+                Some(rv1::PrivateLibraryTopView {
+                    object_id: *object_id,
+                    zone_change_generation: generation,
+                    card_id,
+                    card_name,
+                })
+            })
+        } else {
+            None
+        };
         let mut private_hideaway_exiles = BTreeMap::new();
         for ((_, object_id, generation), viewers) in &self.state.hideaway_look_permissions {
             if !viewers.contains(&p.id)
@@ -899,6 +943,7 @@ impl GameEngine {
                     })
                 })
                 .collect(),
+            private_library_top,
         }
     }
 

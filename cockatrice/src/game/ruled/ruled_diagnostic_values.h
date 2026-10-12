@@ -162,6 +162,8 @@ inline QJsonValue value(RuledCastSource v)
             return QStringLiteral("Graveyard");
         case RuledCastSource::Exile:
             return QStringLiteral("Exile");
+        case RuledCastSource::Library:
+            return QStringLiteral("Library");
     }
     return QJsonObject{{"unknown_enum_value", static_cast<int>(v)}};
 }

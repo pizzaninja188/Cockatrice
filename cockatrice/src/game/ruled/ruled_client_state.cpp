@@ -2222,6 +2222,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
         zoneLandFacesByOid.clear();
         zoneLandSourceByOid.clear();
         exilePlayPermissionGroups.clear();
+        privateLibraryTop.reset();
         pendingSpellCast.reset();
         pendingAttackDeclaration.reset();
         pendingAbilityActivation.reset();
@@ -2242,6 +2243,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     // the engine reply; concession can end the session during that round trip.
     emit resolutionHandPickUiChanged(-1, -1);
     emit triggerOrderUiChanged(false, {});
+    emit privateLibraryTopChanged();
 
     payment.clear();
     emit sessionReset();

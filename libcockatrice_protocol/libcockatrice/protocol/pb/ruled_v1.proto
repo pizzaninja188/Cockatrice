@@ -315,6 +315,8 @@ message CastSource {
     // Public zones use stable engine ObjectIds so pile display order cannot select another card.
     uint32 graveyard_object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
     uint32 exile_object_id = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+    // Library casts bind only the exact current top object and use the generation below.
+    uint32 library_object_id = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   }
   // Required for ordinary public-zone casts; hand casts use their current private slot.
   optional uint64 expected_zone_change_generation = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
@@ -542,6 +544,7 @@ message LandSource {
     uint32 hand_index = 1;
     uint32 exile_object_id = 2;
     uint32 graveyard_object_id = 3;
+    uint32 library_object_id = 5;
   }
   // Required for public-zone sources and omitted for concealed hand slots.
   optional uint64 expected_zone_change_generation = 4;
@@ -847,6 +850,7 @@ message LegalHandAction {
 enum CastSourceZone {
   CAST_SOURCE_ZONE_GRAVEYARD = 0;
   CAST_SOURCE_ZONE_EXILE = 1;
+  CAST_SOURCE_ZONE_LIBRARY = 2;
 }
 
 // A spell the player may cast from a public zone. Flashback and Adventure share this shape while
@@ -2236,6 +2240,16 @@ message RuledPerPlayerView {
   // Face-down Hideaway exiles this player may privately inspect. Servatrice consumes this before
   // recipient redaction to construct their local display map.
   repeated HideawayExileCard hideaway_exile_cards = 42 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  // Current top identity is sent only to this player while a library-top permission is active.
+  // This is separate from the full server-only library mapping used to bind physical cards.
+  optional PrivateLibraryTopView private_library_top = 43 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message PrivateLibraryTopView {
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint64 zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string card_id = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string card_name = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message PlayerCounterView {

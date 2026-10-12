@@ -1,0 +1,42 @@
+// Oracle: https://scryfall.com/card/mkm/155/case-of-the-locked-hothouse
+// Scryfall rulings: https://api.scryfall.com/cards/0929a1bd-e35c-4ca5-8c8c-dd304cf4b830/rulings
+// WotC release notes: https://magic.wizards.com/en/news/feature/murders-at-karlov-manor-release-notes
+// Checked 2026-10-12. CR 305.2, 401.5, 719.3a-c, and 702.169a-d govern this card's rules.
+(
+    id: "case_of_the_locked_hothouse",
+    name: "Case of the Locked Hothouse",
+    face_id: "case_of_the_locked_hothouse",
+    mana_cost: "{3}{G}",
+    types: ["Enchantment", "Case"],
+    static_abilities: [(
+        ability_id: "static_01",
+        presentation: OracleLines([1]),
+        definition: ExtraLandPlays(count: 1),
+    ), (
+        ability_id: "static_02",
+        presentation: OracleLines([3]),
+        definition: LibraryTopPermission(
+            look_at_top: true,
+            cast_filter: Some((any_of: Some([
+                (card_type: Some(Creature)),
+                (card_type: Some(Enchantment)),
+            ]))),
+            play_lands: true,
+            condition: Some(CaseSolved(solved: true)),
+        ),
+    )],
+    triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: OracleLines([2]),
+        trigger: AtBeginningOfEndStep(player: Controller),
+        intervening_if: Some(AllOf([
+            CaseSolved(solved: false),
+            BattlefieldAggregate(
+                filter: (controllers: Controller, card_type: Some(Land)),
+                aggregate: Count,
+                min: Some(7),
+            ),
+        ])),
+        effect: [SolveCase],
+    )],
+)

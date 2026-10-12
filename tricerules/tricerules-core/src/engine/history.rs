@@ -1070,6 +1070,22 @@ impl GameEngine {
         trigger_context: Option<&TriggerContext>,
     ) -> bool {
         match condition {
+            GameCondition::CaseSolved { solved } => {
+                let same_battlefield_incarnation = self
+                    .state
+                    .zone_change_generation
+                    .get(&context.source_object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == context.source_zone_change
+                    && self
+                        .state
+                        .objects
+                        .get(&context.source_object_id)
+                        .is_some_and(|object| object.zone == Zone::Battlefield);
+                same_battlefield_incarnation
+                    && self.state.is_case_solved(context.source_object_id) == *solved
+            }
             GameCondition::ControllerLibraryEmpty => {
                 super::draw::controller_library_empty(&self.state, context.controller)
             }

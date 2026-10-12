@@ -1399,6 +1399,9 @@ impl CardDefinition {
                 .iter()
                 .any(|kind| self.matches_card_type_outside_stack(*kind))
             && filter
+                .is_colorless
+                .is_none_or(|required| self.primary_face().colors().is_empty() == required)
+            && filter
                 .min_mana_value
                 .is_none_or(|min| self.mana_value_outside_stack() >= min)
             && filter
@@ -1426,6 +1429,65 @@ impl CardDefinition {
                         PowerComparison::AtLeast(minimum) => power >= minimum,
                         PowerComparison::AtMost(maximum) => power <= maximum,
                     })
+            })
+    }
+
+    /// Match a proposed cast/play face against a printed nonbattlefield-zone filter. Unlike
+    /// [`Self::matches_zone_card_filter`], this does not combine or front-face-collapse a
+    /// multiface card: library permission is checked against the face the player chose.
+    pub fn matches_zone_card_filter_for_face(
+        &self,
+        face_index: usize,
+        filter: &ZoneCardFilter,
+    ) -> bool {
+        if let Some(branches) = &filter.any_of {
+            return branches
+                .iter()
+                .any(|branch| self.matches_zone_card_filter_for_face(face_index, branch));
+        }
+        let Some(face) = self.face(face_index) else {
+            return false;
+        };
+        filter
+            .exact_name
+            .as_deref()
+            .is_none_or(|name| face.name == name)
+            && filter
+                .card_type
+                .is_none_or(|kind| face.matches_card_type(kind))
+            && !filter
+                .excluded_card_types
+                .iter()
+                .any(|kind| face.matches_card_type(*kind))
+            && filter
+                .is_colorless
+                .is_none_or(|required| face.colors().is_empty() == required)
+            && filter
+                .min_mana_value
+                .is_none_or(|min| face.mana_cost.mana_value() >= min)
+            && filter
+                .max_mana_value
+                .is_none_or(|max| face.mana_cost.mana_value() <= max)
+            && filter
+                .required_subtypes
+                .iter()
+                .all(|subtype| face.has_subtype(subtype))
+            && !filter
+                .excluded_subtypes
+                .iter()
+                .any(|subtype| face.has_subtype(subtype))
+            && filter
+                .required_supertypes
+                .iter()
+                .all(|supertype| face.supertypes.iter().any(|value| value == supertype))
+            && filter
+                .has_adventure
+                .is_none_or(|required| (self.layout == Layout::Adventure) == required)
+            && filter.printed_power.is_none_or(|comparison| {
+                face.power.is_some_and(|power| match comparison {
+                    PowerComparison::AtLeast(minimum) => power >= minimum,
+                    PowerComparison::AtMost(maximum) => power <= maximum,
+                })
             })
     }
 

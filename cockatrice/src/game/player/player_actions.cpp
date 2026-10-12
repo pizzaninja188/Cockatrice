@@ -716,6 +716,53 @@ bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
     return ruledPayment->tryRuledSpellCastFaceMenu(card);
 }
 
+bool PlayerActions::tryRuledLibraryTopCast(const RuledPrivateLibraryTop &top, const RuledFaceOption &offer)
+{
+    AbstractGame *const game = player ? player->getGame() : nullptr;
+    RuledClientState *const state = RuledActions::stateFor(game);
+    if (!game || !state || !RuledActions::isRuledGameForPlayer(player) ||
+        RuledActions::gameplayInputLocked(game) || !state->privateLibraryTop ||
+        state->privateLibraryTop->objectId != top.objectId ||
+        state->privateLibraryTop->zoneChangeGeneration != top.zoneChangeGeneration ||
+        offer.zoneChangeGeneration != top.zoneChangeGeneration ||
+        !state->isZoneCastActionLegal(top.objectId, offer.faceIndex, RuledCastSource::Library, offer.castMethod,
+                                      offer.castingPermissionId, top.zoneChangeGeneration, offer.prototyped)) {
+        return false;
+    }
+    return ruledPayment->beginRuledSpellCast(nullptr, static_cast<int>(top.objectId), offer.faceIndex,
+                                             offer.faceName, offer.manaCost, offer.genericCostReduction,
+                                             RuledCastSource::Library, offer.castMethod, offer.castingPermissionId,
+                                             offer.prototyped);
+}
+
+bool PlayerActions::tryRuledLibraryTopLand(const RuledPrivateLibraryTop &top, const RuledFaceOption &offer)
+{
+    AbstractGame *const game = player ? player->getGame() : nullptr;
+    RuledClientState *const state = RuledActions::stateFor(game);
+    if (!game || !state || !RuledActions::isRuledGameForPlayer(player) ||
+        RuledActions::gameplayInputLocked(game) || !state->privateLibraryTop ||
+        state->privateLibraryTop->objectId != top.objectId ||
+        state->privateLibraryTop->zoneChangeGeneration != top.zoneChangeGeneration ||
+        offer.zoneChangeGeneration != top.zoneChangeGeneration ||
+        !state->isZoneLandActionLegal(top.objectId, RuledCastSource::Library)) {
+        return false;
+    }
+    const auto currentOffers = state->zoneLandFaceOptions(top.objectId, RuledCastSource::Library);
+    if (std::none_of(currentOffers.cbegin(), currentOffers.cend(), [&offer](const RuledFaceOption &current) {
+            return current.faceIndex == offer.faceIndex &&
+                   current.zoneChangeGeneration == offer.zoneChangeGeneration;
+        })) {
+        return false;
+    }
+    ruled::v1::RuledCommand command;
+    auto *play = command.mutable_play_land();
+    play->mutable_source()->set_library_object_id(top.objectId);
+    play->mutable_source()->set_expected_zone_change_generation(top.zoneChangeGeneration);
+    play->set_face_index(static_cast<quint32>(offer.faceIndex));
+    RuledActions::sendRuledCommandExpectingAck(game, command, [](bool) {});
+    return true;
+}
+
 RuledTargetClickEligibility PlayerActions::ruledCardTargetEligibility(CardItem *card) const
 {
     return RuledTargetUi::cardEligibility(this, card);

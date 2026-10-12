@@ -1919,6 +1919,7 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
     ctx.preparationSnapshotSeen = true;
     ctx.preparationCopies.clear();
     state->reveals.applyPublicHands(view);
+    std::optional<RuledPrivateLibraryTop> privateLibraryTop;
     if (!view.battlefields_unchanged()) {
         state->prototypedBattlefieldOids.clear();
         state->engineOidMarkedDamage.clear();
@@ -1933,6 +1934,13 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
     }
     bool anyFirstStrikePending = false;
     for (const auto &p : view.per_player()) {
+        if (static_cast<int>(p.player_id()) == host->localPlayerId() && p.has_private_library_top() &&
+            p.private_library_top().object_id() != 0) {
+            const auto &top = p.private_library_top();
+            privateLibraryTop = RuledPrivateLibraryTop{top.object_id(), top.zone_change_generation(),
+                                                       QString::fromStdString(top.card_id()),
+                                                       QString::fromStdString(top.card_name())};
+        }
         for (const auto &copy : p.prepare_spell_copies()) {
             const auto position = std::find(p.exile_object_ids().begin(), p.exile_object_ids().end(), copy.object_id());
             if (copy.object_id() != 0 && !copy.display_name().empty() && position != p.exile_object_ids().end()) {
@@ -1988,6 +1996,10 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
                 }
             }
         }
+    }
+    if (state->privateLibraryTop != privateLibraryTop) {
+        state->privateLibraryTop = std::move(privateLibraryTop);
+        emit state->privateLibraryTopChanged();
     }
     bool prunedAcceptedSacrificeSelection = false;
     for (auto it = state->acceptedSacrificeSelectionByOid.begin();
@@ -2202,9 +2214,20 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         const int objectId = static_cast<int>(action.object_id());
         const int faceIndex = static_cast<int>(action.face_index());
         const auto castMethod = action.cast_method();
-        const RuledCastSource source = action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_EXILE
-                                           ? RuledCastSource::Exile
-                                           : RuledCastSource::Graveyard;
+        RuledCastSource source;
+        switch (action.source_zone()) {
+            case ruled::v1::CAST_SOURCE_ZONE_GRAVEYARD:
+                source = RuledCastSource::Graveyard;
+                break;
+            case ruled::v1::CAST_SOURCE_ZONE_EXILE:
+                source = RuledCastSource::Exile;
+                break;
+            case ruled::v1::CAST_SOURCE_ZONE_LIBRARY:
+                source = RuledCastSource::Library;
+                break;
+            default:
+                continue; // Ignore an unknown source zone instead of treating it as a graveyard offer.
+        }
         const quint64 castingPermissionId = action.has_casting_permission_id() ? action.casting_permission_id() : 0;
         const bool prototyped = action.prototyped();
         const auto castKey = RuledClientState::zoneCastActionKey(objectId, faceIndex, source, castMethod,
@@ -2258,9 +2281,20 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
 
     for (const auto &action : actions.zone_land_actions()) {
         const quint32 objectId = static_cast<quint32>(action.object_id());
-        const RuledCastSource source = action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_GRAVEYARD
-                                           ? RuledCastSource::Graveyard
-                                           : RuledCastSource::Exile;
+        RuledCastSource source;
+        switch (action.source_zone()) {
+            case ruled::v1::CAST_SOURCE_ZONE_GRAVEYARD:
+                source = RuledCastSource::Graveyard;
+                break;
+            case ruled::v1::CAST_SOURCE_ZONE_EXILE:
+                source = RuledCastSource::Exile;
+                break;
+            case ruled::v1::CAST_SOURCE_ZONE_LIBRARY:
+                source = RuledCastSource::Library;
+                break;
+            default:
+                continue; // Ignore an unknown source zone instead of treating it as exile.
+        }
         state->zoneLandSourceByOid.insert(objectId, source);
         state->zoneLandFacesByOid[objectId].append(
             {static_cast<int>(action.face_index()), QString::fromStdString(action.card_name()), QString(), 0,

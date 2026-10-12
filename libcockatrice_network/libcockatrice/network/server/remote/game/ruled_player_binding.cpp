@@ -234,7 +234,10 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                                              const QSet<quint32> *engineUntappedOids,
                                              bool battlefieldsUnchanged,
                                              int reservedHandCardId,
-                                             quint32 reservedHandOid)
+                                             quint32 reservedHandOid,
+                                             int reservedLibraryCardId,
+                                             quint32 reservedLibraryOid,
+                                             int reservedLibraryPosition)
 {
     RuledZoneSyncResult result;
     const int playerId = player->getPlayerId();
@@ -277,7 +280,9 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         }
         QList<Server_Card *> pool;
         for (Server_Card *c : deckZone->getCards()) {
-            pool.append(c);
+            if (c && c->getId() != reservedLibraryCardId) {
+                pool.append(c);
+            }
         }
         for (Server_Card *c : handZone->getCards()) {
             if (c && c->getId() != reservedHandCardId)
@@ -370,6 +375,16 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                 return result;
             handList.insert(qMin(handZone->getCards().indexOf(*reserved), handList.size()), *reserved);
         }
+        if (reservedLibraryCardId >= 0) {
+            const auto reserved = std::find_if(deckZone->getCards().begin(), deckZone->getCards().end(),
+                                               [reservedLibraryCardId](const Server_Card *card) {
+                                                   return card && card->getId() == reservedLibraryCardId;
+                                               });
+            if (reserved == deckZone->getCards().end() || reservedLibraryOid == 0) {
+                return result;
+            }
+            libList.insert(qBound(0, reservedLibraryPosition, libList.size()), *reserved);
+        }
 
         const QList<Server_Card *> currentHand = handZone->getCards();
         const QList<Server_Card *> currentDeck = deckZone->getCards();
@@ -428,8 +443,13 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
             }
             registerEngineOid(static_cast<quint32>(v.hand_cards(engineHandIndex++).object_id()), card->getId());
         }
-        for (int i = 0; i < libList.size(); ++i) {
-            registerLibraryEngineOid(libWants[i].first, libList[i]->getId());
+        int engineLibraryIndex = 0;
+        for (Server_Card *card : libList) {
+            if (card->getId() == reservedLibraryCardId) {
+                registerLibraryEngineOid(reservedLibraryOid, card->getId());
+                continue;
+            }
+            registerLibraryEngineOid(libWants[engineLibraryIndex++].first, card->getId());
         }
         // Every early return above leaves this false, so a failed reconcile keeps warning about
         // later omissions rather than pretending the zones were seeded.

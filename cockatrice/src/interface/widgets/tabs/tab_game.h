@@ -94,6 +94,11 @@ private:
     QWidget *gamePlayAreaWidget, *deckViewContainerWidget;
     QDockWidget *cardInfoDock, *messageLayoutDock, *playerListDock, *replayDock;
     GamePromptWidget *gamePromptWidget;
+    /// Owner-private current library top and engine-offered actions for it.
+    QWidget *ruledLibraryTopWidget = nullptr;
+    QLabel *ruledLibraryTopLabel = nullptr;
+    QToolButton *ruledLibraryTopInspect = nullptr;
+    QToolButton *ruledLibraryTopActions = nullptr;
     /// Fork: dev-loop command entry. Null unless --dev-console was passed on a ruled, non-replay
     /// game — guard every use, the way replayDock is guarded.
     RuledDevConsoleWidget *devConsoleWidget;
@@ -181,6 +186,7 @@ private:
     /// Recompute the ruled prompt panel's exclusive mode from the view model and push it as one
     /// state. The single place the mode priority is decided; returns the mode it pushed.
     GamePromptWidget::PromptMode refreshRuledPromptState();
+    void refreshRuledLibraryTopUi();
     void publishRuledAutoPassPolicy();
     void ensureStackWindow();
     void saveStackWindowLayout();
