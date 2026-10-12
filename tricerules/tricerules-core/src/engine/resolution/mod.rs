@@ -299,6 +299,7 @@ impl GameEngine {
                     .copied()
                     .unwrap_or(0),
                 scope: grant.scope,
+                max_face_mana_value: None,
                 cast_cost: grant.cast_cost.clone(),
                 origin: grant.origin,
                 available_after_turn_instance: grant.available_after_turn_instance,
@@ -2419,7 +2420,12 @@ impl GameEngine {
         // linked-play offer against the surviving cohort now that its original continuation is
         // visible again.
         self.reconcile_pending_linked_exile_after_departure(events)?;
-        if let Some(pending) = self.state.pending_resolution.as_ref() {
+        if self.reconcile_departed_discover_resolution(events)? {
+            return Ok(true);
+        }
+        if let Some(event) = self.discover_commander_choice_event() {
+            events.push(event);
+        } else if let Some(pending) = self.state.pending_resolution.as_ref() {
             if let ResolutionContinuation::SpecialCast { .. } = &pending.continuation {
                 if let Some(event) = self.resolution_payment_choice_event() {
                     events.push(event);
@@ -3868,6 +3874,7 @@ mod exile_permission_generation_tests {
                 object_id,
                 zone_change_generation: generation,
                 scope: ExilePlayPermissionScope::PlayCard,
+                max_face_mana_value: None,
                 cast_cost: crate::state::ExilePermissionCastCost::PrintedManaCost,
                 expires_at_cleanup_turn_instance: None,
             });

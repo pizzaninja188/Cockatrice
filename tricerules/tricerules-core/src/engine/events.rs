@@ -297,6 +297,9 @@ impl GameEngine {
         }
         batch.events.push(ev_phase(self, rv1::PhaseId::Upkeep));
         batch.events.push(ev_priority_changed(self));
+        if let Some(event) = self.discover_commander_choice_event() {
+            batch.events.push(event);
+        }
         batch.events.push(ev_log(format!(
             "Game started — active P{}, priority P{} (upkeep).",
             self.state.active_player_id(),

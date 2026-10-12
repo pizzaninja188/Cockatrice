@@ -446,6 +446,9 @@ pub struct ActiveExilePlayPermission {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
     pub scope: ExilePlayPermissionScope,
+    /// Discover additionally requires the chosen spell face's mana value to stay within the
+    /// revealed-card threshold. `None` leaves ordinary exile permissions unrestricted.
+    pub max_face_mana_value: Option<u32>,
     pub cast_cost: ExilePermissionCastCost,
     pub origin: ExilePlayPermissionOrigin,
     /// Warp is unavailable during the turn in which its delayed trigger exiled the card.
@@ -1396,6 +1399,16 @@ pub enum ResolutionContinuation {
         stack_generation: u64,
         effect_index: u32,
     },
+    /// CR 903.9b replacement choices interrupt Discover's cleanup before any cohort movement.
+    DiscoverCommanderCleanup {
+        stack: ParkedStackResolution,
+        library_owner: PlayerId,
+        completion: SpecialCastCompletion,
+        cast_committed: bool,
+        destinations: Vec<(TriggerObjectRef, Zone)>,
+        commander_choice_index: usize,
+        command_zone_objects: Vec<ObjectId>,
+    },
     LibraryPartition {
         stack: ParkedStackResolution,
         looked_at: Vec<ObjectId>,
@@ -1518,14 +1531,30 @@ pub enum ResolutionContinuation {
         /// Permission for all legal faces, used by Hideaway rather than a fixed-face
         /// alternative-cost offer.
         permission_scope: Option<ExilePlayPermissionScope>,
+        /// Optional resulting-spell mana-value bound for Discover.
+        max_face_mana_value: Option<u32>,
         /// Smuggler's Buggy returns only after a linked spell cast commits, and only if the
         /// source permanent is still the same battlefield incarnation.
         return_source_to_owner_hand_if_cast: bool,
+        /// Typed resolution-specific cleanup after the offered cast is accepted or declined.
+        completion: SpecialCastCompletion,
     },
     /// CR 704.3: all choices that affect one frozen SBA set are collected before any action in
     /// that set is committed. This continuation is deliberately independent of the stack.
     StateBasedActions {
         choices: PendingStateBasedActionChoices,
+    },
+}
+
+/// Follow-up owned by a temporary special-cast offer. Discover keeps the exact revealed cohort
+/// so accepting the cast bottoms the rest, while declining puts only the hit in hand first.
+#[derive(serde::Serialize, Debug, Clone)]
+pub enum SpecialCastCompletion {
+    ResumeStack,
+    Discover {
+        library_owner: PlayerId,
+        found: Option<TriggerObjectRef>,
+        cohort: Vec<TriggerObjectRef>,
     },
 }
 
@@ -1558,6 +1587,7 @@ impl ResolutionContinuation {
             | Self::OptionalSearch { stack, .. }
             | Self::OwnerLibraryPlacement { stack, .. }
             | Self::ChaosWarpCommander { stack, .. }
+            | Self::DiscoverCommanderCleanup { stack, .. }
             | Self::LibraryPartition { stack, .. }
             | Self::LibraryLook { stack, .. }
             | Self::Explore { stack, .. }
@@ -1614,6 +1644,7 @@ impl ResolutionContinuation {
             | Self::OptionalSearch { stack, .. }
             | Self::OwnerLibraryPlacement { stack, .. }
             | Self::ChaosWarpCommander { stack, .. }
+            | Self::DiscoverCommanderCleanup { stack, .. }
             | Self::LibraryPartition { stack, .. }
             | Self::LibraryLook { stack, .. }
             | Self::Explore { stack, .. }

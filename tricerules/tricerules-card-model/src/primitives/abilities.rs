@@ -2364,6 +2364,14 @@ pub enum StaticAbilityDef {
     /// spells and abilities can still legally target it and any optional payment still occurs.
     /// Surrak, Elusive Hunter and Abrupt Decay share this intrinsic stack-active prohibition.
     SpellCannotBeCountered,
+    /// Chimil, the Inner Sun and Rhythm of the Wild prevent matching spells their controller
+    /// controls from being countered. Chimil and Rhythm of the Wild share this controller-scoped
+    /// rule with optional stack-face filtering. The restriction is checked when the countering
+    /// effect resolves, while protected spells remain legal targets.
+    ControllerSpellsCannotBeCountered {
+        #[serde(default)]
+        spell_filter: StackSpellFilter,
+    },
     /// CR 702.195: continuously watches this permanent's controller and irreversibly grants the
     /// enduring-story designation when three qualifying permanents are controlled.
     Storied,

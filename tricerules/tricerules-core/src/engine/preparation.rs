@@ -84,6 +84,7 @@ impl GameEngine {
                 object_id: copy_id,
                 zone_change_generation: 0,
                 scope: ExilePlayPermissionScope::CastFace(1),
+                max_face_mana_value: None,
                 cast_cost: ExilePermissionCastCost::PrintedManaCost,
                 origin: ExilePlayPermissionOrigin::Preparation {
                     source_object_id: source_id,
@@ -340,6 +341,7 @@ mod tests {
                 object_id: id,
                 zone_change_generation: generation,
                 scope: ExilePlayPermissionScope::PlayCard,
+                max_face_mana_value: None,
                 cast_cost: ExilePermissionCastCost::PrintedManaCost,
                 origin: ExilePlayPermissionOrigin::Effect,
                 available_after_turn_instance: None,

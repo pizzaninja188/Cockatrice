@@ -1,0 +1,114 @@
+{
+  "format_version": 1,
+  "oracle_id": "119d9671-61ba-4629-89b1-f94bdec5cb74",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "chimil_the_inner_sun",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "chimil_the_inner_sun",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "typed_path": "/faces/0/static_abilities/0/definition",
+      "symbol": "StaticAbilityDef::ControllerSpellsCannotBeCountered"
+    },
+    {
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0",
+      "symbol": "SpellEffectKind::Discover"
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_chimil::chimil_keeps_controller_spell_on_stack_and_arcane_denial_tail_resolves",
+      "covers": "An opponent cannot counter the controller's protected spell, but legal targeting and Arcane Denial's remaining instructions still resolve."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::chimil_protection_also_stops_its_controller_from_countering_their_spell",
+      "covers": "Chimil's uncounterable restriction also prevents its controller from countering a spell they control."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::chimil_protection_tracks_source_control_and_ability_availability_at_resolution",
+      "covers": "Protection uses Chimil's live controller and active abilities when the counter effect resolves."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::chimil_spell_is_counterable_before_it_reaches_the_battlefield",
+      "covers": "Chimil itself is counterable as a spell."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_exiles_through_first_qualifying_nonland_and_decline_random_bottoms_the_rest",
+      "covers": "Discover exiles the prefix through the first qualifying nonland; decline puts the hit into hand and randomizes the remaining cards at the bottom."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_casts_the_hit_for_free_then_random_bottoms_only_the_remaining_prefix",
+      "covers": "Accepting Discover casts the hit without paying and randomizes only the rest of the exiled prefix at the bottom."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_caps_every_offered_and_accepted_face_by_stack_mana_value",
+      "covers": "Discover's mana-value limit constrains both published spell faces and server-accepted face choices."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_exhausts_the_library_without_a_hit_and_handles_an_empty_library",
+      "covers": "Discover handles a full-library miss and an empty library without creating a cast offer."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_returns_the_hit_to_hand_when_no_spell_target_is_legal",
+      "covers": "A qualifying spell that has no legal required target is not offered and the hit returns to hand."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_target_preview_honors_the_exiled_spell_faces_protection",
+      "covers": "Discover target preflight applies the newly exiled spell face's protection against the only legal target."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_spell_cast_cancellation_restores_the_exact_offer_and_resumes_cleanup",
+      "covers": "Canceling a discovered spell cast restores its exact exiled incarnation and parent Discover offer before cleanup resumes."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_live_reserved_cast_survives_an_unrelated_concession_and_commits",
+      "covers": "An unrelated concession preserves the exact Discover cast transaction while its hit is reserved on the stack; payment commits and Discover cleanup and its parent tail complete."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_live_reserved_cast_cancellation_after_concession_restores_the_exact_offer",
+      "covers": "After an unrelated concession, canceling the reserved Discover cast restores the exact exile generation, cohort, and offer so cleanup can be declined normally."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_cast_observers_preserve_random_bottom_privacy_and_physical_cohort",
+      "covers": "Cast observers preserve the random library order in owner-specific server zone-sync data while public move events keep reveal order; this fixture covers engine-side views, not client relay filtering."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_declined_commander_hit_offers_its_owner_the_command_zone_replacement",
+      "covers": "A declined discovered commander lets its owner choose the command zone instead of hand."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_bottoming_prefix_commander_can_enter_command_zone_and_remaining_cards_continue",
+      "covers": "A commander in the over-limit Discover prefix can be replaced into the command zone while the remaining cohort continues."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_commander_choice_is_reissued_after_observer_returns_and_reconnects",
+      "covers": "A paused Discover commander choice is republished after one or two observer returns, survives simultaneous-entry timestamp ordering, and replays in a reconnect snapshot."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_owner_departure_during_observer_returns_retires_both_choice_stages",
+      "covers": "When the Discover owner leaves during an observer return, stale cast and commander choices retire, the returned permanent succeeds, and the resolving parent's effect tail reaches survivors."
+    },
+    {
+      "test": "scenario deck_coverage_chimil::discover_owner_departure_during_active_choice_finishes_parent_tail",
+      "covers": "A Discover cast or commander choice retires after its owner leaves directly, while the already-started resolving ability continues its survivor-affecting tail."
+    }
+  ],
+  "tokens": []
+}

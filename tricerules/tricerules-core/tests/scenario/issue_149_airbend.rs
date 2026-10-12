@@ -228,6 +228,7 @@ fn issue_149_permission_cost_and_identity_are_engine_authoritative() {
             object_id,
             zone_change_generation: generation,
             scope: ExilePlayPermissionScope::CastCard,
+            max_face_mana_value: None,
             cast_cost: ExilePermissionCastCost::AlternativeManaCost(
                 ManaCost::parse("{2}").expect("cost"),
             ),
@@ -245,6 +246,7 @@ fn issue_149_permission_cost_and_identity_are_engine_authoritative() {
             object_id,
             zone_change_generation: generation,
             scope: ExilePlayPermissionScope::CastCard,
+            max_face_mana_value: None,
             cast_cost: ExilePermissionCastCost::AlternativeManaCost(
                 ManaCost::parse("{3}").expect("cost"),
             ),

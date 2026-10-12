@@ -402,7 +402,7 @@ pub(crate) fn counter_stack_object(
     else {
         return Ok(None);
     };
-    let target = &engine.state.stack[pos];
+    let target = engine.state.stack[pos].clone();
     let target_name = engine
         .state
         .stack_presentations
@@ -425,7 +425,8 @@ pub(crate) fn counter_stack_object(
                 face.static_abilities.iter().any(|ability| {
                     matches!(ability.definition, StaticAbilityDef::SpellCannotBeCountered)
                 })
-            });
+            })
+        || controller_static_protects_spell(engine, &target);
     if cannot_be_countered {
         events.push(ev_log(format!(
             "{counter_label} cannot counter {target_name}"
@@ -481,6 +482,41 @@ pub(crate) fn counter_stack_object(
     events.push(ev_log(format!("{counter_label} counters {target_name}")));
     engine.check_millennium_calendar_state_triggers();
     Ok(Some(st))
+}
+
+/// Chimil and Rhythm of the Wild protect spells by their live controller and the spell's
+/// current stack characteristics. This check belongs at counter resolution; it does not affect
+/// target legality, so counterspells can still target those spells and finish their other effects.
+fn controller_static_protects_spell(engine: &GameEngine, target: &StackItem) -> bool {
+    if target.ability_text.is_some() {
+        return false;
+    }
+    engine
+        .state
+        .players
+        .iter()
+        .flat_map(|player| player.battlefield.iter().copied())
+        .any(|source_id| {
+            if engine.controller_of(source_id) != Some(target.controller) {
+                return false;
+            }
+            engine
+                .active_static_ability_definitions(source_id)
+                .into_iter()
+                .any(|definition| {
+                    let StaticAbilityDef::ControllerSpellsCannotBeCountered { spell_filter } =
+                        definition
+                    else {
+                        return false;
+                    };
+                    super::super::targeting::stack_spell_target_legal(
+                        &engine.state,
+                        engine.registry,
+                        target.id,
+                        &spell_filter,
+                    )
+                })
+        })
 }
 
 pub(super) fn counter_target_ability(

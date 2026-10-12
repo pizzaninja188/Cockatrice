@@ -1,0 +1,26 @@
+// Exact Oracle card and rulings fetched 2026-10-11:
+// https://scryfall.com/card/ecc/137/chimil-the-inner-sun
+// https://api.scryfall.com/cards/7b696878-bf6c-4323-baa5-93c44dde075e/rulings
+// Official Lost Caverns of Ixalan release notes checked 2026-10-11:
+// https://magic.wizards.com/en/news/feature/the-lost-caverns-of-ixalan-release-notes
+// CR 701.57a-c / 513.1 / 608.2g: Discover is performed during the end step; its spell face
+// must meet the same value bound, and a declined or impossible cast returns the hit to hand.
+(
+    id: "chimil,_the_inner_sun",
+    name: "Chimil, the Inner Sun",
+    face_id: "chimil_the_inner_sun",
+    mana_cost: "{6}",
+    supertypes: ["Legendary"],
+    types: ["Artifact"],
+    static_abilities: [(
+        ability_id: "static_01",
+        presentation: OracleLines([1]),
+        definition: ControllerSpellsCannotBeCountered(spell_filter: ()),
+    )],
+    triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: OracleLines([2]),
+        trigger: AtBeginningOfEndStep(player: Controller),
+        effect: [Discover(value: 5)],
+    )],
+)

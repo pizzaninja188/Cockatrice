@@ -1632,6 +1632,13 @@ pub enum SpellEffectKind {
         #[serde(default)]
         count_by_cast_cost: Option<CastCostConditionalAmount>,
     },
+    /// CR 701.57: Chimil, the Inner Sun and Geological Appraiser discover a fixed value. Exile
+    /// cards until a nonland card with that mana value or less is found; offer a free cast whose
+    /// resulting spell also meets the bound, otherwise put it into its owner's hand, then random-
+    /// bottom the rest of that exact revealed cohort.
+    Discover {
+        value: u32,
+    },
     /// Return a battlefield permanent to its owner's hand. A chosen subject uses the normal
     /// targeting contract (Unsummon, Boomerang); a source-bound subject is untargeted and keeps
     /// CR 400.7 generation identity (Wingspan Stride).
@@ -3547,6 +3554,7 @@ impl SpellEffectKind {
             | SpellEffectKind::LoseLife { .. }
             | SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. }
             | SpellEffectKind::ExileTopWithPlayPermission { .. }
+            | SpellEffectKind::Discover { .. }
             | SpellEffectKind::Mill { .. }
             | SpellEffectKind::MillEachOpponentByHandSize
             | SpellEffectKind::WinGameIf { .. }

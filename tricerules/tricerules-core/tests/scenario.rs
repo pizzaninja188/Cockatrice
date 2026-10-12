@@ -74,6 +74,9 @@ mod deck_coverage_maze_of_ith;
 #[path = "scenario/deck_coverage_mimic_vat.rs"]
 mod deck_coverage_mimic_vat;
 
+#[path = "scenario/deck_coverage_chimil.rs"]
+mod deck_coverage_chimil;
+
 #[path = "scenario/deck_coverage_millennium_calendar.rs"]
 mod deck_coverage_millennium_calendar;
 #[path = "scenario/deck_coverage_mutational_advantage.rs"]

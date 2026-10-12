@@ -3873,3 +3873,18 @@ fn portal_to_phyrexia_effects_are_representable() {
     crate::CardRegistry::from_chunks_and_tokens(&[portal], &[])
         .expect("Portal's simultaneous counted sacrifice and modified return must be typed");
 }
+
+#[test]
+fn chimil_discover_and_controller_spell_protection_are_typed() {
+    assert!(
+        ron::from_str::<super::StaticAbilityDef>(
+            "ControllerSpellsCannotBeCountered(spell_filter:())"
+        )
+        .is_ok(),
+        "Chimil and Rhythm of the Wild need controller-scoped counter protection"
+    );
+    assert!(
+        ron::from_str::<super::SpellEffectKind>("Discover(value:5)").is_ok(),
+        "Chimil and Geological Appraiser need the Discover effect"
+    );
+}

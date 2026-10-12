@@ -2129,15 +2129,16 @@ fn hand_action(
     }
 }
 
-fn spell_targets_have_candidate(targets: &rv1::SpellTargets) -> bool {
-    targets.groups.iter().any(|group| {
-        !group.valid_permanent_ids.is_empty()
-            || !group.valid_stack_ids.is_empty()
-            || !group.valid_graveyard_ids.is_empty()
-            || group.can_target_self
-            || group.can_target_opponent
-            || group.min == 0
-    })
+fn spell_target_groups_are_selectable(targets: &rv1::SpellTargets) -> bool {
+    !targets.groups.is_empty()
+        && targets.groups.iter().all(|group| {
+            group.min == 0
+                || !group.valid_permanent_ids.is_empty()
+                || !group.valid_stack_ids.is_empty()
+                || !group.valid_graveyard_ids.is_empty()
+                || group.can_target_self
+                || group.can_target_opponent
+        })
 }
 
 /// Number of distinct faces the engine is currently publishing for this exact physical source.
@@ -2329,7 +2330,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                             let linked_cost =
                                 legal_mode_cast_cost_link(face, &mode_cost_choices, mode);
                             let selectable = (!needs_target
-                                || spell_targets_have_candidate(&targets))
+                                || spell_target_groups_are_selectable(&targets))
                                 && linked_cost
                                     .as_ref()
                                     .is_none_or(|(_, selectable)| *selectable);
@@ -2522,7 +2523,7 @@ pub(super) fn legal_zone_cast_actions(
                             let linked_cost =
                                 legal_mode_cast_cost_link(face, &mode_cost_choices, mode);
                             let selectable = (!needs_target
-                                || spell_targets_have_candidate(&targets))
+                                || spell_target_groups_are_selectable(&targets))
                                 && linked_cost
                                     .as_ref()
                                     .is_none_or(|(_, selectable)| *selectable);
@@ -2600,6 +2601,12 @@ pub(super) fn legal_zone_cast_actions(
             let Some(face) = definition.face(face_index) else {
                 continue;
             };
+            if permission
+                .max_face_mana_value
+                .is_some_and(|maximum| face.mana_cost.mana_value() > maximum)
+            {
+                continue;
+            }
             if face.is_land {
                 continue;
             }
@@ -2659,6 +2666,29 @@ pub(super) fn legal_zone_cast_actions(
                     _ => None,
                 },
             };
+            if action.needs_target && face.modal_spell.is_none() {
+                let target_source = TargetSourceIdentity::spell_face(eng, object.id, face_index);
+                let mut targets = compute_spell_targets(
+                    eng,
+                    pid,
+                    target_source,
+                    &face.spell_effect,
+                    face.targeting.as_ref(),
+                    &face.cost_modifiers,
+                );
+                apply_cast_cost_target_requirements(
+                    eng,
+                    pid,
+                    target_source,
+                    face,
+                    &cost_choices,
+                    face.targeting.as_ref(),
+                    &mut targets,
+                );
+                if !spell_target_groups_are_selectable(&targets) {
+                    continue;
+                }
+            }
             if !cost_choices.non_mana_costs_payable {
                 continue;
             }
@@ -2677,10 +2707,12 @@ pub(super) fn legal_zone_cast_actions(
                     .map(|(mode_index, mode)| {
                         let needs_target =
                             target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
+                        let target_source =
+                            TargetSourceIdentity::spell_face(eng, object.id, face_index);
                         let mut targets = compute_spell_targets(
                             eng,
                             pid,
-                            TargetSourceIdentity::current(eng, object.id),
+                            target_source,
                             &mode.effects,
                             mode.targeting.as_ref(),
                             &face.cost_modifiers,
@@ -2688,7 +2720,7 @@ pub(super) fn legal_zone_cast_actions(
                         apply_cast_cost_target_requirements(
                             eng,
                             pid,
-                            TargetSourceIdentity::current(eng, object.id),
+                            target_source,
                             face,
                             &mode_cost_choices,
                             mode.targeting.as_ref(),
@@ -2698,7 +2730,8 @@ pub(super) fn legal_zone_cast_actions(
                         rv1::LegalSpellMode {
                             mode_index: mode_index as u32,
                             label: mode_fallback(&face.name, &mode.mode_id),
-                            selectable: (!needs_target || spell_targets_have_candidate(&targets))
+                            selectable: (!needs_target
+                                || spell_target_groups_are_selectable(&targets))
                                 && linked_cost
                                     .as_ref()
                                     .is_none_or(|(_, selectable)| *selectable),
@@ -3075,6 +3108,40 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
 #[cfg(test)]
 mod cast_cost_timing_tests {
     use super::*;
+
+    #[test]
+    fn spell_targets_are_selectable_only_when_each_required_group_has_a_candidate() {
+        let targets = rv1::SpellTargets {
+            groups: vec![
+                rv1::LegalTargetGroup {
+                    min: 1,
+                    ..Default::default()
+                },
+                rv1::LegalTargetGroup {
+                    min: 0,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        assert!(!spell_target_groups_are_selectable(&targets));
+
+        let targets = rv1::SpellTargets {
+            groups: vec![
+                rv1::LegalTargetGroup {
+                    min: 1,
+                    can_target_opponent: true,
+                    ..Default::default()
+                },
+                rv1::LegalTargetGroup {
+                    min: 0,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        assert!(spell_target_groups_are_selectable(&targets));
+    }
 
     #[test]
     fn conditional_instant_timing_is_published_only_with_a_live_cost_option() {

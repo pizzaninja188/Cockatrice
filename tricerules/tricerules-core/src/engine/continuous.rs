@@ -786,6 +786,7 @@ impl GameEngine {
                 | StaticAbilityDef::NoMaximumHandSize { .. }
                 | StaticAbilityDef::MaximumHandSizeTwenty
                 | StaticAbilityDef::SpellCannotBeCountered
+                | StaticAbilityDef::ControllerSpellsCannotBeCountered { .. }
                 | StaticAbilityDef::Storied
                 | StaticAbilityDef::AdditionalTriggeredAbilityInstances { .. }
                 | StaticAbilityDef::ProhibitLifeGain { .. }

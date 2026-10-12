@@ -1021,6 +1021,7 @@ fn issue_229_exile_cast_uses_permission_caster_and_rejects_stale_generations() {
             object_id: source,
             zone_change_generation: generation,
             scope: ExilePlayPermissionScope::CastCard,
+            max_face_mana_value: None,
             cast_cost: ExilePermissionCastCost::AlternativeManaCost(
                 tricerules_cards::mana::ManaCost::parse("{U}").unwrap(),
             ),

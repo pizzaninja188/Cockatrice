@@ -688,6 +688,14 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 reason,
             })?;
         let ability = &identified.definition;
+        if let StaticAbilityDef::ControllerSpellsCannotBeCountered { spell_filter } = ability {
+            spell_filter
+                .validate()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+        }
         if let StaticAbilityDef::UntapControlledPermanentsDuringOtherPlayersUntapSteps {
             permanent_types,
         } = ability

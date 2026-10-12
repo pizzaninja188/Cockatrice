@@ -5,7 +5,7 @@ use super::super::presentation::{
 };
 use super::candidate_identities;
 use super::*;
-use crate::state::PendingLinkedExileAction;
+use crate::state::{PendingLinkedExileAction, SpecialCastCompletion};
 
 pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
     let Some(source_id) = cx.top.source_permanent_id else {
@@ -103,6 +103,8 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
             undo_history_start: cx.engine.state.undoable_mana_abilities.len(),
             permission_scope: None,
             return_source_to_owner_hand_if_cast: false,
+            max_face_mana_value: None,
+            completion: SpecialCastCompletion::ResumeStack,
         },
     });
     cx.events.push(
@@ -165,6 +167,8 @@ pub(super) fn madness_cast(
             undo_history_start: cx.engine.state.undoable_mana_abilities.len(),
             permission_scope: None,
             return_source_to_owner_hand_if_cast: false,
+            max_face_mana_value: None,
+            completion: SpecialCastCompletion::ResumeStack,
         },
     });
     cx.events.push(
@@ -4479,6 +4483,218 @@ pub(super) fn reveal_until_artifact(cx: &mut EffectCx<'_>) -> Result<EffectOutco
             .bottom_revealed_library_refs(cx.controller, &revealed_refs, None, cx.events)?;
     }
     Ok(EffectOutcome::Continue)
+}
+
+/// CR 701.57: exile the top cards through the first nonland whose outside-the-stack mana value
+/// meets the Discover value. A qualifying hit receives a typed free-cast offer; the exact prefix
+/// stays bound to its zone generations until the player casts or declines.
+pub(super) fn discover(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::Discover { value } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let controller = cx.controller;
+    let top = cx.top.clone();
+    let resume_effect_index = cx.effect_index + 1;
+    let spell_label = cx.spell_label.to_string();
+    let Some(player_index) = cx.engine.state.player_idx(controller) else {
+        cx.effect_result.receipt = Some(crate::state::ResolutionReceipt::RevealedCardsCount(0));
+        return Ok(EffectOutcome::Continue);
+    };
+    let library = cx.engine.state.players[player_index]
+        .library
+        .iter()
+        .copied()
+        .collect::<Vec<_>>();
+    let mut prefix = Vec::new();
+    let mut found = None;
+    for object_id in library {
+        let generation = cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        let object = cx
+            .engine
+            .state
+            .objects
+            .get(&object_id)
+            .ok_or(EngineError::Illegal("library object is missing"))?;
+        let definition = cx
+            .engine
+            .registry
+            .get(&object.card_id)
+            .ok_or_else(|| EngineError::MissingCard(object.card_id.clone()))?;
+        prefix.push((object_id, generation));
+        if !definition.matches_card_type_outside_stack(CardTypeFilter::Land)
+            && definition.mana_value_outside_stack() <= value
+        {
+            found = Some((object_id, generation));
+            break;
+        }
+    }
+
+    let revealed_count = u32::try_from(prefix.len())
+        .map_err(|_| EngineError::Illegal("Discover prefix is too large"))?;
+    cx.effect_result.receipt = Some(crate::state::ResolutionReceipt::RevealedCardsCount(
+        revealed_count,
+    ));
+    let object_ids = prefix
+        .iter()
+        .map(|(object_id, _)| *object_id)
+        .collect::<Vec<_>>();
+    if !object_ids.is_empty() {
+        cx.events.extend(super::super::reveals::reveal_cards(
+            &cx.engine.state,
+            cx.engine.registry,
+            &object_ids,
+            top.source_permanent_id.unwrap_or(top.id),
+            &spell_label,
+        ));
+        let zone_snapshot = cx.engine.snapshot_zone_event();
+        for (object_id, generation) in &prefix {
+            let still_current = cx
+                .engine
+                .state
+                .objects
+                .get(object_id)
+                .is_some_and(|object| {
+                    object.zone == Zone::Library
+                        && object.owner == controller
+                        && cx
+                            .engine
+                            .state
+                            .zone_change_generation
+                            .get(object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == *generation
+                });
+            if !still_current {
+                continue;
+            }
+            let name = object_display_name(&cx.engine.state, cx.engine.registry, *object_id);
+            move_object_to_zone(
+                &mut cx.engine.state,
+                cx.engine.registry,
+                *object_id,
+                Zone::Exile,
+                None,
+            )?;
+            cx.events.push(permanent_moved_event(
+                &cx.engine.state,
+                *object_id,
+                controller,
+                rv1::permanent_moved::Destination::Exile,
+            ));
+            cx.events.push(ev_log(format!(
+                "{spell_label} exiles {name} while discovering."
+            )));
+        }
+        cx.engine
+            .fire_zone_triggers(zone_snapshot, Vec::new(), cx.events);
+    }
+
+    let cohort = prefix
+        .iter()
+        .filter_map(|(object_id, _)| {
+            cx.engine.state.objects.get(object_id).and_then(|object| {
+                (object.zone == Zone::Exile).then(|| TriggerObjectRef {
+                    object_id: *object_id,
+                    zone_change_generation: cx
+                        .engine
+                        .state
+                        .zone_change_generation
+                        .get(object_id)
+                        .copied()
+                        .unwrap_or(0),
+                    controller_at_event: controller,
+                })
+            })
+        })
+        .collect::<Vec<_>>();
+    let found = found.and_then(|(object_id, _)| {
+        cohort
+            .iter()
+            .copied()
+            .find(|reference| reference.object_id == object_id)
+    });
+    let completion = SpecialCastCompletion::Discover {
+        library_owner: controller,
+        found,
+        cohort,
+    };
+    let mut stack =
+        ParkedStackResolution::new(top.clone()).with_previous_result(cx.effect_result.clone());
+    stack.resume_effect_index = Some(resume_effect_index);
+
+    let Some(found) = found else {
+        let suspended =
+            cx.engine
+                .finish_special_cast_completion(&completion, false, stack, cx.events)?;
+        return Ok(if suspended {
+            EffectOutcome::Suspended
+        } else {
+            EffectOutcome::Continue
+        });
+    };
+    let found_name = object_display_name(&cx.engine.state, cx.engine.registry, found.object_id);
+    let prompt = format!("Cast {found_name} without paying its mana cost?");
+    let completion_for_no_cast = completion.clone();
+    let stack_for_no_cast = stack.clone();
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player: controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: stack.item.id,
+            candidates: vec![found.object_id],
+            min: 0,
+            max: 1,
+            ordered: false,
+            prompt: prompt.clone(),
+            choice_kind: rv1::ChoiceKind::SpecialCast,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::SpecialCast {
+            stack,
+            exiled: found,
+            face_index: 0,
+            method: SpellCastMethod::Permission,
+            cost: ManaCost::default(),
+            undo_history_start: cx.engine.state.undoable_mana_abilities.len(),
+            permission_scope: Some(ExilePlayPermissionScope::CastCard),
+            return_source_to_owner_hand_if_cast: false,
+            max_face_mana_value: Some(value),
+            completion,
+        },
+    });
+    let can_cast = super::super::legal_actions::legal_zone_cast_actions(cx.engine, controller)
+        .iter()
+        .any(|action| action.object_id == found.object_id);
+    if !can_cast {
+        cx.engine.state.pending_resolution = None;
+        let suspended = cx.engine.finish_special_cast_completion(
+            &completion_for_no_cast,
+            false,
+            stack_for_no_cast,
+            cx.events,
+        )?;
+        return Ok(if suspended {
+            EffectOutcome::Suspended
+        } else {
+            EffectOutcome::Continue
+        });
+    }
+    cx.events.push(
+        cx.engine
+            .resolution_payment_choice_event()
+            .expect("Discover cast offer"),
+    );
+    cx.events.push(ev_log(prompt));
+    Ok(EffectOutcome::Suspended)
 }
 
 /// CR 701.18 scry enters the shared private top-library partition state machine. Scry's selected

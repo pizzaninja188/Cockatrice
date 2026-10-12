@@ -19,7 +19,7 @@ use super::targeting::{
     validate_spell_targets, TargetSourceIdentity,
 };
 use super::*;
-use crate::state::PendingTargetedPlayerChoiceStage;
+use crate::state::{PendingTargetedPlayerChoiceStage, SpecialCastCompletion};
 
 mod attacking_tokens;
 mod branches;
@@ -36,7 +36,436 @@ mod sacrifice_choices;
 mod trigger_choices;
 mod ward;
 
+struct DiscoverCleanupPlan {
+    stack: ParkedStackResolution,
+    library_owner: PlayerId,
+    completion: SpecialCastCompletion,
+    cast_committed: bool,
+    destinations: Vec<(TriggerObjectRef, Zone)>,
+    next_destination_index: usize,
+    command_zone_objects: Vec<ObjectId>,
+}
+
 impl GameEngine {
+    /// Finish the typed follow-up attached to a special-cast offer. Discover's exact exile cohort
+    /// returns in a stable event sequence; only the final owner-private zone view exposes its new
+    /// randomized library order.
+    pub(in crate::engine) fn finish_special_cast_completion(
+        &mut self,
+        completion: &SpecialCastCompletion,
+        cast_committed: bool,
+        stack: ParkedStackResolution,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let SpecialCastCompletion::Discover {
+            library_owner,
+            found,
+            cohort,
+        } = completion
+        else {
+            return Ok(false);
+        };
+
+        let mut destinations = Vec::new();
+        if !cast_committed {
+            if let Some(reference) = found
+                .filter(|reference| self.discover_reference_is_current(*library_owner, reference))
+            {
+                destinations.push((reference, Zone::Hand));
+            }
+        }
+
+        for reference in cohort {
+            if found.is_some_and(|found| found.object_id == reference.object_id)
+                || !self.discover_reference_is_current(*library_owner, reference)
+            {
+                continue;
+            }
+            destinations.push((*reference, Zone::Library));
+        }
+
+        self.continue_discover_cleanup(
+            DiscoverCleanupPlan {
+                stack,
+                library_owner: *library_owner,
+                completion: completion.clone(),
+                cast_committed,
+                destinations,
+                next_destination_index: 0,
+                command_zone_objects: Vec::new(),
+            },
+            events,
+        )
+    }
+
+    fn discover_reference_is_current(
+        &self,
+        library_owner: PlayerId,
+        reference: &TriggerObjectRef,
+    ) -> bool {
+        self.state
+            .objects
+            .get(&reference.object_id)
+            .is_some_and(|object| {
+                object.zone == Zone::Exile
+                    && object.owner == library_owner
+                    && self
+                        .state
+                        .zone_change_generation
+                        .get(&reference.object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == reference.zone_change_generation
+            })
+    }
+
+    /// A resolution-time Discover cast temporarily reserves its offered exile incarnation on the
+    /// stack while the caster pays. Keep that offer parked only when both halves of the exact cast
+    /// transaction still bind it to the same owner, object, and zone generation.
+    fn discover_cast_reservation_is_current(
+        &self,
+        deciding_player: PlayerId,
+        library_owner: PlayerId,
+        reference: &TriggerObjectRef,
+    ) -> bool {
+        let Some(cast) = self.state.pending_spell_cast.as_ref() else {
+            return false;
+        };
+        let Some(object) = self.state.objects.get(&reference.object_id) else {
+            return false;
+        };
+        let current_generation = self
+            .state
+            .zone_change_generation
+            .get(&reference.object_id)
+            .copied()
+            .unwrap_or(0);
+
+        cast.resolution_time_offer
+            && cast.caster == deciding_player
+            && cast.caster == library_owner
+            && cast.reserved_object_id == reference.object_id
+            && cast.original_zone == Zone::Exile
+            && cast.original_holder == library_owner
+            && cast.original_zone_change_generation == reference.zone_change_generation
+            && object.owner == library_owner
+            && object.zone == Zone::Stack
+            && current_generation == cast.original_zone_change_generation.saturating_add(1)
+            && self
+                .pending_spell_cast_internal
+                .as_ref()
+                .is_some_and(|internal| internal.prepared.oid == reference.object_id)
+    }
+
+    /// Retire a Discover choice whose library owner or exact exiled incarnation left while its
+    /// resolution was suspended. The remaining cleanup and parent tail still belong to the
+    /// already-started resolving ability (CR 608.2m), even when the player who chose it leaves.
+    pub(in crate::engine) fn reconcile_departed_discover_resolution(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let Some(pending) = self.state.pending_resolution.take() else {
+            return Ok(false);
+        };
+        match pending.continuation.clone() {
+            ResolutionContinuation::DiscoverCommanderCleanup {
+                stack,
+                library_owner,
+                completion,
+                cast_committed,
+                destinations,
+                commander_choice_index,
+                command_zone_objects,
+            } => {
+                let owner_live = self
+                    .state
+                    .player_idx(library_owner)
+                    .is_some_and(|index| !self.state.players[index].has_lost);
+                let offered_reference_is_current = destinations
+                    .get(commander_choice_index)
+                    .is_some_and(|(reference, _)| {
+                        self.discover_reference_is_current(library_owner, reference)
+                    });
+                if owner_live && offered_reference_is_current {
+                    self.state.pending_resolution = Some(pending);
+                    return Ok(false);
+                }
+
+                if self.continue_discover_cleanup(
+                    DiscoverCleanupPlan {
+                        stack: stack.clone(),
+                        library_owner,
+                        completion,
+                        cast_committed,
+                        destinations,
+                        next_destination_index: commander_choice_index,
+                        command_zone_objects,
+                    },
+                    events,
+                )? {
+                    return Ok(true);
+                }
+                let completed = self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    stack.previous_result,
+                    Vec::new(),
+                )?;
+                events.extend(completed.events);
+                Ok(true)
+            }
+            ResolutionContinuation::SpecialCast {
+                stack,
+                exiled,
+                completion: completion @ SpecialCastCompletion::Discover { library_owner, .. },
+                ..
+            } => {
+                let owner_live = self
+                    .state
+                    .player_idx(library_owner)
+                    .is_some_and(|index| !self.state.players[index].has_lost);
+                let reserved_cast_is_current = self.discover_cast_reservation_is_current(
+                    pending.deciding_player,
+                    library_owner,
+                    &exiled,
+                );
+                if owner_live
+                    && (self.discover_reference_is_current(library_owner, &exiled)
+                        || reserved_cast_is_current)
+                {
+                    self.state.pending_resolution = Some(pending);
+                    return Ok(false);
+                }
+                if !self.finish_special_cast_completion(
+                    &completion,
+                    false,
+                    stack.clone(),
+                    events,
+                )? {
+                    let completed = self.complete_parked_resolution_with_previous(
+                        stack.item,
+                        stack.resume_effect_index,
+                        stack.previous_result,
+                        Vec::new(),
+                    )?;
+                    events.extend(completed.events);
+                }
+                Ok(true)
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                Ok(false)
+            }
+        }
+    }
+
+    fn continue_discover_cleanup(
+        &mut self,
+        plan: DiscoverCleanupPlan,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let DiscoverCleanupPlan {
+            stack,
+            library_owner,
+            completion,
+            cast_committed,
+            destinations,
+            next_destination_index,
+            command_zone_objects,
+        } = plan;
+        let commander_choice_index = self
+            .state
+            .player_idx(library_owner)
+            .filter(|owner_index| !self.state.players[*owner_index].has_lost)
+            .and_then(|owner_index| {
+                let player = &self.state.players[owner_index];
+                destinations
+                    .iter()
+                    .enumerate()
+                    .skip(next_destination_index)
+                    .find_map(|(index, (reference, _))| {
+                        (self.discover_reference_is_current(library_owner, reference)
+                            && player
+                                .declared_commander_object_ids
+                                .contains(&reference.object_id))
+                        .then_some(index)
+                    })
+            });
+        let Some(commander_choice_index) = commander_choice_index else {
+            self.apply_discover_cleanup(
+                library_owner,
+                &completion,
+                cast_committed,
+                &destinations,
+                &command_zone_objects,
+                events,
+            )?;
+            return Ok(false);
+        };
+        let (commander, destination) = destinations[commander_choice_index];
+        let name = object_display_name(&self.state, self.registry, commander.object_id);
+        let destination_label = match destination {
+            Zone::Hand => "their hand",
+            Zone::Library => "the bottom of their library",
+            _ => {
+                return Err(EngineError::Illegal(
+                    "invalid Discover commander destination",
+                ))
+            }
+        };
+        let prompt = format!(
+            "P{library_owner}: Put {name} into the command zone instead of {destination_label}?"
+        );
+        self.state.pending_resolution = Some(PendingResolution {
+            deciding_player: library_owner,
+            presentation: PendingResolutionPresentation {
+                source_object_id: stack.item.id,
+                candidates: Vec::new(),
+                min: 1,
+                max: 1,
+                ordered: false,
+                unique_names: false,
+                prompt: prompt.clone(),
+                choice_kind: rv1::ChoiceKind::ResolutionBranch,
+            },
+            continuation: ResolutionContinuation::DiscoverCommanderCleanup {
+                stack,
+                library_owner,
+                completion,
+                cast_committed,
+                destinations,
+                commander_choice_index,
+                command_zone_objects,
+            },
+        });
+        events.push(
+            self.discover_commander_choice_event()
+                .expect("Discover commander prompt was installed"),
+        );
+        events.push(ev_log(prompt));
+        Ok(true)
+    }
+
+    pub(in crate::engine) fn discover_commander_choice_event(&self) -> Option<rv1::RuledEvent> {
+        let pending = self.state.pending_resolution.as_ref()?;
+        let ResolutionContinuation::DiscoverCommanderCleanup {
+            destinations,
+            commander_choice_index,
+            ..
+        } = &pending.continuation
+        else {
+            return None;
+        };
+        let (_, destination) = destinations.get(*commander_choice_index)?;
+        let ordinary_destination_label = match destination {
+            Zone::Hand => "Hand",
+            Zone::Library => "Library bottom",
+            _ => return None,
+        };
+        let resolution_branches = ["Command zone", ordinary_destination_label]
+            .into_iter()
+            .enumerate()
+            .map(|(index, label)| rv1::ResolutionBranchOption {
+                branch_index: index as u32,
+                label: label.into(),
+                selectable: true,
+                ..Default::default()
+            })
+            .collect();
+        Some(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    deciding_player_id: pending.deciding_player,
+                    source_object_id: pending.presentation.source_object_id,
+                    prompt_text: pending.presentation.prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                    min: 1,
+                    max: 1,
+                    resolution_branches,
+                    ..Default::default()
+                },
+            )),
+        })
+    }
+
+    fn apply_discover_cleanup(
+        &mut self,
+        library_owner: PlayerId,
+        completion: &SpecialCastCompletion,
+        cast_committed: bool,
+        destinations: &[(TriggerObjectRef, Zone)],
+        command_zone_objects: &[ObjectId],
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let SpecialCastCompletion::Discover { found, .. } = completion else {
+            return Ok(());
+        };
+        let live_destinations = destinations
+            .iter()
+            .copied()
+            .filter(|(reference, _)| self.discover_reference_is_current(library_owner, reference))
+            .collect::<Vec<_>>();
+        if live_destinations.is_empty() {
+            return Ok(());
+        }
+        let zone_snapshot = self.snapshot_zone_event();
+        let mut bottom = Vec::new();
+        for (reference, intended_destination) in live_destinations {
+            let object_id = reference.object_id;
+            let name = object_display_name(&self.state, self.registry, object_id);
+            let destination = if command_zone_objects.contains(&object_id) {
+                Zone::Command
+            } else {
+                intended_destination
+            };
+            let moved_destination = match destination {
+                Zone::Hand => rv1::permanent_moved::Destination::Hand,
+                Zone::Library => rv1::permanent_moved::Destination::Library,
+                Zone::Command => rv1::permanent_moved::Destination::Command,
+                _ => return Err(EngineError::Illegal("invalid Discover cleanup destination")),
+            };
+            move_object_to_zone(&mut self.state, self.registry, object_id, destination, None)?;
+            events.push(permanent_moved_event(
+                &self.state,
+                object_id,
+                library_owner,
+                moved_destination,
+            ));
+            if destination == Zone::Library {
+                bottom.push(object_id);
+            } else if destination == Zone::Command {
+                events.push(ev_log(format!(
+                    "P{library_owner} moves {name} to the command zone instead of its Discover destination."
+                )));
+            } else if !cast_committed && found.is_some_and(|found| found.object_id == object_id) {
+                events.push(ev_log(format!(
+                    "P{library_owner} puts {name} into their hand after declining Discover."
+                )));
+            }
+        }
+
+        if !bottom.is_empty() {
+            let Some(index) = self.state.player_idx(library_owner) else {
+                return Err(EngineError::UnknownPlayer(library_owner));
+            };
+            shuffle_object_ids_for_current_command(&self.state, library_owner, &mut bottom);
+            let bottom_set: std::collections::HashSet<_> = bottom.iter().copied().collect();
+            self.state.players[index]
+                .library
+                .retain(|object_id| !bottom_set.contains(object_id));
+            self.state.players[index]
+                .library
+                .extend(bottom.iter().copied());
+            events.push(ev_log(format!(
+                "P{library_owner} puts {} cards on the bottom of their library in a random order after Discover.",
+                bottom.len()
+            )));
+        }
+
+        self.fire_zone_triggers(zone_snapshot, Vec::new(), events);
+        Ok(())
+    }
+
     /// Begin a tier-3 custom resolution (CR 608).
     pub(super) fn begin_custom_resolution(
         &mut self,
@@ -216,6 +645,12 @@ impl GameEngine {
         ) {
             return self.finish_chaos_warp_commander(pending, answer, decision);
         }
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::DiscoverCommanderCleanup { .. }
+        ) {
+            return self.finish_discover_commander_cleanup(pending, answer, decision);
+        }
         if let Some(payment) = pending.continuation.mana_payment().cloned() {
             return self.finish_resolution_mana_payment(pending, payment, answer, decision, player);
         }
@@ -352,6 +787,11 @@ impl GameEngine {
             }
             ResolutionContinuation::ChaosWarpCommander { .. } => {
                 unreachable!("commander replacement handled before object-choice validation")
+            }
+            ResolutionContinuation::DiscoverCommanderCleanup { .. } => {
+                unreachable!(
+                    "Discover commander replacement handled before object-choice validation"
+                )
             }
             ResolutionContinuation::LibraryPartition { .. } => {
                 return self.finish_library_partition(pending, chosen);
@@ -849,6 +1289,7 @@ impl GameEngine {
             stack,
             exiled,
             method,
+            completion,
             ..
         } = &pending.continuation
         else {
@@ -857,6 +1298,7 @@ impl GameEngine {
         let stack = stack.clone();
         let exiled = *exiled;
         let method = *method;
+        let completion = completion.clone();
         let mut events = Vec::new();
         match decision {
             rv1::ResolutionChoiceDecision::Decline => {
@@ -940,6 +1382,88 @@ impl GameEngine {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal("cast choice requires cast or decline"));
             }
+        }
+        if self.finish_special_cast_completion(&completion, false, stack.clone(), &mut events)? {
+            return Ok(finish_with_events(self, events));
+        }
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            stack.resume_effect_index,
+            stack.previous_result,
+            events,
+        )
+    }
+
+    fn finish_discover_commander_cleanup(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let ResolutionContinuation::DiscoverCommanderCleanup {
+            stack,
+            library_owner,
+            completion,
+            cast_committed,
+            destinations,
+            commander_choice_index,
+            mut command_zone_objects,
+        } = pending.continuation.clone()
+        else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "Discover commander continuation missing",
+            ));
+        };
+        let Some((commander, _)) = destinations.get(commander_choice_index).copied() else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "Discover commander choice no longer matches its cohort",
+            ));
+        };
+        let correct_shape = decision == rv1::ResolutionChoiceDecision::SelectBranch
+            && answer.selected_branch_index <= 1
+            && answer.chosen_object_ids.is_empty()
+            && answer.chosen_player_ids.is_empty()
+            && answer.payment.is_none()
+            && answer.restricted_mana.is_empty()
+            && answer.cast_spell.is_none()
+            && answer.spell_cast_announcement.is_none()
+            && answer.chosen_combat_defender.is_none();
+        let owner_live = self.state.player_idx(library_owner).is_some_and(|index| {
+            !self.state.players[index].has_lost
+                && self.state.players[index]
+                    .declared_commander_object_ids
+                    .contains(&commander.object_id)
+        });
+        if !correct_shape
+            || pending.deciding_player != library_owner
+            || !owner_live
+            || !self.discover_reference_is_current(library_owner, &commander)
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "invalid or stale Discover commander replacement choice",
+            ));
+        }
+
+        if answer.selected_branch_index == 0 {
+            command_zone_objects.push(commander.object_id);
+        }
+        let mut events = Vec::new();
+        if self.continue_discover_cleanup(
+            DiscoverCleanupPlan {
+                stack: stack.clone(),
+                library_owner,
+                completion: completion.clone(),
+                cast_committed,
+                destinations: destinations.clone(),
+                next_destination_index: commander_choice_index + 1,
+                command_zone_objects,
+            },
+            &mut events,
+        )? {
+            return Ok(finish_with_events(self, events));
         }
         self.complete_parked_resolution_with_previous(
             stack.item,

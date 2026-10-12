@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::state::{LibrarySearchEntryProgress, PendingLinkedExileAction};
+use crate::state::{LibrarySearchEntryProgress, PendingLinkedExileAction, SpecialCastCompletion};
 
 fn selection_admits_distinct_slots(chosen: &[ObjectId], slots: &[Vec<ObjectId>]) -> bool {
     fn assign(
@@ -807,6 +807,8 @@ impl GameEngine {
                         undo_history_start: self.state.undoable_mana_abilities.len(),
                         permission_scope: Some(permission_scope),
                         return_source_to_owner_hand_if_cast,
+                        max_face_mana_value: None,
+                        completion: SpecialCastCompletion::ResumeStack,
                     },
                 });
                 events.push(

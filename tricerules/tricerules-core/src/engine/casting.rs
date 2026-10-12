@@ -520,6 +520,7 @@ impl GameEngine {
             let ResolutionContinuation::SpecialCast {
                 stack,
                 return_source_to_owner_hand_if_cast,
+                completion,
                 ..
             } = &pending.continuation
             else {
@@ -530,6 +531,7 @@ impl GameEngine {
                 stack.resume_effect_index,
                 stack.previous_result.clone(),
                 *return_source_to_owner_hand_if_cast,
+                completion.clone(),
             ))
         } else {
             None
@@ -538,7 +540,7 @@ impl GameEngine {
         self.state.undoable_mana_abilities.clear();
         self.state.pending_spell_cast = None;
         self.pending_spell_cast_internal = None;
-        if let Some((item, resume_effect_index, previous_result, return_source)) =
+        if let Some((item, resume_effect_index, previous_result, return_source, completion)) =
             special_continuation
         {
             self.state.pending_resolution = None;
@@ -555,12 +557,21 @@ impl GameEngine {
             } else if return_source {
                 self.return_linked_cast_source_to_owner_hand(&item, &mut batch.events)?;
             }
-            batch = self.complete_parked_resolution_with_previous(
-                item,
-                resume_effect_index,
-                previous_result,
-                batch.events,
-            )?;
+            let mut parked = ParkedStackResolution::new(item.clone())
+                .with_previous_result(previous_result.clone());
+            parked.resume_effect_index = resume_effect_index;
+            let commander_choice =
+                self.finish_special_cast_completion(&completion, true, parked, &mut batch.events)?;
+            batch = if commander_choice {
+                finish_with_events(self, batch.events)
+            } else {
+                self.complete_parked_resolution_with_previous(
+                    item,
+                    resume_effect_index,
+                    previous_result,
+                    batch.events,
+                )?
+            };
         }
         Ok(batch)
     }
@@ -928,6 +939,16 @@ impl GameEngine {
                     .ok_or(EngineError::Illegal(
                         "card has no cast-from-exile permission",
                     ))?;
+                if permission.max_face_mana_value.is_some_and(|maximum| {
+                    self.registry
+                        .get(&object.card_id)
+                        .and_then(|definition| definition.face(face_index))
+                        .is_none_or(|face| face.mana_cost.mana_value() > maximum)
+                }) {
+                    return Err(EngineError::Illegal(
+                        "spell face exceeds the cast permission's mana-value limit",
+                    ));
+                }
                 let method_matches = special_method == Some(cast_method)
                     || matches!(
                         (&permission.cast_cost, cast_method),

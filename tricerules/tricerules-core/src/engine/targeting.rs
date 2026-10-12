@@ -1087,9 +1087,16 @@ pub(super) fn stack_spell_target_legal(
     else {
         return false;
     };
+    let current_characteristics = super::characteristics::spell_cast_characteristics(
+        state,
+        registry,
+        item.id,
+        item.controller,
+        face,
+    );
     if spell_filter
         .card_type
-        .is_some_and(|filter| !face.matches_card_type(filter))
+        .is_some_and(|filter| !stack_characteristics_match_type(&current_characteristics, filter))
     {
         return false;
     }
@@ -1106,6 +1113,46 @@ pub(super) fn stack_spell_target_legal(
         && spell_filter
             .max_mana_value
             .is_none_or(|maximum| mana_value <= maximum)
+}
+
+fn stack_characteristics_match_type(
+    characteristics: &super::characteristics::Characteristics,
+    filter: CardTypeFilter,
+) -> bool {
+    let has_type = |card_type: &str| characteristics.has_type(card_type);
+    let is_land = has_type("Land");
+    match filter {
+        CardTypeFilter::BasicLand => {
+            is_land
+                && characteristics
+                    .supertypes
+                    .iter()
+                    .any(|value| value == "Basic")
+        }
+        CardTypeFilter::Land => is_land,
+        CardTypeFilter::Enchantment => has_type("Enchantment"),
+        CardTypeFilter::Instant => has_type("Instant"),
+        CardTypeFilter::Sorcery => has_type("Sorcery"),
+        CardTypeFilter::InstantOrSorcery => has_type("Instant") || has_type("Sorcery"),
+        CardTypeFilter::Creature => has_type("Creature"),
+        CardTypeFilter::Artifact => has_type("Artifact"),
+        CardTypeFilter::Planeswalker => has_type("Planeswalker"),
+        CardTypeFilter::Battle => has_type("Battle"),
+        CardTypeFilter::Nonland => !is_land,
+        CardTypeFilter::NonlandPermanent => {
+            !is_land
+                && [
+                    "Artifact",
+                    "Battle",
+                    "Creature",
+                    "Enchantment",
+                    "Planeswalker",
+                ]
+                .into_iter()
+                .any(has_type)
+        }
+        CardTypeFilter::Noncreature => !has_type("Creature"),
+    }
 }
 
 pub(super) fn effect_has_legal_target_at_resolution(
@@ -1706,6 +1753,7 @@ fn validate_effect_targets(
         | SpellEffectKind::RevealUntilArtifact
         | SpellEffectKind::ManifestDread
         | SpellEffectKind::ExileTopWithPlayPermission { .. }
+        | SpellEffectKind::Discover { .. }
         | SpellEffectKind::ChooseResolutionBranch { .. }
         | SpellEffectKind::ChoosePermanents { .. }
         | SpellEffectKind::ChooseAndSacrifice { .. }
@@ -2930,6 +2978,45 @@ mod tests {
             105,
             &flashfreeze
         ));
+        let creature_spell = StackSpellFilter {
+            card_type: Some(CardTypeFilter::Creature),
+            ..Default::default()
+        };
+        engine.state.continuous_effects.extend([
+            ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(101),
+                kind: ContinuousEffectKind::Layer4RemoveCreature,
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 5,
+            },
+            ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(102),
+                kind: ContinuousEffectKind::Layer4AddTypes(
+                    tricerules_card_model::primitives::TypeLineAddition {
+                        card_types: vec![
+                            tricerules_card_model::primitives::PermanentTypeFilter::Creature,
+                        ],
+                        ..Default::default()
+                    },
+                ),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 6,
+            },
+        ]);
+        assert!(
+            stack_spell_target_legal(&engine.state, registry, 102, &creature_spell),
+            "an artifact spell that becomes a creature matches its current stack type"
+        );
+        assert!(
+            !stack_spell_target_legal(&engine.state, registry, 101, &creature_spell),
+            "a creature spell that loses creature type no longer matches"
+        );
         engine.state.stack[4].ability_text = Some("ability".into());
         assert!(!stack_spell_target_legal(
             &engine.state,

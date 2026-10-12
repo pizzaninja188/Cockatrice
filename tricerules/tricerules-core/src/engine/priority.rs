@@ -203,6 +203,16 @@ impl GameEngine {
                     // starting to resolve still continues fully. Keep its parked continuation.
                     preserve = true;
                 }
+                ResolutionContinuation::DiscoverCommanderCleanup { .. }
+                | ResolutionContinuation::SpecialCast {
+                    completion: crate::state::SpecialCastCompletion::Discover { .. },
+                    ..
+                } => {
+                    // The owner may leave while a Discover choice is parked. Retain the exact
+                    // resolving parent until departure cleanup can retire that choice and run
+                    // Discover's remaining cleanup and parent tail.
+                    preserve = true;
+                }
                 ResolutionContinuation::AuraReturn { stack, .. } => {
                     *stack = None;
                     preserve = true;
@@ -651,6 +661,7 @@ impl GameEngine {
             move_object_to_zone(&mut self.state, self.registry, id, Zone::Exile, None)?;
         }
         let observer_return_parked = self.drain_immediate_observer_actions(None, events)?;
+        self.reconcile_departed_discover_resolution(events)?;
         if self.state.turn_step == TurnStep::DeclareBlockers
             && self
                 .state

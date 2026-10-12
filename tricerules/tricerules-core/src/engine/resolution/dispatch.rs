@@ -95,6 +95,7 @@ pub(super) fn execute_effect(
             zones::reveal_top_card_to_hand_if_matches(cx, effect)?
         }
         SpellEffectKind::RevealUntilArtifact => zones::reveal_until_artifact(cx)?,
+        effect @ SpellEffectKind::Discover { .. } => zones::discover(cx, effect)?,
         effect @ SpellEffectKind::Explore { .. } => zones::explore(cx, effect)?,
         SpellEffectKind::ManifestDread => zones::manifest_dread(cx)?,
         SpellEffectKind::IntoTheWilds => zones::into_the_wilds(cx)?,
