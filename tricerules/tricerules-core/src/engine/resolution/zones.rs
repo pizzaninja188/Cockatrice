@@ -3261,6 +3261,131 @@ pub(super) fn return_all_graveyard_permanents(
     return_matching_graveyard_permanents(cx, players, filter, None)
 }
 
+pub(super) fn return_different_named_permanents_from_graveyard(
+    cx: &mut EffectCx<'_>,
+) -> Result<EffectOutcome, EngineError> {
+    let controller = cx.controller;
+    let Some(index) = cx.engine.state.player_idx(controller) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let permanent_filter = ZoneCardFilter {
+        any_of: Some(vec![
+            ZoneCardFilter {
+                card_type: Some(CardTypeFilter::Land),
+                ..Default::default()
+            },
+            ZoneCardFilter {
+                card_type: Some(CardTypeFilter::NonlandPermanent),
+                ..Default::default()
+            },
+        ]),
+        ..Default::default()
+    };
+    let candidates: Vec<ObjectId> =
+        cx.engine.state.players[index]
+            .graveyard
+            .iter()
+            .copied()
+            .filter(|oid| {
+                cx.engine.state.objects.get(oid).is_some_and(|object| {
+                    object.zone == Zone::Graveyard && object.owner == controller
+                })
+            })
+            .filter(|oid| {
+                zone_card_matches_filter(
+                    &cx.engine.state,
+                    cx.engine.registry,
+                    *oid,
+                    Some(&permanent_filter),
+                )
+            })
+            .collect();
+    if candidates.is_empty() {
+        cx.events.push(ev_log(format!(
+            "P{controller} has no permanent cards in their graveyard ({}).",
+            cx.spell_label
+        )));
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let max = u32::try_from(candidates.len())
+        .map_err(|_| EngineError::Illegal("too many graveyard candidates"))?;
+    let prompt = format!(
+        "P{controller}: choose any number of permanent cards with different names from your graveyard."
+    );
+    let (candidate_card_ids, candidate_names) = candidate_identities(cx.engine, &candidates);
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                accepted_permanent_selections: Vec::new(),
+                variable_mana_contribution: false,
+                candidate_token_identities: Vec::new(),
+                candidate_player_ids: Vec::new(),
+                deciding_player_id: controller,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: custom::ChoiceKind::GraveyardCards as i32,
+                candidate_object_ids: candidates.clone(),
+                candidate_card_ids,
+                min: 0,
+                max,
+                ordered: false,
+                candidate_names,
+                candidate_server_card_ids: Vec::new(),
+                unique_names: true,
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+                resolution_branches: Vec::new(),
+                mana_cost: String::new(),
+                candidate_selectable: Vec::new(),
+                public_reveal: None,
+                candidate_source_zones: vec![
+                    rv1::ChoiceCandidateSourceZone::Graveyard as i32;
+                    candidates.len()
+                ],
+                combat_defender_options: Vec::new(),
+                waterbend: false,
+                selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
+            },
+        )),
+    });
+    cx.events.push(ev_log(prompt.clone()));
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player: controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates: candidates.clone(),
+            min: 0,
+            max,
+            ordered: false,
+            prompt,
+            choice_kind: custom::ChoiceKind::GraveyardCards,
+            unique_names: true,
+        },
+        continuation: ResolutionContinuation::DifferentNamedGraveyardReturn {
+            stack: ParkedStackResolution::new(cx.top.clone()),
+            candidate_generations: candidates
+                .iter()
+                .map(|oid| {
+                    (
+                        *oid,
+                        cx.engine
+                            .state
+                            .zone_change_generation
+                            .get(oid)
+                            .copied()
+                            .unwrap_or(0),
+                    )
+                })
+                .collect(),
+            spell_label: cx.spell_label.to_string(),
+        },
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
 pub(super) fn return_all_graveyard_permanents_with_mana_value_x_or_less(
     cx: &mut EffectCx<'_>,
     filter: &ZoneCardFilter,
@@ -3360,7 +3485,7 @@ fn return_matching_graveyard_permanents(
     )
 }
 
-fn plain_return_entry(
+pub(in crate::engine) fn plain_return_entry(
     engine: &GameEngine,
     object_id: ObjectId,
     destination_controller: PlayerId,

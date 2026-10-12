@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "5674f6ae-ed5d-441e-a534-b5dd415165fd",
+  "spans": [
+    {
+      "face_id": "eerie_ultimatum",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/spell_effect/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnDifferentNamedPermanentsFromGraveyard",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "covers": "Exact Eerie Ultimatum identity, mana cost, type, and complete spell effect",
+      "test": "deck_registry::deck_coverage_eerie_ultimatum::eerie_ultimatum_registers_its_exact_card_identity_and_instructions"
+    },
+    {
+      "covers": "Returns differently named permanent cards from the controller graveyard as one entry cohort; Aura cannot attach to a simultaneous entrant",
+      "test": "scenario deck_coverage_eerie_ultimatum::eerie_returns_different_named_permanents_and_keeps_simultaneous_aura_in_graveyard"
+    },
+    {
+      "covers": "Allows zero choices, skips an empty cohort, and finishes the resolving spell in its graveyard",
+      "test": "scenario deck_coverage_eerie_ultimatum::eerie_can_choose_zero_and_skips_the_choice_when_no_permanent_card_matches"
+    },
+    {
+      "covers": "Rejects a selected graveyard object whose zone-change generation became stale",
+      "test": "scenario deck_coverage_eerie_ultimatum::eerie_rejects_a_graveyard_card_whose_zone_generation_changed_after_the_choice"
+    },
+    {
+      "covers": "Serialized Eerie cast and resolution-choice commands replay the same event batches and state",
+      "test": "scenario deck_coverage_eerie_ultimatum::eerie_serialized_resolution_choice_replays_identically"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

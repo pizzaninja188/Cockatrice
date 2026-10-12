@@ -1781,6 +1781,7 @@ fn validate_effect_targets(
         | SpellEffectKind::CastMadness { .. }
         | SpellEffectKind::SiegeDefeat
         | SpellEffectKind::ExileGraveyards { .. }
+        | SpellEffectKind::ReturnDifferentNamedPermanentsFromGraveyard
         | SpellEffectKind::Proliferate
         | SpellEffectKind::DoubleTimeCounters
         | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary

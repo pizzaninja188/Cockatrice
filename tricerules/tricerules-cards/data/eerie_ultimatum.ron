@@ -1,0 +1,8 @@
+(
+  id: "eerie_ultimatum", name: "Eerie Ultimatum",
+  face_id: "eerie_ultimatum", mana_cost: "{W}{W}{B}{B}{B}{G}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    ReturnDifferentNamedPermanentsFromGraveyard,
+  ],
+)

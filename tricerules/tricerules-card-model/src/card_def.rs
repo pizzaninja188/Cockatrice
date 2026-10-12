@@ -1502,6 +1502,18 @@ impl CardDefinition {
         }
     }
 
+    /// Names an object has in zones other than the battlefield or stack. Split cards and Rooms
+    /// use both face names (CR 709.4, 709.5); transform, MDFC, Adventure, and other layouts use
+    /// only their front/normal face (CR 710.2, 712.8a, 715.4). Consumers that compare multiple
+    /// cards, such as Eerie Ultimatum and Gifts Ungiven, need the complete per-card name set.
+    pub fn names_outside_stack(&self) -> Vec<&str> {
+        if matches!(self.layout, Layout::Split | Layout::Room) {
+            self.faces.iter().map(|face| face.name.as_str()).collect()
+        } else {
+            vec![self.primary_face().name.as_str()]
+        }
+    }
+
     /// Whether this physical card has `subtype` outside the battlefield and stack. Split cards
     /// combine both halves; other multiface layouts use only their normal/front face.
     pub fn has_subtype_outside_stack(&self, subtype: &str) -> bool {
@@ -1911,6 +1923,7 @@ mod tests {
         let split = definition(Layout::Split, vec![left, right]);
         assert!(split.has_name_outside_stack("Fire"));
         assert!(split.has_name_outside_stack("Ice"));
+        assert_eq!(split.names_outside_stack(), vec!["Fire", "Ice"]);
 
         let mut front = face(&["Creature"]);
         front.name = "Bonecrusher Giant".into();
@@ -1919,6 +1932,7 @@ mod tests {
         let adventure = definition(Layout::Adventure, vec![front, back]);
         assert!(adventure.has_name_outside_stack("Bonecrusher Giant"));
         assert!(!adventure.has_name_outside_stack("Stomp"));
+        assert_eq!(adventure.names_outside_stack(), vec!["Bonecrusher Giant"]);
 
         let mut normal = face(&["Creature", "Dragon"]);
         normal.name = "Sagu Wildling".into();
@@ -1927,6 +1941,16 @@ mod tests {
         let omen_card = definition(Layout::Omen, vec![normal, omen]);
         assert!(omen_card.has_name_outside_stack("Sagu Wildling"));
         assert!(!omen_card.has_name_outside_stack("Roost Seek"));
+        assert_eq!(omen_card.names_outside_stack(), vec!["Sagu Wildling"]);
+
+        for layout in [Layout::Transform, Layout::Flip, Layout::ModalDfc] {
+            let mut front = face(&["Creature"]);
+            front.name = "Front Name".into();
+            let mut back = face(&["Creature"]);
+            back.name = "Back Name".into();
+            let card = definition(layout, vec![front, back]);
+            assert_eq!(card.names_outside_stack(), vec!["Front Name"]);
+        }
     }
 
     #[test]
@@ -1969,6 +1993,10 @@ mod tests {
         right.name = "Tunnel of Hate".into();
         right.mana_cost = ManaCost::parse("{4}{R}{R}").unwrap();
         let room = definition(Layout::Room, vec![left, right]);
+        assert_eq!(
+            room.names_outside_stack(),
+            vec!["Ticket Booth", "Tunnel of Hate"]
+        );
 
         assert!(room.matches_card_type_outside_stack(CardTypeFilter::Enchantment));
         assert_eq!(room.card_types_outside_stack(), vec!["Enchantment"]);

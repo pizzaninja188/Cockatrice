@@ -1333,6 +1333,11 @@ pub enum ResolutionContinuation {
         candidate_generations: Vec<(ObjectId, u64)>,
         spell_label: String,
     },
+    DifferentNamedGraveyardReturn {
+        stack: ParkedStackResolution,
+        candidate_generations: Vec<(ObjectId, u64)>,
+        spell_label: String,
+    },
     LinkedExileChoice {
         stack: ParkedStackResolution,
         key: LinkedExileKey,
@@ -1585,6 +1590,7 @@ impl ResolutionContinuation {
             | Self::PlayerSetDiscard { stack, .. }
             | Self::PlayerSetSacrifice { stack, .. }
             | Self::GraveyardChoice { stack, .. }
+            | Self::DifferentNamedGraveyardReturn { stack, .. }
             | Self::LinkedExileChoice { stack, .. }
             | Self::Sacrifice { stack }
             | Self::CopyTargets { stack, .. }
@@ -1642,6 +1648,7 @@ impl ResolutionContinuation {
             | Self::PlayerSetDiscard { stack, .. }
             | Self::PlayerSetSacrifice { stack, .. }
             | Self::GraveyardChoice { stack, .. }
+            | Self::DifferentNamedGraveyardReturn { stack, .. }
             | Self::LinkedExileChoice { stack, .. }
             | Self::Sacrifice { stack }
             | Self::CopyTargets { stack, .. }

@@ -1738,6 +1738,11 @@ pub enum SpellEffectKind {
     ReturnAllGraveyardPermanentsWithManaValueXOrLess {
         filter: ZoneCardFilter,
     },
+    /// Eerie Ultimatum: choose any number of differently named permanent cards from the
+    /// controller's graveyard and return the chosen cards together. The engine freezes the
+    /// eligible incarnations at choice time, then sends the selected cohort through one entry
+    /// batch so replacement effects and other entry choices see the simultaneous event.
+    ReturnDifferentNamedPermanentsFromGraveyard,
     /// Choose a card from the controller's graveyard when this instruction resolves rather than
     /// targeting it while casting. Say Its Name mills first, then optionally chooses the current
     /// creature-or-land cohort; Corpse Churn shares the same post-mill timing.
@@ -3545,6 +3550,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { .. }
             | SpellEffectKind::ReturnAllGraveyardPermanents { .. }
             | SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { .. }
+            | SpellEffectKind::ReturnDifferentNamedPermanentsFromGraveyard
             | SpellEffectKind::ChooseGraveyardCard { .. }
             | SpellEffectKind::ChooseLinkedExiledCard { .. }
             | SpellEffectKind::PlayLinkedExiledCard { .. }
@@ -4881,6 +4887,16 @@ impl SpellEffectKind {
                     "X-bounded graveyard permanent return requires a spell instruction".into(),
                 );
             }
+        }
+        if matches!(
+            self,
+            SpellEffectKind::ReturnDifferentNamedPermanentsFromGraveyard
+        ) && !matches!(context, EffectContext::Spell | EffectContext::Ability)
+        {
+            return Err(
+                "different-name graveyard permanent return requires a spell or ability instruction"
+                    .into(),
+            );
         }
         if let SpellEffectKind::PutCounters { counter, .. }
         | SpellEffectKind::RemoveCounters { counter, .. }

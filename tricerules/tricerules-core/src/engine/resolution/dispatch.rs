@@ -351,6 +351,9 @@ pub(super) fn execute_effect(
         SpellEffectKind::ReturnAllGraveyardPermanents { players, filter } => {
             zones::return_all_graveyard_permanents(cx, players, &filter)?
         }
+        SpellEffectKind::ReturnDifferentNamedPermanentsFromGraveyard => {
+            zones::return_different_named_permanents_from_graveyard(cx)?
+        }
         SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { filter } => {
             zones::return_all_graveyard_permanents_with_mana_value_x_or_less(cx, &filter)?
         }

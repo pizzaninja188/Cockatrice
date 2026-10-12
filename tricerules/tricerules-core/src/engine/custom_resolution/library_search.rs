@@ -574,6 +574,86 @@ impl GameEngine {
         self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
     }
 
+    pub(super) fn finish_different_named_graveyard_return(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[ObjectId],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, generations, spell_label) = match &pending.continuation {
+            ResolutionContinuation::DifferentNamedGraveyardReturn {
+                stack,
+                candidate_generations,
+                spell_label,
+            } => (
+                stack.clone(),
+                candidate_generations.clone(),
+                spell_label.clone(),
+            ),
+            _ => {
+                return Err(EngineError::Illegal(
+                    "different-name graveyard-return continuation missing",
+                ))
+            }
+        };
+        let controller = stack.item.controller;
+        let mut events = Vec::new();
+        if chosen.is_empty() {
+            events.push(ev_log(format!(
+                "P{controller} chooses no permanent cards to return."
+            )));
+            return self.complete_parked_resolution_with_previous(
+                stack.item,
+                stack.resume_effect_index,
+                stack.previous_result,
+                events,
+            );
+        }
+
+        let mut entries = Vec::with_capacity(chosen.len());
+        for &oid in chosen {
+            let expected_generation = generations
+                .iter()
+                .find_map(|(candidate, generation)| (*candidate == oid).then_some(*generation));
+            let current_generation = self
+                .state
+                .zone_change_generation
+                .get(&oid)
+                .copied()
+                .unwrap_or(0);
+            if expected_generation != Some(current_generation)
+                || !self.state.objects.get(&oid).is_some_and(|object| {
+                    object.zone == Zone::Graveyard && object.owner == controller
+                })
+            {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "graveyard permanent choice became stale",
+                ));
+            }
+            entries.push(super::super::resolution::zones::plain_return_entry(
+                self, oid, controller,
+            ));
+        }
+
+        let Some(stack) = self.begin_zone_entry_batch(
+            stack,
+            entries,
+            Zone::Graveyard,
+            &spell_label,
+            None,
+            &mut events,
+        )?
+        else {
+            return Ok(finish_with_events(self, events));
+        };
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            stack.resume_effect_index,
+            stack.previous_result,
+            events,
+        )
+    }
+
     pub(super) fn finish_linked_exile_choice(
         &mut self,
         pending: PendingResolution,

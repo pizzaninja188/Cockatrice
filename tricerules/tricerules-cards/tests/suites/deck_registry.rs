@@ -47,6 +47,8 @@ mod deck_coverage_devotion_gods;
 mod deck_coverage_draw_replacements;
 #[path = "../deck_coverage_duplicant.rs"]
 mod deck_coverage_duplicant;
+#[path = "../deck_coverage_eerie_ultimatum.rs"]
+mod deck_coverage_eerie_ultimatum;
 #[path = "../deck_coverage_everflowing_chalice.rs"]
 mod deck_coverage_everflowing_chalice;
 #[path = "../deck_coverage_farewell.rs"]

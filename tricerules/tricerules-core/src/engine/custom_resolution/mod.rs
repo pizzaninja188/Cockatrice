@@ -743,17 +743,24 @@ impl GameEngine {
                     .get(&oid)
                     .map(|o| o.card_id.clone())
                     .unwrap_or_default();
-                let name = self
+                let names = self
                     .registry
                     .get(&card_id)
-                    .map(|d| d.name.clone())
-                    .unwrap_or(card_id);
-                if !name_seen.insert(name) {
+                    .map(|definition| {
+                        definition
+                            .names_outside_stack()
+                            .into_iter()
+                            .map(str::to_owned)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_else(|| vec![card_id]);
+                if names.iter().any(|name| name_seen.contains(name)) {
                     self.state.pending_resolution = Some(pending);
                     return Err(EngineError::Illegal(
                         "chosen cards must have different names",
                     ));
                 }
+                name_seen.extend(names);
             }
         }
 
@@ -816,6 +823,9 @@ impl GameEngine {
             }
             ResolutionContinuation::GraveyardChoice { .. } => {
                 return self.finish_graveyard_choice(pending, chosen);
+            }
+            ResolutionContinuation::DifferentNamedGraveyardReturn { .. } => {
+                return self.finish_different_named_graveyard_return(pending, chosen);
             }
             ResolutionContinuation::LinkedExileChoice { .. } => {
                 return self.finish_linked_exile_choice(pending, chosen);
