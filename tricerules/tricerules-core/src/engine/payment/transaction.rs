@@ -134,6 +134,7 @@ pub(in crate::engine) struct CostPaymentReceipt {
     pub(in crate::engine) cast_cost_receipts: Vec<CastCostReceipt>,
     pub(in crate::engine) returned_attacker_assignment: Option<CombatAttackAssignment>,
     pub(in crate::engine) sneak_returned_name: Option<String>,
+    pub(in crate::engine) counter_replacement_logs: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -248,7 +249,48 @@ pub(in crate::engine) struct CostTransactionPlan {
     cast_cost_receipts: Vec<CastCostReceipt>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(in crate::engine) struct CounterPlacementCost {
+    pub(in crate::engine) debit_index: usize,
+    pub(in crate::engine) object_id: ObjectId,
+    pub(in crate::engine) generation: u64,
+    pub(in crate::engine) kind: CounterKind,
+    pub(in crate::engine) count: u32,
+}
+
 impl CostTransactionPlan {
+    pub(in crate::engine) fn player(&self) -> PlayerId {
+        self.player
+    }
+
+    pub(in crate::engine) fn counter_placement_costs(&self) -> Vec<CounterPlacementCost> {
+        self.debits
+            .iter()
+            .enumerate()
+            .filter_map(|(debit_index, debit)| match debit {
+                CostDebit::Loyalty {
+                    object_id,
+                    generation,
+                    delta,
+                } if *delta > 0 => Some(CounterPlacementCost {
+                    debit_index,
+                    object_id: *object_id,
+                    generation: *generation,
+                    kind: CounterKind::Loyalty,
+                    count: *delta as u32,
+                }),
+                CostDebit::Blight { object, count } => Some(CounterPlacementCost {
+                    debit_index,
+                    object_id: object.object_id,
+                    generation: object.zone_change_generation,
+                    kind: CounterKind::MinusOneMinusOne,
+                    count: *count,
+                }),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Exact mana inputs consumed by an activation cost, separated by unrestricted color and
     /// restricted group so attack-payment receipts can retain CR 733.1 source lineage.
     pub(in crate::engine) fn mana_source_spend(
@@ -1879,7 +1921,43 @@ impl GameEngine {
         plan: CostTransactionPlan,
     ) -> Result<CostPaymentReceipt, EngineError> {
         let plan = self.prepare_cost_transaction_commit(plan)?;
-        self.commit_prevalidated_cost_transaction(plan)
+        self.commit_prevalidated_cost_transaction(plan, None)
+    }
+
+    pub(in crate::engine) fn commit_cost_transaction_with_counter_placements(
+        &mut self,
+        plan: CostTransactionPlan,
+        placements: Vec<super::super::replacement::ProposedCounterPlacement>,
+    ) -> Result<CostPaymentReceipt, EngineError> {
+        let plan = self.prepare_cost_transaction_commit(plan)?;
+        self.validate_resolved_cost_counter_placements(&plan, &placements)?;
+        self.commit_prevalidated_cost_transaction(plan, Some(placements))
+    }
+
+    fn prepare_cost_counter_placements(
+        &mut self,
+        plan: &CostTransactionPlan,
+    ) -> Result<Vec<super::super::replacement::ProposedCounterPlacement>, EngineError> {
+        let mut proposals = Vec::new();
+        for cost in plan.counter_placement_costs() {
+            let mut proposal = self
+                .proposed_object_counter_placement(
+                    plan.player,
+                    cost.object_id,
+                    [(cost.kind, cost.count)],
+                    super::super::continuous::CounterPlacementOrigin::Cost,
+                )
+                .ok_or(EngineError::Illegal("counter cost recipient became stale"))?;
+            proposal.cost_debit_index = Some(cost.debit_index);
+            proposals.push(proposal);
+        }
+        let (batch, candidates) = self.prepare_counter_placement_batch(proposals)?;
+        if candidates.is_some() {
+            return Err(EngineError::Illegal(
+                "counter cost replacement order needs a payment continuation",
+            ));
+        }
+        Ok(batch.events)
     }
 
     pub(in crate::engine) fn prepare_cost_transaction_commit(
@@ -1900,16 +1978,12 @@ impl GameEngine {
             }
         }
         plan.debits = debits;
+        Self::order_cost_debits_for_commit(&mut plan);
         self.revalidate_cost_transaction(&plan)?;
         Ok(plan)
     }
 
-    pub(in crate::engine) fn commit_prevalidated_cost_transaction(
-        &mut self,
-        mut plan: CostTransactionPlan,
-    ) -> Result<CostPaymentReceipt, EngineError> {
-        // Counter placement is nonconsuming. Complete it before any selected zone departure,
-        // including when the same creature also pays a sacrifice cost (CR 601.2h).
+    fn order_cost_debits_for_commit(plan: &mut CostTransactionPlan) {
         if plan.debits.iter().any(|debit| {
             matches!(
                 debit,
@@ -1927,6 +2001,36 @@ impl GameEngine {
                 )
             });
         }
+    }
+
+    pub(in crate::engine) fn commit_prevalidated_cost_transaction(
+        &mut self,
+        mut plan: CostTransactionPlan,
+        resolved_counter_placements: Option<
+            Vec<super::super::replacement::ProposedCounterPlacement>,
+        >,
+    ) -> Result<CostPaymentReceipt, EngineError> {
+        Self::order_cost_debits_for_commit(&mut plan);
+        let resolved_counter_placements = match resolved_counter_placements {
+            Some(placements) => Some(placements),
+            None if !plan.counter_placement_costs().is_empty() => {
+                Some(self.prepare_cost_counter_placements(&plan)?)
+            }
+            None => None,
+        };
+        if resolved_counter_placements.is_none() && !plan.counter_placement_costs().is_empty() {
+            return Err(EngineError::Illegal(
+                "counter placement cost requires a resolved counter-placement batch",
+            ));
+        }
+        if let Some(placements) = resolved_counter_placements.as_ref() {
+            self.validate_resolved_cost_counter_placements(&plan, placements)?;
+        }
+        let mut placement_by_debit = resolved_counter_placements
+            .unwrap_or_default()
+            .into_iter()
+            .map(|placement| (placement.cost_debit_index.unwrap_or(usize::MAX), placement))
+            .collect::<BTreeMap<_, _>>();
 
         let mut payment = CostPaymentReceipt {
             blight_receipts: vec![],
@@ -1942,8 +2046,9 @@ impl GameEngine {
             cast_cost_receipts: plan.cast_cost_receipts,
             returned_attacker_assignment: None,
             sneak_returned_name: None,
+            counter_replacement_logs: Vec::new(),
         };
-        for debit in plan.debits {
+        for (debit_index, debit) in plan.debits.into_iter().enumerate() {
             let zones = matches!(
                 &debit,
                 CostDebit::Exile { .. }
@@ -1969,25 +2074,35 @@ impl GameEngine {
                     self.remove_counters(object.object_id, kind, count);
                 }
                 CostDebit::Blight { object, count } => {
-                    let receipt = self.complete_blight(
-                        plan.player,
+                    let placement =
+                        placement_by_debit
+                            .remove(&debit_index)
+                            .ok_or(EngineError::Illegal(
+                                "Blight cost has no resolved counter placement",
+                            ))?;
+                    self.commit_resolved_cost_counter_placement(&placement, &mut payment);
+                    let receipt = crate::state::BlightReceipt {
+                        player: plan.player,
                         count,
-                        Some(object.object_id),
-                        super::super::continuous::CounterPlacementOrigin::Cost,
-                    );
+                        creature: Some(TriggerObjectRef {
+                            object_id: object.object_id,
+                            zone_change_generation: object.zone_change_generation,
+                            controller_at_event: plan.player,
+                        }),
+                    };
                     payment.trigger_events.push(GameEvent::Blighted(receipt));
                     payment.blight_receipts.push(receipt);
                 }
                 CostDebit::Loyalty {
-                    object_id, delta, ..
+                    object_id,
+                    generation: _,
+                    delta,
                 } => {
                     if delta > 0 {
-                        self.place_counters(
-                            object_id,
-                            CounterKind::Loyalty,
-                            delta as u32,
-                            super::super::continuous::CounterPlacementOrigin::Cost,
-                        );
+                        let placement = placement_by_debit
+                            .remove(&debit_index)
+                            .expect("validated counter placement cost");
+                        self.commit_resolved_cost_counter_placement(&placement, &mut payment);
                         self.reconcile_combat_characteristics(&mut payment.move_events);
                         continue;
                     }
@@ -2227,6 +2342,61 @@ impl GameEngine {
             self.reconcile_combat_characteristics(&mut payment.move_events);
         }
         Ok(payment)
+    }
+
+    fn commit_resolved_cost_counter_placement(
+        &mut self,
+        placement: &super::super::replacement::ProposedCounterPlacement,
+        payment: &mut CostPaymentReceipt,
+    ) {
+        let (object_id, zone_change_generation) = match &placement.recipient {
+            super::super::replacement::CounterPlacementRecipient::Object {
+                object_id,
+                zone_change_generation,
+            } => (*object_id, *zone_change_generation),
+            super::super::replacement::CounterPlacementRecipient::EnteringObject { .. } => {
+                unreachable!("validated counter cost targets an existing permanent")
+            }
+            super::super::replacement::CounterPlacementRecipient::Player { .. } => {
+                unreachable!("validated counter cost targets a permanent")
+            }
+        };
+        for replacement in &placement.applied_replacements {
+            let name = self.replacement_object_display_name(replacement.source_object_id, None);
+            payment
+                .counter_replacement_logs
+                .push(format!("{name}'s counter replacement effect is applied."));
+        }
+        let Some(kind) = placement.original_counters.keys().next().copied() else {
+            unreachable!("validated cost placement contains one counter kind");
+        };
+        let count = placement.counters.get(&kind).copied().unwrap_or(0);
+        if count == 0 {
+            return;
+        }
+        let before = self.state.objects[&object_id].counter_count(kind);
+        self.state
+            .objects
+            .get_mut(&object_id)
+            .expect("validated counter-cost recipient")
+            .add_counters(kind, count, self.state.command_index);
+        let after = self.state.objects[&object_id].counter_count(kind);
+        let placed = after.saturating_sub(before);
+        if placed == 0 {
+            return;
+        }
+        let controller = self.controller_of(object_id).unwrap_or(placement.actor);
+        payment.trigger_events.push(GameEvent::CountersPlaced {
+            object: TriggerObjectRef {
+                object_id,
+                zone_change_generation,
+                controller_at_event: controller,
+            },
+            kind,
+            before,
+            after,
+            read_ahead_entry: false,
+        });
     }
 
     fn commit_exile_cost(
@@ -4187,6 +4357,87 @@ mod convoke_transaction_tests {
         );
         assert_eq!(engine.state.objects[&oid].zone, Zone::Graveyard);
         assert!(engine.state.zone_change_generation[&oid] > generation);
+    }
+
+    #[test]
+    fn non_ability_blight_costs_record_counter_placement_events_under_laezel() {
+        for (index, purpose) in [CostPurpose::Spell, CostPurpose::Resolution]
+            .into_iter()
+            .enumerate()
+        {
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                153_120 + index as u64,
+                &[0, 1],
+                20,
+                None,
+                true,
+            )
+            .unwrap();
+            let hand = engine.state.players[0].hand.clone();
+            let creature = hand[0];
+            let laezel = hand[1];
+            for (object_id, card_id) in [
+                (creature, "ancient_brontodon"),
+                (laezel, "laezel,_vlaakiths_champion"),
+            ] {
+                engine.state.objects.get_mut(&object_id).unwrap().card_id = card_id.into();
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    object_id,
+                    Zone::Battlefield,
+                    None,
+                )
+                .unwrap();
+            }
+            {
+                let object = engine.state.objects.get_mut(&creature).unwrap();
+                object.power = Some(9);
+                object.toughness = Some(9);
+            }
+            engine.emit_static_abilities_on_enter(laezel);
+            let generation = engine.state.zone_change_generation[&creature];
+            let plan = CostTransactionPlan {
+                purpose,
+                player: 0,
+                player_idx: 0,
+                cast_cost_receipts: vec![],
+                debits: vec![CostDebit::Blight {
+                    object: rv1::CostObjectRef {
+                        object_id: creature,
+                        zone_change_generation: generation,
+                    },
+                    count: 2,
+                }],
+            };
+
+            let receipt = engine
+                .commit_cost_transaction(plan)
+                .expect("Blight cost commits with Lae'zel's replacement");
+
+            assert_eq!(
+                engine.state.objects[&creature].counter_count(CounterKind::MinusOneMinusOne),
+                3
+            );
+            assert_eq!(
+                receipt
+                    .trigger_events
+                    .iter()
+                    .filter(|event| matches!(
+                        event,
+                        GameEvent::CountersPlaced {
+                            object,
+                            kind: CounterKind::MinusOneMinusOne,
+                            ..
+                        } if object.object_id == creature
+                    ))
+                    .count(),
+                1,
+                "counter-placement triggers observe the replaced cost event"
+            );
+            assert_eq!(receipt.blight_receipts.len(), 1);
+        }
     }
 
     #[test]

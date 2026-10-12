@@ -205,6 +205,9 @@ pub(crate) struct CounterPlacementReceipt {
     pub object: TriggerObjectRef,
     pub counter: CounterKind,
     pub count: u32,
+    /// Exact counter totals captured at this placement, before later placements in the same batch.
+    pub before: u32,
+    pub after: u32,
 }
 
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -1302,6 +1305,13 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         counter_move: PendingCounterMove,
     },
+    CounterReplacement {
+        stack: Option<ParkedStackResolution>,
+        completion: CounterPlacementCompletion,
+    },
+    EntryCounterReplacement {
+        resume: Box<EntryCounterReplacementResume>,
+    },
     PermanentChoice {
         stack: ParkedStackResolution,
         candidate_generations: Vec<(ObjectId, u64)>,
@@ -1597,6 +1607,108 @@ pub enum SpecialCastCompletion {
     },
 }
 
+/// Typed work that remains after a shared counter-placement replacement batch finishes.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) enum CounterPlacementCompletion {
+    StackEffect {
+        spell_label: String,
+    },
+    Proliferate {
+        player_id: PlayerId,
+    },
+    ActivationCost {
+        replay: ActivationCostReplay,
+    },
+    SagaLore {
+        active_player: PlayerId,
+        sagas: Vec<TriggerObjectRef>,
+    },
+    CounterMove {
+        source_target: StackTarget,
+        destination_target: StackTarget,
+        kind: CounterKind,
+        actor: PlayerId,
+        ability_label: String,
+    },
+    Amass {
+        controller: PlayerId,
+        subtype: ArmySubtype,
+        count: u32,
+        source_id: ObjectId,
+        target_object_id: ObjectId,
+        target_zone_change_generation: u64,
+    },
+    BlightEffect {
+        player: PlayerId,
+        count: u32,
+        creature: TriggerObjectRef,
+        spell_label: String,
+    },
+    Explore {
+        controller: PlayerId,
+        explorer: TriggerObjectRef,
+        revealed: Option<TriggerObjectRef>,
+        spell_label: String,
+    },
+    DamageBatch {
+        completed: Vec<crate::engine::damage::CompletedDamage>,
+        continuation: crate::engine::damage::DamageBatchContinuation,
+    },
+    /// Nested counter placement created by a damage-prevention replacement. The parent damage
+    /// batch remains uncommitted until this contained counter event and the rest of the damage
+    /// replacements finish.
+    DamageReplacement {
+        damage_batch: crate::engine::damage::PendingDamageBatch,
+        damage_event_index: usize,
+        continuation: crate::engine::damage::DamageBatchContinuation,
+    },
+}
+
+/// Resume owner for counter replacements that modify counters on one or more entering objects.
+/// The enclosing continuation owns the serialized parent so no entry or paired departure moves
+/// while a replacement-order choice is pending.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) enum EntryCounterReplacementResume {
+    Single {
+        stack: ParkedStackResolution,
+        event: Box<BattlefieldEntryEvent>,
+        completion: BattlefieldEntryCompletion,
+    },
+    Batch {
+        stack: Option<ParkedStackResolution>,
+        batch: SimultaneousEntryBatch,
+        source_generations: Vec<(ObjectId, u64, Zone)>,
+    },
+}
+
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ActivationCostCommandKind {
+    Direct,
+    Staged,
+}
+
+/// Accepted activation identity retained while counter placement costs wait for replacement order.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ActivationCostReplay {
+    pub(crate) actor: PlayerId,
+    pub(crate) source_object_id: ObjectId,
+    pub(crate) source_zone_change_generation: u64,
+    pub(crate) command_kind: ActivationCostCommandKind,
+    pub(crate) command_bytes: Vec<u8>,
+    pub(crate) transaction_id: Option<u64>,
+    pub(crate) expected_revision: Option<u64>,
+    pub(crate) counter_debits: Vec<ActivationCostCounterDebit>,
+}
+
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ActivationCostCounterDebit {
+    pub(crate) debit_index: usize,
+    pub(crate) object_id: ObjectId,
+    pub(crate) zone_change_generation: u64,
+    pub(crate) counter_kind: CounterKind,
+    pub(crate) requested_count: u32,
+}
+
 impl ResolutionContinuation {
     pub fn stack(&self) -> Option<&ParkedStackResolution> {
         match self {
@@ -1647,6 +1759,11 @@ impl ResolutionContinuation {
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::SpecialCast { stack, .. } => Some(stack),
+            Self::CounterReplacement { stack, .. } => stack.as_ref(),
+            Self::EntryCounterReplacement { resume } => match resume.as_ref() {
+                EntryCounterReplacementResume::Single { stack, .. } => Some(stack),
+                EntryCounterReplacementResume::Batch { stack, .. } => stack.as_ref(),
+            },
             Self::AuraReturn { stack, .. }
             | Self::SimultaneousEntryOrder { stack, .. }
             | Self::MassSacrificeGraveyardOrder { stack, .. } => stack.as_ref(),
@@ -1705,6 +1822,11 @@ impl ResolutionContinuation {
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::SpecialCast { stack, .. } => Some(stack),
+            Self::CounterReplacement { stack, .. } => stack.as_mut(),
+            Self::EntryCounterReplacement { resume } => match resume.as_mut() {
+                EntryCounterReplacementResume::Single { stack, .. } => Some(stack),
+                EntryCounterReplacementResume::Batch { stack, .. } => stack.as_mut(),
+            },
             Self::AuraReturn { stack, .. }
             | Self::SimultaneousEntryOrder { stack, .. }
             | Self::MassSacrificeGraveyardOrder { stack, .. } => stack.as_mut(),
@@ -1913,6 +2035,28 @@ pub enum EntryReplacementEffectId {
     },
 }
 
+/// Provenance for one instruction that gives counters to a permanent as it enters.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) enum EntryCounterSource {
+    EntryReplacement(EntryReplacementEffectId),
+    ResolutionEffect {
+        stack_object_id: ObjectId,
+        stack_zone_change_generation: u64,
+        effect_index: u32,
+    },
+}
+
+/// One independent counter-placement instruction on a proposed battlefield entry. Keeping the
+/// bag, actor, and source separate preserves replacement order between same-kind instructions.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct EntryCounterPlacement {
+    pub(crate) actor: PlayerId,
+    pub(crate) counters: BTreeMap<CounterKind, u32>,
+    pub(crate) source: EntryCounterSource,
+    pub(crate) read_ahead_entry: bool,
+    pub(crate) applied_replacements: Vec<crate::engine::replacement::CounterReplacementInstance>,
+}
+
 /// Actual WUBRG mana debited for one cast. Colorless mana, life and nonmana payments
 /// do not contribute. The receipt lives on the cast and its proposed entry, never a permanent.
 #[derive(serde::Serialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -1972,6 +2116,11 @@ pub struct BattlefieldEntryEvent {
     pub(crate) chosen_creature_types: Vec<ChosenCreatureTypeRecord>,
     /// Counter state accumulated by entry replacement effects before zone commitment.
     pub entry_counters: BTreeMap<CounterKind, u32>,
+    /// Independent entry-counter instructions in application order. `entry_counters` remains the
+    /// aggregate projection used by early characteristic evaluation until commit.
+    pub(crate) entry_counter_placements: Vec<EntryCounterPlacement>,
+    /// True once the shared replacement planner has finalized every entry-counter instruction.
+    pub(crate) entry_counter_replacements_resolved: bool,
     /// CR 611.2e continuous effects created by the instruction putting this object onto the
     /// battlefield. They apply simultaneously with entry and persist for this incarnation.
     pub entry_modifiers: Vec<ResolvingPermanentModifier>,

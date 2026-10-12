@@ -1,0 +1,92 @@
+{
+  "format_version": 1,
+  "oracle_id": "c066f921-e349-45d1-8ec3-0955d10bbf19",
+  "spans": [
+    {
+      "face_id": "laezel_vlaakiths_champion",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "laezel_vlaakiths_champion",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/keywords/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AddOneCounterOfEachKindToSelfOrControlledCreaturePlaneswalker",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "Keyword::ChooseABackground",
+      "typed_path": "/faces/0/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_laezel::laezel_registers_exact_identity_and_counter_replacement",
+      "covers": "exact Oracle identity, printed characteristics, and complete one-line ability mapping"
+    },
+    {
+      "test": "scenario deck_coverage_laezel::laezel_and_doubling_season_order_replacements_for_entry_counters_before_commit",
+      "covers": "entrant counter replacements are ordered before battlefield entry commits"
+    },
+    {
+      "test": "scenario deck_coverage_laezel::laezel_adds_one_counter_to_a_positive_loyalty_cost",
+      "covers": "one counter is added to a positive loyalty cost"
+    },
+    {
+      "test": "scenario deck_coverage_laezel::laezel_stages_positive_loyalty_cost_until_counter_replacements_finish",
+      "covers": "loyalty payment and activation remain pending until counter replacements finish"
+    },
+    {
+      "test": "scenario deck_coverage_laezel::laezel_and_doubling_season_order_effect_counter_replacements_before_commit",
+      "covers": "effect counter replacements are ordered before counter and trigger commit"
+    },
+    {
+      "test": "scenario deck_coverage_laezel::laezel_and_doubling_season_order_prevention_counters_before_damage_commit",
+      "covers": "prevention additional counters and damage results remain staged while nested replacements are ordered"
+    },
+    {
+      "test": "scenario deck_coverage_laezel::laezel_and_doubling_season_order_earthbend_counters_before_commit",
+      "covers": "Earthbend counter order preserves the chosen land type, delayed return, and resolving instruction"
+    },
+    {
+      "test": "scenario deck_coverage_laezel::laezel_and_doubling_season_order_explore_counters_before_the_library_choice",
+      "covers": "Explore counter replacements resolve before the exact revealed library card choice"
+    },
+    {
+      "test": "scenario deck_coverage_laezel::laezel_and_doubling_season_order_blight_effect_counters_before_commit",
+      "covers": "Blight effect counters remain staged until replacements finish"
+    },
+    {
+      "test": "scenario deck_coverage_laezel::laezel_stages_blight_activation_cost_until_replacement_order_finishes",
+      "covers": "Blight activation debit, tap, and stack ability remain atomic until cost counter replacements finish"
+    },
+    {
+      "test": "scenario deck_coverage_laezel::laezel_and_doubling_season_apply_each_order_to_two_counter_effect",
+      "covers": "both legal orders for two same-kind effect events produce their distinct per-event results"
+    },
+    {
+      "test": "scenario deck_coverage_laezel::laezel_and_doubling_season_mass_counter_choices_commit_as_one_batch",
+      "covers": "multiple permanent counter recipients stay atomic while replacement choices are pending"
+    },
+    {
+      "test": "scenario deck_coverage_laezel::laezel_and_proliferate_use_the_putting_player_for_permanent_and_player_counters",
+      "covers": "Lae'zel applies to another player's proliferate event only when the putting player controls her"
+    },
+    {
+      "test": "scenario deck_coverage_laezel::laezel_and_doubling_season_stage_mixed_proliferate_recipients_together",
+      "covers": "mixed permanent and player counter recipients commit together after replacement ordering"
+    },
+    {
+      "test": "scenario deck_coverage_laezel::laezel_proliferate_batch_hides_face_down_recipient_identity_on_wire",
+      "covers": "serialized public proliferate events preserve face-down recipient privacy"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

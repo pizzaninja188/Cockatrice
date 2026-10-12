@@ -255,12 +255,17 @@ impl GameEngine {
         self.complete_entry_timestamp_order(batch, stack, events)
     }
 
-    fn complete_entry_timestamp_order(
+    pub(super) fn complete_entry_timestamp_order(
         &mut self,
         batch: SimultaneousEntryBatch,
         stack: Option<ParkedStackResolution>,
         mut events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
+        let Some(batch) =
+            self.begin_entry_counter_placements_for_batch(batch, stack.clone(), &mut events)?
+        else {
+            return Ok(events::finish_with_events(self, events));
+        };
         match batch {
             SimultaneousEntryBatch::Zone(batch) => {
                 let stack = stack.ok_or(EngineError::Illegal("zone entry has no stack"))?;

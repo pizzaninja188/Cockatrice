@@ -75,6 +75,8 @@ impl GameEngine {
                     chosen_opponents: Vec::new(),
                     chosen_creature_types: Vec::new(),
                     entry_counters: BTreeMap::new(),
+                    entry_counter_placements: Vec::new(),
+                    entry_counter_replacements_resolved: false,
                     entry_modifiers: Vec::new(),
                     entry_cause: None,
                     attached_to: None,
@@ -85,8 +87,9 @@ impl GameEngine {
                 },
                 completion,
                 &mut events,
-            ) {
+            )? {
                 super::replacement::BattlefieldEntryProgress::Parked => {
+                    self.transfer_entry_choice_resume(&stack);
                     return Ok(finish_with_events(self, events));
                 }
                 super::replacement::BattlefieldEntryProgress::Ready(entry) => {
@@ -493,6 +496,8 @@ impl GameEngine {
                         chosen_opponents: Vec::new(),
                         chosen_creature_types: Vec::new(),
                         entry_counters: BTreeMap::new(),
+                        entry_counter_placements: Vec::new(),
+                        entry_counter_replacements_resolved: false,
                         entry_modifiers: Vec::new(),
                         entry_cause: None,
                         attached_to: None,
@@ -508,8 +513,9 @@ impl GameEngine {
                         from_zone: Zone::Graveyard,
                     },
                     &mut events,
-                ) {
+                )? {
                     super::replacement::BattlefieldEntryProgress::Parked => {
+                        self.transfer_entry_choice_resume(&stack);
                         return Ok(finish_with_events(self, events));
                     }
                     super::replacement::BattlefieldEntryProgress::Ready(entry) => {
@@ -816,6 +822,8 @@ impl GameEngine {
                     chosen_opponents: Vec::new(),
                     chosen_creature_types: Vec::new(),
                     entry_counters: BTreeMap::new(),
+                entry_counter_placements: Vec::new(),
+                entry_counter_replacements_resolved: false,
                     entry_modifiers: Vec::new(),
                     entry_cause: None,
                     attached_to: None,
@@ -1171,6 +1179,8 @@ impl GameEngine {
                                 chosen_opponents: Vec::new(),
                                 chosen_creature_types: Vec::new(),
                                 entry_counters: BTreeMap::new(),
+                                entry_counter_placements: Vec::new(),
+                                entry_counter_replacements_resolved: false,
                                 entry_modifiers: Vec::new(),
                                 entry_cause: None,
                                 attached_to: None,

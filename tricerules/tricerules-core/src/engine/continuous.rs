@@ -16,8 +16,8 @@ mod land_mana_tests;
 /// The rules event that causes a counter placement. Ordinary effect placements participate in
 /// the CR 614.16 replacement. Entry counters are replaced on their finalized entry event before
 /// entering this funnel; costs, turn-based actions, and damage results do not participate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum CounterPlacementOrigin {
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CounterPlacementOrigin {
     Effect,
     Cost,
     TurnBased,
@@ -284,69 +284,6 @@ impl GameEngine {
             .is_some()
     }
 
-    /// Commit a preflighted one-counter move without an intervening rules transition. It returns
-    /// only the destination placement event; the caller fires placement triggers after the move
-    /// is complete. Siege's existing last-defense trigger is staged only after placement succeeds,
-    /// so a failed placement leaves neither a counter change nor a staged trigger behind.
-    pub(super) fn move_one_counter_between(
-        &mut self,
-        source: ObjectId,
-        destination: ObjectId,
-        kind: CounterKind,
-    ) -> Option<GameEvent> {
-        let before = self.counter_move_preflight(source, destination, kind)?;
-        let source_counters = self.state.objects.get(&source)?.counters.clone();
-        let source_timestamps = self.state.objects.get(&source)?.counter_timestamps.clone();
-        let destination_counters = self.state.objects.get(&destination)?.counters.clone();
-        let destination_timestamps = self
-            .state
-            .objects
-            .get(&destination)?
-            .counter_timestamps
-            .clone();
-
-        self.state
-            .objects
-            .get_mut(&source)
-            .expect("counter-move source was preflighted")
-            .set_counter(kind, before - 1);
-        let Some(event) = self.place_counters_with_event(
-            destination,
-            kind,
-            1,
-            false,
-            CounterPlacementOrigin::Effect,
-        ) else {
-            // Placement should be guaranteed by the post-removal preflight. Keep CR 122.5
-            // atomic if a future placement path adds another failure point.
-            let source_object = self
-                .state
-                .objects
-                .get_mut(&source)
-                .expect("counter-move source remains present during commit");
-            source_object.counters = source_counters;
-            source_object.counter_timestamps = source_timestamps;
-            let destination_object = self
-                .state
-                .objects
-                .get_mut(&destination)
-                .expect("counter-move destination remains present during commit");
-            destination_object.counters = destination_counters;
-            destination_object.counter_timestamps = destination_timestamps;
-            return None;
-        };
-
-        if kind == CounterKind::Defense
-            && before == 1
-            && self.characteristics(source).is_some_and(|characteristics| {
-                characteristics.has_type("Battle") && characteristics.has_type("Siege")
-            })
-        {
-            self.stage_siege_defeat_trigger(source);
-        }
-        Some(event)
-    }
-
     /// Tatterkite / Blossombind: consult live copied abilities and attachment membership.
     /// This also runs after an entrant's face is established, before its entry counters.
     pub(super) fn can_receive_counters(&self, target: ObjectId) -> bool {
@@ -375,9 +312,27 @@ impl GameEngine {
         })
     }
 
-    /// The sole gameplay counter-placement funnel. Removal and fixture construction are separate.
+    /// Synchronous helper retained for engine unit fixtures. Gameplay counter placement resolves
+    /// through the shared CR 616 proposal planner before committing state.
+    #[cfg(test)]
     pub(super) fn place_counters(
         &mut self,
+        target: ObjectId,
+        kind: CounterKind,
+        count: u32,
+        origin: CounterPlacementOrigin,
+    ) -> u32 {
+        let actor = self.controller_of(target).unwrap_or_default();
+        self.place_counters_as(actor, target, kind, count, origin)
+    }
+
+    /// Place counters for the player named by the placement instruction. Keeping that actor
+    /// explicit is required by Lae'zel: the recipient's controller is not necessarily the player
+    /// performing the placement.
+    #[cfg(test)]
+    pub(super) fn place_counters_as(
+        &mut self,
+        actor: PlayerId,
         target: ObjectId,
         kind: CounterKind,
         count: u32,
@@ -386,6 +341,7 @@ impl GameEngine {
         if count == 0 || !self.can_receive_counters(target) {
             return 0;
         }
+        let count = self.laezel_replaced_count(actor, target, count);
         let count = self.ordinary_counter_placement_replaced_count(target, count, origin);
         let timestamp = self.state.command_index;
         self.state
@@ -394,6 +350,38 @@ impl GameEngine {
             .expect("validated counter recipient")
             .add_counters(kind, count, timestamp);
         count
+    }
+
+    #[cfg(test)]
+    fn laezel_replaced_count(&self, actor: PlayerId, target: ObjectId, count: u32) -> u32 {
+        if count == 0
+            || !self.characteristics(target).is_some_and(|characteristics| {
+                characteristics.controller == actor
+                    && (characteristics.is_creature() || characteristics.has_type("Planeswalker"))
+            })
+        {
+            return count;
+        }
+        let mut sources: Vec<_> = self
+            .state
+            .objects
+            .values()
+            .filter(|object| object.zone == Zone::Battlefield && object.controller == actor)
+            .map(|object| object.id)
+            .collect();
+        sources.sort_unstable();
+
+        let additional = sources
+            .into_iter()
+            .flat_map(|source| self.active_static_ability_definitions(source))
+            .filter(|ability| {
+                matches!(
+                    ability,
+                    StaticAbilityDef::AddOneCounterOfEachKindToSelfOrControlledCreaturePlaneswalker
+                )
+            })
+            .count() as u32;
+        count.saturating_add(additional)
     }
 
     /// CR 614.16: apply the ordinary counter replacement only to counters placed by effects on a
@@ -475,43 +463,7 @@ impl GameEngine {
         (0..instances).fold(count, |count, _| count.saturating_mul(2))
     }
 
-    /// Apply counter doublers to completed entry events from one source snapshot. Call this only
-    /// after entry choices finish and before committing any entrant; newly entering sources then
-    /// cannot affect themselves or later siblings in the same simultaneous event.
-    pub(super) fn replace_entry_counter_events<'a>(
-        &self,
-        events: impl IntoIterator<Item = &'a mut BattlefieldEntryEvent>,
-    ) {
-        let events = events.into_iter().collect::<Vec<_>>();
-        let mut instances_by_controller = BTreeMap::new();
-        for event in &events {
-            instances_by_controller
-                .entry(event.destination_controller)
-                .or_insert_with(|| {
-                    self.active_static_replacement_instances_for_controller(
-                        event.destination_controller,
-                        |ability| {
-                            matches!(
-                                ability,
-                                StaticAbilityDef::DoubleEffectCountersPlacedOnPermanentsYouControl
-                            )
-                        },
-                    )
-                });
-        }
-        for event in events {
-            let instances = instances_by_controller
-                .get(&event.destination_controller)
-                .copied()
-                .unwrap_or_default();
-            for count in event.entry_counters.values_mut() {
-                for _ in 0..instances {
-                    *count = count.saturating_mul(2);
-                }
-            }
-        }
-    }
-
+    #[cfg(test)]
     pub(super) fn place_counters_with_event(
         &mut self,
         target: ObjectId,
@@ -525,6 +477,51 @@ impl GameEngine {
         if placed == 0 {
             return None;
         }
+        let after = self.state.objects.get(&target)?.counter_count(kind);
+        Some(GameEvent::CountersPlaced {
+            object: TriggerObjectRef {
+                object_id: target,
+                zone_change_generation: self
+                    .state
+                    .zone_change_generation
+                    .get(&target)
+                    .copied()
+                    .unwrap_or(0),
+                controller_at_event: self.controller_of(target)?,
+            },
+            kind,
+            before,
+            after,
+            read_ahead_entry,
+        })
+    }
+
+    /// Commit a counter instruction whose replacement effects were already applied by the
+    /// shared counter-placement planner. Entry batches use this only after every replacement
+    /// choice for the parent event has finished, so applying Lae'zel or Doubling Season here
+    /// again would duplicate the replacement.
+    pub(super) fn commit_prepared_entry_counters_with_event(
+        &mut self,
+        target: ObjectId,
+        kind: CounterKind,
+        count: u32,
+        read_ahead_entry: bool,
+    ) -> Option<GameEvent> {
+        if count == 0
+            || !self
+                .state
+                .objects
+                .get(&target)
+                .is_some_and(|object| object.zone == Zone::Battlefield)
+        {
+            return None;
+        }
+        let before = self.state.objects.get(&target)?.counter_count(kind);
+        let timestamp = self.state.command_index;
+        self.state
+            .objects
+            .get_mut(&target)?
+            .add_counters(kind, count, timestamp);
         let after = self.state.objects.get(&target)?.counter_count(kind);
         Some(GameEvent::CountersPlaced {
             object: TriggerObjectRef {
@@ -874,6 +871,7 @@ impl GameEngine {
                 | StaticAbilityDef::LimitAttackers { .. }
                 | StaticAbilityDef::AttackTax { .. }
                 | StaticAbilityDef::DoubleEffectCountersPlacedOnPermanentsYouControl
+                | StaticAbilityDef::AddOneCounterOfEachKindToSelfOrControlledCreaturePlaneswalker
                 | StaticAbilityDef::DoubleTokensCreatedUnderYourControl
                 | StaticAbilityDef::MultiplyManaFromTappedPermanents { .. } => {
                     // Queried at the relevant event; no independent effect record is needed.
@@ -3175,8 +3173,8 @@ mod issue_499_effect_counter_replacement_tests {
         .expect("typed replacement fixture");
 
         let registry: &'static tricerules_card_model::CardRegistry = Box::leak(Box::new(registry));
-        // Entry counters use replace_entry_counter_events after entry choices finalize; this
-        // low-level placement funnel must leave Entry unchanged, like costs and turn-based actions.
+        // Entry counters use the parent entry-event planner after entry choices finalize; this
+        // low-level fixture funnel must leave Entry unchanged, like costs and turn-based actions.
         for (index, (origin, expected)) in [
             (CounterPlacementOrigin::Effect, 2),
             (CounterPlacementOrigin::Cost, 1),

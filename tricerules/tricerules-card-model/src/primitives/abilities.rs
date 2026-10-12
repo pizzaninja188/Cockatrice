@@ -2405,6 +2405,11 @@ pub enum StaticAbilityDef {
     /// Entry-counter replacement is applied to the completed entry event before commit; this
     /// variant's ordinary placement path excludes paid costs, turn-based actions, and damage.
     DoubleEffectCountersPlacedOnPermanentsYouControl,
+    /// Lae'zel's exact CR 614 replacement: when this ability's controller puts counters on
+    /// themself or a creature/planeswalker they control, add one of each represented kind.
+    /// Keep this specialized rather than introducing configurable replacement parameters for
+    /// a single Oracle effect; it shares the event/order machinery with Doubling Season.
+    AddOneCounterOfEachKindToSelfOrControlledCreaturePlaneswalker,
     /// CR 614.16: double tokens created under this permanent's controller by an effect.
     /// Doubling Season and Parallel Lives share this replacement behavior.
     DoubleTokensCreatedUnderYourControl,

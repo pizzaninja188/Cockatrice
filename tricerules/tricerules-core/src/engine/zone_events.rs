@@ -223,7 +223,7 @@ impl GameEngine {
                 entry,
                 BattlefieldEntryCompletion::ZoneEntryBatch(Box::new(batch.clone())),
                 events,
-            ) {
+            )? {
                 replacement::BattlefieldEntryProgress::Parked => {
                     self.transfer_entry_choice_resume(&stack);
                     return Ok(None);
@@ -242,6 +242,17 @@ impl GameEngine {
         else {
             return Ok(None);
         };
+        let Some(batch) = self.begin_entry_counter_placements_for_batch(
+            SimultaneousEntryBatch::Zone(batch),
+            Some(stack.clone()),
+            events,
+        )?
+        else {
+            return Ok(None);
+        };
+        let SimultaneousEntryBatch::Zone(batch) = batch else {
+            return Err(EngineError::Illegal("zone entry batch changed type"));
+        };
         self.commit_zone_entry_batch_ready(stack, batch, events)
             .map(Some)
     }
@@ -255,6 +266,13 @@ impl GameEngine {
         // A looked remainder is frozen too: reject before committing even the first entrant.
         if !self.zone_entry_batch_current(&batch) {
             return Err(EngineError::Illegal("zone entry cohort became stale"));
+        }
+        if batch.ready.iter().any(|entry| {
+            !entry.entry_counter_placements.is_empty() && !entry.entry_counter_replacements_resolved
+        }) {
+            return Err(EngineError::Illegal(
+                "zone-entry counters were not processed by the replacement planner",
+            ));
         }
         self.prune_invalid_zone_entry_auras(&mut batch)?;
         let mut completion = batch.completion;
@@ -311,9 +329,6 @@ impl GameEngine {
                 }
             }
         }
-        // The paired departure, when present, is now complete. Freeze entry-counter replacement
-        // against that battlefield before the first member of the simultaneous batch enters.
-        self.replace_entry_counter_events(batch.ready.iter_mut());
         for entry in batch.ready {
             let oid = entry.object_id;
             let chosen_x = entry.chosen_x;
@@ -871,6 +886,8 @@ mod timestamp_order_tests {
             chosen_opponents: Vec::new(),
             chosen_creature_types: Vec::new(),
             entry_counters: Default::default(),
+            entry_counter_placements: Vec::new(),
+            entry_counter_replacements_resolved: false,
             entry_modifiers: vec![],
             entry_cause: None,
             attached_to: None,

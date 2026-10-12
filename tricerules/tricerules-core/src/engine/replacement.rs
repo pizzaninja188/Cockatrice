@@ -15,9 +15,15 @@ use super::*;
 #[cfg(test)]
 mod entry_layers_tests;
 use crate::state::{
-    ChosenCreatureTypeRecord, ChosenOpponentRecord, LinkedChoiceKey, PendingAuraEntryRecipient,
-    ReplacementSourcePresentation,
+    ChosenCreatureTypeRecord, ChosenOpponentRecord, CounterPlacementReceipt, EntryCounterPlacement,
+    EntryCounterSource, LinkedChoiceKey, PendingAuraEntryRecipient, ReplacementSourcePresentation,
 };
+
+type CounterPlacementCandidates = Vec<(CounterReplacementInstance, String)>;
+type PreparedCounterPlacementBatch = (
+    PendingCounterPlacementBatch,
+    Option<CounterPlacementCandidates>,
+);
 
 fn materialize_entry_modifiers(
     event: &BattlefieldEntryEvent,
@@ -87,6 +93,36 @@ fn accumulate_entry_counters(
     *total = total.saturating_add(count);
 }
 
+pub(super) fn append_entry_counter_placement(
+    event: &mut BattlefieldEntryEvent,
+    actor: PlayerId,
+    counters: impl IntoIterator<Item = (CounterKind, u32)>,
+    source: EntryCounterSource,
+    read_ahead_entry: bool,
+) {
+    let mut counter_bag = BTreeMap::new();
+    for (kind, count) in counters {
+        if count > 0 {
+            let total = counter_bag.entry(kind).or_insert(0u32);
+            *total = total.saturating_add(count);
+        }
+    }
+    if counter_bag.is_empty() {
+        return;
+    }
+    for (&kind, &count) in &counter_bag {
+        accumulate_entry_counters(&mut event.entry_counters, kind, count);
+    }
+    event.entry_counter_replacements_resolved = false;
+    event.entry_counter_placements.push(EntryCounterPlacement {
+        actor,
+        counters: counter_bag,
+        source,
+        read_ahead_entry,
+        applied_replacements: Vec::new(),
+    });
+}
+
 fn saga_chapter_label(mut chapter: u32) -> String {
     let mut label = String::new();
     for (value, numeral) in [
@@ -119,6 +155,88 @@ pub(crate) enum PendingReplacementEvent {
     Draw(Box<super::draw::PendingDrawTransaction>),
     Damage(super::damage::PendingDamageBatch),
     BattlefieldEntry(Box<PendingBattlefieldEntry>),
+    Counters(Box<PendingCounterPlacementBatch>),
+}
+
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CounterReplacementKind {
+    Laezel,
+    DoublingSeason,
+}
+
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CounterReplacementInstance {
+    pub(crate) source_object_id: ObjectId,
+    pub(crate) source_zone_change_generation: u64,
+    pub(crate) ability_id: String,
+    pub(crate) kind: CounterReplacementKind,
+}
+
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CounterPlacementRecipient {
+    Object {
+        object_id: ObjectId,
+        zone_change_generation: u64,
+    },
+    EnteringObject {
+        object_id: ObjectId,
+        zone_change_generation: u64,
+    },
+    Player {
+        player_id: PlayerId,
+    },
+}
+
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct EntryCounterReplacementContext {
+    pub(crate) placement_index: usize,
+    pub(crate) destination_controller: PlayerId,
+    pub(crate) recipient_is_creature_or_planeswalker: bool,
+    pub(crate) recipient_can_receive_counters: bool,
+    pub(crate) source_zone: Zone,
+    pub(crate) source_zone_change_generation: u64,
+    pub(crate) excluded_replacement_sources: Vec<(ObjectId, u64)>,
+}
+
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CounterMoveReplacementContext {
+    pub(crate) source_object_id: ObjectId,
+    pub(crate) source_zone_change_generation: u64,
+    pub(crate) kind: CounterKind,
+}
+
+/// One recipient-scoped counter event. Replacement ordering changes this proposal without
+/// committing counters; the whole batch is committed only after every required choice is made.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct ProposedCounterPlacement {
+    pub(crate) recipient: CounterPlacementRecipient,
+    pub(crate) actor: PlayerId,
+    /// Requested values before any replacement effect changes this event.
+    pub(crate) original_counters: BTreeMap<CounterKind, u32>,
+    pub(crate) counters: BTreeMap<CounterKind, u32>,
+    pub(crate) origin: super::continuous::CounterPlacementOrigin,
+    pub(crate) entry_source: Option<EntryCounterSource>,
+    pub(crate) entry_context: Option<EntryCounterReplacementContext>,
+    pub(crate) counter_move_context: Option<CounterMoveReplacementContext>,
+    /// Cost debit position, retained to bind a resolved event to its exact payment instruction.
+    pub(crate) cost_debit_index: Option<usize>,
+    /// CR 614.16 can make Doubling Season apply to counters created by a preceding replacement.
+    pub(crate) effect_created_counters: bool,
+    pub(crate) applied_replacements: Vec<CounterReplacementInstance>,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct CounterPlacementApplication {
+    pub(crate) choice_id: u32,
+    pub(crate) event_index: usize,
+    pub(crate) replacement: CounterReplacementInstance,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingCounterPlacementBatch {
+    pub(crate) events: Vec<ProposedCounterPlacement>,
+    pub(crate) event_index: usize,
+    pub(crate) applications: Vec<CounterPlacementApplication>,
 }
 
 pub(super) enum BattlefieldEntryProgress {
@@ -129,15 +247,300 @@ pub(super) enum BattlefieldEntryProgress {
 }
 
 impl GameEngine {
-    fn replacement_object_display_name(
+    pub(super) fn proposed_object_counter_placement(
+        &self,
+        actor: PlayerId,
+        object_id: ObjectId,
+        counters: impl IntoIterator<Item = (CounterKind, u32)>,
+        origin: super::continuous::CounterPlacementOrigin,
+    ) -> Option<ProposedCounterPlacement> {
+        if !self.can_receive_counters(object_id)
+            || !self
+                .state
+                .objects
+                .get(&object_id)
+                .is_some_and(|object| object.zone == Zone::Battlefield)
+        {
+            return None;
+        }
+        let mut counter_bag: BTreeMap<CounterKind, u32> = BTreeMap::new();
+        for (kind, count) in counters {
+            if count > 0 {
+                let total = counter_bag.entry(kind).or_insert(0);
+                *total = (*total).saturating_add(count);
+            }
+        }
+        if counter_bag.is_empty() {
+            return None;
+        }
+        let original_counters = counter_bag.clone();
+        Some(ProposedCounterPlacement {
+            recipient: CounterPlacementRecipient::Object {
+                object_id,
+                zone_change_generation: self
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0),
+            },
+            actor,
+            original_counters,
+            counters: counter_bag,
+            origin,
+            entry_source: None,
+            entry_context: None,
+            counter_move_context: None,
+            cost_debit_index: None,
+            effect_created_counters: origin == super::continuous::CounterPlacementOrigin::Effect,
+            applied_replacements: Vec::new(),
+        })
+    }
+
+    pub(super) fn proposed_player_counter_placement(
+        &self,
+        actor: PlayerId,
+        player_id: PlayerId,
+        counters: impl IntoIterator<Item = (CounterKind, u32)>,
+        origin: super::continuous::CounterPlacementOrigin,
+    ) -> Option<ProposedCounterPlacement> {
+        if self
+            .state
+            .player_idx(player_id)
+            .is_none_or(|index| self.state.players[index].has_lost)
+        {
+            return None;
+        }
+        let mut counter_bag: BTreeMap<CounterKind, u32> = BTreeMap::new();
+        for (kind, count) in counters {
+            if count > 0 {
+                let total = counter_bag.entry(kind).or_insert(0);
+                *total = (*total).saturating_add(count);
+            }
+        }
+        if counter_bag.is_empty() {
+            return None;
+        }
+        let original_counters = counter_bag.clone();
+        Some(ProposedCounterPlacement {
+            recipient: CounterPlacementRecipient::Player { player_id },
+            actor,
+            original_counters,
+            counters: counter_bag,
+            origin,
+            entry_source: None,
+            entry_context: None,
+            counter_move_context: None,
+            cost_debit_index: None,
+            effect_created_counters: origin == super::continuous::CounterPlacementOrigin::Effect,
+            applied_replacements: Vec::new(),
+        })
+    }
+
+    fn entry_counter_recipient_can_receive(
+        &self,
+        object_id: ObjectId,
+        cohort: &[&BattlefieldEntryEvent],
+    ) -> bool {
+        for (&source_id, object) in &self.state.objects {
+            if object.zone != Zone::Battlefield
+                || !super::characteristics::printed_static_source_is_available(
+                    &self.state,
+                    self.registry,
+                    source_id,
+                )
+            {
+                continue;
+            }
+            for ability in self.active_static_ability_definitions(source_id) {
+                match ability {
+                    StaticAbilityDef::ProhibitCounters {
+                        affected: tricerules_card_model::primitives::CounterPlacementAffected::Self_,
+                    } if source_id == object_id => return false,
+                    StaticAbilityDef::ProhibitCounters {
+                        affected: tricerules_card_model::primitives::CounterPlacementAffected::AttachedPermanent,
+                    } if object.attached_to == Some(AttachmentRecipient::Object(object_id)) => {
+                        return false;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        for entry in cohort {
+            if entry.object_id == object_id {
+                if self
+                    .state
+                    .objects
+                    .get(&entry.object_id)
+                    .is_some_and(|object| object.face_down)
+                {
+                    continue;
+                }
+                if self.battlefield_entry_face(entry).is_some_and(|face| {
+                    face.static_abilities.iter().any(|ability| {
+                        matches!(
+                            &ability.definition,
+                            StaticAbilityDef::ProhibitCounters {
+                                affected: tricerules_card_model::primitives::CounterPlacementAffected::Self_
+                            }
+                        )
+                    })
+                }) {
+                    return false;
+                }
+            } else if entry.attached_to == Some(AttachmentRecipient::Object(object_id))
+                && !self
+                    .state
+                    .objects
+                    .get(&entry.object_id)
+                    .is_some_and(|object| object.face_down)
+                && self.battlefield_entry_face(entry).is_some_and(|face| {
+                    face.static_abilities.iter().any(|ability| {
+                        matches!(
+                            &ability.definition,
+                            StaticAbilityDef::ProhibitCounters {
+                                affected: tricerules_card_model::primitives::CounterPlacementAffected::AttachedPermanent
+                            }
+                        )
+                    })
+                })
+            {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn proposed_entry_counter_placements(
+        &self,
+        entries: &[&BattlefieldEntryEvent],
+        excluded_replacement_sources: &[(ObjectId, u64)],
+    ) -> Vec<ProposedCounterPlacement> {
+        let mut proposals = Vec::new();
+        for event in entries {
+            if event.entry_counter_replacements_resolved {
+                continue;
+            }
+            let Some(object) = self.state.objects.get(&event.object_id) else {
+                continue;
+            };
+            let generation = self
+                .state
+                .zone_change_generation
+                .get(&event.object_id)
+                .copied()
+                .unwrap_or(0);
+            let projected = self.battlefield_entry_characteristics_through_layer_5(event);
+            for (placement_index, placement) in event.entry_counter_placements.iter().enumerate() {
+                let original_counters = placement.counters.clone();
+                if original_counters.is_empty() {
+                    continue;
+                }
+                proposals.push(ProposedCounterPlacement {
+                    recipient: CounterPlacementRecipient::EnteringObject {
+                        object_id: event.object_id,
+                        zone_change_generation: generation,
+                    },
+                    actor: placement.actor,
+                    original_counters: original_counters.clone(),
+                    counters: original_counters,
+                    origin: super::continuous::CounterPlacementOrigin::Entry,
+                    entry_source: Some(placement.source.clone()),
+                    entry_context: Some(EntryCounterReplacementContext {
+                        placement_index,
+                        destination_controller: event.destination_controller,
+                        recipient_is_creature_or_planeswalker: projected.as_ref().is_some_and(
+                            |characteristics| {
+                                characteristics.is_creature()
+                                    || characteristics.has_type("Planeswalker")
+                            },
+                        ),
+                        recipient_can_receive_counters: self
+                            .entry_counter_recipient_can_receive(event.object_id, entries),
+                        source_zone: object.zone,
+                        source_zone_change_generation: generation,
+                        excluded_replacement_sources: excluded_replacement_sources.to_vec(),
+                    }),
+                    counter_move_context: None,
+                    cost_debit_index: None,
+                    effect_created_counters: false,
+                    applied_replacements: placement.applied_replacements.clone(),
+                });
+            }
+        }
+        proposals
+    }
+
+    fn apply_entry_counter_placement_results(
+        event: &mut BattlefieldEntryEvent,
+        proposals: &[ProposedCounterPlacement],
+    ) -> Result<(), EngineError> {
+        for proposal in proposals {
+            let (object_id, generation) = match &proposal.recipient {
+                CounterPlacementRecipient::EnteringObject {
+                    object_id,
+                    zone_change_generation,
+                } => (*object_id, *zone_change_generation),
+                _ => return Err(EngineError::Illegal("entry counter recipient changed")),
+            };
+            let Some(context) = proposal.entry_context.as_ref() else {
+                return Err(EngineError::Illegal("entry counter context is missing"));
+            };
+            if object_id != event.object_id {
+                continue;
+            }
+            if context.source_zone_change_generation != generation {
+                return Err(EngineError::Illegal("entry counter generation changed"));
+            }
+            let Some(placement) = event
+                .entry_counter_placements
+                .get_mut(context.placement_index)
+            else {
+                return Err(EngineError::Illegal("entry counter instruction is stale"));
+            };
+            placement.counters = if context.recipient_can_receive_counters {
+                proposal.counters.clone()
+            } else {
+                BTreeMap::new()
+            };
+            placement.applied_replacements = proposal.applied_replacements.clone();
+        }
+        event.entry_counters.clear();
+        for placement in &event.entry_counter_placements {
+            for (&kind, &count) in &placement.counters {
+                accumulate_entry_counters(&mut event.entry_counters, kind, count);
+            }
+        }
+        event.entry_counter_replacements_resolved = true;
+        Ok(())
+    }
+
+    pub(super) fn replacement_object_display_name(
         &self,
         object_id: ObjectId,
         entry_face: Option<usize>,
     ) -> String {
+        let Some(object) = self.state.objects.get(&object_id) else {
+            return format!("[object {object_id}]");
+        };
+        if object.face_down {
+            return match object.zone {
+                Zone::Battlefield => "Face-down creature",
+                Zone::Exile => "Face-down exiled card",
+                Zone::Stack => "Face-down spell",
+                _ => "Face-down object",
+            }
+            .to_string();
+        }
+        match object.zone {
+            Zone::Hand => return "a card in a hand".to_string(),
+            Zone::Library => return "a card in a library".to_string(),
+            _ => {}
+        }
         let display_name =
             self.effective_card_identity(object_id)
                 .and_then(|(card_id, face_index)| {
-                    let object = self.state.objects.get(&object_id)?;
                     let face_index =
                         if object.copiable_values.is_some() || object.token_origin.is_some() {
                             face_index
@@ -173,6 +576,1852 @@ impl GameEngine {
                 .copied()
                 .unwrap_or(0),
         }
+    }
+
+    /// Resolve a parent batch of ordinary counter events. The return value is `None` when the
+    /// affected player must choose a replacement order; no counter is committed in that case.
+    pub(super) fn begin_counter_placement_batch(
+        &mut self,
+        mut events: Vec<ProposedCounterPlacement>,
+        stack: ParkedStackResolution,
+        completion: crate::state::CounterPlacementCompletion,
+        out: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<Option<Vec<CounterPlacementReceipt>>, EngineError> {
+        events.sort_by_key(|event| {
+            let affected = match &event.recipient {
+                CounterPlacementRecipient::Object { object_id, .. } => {
+                    self.controller_of(*object_id)
+                }
+                CounterPlacementRecipient::EnteringObject { .. } => event
+                    .entry_context
+                    .as_ref()
+                    .map(|context| context.destination_controller),
+                CounterPlacementRecipient::Player { player_id } => Some(*player_id),
+            };
+            (affected
+                .map(|player| self.state.apnap_rank(player))
+                .unwrap_or(usize::MAX),)
+        });
+        let (batch, candidates) = self.prepare_counter_placement_batch(events)?;
+        match candidates {
+            Some(candidates) => {
+                self.park_counter_placement_choice(batch, candidates, Some(stack), completion, out);
+                Ok(None)
+            }
+            None => self
+                .commit_counter_placement_batch(&batch.events, &completion, out)
+                .map(Some),
+        }
+    }
+
+    /// Resolve a turn-based parent counter action that has no stack item to resume. The only
+    /// current caller is the simultaneous Saga lore action.
+    pub(super) fn begin_unstacked_counter_placement_batch(
+        &mut self,
+        mut events: Vec<ProposedCounterPlacement>,
+        completion: crate::state::CounterPlacementCompletion,
+        out: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        if !matches!(
+            completion,
+            crate::state::CounterPlacementCompletion::SagaLore { .. }
+        ) {
+            return Err(EngineError::Illegal(
+                "unstacked counter batches require a turn-based completion",
+            ));
+        }
+        events.sort_by_key(|event| {
+            let affected = match &event.recipient {
+                CounterPlacementRecipient::Object { object_id, .. } => {
+                    self.controller_of(*object_id)
+                }
+                CounterPlacementRecipient::EnteringObject { .. } => event
+                    .entry_context
+                    .as_ref()
+                    .map(|context| context.destination_controller),
+                CounterPlacementRecipient::Player { player_id } => Some(*player_id),
+            };
+            (affected
+                .map(|player| self.state.apnap_rank(player))
+                .unwrap_or(usize::MAX),)
+        });
+        let (batch, candidates) = self.prepare_counter_placement_batch(events)?;
+        if let Some(candidates) = candidates {
+            self.park_counter_placement_choice(batch, candidates, None, completion, out);
+            Ok(true)
+        } else {
+            self.commit_counter_placement_batch(&batch.events, &completion, out)?;
+            Ok(false)
+        }
+    }
+
+    /// Apply deterministic replacements and return a serializable proposal batch plus the first
+    /// choice, if one is required. Callers that are paying costs retain the proposals without
+    /// committing them until the full transaction is ready.
+    pub(super) fn prepare_counter_placement_batch(
+        &mut self,
+        events: Vec<ProposedCounterPlacement>,
+    ) -> Result<PreparedCounterPlacementBatch, EngineError> {
+        let mut batch = PendingCounterPlacementBatch {
+            events,
+            event_index: 0,
+            applications: Vec::new(),
+        };
+        let candidates = self.advance_counter_placement_batch(&mut batch)?;
+        Ok((batch, candidates))
+    }
+
+    fn counter_replacement_candidates(
+        &mut self,
+        event: &ProposedCounterPlacement,
+    ) -> Vec<(CounterReplacementInstance, String)> {
+        let Some(context) = event.counter_move_context.clone() else {
+            return self.counter_replacement_candidates_in_current_state(event);
+        };
+        let Some((before, timestamp)) = self
+            .state
+            .objects
+            .get(&context.source_object_id)
+            .filter(|object| object.zone == Zone::Battlefield)
+            .map(|object| {
+                (
+                    object.counter_count(context.kind),
+                    object.counter_timestamps.get(&context.kind).copied(),
+                )
+            })
+        else {
+            return Vec::new();
+        };
+        if before == 0
+            || self
+                .state
+                .zone_change_generation
+                .get(&context.source_object_id)
+                .copied()
+                .unwrap_or(0)
+                != context.source_zone_change_generation
+        {
+            return Vec::new();
+        }
+        self.state
+            .objects
+            .get_mut(&context.source_object_id)
+            .expect("counter-move source was validated")
+            .set_counter(context.kind, before - 1);
+        let candidates = self.counter_replacement_candidates_in_current_state(event);
+        let source = self
+            .state
+            .objects
+            .get_mut(&context.source_object_id)
+            .expect("counter-move source remains present during preview");
+        source.set_counter(context.kind, before);
+        if let Some(timestamp) = timestamp {
+            source.counter_timestamps.insert(context.kind, timestamp);
+        } else {
+            source.counter_timestamps.remove(&context.kind);
+        }
+        candidates
+    }
+
+    fn counter_replacement_candidates_in_current_state(
+        &self,
+        event: &ProposedCounterPlacement,
+    ) -> Vec<(CounterReplacementInstance, String)> {
+        if !event.counters.values().any(|count| *count > 0) {
+            return Vec::new();
+        }
+        let (recipient_controller, laezel_recipient) = match &event.recipient {
+            CounterPlacementRecipient::Object {
+                object_id,
+                zone_change_generation,
+            } => {
+                let current_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0);
+                if current_generation != *zone_change_generation
+                    || !self.can_receive_counters(*object_id)
+                {
+                    return Vec::new();
+                }
+                let Some(characteristics) = self.characteristics(*object_id) else {
+                    return Vec::new();
+                };
+                (
+                    Some(characteristics.controller),
+                    characteristics.is_creature() || characteristics.has_type("Planeswalker"),
+                )
+            }
+            CounterPlacementRecipient::EnteringObject {
+                object_id,
+                zone_change_generation,
+            } => {
+                let Some(context) = event.entry_context.as_ref() else {
+                    return Vec::new();
+                };
+                let Some(object) = self.state.objects.get(object_id) else {
+                    return Vec::new();
+                };
+                if self
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    != *zone_change_generation
+                    || object.zone != context.source_zone
+                    || context.source_zone_change_generation != *zone_change_generation
+                    || !context.recipient_can_receive_counters
+                {
+                    return Vec::new();
+                }
+                (
+                    Some(context.destination_controller),
+                    context.recipient_is_creature_or_planeswalker,
+                )
+            }
+            CounterPlacementRecipient::Player { player_id } => (Some(*player_id), true),
+        };
+        let mut sources = self
+            .state
+            .objects
+            .values()
+            .filter(|object| object.zone == Zone::Battlefield && !object.face_down)
+            .map(|object| object.id)
+            .collect::<Vec<_>>();
+        sources.sort_unstable();
+        let mut candidates = Vec::new();
+        for source_id in sources {
+            if !self.state.objects.contains_key(&source_id) {
+                continue;
+            }
+            let Some(source_controller) = self
+                .characteristics(source_id)
+                .map(|characteristics| characteristics.controller)
+            else {
+                continue;
+            };
+            let source_generation = self
+                .state
+                .zone_change_generation
+                .get(&source_id)
+                .copied()
+                .unwrap_or(0);
+            if event.entry_context.as_ref().is_some_and(|context| {
+                context
+                    .excluded_replacement_sources
+                    .contains(&(source_id, source_generation))
+            }) {
+                continue;
+            }
+            for ability in self.active_static_abilities(source_id) {
+                let kind = match ability.definition {
+                    StaticAbilityDef::AddOneCounterOfEachKindToSelfOrControlledCreaturePlaneswalker
+                        if source_controller == event.actor
+                            && recipient_controller == Some(event.actor)
+                            && laezel_recipient =>
+                    {
+                        CounterReplacementKind::Laezel
+                    }
+                        StaticAbilityDef::DoubleEffectCountersPlacedOnPermanentsYouControl
+                        if (event.origin == super::continuous::CounterPlacementOrigin::Effect
+                            || event.origin == super::continuous::CounterPlacementOrigin::Entry
+                            || event.effect_created_counters)
+                            && recipient_controller == Some(source_controller)
+                                && matches!(
+                                    &event.recipient,
+                                    CounterPlacementRecipient::Object { .. }
+                                        | CounterPlacementRecipient::EnteringObject { .. }
+                                ) =>
+                    {
+                        CounterReplacementKind::DoublingSeason
+                    }
+                    _ => continue,
+                };
+                let instance = CounterReplacementInstance {
+                    source_object_id: source_id,
+                    source_zone_change_generation: source_generation,
+                    ability_id: ability.ability_id.as_str().to_owned(),
+                    kind,
+                };
+                if event.applied_replacements.contains(&instance) {
+                    continue;
+                }
+                let summary = match kind {
+                    CounterReplacementKind::Laezel => "adds one of each counter kind",
+                    CounterReplacementKind::DoublingSeason => "doubles effect counters",
+                };
+                let label = format!(
+                    "{} {summary}",
+                    self.replacement_object_display_name(source_id, None)
+                );
+                candidates.push((instance, label));
+            }
+        }
+        candidates
+    }
+
+    /// Apply one replacement and continue until either a player must choose or every event is
+    /// fully processed. `Some` contains the current eligible choices; `None` means ready to commit.
+    fn advance_counter_placement_batch(
+        &mut self,
+        batch: &mut PendingCounterPlacementBatch,
+    ) -> Result<Option<Vec<(CounterReplacementInstance, String)>>, EngineError> {
+        while batch.event_index < batch.events.len() {
+            let candidates = self.counter_replacement_candidates(&batch.events[batch.event_index]);
+            match candidates.len() {
+                0 => batch.event_index += 1,
+                1 => {
+                    let instance = candidates[0].0.clone();
+                    Self::apply_counter_replacement(
+                        &mut batch.events[batch.event_index],
+                        &instance,
+                    );
+                }
+                _ => return Ok(Some(candidates)),
+            }
+        }
+        Ok(None)
+    }
+
+    pub(in crate::engine) fn validate_resolved_cost_counter_placements(
+        &mut self,
+        plan: &super::payment::transaction::CostTransactionPlan,
+        placements: &[ProposedCounterPlacement],
+    ) -> Result<(), EngineError> {
+        let expected = plan.counter_placement_costs();
+        if expected.len() != placements.len() {
+            return Err(EngineError::Illegal(
+                "counter cost placements do not match the payment plan",
+            ));
+        }
+        for (debit, placement) in expected.iter().zip(placements) {
+            let original_counters = BTreeMap::from([(debit.kind, debit.count)]);
+            if placement.cost_debit_index != Some(debit.debit_index)
+                || placement.actor != plan.player()
+                || placement.origin != super::continuous::CounterPlacementOrigin::Cost
+                || placement.original_counters != original_counters
+                || placement.counters.keys().any(|kind| *kind != debit.kind)
+                || !matches!(
+                    &placement.recipient,
+                    CounterPlacementRecipient::Object {
+                        object_id,
+                        zone_change_generation
+                    } if *object_id == debit.object_id && *zone_change_generation == debit.generation
+                )
+            {
+                return Err(EngineError::Illegal(
+                    "positive loyalty cost placement does not match its debit",
+                ));
+            }
+
+            let mut replayed = self
+                .proposed_object_counter_placement(
+                    plan.player(),
+                    debit.object_id,
+                    [(debit.kind, debit.count)],
+                    super::continuous::CounterPlacementOrigin::Cost,
+                )
+                .ok_or(EngineError::Illegal("counter cost recipient became stale"))?;
+            replayed.cost_debit_index = Some(debit.debit_index);
+            for replacement in &placement.applied_replacements {
+                let candidates = self.counter_replacement_candidates(&replayed);
+                if !candidates
+                    .iter()
+                    .any(|(candidate, _)| candidate == replacement)
+                    || (candidates.len() == 1 && candidates[0].0 != *replacement)
+                {
+                    return Err(EngineError::Illegal(
+                        "counter replacement is no longer applicable to the cost",
+                    ));
+                }
+                Self::apply_counter_replacement(&mut replayed, replacement);
+            }
+            let mut remaining = PendingCounterPlacementBatch {
+                events: vec![replayed],
+                event_index: 0,
+                applications: Vec::new(),
+            };
+            if self
+                .advance_counter_placement_batch(&mut remaining)?
+                .is_some()
+            {
+                return Err(EngineError::Illegal(
+                    "counter cost replacement order is incomplete",
+                ));
+            }
+            let replayed = &remaining.events[0];
+            if replayed.counters != placement.counters
+                || replayed.effect_created_counters != placement.effect_created_counters
+                || replayed.applied_replacements != placement.applied_replacements
+            {
+                return Err(EngineError::Illegal(
+                    "counter cost replacement result changed",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn apply_counter_replacement(
+        event: &mut ProposedCounterPlacement,
+        instance: &CounterReplacementInstance,
+    ) {
+        match instance.kind {
+            CounterReplacementKind::Laezel => {
+                for count in event.counters.values_mut() {
+                    if *count > 0 {
+                        *count = count.saturating_add(1);
+                    }
+                }
+                event.effect_created_counters = true;
+            }
+            CounterReplacementKind::DoublingSeason => {
+                for count in event.counters.values_mut() {
+                    *count = count.saturating_mul(2);
+                }
+            }
+        }
+        event.applied_replacements.push(instance.clone());
+    }
+
+    pub(super) fn park_counter_placement_choice(
+        &mut self,
+        mut batch: PendingCounterPlacementBatch,
+        candidates: Vec<(CounterReplacementInstance, String)>,
+        stack: Option<ParkedStackResolution>,
+        completion: crate::state::CounterPlacementCompletion,
+        out: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let event = &batch.events[batch.event_index];
+        let deciding_player = match &event.recipient {
+            CounterPlacementRecipient::Object { object_id, .. } => {
+                self.controller_of(*object_id).unwrap_or(event.actor)
+            }
+            CounterPlacementRecipient::EnteringObject { .. } => event
+                .entry_context
+                .as_ref()
+                .map(|context| context.destination_controller)
+                .unwrap_or(event.actor),
+            CounterPlacementRecipient::Player { player_id } => *player_id,
+        };
+        let mut application_ids = Vec::with_capacity(candidates.len());
+        let mut candidate_names = Vec::with_capacity(candidates.len());
+        let mut replacement_options = Vec::with_capacity(candidates.len());
+        batch.applications.clear();
+        for (replacement, label) in candidates {
+            let choice_id = self.state.next_replacement_application_id;
+            self.state.next_replacement_application_id = choice_id.saturating_add(1);
+            let option = self
+                .replacement_source_presentation(replacement.source_object_id)
+                .option(choice_id, label.clone());
+            replacement_options.push(option);
+            application_ids.push(choice_id);
+            candidate_names.push(label);
+            batch.applications.push(CounterPlacementApplication {
+                choice_id,
+                event_index: batch.event_index,
+                replacement,
+            });
+        }
+        let prompt = match &event.recipient {
+            CounterPlacementRecipient::Object { object_id, .. } => format!(
+                "Choose the next counter replacement effect for {}.",
+                self.replacement_object_display_name(*object_id, None)
+            ),
+            CounterPlacementRecipient::EnteringObject { object_id, .. } => format!(
+                "Choose the next counter replacement effect for {} entering the battlefield.",
+                self.replacement_object_display_name(*object_id, None)
+            ),
+            CounterPlacementRecipient::Player { player_id } => {
+                format!("Choose the next counter replacement effect for P{player_id}.")
+            }
+        };
+        let source_object_id = stack
+            .as_ref()
+            .map(|parked| parked.item.id)
+            .unwrap_or_else(|| match &completion {
+                crate::state::CounterPlacementCompletion::ActivationCost { replay } => {
+                    replay.source_object_id
+                }
+                crate::state::CounterPlacementCompletion::DamageBatch { completed, .. } => {
+                    completed
+                        .first()
+                        .map(|damage| damage.spec.event.source.object_id)
+                        .unwrap_or_default()
+                }
+                crate::state::CounterPlacementCompletion::DamageReplacement {
+                    damage_batch,
+                    ..
+                } => damage_batch
+                    .damage
+                    .first()
+                    .map(|damage| damage.spec.event.source.object_id)
+                    .unwrap_or_default(),
+                crate::state::CounterPlacementCompletion::SagaLore { sagas, .. } => {
+                    sagas.first().map(|saga| saga.object_id).unwrap_or_default()
+                }
+                _ => 0,
+            });
+        out.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    accepted_permanent_selections: Vec::new(),
+                    variable_mana_contribution: false,
+                    candidate_token_identities: Vec::new(),
+                    candidate_player_ids: Vec::new(),
+                    deciding_player_id: deciding_player,
+                    source_object_id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ReplacementEffect as i32,
+                    candidate_object_ids: application_ids.clone(),
+                    candidate_card_ids: vec![String::new(); application_ids.len()],
+                    min: 1,
+                    max: 1,
+                    ordered: false,
+                    candidate_names,
+                    candidate_server_card_ids: Vec::new(),
+                    candidate_selectable: Vec::new(),
+                    resolution_branches: Vec::new(),
+                    mana_cost: String::new(),
+                    unique_names: false,
+                    generic_mana_cost: 0,
+                    payment_currently_legal: false,
+                    public_reveal: None,
+                    candidate_source_zones: Vec::new(),
+                    combat_defender_options: Vec::new(),
+                    waterbend: false,
+                    selection_slots: Vec::new(),
+                    replacement_options,
+                    selection_alternatives: Vec::new(),
+                },
+            )),
+        });
+        out.push(ev_log(prompt.clone()));
+        self.state.pending_replacement_event =
+            Some(PendingReplacementEvent::Counters(Box::new(batch)));
+        self.state.pending_resolution = Some(PendingResolution {
+            deciding_player,
+            presentation: PendingResolutionPresentation {
+                source_object_id,
+                candidates: application_ids,
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind: rv1::ChoiceKind::ReplacementEffect,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::CounterReplacement { stack, completion },
+        });
+    }
+
+    fn park_entry_counter_placement_choice(
+        &mut self,
+        mut counter_batch: PendingCounterPlacementBatch,
+        candidates: Vec<(CounterReplacementInstance, String)>,
+        resume: crate::state::EntryCounterReplacementResume,
+        out: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let event = &counter_batch.events[counter_batch.event_index];
+        let (deciding_player, entering_object_id) = match &event.recipient {
+            CounterPlacementRecipient::EnteringObject { object_id, .. } => (
+                event
+                    .entry_context
+                    .as_ref()
+                    .map(|context| context.destination_controller)
+                    .unwrap_or(event.actor),
+                *object_id,
+            ),
+            _ => (event.actor, 0),
+        };
+        let (stack, resume) = match resume {
+            crate::state::EntryCounterReplacementResume::Single {
+                stack,
+                event,
+                completion,
+            } => (
+                Some(stack.clone()),
+                crate::state::EntryCounterReplacementResume::Single {
+                    stack,
+                    event,
+                    completion,
+                },
+            ),
+            crate::state::EntryCounterReplacementResume::Batch {
+                stack,
+                batch,
+                source_generations,
+            } => (
+                stack.clone(),
+                crate::state::EntryCounterReplacementResume::Batch {
+                    stack,
+                    batch,
+                    source_generations,
+                },
+            ),
+        };
+        let mut candidate_ids = Vec::with_capacity(candidates.len());
+        let mut candidate_names = Vec::with_capacity(candidates.len());
+        let mut replacement_options = Vec::with_capacity(candidates.len());
+        counter_batch.applications.clear();
+        for (replacement, label) in candidates {
+            let choice_id = self.state.next_replacement_application_id;
+            self.state.next_replacement_application_id = choice_id.saturating_add(1);
+            replacement_options.push(
+                self.replacement_source_presentation(replacement.source_object_id)
+                    .option(choice_id, label.clone()),
+            );
+            candidate_ids.push(choice_id);
+            candidate_names.push(label);
+            counter_batch
+                .applications
+                .push(CounterPlacementApplication {
+                    choice_id,
+                    event_index: counter_batch.event_index,
+                    replacement,
+                });
+        }
+        let prompt = match &event.recipient {
+            CounterPlacementRecipient::EnteringObject { object_id, .. } => format!(
+                "Choose the next counter replacement effect for {} entering the battlefield.",
+                self.replacement_object_display_name(*object_id, None)
+            ),
+            _ => "Choose the next counter replacement effect.".to_string(),
+        };
+        let source_object_id = stack
+            .as_ref()
+            .map(|parked| parked.item.id)
+            .unwrap_or(entering_object_id);
+        out.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    accepted_permanent_selections: Vec::new(),
+                    variable_mana_contribution: false,
+                    candidate_token_identities: Vec::new(),
+                    candidate_player_ids: Vec::new(),
+                    deciding_player_id: deciding_player,
+                    source_object_id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ReplacementEffect as i32,
+                    candidate_object_ids: candidate_ids.clone(),
+                    candidate_card_ids: vec![String::new(); candidate_ids.len()],
+                    min: 1,
+                    max: 1,
+                    ordered: false,
+                    candidate_names,
+                    candidate_server_card_ids: Vec::new(),
+                    candidate_selectable: Vec::new(),
+                    resolution_branches: Vec::new(),
+                    mana_cost: String::new(),
+                    unique_names: false,
+                    generic_mana_cost: 0,
+                    payment_currently_legal: false,
+                    public_reveal: None,
+                    candidate_source_zones: Vec::new(),
+                    combat_defender_options: Vec::new(),
+                    waterbend: false,
+                    selection_slots: Vec::new(),
+                    replacement_options,
+                    selection_alternatives: Vec::new(),
+                },
+            )),
+        });
+        out.push(ev_log(prompt.clone()));
+        self.state.pending_replacement_event =
+            Some(PendingReplacementEvent::Counters(Box::new(counter_batch)));
+        self.state.pending_resolution = Some(PendingResolution {
+            deciding_player,
+            presentation: PendingResolutionPresentation {
+                source_object_id,
+                candidates: candidate_ids,
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind: rv1::ChoiceKind::ReplacementEffect,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::EntryCounterReplacement {
+                resume: Box::new(resume),
+            },
+        });
+    }
+
+    fn simultaneous_entry_references(
+        batch: &SimultaneousEntryBatch,
+    ) -> Vec<&BattlefieldEntryEvent> {
+        match batch {
+            SimultaneousEntryBatch::Zone(batch) => {
+                batch.ready.iter().chain(batch.remaining.iter()).collect()
+            }
+            SimultaneousEntryBatch::Token(batch) => batch
+                .ready
+                .iter()
+                .chain(batch.remaining.iter())
+                .map(|entry| &entry.event)
+                .collect(),
+            SimultaneousEntryBatch::Observer(batch) => {
+                batch.ready.iter().map(|entry| &entry.event).collect()
+            }
+        }
+    }
+
+    fn simultaneous_entry_references_mut(
+        batch: &mut SimultaneousEntryBatch,
+    ) -> Vec<&mut BattlefieldEntryEvent> {
+        match batch {
+            SimultaneousEntryBatch::Zone(batch) => batch
+                .ready
+                .iter_mut()
+                .chain(batch.remaining.iter_mut())
+                .collect(),
+            SimultaneousEntryBatch::Token(batch) => batch
+                .ready
+                .iter_mut()
+                .chain(batch.remaining.iter_mut())
+                .map(|entry| &mut entry.event)
+                .collect(),
+            SimultaneousEntryBatch::Observer(batch) => batch
+                .ready
+                .iter_mut()
+                .map(|entry| &mut entry.event)
+                .collect(),
+        }
+    }
+
+    fn simultaneous_entry_source_generations(
+        &self,
+        batch: &SimultaneousEntryBatch,
+    ) -> Vec<(ObjectId, u64, Zone)> {
+        Self::simultaneous_entry_references(batch)
+            .into_iter()
+            .filter_map(|event| {
+                let object = self.state.objects.get(&event.object_id)?;
+                Some((
+                    event.object_id,
+                    self.state
+                        .zone_change_generation
+                        .get(&event.object_id)
+                        .copied()
+                        .unwrap_or(0),
+                    object.zone,
+                ))
+            })
+            .collect()
+    }
+
+    fn entry_counter_excluded_sources(batch: &SimultaneousEntryBatch) -> Vec<(ObjectId, u64)> {
+        match batch {
+            SimultaneousEntryBatch::Zone(batch) => match &batch.completion {
+                Some(crate::state::ZoneEntryCompletion::PairedArtifactExchange {
+                    departure,
+                    ..
+                }) => vec![(departure.object_id, departure.zone_change_generation)],
+                _ => Vec::new(),
+            },
+            SimultaneousEntryBatch::Token(_) | SimultaneousEntryBatch::Observer(_) => Vec::new(),
+        }
+    }
+
+    fn simultaneous_entry_generations_current(
+        &self,
+        batch: &SimultaneousEntryBatch,
+        source_generations: &[(ObjectId, u64, Zone)],
+    ) -> bool {
+        source_generations
+            .iter()
+            .all(|(object_id, generation, zone)| {
+                self.state.objects.get(object_id).is_some_and(|object| {
+                    object.zone == *zone
+                        && self
+                            .state
+                            .zone_change_generation
+                            .get(object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == *generation
+                })
+            })
+            && Self::simultaneous_entry_references(batch)
+                .iter()
+                .all(|event| {
+                    source_generations
+                        .iter()
+                        .any(|(object_id, _, _)| *object_id == event.object_id)
+                })
+    }
+
+    /// Prepares every counter instruction in a simultaneous entry parent before any entrant is
+    /// moved. `None` means a replacement-order choice has parked the full parent batch.
+    pub(super) fn begin_entry_counter_placements_for_batch(
+        &mut self,
+        mut batch: SimultaneousEntryBatch,
+        stack: Option<ParkedStackResolution>,
+        out: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<Option<SimultaneousEntryBatch>, EngineError> {
+        let references = Self::simultaneous_entry_references(&batch);
+        let exclusions = Self::entry_counter_excluded_sources(&batch);
+        let source_generations = self.simultaneous_entry_source_generations(&batch);
+        let proposals = self.proposed_entry_counter_placements(&references, &exclusions);
+        if proposals.is_empty() {
+            for event in Self::simultaneous_entry_references_mut(&mut batch) {
+                event.entry_counter_replacements_resolved = true;
+            }
+            return Ok(Some(batch));
+        }
+        let (counter_batch, candidates) = self.prepare_counter_placement_batch(proposals)?;
+        if let Some(candidates) = candidates {
+            self.park_entry_counter_placement_choice(
+                counter_batch,
+                candidates,
+                crate::state::EntryCounterReplacementResume::Batch {
+                    stack,
+                    batch,
+                    source_generations,
+                },
+                out,
+            );
+            return Ok(None);
+        }
+        for event in Self::simultaneous_entry_references_mut(&mut batch) {
+            Self::apply_entry_counter_placement_results(event, &counter_batch.events)?;
+        }
+        Ok(Some(batch))
+    }
+
+    pub(super) fn finish_entry_counter_replacement_choice(
+        &mut self,
+        pending: PendingResolution,
+        chosen_application_id: u32,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let resume = match &pending.continuation {
+            ResolutionContinuation::EntryCounterReplacement { resume } => (**resume).clone(),
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "entry-counter replacement continuation is missing",
+                ));
+            }
+        };
+        let Some(pending_event) = self.state.pending_replacement_event.take() else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("entry-counter choice is stale"));
+        };
+        let mut counter_batch = match pending_event {
+            PendingReplacementEvent::Counters(batch) => *batch,
+            other => {
+                self.state.pending_replacement_event = Some(other);
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("entry-counter choice is stale"));
+            }
+        };
+        let Some(application) = counter_batch
+            .applications
+            .iter()
+            .find(|application| application.choice_id == chosen_application_id)
+            .cloned()
+        else {
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::Counters(Box::new(counter_batch)));
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "entry-counter replacement application is stale",
+            ));
+        };
+        let candidates =
+            self.counter_replacement_candidates(&counter_batch.events[counter_batch.event_index]);
+        if application.event_index != counter_batch.event_index
+            || !candidates
+                .iter()
+                .any(|(candidate, _)| *candidate == application.replacement)
+        {
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::Counters(Box::new(counter_batch)));
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "entry-counter replacement effect is no longer applicable",
+            ));
+        }
+        if counter_batch.events.iter().any(|event| {
+            let CounterPlacementRecipient::EnteringObject { object_id, .. } = &event.recipient
+            else {
+                return true;
+            };
+            let Some(context) = event.entry_context.as_ref() else {
+                return true;
+            };
+            self.state
+                .objects
+                .get(object_id)
+                .is_none_or(|object| object.zone != context.source_zone)
+                || self
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    != context.source_zone_change_generation
+        }) {
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::Counters(Box::new(counter_batch)));
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("entry-counter recipient became stale"));
+        }
+        match &resume {
+            crate::state::EntryCounterReplacementResume::Single { event, .. }
+                if !counter_batch.events.iter().any(|proposal| {
+                    matches!(
+                        &proposal.recipient,
+                        CounterPlacementRecipient::EnteringObject { object_id, zone_change_generation }
+                            if *object_id == event.object_id
+                                && self.state.zone_change_generation.get(object_id).copied().unwrap_or(0)
+                                    == *zone_change_generation
+                    )
+                }) => {
+                    self.state.pending_replacement_event = Some(PendingReplacementEvent::Counters(
+                        Box::new(counter_batch),
+                    ));
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal("entering permanent became stale"));
+                }
+            crate::state::EntryCounterReplacementResume::Single { .. } => {}
+            crate::state::EntryCounterReplacementResume::Batch {
+                batch,
+                source_generations,
+                ..
+            } if !self.simultaneous_entry_generations_current(batch, source_generations) => {
+                self.state.pending_replacement_event = Some(PendingReplacementEvent::Counters(
+                    Box::new(counter_batch),
+                ));
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("simultaneous entry cohort became stale"));
+            }
+            _ => {}
+        }
+        Self::apply_counter_replacement(
+            &mut counter_batch.events[counter_batch.event_index],
+            &application.replacement,
+        );
+        counter_batch.applications.clear();
+
+        let mut events = Vec::new();
+        if let Some(candidates) = self.advance_counter_placement_batch(&mut counter_batch)? {
+            self.park_entry_counter_placement_choice(
+                counter_batch,
+                candidates,
+                resume,
+                &mut events,
+            );
+            return Ok(finish_with_events(self, events));
+        }
+
+        match resume {
+            crate::state::EntryCounterReplacementResume::Single {
+                stack: _,
+                mut event,
+                completion,
+            } => {
+                Self::apply_entry_counter_placement_results(&mut event, &counter_batch.events)?;
+                self.complete_pending_battlefield_entry(pending, *event, completion, events)
+            }
+            crate::state::EntryCounterReplacementResume::Batch {
+                stack,
+                mut batch,
+                source_generations,
+            } => {
+                if !self.simultaneous_entry_generations_current(&batch, &source_generations) {
+                    self.state.pending_replacement_event =
+                        Some(PendingReplacementEvent::Counters(Box::new(counter_batch)));
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "simultaneous entry cohort became stale",
+                    ));
+                }
+                for event in Self::simultaneous_entry_references_mut(&mut batch) {
+                    Self::apply_entry_counter_placement_results(event, &counter_batch.events)?;
+                }
+                self.complete_entry_timestamp_order(batch, stack, events)
+            }
+        }
+    }
+
+    fn saga_lore_counter_batch_is_current(
+        &self,
+        events: &[ProposedCounterPlacement],
+        completion: &crate::state::CounterPlacementCompletion,
+    ) -> bool {
+        let crate::state::CounterPlacementCompletion::SagaLore {
+            active_player,
+            sagas,
+        } = completion
+        else {
+            return false;
+        };
+        if events.len() != sagas.len() {
+            return false;
+        }
+        let mut expected = sagas
+            .iter()
+            .map(|saga| (saga.object_id, saga.zone_change_generation))
+            .collect::<Vec<_>>();
+        let mut actual = Vec::with_capacity(events.len());
+        for event in events {
+            let CounterPlacementRecipient::Object {
+                object_id,
+                zone_change_generation,
+            } = &event.recipient
+            else {
+                return false;
+            };
+            let Some(characteristics) = self.characteristics(*object_id) else {
+                return false;
+            };
+            if event.actor != *active_player
+                || event.origin != super::continuous::CounterPlacementOrigin::TurnBased
+                || event.original_counters != BTreeMap::from([(CounterKind::Lore, 1)])
+                || self
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    != *zone_change_generation
+                || !self
+                    .state
+                    .objects
+                    .get(object_id)
+                    .is_some_and(|object| object.zone == Zone::Battlefield)
+                || characteristics.controller != *active_player
+                || !characteristics.has_type("Enchantment")
+                || !characteristics.has_type("Saga")
+                || !self.can_receive_counters(*object_id)
+            {
+                return false;
+            }
+            actual.push((*object_id, *zone_change_generation));
+        }
+        expected.sort_unstable();
+        actual.sort_unstable();
+        actual == expected
+    }
+
+    fn finish_unstacked_saga_lore_action(
+        &mut self,
+        mut out: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        self.apply_sbas(&mut out)?;
+        self.flush_staged_triggers(&mut out);
+        if self.state.blocking_choice().is_none() {
+            out.push(ev_priority_changed(self));
+        }
+        Ok(finish_with_events(self, out))
+    }
+
+    pub(super) fn commit_counter_placement_batch(
+        &mut self,
+        events: &[ProposedCounterPlacement],
+        completion: &crate::state::CounterPlacementCompletion,
+        out: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<Vec<CounterPlacementReceipt>, EngineError> {
+        if matches!(
+            completion,
+            crate::state::CounterPlacementCompletion::SagaLore { .. }
+        ) && !self.saga_lore_counter_batch_is_current(events, completion)
+        {
+            return Err(EngineError::Illegal("Saga lore counter batch became stale"));
+        }
+        if matches!(
+            completion,
+            crate::state::CounterPlacementCompletion::ActivationCost { .. }
+        ) {
+            return Err(EngineError::Illegal(
+                "activation-cost counters must commit with their payment transaction",
+            ));
+        }
+        if let crate::state::CounterPlacementCompletion::Amass {
+            controller,
+            target_object_id,
+            target_zone_change_generation,
+            ..
+        } = completion
+        {
+            if self
+                .state
+                .zone_change_generation
+                .get(target_object_id)
+                .copied()
+                .unwrap_or(0)
+                != *target_zone_change_generation
+                || !self.is_amass_candidate(*target_object_id, *controller)
+            {
+                return Err(EngineError::Illegal("Amass Army became stale"));
+            }
+        }
+        if let crate::state::CounterPlacementCompletion::BlightEffect {
+            player,
+            count,
+            creature,
+            ..
+        } = completion
+        {
+            let is_current = events.len() == 1
+                && events.first().is_some_and(|event| {
+                    matches!(
+                        &event.recipient,
+                        CounterPlacementRecipient::Object {
+                            object_id,
+                            zone_change_generation
+                        } if *object_id == creature.object_id
+                            && *zone_change_generation == creature.zone_change_generation
+                    ) && event.actor == *player
+                        && event.origin == super::continuous::CounterPlacementOrigin::Effect
+                        && event.original_counters
+                            == BTreeMap::from([(CounterKind::MinusOneMinusOne, *count)])
+                })
+                && self
+                    .state
+                    .zone_change_generation
+                    .get(&creature.object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == creature.zone_change_generation
+                && self.can_blight_creature(*player, creature.object_id);
+            if !is_current {
+                return Err(EngineError::Illegal("Blight creature became stale"));
+            }
+        }
+        if let crate::state::CounterPlacementCompletion::Explore {
+            controller,
+            explorer,
+            revealed,
+            ..
+        } = completion
+        {
+            let is_current =
+                events.len() == 1
+                    && events.first().is_some_and(|event| {
+                        matches!(
+                            &event.recipient,
+                            CounterPlacementRecipient::Object {
+                                object_id,
+                                zone_change_generation
+                            } if *object_id == explorer.object_id
+                                && *zone_change_generation == explorer.zone_change_generation
+                        ) && event.actor == *controller
+                            && event.origin == super::continuous::CounterPlacementOrigin::Effect
+                            && event.original_counters
+                                == BTreeMap::from([(CounterKind::PlusOnePlusOne, 1)])
+                    })
+                    && self
+                        .state
+                        .zone_change_generation
+                        .get(&explorer.object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == explorer.zone_change_generation
+                    && self.can_receive_counters(explorer.object_id)
+                    && revealed.is_none_or(|revealed| {
+                        self.state
+                            .zone_change_generation
+                            .get(&revealed.object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == revealed.zone_change_generation
+                            && self
+                                .state
+                                .objects
+                                .get(&revealed.object_id)
+                                .is_some_and(|object| object.zone == Zone::Library)
+                            && self.state.player_idx(*controller).and_then(|index| {
+                                self.state.players[index].library.front().copied()
+                            }) == Some(revealed.object_id)
+                    });
+            if !is_current {
+                return Err(EngineError::Illegal("Explore event became stale"));
+            }
+        }
+        if let crate::state::CounterPlacementCompletion::CounterMove {
+            source_target,
+            destination_target,
+            kind,
+            actor,
+            ..
+        } = completion
+        {
+            let Some(source_generation) = source_target.zone_change_generation else {
+                return Err(EngineError::Illegal(
+                    "counter-move source generation missing",
+                ));
+            };
+            let Some(destination_generation) = destination_target.zone_change_generation else {
+                return Err(EngineError::Illegal(
+                    "counter-move destination generation missing",
+                ));
+            };
+            let matches_event = events.len() == 1
+                && events[0].actor == *actor
+                && events[0].origin == super::continuous::CounterPlacementOrigin::Effect
+                && events[0].original_counters.len() == 1
+                && events[0].original_counters.get(kind) == Some(&1)
+                && events[0].counters.values().any(|count| *count > 0)
+                && events[0]
+                    .counter_move_context
+                    .as_ref()
+                    .is_some_and(|context| {
+                        context.source_object_id == source_target.object_id
+                            && context.source_zone_change_generation == source_generation
+                            && context.kind == *kind
+                    })
+                && matches!(
+                    &events[0].recipient,
+                    CounterPlacementRecipient::Object {
+                        object_id,
+                        zone_change_generation,
+                    } if *object_id == destination_target.object_id
+                        && *zone_change_generation == destination_generation
+                );
+            if !matches_event
+                || source_target.object_id == destination_target.object_id
+                || self
+                    .state
+                    .zone_change_generation
+                    .get(&source_target.object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    != source_generation
+                || !self
+                    .state
+                    .objects
+                    .get(&source_target.object_id)
+                    .is_some_and(|object| {
+                        object.zone == Zone::Battlefield && object.counter_count(*kind) > 0
+                    })
+            {
+                return Err(EngineError::Illegal("counter-move completion became stale"));
+            }
+        }
+        for event in events {
+            match &event.recipient {
+                CounterPlacementRecipient::Object {
+                    object_id,
+                    zone_change_generation,
+                } if self
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == *zone_change_generation
+                    && (matches!(
+                        completion,
+                        crate::state::CounterPlacementCompletion::CounterMove { .. }
+                    ) || self.can_receive_counters(*object_id)) => {}
+                CounterPlacementRecipient::EnteringObject { .. } => {
+                    return Err(EngineError::Illegal(
+                        "entry counters must commit with their battlefield entry",
+                    ));
+                }
+                CounterPlacementRecipient::Player { player_id }
+                    if self
+                        .state
+                        .player_idx(*player_id)
+                        .is_some_and(|index| !self.state.players[index].has_lost) => {}
+                _ => {
+                    return Err(EngineError::Illegal(
+                        "counter-placement recipient became stale",
+                    ))
+                }
+            }
+        }
+        if let crate::state::CounterPlacementCompletion::CounterMove {
+            source_target,
+            destination_target,
+            kind,
+            ..
+        } = completion
+        {
+            if !self.counter_move_can_complete(
+                source_target.object_id,
+                destination_target.object_id,
+                *kind,
+            ) {
+                return Err(EngineError::Illegal(
+                    "counter-move destination cannot receive counters",
+                ));
+            }
+        }
+        let counter_move_siege_defeat =
+            if let crate::state::CounterPlacementCompletion::CounterMove {
+                source_target,
+                kind: CounterKind::Defense,
+                ..
+            } = completion
+            {
+                self.state.objects[&source_target.object_id].counter_count(CounterKind::Defense)
+                    == 1
+                    && self.characteristics(source_target.object_id).is_some_and(
+                        |characteristics| {
+                            characteristics.has_type("Battle") && characteristics.has_type("Siege")
+                        },
+                    )
+            } else {
+                false
+            };
+        if let crate::state::CounterPlacementCompletion::CounterMove {
+            source_target,
+            kind,
+            ..
+        } = completion
+        {
+            let source = self
+                .state
+                .objects
+                .get_mut(&source_target.object_id)
+                .expect("counter-move source was validated");
+            let before = source.counter_count(*kind);
+            source.set_counter(*kind, before - 1);
+        }
+        let mut game_events = Vec::new();
+        let mut receipts = Vec::new();
+        let timestamp = self.state.command_index;
+        if let crate::state::CounterPlacementCompletion::Proliferate { player_id } = completion {
+            out.push(ev_log(format!("P{player_id} proliferates.")));
+        }
+        for event in events {
+            for replacement in &event.applied_replacements {
+                let source_name =
+                    self.replacement_object_display_name(replacement.source_object_id, None);
+                out.push(ev_log(format!(
+                    "{source_name}'s counter replacement effect is applied."
+                )));
+            }
+            match (&event.recipient, completion) {
+                (
+                    CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::StackEffect { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::Amass { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::BlightEffect { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::Explore { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::DamageBatch { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::DamageReplacement { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::ActivationCost { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::CounterMove { .. },
+                ) => {}
+                (CounterPlacementRecipient::EnteringObject { .. }, _) => {
+                    return Err(EngineError::Illegal(
+                        "entry counters must commit with their battlefield entry",
+                    ));
+                }
+                (
+                    CounterPlacementRecipient::Object { object_id, .. },
+                    crate::state::CounterPlacementCompletion::Proliferate { .. },
+                ) => {
+                    out.push(ev_log(format!(
+                        "{} gets one of each kind of counter on it.",
+                        self.replacement_object_display_name(*object_id, None),
+                    )));
+                }
+                (
+                    CounterPlacementRecipient::Object { object_id, .. },
+                    crate::state::CounterPlacementCompletion::SagaLore { active_player, .. },
+                ) => {
+                    out.push(ev_log(format!(
+                        "P{active_player} puts a lore counter on {}.",
+                        self.replacement_object_display_name(*object_id, None),
+                    )));
+                }
+                (
+                    CounterPlacementRecipient::Player { player_id },
+                    crate::state::CounterPlacementCompletion::Proliferate { .. },
+                ) => {
+                    out.push(ev_log(format!(
+                        "P{player_id} gets one of each kind of counter on them."
+                    )));
+                }
+                (
+                    CounterPlacementRecipient::Player { .. },
+                    crate::state::CounterPlacementCompletion::StackEffect { .. }
+                    | crate::state::CounterPlacementCompletion::Amass { .. }
+                    | crate::state::CounterPlacementCompletion::ActivationCost { .. }
+                    | crate::state::CounterPlacementCompletion::SagaLore { .. }
+                    | crate::state::CounterPlacementCompletion::BlightEffect { .. }
+                    | crate::state::CounterPlacementCompletion::Explore { .. }
+                    | crate::state::CounterPlacementCompletion::DamageBatch { .. }
+                    | crate::state::CounterPlacementCompletion::DamageReplacement { .. }
+                    | crate::state::CounterPlacementCompletion::CounterMove { .. },
+                ) => {
+                    return Err(EngineError::Illegal(
+                        "stack-effect counter recipient must be a permanent",
+                    ));
+                }
+            }
+            for (&kind, &count) in &event.counters {
+                if count == 0 {
+                    continue;
+                }
+                match &event.recipient {
+                    CounterPlacementRecipient::Object { object_id, .. } => {
+                        let before = self.state.objects[object_id].counter_count(kind);
+                        self.state
+                            .objects
+                            .get_mut(object_id)
+                            .expect("validated counter recipient")
+                            .add_counters(kind, count, timestamp);
+                        let after = self.state.objects[object_id].counter_count(kind);
+                        let placed = after.saturating_sub(before);
+                        if placed == 0 {
+                            continue;
+                        }
+                        let controller = self.controller_of(*object_id).unwrap_or(event.actor);
+                        let generation = self
+                            .state
+                            .zone_change_generation
+                            .get(object_id)
+                            .copied()
+                            .unwrap_or(0);
+                        receipts.push(CounterPlacementReceipt {
+                            object: TriggerObjectRef {
+                                object_id: *object_id,
+                                zone_change_generation: generation,
+                                controller_at_event: controller,
+                            },
+                            counter: kind,
+                            count: placed,
+                            before,
+                            after,
+                        });
+                        game_events.push(GameEvent::CountersPlaced {
+                            object: TriggerObjectRef {
+                                object_id: *object_id,
+                                zone_change_generation: generation,
+                                controller_at_event: controller,
+                            },
+                            kind,
+                            before,
+                            after,
+                            read_ahead_entry: false,
+                        });
+                        if let crate::state::CounterPlacementCompletion::StackEffect {
+                            spell_label,
+                        } = completion
+                        {
+                            out.push(ev_log(format!(
+                                "{spell_label} puts {placed} {} counter(s) on {}",
+                                kind.label(),
+                                self.replacement_object_display_name(*object_id, None),
+                            )));
+                        }
+                    }
+                    CounterPlacementRecipient::EnteringObject { .. } => unreachable!(
+                        "entry counter placements are committed with their entry event"
+                    ),
+                    CounterPlacementRecipient::Player { player_id } => {
+                        let index = self
+                            .state
+                            .player_idx(*player_id)
+                            .expect("validated counter recipient");
+                        let before = self.state.players[index]
+                            .counters
+                            .get(&kind)
+                            .copied()
+                            .unwrap_or(0);
+                        let after = before.saturating_add(count);
+                        self.state.players[index].counters.insert(kind, after);
+                    }
+                }
+            }
+        }
+        if let crate::state::CounterPlacementCompletion::Proliferate { player_id } = completion {
+            game_events.push(GameEvent::Proliferated { player: *player_id });
+        }
+        if let crate::state::CounterPlacementCompletion::Amass {
+            controller,
+            subtype,
+            count,
+            source_id,
+            target_object_id,
+            ..
+        } = completion
+        {
+            if !self
+                .characteristics(*target_object_id)
+                .is_some_and(|characteristics| characteristics.has_type(subtype.as_str()))
+            {
+                self.state.continuous_effects.push(ContinuousEffect {
+                    trigger_grant_origin: None,
+                    source_id: Some(*source_id),
+                    affected: AffectedScope::Single(*target_object_id),
+                    kind: ContinuousEffectKind::Layer4AddTypes(
+                        tricerules_card_model::primitives::TypeLineAddition {
+                            land_types: Vec::new(),
+                            card_types: Vec::<PermanentTypeFilter>::new(),
+                            creature_types: vec![subtype.as_str().to_string()],
+                        },
+                    ),
+                    condition: None,
+                    duration: EffectDuration::Indefinite,
+                    timestamp: self.state.command_index,
+                });
+            }
+            out.push(ev_log(format!(
+                "P{controller} amasses {} {count} on {}.",
+                subtype.plural(),
+                self.replacement_object_display_name(*target_object_id, None)
+            )));
+        }
+        if let crate::state::CounterPlacementCompletion::CounterMove {
+            source_target,
+            destination_target,
+            kind,
+            ability_label,
+            ..
+        } = completion
+        {
+            out.push(ev_log(format!(
+                "{ability_label} moves one {} counter from {} to {}.",
+                kind.label(),
+                self.replacement_object_display_name(source_target.object_id, None),
+                self.replacement_object_display_name(destination_target.object_id, None),
+            )));
+            if counter_move_siege_defeat {
+                self.stage_siege_defeat_trigger(source_target.object_id);
+            }
+        }
+        if !game_events.is_empty()
+            && !matches!(
+                completion,
+                crate::state::CounterPlacementCompletion::DamageBatch { .. }
+                    | crate::state::CounterPlacementCompletion::DamageReplacement { .. }
+            )
+        {
+            self.fire_triggers(&game_events, out);
+        }
+        Ok(receipts)
+    }
+
+    pub(super) fn finish_counter_replacement_choice(
+        &mut self,
+        pending: PendingResolution,
+        chosen_application_id: u32,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, completion) = match &pending.continuation {
+            ResolutionContinuation::CounterReplacement { stack, completion } => {
+                (stack.clone(), completion.clone())
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "counter-replacement continuation missing",
+                ));
+            }
+        };
+        let Some(pending_event) = self.state.pending_replacement_event.take() else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("counter-replacement choice is stale"));
+        };
+        let mut batch = match pending_event {
+            PendingReplacementEvent::Counters(batch) => *batch,
+            other => {
+                self.state.pending_replacement_event = Some(other);
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("counter-replacement choice is stale"));
+            }
+        };
+        if let crate::state::CounterPlacementCompletion::CounterMove {
+            source_target,
+            destination_target,
+            kind,
+            ..
+        } = &completion
+        {
+            let Some(parked) = stack.as_ref() else {
+                self.state.pending_replacement_event =
+                    Some(PendingReplacementEvent::Counters(Box::new(batch)));
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "counter-move continuation is missing its resolving stack item",
+                ));
+            };
+            let current = super::targeting::counter_move_target_pair_is_current(
+                self,
+                &parked.item,
+                source_target,
+                destination_target,
+            ) && self
+                .state
+                .objects
+                .get(&source_target.object_id)
+                .is_some_and(|source| source.counter_count(*kind) > 0)
+                && self.counter_move_can_complete(
+                    source_target.object_id,
+                    destination_target.object_id,
+                    *kind,
+                );
+            if !current {
+                return self.complete_parked_resolution_with_previous(
+                    parked.item.clone(),
+                    parked.resume_effect_index,
+                    parked.previous_result.clone(),
+                    Vec::new(),
+                );
+            }
+        }
+        let Some(application) = batch
+            .applications
+            .iter()
+            .find(|application| application.choice_id == chosen_application_id)
+            .cloned()
+        else {
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::Counters(Box::new(batch)));
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "counter-replacement application is stale",
+            ));
+        };
+        if application.event_index != batch.event_index
+            || !self
+                .counter_replacement_candidates(&batch.events[batch.event_index])
+                .iter()
+                .any(|(candidate, _)| *candidate == application.replacement)
+        {
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::Counters(Box::new(batch)));
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "counter-replacement effect is no longer applicable",
+            ));
+        }
+        Self::apply_counter_replacement(
+            &mut batch.events[batch.event_index],
+            &application.replacement,
+        );
+        batch.applications.clear();
+
+        let mut events = Vec::new();
+        if let Some(candidates) = self.advance_counter_placement_batch(&mut batch)? {
+            self.park_counter_placement_choice(batch, candidates, stack, completion, &mut events);
+            return Ok(finish_with_events(self, events));
+        }
+        if let crate::state::CounterPlacementCompletion::ActivationCost { replay } = &completion {
+            return match self.finish_activation_cost_replacements(replay, batch.events) {
+                Ok(result) => Ok(result),
+                Err(error) => {
+                    self.state.pending_replacement_event = None;
+                    self.pending_counter_cost_internal = None;
+                    if replay.command_kind == crate::state::ActivationCostCommandKind::Staged
+                        && self.state.pending_ability_activation.as_ref().is_some_and(
+                            |activation| {
+                                Some(activation.transaction_id) == replay.transaction_id
+                                    && Some(activation.revision) == replay.expected_revision
+                            },
+                        )
+                    {
+                        self.state.pending_ability_activation = None;
+                        self.pending_ability_activation_internal = None;
+                    }
+                    Err(error)
+                }
+            };
+        }
+        if matches!(
+            completion,
+            crate::state::CounterPlacementCompletion::SagaLore { .. }
+        ) {
+            if !self.saga_lore_counter_batch_is_current(&batch.events, &completion) {
+                return self.finish_unstacked_saga_lore_action(events);
+            }
+            match self.commit_counter_placement_batch(&batch.events, &completion, &mut events) {
+                Ok(_) => return self.finish_unstacked_saga_lore_action(events),
+                Err(error) => {
+                    self.state.pending_replacement_event =
+                        Some(PendingReplacementEvent::Counters(Box::new(batch)));
+                    self.state.pending_resolution = Some(pending);
+                    return Err(error);
+                }
+            }
+        }
+        if let crate::state::CounterPlacementCompletion::DamageReplacement {
+            damage_batch,
+            damage_event_index,
+            continuation,
+        } = &completion
+        {
+            let parked_batch = batch.clone();
+            return match self.finish_prevention_counter_replacement(
+                damage_batch.clone(),
+                *damage_event_index,
+                continuation.clone(),
+                batch.events.clone(),
+                &mut events,
+            ) {
+                Ok(result) => Ok(result),
+                Err(error) => {
+                    self.state.pending_replacement_event =
+                        Some(PendingReplacementEvent::Counters(Box::new(parked_batch)));
+                    self.state.pending_resolution = Some(pending);
+                    Err(error)
+                }
+            };
+        }
+        if let crate::state::CounterPlacementCompletion::DamageBatch {
+            completed,
+            continuation,
+        } = &completion
+        {
+            return match self.commit_counter_placement_batch(
+                &batch.events,
+                &completion,
+                &mut events,
+            ) {
+                Ok(receipts) => self.finish_counter_replaced_damage_batch(
+                    completed.clone(),
+                    continuation.clone(),
+                    receipts,
+                    &mut events,
+                ),
+                Err(error) => {
+                    self.state.pending_replacement_event =
+                        Some(PendingReplacementEvent::Counters(Box::new(batch)));
+                    self.state.pending_resolution = Some(pending);
+                    Err(error)
+                }
+            };
+        }
+        if stack.is_none()
+            && matches!(
+                completion,
+                crate::state::CounterPlacementCompletion::BlightEffect { .. }
+                    | crate::state::CounterPlacementCompletion::Explore { .. }
+            )
+        {
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::Counters(Box::new(batch)));
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "counter-replacement continuation is missing its resolving stack item",
+            ));
+        }
+        let Some(stack) = stack else {
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::Counters(Box::new(batch)));
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "counter-replacement stack continuation is missing",
+            ));
+        };
+        let receipts =
+            match self.commit_counter_placement_batch(&batch.events, &completion, &mut events) {
+                Ok(receipts) => receipts,
+                Err(error) => {
+                    self.state.pending_replacement_event =
+                        Some(PendingReplacementEvent::Counters(Box::new(batch)));
+                    self.state.pending_resolution = Some(pending);
+                    return Err(error);
+                }
+            };
+        if let crate::state::CounterPlacementCompletion::BlightEffect {
+            player,
+            count,
+            creature,
+            spell_label,
+        } = &completion
+        {
+            let receipt = crate::state::BlightReceipt {
+                player: *player,
+                count: *count,
+                creature: Some(*creature),
+            };
+            let mut stack = stack;
+            stack.item.blight_receipts.push(receipt);
+            events.push(ev_log(format!(
+                "P{player} blights {count} using {} ({spell_label}).",
+                self.replacement_object_display_name(creature.object_id, None),
+            )));
+            self.fire_triggers(&[GameEvent::Blighted(receipt)], &mut events);
+            return self.complete_parked_resolution_with_previous(
+                stack.item,
+                stack.resume_effect_index,
+                stack.previous_result,
+                events,
+            );
+        }
+        if let crate::state::CounterPlacementCompletion::Explore {
+            controller,
+            explorer,
+            revealed,
+            spell_label,
+        } = &completion
+        {
+            let mut previous_result = stack.previous_result.clone();
+            previous_result.counter_placements.extend(receipts);
+            if let Some(revealed) = revealed {
+                self.park_explore_choice(
+                    stack,
+                    *controller,
+                    *explorer,
+                    *revealed,
+                    spell_label,
+                    &mut events,
+                )?;
+                return Ok(finish_with_events(self, events));
+            }
+            events.push(ev_log(format!(
+                "P{controller} explores with an empty library ({spell_label})."
+            )));
+            self.fire_triggers(&[GameEvent::Explored { object: *explorer }], &mut events);
+            return self.complete_parked_resolution_with_previous(
+                stack.item,
+                stack.resume_effect_index,
+                previous_result,
+                events,
+            );
+        }
+        let mut previous_result = stack.previous_result.clone();
+        previous_result.counter_placements.extend(receipts);
+        if let crate::state::CounterPlacementCompletion::Amass {
+            controller,
+            target_object_id,
+            target_zone_change_generation,
+            ..
+        } = &completion
+        {
+            previous_result.produced_objects.push(TriggerObjectRef {
+                object_id: *target_object_id,
+                zone_change_generation: *target_zone_change_generation,
+                controller_at_event: *controller,
+            });
+        }
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            stack.resume_effect_index,
+            previous_result,
+            events,
+        )
     }
 
     pub(super) fn replacement_stack_source_presentation(
@@ -2958,7 +5207,13 @@ impl GameEngine {
                                 previous_effect_result: None,
                             },
                         );
-                        accumulate_entry_counters(&mut event.entry_counters, *counter, count);
+                        append_entry_counter_placement(
+                            event,
+                            event.destination_controller,
+                            [(*counter, count)],
+                            EntryCounterSource::EntryReplacement(effect_id.clone()),
+                            false,
+                        );
                     }
                     _ => debug_assert!(false, "stale intrinsic entry replacement"),
                 }
@@ -3016,7 +5271,13 @@ impl GameEngine {
                                 previous_effect_result: None,
                             },
                         );
-                        accumulate_entry_counters(&mut event.entry_counters, *counter, count);
+                        append_entry_counter_placement(
+                            event,
+                            event.destination_controller,
+                            [(*counter, count)],
+                            EntryCounterSource::EntryReplacement(effect_id.clone()),
+                            false,
+                        );
                     }
                     _ => debug_assert!(false, "stale battlefield entry replacement"),
                 }
@@ -3034,8 +5295,26 @@ impl GameEngine {
         event: BattlefieldEntryEvent,
         completion: BattlefieldEntryCompletion,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> BattlefieldEntryProgress {
-        self.advance_or_park_battlefield_entry(item, event, completion, events)
+    ) -> Result<BattlefieldEntryProgress, EngineError> {
+        let stack = ParkedStackResolution::new(item.clone());
+        match self.advance_or_park_battlefield_entry(item, event, completion.clone(), events) {
+            BattlefieldEntryProgress::Ready(event)
+                if !matches!(
+                    &completion,
+                    BattlefieldEntryCompletion::TokenBatch(_)
+                        | BattlefieldEntryCompletion::ZoneEntryBatch(_)
+                        | BattlefieldEntryCompletion::ObserverReturn { .. }
+                ) =>
+            {
+                match self
+                    .prepare_single_entry_counter_placements(stack, *event, completion, events)?
+                {
+                    Some(event) => Ok(BattlefieldEntryProgress::Ready(Box::new(event))),
+                    None => Ok(BattlefieldEntryProgress::Parked),
+                }
+            }
+            progress => Ok(progress),
+        }
     }
 
     pub(super) fn advance_or_park_battlefield_entry(
@@ -3333,11 +5612,10 @@ impl GameEngine {
 
     pub(super) fn commit_battlefield_entry(
         &mut self,
-        mut event: BattlefieldEntryEvent,
+        event: BattlefieldEntryEvent,
         attached_to: Option<AttachmentRecipient>,
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
-        self.replace_entry_counter_events(std::iter::once(&mut event));
         let attached_to = attached_to.or(event.attached_to);
         let object_id = event.object_id;
         let chosen_x = event.chosen_x;
@@ -3373,6 +5651,12 @@ impl GameEngine {
         &self,
         event: &BattlefieldEntryEvent,
     ) -> Result<(), EngineError> {
+        if !event.entry_counter_placements.is_empty() && !event.entry_counter_replacements_resolved
+        {
+            return Err(EngineError::Illegal(
+                "entry counters were not processed by the replacement planner",
+            ));
+        }
         let object = self
             .state
             .objects
@@ -3438,10 +5722,6 @@ impl GameEngine {
         };
         let zone_snapshot = self.snapshot_zone_event();
         let battle_protector = event.battle_protector;
-        let read_ahead_entry = event
-            .applied_effects
-            .iter()
-            .any(|effect| matches!(effect, EntryReplacementEffectId::ReadAhead { .. }));
         let (is_room, enters_as_copy) = self
             .state
             .objects
@@ -3521,15 +5801,16 @@ impl GameEngine {
             object.attached_to = attached_to;
         }
         let mut trigger_events = Vec::new();
-        for (counter, count) in event.entry_counters {
-            if let Some(placed) = self.place_counters_with_event(
-                event.object_id,
-                counter,
-                count,
-                read_ahead_entry && counter == CounterKind::Lore,
-                super::continuous::CounterPlacementOrigin::Entry,
-            ) {
-                trigger_events.push(placed);
+        for placement in &event.entry_counter_placements {
+            for (&counter, &count) in &placement.counters {
+                if let Some(placed) = self.commit_prepared_entry_counters_with_event(
+                    event.object_id,
+                    counter,
+                    count,
+                    placement.read_ahead_entry && counter == CounterKind::Lore,
+                ) {
+                    trigger_events.push(placed);
+                }
             }
         }
         if event.prepared {
@@ -3723,7 +6004,7 @@ impl GameEngine {
             )?;
             return Ok(false);
         }
-        let Some(SimultaneousEntryBatch::Token(batch)) = self.begin_entry_timestamp_order(
+        let Some(batch) = self.begin_entry_timestamp_order(
             SimultaneousEntryBatch::Token(Box::new(PendingTokenEntryBatch {
                 current_created: ready[0].created.clone(),
                 result_object_ids,
@@ -3737,6 +6018,14 @@ impl GameEngine {
         )?
         else {
             return Ok(true);
+        };
+        let Some(batch) =
+            self.begin_entry_counter_placements_for_batch(batch, Some(stack.clone()), events)?
+        else {
+            return Ok(true);
+        };
+        let SimultaneousEntryBatch::Token(batch) = batch else {
+            return Err(EngineError::Illegal("token entry batch changed type"));
         };
         self.commit_token_entry_batch(
             &stack.item,
@@ -3768,9 +6057,14 @@ impl GameEngine {
             .iter()
             .map(|entry| entry.event.object_id)
             .collect::<Vec<_>>();
-        // Snapshot all currently active doublers before committing the first token. The batch
-        // shares this source set even though its members are committed one at a time internally.
-        self.replace_entry_counter_events(entries.iter_mut().map(|entry| &mut entry.event));
+        if entries.iter().any(|entry| {
+            !entry.event.entry_counter_placements.is_empty()
+                && !entry.event.entry_counter_replacements_resolved
+        }) {
+            return Err(EngineError::Illegal(
+                "token entry counters were not processed by the replacement planner",
+            ));
+        }
         let mut trigger_events = Vec::new();
         for entry in &entries {
             trigger_events.push(GameEvent::EntersBattlefield {
@@ -3926,6 +6220,25 @@ impl GameEngine {
         if !self.accepted_entry_aura_recipient_current(&event)? {
             return self.finish_entry_copy_without_recipient(stack, event, completion, events);
         }
+        let event = if matches!(
+            &completion,
+            BattlefieldEntryCompletion::TokenBatch(_)
+                | BattlefieldEntryCompletion::ZoneEntryBatch(_)
+                | BattlefieldEntryCompletion::ObserverReturn { .. }
+        ) {
+            event
+        } else {
+            let Some(event) = self.prepare_single_entry_counter_placements(
+                stack.clone(),
+                event,
+                completion.clone(),
+                &mut events,
+            )?
+            else {
+                return Ok(finish_with_events(self, events));
+            };
+            event
+        };
         match completion {
             BattlefieldEntryCompletion::LandPlay {
                 player,
@@ -4216,6 +6529,38 @@ impl GameEngine {
                 Ok(finish_with_events(self, events))
             }
         }
+    }
+
+    /// Resolve all counter replacement choices for one finalized entry event before its zone
+    /// change. `None` means the whole entry is parked on a player choice.
+    pub(super) fn prepare_single_entry_counter_placements(
+        &mut self,
+        stack: ParkedStackResolution,
+        mut event: BattlefieldEntryEvent,
+        completion: BattlefieldEntryCompletion,
+        out: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<Option<BattlefieldEntryEvent>, EngineError> {
+        if event.entry_counter_replacements_resolved {
+            return Ok(Some(event));
+        }
+        let references = [&event];
+        let proposals = self.proposed_entry_counter_placements(&references, &[]);
+        let (counter_batch, candidates) = self.prepare_counter_placement_batch(proposals)?;
+        if let Some(candidates) = candidates {
+            self.park_entry_counter_placement_choice(
+                counter_batch,
+                candidates,
+                crate::state::EntryCounterReplacementResume::Single {
+                    stack,
+                    event: Box::new(event),
+                    completion,
+                },
+                out,
+            );
+            return Ok(None);
+        }
+        Self::apply_entry_counter_placement_results(&mut event, &counter_batch.events)?;
+        Ok(Some(event))
     }
 
     pub(super) fn finish_entry_copy_source_choice(
@@ -5399,7 +7744,14 @@ impl GameEngine {
         if chapter == 0 || chapter > final_chapter {
             return restore(self, pending, entry, "read-ahead chapter is out of range");
         }
-        accumulate_entry_counters(&mut entry.event.entry_counters, CounterKind::Lore, chapter);
+        let entry_actor = entry.event.destination_controller;
+        append_entry_counter_placement(
+            &mut entry.event,
+            entry_actor,
+            [(CounterKind::Lore, chapter)],
+            EntryCounterSource::EntryReplacement(effect_id.clone()),
+            true,
+        );
         entry.event.applied_effects.push(effect_id);
 
         let mut events = vec![ev_log(format!(
@@ -5578,7 +7930,7 @@ mod tests {
         .unwrap();
         let object_id = engine.state.players[0].hand[0];
         engine.state.objects.get_mut(&object_id).unwrap().card_id = "tatterkite".into();
-        let event = BattlefieldEntryEvent {
+        let mut event = BattlefieldEntryEvent {
             entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
@@ -5597,10 +7949,9 @@ mod tests {
             chosen_basic_land_type: None,
             chosen_opponents: Vec::new(),
             chosen_creature_types: Vec::new(),
-            entry_counters: BTreeMap::from([
-                (CounterKind::PlusOnePlusOne, 3),
-                (CounterKind::Stun, 2),
-            ]),
+            entry_counters: BTreeMap::new(),
+            entry_counter_placements: Vec::new(),
+            entry_counter_replacements_resolved: false,
             entry_modifiers: Vec::new(),
             entry_cause: None,
             attached_to: None,
@@ -5609,6 +7960,28 @@ mod tests {
             accepted_aura_recipient: None,
             applied_effects: Vec::new(),
         };
+        append_entry_counter_placement(
+            &mut event,
+            0,
+            [(CounterKind::PlusOnePlusOne, 3), (CounterKind::Stun, 2)],
+            EntryCounterSource::ResolutionEffect {
+                stack_object_id: object_id,
+                stack_zone_change_generation: engine
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0),
+                effect_index: 0,
+            },
+            false,
+        );
+        let references = [&event];
+        let proposals = engine.proposed_entry_counter_placements(&references, &[]);
+        let (counter_batch, choices) = engine.prepare_counter_placement_batch(proposals).unwrap();
+        assert!(choices.is_none());
+        GameEngine::apply_entry_counter_placement_results(&mut event, &counter_batch.events)
+            .unwrap();
         engine
             .commit_battlefield_entry(event, None, &mut Vec::new())
             .unwrap();
@@ -5660,6 +8033,8 @@ mod tests {
             chosen_opponents: Vec::new(),
             chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
+            entry_counter_placements: Vec::new(),
+            entry_counter_replacements_resolved: false,
             entry_modifiers: Vec::new(),
             entry_cause: None,
             attached_to: None,
@@ -5748,6 +8123,8 @@ mod tests {
             chosen_opponents: Vec::new(),
             chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
+            entry_counter_placements: Vec::new(),
+            entry_counter_replacements_resolved: false,
             entry_modifiers: Vec::new(),
             entry_cause: None,
             attached_to: None,
@@ -5821,6 +8198,8 @@ mod tests {
             chosen_opponents: Vec::new(),
             chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
+            entry_counter_placements: Vec::new(),
+            entry_counter_replacements_resolved: false,
             entry_modifiers: vec![ResolvingPermanentModifier::AddTypes(
                 tricerules_card_model::TypeLineAddition {
                     land_types: Vec::new(),
@@ -5856,6 +8235,242 @@ mod tests {
             "a printed battlefield entry replacement loses its source under type-setting suppression");
         engine.state.continuous_effects.clear();
         assert_eq!(engine.battlefield_entry_candidates(&event).len(), 1);
+    }
+
+    fn add_counter_fixture_permanent(
+        engine: &mut GameEngine,
+        owner: PlayerId,
+        card_id: &str,
+    ) -> ObjectId {
+        let player_index = engine.state.player_idx(owner).expect("fixture player");
+        let object_id = engine.state.players[player_index].hand.remove(0);
+        {
+            let object = engine
+                .state
+                .objects
+                .get_mut(&object_id)
+                .expect("fixture hand object");
+            object.card_id = card_id.into();
+            object.zone = Zone::Battlefield;
+            object.base_controller = owner;
+            object.controller = owner;
+        }
+        engine.state.players[player_index]
+            .battlefield
+            .push(object_id);
+        engine.emit_static_abilities_on_enter(object_id);
+        object_id
+    }
+
+    fn resolved_counter_map(
+        engine: &mut GameEngine,
+        proposal: ProposedCounterPlacement,
+    ) -> BTreeMap<CounterKind, u32> {
+        let (batch, candidates) = engine
+            .prepare_counter_placement_batch(vec![proposal])
+            .expect("counter placement planning");
+        assert!(candidates.is_none(), "this fixture has no ordering choice");
+        batch
+            .events
+            .into_iter()
+            .next()
+            .expect("one placement event")
+            .counters
+    }
+
+    #[test]
+    fn laezel_uses_live_actor_controller_and_recipient_characteristics() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            91_100,
+            &[0, 1],
+            20,
+            Some(vec![vec!["plains".into(); 7], vec!["island".into(); 7]]),
+            true,
+        )
+        .expect("engine");
+        let laezel = add_counter_fixture_permanent(&mut engine, 0, "laezel,_vlaakiths_champion");
+        let own_creature = add_counter_fixture_permanent(&mut engine, 0, "grizzly_bears");
+        let opposing_creature = add_counter_fixture_permanent(&mut engine, 1, "grizzly_bears");
+        let artifact = add_counter_fixture_permanent(&mut engine, 0, "sol_ring");
+        let battle = add_counter_fixture_permanent(
+            &mut engine,
+            0,
+            "invasion_of_ulgrotha_grandmother_ravi_sengir",
+        );
+
+        let own = engine
+            .proposed_object_counter_placement(
+                0,
+                own_creature,
+                [(CounterKind::PlusOnePlusOne, 1), (CounterKind::Lore, 2)],
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            )
+            .expect("own creature accepts counters");
+        assert_eq!(
+            resolved_counter_map(&mut engine, own),
+            BTreeMap::from([(CounterKind::PlusOnePlusOne, 2), (CounterKind::Lore, 3),]),
+            "Lae'zel adds one counter of every kind in the placement event"
+        );
+
+        for (actor, recipient, label) in [
+            (0, artifact, "ordinary artifact"),
+            (0, battle, "Battle"),
+            (0, opposing_creature, "opponent's creature"),
+            (
+                1,
+                own_creature,
+                "your creature when an opponent places counters",
+            ),
+        ] {
+            let proposal = engine
+                .proposed_object_counter_placement(
+                    actor,
+                    recipient,
+                    [(CounterKind::PlusOnePlusOne, 1)],
+                    super::super::continuous::CounterPlacementOrigin::Effect,
+                )
+                .expect("fixture recipient accepts counters");
+            assert_eq!(
+                resolved_counter_map(&mut engine, proposal)[&CounterKind::PlusOnePlusOne],
+                1,
+                "Lae'zel does not modify the {label} placement"
+            );
+        }
+
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(artifact),
+            kind: ContinuousEffectKind::Layer4AddTypes(
+                tricerules_card_model::primitives::TypeLineAddition {
+                    land_types: Vec::new(),
+                    card_types: vec![PermanentTypeFilter::Creature],
+                    creature_types: Vec::new(),
+                },
+            ),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 91_101,
+        });
+        let animated = engine
+            .proposed_object_counter_placement(
+                0,
+                artifact,
+                [(CounterKind::PlusOnePlusOne, 1)],
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            )
+            .expect("animated artifact accepts counters");
+        assert_eq!(
+            resolved_counter_map(&mut engine, animated)[&CounterKind::PlusOnePlusOne],
+            2,
+            "an artifact animated into a creature qualifies"
+        );
+
+        let player_zero = engine.state.player_idx(0).unwrap();
+        let player_one = engine.state.player_idx(1).unwrap();
+        engine.state.players[player_zero]
+            .battlefield
+            .retain(|object_id| *object_id != laezel);
+        engine.state.players[player_one].battlefield.push(laezel);
+        engine
+            .state
+            .objects
+            .get_mut(&laezel)
+            .unwrap()
+            .base_controller = 1;
+        engine.reindex_battlefield_control(&mut Vec::new());
+        let live_controller = engine
+            .proposed_object_counter_placement(
+                1,
+                opposing_creature,
+                [(CounterKind::PlusOnePlusOne, 1)],
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            )
+            .expect("controlled creature accepts counters");
+        assert_eq!(
+            resolved_counter_map(&mut engine, live_controller)[&CounterKind::PlusOnePlusOne],
+            2,
+            "a changed live Lae'zel controller determines the putting player"
+        );
+
+        engine.state.objects.get_mut(&laezel).unwrap().face_down = true;
+        let hidden_ability = engine
+            .proposed_object_counter_placement(
+                1,
+                opposing_creature,
+                [(CounterKind::PlusOnePlusOne, 1)],
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            )
+            .expect("controlled creature still accepts counters");
+        assert_eq!(
+            resolved_counter_map(&mut engine, hidden_ability)[&CounterKind::PlusOnePlusOne],
+            1,
+            "a live face-down source has no Lae'zel static ability"
+        );
+    }
+
+    #[test]
+    fn counter_replacement_prompt_hides_face_down_recipient_identity_on_wire() {
+        use prost::Message;
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            91_101,
+            &[0, 1],
+            20,
+            Some(vec![vec!["plains".into(); 7], vec!["island".into(); 7]]),
+            true,
+        )
+        .expect("engine");
+        add_counter_fixture_permanent(&mut engine, 0, "laezel,_vlaakiths_champion");
+        add_counter_fixture_permanent(&mut engine, 0, "doubling_season");
+        let recipient = add_counter_fixture_permanent(&mut engine, 0, "grizzly_bears");
+        engine.state.objects.get_mut(&recipient).unwrap().face_down = true;
+
+        let proposal = engine
+            .proposed_object_counter_placement(
+                0,
+                recipient,
+                [(CounterKind::PlusOnePlusOne, 1)],
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            )
+            .expect("face-down creature accepts counters");
+        let (batch, candidates) = engine
+            .prepare_counter_placement_batch(vec![proposal])
+            .expect("prepare counter replacement order");
+        let candidates = candidates.expect("Lae'zel and Doubling Season order choice");
+        let mut events = Vec::new();
+        engine.park_counter_placement_choice(
+            batch,
+            candidates,
+            None,
+            crate::state::CounterPlacementCompletion::StackEffect {
+                spell_label: "Test Effect".into(),
+            },
+            &mut events,
+        );
+
+        let wire = rv1::RuledEventBatch {
+            events,
+            ..Default::default()
+        };
+        let bytes = wire.encode_to_vec();
+        let decoded = rv1::RuledEventBatch::decode(bytes.as_slice()).expect("decode public batch");
+        let public_text = decoded
+            .events
+            .iter()
+            .filter_map(|event| match event.ev.as_ref()? {
+                rv1::ruled_event::Ev::Log(log) => Some(log.text.as_str()),
+                rv1::ruled_event::Ev::ResolutionChoiceRequired(choice) => {
+                    Some(choice.prompt_text.as_str())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(public_text.contains("Face-down creature"), "{public_text}");
+        assert!(!public_text.contains("Grizzly Bears"), "{public_text}");
     }
 }
 

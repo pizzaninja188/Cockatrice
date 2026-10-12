@@ -23,11 +23,15 @@ impl GameEngine {
     }
 
     /// CR 714.3b: after the active player's draw step, add one lore counter to every Saga they
-    /// control simultaneously. The resulting counter edges form one trigger-collection batch.
-    pub(super) fn perform_precombat_saga_lore_action(&mut self, out: &mut Vec<rv1::RuledEvent>) {
+    /// control simultaneously. Stage the complete cohort and its replacement choices before
+    /// committing any lore counter or collecting the chapter triggers.
+    pub(super) fn perform_precombat_saga_lore_action(
+        &mut self,
+        out: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
         let active = self.state.active_player_id();
         let Some(index) = self.state.player_idx(active) else {
-            return;
+            return Ok(());
         };
         let sagas: Vec<_> = self.state.players[index]
             .battlefield
@@ -40,19 +44,40 @@ impl GameEngine {
                     })
             })
             .collect();
-        let mut counter_events = Vec::new();
+        let mut proposals = Vec::new();
+        let mut saga_refs = Vec::new();
         for saga in sagas {
-            if let Some(event) = self.place_counters_with_event(
+            if let Some(proposal) = self.proposed_object_counter_placement(
+                active,
                 saga,
-                CounterKind::Lore,
-                1,
-                false,
+                [(CounterKind::Lore, 1)],
                 super::continuous::CounterPlacementOrigin::TurnBased,
             ) {
-                counter_events.push(event);
+                saga_refs.push(TriggerObjectRef {
+                    object_id: saga,
+                    zone_change_generation: self
+                        .state
+                        .zone_change_generation
+                        .get(&saga)
+                        .copied()
+                        .unwrap_or(0),
+                    controller_at_event: active,
+                });
+                proposals.push(proposal);
             }
         }
-        self.fire_triggers(&counter_events, out);
+        if proposals.is_empty() {
+            return Ok(());
+        }
+        self.begin_unstacked_counter_placement_batch(
+            proposals,
+            crate::state::CounterPlacementCompletion::SagaLore {
+                active_player: active,
+                sagas: saga_refs,
+            },
+            out,
+        )?;
+        Ok(())
     }
 }
 
@@ -70,16 +95,40 @@ mod tests {
             true,
         )
         .expect("new");
-        let object_id = engine.state.players[0].hand.remove(0);
-        engine.state.players[0].battlefield.push(object_id);
+        let object_id = copied_saga_into(&mut engine, 0, false);
+        (engine, object_id)
+    }
+
+    fn copied_saga_into(engine: &mut GameEngine, controller: PlayerId, animate: bool) -> ObjectId {
+        let object_id = engine.state.players[controller as usize].hand.remove(0);
+        engine.state.players[controller as usize]
+            .battlefield
+            .push(object_id);
         let face = engine
             .registry
             .get("burn,_burn,_tree_and_fern")
             .expect("Burn")
             .primary_face()
             .clone();
+        let mut face = face;
+        if animate {
+            face.types.push("Creature".to_string());
+            face.supertypes.retain(|supertype| supertype != "Legendary");
+            face.power = Some(1);
+            face.toughness = Some(1);
+        }
+        face.triggered_abilities.retain_mut(|ability| {
+            let TriggerCondition::SagaChapter { chapters } = &mut ability.trigger else {
+                return false;
+            };
+            *chapters = vec![4];
+            true
+        });
         let object = engine.state.objects.get_mut(&object_id).expect("object");
         object.zone = Zone::Battlefield;
+        object.controller = controller;
+        object.base_controller = controller;
+        object.owner = controller;
         object.card_id = "burn,_burn,_tree_and_fern".into();
         object.copiable_values = Some(CopiableValues {
             prototyped: false,
@@ -89,7 +138,118 @@ mod tests {
             room_faces: None,
             face,
         });
-        (engine, object_id)
+        object_id
+    }
+
+    fn battlefield_card(engine: &mut GameEngine, controller: PlayerId, card_id: &str) -> ObjectId {
+        let object_id = engine.state.players[controller as usize].hand.remove(0);
+        engine.state.players[controller as usize]
+            .battlefield
+            .push(object_id);
+        let object = engine.state.objects.get_mut(&object_id).expect("object");
+        object.zone = Zone::Battlefield;
+        object.controller = controller;
+        object.base_controller = controller;
+        object.owner = controller;
+        object.card_id = card_id.into();
+        object.copiable_values = None;
+        object.face_down = false;
+        object_id
+    }
+
+    fn laezel_with_two_replacement_instances(engine: &mut GameEngine) {
+        let object_id = battlefield_card(engine, 0, "laezel,_vlaakiths_champion");
+        let mut face = engine
+            .registry
+            .get("laezel,_vlaakiths_champion")
+            .expect("Lae'zel")
+            .primary_face()
+            .clone();
+        let mut second = face.static_abilities[0].clone();
+        second.ability_id = tricerules_card_model::AbilityId::new("static_02").unwrap();
+        face.static_abilities.push(second);
+        engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("Lae'zel object")
+            .copiable_values = Some(CopiableValues {
+            prototyped: false,
+            source_card_id: "laezel,_vlaakiths_champion".into(),
+            source_face_index: 0,
+            display_name: "Lae'zel replacement fixture".into(),
+            room_faces: None,
+            face,
+        });
+    }
+
+    #[test]
+    fn simultaneous_saga_lore_choices_commit_all_recipients_together() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            185_101,
+            &[0, 1],
+            20,
+        )
+        .expect("new");
+        engine.state.opening = None;
+        engine.state.priority_idx = 0;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.command_index = 5;
+        assert_eq!(engine.state.active_player_id(), 0);
+        laezel_with_two_replacement_instances(&mut engine);
+        let first = copied_saga_into(&mut engine, 0, true);
+        let second = copied_saga_into(&mut engine, 0, true);
+        assert_eq!(engine.saga_final_chapter(first), Some(4));
+        assert_eq!(engine.saga_final_chapter(second), Some(4));
+        let mut out = Vec::new();
+        engine.perform_precombat_saga_lore_action(&mut out).unwrap();
+
+        let mut choices = 0;
+        while let Some(pending) = engine.state.pending_resolution.as_ref() {
+            assert_eq!(
+                pending.presentation.choice_kind,
+                rv1::ChoiceKind::ReplacementEffect,
+                "the unstacked turn-based action parks on counter replacement order"
+            );
+            assert_eq!(
+                engine.state.objects[&first].counter_count(CounterKind::Lore),
+                0,
+                "no Saga commits while any recipient still needs a replacement choice"
+            );
+            assert_eq!(
+                engine.state.objects[&second].counter_count(CounterKind::Lore),
+                0,
+                "sibling Saga counters remain staged"
+            );
+            let candidate = pending.presentation.candidates[0];
+            engine
+                .apply_command(
+                    0,
+                    &rv1::RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                            rv1::SubmitResolutionChoice {
+                                chosen_object_ids: vec![candidate],
+                                ..Default::default()
+                            },
+                        )),
+                    },
+                )
+                .expect("choose a legal counter replacement");
+            choices += 1;
+        }
+
+        assert_eq!(choices, 2, "each Saga has two one-shot Lae'zel instances");
+        assert_eq!(engine.state.objects[&first].zone, Zone::Battlefield);
+        assert_eq!(engine.state.objects[&second].zone, Zone::Battlefield);
+        assert_eq!(
+            engine.state.objects[&first].counter_count(CounterKind::Lore),
+            3
+        );
+        assert_eq!(
+            engine.state.objects[&second].counter_count(CounterKind::Lore),
+            3
+        );
     }
 
     #[test]
@@ -107,7 +267,9 @@ mod tests {
             trigger_grant_origin: None,
         });
         assert_eq!(engine.saga_final_chapter(saga), None);
-        engine.perform_precombat_saga_lore_action(&mut Vec::new());
+        engine
+            .perform_precombat_saga_lore_action(&mut Vec::new())
+            .unwrap();
         assert_eq!(
             engine.state.objects[&saga].counter_count(CounterKind::Lore),
             1,
@@ -127,7 +289,9 @@ mod tests {
             .types
             .retain(|card_type| card_type != "Saga");
         assert_eq!(engine.saga_final_chapter(saga), None);
-        engine.perform_precombat_saga_lore_action(&mut Vec::new());
+        engine
+            .perform_precombat_saga_lore_action(&mut Vec::new())
+            .unwrap();
         assert_eq!(
             engine.state.objects[&saga].counter_count(CounterKind::Lore),
             1,

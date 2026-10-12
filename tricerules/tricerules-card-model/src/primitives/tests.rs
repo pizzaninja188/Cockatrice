@@ -1795,12 +1795,21 @@ fn arena_opponent_chooser_rejects_unsupported_activation_shapes() {
     let ability = arena_opponent_chooser_ability();
     ability.validate_shape().expect("bounded Arena activation");
 
+    let mut positive_loyalty = ability.clone();
+    positive_loyalty.costs.push(AbilityCost::Loyalty(1));
+    positive_loyalty
+        .validate_shape()
+        .expect("a positive loyalty cost can be staged with mana and source tap");
+
     let mut sacrifice = ability.clone();
     sacrifice.costs.push(AbilityCost::SacrificeSelf);
     assert!(
         sacrifice.validate_shape().is_err(),
-        "the first opponent-choice contract supports demonstrated mana/source-tap costs"
+        "opponent-choice activation still rejects unsupported extra costs"
     );
+    let mut loyalty_debit = ability.clone();
+    loyalty_debit.costs.push(AbilityCost::Loyalty(-1));
+    assert!(loyalty_debit.validate_shape().is_err());
     let mut optional = ability.clone();
     optional.targeting.as_mut().unwrap().groups[1].min = 0;
     assert!(optional.validate_shape().is_err());

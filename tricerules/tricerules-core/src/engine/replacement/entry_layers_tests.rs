@@ -302,10 +302,36 @@ fn entry_counter_doublers_use_a_shared_precommit_source_snapshot() {
     let prism = object(&mut engine, "astral_cornucopia", Zone::Stack, 0);
     let season_entry = event(&engine, entering_season);
     let mut prism_entry = event(&engine, prism);
-    prism_entry.entry_counters.insert(CounterKind::Charge, 2);
+    append_entry_counter_placement(
+        &mut prism_entry,
+        0,
+        [(CounterKind::Charge, 2)],
+        EntryCounterSource::ResolutionEffect {
+            stack_object_id: entering_season,
+            stack_zone_change_generation: engine
+                .state
+                .zone_change_generation
+                .get(&entering_season)
+                .copied()
+                .unwrap_or(0),
+            effect_index: 0,
+        },
+        false,
+    );
     let mut entries = vec![season_entry, prism_entry];
 
-    engine.replace_entry_counter_events(entries.iter_mut());
+    let references = entries.iter().collect::<Vec<_>>();
+    let proposals = engine.proposed_entry_counter_placements(&references, &[]);
+    let (counter_batch, choices) = engine.prepare_counter_placement_batch(proposals).unwrap();
+    assert!(
+        choices.is_none(),
+        "the sole counter replacement applies automatically"
+    );
+    assert_eq!(counter_batch.events.len(), 1);
+    assert_eq!(counter_batch.events[0].counters[&CounterKind::Charge], 4);
+    for entry in &mut entries {
+        GameEngine::apply_entry_counter_placement_results(entry, &counter_batch.events).unwrap();
+    }
     assert_eq!(
         entries[1].entry_counters[&CounterKind::Charge],
         4,
@@ -319,6 +345,44 @@ fn entry_counter_doublers_use_a_shared_precommit_source_snapshot() {
         engine.state.objects[&prism].counter_count(CounterKind::Charge),
         4,
         "sequential internal commits retain the simultaneous event's shared multiplier"
+    );
+}
+
+#[test]
+fn laezel_entering_with_another_counter_bearing_permanent_does_not_replace_its_entry() {
+    let mut engine = engine();
+    let incoming_laezel = object(&mut engine, "laezel,_vlaakiths_champion", Zone::Stack, 0);
+    let incoming_creature = object(&mut engine, "grizzly_bears", Zone::Stack, 0);
+    let mut creature_entry = event(&engine, incoming_creature);
+    append_test_entry_counters(
+        &engine,
+        &mut creature_entry,
+        0,
+        [(CounterKind::PlusOnePlusOne, 1)],
+    );
+    let mut entries = vec![event(&engine, incoming_laezel), creature_entry];
+
+    // The shared snapshot is the current battlefield. Lae'zel in the uncommitted entry cohort
+    // cannot apply her replacement to the other entrant's pre-commit counter placement.
+    let references = entries.iter().collect::<Vec<_>>();
+    let proposals = engine.proposed_entry_counter_placements(&references, &[]);
+    let (counter_batch, choices) = engine.prepare_counter_placement_batch(proposals).unwrap();
+    assert!(choices.is_none());
+    assert_eq!(
+        counter_batch.events[0].counters[&CounterKind::PlusOnePlusOne],
+        1,
+        "a simultaneous entrant is not an established replacement source"
+    );
+    for entry in &mut entries {
+        GameEngine::apply_entry_counter_placement_results(entry, &counter_batch.events).unwrap();
+    }
+
+    for entry in entries {
+        engine.commit_battlefield_entry_state(entry, None).unwrap();
+    }
+    assert_eq!(
+        engine.state.objects[&incoming_creature].counter_count(CounterKind::PlusOnePlusOne),
+        1
     );
 }
 
@@ -451,6 +515,8 @@ fn event(engine: &GameEngine, oid: ObjectId) -> BattlefieldEntryEvent {
         chosen_opponents: Vec::new(),
         chosen_creature_types: Vec::new(),
         entry_counters: BTreeMap::new(),
+        entry_counter_placements: Vec::new(),
+        entry_counter_replacements_resolved: false,
         entry_modifiers: Vec::new(),
         entry_cause: None,
         attached_to: None,
@@ -459,6 +525,42 @@ fn event(engine: &GameEngine, oid: ObjectId) -> BattlefieldEntryEvent {
         accepted_aura_recipient: None,
         applied_effects: Vec::new(),
     }
+}
+
+fn append_test_entry_counters(
+    engine: &GameEngine,
+    event: &mut BattlefieldEntryEvent,
+    actor: PlayerId,
+    counters: impl IntoIterator<Item = (CounterKind, u32)>,
+) {
+    let object_id = event.object_id;
+    append_entry_counter_placement(
+        event,
+        actor,
+        counters,
+        EntryCounterSource::ResolutionEffect {
+            stack_object_id: object_id,
+            stack_zone_change_generation: engine
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0),
+            effect_index: 0,
+        },
+        false,
+    );
+}
+
+fn finish_entry_counter_replacements(engine: &mut GameEngine, event: &mut BattlefieldEntryEvent) {
+    let references: [&BattlefieldEntryEvent; 1] = [&*event];
+    let proposals = engine.proposed_entry_counter_placements(&references, &[]);
+    let (counter_batch, choices) = engine.prepare_counter_placement_batch(proposals).unwrap();
+    assert!(
+        choices.is_none(),
+        "fixture entry has no replacement-order choice"
+    );
+    GameEngine::apply_entry_counter_placement_results(event, &counter_batch.events).unwrap();
 }
 
 #[test]
@@ -772,7 +874,7 @@ fn printed_aura_without_recipient_stays_in_library_and_resumes_tail_once() {
         let hand_before_tail = engine.state.players[0].hand.len();
         let mut events = Vec::new();
         let mut entry = event(&engine, aura);
-        entry.entry_counters.insert(CounterKind::Stun, 2);
+        append_test_entry_counters(&engine, &mut entry, 0, [(CounterKind::Stun, 2)]);
         let resumed = engine
             .begin_zone_entry_batch(
                 stack,
@@ -1715,11 +1817,12 @@ fn entry_early_layers_own_conditions_use_projected_counters_and_tapped_status() 
     copy_face(&mut engine, oid, source, "condition_entry_land");
     let mut entry = event(&engine, oid);
     entry.tapped = true;
-    entry.entry_counters.insert(CounterKind::Charge, 2);
+    append_test_entry_counters(&engine, &mut entry, 0, [(CounterKind::Charge, 2)]);
     let preview = engine
         .battlefield_entry_characteristics_through_layer_5(&entry)
         .unwrap();
     assert!(preview.has_type("Artifact"));
+    finish_entry_counter_replacements(&mut engine, &mut entry);
     engine
         .commit_battlefield_entry(entry, None, &mut Vec::new())
         .unwrap();
@@ -1823,12 +1926,13 @@ fn entry_early_layers_kaito_uses_entry_loyalty_before_commitment() {
         0
     );
     let mut entry = event(&engine, oid);
-    entry.entry_counters.insert(CounterKind::Loyalty, 4);
+    append_test_entry_counters(&engine, &mut entry, 0, [(CounterKind::Loyalty, 4)]);
     let preview = engine
         .battlefield_entry_characteristics_through_layer_5(&entry)
         .unwrap();
     assert!(preview.is_creature() && preview.has_type("Ninja"));
     assert!(!preview.has_type("Planeswalker"));
+    finish_entry_counter_replacements(&mut engine, &mut entry);
     engine
         .commit_battlefield_entry(entry, None, &mut Vec::new())
         .unwrap();

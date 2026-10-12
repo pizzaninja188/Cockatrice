@@ -116,7 +116,11 @@ mod tests {
                     dealt: u32::MAX,
                     prevented: 0,
                 },
+                recipient_generation: engine.state.zone_change_generation.get(&target).copied(),
                 prevention_debits: Vec::new(),
+                counter_placements: Vec::new(),
+                counter_placement_proposals: Vec::new(),
+                additional_counter_logs: Vec::new(),
             });
         }
         let mut events = Vec::new();

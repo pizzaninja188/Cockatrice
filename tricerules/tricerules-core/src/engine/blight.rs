@@ -1,7 +1,5 @@
 //! Shared CR 701.68 operation for Cinder Strike, Gristle Glutton and Chaos Spewer.
-use super::continuous::CounterPlacementOrigin;
 use super::*;
-use crate::state::BlightReceipt;
 
 impl GameEngine {
     pub(super) fn blight_candidates(&self, player: PlayerId) -> Vec<ObjectId> {
@@ -42,38 +40,6 @@ impl GameEngine {
             return Err(EngineError::Illegal("illegal or stale Blight creature"));
         }
         Ok(())
-    }
-
-    pub(super) fn complete_blight(
-        &mut self,
-        player: PlayerId,
-        count: u32,
-        creature: Option<ObjectId>,
-        origin: CounterPlacementOrigin,
-    ) -> BlightReceipt {
-        let creature = creature.map(|oid| TriggerObjectRef {
-            object_id: oid,
-            zone_change_generation: self
-                .state
-                .zone_change_generation
-                .get(&oid)
-                .copied()
-                .unwrap_or(0),
-            controller_at_event: player,
-        });
-        if let Some(object) = &creature {
-            self.place_counters(
-                object.object_id,
-                CounterKind::MinusOneMinusOne,
-                count,
-                origin,
-            );
-        }
-        BlightReceipt {
-            player,
-            count,
-            creature,
-        }
     }
 
     pub(super) fn blight_cost_choice(

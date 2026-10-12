@@ -3,12 +3,13 @@
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
     AbilityDefinitionId, ActivatedAbilityOccurrence, ActivatedAbilitySlotLedger,
-    ActivationUseIdentity, ActivationUseKey, ActiveDamageDoubling, ActiveDamagePrevention,
-    ActiveDeathReplacement, ActiveEventObserver, ActiveExilePlayPermission, AffectedScope,
-    AttachmentRecipient, AttackingTokenBatch, BattlefieldEntryCompletion, BattlefieldEntryEvent,
-    BlockingChoice, CardResultCohort, CardResultEntry, CastCostObjectReceipt, CastCostReceipt,
-    ChosenCreatureTypeRecord, ChosenMode, ClassLevelDesignation, CombatAttackAssignment,
-    CombatDefenderTarget, CombatState, ContinuousEffect, CopiableValues, DamageDoublingScope,
+    ActivationCostCommandKind, ActivationUseIdentity, ActivationUseKey, ActiveDamageDoubling,
+    ActiveDamagePrevention, ActiveDeathReplacement, ActiveEventObserver, ActiveExilePlayPermission,
+    AffectedScope, AttachmentRecipient, AttackingTokenBatch, BattlefieldEntryCompletion,
+    BattlefieldEntryEvent, BlockingChoice, CardResultCohort, CardResultEntry,
+    CastCostObjectReceipt, CastCostReceipt, ChosenCreatureTypeRecord, ChosenMode,
+    ClassLevelDesignation, CombatAttackAssignment, CombatDefenderTarget, CombatState,
+    ContinuousEffect, CopiableValues, CounterPlacementCompletion, DamageDoublingScope,
     DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
     DelayedTriggerPayload, EffectResult, EntryReplacementApplication, EntryReplacementEffectId,
     EventObserverMatcher, EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState,
@@ -1281,6 +1282,7 @@ pub struct GameEngine {
     pub state: GameState,
     pending_spell_cast_internal: Option<casting::PendingSpellCastInternal>,
     pending_ability_activation_internal: Option<activation::PendingAbilityActivationInternal>,
+    pending_counter_cost_internal: Option<activation::PendingCounterCostInternal>,
     pending_attack_declaration_internal: Option<combat::PendingAttackDeclarationInternal>,
     /// Shared process-wide registry (`tricerules_cards::registry::global()`); read-only.
     registry: &'static CardRegistry,
@@ -1938,6 +1940,7 @@ impl GameEngine {
             state,
             pending_spell_cast_internal: None,
             pending_ability_activation_internal: None,
+            pending_counter_cost_internal: None,
             pending_attack_declaration_internal: None,
             registry,
             dev_commands_enabled: false,
@@ -2875,6 +2878,24 @@ impl GameEngine {
             }
         }
         if let Some(pending) = self.state.pending_ability_activation.as_ref() {
+            let counter_cost_choice = self.state.pending_resolution.as_ref().is_some_and(
+                |choice| {
+                    choice.deciding_player == player
+                        && matches!(
+                            &choice.continuation,
+                            ResolutionContinuation::CounterReplacement {
+                                completion: CounterPlacementCompletion::ActivationCost { replay },
+                                ..
+                            } if replay.command_kind == ActivationCostCommandKind::Staged
+                                && replay.actor == player
+                                && replay.transaction_id == Some(pending.transaction_id)
+                                && replay.expected_revision == Some(pending.revision)
+                                && replay.source_object_id == pending.source_object_id
+                                && replay.source_zone_change_generation
+                                    == pending.source_zone_change_generation
+                        )
+                },
+            );
             let allowed = matches!(
                 cmd.cmd.as_ref(),
                 Some(Cmd::SubmitAbilityActivationChoice(_))
@@ -2894,7 +2915,9 @@ impl GameEngine {
                         .state
                         .pending_resolution
                         .as_ref()
-                        .is_some_and(|choice| choice.deciding_player == player);
+                        .is_some_and(|choice| choice.deciding_player == player)
+                || matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitResolutionChoice(_)))
+                    && counter_cost_choice;
             if !allowed {
                 return Err(EngineError::Illegal(
                     "finish the pending ability activation before acting",
@@ -2990,7 +3013,16 @@ impl GameEngine {
                     .state
                     .pending_resolution
                     .as_ref()
-                    .is_some_and(|pending| pending.continuation.mana_window_undo_start().is_some());
+                    .is_some_and(|pending| {
+                        pending.continuation.mana_window_undo_start().is_some()
+                            || matches!(
+                                &pending.continuation,
+                                ResolutionContinuation::CounterReplacement {
+                                    completion: CounterPlacementCompletion::ActivationCost { .. },
+                                    ..
+                                }
+                            )
+                    });
         let preserves_spell_payment_undo = matches!(
             cmd.cmd.as_ref(),
             Some(Cmd::CommitSpellCast(_) | Cmd::CancelSpellCast(_))

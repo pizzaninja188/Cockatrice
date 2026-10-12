@@ -83,10 +83,23 @@ fn choice_engine_players(players: &[PlayerId]) -> (GameEngine, rv1::ActivateAbil
             (ability_id: "triggered_02", presentation: Fallback, trigger: WhenSelfLeavesBattlefield, effect: [GainLife(amount: 1)]),
             (ability_id: "triggered_03", presentation: Fallback, trigger: WheneverPlayerCommitsCrime(player: Controller), effect: [GainLife(amount: 1)]),
         ], activated_abilities:"#);
+    let loyalty_walker = OPPONENT_CHOICE_LAND
+        .replace("opponent_choice_land", "loyalty_choice_walker")
+        .replace("Opponent Choice Land", "Loyalty Choice Walker")
+        .replace(
+            "types: [\"Land\"],",
+            "supertypes: [\"Legendary\"], types: [\"Planeswalker\"], loyalty: 5,",
+        )
+        .replace(
+            "costs: [Mana(\"{3}\"), Tap],",
+            "costs: [Mana(\"{3}\"), Tap, Loyalty(1)],",
+        );
     let registry = CardRegistry::from_chunks_and_tokens(
         &[
             include_str!("../../../tricerules-cards/data/forest.ron"),
             include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+            include_str!("../../../tricerules-cards/data/laezel,_vlaakiths_champion.ron"),
+            include_str!("../../../tricerules-cards/data/doubling_season.ron"),
             OPPONENT_CHOICE_LAND,
             PAYMENT_CREATURE,
             RESTRICTED_PAYMENT_LAND,
@@ -96,6 +109,7 @@ fn choice_engine_players(players: &[PlayerId]) -> (GameEngine, rv1::ActivateAbil
             &taxed,
             &reduced,
             &snapshot,
+            &loyalty_walker,
         ],
         &[],
     )
@@ -1411,6 +1425,264 @@ fn arena_staged_mana_sacrifice_keeps_announced_incarnation_and_partial_resolutio
     assert!(engine.state.players[1].battlefield.contains(&opponent));
     assert!(engine.state.objects[&opponent].tapped);
     assert_eq!(engine.state.objects[&opponent].damage, 0);
+}
+
+fn pending_staged_loyalty_cost_replacement() -> (
+    GameEngine,
+    ObjectId,
+    u64,
+    u64,
+    usize,
+    crate::state::ManaPool,
+) {
+    let (mut engine, legacy) = choice_engine();
+    let walker = place_ready(&mut engine, 10, "Loyalty Choice Walker");
+    place_ready(&mut engine, 10, "Lae'zel, Vlaakith's Champion");
+    for _ in 0..3 {
+        place_ready(&mut engine, 10, "Doubling Season");
+    }
+    engine
+        .state
+        .objects
+        .get_mut(&walker)
+        .unwrap()
+        .counters
+        .insert(CounterKind::Loyalty, 5);
+    let generation = engine.payment_object_ref(walker).zone_change_generation;
+    let begin = RuledCommand {
+        cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(
+            rv1::BeginAbilityActivation {
+                source_object_id: walker,
+                expected_zone_change_generation: generation,
+                ability_index: 0,
+                source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+                own_target: Some(rv1::AbilityActivationTarget {
+                    object_id: legacy.targets[0].object_id,
+                    zone_change_generation: engine
+                        .payment_object_ref(legacy.targets[0].object_id)
+                        .zone_change_generation,
+                    group_index: 0,
+                }),
+                opponent_player_id: Some(20),
+            },
+        )),
+    };
+    engine.apply_command(10, &begin).expect("announce ability");
+    let pending = engine.state.pending_ability_activation.as_ref().unwrap();
+    let opponent_choice = rv1::SubmitAbilityActivationChoice {
+        transaction_id: pending.transaction_id,
+        expected_revision: pending.revision,
+        target: Some(pending.target_candidates[0]),
+        ..Default::default()
+    };
+    engine
+        .apply_command(
+            20,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
+                    opponent_choice,
+                )),
+            },
+        )
+        .expect("opponent selects the second target");
+
+    let pending = engine.state.pending_ability_activation.as_ref().unwrap();
+    let transaction_id = pending.transaction_id;
+    let expected_revision = pending.revision;
+    let mut commit = rv1::CommitAbilityActivation {
+        transaction_id,
+        expected_revision,
+        payment: Some(rv1::PaymentSelection {
+            mana: Some(rv1::PaymentMana {
+                c: 3,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let preview = engine.preview_payment(
+        10,
+        &rv1::PreviewPayment {
+            commit_ability_activation: Some(commit.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(preview.error.is_empty(), "{}", preview.error);
+    assert!(preview.complete);
+    commit.payment = preview.selection;
+    let stack_len = engine.state.stack.len();
+    let mana_before = engine.state.players[0].mana_pool;
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                    commit.clone(),
+                )),
+            },
+        )
+        .expect("open replacement choice before payment");
+    assert!(engine.state.pending_resolution.is_some());
+    (
+        engine,
+        walker,
+        transaction_id,
+        expected_revision,
+        stack_len,
+        mana_before,
+    )
+}
+
+#[test]
+fn staged_positive_loyalty_cost_waits_for_replacement_order_before_payment_commit() {
+    let (mut engine, walker, transaction_id, expected_revision, stack_len, mana_before) =
+        pending_staged_loyalty_cost_replacement();
+    let commit = rv1::CommitAbilityActivation {
+        transaction_id,
+        expected_revision,
+        ..Default::default()
+    };
+
+    for expected_choices in [3, 2] {
+        let (deciding_player, choice_kind, candidate_count, selected) = {
+            let choice = engine.state.pending_resolution.as_ref().unwrap();
+            (
+                choice.deciding_player,
+                choice.presentation.choice_kind,
+                choice.presentation.candidates.len(),
+                choice.presentation.candidates[0],
+            )
+        };
+        assert_eq!(deciding_player, 10);
+        assert_eq!(choice_kind, rv1::ChoiceKind::ReplacementEffect);
+        assert_eq!(candidate_count, expected_choices);
+        assert!(!engine.state.objects[&walker].tapped);
+        assert_eq!(
+            engine.state.objects[&walker].counter_count(CounterKind::Loyalty),
+            5
+        );
+        assert_eq!(engine.state.players[0].mana_pool, mana_before);
+        assert_eq!(engine.state.stack.len(), stack_len);
+        assert!(engine.state.pending_ability_activation.is_some());
+        assert!(engine.pending_ability_activation_internal.is_some());
+        serde_json::to_value(&engine.state).expect("the parked cost choice stays serializable");
+
+        let before_invalid = serde_json::to_value(&engine.state).unwrap();
+        engine
+            .apply_command(
+                10,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
+                        rv1::CancelAbilityActivation {
+                            transaction_id,
+                            expected_revision,
+                        },
+                    )),
+                },
+            )
+            .expect_err("a staged payment cannot be canceled during replacement order");
+        assert_eq!(serde_json::to_value(&engine.state).unwrap(), before_invalid);
+        engine
+            .apply_command(
+                10,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                        commit.clone(),
+                    )),
+                },
+            )
+            .expect_err("a staged payment cannot be committed twice");
+        assert_eq!(serde_json::to_value(&engine.state).unwrap(), before_invalid);
+        engine
+            .apply_command(
+                20,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![selected],
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect_err("only the affected player's replacement choice is accepted");
+        assert_eq!(serde_json::to_value(&engine.state).unwrap(), before_invalid);
+        engine
+            .apply_command(
+                10,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![selected],
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect("choose the next replacement effect");
+    }
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(engine.pending_ability_activation_internal.is_none());
+    assert!(engine.pending_counter_cost_internal.is_none());
+    assert!(engine.state.objects[&walker].tapped);
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+    assert_eq!(
+        engine.state.objects[&walker].counter_count(CounterKind::Loyalty),
+        21
+    );
+    assert_eq!(engine.state.stack.len(), stack_len + 1);
+    assert_eq!(engine.state.stack[0].source_permanent_id, Some(walker));
+}
+
+#[test]
+fn failed_staged_loyalty_payment_does_not_commit_counter_tap_or_stack() {
+    let (mut engine, walker, _transaction_id, _expected_revision, stack_len, _) =
+        pending_staged_loyalty_cost_replacement();
+    let choice = engine.state.pending_resolution.as_ref().unwrap();
+    let selected = choice.presentation.candidates[0];
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![selected],
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("first replacement application remains staged");
+    engine.state.players[0].mana_pool.colorless = 2;
+    let choice = engine.state.pending_resolution.as_ref().unwrap();
+    let selected = choice.presentation.candidates[0];
+    engine
+        .apply_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![selected],
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect_err("revalidated mana payment must fail before any cost is committed");
+    assert!(!engine.state.objects[&walker].tapped);
+    assert_eq!(
+        engine.state.objects[&walker].counter_count(CounterKind::Loyalty),
+        5
+    );
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 2);
+    assert_eq!(engine.state.stack.len(), stack_len);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert!(engine.pending_ability_activation_internal.is_none());
+    assert!(engine.pending_counter_cost_internal.is_none());
 }
 
 #[test]

@@ -13,6 +13,7 @@ use super::targeting::{
 };
 use super::*;
 use crate::engine::events::ev_log_ability;
+use prost::Message;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum LimitedActivationUse {
@@ -45,6 +46,12 @@ pub(super) struct AnnouncedAbilityActivation {
     target_triggers: Vec<super::triggers::CollectedTrigger>,
     activation_uses: Vec<LimitedActivationUse>,
     x_value: u32,
+}
+
+impl AnnouncedAbilityActivation {
+    pub(super) fn source_identity(&self) -> (PlayerId, ObjectId, u64) {
+        (self.player, self.permanent_id, self.source_zone_change)
+    }
 }
 
 fn format_paid_card_costs_log(costs: &[PaidCardCost]) -> String {
@@ -1583,7 +1590,7 @@ impl GameEngine {
         let origin = pending_state.original_zone;
         let prepare_source = self.state.prepare_spell_sources.get(&oid).cloned();
         let payment_plan = self.prepare_cost_transaction_commit(payment_plan)?;
-        let payment = self.commit_prevalidated_cost_transaction(payment_plan)?;
+        let payment = self.commit_prevalidated_cost_transaction(payment_plan, None)?;
         let returned_attacker_assignment = payment.returned_attacker_assignment;
         let life_paid = payment.life_paid;
         let mana_spent = payment.mana_spent;
@@ -2367,8 +2374,191 @@ impl GameEngine {
             prepared_payment,
             command.payment.as_ref(),
         )?;
-        let payment = self.commit_cost_transaction(cost_plan)?;
+        let replay = crate::state::ActivationCostReplay {
+            actor: player,
+            source_object_id: permanent_id,
+            source_zone_change_generation: source_zone_change,
+            command_kind: crate::state::ActivationCostCommandKind::Direct,
+            command_bytes: command.encode_to_vec(),
+            transaction_id: None,
+            expected_revision: None,
+            counter_debits: Vec::new(),
+        };
+        self.finish_ability_cost_transaction(cost_plan, announcement, replay)
+    }
+
+    pub(super) fn finish_ability_cost_transaction(
+        &mut self,
+        plan: super::payment::transaction::CostTransactionPlan,
+        announcement: AnnouncedAbilityActivation,
+        mut replay: crate::state::ActivationCostReplay,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let plan = self.prepare_cost_transaction_commit(plan)?;
+        let counter_costs = plan.counter_placement_costs();
+        if counter_costs.is_empty() {
+            let payment = self.commit_cost_transaction(plan)?;
+            self.complete_activation_cost_state(&replay);
+            return Ok(self.finish_announced_ability(announcement, payment));
+        }
+
+        replay.counter_debits = counter_costs
+            .iter()
+            .map(|debit| crate::state::ActivationCostCounterDebit {
+                debit_index: debit.debit_index,
+                object_id: debit.object_id,
+                zone_change_generation: debit.generation,
+                counter_kind: debit.kind,
+                requested_count: debit.count,
+            })
+            .collect();
+        if replay.actor != plan.player()
+            || counter_costs.iter().any(|debit| {
+                debit.kind == tricerules_card_model::CounterKind::Loyalty
+                    && (debit.object_id != replay.source_object_id
+                        || debit.generation != replay.source_zone_change_generation)
+            })
+        {
+            return Err(EngineError::Illegal(
+                "counter cost replay does not match its activation",
+            ));
+        }
+        let mut placements = Vec::with_capacity(counter_costs.len());
+        for debit in &counter_costs {
+            let mut placement = self
+                .proposed_object_counter_placement(
+                    replay.actor,
+                    debit.object_id,
+                    [(debit.kind, debit.count)],
+                    super::continuous::CounterPlacementOrigin::Cost,
+                )
+                .ok_or(EngineError::Illegal(
+                    "positive loyalty cost recipient became stale",
+                ))?;
+            placement.cost_debit_index = Some(debit.debit_index);
+            placements.push(placement);
+        }
+        let (batch, candidates) = self.prepare_counter_placement_batch(placements)?;
+        if let Some(candidates) = candidates {
+            let completion = crate::state::CounterPlacementCompletion::ActivationCost {
+                replay: replay.clone(),
+            };
+            self.pending_counter_cost_internal = Some(activation::PendingCounterCostInternal {
+                replay,
+                plan,
+                announcement,
+            });
+            let mut events = Vec::new();
+            self.park_counter_placement_choice(batch, candidates, None, completion, &mut events);
+            return Ok(finish_with_events(self, events));
+        }
+
+        let payment = self.commit_cost_transaction_with_counter_placements(plan, batch.events)?;
+        self.complete_activation_cost_state(&replay);
         Ok(self.finish_announced_ability(announcement, payment))
+    }
+
+    pub(super) fn complete_activation_cost_state(
+        &mut self,
+        replay: &crate::state::ActivationCostReplay,
+    ) {
+        if replay.command_kind == crate::state::ActivationCostCommandKind::Staged {
+            self.state.pending_ability_activation = None;
+            self.pending_ability_activation_internal = None;
+        }
+        self.pending_counter_cost_internal = None;
+    }
+
+    pub(super) fn finish_activation_cost_replacements(
+        &mut self,
+        replay: &crate::state::ActivationCostReplay,
+        placements: Vec<super::replacement::ProposedCounterPlacement>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let pending = self
+            .pending_counter_cost_internal
+            .as_ref()
+            .filter(|pending| pending.replay == *replay)
+            .cloned()
+            .ok_or(EngineError::Illegal(
+                "activation counter-cost snapshot is stale",
+            ))?;
+        if replay.actor != pending.plan.player()
+            || pending.announcement.source_identity()
+                != (
+                    replay.actor,
+                    replay.source_object_id,
+                    replay.source_zone_change_generation,
+                )
+            || self
+                .state
+                .zone_change_generation
+                .get(&replay.source_object_id)
+                .copied()
+                .unwrap_or(0)
+                != replay.source_zone_change_generation
+        {
+            return Err(EngineError::Illegal(
+                "activation source changed during counter-cost replacement",
+            ));
+        }
+        match replay.command_kind {
+            crate::state::ActivationCostCommandKind::Direct => {
+                let command = rv1::ActivateAbility::decode(replay.command_bytes.as_slice())
+                    .map_err(|_| EngineError::Illegal("accepted activation command is invalid"))?;
+                if command.source_object_id != replay.source_object_id
+                    || command.expected_zone_change_generation
+                        != replay.source_zone_change_generation
+                    || self.state.pending_ability_activation.is_some()
+                {
+                    return Err(EngineError::Illegal(
+                        "direct activation identity changed during counter-cost replacement",
+                    ));
+                }
+            }
+            crate::state::ActivationCostCommandKind::Staged => {
+                let command = rv1::CommitAbilityActivation::decode(replay.command_bytes.as_slice())
+                    .map_err(|_| EngineError::Illegal("accepted activation payment is invalid"))?;
+                let state_matches =
+                    self.state
+                        .pending_ability_activation
+                        .as_ref()
+                        .is_some_and(|pending| {
+                            pending.actor_player_id == replay.actor
+                                && pending.source_object_id == replay.source_object_id
+                                && pending.source_zone_change_generation
+                                    == replay.source_zone_change_generation
+                                && Some(pending.transaction_id) == replay.transaction_id
+                                && Some(pending.revision) == replay.expected_revision
+                        });
+                if !state_matches
+                    || Some(command.transaction_id) != replay.transaction_id
+                    || Some(command.expected_revision) != replay.expected_revision
+                {
+                    return Err(EngineError::Illegal(
+                        "staged activation transaction changed during counter-cost replacement",
+                    ));
+                }
+            }
+        }
+        let plan = self.prepare_cost_transaction_commit(pending.plan.clone())?;
+        let signatures = plan
+            .counter_placement_costs()
+            .iter()
+            .map(|debit| crate::state::ActivationCostCounterDebit {
+                debit_index: debit.debit_index,
+                object_id: debit.object_id,
+                zone_change_generation: debit.generation,
+                counter_kind: debit.kind,
+                requested_count: debit.count,
+            })
+            .collect::<Vec<_>>();
+        if signatures != replay.counter_debits {
+            return Err(EngineError::Illegal(
+                "counter cost debits changed during replacement order",
+            ));
+        }
+        let payment = self.commit_cost_transaction_with_counter_placements(plan, placements)?;
+        self.complete_activation_cost_state(replay);
+        Ok(self.finish_announced_ability(pending.announcement, payment))
     }
 
     pub(super) fn capture_ability_announcement(
@@ -2613,6 +2803,9 @@ impl GameEngine {
             primary_presentation.clone(),
             tgt_line,
         ));
+        for replacement_log in &payment.counter_replacement_logs {
+            batch.events.push(ev_log(replacement_log.clone()));
+        }
         if payment.life_paid > 0 {
             batch.events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
@@ -3747,6 +3940,8 @@ impl GameEngine {
                 chosen_opponents: Vec::new(),
                 chosen_creature_types: Vec::new(),
                 entry_counters: BTreeMap::new(),
+                entry_counter_placements: Vec::new(),
+                entry_counter_replacements_resolved: false,
                 entry_modifiers: Vec::new(),
                 entry_cause: None,
                 attached_to: None,
@@ -3761,8 +3956,13 @@ impl GameEngine {
                 resume_stack: special_resume_stack.clone().map(Box::new),
             },
             &mut batch.events,
-        ) {
-            super::replacement::BattlefieldEntryProgress::Parked => return Ok(batch),
+        )? {
+            super::replacement::BattlefieldEntryProgress::Parked => {
+                if let Some(stack) = special_resume_stack.as_ref() {
+                    self.transfer_entry_choice_resume(stack);
+                }
+                return Ok(batch);
+            }
             super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
                 self.restore_skipped_battlefield_entry(&entry)?;
             }

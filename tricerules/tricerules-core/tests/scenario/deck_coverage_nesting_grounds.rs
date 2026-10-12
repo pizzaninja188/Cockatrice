@@ -251,6 +251,155 @@ fn nesting_grounds_moves_one_selected_counter_between_distinct_player_targets() 
 }
 
 #[test]
+fn nesting_grounds_stages_laezel_and_doubling_season_before_atomic_move() {
+    for (replacement_choice, expected_destination_count) in [(0, 4), (1, 3)] {
+        let mut engine = four_player_engine(202_610_110 + replacement_choice as u64);
+        let grounds = inject_permanent_on_battlefield(&mut engine, 0, NESTING_GROUNDS);
+        inject_permanent_on_battlefield(&mut engine, 0, "laezel,_vlaakiths_champion");
+        inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+        let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+        let destination = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .set_counter(CounterKind::Quest, 1);
+        give_mana(
+            &mut engine,
+            0,
+            ManaGift {
+                c: 1,
+                ..Default::default()
+            },
+        );
+
+        engine
+            .apply_command(
+                0,
+                &move_counter_command(&engine, grounds, source, destination),
+            )
+            .expect("activate Nesting Grounds");
+        let counter_kind_choice = pass_until_choice(&mut engine);
+        assert_eq!(counter_kind_choice.resolution_branches.len(), 1);
+        engine
+            .apply_command(0, &select_branch(0))
+            .expect("choose the Quest counter");
+
+        let replacement_prompt = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("counter placement replacement choice")
+            .clone();
+        assert_eq!(
+            replacement_prompt.presentation.choice_kind,
+            tricerules_proto::ruled::v1::ChoiceKind::ReplacementEffect
+        );
+        assert_eq!(replacement_prompt.presentation.candidates.len(), 2);
+        assert_eq!(
+            engine.state.objects[&source].counter_count(CounterKind::Quest),
+            1,
+            "source removal waits until destination replacements finish"
+        );
+        assert_eq!(
+            engine.state.objects[&destination].counter_count(CounterKind::Quest),
+            0,
+            "destination placement waits until replacement order is complete"
+        );
+
+        let selected = replacement_prompt.presentation.candidates[replacement_choice];
+        engine
+            .apply_command(0, &submit_resolution_choice(vec![selected]))
+            .expect("choose the first counter replacement");
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(
+            engine.state.objects[&source].counter_count(CounterKind::Quest),
+            0
+        );
+        assert_eq!(
+            engine.state.objects[&destination].counter_count(CounterKind::Quest),
+            expected_destination_count,
+            "Lae'zel then Doubling Season yields four; reverse order yields three"
+        );
+    }
+}
+
+#[test]
+fn nesting_grounds_stale_replacement_choice_preserves_both_counter_sets() {
+    let mut engine = four_player_engine(202_610_112);
+    let grounds = inject_permanent_on_battlefield(&mut engine, 0, NESTING_GROUNDS);
+    inject_permanent_on_battlefield(&mut engine, 0, "laezel,_vlaakiths_champion");
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let destination = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    engine
+        .state
+        .objects
+        .get_mut(&source)
+        .unwrap()
+        .set_counter(CounterKind::Quest, 1);
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    engine
+        .apply_command(
+            0,
+            &move_counter_command(&engine, grounds, source, destination),
+        )
+        .expect("activate Nesting Grounds");
+    pass_until_choice(&mut engine);
+    engine
+        .apply_command(0, &select_branch(0))
+        .expect("choose the Quest counter");
+    let replacement_prompt = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("counter replacement choice")
+        .clone();
+    let queued_triggers =
+        serde_json::to_value(&engine.state.staged_trigger_groups).expect("serializable triggers");
+
+    // Simulate a stale physical incarnation while the replacement choice is parked.
+    let source_generation = engine
+        .state
+        .zone_change_generation
+        .get(&source)
+        .copied()
+        .unwrap_or(0);
+    engine
+        .state
+        .zone_change_generation
+        .insert(source, source_generation + 1);
+    engine
+        .apply_command(
+            0,
+            &submit_resolution_choice(vec![replacement_prompt.presentation.candidates[0]]),
+        )
+        .expect("a stale move resolves without committing either half");
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Quest),
+        1
+    );
+    assert_eq!(
+        engine.state.objects[&destination].counter_count(CounterKind::Quest),
+        0
+    );
+    assert_eq!(
+        serde_json::to_value(&engine.state.staged_trigger_groups).expect("serializable triggers"),
+        queued_triggers,
+        "an abandoned stale move emits no counter-placement or Siege trigger"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
 fn nesting_grounds_keeps_its_mana_ability_and_sorcery_speed_costs() {
     let mut engine = four_player_engine(202_610_081);
     let grounds = inject_permanent_on_battlefield(&mut engine, 0, NESTING_GROUNDS);

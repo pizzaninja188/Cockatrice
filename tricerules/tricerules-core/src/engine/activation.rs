@@ -1,14 +1,23 @@
 //! CR 602.3: engine-owned multi-actor target announcement before ability payment.
 use super::combat::priority_locked_for_combat_declaration;
+use super::payment::transaction::CostTransactionPlan;
 use super::payment::PreparedPaymentCosts;
 use super::targeting::{compute_ability_targets, TargetSourceIdentity};
 use super::*;
+use prost::Message;
 
 #[derive(Clone)]
 pub(super) struct PendingAbilityActivationInternal {
     pub(super) effective: EffectiveActivatedAbility,
     prepared_costs: Option<PreparedPaymentCosts>,
     announcement: super::casting::AnnouncedAbilityActivation,
+}
+
+#[derive(Clone)]
+pub(super) struct PendingCounterCostInternal {
+    pub(super) replay: crate::state::ActivationCostReplay,
+    pub(super) plan: CostTransactionPlan,
+    pub(super) announcement: super::casting::AnnouncedAbilityActivation,
 }
 
 fn target_ref(target: &rv1::AbilityActivationTarget) -> rv1::TargetRef {
@@ -107,6 +116,11 @@ impl GameEngine {
         if !valid {
             self.state.pending_ability_activation = None;
             self.pending_ability_activation_internal = None;
+            if self.pending_counter_cost_internal.is_some() {
+                self.state.pending_resolution = None;
+                self.state.pending_replacement_event = None;
+                self.pending_counter_cost_internal = None;
+            }
             events.push(events::ev_log("Unfinished ability activation abandoned because its actor, source or required announcement is unavailable.".into()));
             return;
         }
@@ -131,6 +145,11 @@ impl GameEngine {
         if eligible.is_empty() {
             self.state.pending_ability_activation = None;
             self.pending_ability_activation_internal = None;
+            if self.pending_counter_cost_internal.is_some() {
+                self.state.pending_resolution = None;
+                self.state.pending_replacement_event = None;
+                self.pending_counter_cost_internal = None;
+            }
             events.push(events::ev_log("Unfinished ability activation abandoned because no opponent can complete its target choice.".into()));
             return;
         }
@@ -766,17 +785,29 @@ impl GameEngine {
             ));
         }
         let costs = self.prepare_pending_ability_payment(player, command)?;
-        let source = self
-            .state
-            .pending_ability_activation
-            .as_ref()
-            .unwrap()
-            .source_object_id;
+        let pending = self.state.pending_ability_activation.as_ref().unwrap();
+        let source = pending.source_object_id;
+        let source_zone_change_generation = pending.source_zone_change_generation;
         let plan = self.finish_ability_payment(player, source, costs, command.payment.as_ref())?;
-        let receipt = self.commit_cost_transaction(plan)?;
-        let internal = self.pending_ability_activation_internal.take().unwrap();
-        self.state.pending_ability_activation = None;
-        Ok(self.finish_announced_ability(internal.announcement, receipt))
+        let announcement = self
+            .pending_ability_activation_internal
+            .as_ref()
+            .ok_or(EngineError::Illegal(
+                "missing locked activation announcement",
+            ))?
+            .announcement
+            .clone();
+        let replay = crate::state::ActivationCostReplay {
+            actor: player,
+            source_object_id: source,
+            source_zone_change_generation,
+            command_kind: crate::state::ActivationCostCommandKind::Staged,
+            command_bytes: command.encode_to_vec(),
+            transaction_id: Some(command.transaction_id),
+            expected_revision: Some(command.expected_revision),
+            counter_debits: Vec::new(),
+        };
+        self.finish_ability_cost_transaction(plan, announcement, replay)
     }
 
     pub(super) fn cancel_ability_activation(

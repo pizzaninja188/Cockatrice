@@ -1,5 +1,25 @@
 use super::*;
 
+fn resolve_counter_placements(
+    cx: &mut EffectCx<'_>,
+    placements: Vec<super::super::replacement::ProposedCounterPlacement>,
+) -> Result<EffectOutcome, EngineError> {
+    let result = cx.engine.begin_counter_placement_batch(
+        placements,
+        crate::state::ParkedStackResolution::new(cx.top.clone()),
+        crate::state::CounterPlacementCompletion::StackEffect {
+            spell_label: cx.spell_label.to_owned(),
+        },
+        cx.events,
+    )?;
+    if let Some(receipts) = result {
+        cx.effect_result.counter_placements.extend(receipts);
+        Ok(EffectOutcome::Continue)
+    } else {
+        Ok(EffectOutcome::Suspended)
+    }
+}
+
 fn materialize_resolving_duration(
     cx: &EffectCx<'_>,
     ordinary_source_id: Option<ObjectId>,
@@ -766,12 +786,23 @@ pub(super) fn earthbend(
             timestamp: cx.engine.state.command_index,
         });
     }
-    cx.engine.place_counters(
-        oid,
-        tricerules_card_model::primitives::CounterKind::PlusOnePlusOne,
-        count,
-        super::super::continuous::CounterPlacementOrigin::Effect,
-    );
+    let counter_placement = cx
+        .engine
+        .proposed_object_counter_placement(
+            cx.controller,
+            oid,
+            [(
+                tricerules_card_model::primitives::CounterKind::PlusOnePlusOne,
+                count,
+            )],
+            super::super::continuous::CounterPlacementOrigin::Effect,
+        )
+        .into_iter()
+        .collect();
+    cx.events.push(ev_log(format!(
+        "{} earthbends {oid} for {count}.",
+        cx.spell_label
+    )));
     super::misc::create_delayed_trigger(
         cx,
         SpellEffectKind::CreateDelayedTrigger {
@@ -801,11 +832,7 @@ pub(super) fn earthbend(
             }),
         },
     )?;
-    cx.events.push(ev_log(format!(
-        "{} earthbends {oid} for {count}.",
-        cx.spell_label
-    )));
-    Ok(EffectOutcome::Continue)
+    resolve_counter_placements(cx, counter_placement)
 }
 
 pub(super) fn animate_self(
@@ -1149,47 +1176,18 @@ pub(super) fn double_counters(
             })
         })
         .collect::<Vec<_>>();
-    let mut counter_events = Vec::new();
+    let mut proposed = Vec::new();
     for (oid, counters) in cohorts {
-        for (kind, count) in counters {
-            let Some(event) = cx.engine.place_counters_with_event(
-                oid,
-                kind,
-                count,
-                false,
-                super::super::continuous::CounterPlacementOrigin::Effect,
-            ) else {
-                continue;
-            };
-            let GameEvent::CountersPlaced {
-                object,
-                kind,
-                before,
-                after,
-                ..
-            } = &event
-            else {
-                unreachable!("counter placement funnel returned a different event");
-            };
-            let placed = after.saturating_sub(*before);
-            cx.effect_result
-                .counter_placements
-                .push(crate::state::CounterPlacementReceipt {
-                    object: *object,
-                    counter: *kind,
-                    count: placed,
-                });
-            cx.events.push(ev_log(format!(
-                "{} puts {placed} {} counter(s) on {}",
-                cx.spell_label,
-                kind.label(),
-                object_display_name(&cx.engine.state, cx.engine.registry, oid),
-            )));
-            counter_events.push(event);
+        if let Some(event) = cx.engine.proposed_object_counter_placement(
+            cx.controller,
+            oid,
+            counters,
+            super::super::continuous::CounterPlacementOrigin::Effect,
+        ) {
+            proposed.push(event);
         }
     }
-    cx.engine.fire_triggers(&counter_events, cx.events);
-    Ok(EffectOutcome::Continue)
+    resolve_counter_placements(cx, proposed)
 }
 
 pub(super) fn double_time_counters(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
@@ -1218,38 +1216,17 @@ pub(super) fn double_time_counters(cx: &mut EffectCx<'_>) -> Result<EffectOutcom
     if count == 0 {
         return Ok(EffectOutcome::Continue);
     }
-    let Some(event) = cx.engine.place_counters_with_event(
-        source_id,
-        CounterKind::Time,
-        count,
-        false,
-        super::super::continuous::CounterPlacementOrigin::Effect,
-    ) else {
-        return Ok(EffectOutcome::Continue);
-    };
-    if let GameEvent::CountersPlaced {
-        object,
-        before,
-        after,
-        ..
-    } = &event
-    {
-        let placed = after.saturating_sub(*before);
-        cx.effect_result
-            .counter_placements
-            .push(crate::state::CounterPlacementReceipt {
-                object: *object,
-                counter: CounterKind::Time,
-                count: placed,
-            });
-        cx.events.push(ev_log(format!(
-            "{} puts {placed} time counter(s) on {}",
-            cx.spell_label,
-            object_display_name(&cx.engine.state, cx.engine.registry, source_id),
-        )));
-    }
-    cx.engine.fire_triggers(&[event], cx.events);
-    Ok(EffectOutcome::Continue)
+    let proposed = cx
+        .engine
+        .proposed_object_counter_placement(
+            cx.controller,
+            source_id,
+            [(CounterKind::Time, count)],
+            super::super::continuous::CounterPlacementOrigin::Effect,
+        )
+        .into_iter()
+        .collect();
+    resolve_counter_placements(cx, proposed)
 }
 
 pub(super) fn put_counters(
@@ -1270,58 +1247,18 @@ pub(super) fn put_counters(
             .with_previous_effect_result(cx.previous_effect_result),
     );
     let subjects = cx.resolve_battlefield_subjects(&subject);
-    let engine = &mut *cx.engine;
-    let events = &mut *cx.events;
-    let receipts = &mut cx.effect_result.counter_placements;
-    let spell_label = cx.spell_label;
-    let mut counter_events = Vec::new();
-    for tid in subjects {
-        let is_on_battlefield = engine
-            .state
-            .objects
-            .get(&tid)
-            .is_some_and(|object| object.zone == Zone::Battlefield);
-        if !is_on_battlefield {
-            continue;
-        }
-
-        let tgt = object_display_name(&engine.state, engine.registry, tid);
-        let Some(counter_event) = engine.place_counters_with_event(
-            tid,
-            counter,
-            count,
-            false,
-            super::super::continuous::CounterPlacementOrigin::Effect,
-        ) else {
-            continue;
-        };
-        let GameEvent::CountersPlaced {
-            object,
-            kind,
-            before,
-            after,
-            ..
-        } = &counter_event
-        else {
-            unreachable!("counter placement funnel returned a different event");
-        };
-        receipts.push(crate::state::CounterPlacementReceipt {
-            object: *object,
-            counter: *kind,
-            count: after.saturating_sub(*before),
-        });
-        counter_events.push(counter_event);
-        events.push(ev_log(format!(
-            "{spell_label} puts {count} {} counter{} on {tgt}",
-            counter_label(counter),
-            if count == 1 { "" } else { "s" },
-        )));
-        // Annihilation / toughness-0 death are checked by the SBA pass that
-        // runs after this resolution (CR 122.3, CR 704.5f).
-    }
-    engine.fire_triggers(&counter_events, events);
-
-    Ok(EffectOutcome::Continue)
+    let proposed = subjects
+        .into_iter()
+        .filter_map(|object_id| {
+            cx.engine.proposed_object_counter_placement(
+                cx.controller,
+                object_id,
+                [(counter, count)],
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            )
+        })
+        .collect();
+    resolve_counter_placements(cx, proposed)
 }
 
 /// CR 122 / 608.2h: put `count` counters on every creature matching the authored scope. Untargeted
@@ -1353,47 +1290,18 @@ pub(super) fn put_counters_all(
         cx.targets,
         cx.target_group_indices,
     );
-    let engine = &mut *cx.engine;
-    let events = &mut *cx.events;
-    let receipts = &mut cx.effect_result.counter_placements;
-    let spell_label = cx.spell_label;
-    let mut counter_events = Vec::new();
-    for tid in affected {
-        let tgt = object_display_name(&engine.state, engine.registry, tid);
-        let Some(counter_event) = engine.place_counters_with_event(
-            tid,
-            counter,
-            count,
-            false,
-            super::super::continuous::CounterPlacementOrigin::Effect,
-        ) else {
-            continue;
-        };
-        let GameEvent::CountersPlaced {
-            object,
-            kind,
-            before,
-            after,
-            ..
-        } = &counter_event
-        else {
-            unreachable!("counter placement funnel returned a different event");
-        };
-        receipts.push(crate::state::CounterPlacementReceipt {
-            object: *object,
-            counter: *kind,
-            count: after.saturating_sub(*before),
-        });
-        counter_events.push(counter_event);
-        events.push(ev_log(format!(
-            "{spell_label} puts {count} {} counter{} on {tgt}",
-            counter_label(counter),
-            if count == 1 { "" } else { "s" },
-        )));
-    }
-    engine.fire_triggers(&counter_events, events);
-
-    Ok(EffectOutcome::Continue)
+    let proposed = affected
+        .into_iter()
+        .filter_map(|object_id| {
+            cx.engine.proposed_object_counter_placement(
+                cx.controller,
+                object_id,
+                [(counter, count)],
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            )
+        })
+        .collect();
+    resolve_counter_placements(cx, proposed)
 }
 
 /// CR 122 / 608.2h: put `count` counters on each planeswalker the resolving ability's controller
@@ -1450,47 +1358,18 @@ pub(super) fn put_counters_all_planeswalkers(
         .map(|(object_id, _)| object_id)
         .collect::<Vec<_>>();
 
-    let engine = &mut *cx.engine;
-    let events = &mut *cx.events;
-    let receipts = &mut cx.effect_result.counter_placements;
-    let spell_label = cx.spell_label;
-    let mut counter_events = Vec::new();
-    for object_id in affected {
-        let target_name = object_display_name(&engine.state, engine.registry, object_id);
-        let Some(counter_event) = engine.place_counters_with_event(
-            object_id,
-            counter,
-            count,
-            false,
-            super::super::continuous::CounterPlacementOrigin::Effect,
-        ) else {
-            continue;
-        };
-        let GameEvent::CountersPlaced {
-            object,
-            kind,
-            before,
-            after,
-            ..
-        } = &counter_event
-        else {
-            unreachable!("counter placement funnel returned a different event");
-        };
-        receipts.push(crate::state::CounterPlacementReceipt {
-            object: *object,
-            counter: *kind,
-            count: after.saturating_sub(*before),
-        });
-        counter_events.push(counter_event);
-        events.push(ev_log(format!(
-            "{spell_label} puts {count} {} counter{} on {target_name}",
-            counter_label(counter),
-            if count == 1 { "" } else { "s" },
-        )));
-    }
-    engine.fire_triggers(&counter_events, events);
-
-    Ok(EffectOutcome::Continue)
+    let proposed = affected
+        .into_iter()
+        .filter_map(|object_id| {
+            cx.engine.proposed_object_counter_placement(
+                cx.controller,
+                object_id,
+                [(counter, count)],
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            )
+        })
+        .collect();
+    resolve_counter_placements(cx, proposed)
 }
 
 pub(super) fn can_put_counters(
@@ -1555,26 +1434,29 @@ pub(super) fn change_counters(
         _ => return Err(EngineError::Illegal("counter dispatch mismatch")),
     };
     let subjects = cx.resolve_battlefield_subjects(&subject);
-    for oid in subjects {
-        for (&kind, &count) in &counters {
-            let changed = if removing {
-                cx.engine.remove_counters(oid, kind, count)
-            } else {
-                cx.engine.place_counters(
-                    oid,
-                    kind,
-                    count,
+    if !removing {
+        let proposed = subjects
+            .into_iter()
+            .filter_map(|object_id| {
+                cx.engine.proposed_object_counter_placement(
+                    cx.controller,
+                    object_id,
+                    counters.iter().map(|(&kind, &count)| (kind, count)),
                     super::super::continuous::CounterPlacementOrigin::Effect,
                 )
-            };
+            })
+            .collect();
+        return resolve_counter_placements(cx, proposed);
+    }
+    for object_id in subjects {
+        for (&kind, &count) in &counters {
+            let changed = cx.engine.remove_counters(object_id, kind, count);
             if changed > 0 {
                 cx.events.push(ev_log(format!(
-                    "{} {} {changed} {} counter(s) {} {}",
+                    "{} removes {changed} {} counter(s) from {}",
                     cx.spell_label,
-                    if removing { "removes" } else { "puts" },
                     kind.label(),
-                    if removing { "from" } else { "on" },
-                    object_display_name(&cx.engine.state, cx.engine.registry, oid)
+                    object_display_name(&cx.engine.state, cx.engine.registry, object_id)
                 )));
             }
         }

@@ -57,25 +57,64 @@ impl GameEngine {
                 kind,
             );
         if can_move {
-            if let Some(event) = self.move_one_counter_between(
-                source_target.object_id,
+            let actor = stack.item.controller;
+            let Some(mut proposal) = self.proposed_object_counter_placement(
+                actor,
                 destination_target.object_id,
+                [(kind, 1)],
+                super::continuous::CounterPlacementOrigin::Effect,
+            ) else {
+                return self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    stack.previous_result,
+                    events,
+                );
+            };
+            let Some(source_zone_change_generation) = source_target.zone_change_generation else {
+                return self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    stack.previous_result,
+                    events,
+                );
+            };
+            proposal.counter_move_context =
+                Some(super::super::replacement::CounterMoveReplacementContext {
+                    source_object_id: source_target.object_id,
+                    source_zone_change_generation,
+                    kind,
+                });
+            let ability_label = self
+                .registry
+                .get(&stack.item.card_id)
+                .map(|definition| definition.name.clone())
+                .unwrap_or_else(|| stack.item.card_id.clone());
+            let completion = crate::state::CounterPlacementCompletion::CounterMove {
+                source_target,
+                destination_target,
                 kind,
+                actor,
+                ability_label,
+            };
+            match self.begin_counter_placement_batch(
+                vec![proposal],
+                stack.clone(),
+                completion,
+                &mut events,
             ) {
-                let source_name =
-                    object_display_name(&self.state, self.registry, source_target.object_id);
-                let destination_name =
-                    object_display_name(&self.state, self.registry, destination_target.object_id);
-                let source_label = self
-                    .registry
-                    .get(&stack.item.card_id)
-                    .map(|definition| definition.name.clone())
-                    .unwrap_or_else(|| stack.item.card_id.clone());
-                events.push(ev_log(format!(
-                    "{source_label} moves one {} counter from {source_name} to {destination_name}.",
-                    kind.label(),
-                )));
-                self.fire_triggers(&[event], &mut events);
+                Ok(Some(receipts)) => {
+                    let mut previous_result = stack.previous_result.clone();
+                    previous_result.counter_placements.extend(receipts);
+                    return self.complete_parked_resolution_with_previous(
+                        stack.item,
+                        stack.resume_effect_index,
+                        previous_result,
+                        events,
+                    );
+                }
+                Ok(None) => return Ok(finish_with_events(self, events)),
+                Err(error) => return Err(error),
             }
         }
 

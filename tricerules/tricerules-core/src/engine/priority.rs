@@ -1027,7 +1027,7 @@ impl GameEngine {
                 }
                 self.state.passes_since_stack_change = 0;
                 ev.push(ev_phase(self, rv1::PhaseId::Main1));
-                self.perform_precombat_saga_lore_action(ev);
+                self.perform_precombat_saga_lore_action(ev)?;
                 self.apply_sbas(ev)?;
                 self.flush_staged_triggers(ev);
                 if self.state.blocking_choice().is_none() {

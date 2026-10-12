@@ -1,6 +1,5 @@
 use super::*;
 use crate::engine::events::finish_with_events;
-use tricerules_card_model::primitives::{PermanentTypeFilter, TypeLineAddition};
 
 pub(super) fn amass(
     cx: &mut EffectCx<'_>,
@@ -46,14 +45,20 @@ pub(super) fn amass(
     match candidates.as_slice() {
         [] => Ok(EffectOutcome::Continue),
         [chosen] => {
-            *cx.effect_result = cx.engine.apply_amass(
+            let result = cx.engine.apply_amass(
+                ParkedStackResolution::new(cx.top.clone()),
                 *chosen,
                 cx.controller,
                 PendingAmass { subtype, count },
                 cx.top.id,
                 cx.events,
             )?;
-            Ok(EffectOutcome::Continue)
+            if let Some(result) = result {
+                *cx.effect_result = result;
+                Ok(EffectOutcome::Continue)
+            } else {
+                Ok(EffectOutcome::Suspended)
+            }
         }
         _ => {
             cx.engine.park_amass_choice(
@@ -70,7 +75,11 @@ pub(super) fn amass(
 }
 
 impl GameEngine {
-    fn is_amass_candidate(&self, oid: ObjectId, controller: PlayerId) -> bool {
+    pub(in crate::engine) fn is_amass_candidate(
+        &self,
+        oid: ObjectId,
+        controller: PlayerId,
+    ) -> bool {
         self.state.objects.get(&oid).is_some_and(|object| {
             object.zone == Zone::Battlefield
                 && self.characteristics(oid).is_some_and(|characteristics| {
@@ -95,38 +104,15 @@ impl GameEngine {
 
     fn apply_amass(
         &mut self,
+        stack: ParkedStackResolution,
         chosen: ObjectId,
         controller: PlayerId,
         amass: PendingAmass,
         source_id: ObjectId,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<EffectResult, EngineError> {
+    ) -> Result<Option<EffectResult>, EngineError> {
         if !self.is_amass_candidate(chosen, controller) {
             return Err(EngineError::Illegal("stale Amass Army choice"));
-        }
-        self.place_counters(
-            chosen,
-            CounterKind::PlusOnePlusOne,
-            amass.count,
-            super::super::continuous::CounterPlacementOrigin::Effect,
-        );
-        if !self
-            .characteristics(chosen)
-            .is_some_and(|characteristics| characteristics.has_type(amass.subtype.as_str()))
-        {
-            self.state.continuous_effects.push(ContinuousEffect {
-                trigger_grant_origin: None,
-                source_id: Some(source_id),
-                affected: AffectedScope::Single(chosen),
-                kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
-                    land_types: Vec::new(),
-                    card_types: Vec::<PermanentTypeFilter>::new(),
-                    creature_types: vec![amass.subtype.as_str().to_string()],
-                }),
-                condition: None,
-                duration: EffectDuration::Indefinite,
-                timestamp: self.state.command_index,
-            });
         }
         let generation = self
             .state
@@ -134,20 +120,37 @@ impl GameEngine {
             .get(&chosen)
             .copied()
             .unwrap_or(0);
-        events.push(ev_log(format!(
-            "P{controller} amasses {} {} on {}.",
-            amass.subtype.plural(),
-            amass.count,
-            object_display_name(&self.state, self.registry, chosen)
-        )));
-        Ok(EffectResult {
+        let proposed = self
+            .proposed_object_counter_placement(
+                controller,
+                chosen,
+                [(CounterKind::PlusOnePlusOne, amass.count)],
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            )
+            .into_iter()
+            .collect();
+        let completion = crate::state::CounterPlacementCompletion::Amass {
+            controller,
+            subtype: amass.subtype,
+            count: amass.count,
+            source_id,
+            target_object_id: chosen,
+            target_zone_change_generation: generation,
+        };
+        let Some(receipts) =
+            self.begin_counter_placement_batch(proposed, stack, completion, events)?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(EffectResult {
             produced_objects: vec![TriggerObjectRef {
                 object_id: chosen,
                 zone_change_generation: generation,
                 controller_at_event: controller,
             }],
+            counter_placements: receipts,
             ..Default::default()
-        })
+        }))
     }
 
     fn park_amass_choice(
@@ -257,13 +260,17 @@ impl GameEngine {
         let subtype = *subtype;
         let count = *count;
         let mut events = Vec::new();
-        let result = self.apply_amass(
+        let Some(result) = self.apply_amass(
+            stack.clone(),
             chosen,
             pending.deciding_player,
             PendingAmass { subtype, count },
             stack.item.id,
             &mut events,
-        )?;
+        )?
+        else {
+            return Ok(finish_with_events(self, events));
+        };
         self.complete_parked_resolution_with_previous(
             stack.item,
             stack.resume_effect_index,
@@ -288,8 +295,17 @@ impl GameEngine {
                 events,
             ),
             [chosen] => {
-                let result =
-                    self.apply_amass(*chosen, controller, amass, stack.item.id, &mut events)?;
+                let Some(result) = self.apply_amass(
+                    stack.clone(),
+                    *chosen,
+                    controller,
+                    amass,
+                    stack.item.id,
+                    &mut events,
+                )?
+                else {
+                    return Ok(finish_with_events(self, events));
+                };
                 self.complete_parked_resolution_with_previous(
                     stack.item,
                     stack.resume_effect_index,

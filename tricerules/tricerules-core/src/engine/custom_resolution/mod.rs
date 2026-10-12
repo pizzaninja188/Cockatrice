@@ -898,6 +898,12 @@ impl GameEngine {
             ResolutionContinuation::EntryReplacement { .. } => {
                 return self.finish_battlefield_entry_replacement_choice(pending, chosen[0]);
             }
+            ResolutionContinuation::CounterReplacement { .. } => {
+                return self.finish_counter_replacement_choice(pending, chosen[0]);
+            }
+            ResolutionContinuation::EntryCounterReplacement { .. } => {
+                return self.finish_entry_counter_replacement_choice(pending, chosen[0]);
+            }
             ResolutionContinuation::EntryCost { .. }
             | ResolutionContinuation::EntryReveal { .. } => {
                 unreachable!("entry-cost branch handled before object-choice validation")
@@ -1158,6 +1164,8 @@ impl GameEngine {
             chosen_opponents: Vec::new(),
             chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
+            entry_counter_placements: Vec::new(),
+            entry_counter_replacements_resolved: false,
             entry_modifiers: Vec::new(),
             entry_cause: None,
             attached_to: Some(recipient),
@@ -1197,7 +1205,7 @@ impl GameEngine {
                 resume_original_stack,
             },
             &mut events,
-        ) {
+        )? {
             super::replacement::BattlefieldEntryProgress::Parked => {
                 if let (Some(resume), Some(next_pending)) =
                     (stack.as_ref(), self.state.pending_resolution.as_mut())

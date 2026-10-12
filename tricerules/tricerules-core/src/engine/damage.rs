@@ -8,6 +8,11 @@ use super::events::{ev_log, finish_with_events, object_display_name};
 use super::targeting::TargetSourceIdentity;
 use super::*;
 
+type PreparedPreventionCounterPlacement = (
+    super::replacement::PendingCounterPlacementBatch,
+    Vec<(super::replacement::CounterReplacementInstance, String)>,
+);
+
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DamageSourceSnapshot {
     pub wither: bool,
@@ -127,8 +132,8 @@ pub(crate) struct DamageSpec {
     pub source_has_lifelink: bool,
 }
 
-#[derive(Debug, Clone)]
-enum DamageBatchContinuation {
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) enum DamageBatchContinuation {
     Combat,
     Stack {
         item: Box<StackItem>,
@@ -194,6 +199,12 @@ pub(crate) struct PendingDamageEvent {
     pub applied_applications: Vec<DamageReplacementApplication>,
     /// Exact finite shield amounts consumed while reducing this damage occurrence.
     pub prevention_debits: Vec<(u32, u32)>,
+    /// Counter side effects from prevention replacements remain proposals until every damage
+    /// replacement in the batch is resolved.
+    #[serde(default)]
+    pub counter_placement_proposals: Vec<super::replacement::ProposedCounterPlacement>,
+    #[serde(default)]
+    pub additional_counter_logs: Vec<DamageAdditionalCounterLog>,
     pub combat: Option<PendingCombatDamageOccurrence>,
     /// Original noncombat recipient occurrence; never rebound during a parked choice.
     pub recipient_generation: Option<u64>,
@@ -210,8 +221,29 @@ pub(crate) struct PendingCombatDamageOccurrence {
 pub(crate) struct CompletedDamage {
     pub spec: DamageSpec,
     pub result: DamageResult,
+    /// Exact permanent incarnation that received this damage, when applicable.
+    #[serde(default)]
+    pub recipient_generation: Option<u64>,
     /// Finite prevention resources consumed while producing this exact result.
     pub prevention_debits: Vec<(u32, u32)>,
+    /// Counter events committed before damage results, with their triggers deferred until the
+    /// entire damage batch is committed.
+    #[serde(default)]
+    pub counter_placements: Vec<crate::state::CounterPlacementReceipt>,
+    #[serde(default)]
+    pub counter_placement_proposals: Vec<super::replacement::ProposedCounterPlacement>,
+    #[serde(default)]
+    pub additional_counter_logs: Vec<DamageAdditionalCounterLog>,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct DamageAdditionalCounterLog {
+    pub source_label: String,
+    pub recipient_object_id: ObjectId,
+    pub recipient_zone_change_generation: u64,
+    pub recipient_label: String,
+    pub counter: CounterKind,
+    pub count: u32,
 }
 
 enum DamageBatchProgress {
@@ -219,6 +251,12 @@ enum DamageBatchProgress {
     NeedsChoice {
         batch: PendingDamageBatch,
         raw_candidates: Vec<(usize, DamageReplacementApplication, String)>,
+    },
+    NeedsCounterChoice {
+        batch: PendingDamageBatch,
+        damage_event_index: usize,
+        counter_batch: super::replacement::PendingCounterPlacementBatch,
+        candidates: Vec<(super::replacement::CounterReplacementInstance, String)>,
     },
 }
 
@@ -442,28 +480,117 @@ impl GameEngine {
                     spec,
                     applied_applications: Vec::new(),
                     prevention_debits: Vec::new(),
+                    counter_placement_proposals: Vec::new(),
+                    additional_counter_logs: Vec::new(),
                     combat: None,
                 })
                 .collect(),
             applications: Vec::new(),
         };
-        match self.advance_damage_batch(pending, events)? {
-            DamageBatchProgress::Complete(completed) => Ok(Some(completed)),
-            DamageBatchProgress::NeedsChoice {
-                batch,
-                raw_candidates,
-            } => {
-                self.park_damage_replacement_choice(
-                    DamageBatchContinuation::Stack {
-                        item: Box::new(item.clone()),
-                        resume_effect_index: None,
-                    },
-                    batch,
-                    raw_candidates,
-                    events,
-                );
-                Ok(None)
+        self.advance_or_park_damage_batch(
+            pending,
+            DamageBatchContinuation::Stack {
+                item: Box::new(item.clone()),
+                resume_effect_index: None,
+            },
+            events,
+        )
+    }
+
+    fn stage_wither_counter_batch(
+        &mut self,
+        mut completed: Vec<CompletedDamage>,
+        mut continuation: DamageBatchContinuation,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<Option<Vec<CompletedDamage>>, EngineError> {
+        let mut placements = completed
+            .iter_mut()
+            .flat_map(|damage| std::mem::take(&mut damage.counter_placement_proposals))
+            .collect::<Vec<_>>();
+        for damage in &completed {
+            let event = &damage.spec.event;
+            let DamageRecipient::Permanent(recipient) = event.recipient else {
+                continue;
+            };
+            if !event.source.wither || damage.result.dealt == 0 {
+                continue;
             }
+            let generation = self
+                .state
+                .zone_change_generation
+                .get(&recipient)
+                .copied()
+                .unwrap_or(0);
+            if damage.recipient_generation != Some(generation)
+                || !self
+                    .state
+                    .objects
+                    .get(&recipient)
+                    .is_some_and(|object| object.zone == Zone::Battlefield)
+                || !self
+                    .characteristics(recipient)
+                    .is_some_and(|characteristics| characteristics.is_creature())
+                || !self.can_receive_counters(recipient)
+            {
+                continue;
+            }
+            self.state.objects[&recipient]
+                .counter_count(CounterKind::MinusOneMinusOne)
+                .checked_add(damage.result.dealt)
+                .ok_or(EngineError::DamageNumericRange("wither counter total"))?;
+            if let Some(placement) = self.proposed_object_counter_placement(
+                event.source.controller,
+                recipient,
+                [(CounterKind::MinusOneMinusOne, damage.result.dealt)],
+                super::continuous::CounterPlacementOrigin::Damage,
+            ) {
+                placements.push(placement);
+            }
+        }
+        if placements.is_empty() {
+            return Ok(Some(completed));
+        }
+
+        if let DamageBatchContinuation::ManaAbility {
+            actor,
+            resume_resolution,
+            ..
+        } = &mut continuation
+        {
+            if resume_resolution.is_none()
+                && self
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .is_some_and(|pending| {
+                        pending.deciding_player == *actor
+                            && pending.continuation.mana_window_undo_start().is_some()
+                    })
+            {
+                *resume_resolution = self.state.pending_resolution.take().map(Box::new);
+            }
+        }
+
+        let completion = crate::state::CounterPlacementCompletion::DamageBatch {
+            completed: completed.clone(),
+            continuation,
+        };
+        let (batch, candidates) = self.prepare_counter_placement_batch(placements)?;
+        if let Some(candidates) = candidates {
+            self.park_counter_placement_choice(batch, candidates, None, completion, events);
+            return Ok(None);
+        }
+        let receipts = self.commit_counter_placement_batch(&batch.events, &completion, events)?;
+        Self::attach_counter_placement_receipts(&mut completed, receipts);
+        Ok(Some(completed))
+    }
+
+    pub(super) fn attach_counter_placement_receipts(
+        completed: &mut [CompletedDamage],
+        receipts: Vec<crate::state::CounterPlacementReceipt>,
+    ) {
+        if let Some(first) = completed.first_mut() {
+            first.counter_placements.extend(receipts);
         }
     }
 
@@ -554,51 +681,19 @@ impl GameEngine {
                 spec: damage,
                 applied_applications: Vec::new(),
                 prevention_debits: Vec::new(),
+                counter_placement_proposals: Vec::new(),
+                additional_counter_logs: Vec::new(),
                 combat: None,
             }],
             applications: Vec::new(),
         };
-        match self.advance_damage_batch(pending, events)? {
-            DamageBatchProgress::Complete(completed) => {
-                let triggers =
-                    self.commit_completed_damage_batch_collecting_triggers(&completed, events)?;
-                Ok((completed, triggers))
-            }
-            DamageBatchProgress::NeedsChoice {
-                batch,
-                raw_candidates,
-            } => {
-                let actor = continuation.fallback_controller();
-                let suspend_payment =
-                    self.state
-                        .pending_resolution
-                        .as_ref()
-                        .is_some_and(|pending| {
-                            pending.deciding_player == actor
-                                && pending.continuation.mana_window_undo_start().is_some()
-                        });
-                let continuation = match continuation {
-                    DamageBatchContinuation::ManaAbility {
-                        actor,
-                        source_object_id,
-                        source_zone_change_generation,
-                        ..
-                    } => DamageBatchContinuation::ManaAbility {
-                        actor,
-                        source_object_id,
-                        source_zone_change_generation,
-                        resume_resolution: if suspend_payment {
-                            self.state.pending_resolution.take().map(Box::new)
-                        } else {
-                            None
-                        },
-                    },
-                    stack => stack,
-                };
-                self.park_damage_replacement_choice(continuation, batch, raw_candidates, events);
-                Ok((Vec::new(), Vec::new()))
-            }
-        }
+        let Some(completed) = self.advance_or_park_damage_batch(pending, continuation, events)?
+        else {
+            return Ok((Vec::new(), Vec::new()));
+        };
+        let triggers =
+            self.commit_completed_damage_batch_collecting_triggers(&completed, events)?;
+        Ok((completed, triggers))
     }
 
     fn pending_damage_replacement_candidates(
@@ -661,6 +756,52 @@ impl GameEngine {
                 effects.chain(doublers).chain(protection).collect()
             })
             .collect()
+    }
+
+    fn plan_prevention_counter_placement_after_application(
+        &mut self,
+        batch: &mut PendingDamageBatch,
+        event_index: usize,
+        prior_proposal_count: usize,
+    ) -> Result<Option<PreparedPreventionCounterPlacement>, EngineError> {
+        let damage = batch
+            .damage
+            .get_mut(event_index)
+            .ok_or(EngineError::Illegal(
+                "damage event disappeared during replacement",
+            ))?;
+        if damage.counter_placement_proposals.len() <= prior_proposal_count {
+            return Ok(None);
+        }
+        let proposal = damage
+            .counter_placement_proposals
+            .pop()
+            .expect("a newly added prevention counter placement exists");
+        let (counter_batch, candidates) =
+            match self.prepare_counter_placement_batch(vec![proposal.clone()]) {
+                Ok(prepared) => prepared,
+                Err(error) => {
+                    batch.damage[event_index]
+                        .counter_placement_proposals
+                        .push(proposal);
+                    return Err(error);
+                }
+            };
+        if let Some(candidates) = candidates {
+            return Ok(Some((counter_batch, candidates)));
+        }
+        let Some(proposal) = counter_batch.events.into_iter().next() else {
+            batch.damage[event_index]
+                .counter_placement_proposals
+                .push(proposal);
+            return Err(EngineError::Illegal(
+                "prevention counter replacement removed its placement event",
+            ));
+        };
+        batch.damage[event_index]
+            .counter_placement_proposals
+            .push(proposal);
+        Ok(None)
     }
 
     fn damage_affected_player(&self, event: &DamageEvent) -> Option<PlayerId> {
@@ -757,18 +898,27 @@ impl GameEngine {
                     batch
                         .damage
                         .into_iter()
-                        .map(|damage| CompletedDamage {
-                            result: DamageResult {
-                                attempted: damage.spec.event.amount,
-                                dealt: damage.remaining,
-                                prevented: damage.prevented_total,
-                            },
-                            prevention_debits: damage.prevention_debits,
-                            spec: damage.spec,
+                        .map(|damage| {
+                            let recipient_generation = damage.recipient_generation;
+                            CompletedDamage {
+                                result: DamageResult {
+                                    attempted: damage.spec.event.amount,
+                                    dealt: damage.remaining,
+                                    prevented: damage.prevented_total,
+                                },
+                                recipient_generation,
+                                prevention_debits: damage.prevention_debits,
+                                counter_placements: Vec::new(),
+                                counter_placement_proposals: damage.counter_placement_proposals,
+                                additional_counter_logs: damage.additional_counter_logs,
+                                spec: damage.spec,
+                            }
                         })
                         .collect(),
                 ));
             };
+            let pending_counter_placements =
+                batch.damage[event_index].counter_placement_proposals.len();
             let applied = self.apply_damage_replacement_application(
                 &mut batch,
                 event_index,
@@ -776,6 +926,104 @@ impl GameEngine {
                 events,
             )?;
             debug_assert!(applied);
+            if let Some((counter_batch, candidates)) = self
+                .plan_prevention_counter_placement_after_application(
+                    &mut batch,
+                    event_index,
+                    pending_counter_placements,
+                )?
+            {
+                return Ok(DamageBatchProgress::NeedsCounterChoice {
+                    batch,
+                    damage_event_index: event_index,
+                    counter_batch,
+                    candidates,
+                });
+            }
+        }
+    }
+
+    fn suspend_mana_ability_payment(&mut self, continuation: &mut DamageBatchContinuation) {
+        let DamageBatchContinuation::ManaAbility {
+            actor,
+            resume_resolution,
+            ..
+        } = continuation
+        else {
+            return;
+        };
+        if resume_resolution.is_none()
+            && self
+                .state
+                .pending_resolution
+                .as_ref()
+                .is_some_and(|pending| {
+                    pending.deciding_player == *actor
+                        && pending.continuation.mana_window_undo_start().is_some()
+                })
+        {
+            *resume_resolution = self.state.pending_resolution.take().map(Box::new);
+        }
+    }
+
+    fn park_damage_counter_replacement_choice(
+        &mut self,
+        continuation: DamageBatchContinuation,
+        damage_batch: PendingDamageBatch,
+        damage_event_index: usize,
+        counter_batch: super::replacement::PendingCounterPlacementBatch,
+        candidates: Vec<(super::replacement::CounterReplacementInstance, String)>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let completion = crate::state::CounterPlacementCompletion::DamageReplacement {
+            damage_batch,
+            damage_event_index,
+            continuation,
+        };
+        self.park_counter_placement_choice(counter_batch, candidates, None, completion, events);
+    }
+
+    fn advance_or_park_damage_batch(
+        &mut self,
+        batch: PendingDamageBatch,
+        mut continuation: DamageBatchContinuation,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<Option<Vec<CompletedDamage>>, EngineError> {
+        match self.advance_damage_batch(batch, events)? {
+            DamageBatchProgress::Complete(completed) => {
+                self.stage_wither_counter_batch(completed, continuation, events)
+            }
+            DamageBatchProgress::NeedsChoice {
+                batch,
+                raw_candidates,
+            } => {
+                self.suspend_mana_ability_payment(&mut continuation);
+                if matches!(continuation, DamageBatchContinuation::Combat) {
+                    self.state.combat_damage_priority_pending = true;
+                }
+                self.park_damage_replacement_choice(continuation, batch, raw_candidates, events);
+                Ok(None)
+            }
+            DamageBatchProgress::NeedsCounterChoice {
+                batch,
+                damage_event_index,
+                counter_batch,
+                candidates,
+            } => {
+                self.suspend_mana_ability_payment(&mut continuation);
+                if matches!(continuation, DamageBatchContinuation::Combat) {
+                    self.state.combat_damage_priority_pending = true;
+                }
+                self.park_damage_counter_replacement_choice(
+                    continuation,
+                    batch,
+                    damage_event_index,
+                    counter_batch,
+                    candidates,
+                    events,
+                );
+                Ok(None)
+            }
         }
     }
 
@@ -880,21 +1128,24 @@ impl GameEngine {
             *remaining -= prevented;
         }
         let source_label = effect.source_label.clone();
+        let effect_source_id = effect.source_id;
         let additional_effect = effect.additional_effect;
         let exhausted = matches!(effect.amount, DamagePreventionAmount::Remaining(0));
 
-        let damage = &mut batch.damage[event_index];
-        damage.remaining -= prevented;
-        damage.prevented_total = prevented_total;
-        damage.applied_applications.push(application);
-        if finite_remaining && prevented > 0 {
-            damage.prevention_debits.push((effect_id, prevented));
-        }
-        if prevented > 0 {
-            events.push(ev_log(format!(
-                "{source_label} prevents {prevented} damage from {}.",
-                event.source.label
-            )));
+        {
+            let damage = &mut batch.damage[event_index];
+            damage.remaining -= prevented;
+            damage.prevented_total = prevented_total;
+            damage.applied_applications.push(application);
+            if finite_remaining && prevented > 0 {
+                damage.prevention_debits.push((effect_id, prevented));
+            }
+            if prevented > 0 {
+                events.push(ev_log(format!(
+                    "{source_label} prevents {prevented} damage from {}.",
+                    event.source.label
+                )));
+            }
         }
         if let Some(DamagePreventionAdditionalEffect::PutCounters { counter, basis }) =
             additional_effect
@@ -907,17 +1158,34 @@ impl GameEngine {
                 if let DamageRecipient::Permanent(recipient) = event.recipient {
                     let recipient_label =
                         object_display_name(&self.state, self.registry, recipient);
-                    if self.place_counters(
+                    let recipient_generation = self
+                        .state
+                        .zone_change_generation
+                        .get(&recipient)
+                        .copied()
+                        .unwrap_or(0);
+                    let actor = effect_source_id
+                        .and_then(|source_id| self.controller_of(source_id))
+                        .or_else(|| self.controller_of(recipient))
+                        .unwrap_or(event.source.controller);
+                    if let Some(placement) = self.proposed_object_counter_placement(
+                        actor,
                         recipient,
-                        counter,
-                        amount,
+                        [(counter, amount)],
                         super::continuous::CounterPlacementOrigin::Effect,
-                    ) > 0
-                    {
-                        events.push(ev_log(format!(
-                            "{source_label} puts {amount} {} counter(s) on {recipient_label}.",
-                            counter.label()
-                        )));
+                    ) {
+                        let damage = &mut batch.damage[event_index];
+                        damage.counter_placement_proposals.push(placement);
+                        damage
+                            .additional_counter_logs
+                            .push(DamageAdditionalCounterLog {
+                                source_label: source_label.clone(),
+                                recipient_object_id: recipient,
+                                recipient_zone_change_generation: recipient_generation,
+                                recipient_label,
+                                counter,
+                                count: amount,
+                            });
                     }
                 }
             }
@@ -1204,27 +1472,14 @@ impl GameEngine {
                         spec,
                         applied_applications: Vec::new(),
                         prevention_debits: Vec::new(),
+                        counter_placement_proposals: Vec::new(),
+                        additional_counter_logs: Vec::new(),
                     }
                 })
                 .collect(),
             applications: Vec::new(),
         };
-        match self.advance_damage_batch(pending, events)? {
-            DamageBatchProgress::Complete(completed) => Ok(Some(completed)),
-            DamageBatchProgress::NeedsChoice {
-                batch,
-                raw_candidates,
-            } => {
-                self.state.combat_damage_priority_pending = true;
-                self.park_damage_replacement_choice(
-                    DamageBatchContinuation::Combat,
-                    batch,
-                    raw_candidates,
-                    events,
-                );
-                Ok(None)
-            }
-        }
+        self.advance_or_park_damage_batch(pending, DamageBatchContinuation::Combat, events)
     }
 
     /// Preflight a simultaneous combat-damage batch. The legacy commit loop remains the fast path
@@ -1542,6 +1797,24 @@ impl GameEngine {
                     self.park_damage_replacement_choice(completion, batch, raw_candidates, events);
                 }
             }
+            DamageBatchProgress::NeedsCounterChoice {
+                batch,
+                damage_event_index,
+                counter_batch,
+                candidates,
+            } => {
+                if matches!(completion, DamageBatchContinuation::Combat) {
+                    self.state.combat_damage_priority_pending = true;
+                }
+                self.park_damage_counter_replacement_choice(
+                    completion,
+                    batch,
+                    damage_event_index,
+                    counter_batch,
+                    candidates,
+                    events,
+                );
+            }
             DamageBatchProgress::Complete(completed) => {
                 self.commit_completed_damage_batch(&completed, events)?;
                 match completion {
@@ -1573,7 +1846,7 @@ impl GameEngine {
         pending: PendingResolution,
         chosen_application_id: u32,
     ) -> Result<RuledEventBatch, EngineError> {
-        let completion = match &pending.continuation {
+        let mut completion = match &pending.continuation {
             ResolutionContinuation::CombatDamageReplacement { .. } => {
                 DamageBatchContinuation::Combat
             }
@@ -1626,6 +1899,11 @@ impl GameEngine {
             ));
         };
         let mut events = Vec::new();
+        let prior_counter_proposal_count = batch
+            .damage
+            .get(application.event_index)
+            .map(|damage| damage.counter_placement_proposals.len())
+            .unwrap_or(0);
         if !self.apply_damage_replacement_application(
             &mut batch,
             application.event_index,
@@ -1639,23 +1917,96 @@ impl GameEngine {
                 "damage-replacement effect is no longer active",
             ));
         }
-        let completed = match self.advance_damage_batch(batch, &mut events)? {
-            DamageBatchProgress::Complete(completed) => completed,
-            DamageBatchProgress::NeedsChoice {
-                batch,
-                raw_candidates,
-            } => {
-                self.park_damage_replacement_choice(
-                    completion.clone(),
-                    batch,
-                    raw_candidates,
-                    &mut events,
-                );
-                return Ok(finish_with_events(self, events));
+        if let Some((counter_batch, candidates)) = self
+            .plan_prevention_counter_placement_after_application(
+                &mut batch,
+                application.event_index,
+                prior_counter_proposal_count,
+            )?
+        {
+            self.suspend_mana_ability_payment(&mut completion);
+            if matches!(completion, DamageBatchContinuation::Combat) {
+                self.state.combat_damage_priority_pending = true;
             }
+            self.park_damage_counter_replacement_choice(
+                completion,
+                batch,
+                application.event_index,
+                counter_batch,
+                candidates,
+                &mut events,
+            );
+            return Ok(finish_with_events(self, events));
+        }
+        let Some(completed) =
+            self.advance_or_park_damage_batch(batch, completion.clone(), &mut events)?
+        else {
+            return Ok(finish_with_events(self, events));
         };
         let damage_triggers =
             self.commit_completed_damage_batch_collecting_triggers(&completed, &mut events)?;
+        self.finish_damage_batch_continuation(completion, &completed, damage_triggers, events)
+    }
+
+    pub(super) fn finish_counter_replaced_damage_batch(
+        &mut self,
+        mut completed: Vec<CompletedDamage>,
+        continuation: DamageBatchContinuation,
+        counter_placements: Vec<crate::state::CounterPlacementReceipt>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        Self::attach_counter_placement_receipts(&mut completed, counter_placements);
+        let damage_triggers =
+            self.commit_completed_damage_batch_collecting_triggers(&completed, events)?;
+        self.finish_damage_batch_continuation(
+            continuation,
+            &completed,
+            damage_triggers,
+            std::mem::take(events),
+        )
+    }
+
+    pub(super) fn finish_prevention_counter_replacement(
+        &mut self,
+        mut damage_batch: PendingDamageBatch,
+        damage_event_index: usize,
+        continuation: DamageBatchContinuation,
+        placements: Vec<super::replacement::ProposedCounterPlacement>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let [placement] = placements.as_slice() else {
+            return Err(EngineError::Illegal(
+                "damage-prevention counter replacement must resolve one placement",
+            ));
+        };
+        let Some(damage) = damage_batch.damage.get_mut(damage_event_index) else {
+            return Err(EngineError::Illegal(
+                "damage-prevention counter replacement lost its damage event",
+            ));
+        };
+        damage.counter_placement_proposals.push(placement.clone());
+        let Some(completed) =
+            self.advance_or_park_damage_batch(damage_batch, continuation.clone(), events)?
+        else {
+            return Ok(finish_with_events(self, std::mem::take(events)));
+        };
+        let damage_triggers =
+            self.commit_completed_damage_batch_collecting_triggers(&completed, events)?;
+        self.finish_damage_batch_continuation(
+            continuation,
+            &completed,
+            damage_triggers,
+            std::mem::take(events),
+        )
+    }
+
+    fn finish_damage_batch_continuation(
+        &mut self,
+        completion: DamageBatchContinuation,
+        completed: &[CompletedDamage],
+        damage_triggers: Vec<super::triggers::CollectedTrigger>,
+        events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
         if let DamageBatchContinuation::ManaAbility {
             actor,
             source_object_id,
@@ -1665,7 +2016,7 @@ impl GameEngine {
             self.record_attack_mana_damage_results(
                 *actor,
                 *source_object_id,
-                &completed,
+                completed,
                 damage_triggers,
             );
         }
@@ -1681,6 +2032,7 @@ impl GameEngine {
             DamageBatchContinuation::ManaAbility {
                 resume_resolution, ..
             } => {
+                let mut events = events;
                 if let Some(resume_resolution) = resume_resolution {
                     self.state.pending_resolution = Some(*resume_resolution);
                     events.push(
@@ -1752,16 +2104,6 @@ impl GameEngine {
                 } else {
                     None
                 };
-                if is_creature
-                    && event.source.wither
-                    && result.dealt > 0
-                    && self.can_receive_counters(permanent)
-                {
-                    object
-                        .counter_count(CounterKind::MinusOneMinusOne)
-                        .checked_add(result.dealt)
-                        .ok_or(EngineError::DamageNumericRange("wither counter total"))?;
-                }
                 let Some(object) = self.state.objects.get_mut(&permanent) else {
                     return Ok(0);
                 };
@@ -1792,14 +2134,6 @@ impl GameEngine {
                     && object.counter_count(CounterKind::Defense) == 0
                     && characteristics.has_type("Siege");
                 let _ = object;
-                if is_creature && event.source.wither {
-                    self.place_counters(
-                        permanent,
-                        CounterKind::MinusOneMinusOne,
-                        result.dealt,
-                        super::continuous::CounterPlacementOrigin::Damage,
-                    );
-                }
                 if defeated_siege {
                     self.stage_siege_defeat_trigger(permanent);
                 }
@@ -1842,14 +2176,83 @@ impl GameEngine {
         replay_trigger_snapshot: Option<&[super::triggers::CollectedTrigger]>,
     ) -> Result<Vec<super::triggers::CollectedTrigger>, EngineError> {
         let mut lifelink_by_source: BTreeMap<(ObjectId, PlayerId), u32> = BTreeMap::new();
-        let mut trigger_events = Vec::new();
+        for log in completed
+            .iter()
+            .flat_map(|damage| &damage.additional_counter_logs)
+        {
+            let committed = completed
+                .iter()
+                .flat_map(|damage| &damage.counter_placements)
+                .any(|placement| {
+                    placement.object.object_id == log.recipient_object_id
+                        && placement.object.zone_change_generation
+                            == log.recipient_zone_change_generation
+                        && placement.counter == log.counter
+                });
+            if committed {
+                events.push(ev_log(format!(
+                    "{} puts {} {} counter(s) on {}.",
+                    log.source_label,
+                    log.count,
+                    log.counter.label(),
+                    log.recipient_label,
+                )));
+            }
+        }
+        let mut trigger_events = completed
+            .iter()
+            .flat_map(|damage| damage.counter_placements.iter())
+            .filter_map(|placement| {
+                let object = self.state.objects.get(&placement.object.object_id)?;
+                let current_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&placement.object.object_id)
+                    .copied()
+                    .unwrap_or(0);
+                if object.zone != Zone::Battlefield
+                    || current_generation != placement.object.zone_change_generation
+                {
+                    return None;
+                }
+                (placement.after > placement.before).then_some(GameEvent::CountersPlaced {
+                    object: placement.object,
+                    kind: placement.counter,
+                    before: placement.before,
+                    after: placement.after,
+                    read_ahead_entry: false,
+                })
+            })
+            .collect::<Vec<_>>();
         for damage in completed {
-            let dealt = self.commit_damage_result(
-                &damage.spec.event,
-                damage.result,
-                damage.spec.source_has_deathtouch,
-                events,
-            )?;
+            let recipient_is_current = match damage.spec.event.recipient {
+                DamageRecipient::Player(_) => true,
+                DamageRecipient::Permanent(recipient) => {
+                    damage.recipient_generation.is_none_or(|generation| {
+                        self.state
+                            .zone_change_generation
+                            .get(&recipient)
+                            .copied()
+                            .unwrap_or(0)
+                            == generation
+                            && self
+                                .state
+                                .objects
+                                .get(&recipient)
+                                .is_some_and(|object| object.zone == Zone::Battlefield)
+                    })
+                }
+            };
+            let dealt = if recipient_is_current {
+                self.commit_damage_result(
+                    &damage.spec.event,
+                    damage.result,
+                    damage.spec.source_has_deathtouch,
+                    events,
+                )?
+            } else {
+                0
+            };
             if dealt == 0 {
                 continue;
             }
@@ -1918,6 +2321,196 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prevention_counter_replacement_is_ordered_before_the_remaining_simultaneous_damage() {
+        let decks = Some(vec![vec!["plains".into(); 7], vec!["plains".into(); 7]]);
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            305_101,
+            &[0, 1],
+            20,
+            decks,
+            true,
+        )
+        .expect("engine");
+        let anti_venom = move_bear_to_battlefield(&mut engine);
+        engine.state.objects.get_mut(&anti_venom).unwrap().card_id =
+            "anti-venom,_horrifying_healer".into();
+        engine.emit_static_abilities_on_enter(anti_venom);
+        let laezel = move_bear_to_battlefield(&mut engine);
+        engine.state.objects.get_mut(&laezel).unwrap().card_id =
+            "laezel,_vlaakiths_champion".into();
+        engine.emit_static_abilities_on_enter(laezel);
+        assert_eq!(engine.active_static_abilities(laezel).len(), 1);
+        assert_eq!(engine.controller_of(laezel), Some(0));
+        for _ in 0..2 {
+            let doubling_season = move_bear_to_battlefield(&mut engine);
+            engine
+                .state
+                .objects
+                .get_mut(&doubling_season)
+                .unwrap()
+                .card_id = "doubling_season".into();
+            engine.emit_static_abilities_on_enter(doubling_season);
+            assert_eq!(engine.active_static_abilities(doubling_season).len(), 2);
+        }
+        let other_recipient = move_bear_to_battlefield(&mut engine);
+        engine
+            .state
+            .objects
+            .get_mut(&other_recipient)
+            .unwrap()
+            .card_id = "grizzly_bears".into();
+        let source = move_bear_to_battlefield(&mut engine);
+        engine.state.objects.get_mut(&source).unwrap().card_id = "grizzly_bears".into();
+        let doubler_id = 99_001;
+        engine
+            .state
+            .damage_doubling_effects
+            .push(ActiveDamageDoubling {
+                id: doubler_id,
+                static_origin: None,
+                source_id: None,
+                source_label: "simultaneous damage doubler".into(),
+                source_presentation: Default::default(),
+                scope: DamageDoublingScope::AnySource,
+                duration: EffectDuration::UntilEndOfTurn,
+            });
+        engine.add_damage_prevention(
+            None,
+            "second-recipient shield",
+            DamagePreventionScope::Recipient(other_recipient),
+            DamagePreventionAmount::All,
+        );
+
+        let prevention_id = engine
+            .state
+            .damage_prevention_effects
+            .iter()
+            .find(|effect| effect.source_id == Some(anti_venom))
+            .expect("Anti-Venom prevention effect")
+            .id;
+        assert_eq!(engine.controller_of(anti_venom), Some(0));
+        assert!(engine.characteristics(anti_venom).unwrap().is_creature());
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = source_item(source, source_generation);
+        item.card_id = "grizzly_bears".into();
+        assert!(engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![
+                    DamageSpec {
+                        event: DamageEvent::noncombat(
+                            source,
+                            0,
+                            "simultaneous source",
+                            DamageRecipient::Permanent(anti_venom),
+                            2,
+                        ),
+                        source_has_deathtouch: false,
+                        source_has_lifelink: false,
+                    },
+                    DamageSpec {
+                        event: DamageEvent::noncombat(
+                            source,
+                            0,
+                            "simultaneous source",
+                            DamageRecipient::Permanent(other_recipient),
+                            2,
+                        ),
+                        source_has_deathtouch: false,
+                        source_has_lifelink: false,
+                    },
+                ],
+                &mut Vec::new(),
+            )
+            .unwrap()
+            .is_none());
+
+        let Some(super::super::replacement::PendingReplacementEvent::Damage(batch)) =
+            engine.state.pending_replacement_event.as_ref()
+        else {
+            panic!("initial simultaneous damage replacement choice");
+        };
+        let selected = batch
+            .applications
+            .iter()
+            .find(|application| {
+                application.event_index == 0
+                    && application.application
+                        == DamageReplacementApplication::Effect(prevention_id)
+            })
+            .expect("Anti-Venom prevention is one of the initial choices")
+            .choice_id;
+        let pending = engine.state.pending_resolution.take().expect("choice");
+        engine
+            .finish_damage_replacement_choice(pending, selected)
+            .expect("apply Anti-Venom before its contained counter event");
+
+        let Some(super::super::replacement::PendingReplacementEvent::Counters(_)) =
+            engine.state.pending_replacement_event.as_ref()
+        else {
+            panic!("contained counter replacement choice precedes later damage choices");
+        };
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("counter choice");
+        assert!(matches!(
+            &pending.continuation,
+            crate::state::ResolutionContinuation::CounterReplacement {
+                completion: crate::state::CounterPlacementCompletion::DamageReplacement { .. },
+                ..
+            }
+        ));
+        assert_eq!(
+            engine.state.objects[&anti_venom].counter_count(CounterKind::PlusOnePlusOne),
+            0
+        );
+        assert_eq!(engine.state.objects[&anti_venom].damage, 0);
+        assert_eq!(engine.state.objects[&other_recipient].damage, 0);
+
+        while matches!(
+            engine.state.pending_replacement_event,
+            Some(super::super::replacement::PendingReplacementEvent::Counters(_))
+        ) {
+            let pending = engine
+                .state
+                .pending_resolution
+                .take()
+                .expect("nested choice");
+            let selected = pending.presentation.candidates[0];
+            engine
+                .finish_counter_replacement_choice(pending, selected)
+                .expect("finish the contained counter replacement");
+            assert_eq!(
+                engine.state.objects[&anti_venom].counter_count(CounterKind::PlusOnePlusOne),
+                0,
+                "counter values stay staged while another damage replacement remains"
+            );
+            assert_eq!(engine.state.objects[&anti_venom].damage, 0);
+            assert_eq!(engine.state.objects[&other_recipient].damage, 0);
+        }
+        assert!(matches!(
+            engine.state.pending_replacement_event,
+            Some(super::super::replacement::PendingReplacementEvent::Damage(
+                _
+            ))
+        ));
+        assert!(engine.state.pending_resolution.is_some());
+        assert!(engine
+            .state
+            .damage_doubling_effects
+            .iter()
+            .any(|effect| effect.id == doubler_id));
+    }
 
     #[test]
     fn controlled_creature_damage_doubler_replaces_noncombat_damage() {
@@ -2707,6 +3300,103 @@ mod tests {
     }
 
     #[test]
+    fn wither_counter_replacement_order_finishes_before_damage_commits() {
+        let abilities = r#"
+            (ability_id: "laezel", presentation: Fallback,
+                definition: AddOneCounterOfEachKindToSelfOrControlledCreaturePlaneswalker),
+            (ability_id: "doubling_season_one", presentation: Fallback,
+                definition: DoubleEffectCountersPlacedOnPermanentsYouControl),
+            (ability_id: "doubling_season_two", presentation: Fallback,
+                definition: DoubleEffectCountersPlacedOnPermanentsYouControl)
+        "#;
+
+        let (mut engine, source) = damage_doubler_engine(abilities);
+        grant_wither_for_damage_test(&mut engine, source);
+        let target = move_fixture_source_to_battlefield(&mut engine, "plain_creature_fixture", 0);
+        {
+            let target = engine.state.objects.get_mut(&target).unwrap();
+            target.power = Some(20);
+            target.toughness = Some(20);
+        }
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let item = source_item(source, generation);
+        let mut events = Vec::new();
+
+        assert!(engine
+            .process_or_park_damage_batch(
+                &item,
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        source,
+                        0,
+                        "Damage Doubler Fixture",
+                        DamageRecipient::Permanent(target),
+                        1,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut events,
+            )
+            .expect("wither damage reaches counter replacement planning")
+            .is_none());
+
+        let choice = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("replacement order is requested before damage commits");
+        assert_eq!(
+            choice.presentation.choice_kind,
+            rv1::ChoiceKind::ReplacementEffect
+        );
+        assert_eq!(choice.presentation.candidates.len(), 2);
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::MinusOneMinusOne),
+            0,
+            "wither counters stay staged while their replacements are ordered"
+        );
+        assert_eq!(
+            engine.state.objects[&target].damage, 0,
+            "the damage result stays uncommitted with the wither placement"
+        );
+        assert_eq!(
+            engine
+                .characteristics(target)
+                .map(|characteristics| { (characteristics.power, characteristics.toughness) }),
+            Some((Some(20), Some(20)))
+        );
+
+        let chosen = choice.presentation.candidates[0];
+        engine
+            .apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![chosen],
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect("counter replacement order completes the damage batch");
+
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
+        assert_eq!(engine.state.objects[&target].damage, 0);
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::MinusOneMinusOne),
+            8
+        );
+    }
+
+    #[test]
     fn doubled_wither_damage_reports_counter_total_overflow() {
         let (mut engine, source) = damage_doubler_engine(
             r#"(ability_id: "double_damage", presentation: Fallback,
@@ -2727,8 +3417,8 @@ mod tests {
             .copied()
             .unwrap_or(0);
         let item = source_item(source, generation);
-        let completed = engine
-            .process_or_park_damage_batch(
+        assert!(matches!(
+            engine.process_or_park_damage_batch(
                 &item,
                 vec![DamageSpec {
                     event: DamageEvent::noncombat(
@@ -2742,11 +3432,7 @@ mod tests {
                     source_has_lifelink: false,
                 }],
                 &mut Vec::new(),
-            )
-            .unwrap()
-            .expect("one controlled-creature doubler resolves immediately");
-        assert!(matches!(
-            engine.commit_completed_damage_batch(&completed, &mut Vec::new()),
+            ),
             Err(EngineError::DamageNumericRange("wither counter total"))
         ));
         assert_eq!(

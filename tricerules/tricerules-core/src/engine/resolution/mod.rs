@@ -1222,6 +1222,8 @@ impl GameEngine {
                         chosen_opponents: Vec::new(),
                         chosen_creature_types: Vec::new(),
                         entry_counters: BTreeMap::new(),
+                        entry_counter_placements: Vec::new(),
+                        entry_counter_replacements_resolved: false,
                         entry_modifiers: Vec::new(),
                         entry_cause: None,
                         attached_to: None,
@@ -1232,7 +1234,7 @@ impl GameEngine {
                     },
                     BattlefieldEntryCompletion::PermanentSpell { attached_to },
                     events,
-                ) {
+                )? {
                     super::replacement::BattlefieldEntryProgress::Parked => {
                         return Ok(ResolutionProgress::Parked);
                     }
@@ -1256,6 +1258,17 @@ impl GameEngine {
                     }
                     super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                         let entry = *entry;
+                        let Some(entry) = self.prepare_single_entry_counter_placements(
+                            crate::state::ParkedStackResolution::new(top.clone()),
+                            entry,
+                            crate::state::BattlefieldEntryCompletion::PermanentSpell {
+                                attached_to,
+                            },
+                            events,
+                        )?
+                        else {
+                            return Ok(ResolutionProgress::Parked);
+                        };
                         events.push(rv1::RuledEvent {
                             ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
                                 object_id: top.id,
@@ -2319,6 +2332,8 @@ impl GameEngine {
                 chosen_opponents: Vec::new(),
                 chosen_creature_types: Vec::new(),
                 entry_counters: BTreeMap::new(),
+                entry_counter_placements: Vec::new(),
+                entry_counter_replacements_resolved: false,
                 entry_modifiers: Vec::new(),
                 entry_cause: None,
                 attached_to: None,
@@ -2342,7 +2357,7 @@ impl GameEngine {
                     resume_original_stack,
                 },
                 events,
-            ) {
+            )? {
                 super::replacement::BattlefieldEntryProgress::Parked => {
                     if let (Some(resume), Some(pending)) = (
                         resume_stack.as_ref(),
@@ -2376,7 +2391,7 @@ impl GameEngine {
                 }
             }
         }
-        let Some(SimultaneousEntryBatch::Observer(batch)) = self.begin_entry_timestamp_order(
+        let Some(batch) = self.begin_entry_timestamp_order(
             SimultaneousEntryBatch::Observer(Box::new(PendingObserverReturnBatch {
                 ready: entries,
                 remaining: VecDeque::new(),
@@ -2384,11 +2399,19 @@ impl GameEngine {
                 suspended_resolution: suspended_resolution.clone(),
                 suspended_replacement_event: suspended_replacement_event.clone(),
             })),
-            resume_stack,
+            resume_stack.clone(),
             events,
         )?
         else {
             return Ok(true);
+        };
+        let Some(batch) =
+            self.begin_entry_counter_placements_for_batch(batch, resume_stack.clone(), events)?
+        else {
+            return Ok(true);
+        };
+        let SimultaneousEntryBatch::Observer(batch) = batch else {
+            return Err(EngineError::Illegal("observer entry batch changed type"));
         };
         self.commit_observer_return_batch(batch.ready, events)?;
         if self.restore_suspended_observer_resolution(
@@ -2626,9 +2649,14 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         self.prune_invalid_observer_entry_auras(&mut entries)?;
-        // These returns are one simultaneous entry event. Apply every entrant's entry counters
-        // from the same pre-commit Doubling Season snapshot before moving any object.
-        self.replace_entry_counter_events(entries.iter_mut().map(|entry| &mut entry.event));
+        if entries.iter().any(|entry| {
+            !entry.event.entry_counter_placements.is_empty()
+                && !entry.event.entry_counter_replacements_resolved
+        }) {
+            return Err(EngineError::Illegal(
+                "observer-entry counters were not processed by the replacement planner",
+            ));
+        }
         let mut trigger_events = Vec::new();
         for entry in entries {
             let object_id = entry.event.object_id;
@@ -2952,6 +2980,8 @@ impl GameEngine {
                         chosen_opponents: Vec::new(),
                         chosen_creature_types: Vec::new(),
                         entry_counters: BTreeMap::new(),
+                        entry_counter_placements: Vec::new(),
+                        entry_counter_replacements_resolved: false,
                         entry_modifiers: Vec::new(),
                         entry_cause: None,
                         attached_to: None,
@@ -3814,10 +3844,6 @@ pub(super) fn seat_resolved_spell_last_in_graveyard(state: &mut GameState, oid: 
     }
     graveyard.retain(|&x| x != oid);
     graveyard.push(oid);
-}
-
-fn counter_label(kind: CounterKind) -> String {
-    kind.label()
 }
 
 pub(crate) fn permanent_moved_event_with_library_position(

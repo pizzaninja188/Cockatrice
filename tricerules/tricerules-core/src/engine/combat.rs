@@ -837,7 +837,7 @@ impl GameEngine {
         let mana_sources_consumed =
             mana_sources_consumed_by_cost(preceding_receipts, &self.state, player, &cost_plan);
         let cost_plan = self.prepare_cost_transaction_commit(cost_plan)?;
-        let payment = self.commit_prevalidated_cost_transaction(cost_plan.clone())?;
+        let payment = self.commit_prevalidated_cost_transaction(cost_plan.clone(), None)?;
         self.record_limited_activations(receipt.activation_uses.clone());
 
         let restriction_group_id = if let Some(restriction) = &receipt.mana_restriction {

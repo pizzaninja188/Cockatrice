@@ -107,6 +107,47 @@ fn one_existing_army_is_chosen_automatically_and_keeps_both_subtypes() {
 }
 
 #[test]
+fn amass_stages_counter_replacement_choices_before_mutation() {
+    let mut engine = engine(186_010);
+    inject_permanent_on_battlefield(&mut engine, 0, "laezel,_vlaakiths_champion");
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    let army = inject_creature_on_battlefield(&mut engine, 0, "zombie_army_b_0_0");
+    seed_army_counter(&mut engine, army);
+
+    put_flunkies_trigger_on_stack(&mut engine);
+    pass_both_players(&mut engine);
+
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Amass must ask for counter-replacement order");
+    assert_eq!(
+        pending.presentation.choice_kind,
+        ChoiceKind::ReplacementEffect
+    );
+    assert_eq!(
+        engine.state.objects[&army].counter_count(CounterKind::PlusOnePlusOne),
+        1,
+        "the Army does not receive counters until all replacement choices are complete"
+    );
+    let selected = pending.presentation.candidates[0];
+    engine
+        .apply_command(0, &submit_resolution_choice(vec![selected]))
+        .expect("choose a counter replacement order");
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(matches!(
+        engine.state.objects[&army].counter_count(CounterKind::PlusOnePlusOne),
+        5 | 6
+    ));
+    assert!(engine
+        .characteristics(army)
+        .expect("Army characteristics")
+        .has_type("Goblin"));
+}
+
+#[test]
 fn added_army_subtype_is_generation_bound_and_clears_on_departure() {
     let mut engine = engine(186_009);
     let army = inject_creature_on_battlefield(&mut engine, 0, "zombie_army_b_0_0");

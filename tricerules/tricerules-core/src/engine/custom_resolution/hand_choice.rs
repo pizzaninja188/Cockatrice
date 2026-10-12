@@ -129,6 +129,8 @@ impl GameEngine {
                 chosen_opponents: Vec::new(),
                 chosen_creature_types: Vec::new(),
                 entry_counters: Default::default(),
+                entry_counter_placements: Vec::new(),
+                entry_counter_replacements_resolved: false,
                 entry_modifiers: Vec::new(),
                 entry_cause: hand_choice.entry_cause,
                 attached_to: None,
@@ -142,8 +144,9 @@ impl GameEngine {
                 entry,
                 completion.clone(),
                 &mut events,
-            ) {
+            )? {
                 super::super::replacement::BattlefieldEntryProgress::Parked => {
+                    self.transfer_entry_choice_resume(&stack);
                     Ok(finish_with_events(self, events))
                 }
                 super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {

@@ -161,6 +161,8 @@ pub enum Keyword {
     ReadAhead,
     /// CR 702.124: Partner is a pregame Commander deck-construction ability, not an in-game action.
     Partner,
+    /// CR 702.124k: Choose a Background is pregame Commander deck-construction text, not an in-game action.
+    ChooseABackground,
 }
 
 impl Keyword {
@@ -210,6 +212,7 @@ impl Keyword {
             Keyword::Convoke => "Convoke",
             Keyword::ReadAhead => "Read ahead",
             Keyword::Partner => "Partner",
+            Keyword::ChooseABackground => "Choose a Background",
         }
     }
 }

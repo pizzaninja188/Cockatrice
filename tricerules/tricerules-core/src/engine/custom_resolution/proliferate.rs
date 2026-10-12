@@ -83,26 +83,23 @@ impl GameEngine {
             }
         }
 
-        let mut counter_events = Vec::new();
+        let mut placements = Vec::new();
         for &object_id in chosen_objects {
-            let kinds = self
+            let counters = self
                 .state
                 .objects
                 .get(&object_id)
                 .into_iter()
                 .flat_map(|object| object.counters.iter())
-                .filter_map(|(&kind, &count)| (count > 0).then_some(kind))
+                .filter_map(|(&kind, &count)| (count > 0).then_some((kind, 1)))
                 .collect::<Vec<_>>();
-            for kind in kinds {
-                if let Some(event) = self.place_counters_with_event(
-                    object_id,
-                    kind,
-                    1,
-                    false,
-                    CounterPlacementOrigin::Effect,
-                ) {
-                    counter_events.push(event);
-                }
+            if let Some(event) = self.proposed_object_counter_placement(
+                pending.deciding_player,
+                object_id,
+                counters,
+                CounterPlacementOrigin::Effect,
+            ) {
+                placements.push(event);
             }
         }
 
@@ -110,42 +107,40 @@ impl GameEngine {
             let Some(index) = self.state.player_idx(player_id) else {
                 unreachable!("validated player remains present during the command")
             };
-            let kinds = self.state.players[index]
+            let counters = self.state.players[index]
                 .counters
                 .iter()
-                .filter_map(|(&kind, &count)| (count > 0).then_some(kind))
+                .filter_map(|(&kind, &count)| (count > 0).then_some((kind, 1)))
                 .collect::<Vec<_>>();
-            for kind in kinds {
-                let count = self.state.players[index].counters.entry(kind).or_default();
-                *count = count.saturating_add(1);
+            if let Some(event) = self.proposed_player_counter_placement(
+                pending.deciding_player,
+                player_id,
+                counters,
+                CounterPlacementOrigin::Effect,
+            ) {
+                placements.push(event);
             }
         }
 
-        counter_events.push(GameEvent::Proliferated {
-            player: pending.deciding_player,
-        });
-
-        let mut logs = vec![ev_log(format!(
-            "P{} proliferates.",
-            pending.deciding_player
-        ))];
-        for &object_id in chosen_objects {
-            logs.push(ev_log(format!(
-                "{} gets one of each kind of counter on it.",
-                object_display_name(&self.state, self.registry, object_id)
-            )));
-        }
-        for &player_id in chosen_players {
-            logs.push(ev_log(format!(
-                "P{player_id} gets one of each kind of counter on them."
-            )));
-        }
-
-        self.fire_triggers(&counter_events, &mut logs);
+        let stack = stack.clone();
+        let mut logs = Vec::new();
+        let receipts = self.begin_counter_placement_batch(
+            placements,
+            stack.clone(),
+            crate::state::CounterPlacementCompletion::Proliferate {
+                player_id: pending.deciding_player,
+            },
+            &mut logs,
+        )?;
+        let Some(receipts) = receipts else {
+            return Ok(finish_with_events(self, logs));
+        };
+        let mut previous_result = stack.previous_result.clone();
+        previous_result.counter_placements.extend(receipts);
         self.complete_parked_resolution_with_previous(
-            stack.item.clone(),
+            stack.item,
             stack.resume_effect_index,
-            stack.previous_result.clone(),
+            previous_result,
             logs,
         )
     }

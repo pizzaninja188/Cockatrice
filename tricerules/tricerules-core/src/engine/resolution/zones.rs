@@ -5,7 +5,52 @@ use super::super::presentation::{
 };
 use super::candidate_identities;
 use super::*;
-use crate::state::{PendingLinkedExileAction, SpecialCastCompletion};
+use crate::state::{
+    EntryCounterPlacement, EntryCounterSource, PendingLinkedExileAction, SpecialCastCompletion,
+};
+
+fn entry_counter_instruction(
+    actor: PlayerId,
+    source: EntryCounterSource,
+    counters: impl IntoIterator<Item = (CounterKind, u32)>,
+) -> (
+    std::collections::BTreeMap<CounterKind, u32>,
+    Vec<EntryCounterPlacement>,
+) {
+    let mut counter_bag = std::collections::BTreeMap::new();
+    for (kind, count) in counters {
+        if count > 0 {
+            let total = counter_bag.entry(kind).or_insert(0u32);
+            *total = total.saturating_add(count);
+        }
+    }
+    let placements = if counter_bag.is_empty() {
+        Vec::new()
+    } else {
+        vec![EntryCounterPlacement {
+            actor,
+            counters: counter_bag.clone(),
+            source,
+            read_ahead_entry: false,
+            applied_replacements: Vec::new(),
+        }]
+    };
+    (counter_bag, placements)
+}
+
+fn entry_counter_source(cx: &EffectCx<'_>) -> EntryCounterSource {
+    EntryCounterSource::ResolutionEffect {
+        stack_object_id: cx.top.id,
+        stack_zone_change_generation: cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&cx.top.id)
+            .copied()
+            .unwrap_or(0),
+        effect_index: cx.effect_index,
+    }
+}
 
 pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
     let Some(source_id) = cx.top.source_permanent_id else {
@@ -3510,6 +3555,8 @@ pub(in crate::engine) fn plain_return_entry(
         chosen_opponents: Vec::new(),
         chosen_creature_types: Vec::new(),
         entry_counters: Default::default(),
+        entry_counter_placements: Vec::new(),
+        entry_counter_replacements_resolved: false,
         entry_modifiers: Vec::new(),
         entry_cause: None,
         attached_to: None,
@@ -3726,6 +3773,8 @@ pub(super) fn move_graveyard_cards(
                 chosen_opponents: Vec::new(),
                 chosen_creature_types: Vec::new(),
                 entry_counters: BTreeMap::new(),
+                entry_counter_placements: Vec::new(),
+                entry_counter_replacements_resolved: false,
                 entry_modifiers: entry_modifiers.clone(),
                 entry_cause: None,
                 attached_to: None,
@@ -3815,10 +3864,13 @@ pub(super) fn return_linked_exiled_cards(
         .get(&key)
         .cloned()
         .unwrap_or_default();
-    let entry_counters: BTreeMap<_, _> = entry_counters
-        .into_iter()
-        .map(|placement| (placement.counter, placement.count))
-        .collect();
+    let (entry_counters, entry_counter_placements) = entry_counter_instruction(
+        cx.controller,
+        entry_counter_source(cx),
+        entry_counters
+            .into_iter()
+            .map(|placement| (placement.counter, placement.count)),
+    );
     let entries = linked
         .into_iter()
         .filter(|linked| {
@@ -3845,6 +3897,7 @@ pub(super) fn return_linked_exiled_cards(
         .map(|linked| {
             let mut event = plain_return_entry(cx.engine, linked.object_id, cx.controller);
             event.entry_counters = entry_counters.clone();
+            event.entry_counter_placements = entry_counter_placements.clone();
             event.entry_modifiers = entry_modifiers.clone();
             event
         })
@@ -4058,10 +4111,13 @@ pub(super) fn return_triggered_card(
         ReturnController::AbilityController => cx.controller,
     };
     let object_label = object_display_name(&cx.engine.state, cx.engine.registry, source_id);
-    let entry_counters = entry_counters
-        .into_iter()
-        .map(|placement| (placement.counter, placement.count))
-        .collect();
+    let (entry_counters, entry_counter_placements) = entry_counter_instruction(
+        cx.controller,
+        entry_counter_source(cx),
+        entry_counters
+            .into_iter()
+            .map(|placement| (placement.counter, placement.count)),
+    );
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
@@ -4084,6 +4140,8 @@ pub(super) fn return_triggered_card(
             chosen_opponents: Vec::new(),
             chosen_creature_types: Vec::new(),
             entry_counters,
+            entry_counter_placements,
+            entry_counter_replacements_resolved: false,
             entry_modifiers: Vec::new(),
             entry_cause: None,
             attached_to: None,
@@ -4103,7 +4161,7 @@ pub(super) fn return_triggered_card(
             },
         },
         cx.events,
-    ) {
+    )? {
         super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
         super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
             cx.engine.restore_skipped_battlefield_entry(&entry)?;
@@ -4181,6 +4239,8 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
             chosen_opponents: Vec::new(),
             chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
+            entry_counter_placements: Vec::new(),
+            entry_counter_replacements_resolved: false,
             entry_modifiers: Vec::new(),
             entry_cause: None,
             attached_to: None,
@@ -4195,7 +4255,7 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
             assignment,
         },
         cx.events,
-    ) {
+    )? {
         super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
         super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
             cx.engine.restore_skipped_battlefield_entry(&entry)?;
@@ -4274,6 +4334,8 @@ pub(super) fn put_ability_source_onto_battlefield(
             chosen_opponents: Vec::new(),
             chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
+            entry_counter_placements: Vec::new(),
+            entry_counter_replacements_resolved: false,
             entry_modifiers: Vec::new(),
             entry_cause: None,
             attached_to: None,
@@ -4289,7 +4351,7 @@ pub(super) fn put_ability_source_onto_battlefield(
             from_zone: Zone::Hand,
         },
         cx.events,
-    ) {
+    )? {
         super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
         super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
             cx.engine.restore_skipped_battlefield_entry(&entry)?;
@@ -4397,10 +4459,13 @@ pub(super) fn exile_source_then_return_transformed(
         ReturnController::Owner => owner,
         ReturnController::AbilityController => cx.controller,
     };
-    let entry_counters = entry_counters
-        .into_iter()
-        .map(|placement| (placement.counter, placement.count))
-        .collect();
+    let (entry_counters, entry_counter_placements) = entry_counter_instruction(
+        cx.controller,
+        entry_counter_source(cx),
+        entry_counters
+            .into_iter()
+            .map(|placement| (placement.counter, placement.count)),
+    );
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
@@ -4423,6 +4488,8 @@ pub(super) fn exile_source_then_return_transformed(
             chosen_opponents: Vec::new(),
             chosen_creature_types: Vec::new(),
             entry_counters,
+            entry_counter_placements,
+            entry_counter_replacements_resolved: false,
             entry_modifiers: Vec::new(),
             entry_cause: None,
             attached_to: None,
@@ -4438,7 +4505,7 @@ pub(super) fn exile_source_then_return_transformed(
             from_zone: Zone::Exile,
         },
         cx.events,
-    ) {
+    )? {
         super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
         super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
             cx.engine.restore_skipped_battlefield_entry(&entry)?;
@@ -4958,7 +5025,28 @@ pub(super) fn explore(
     let revealed_id = cx.engine.state.players[player_idx].library.front().copied();
 
     if revealed_id.is_none() {
-        place_explore_counter(cx.engine, explorer, cx.events);
+        if let Some(proposal) = cx.engine.proposed_object_counter_placement(
+            controller,
+            explorer.object_id,
+            [(CounterKind::PlusOnePlusOne, 1)],
+            super::super::continuous::CounterPlacementOrigin::Effect,
+        ) {
+            let receipts = cx.engine.begin_counter_placement_batch(
+                vec![proposal],
+                ParkedStackResolution::new(cx.top.clone()),
+                crate::state::CounterPlacementCompletion::Explore {
+                    controller,
+                    explorer,
+                    revealed: None,
+                    spell_label: cx.spell_label.to_owned(),
+                },
+                cx.events,
+            )?;
+            let Some(receipts) = receipts else {
+                return Ok(EffectOutcome::Suspended);
+            };
+            cx.effect_result.counter_placements.extend(receipts);
+        }
         cx.events.push(ev_log(format!(
             "P{controller} explores with an empty library ({}).",
             cx.spell_label
@@ -4988,7 +5076,7 @@ pub(super) fn explore(
         zone_change_generation: revealed_generation,
         controller_at_event: controller,
     };
-    let (candidate_card_ids, candidate_names) = candidate_identities(cx.engine, &[revealed_id]);
+    let (_, candidate_names) = candidate_identities(cx.engine, &[revealed_id]);
     let revealed_name = candidate_names
         .first()
         .cloned()
@@ -5033,98 +5121,145 @@ pub(super) fn explore(
         return Ok(EffectOutcome::Continue);
     }
 
-    place_explore_counter(cx.engine, explorer, cx.events);
-    let prompt = format!(
-        "{revealed_name} was revealed while exploring. Click it to put it into your graveyard, or submit without selecting it to leave it on top of your library."
-    );
-    cx.events.push(rv1::RuledEvent {
-        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-            rv1::ResolutionChoiceRequired {
-                accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
-                candidate_token_identities: Vec::new(),
-                candidate_player_ids: Vec::new(),
-                deciding_player_id: controller,
-                source_object_id: cx.top.id,
-                prompt_text: prompt.clone(),
-                choice_kind: rv1::ChoiceKind::LibraryLook as i32,
-                candidate_object_ids: vec![revealed_id],
-                candidate_card_ids,
-                candidate_names,
+    let mut stack = ParkedStackResolution::new(cx.top.clone());
+    stack.previous_result = cx.previous_effect_result.clone();
+    if let Some(proposal) = cx.engine.proposed_object_counter_placement(
+        controller,
+        explorer.object_id,
+        [(CounterKind::PlusOnePlusOne, 1)],
+        super::super::continuous::CounterPlacementOrigin::Effect,
+    ) {
+        let receipts = cx.engine.begin_counter_placement_batch(
+            vec![proposal],
+            stack.clone(),
+            crate::state::CounterPlacementCompletion::Explore {
+                controller,
+                explorer,
+                revealed: Some(revealed),
+                spell_label: cx.spell_label.to_owned(),
+            },
+            cx.events,
+        )?;
+        let Some(receipts) = receipts else {
+            return Ok(EffectOutcome::Suspended);
+        };
+        stack
+            .previous_result
+            .counter_placements
+            .extend(receipts.clone());
+        cx.effect_result.counter_placements.extend(receipts);
+    }
+    cx.engine.park_explore_choice(
+        stack,
+        controller,
+        explorer,
+        revealed,
+        cx.spell_label,
+        cx.events,
+    )?;
+    Ok(EffectOutcome::Suspended)
+}
+
+impl GameEngine {
+    pub(in crate::engine) fn park_explore_choice(
+        &mut self,
+        stack: ParkedStackResolution,
+        controller: PlayerId,
+        explorer: TriggerObjectRef,
+        revealed: TriggerObjectRef,
+        spell_label: &str,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let current_generation = self
+            .state
+            .zone_change_generation
+            .get(&revealed.object_id)
+            .copied()
+            .unwrap_or(0);
+        if current_generation != revealed.zone_change_generation
+            || !self
+                .state
+                .objects
+                .get(&revealed.object_id)
+                .is_some_and(|object| object.zone == Zone::Library)
+            || self
+                .state
+                .player_idx(controller)
+                .and_then(|index| self.state.players[index].library.front().copied())
+                != Some(revealed.object_id)
+        {
+            return Err(EngineError::Illegal(
+                "Explore revealed card is no longer on top of the library",
+            ));
+        }
+        let (candidate_card_ids, candidate_names) =
+            candidate_identities(self, &[revealed.object_id]);
+        let revealed_name = candidate_names
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "a card".into());
+        let prompt = format!(
+            "{revealed_name} was revealed while exploring. Click it to put it into your graveyard, or submit without selecting it to leave it on top of your library."
+        );
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    accepted_permanent_selections: Vec::new(),
+                    variable_mana_contribution: false,
+                    candidate_token_identities: Vec::new(),
+                    candidate_player_ids: Vec::new(),
+                    deciding_player_id: controller,
+                    source_object_id: stack.item.id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::LibraryLook as i32,
+                    candidate_object_ids: vec![revealed.object_id],
+                    candidate_card_ids,
+                    candidate_names,
+                    min: 0,
+                    max: 1,
+                    ordered: false,
+                    unique_names: false,
+                    candidate_server_card_ids: Vec::new(),
+                    candidate_selectable: vec![true],
+                    resolution_branches: Vec::new(),
+                    mana_cost: String::new(),
+                    generic_mana_cost: 0,
+                    payment_currently_legal: false,
+                    public_reveal: super::super::reveals::reveal_choice(
+                        &self.state,
+                        self.registry,
+                        &[revealed.object_id],
+                        stack.item.id,
+                        spell_label,
+                    ),
+                    candidate_source_zones: Vec::new(),
+                    combat_defender_options: Vec::new(),
+                    waterbend: false,
+                    selection_slots: Vec::new(),
+                    replacement_options: Vec::new(),
+                    selection_alternatives: Vec::new(),
+                },
+            )),
+        });
+        self.state.pending_resolution = Some(PendingResolution {
+            deciding_player: controller,
+            presentation: PendingResolutionPresentation {
+                source_object_id: stack.item.id,
+                candidates: vec![revealed.object_id],
                 min: 0,
                 max: 1,
                 ordered: false,
                 unique_names: false,
-                candidate_server_card_ids: Vec::new(),
-                candidate_selectable: vec![true],
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
-                public_reveal: super::super::reveals::reveal_choice(
-                    &cx.engine.state,
-                    cx.engine.registry,
-                    &[revealed_id],
-                    cx.top.id,
-                    cx.spell_label,
-                ),
-                candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                prompt,
+                choice_kind: rv1::ChoiceKind::LibraryLook,
             },
-        )),
-    });
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
-            source_object_id: cx.top.id,
-            candidates: vec![revealed_id],
-            min: 0,
-            max: 1,
-            ordered: false,
-            unique_names: false,
-            prompt,
-            choice_kind: rv1::ChoiceKind::LibraryLook,
-        },
-        continuation: ResolutionContinuation::Explore {
-            stack: ParkedStackResolution::new(cx.top.clone()),
-            explorer,
-            revealed,
-        },
-    });
-    Ok(EffectOutcome::Suspended)
-}
-
-fn place_explore_counter(
-    engine: &mut GameEngine,
-    explorer: TriggerObjectRef,
-    out: &mut Vec<rv1::RuledEvent>,
-) {
-    let is_current = engine
-        .state
-        .zone_change_generation
-        .get(&explorer.object_id)
-        .copied()
-        .unwrap_or(0)
-        == explorer.zone_change_generation
-        && engine
-            .state
-            .objects
-            .get(&explorer.object_id)
-            .is_some_and(|object| object.zone == Zone::Battlefield);
-    if is_current {
-        if let Some(event) = engine.place_counters_with_event(
-            explorer.object_id,
-            CounterKind::PlusOnePlusOne,
-            1,
-            false,
-            super::super::continuous::CounterPlacementOrigin::Effect,
-        ) {
-            engine.fire_triggers(&[event], out);
-        }
+            continuation: ResolutionContinuation::Explore {
+                stack,
+                explorer,
+                revealed,
+            },
+        });
+        Ok(())
     }
 }
 
@@ -5461,6 +5596,8 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 chosen_opponents: Vec::new(),
                 chosen_creature_types: Vec::new(),
                 entry_counters: BTreeMap::new(),
+                entry_counter_placements: Vec::new(),
+                entry_counter_replacements_resolved: false,
                 entry_modifiers: Vec::new(),
                 entry_cause: None,
                 attached_to: None,
@@ -5475,7 +5612,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 chosen_library_position: 0,
             },
             cx.events,
-        ) {
+        )? {
             super::super::replacement::BattlefieldEntryProgress::Parked => {
                 return Ok(EffectOutcome::Suspended);
             }

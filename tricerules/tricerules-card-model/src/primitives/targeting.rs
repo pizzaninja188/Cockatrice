@@ -666,12 +666,17 @@ impl TargetingDef {
         if !targeting.is_some_and(Self::requires_opponent_choice) {
             return Ok(());
         }
-        let source_tap_and_mana = costs.len() == 2
+        let source_tap_and_mana = (costs.len() == 2 || costs.len() == 3)
             && costs.contains(&super::AbilityCost::Tap)
             && costs.iter().any(|cost| {
                 matches!(cost, super::AbilityCost::Mana(mana)
                     if !mana.pips.contains(&crate::ManaSymbol::X))
-            });
+            })
+            && costs
+                .iter()
+                .filter(|cost| matches!(cost, super::AbilityCost::Loyalty(delta) if *delta > 0))
+                .count()
+                == costs.len().saturating_sub(2);
         if source_zone != super::AbilitySourceZone::Battlefield || !source_tap_and_mana {
             return Err(
                 "opponent target choices require battlefield mana and source-tap activation costs"

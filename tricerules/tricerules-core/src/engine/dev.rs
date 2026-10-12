@@ -192,6 +192,8 @@ impl GameEngine {
                     chosen_opponents: Vec::new(),
                     chosen_creature_types: Vec::new(),
                     entry_counters: BTreeMap::new(),
+                    entry_counter_placements: Vec::new(),
+                    entry_counter_replacements_resolved: false,
                     entry_modifiers: Vec::new(),
                     entry_cause: None,
                     attached_to: None,
@@ -202,7 +204,7 @@ impl GameEngine {
                 },
                 completion,
                 ev,
-            ) {
+            )? {
                 super::replacement::BattlefieldEntryProgress::Parked => Ok(()),
                 super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
                     self.restore_skipped_battlefield_entry(&entry)?;

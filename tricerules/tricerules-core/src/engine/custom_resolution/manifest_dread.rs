@@ -66,6 +66,8 @@ impl GameEngine {
             chosen_opponents: Vec::new(),
             chosen_creature_types: Vec::new(),
             entry_counters: BTreeMap::new(),
+            entry_counter_placements: Vec::new(),
+            entry_counter_replacements_resolved: false,
             entry_modifiers: Vec::new(),
             entry_cause: None,
             attached_to: None,
@@ -84,16 +86,12 @@ impl GameEngine {
             entry,
             completion.clone(),
             &mut events,
-        ) {
+        )? {
             super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
                 self.finish_entry_copy_without_recipient(stack, *entry, completion, events)
             }
             super::super::replacement::BattlefieldEntryProgress::Parked => {
-                if let Some(replacement_pending) = self.state.pending_resolution.as_mut() {
-                    if let Some(replacement_stack) = replacement_pending.continuation.stack_mut() {
-                        replacement_stack.resume_effect_index = stack.resume_effect_index;
-                    }
-                }
+                self.transfer_entry_choice_resume(&stack);
                 Ok(finish_with_events(self, events))
             }
             super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {

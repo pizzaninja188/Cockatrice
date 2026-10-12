@@ -1,0 +1,18 @@
+// Exact Oracle c066f921-e349-45d1-8ec3-0955d10bbf19; Scryfall record 1a93f587-ab72-42da-88c4-31af1c9cdf1b.
+// Counter replacement reviewed against CR 107.7, 109.5, 122, 606.4, 614 and 616 (2026-09-25).
+(
+  id: "laezel,_vlaakiths_champion",
+  name: "Lae'zel, Vlaakith's Champion",
+  face_id: "laezel_vlaakiths_champion",
+  mana_cost: "{2}{W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Gith", "Warrior"],
+  keywords: [ChooseABackground],
+  power: 3,
+  toughness: 3,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: AddOneCounterOfEachKindToSelfOrControlledCreaturePlaneswalker,
+  )],
+)
