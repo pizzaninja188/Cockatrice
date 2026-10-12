@@ -34,7 +34,7 @@
       "covers": "actual cast X scales power while first strike remains at X zero and positive"
     },
     {
-      "test": "issue_misc38_batch::issue_misc38_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc38_batch::issue_misc38_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost, type line, absent numeric characteristics"
     }
   ],

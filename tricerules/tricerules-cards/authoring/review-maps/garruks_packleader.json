@@ -40,7 +40,7 @@
       "covers": "declining the optional draw leaves the library and hand unchanged"
     },
     {
-      "test": "deck_coverage_garruks_packleader::garruks_packleader_registers_its_power_filtered_optional_draw_trigger",
+      "test": "deck_registry::deck_coverage_garruks_packleader::garruks_packleader_registers_its_power_filtered_optional_draw_trigger",
       "covers": "the exact Oracle identity, printed characteristics, entry-time creature power filter, and optional controller draw"
     }
   ],

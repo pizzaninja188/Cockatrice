@@ -26,7 +26,7 @@
       "covers": "actual registered card exercises its token count, source zone, costs, timing, and crew or life result as applicable"
     },
     {
-      "test": "issue_misc28_batch::issue_misc28_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc28_batch::issue_misc28_registers_five_exact_card_identities",
       "covers": "printed card layout, cost, type, and power/toughness"
     }
   ],

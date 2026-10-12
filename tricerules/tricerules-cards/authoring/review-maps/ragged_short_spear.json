@@ -52,11 +52,11 @@
       "covers": "the optional entry rummage discards a private card then draws two, and equip grants +2/+0"
     },
     {
-      "test": "issue_misc13_batch::issue_misc13_batch_maps_definitions",
+      "test": "batch_registry::issue_misc13_batch::issue_misc13_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, optional entry rummage, attached +2/+0, and equip of Ragged Short Spear"
     },
     {
-      "test": "issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Ragged Short Spear"
     }
   ],

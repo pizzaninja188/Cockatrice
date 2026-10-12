@@ -29,11 +29,11 @@
       "covers": "its controller draws two cards and each player loses two life"
     },
     {
-      "test": "issue_misc2_batch::issue_misc2_batch_maps_definitions",
+      "test": "batch_registry::issue_misc2_batch::issue_misc2_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and effects of risky_shortcut"
     },
     {
-      "test": "issue_misc2_batch::issue_misc2_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc2_batch::issue_misc2_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for risky_shortcut"
     }
   ],

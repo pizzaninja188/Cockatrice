@@ -92,11 +92,11 @@
       "covers": "the 2024-04-12 spree ruling and CR 608.2b: when the only chosen target is illegal on resolution the entire spell fails to resolve, so the untargeted token mode creates no Mercenary while the cast-time additional costs stay paid"
     },
     {
-      "test": "issue_359_direct_ron::issue_359_unfortunate_accident_maps_every_printed_clause",
+      "test": "mechanic_registry::issue_359_direct_ron::issue_359_unfortunate_accident_maps_every_printed_clause",
       "covers": "reviewed identity, mana cost, type, Spree group/options, mode ids, linked cast costs, per-mode target contract, ordered effects, and the referenced Mercenary token"
     },
     {
-      "test": "issue_359_direct_ron::issue_359_direct_ron_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_359_direct_ron::issue_359_direct_ron_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprints for both faces"
     }
   ],

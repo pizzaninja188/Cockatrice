@@ -28,11 +28,11 @@
       "covers": "the {2}-and-tap ability makes each opponent lose one life and gains the controller one life"
     },
     {
-      "test": "issue_misc4_batch::issue_misc4_batch_maps_definitions",
+      "test": "batch_registry::issue_misc4_batch::issue_misc4_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of vampire_neonate"
     },
     {
-      "test": "issue_misc4_batch::issue_misc4_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc4_batch::issue_misc4_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for vampire_neonate"
     }
   ],

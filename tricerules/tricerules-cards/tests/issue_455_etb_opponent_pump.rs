@@ -9,7 +9,7 @@
 //! controller scope), CR 613.4c (power/toughness modifying effects), and CR 702.185 (Warp) govern
 //! the asserted shapes.
 
-mod common;
+use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{

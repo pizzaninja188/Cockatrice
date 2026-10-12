@@ -13,7 +13,7 @@
 //! CR 604.1 / 604.2 (static abilities), CR 611.3 (continuous effects with a live condition), and
 //! CR 109.2 (land card type) govern the asserted shapes.
 
-mod common;
+use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{

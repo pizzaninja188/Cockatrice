@@ -31,7 +31,7 @@
       "covers": "actual registered deduce resolution, controller scope, and effect ordering"
     },
     {
-      "test": "issue_misc34_batch::issue_misc34_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc34_batch::issue_misc34_registers_five_exact_card_identities",
       "covers": "printed characteristics for deduce"
     }
   ],

@@ -24,7 +24,7 @@
       "covers": "both players creatures receive two -1/-1 counters while noncreatures do not"
     },
     {
-      "test": "issue_misc32_batch::issue_misc32_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc32_batch::issue_misc32_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost, type line, and absent numeric characteristics"
     }
   ],

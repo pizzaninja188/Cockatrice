@@ -9,7 +9,7 @@
 //! timing), CR 602.5 (activation restrictions), CR 400.7 and 603.6 (source-relative "entered this
 //! turn"), and CR 205.4a (basic land supertype) govern the asserted shapes.
 
-mod common;
+use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{

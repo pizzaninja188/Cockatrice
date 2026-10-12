@@ -44,11 +44,11 @@
       "covers": "the entry trigger grants double strike to each creature you control (including the Dragon) and not to an opponent's creature"
     },
     {
-      "test": "issue_misc17_batch::issue_misc17_batch_maps_definitions",
+      "test": "batch_registry::issue_misc17_batch::issue_misc17_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flying, Double strike, and the mass double-strike entry grant of Terror of Mount Velus"
     },
     {
-      "test": "issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Terror of Mount Velus"
     }
   ],

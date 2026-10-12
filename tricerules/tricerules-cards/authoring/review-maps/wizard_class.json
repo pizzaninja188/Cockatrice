@@ -46,7 +46,7 @@
   ],
   "semantic_fixtures": [
     {
-      "test": "deck_coverage_wizard_class::wizard_class_is_registered_as_a_complete_card",
+      "test": "deck_registry::deck_coverage_wizard_class::wizard_class_is_registered_as_a_complete_card",
       "covers": "exact identity, Class type, top-section no-maximum-hand-size static ability, and both level bars"
     },
     {

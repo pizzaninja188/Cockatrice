@@ -30,11 +30,11 @@
       "covers": "the dies trigger creates exactly two registered 2/2 black Zombie tokens"
     },
     {
-      "test": "issue_dies_batch::issue_dies_batch_maps_definitions",
+      "test": "batch_registry::issue_dies_batch::issue_dies_batch_maps_definitions",
       "covers": "reviewed identity, characteristics, trigger and effects of maalfeld_twins"
     },
     {
-      "test": "issue_dies_batch::issue_dies_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_dies_batch::issue_dies_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for maalfeld_twins"
     }
   ],

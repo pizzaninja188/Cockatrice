@@ -17,45 +17,17 @@ function Assert-Equal {
     }
 }
 
-function Get-MarkdownTableRows {
+# Historical calibration evidence is a fixture, not an active documentation workflow.
+function Get-CalibrationTableRows {
     param(
-        [Parameter(Mandatory)]
-        [AllowEmptyString()]
-        [string[]] $Lines,
-
-        [Parameter(Mandatory)]
-        [string] $Marker
+        [Parameter(Mandatory)] $Summary,
+        [Parameter(Mandatory)] [string] $Marker
     )
-
-    $markerIndex = [array]::IndexOf($Lines, $Marker)
-    if ($markerIndex -lt 0) {
-        throw "Markdown marker not found: $Marker"
+    $table = $Summary.tables.PSObject.Properties[$Marker]
+    if (-not $table -or @($table.Value).Count -eq 0) {
+        throw "Calibration summary table missing: $Marker"
     }
-
-    $rows = @()
-    $tableStarted = $false
-    for ($index = $markerIndex + 1; $index -lt $Lines.Count; $index++) {
-        $line = $Lines[$index]
-        if (-not $line.StartsWith('|')) {
-            if ($tableStarted) {
-                break
-            }
-            continue
-        }
-
-        $tableStarted = $true
-        $cells = @($line.Trim('|').Split('|') | ForEach-Object { $_.Trim().Trim('*') })
-        if ($cells.Count -eq 0 -or $cells[0] -match '^[-:]+$') {
-            continue
-        }
-        $rows += ,$cells
-    }
-
-    if ($rows.Count -lt 2) {
-        throw "Markdown table after '$Marker' is missing data rows."
-    }
-
-    return $rows[1..($rows.Count - 1)]
+    foreach ($row in $table.Value) { Write-Output -NoEnumerate $row }
 }
 
 function Format-Percentage {
@@ -81,7 +53,7 @@ function Test-Calibration {
         [string] $CsvPath,
 
         [Parameter(Mandatory)]
-        [string] $MarkdownPath,
+        [string] $SummaryPath,
 
         [bool] $RequireGapTraceability = $false,
 
@@ -145,8 +117,8 @@ function Test-Calibration {
     $blocked = @($rows | Where-Object classification -eq 'blocked').Count
     $fullOrPartial = $full + $partial
 
-    $markdownLines = @(Get-Content -LiteralPath $MarkdownPath)
-    $resultRows = Get-MarkdownTableRows -Lines $markdownLines -Marker '## Result'
+    $summary = Get-Content -Raw -LiteralPath $SummaryPath | ConvertFrom-Json
+    $resultRows = Get-CalibrationTableRows -Summary $summary -Marker '## Result'
     $resultByLabel = @{}
     foreach ($row in $resultRows) {
         $resultByLabel[$row[0]] = $row
@@ -161,13 +133,13 @@ function Test-Calibration {
     }
     foreach ($label in $expectedResults.Keys) {
         if (-not $resultByLabel.ContainsKey($label)) {
-            throw "$displayName Markdown result table is missing '$label'."
+            throw "$displayName summary result table is missing '$label'."
         }
         Assert-Equal $expectedResults[$label][0].ToString() $resultByLabel[$label][1] "$displayName result '$label' count"
         Assert-Equal $expectedResults[$label][1] $resultByLabel[$label][2] "$displayName result '$label' rate"
     }
 
-    $stratumRows = Get-MarkdownTableRows -Lines $markdownLines -Marker 'By stratum:'
+    $stratumRows = Get-CalibrationTableRows -Summary $summary -Marker 'By stratum:'
     $stratumByCode = @{}
     foreach ($row in $stratumRows) {
         $code = $row[0]
@@ -179,7 +151,7 @@ function Test-Calibration {
 
     foreach ($stratum in $strata) {
         if (-not $stratumByCode.ContainsKey($stratum.Name)) {
-            throw "$displayName Markdown stratum table is missing '$($stratum.Name)'."
+            throw "$displayName summary stratum table is missing '$($stratum.Name)'."
         }
         $row = $stratumByCode[$stratum.Name]
         $stratumFull = @($stratum.Group | Where-Object classification -eq 'full_now').Count
@@ -220,8 +192,8 @@ function Test-Calibration {
                 } |
                 Sort-Object -Unique
         )
-        $traceabilityRows = Get-MarkdownTableRows `
-            -Lines $markdownLines `
+        $traceabilityRows = Get-CalibrationTableRows `
+            -Summary $summary `
             -Marker 'Full raw-label traceability:'
         $gapToIssue = @{}
         $mappedGaps = @(
@@ -268,8 +240,8 @@ function Test-Calibration {
                 }
             }
 
-            $capabilityRows = Get-MarkdownTableRows `
-                -Lines $markdownLines `
+            $capabilityRows = Get-CalibrationTableRows `
+                -Summary $summary `
                 -Marker 'The normalized capability gaps are:'
             $reportedIssues = [System.Collections.Generic.HashSet[int]]::new()
             foreach ($capabilityRow in $capabilityRows) {
@@ -296,14 +268,14 @@ function Test-Calibration {
 function Test-ExpandedCalibration {
     param([string] $Repo, [string] $Stem)
 
-    $docs = Join-Path $Repo 'docs'
-    $rows = @(Import-Csv (Join-Path $docs "$Stem.csv"))
-    $population = @(Import-Csv (Join-Path $docs "$Stem-population.csv"))
-    $gaps = @(Import-Csv (Join-Path $docs "$Stem-gaps.csv"))
-    $manifest = Get-Content (Join-Path $docs "$Stem-manifest.json") -Raw | ConvertFrom-Json
-    $rulingsData = Get-Content (Join-Path $docs "$Stem-rulings.json") -Raw -Encoding utf8 | ConvertFrom-Json
+    $fixtures = Join-Path $Repo 'tests/fixtures/card-coverage-calibration'
+    $rows = @(Import-Csv (Join-Path $fixtures "$Stem.csv"))
+    $population = @(Import-Csv (Join-Path $fixtures "$Stem-population.csv"))
+    $gaps = @(Import-Csv (Join-Path $fixtures "$Stem-gaps.csv"))
+    $manifest = Get-Content (Join-Path $fixtures "$Stem-manifest.json") -Raw | ConvertFrom-Json
+    $rulingsData = Get-Content (Join-Path $fixtures "$Stem-rulings.json") -Raw -Encoding utf8 | ConvertFrom-Json
     $rulings = @($rulingsData)
-    $markdown = @(Get-Content (Join-Path $docs "$Stem.md"))
+    $summary = Get-Content -Raw (Join-Path $fixtures "$Stem-summary.json") | ConvertFrom-Json
 
     Assert-Equal 4 $manifest.version "$Stem manifest version"
     Assert-Equal $manifest.sample_size $rows.Count "$Stem manifest sample size"
@@ -318,7 +290,7 @@ function Test-ExpandedCalibration {
         if ($file.Name -notmatch ('^' + [regex]::Escape($Stem) + '[a-z-]*\.(csv|json)$')) {
             throw "$Stem contains an unsafe checksum path '$($file.Name)'."
         }
-        $actual = (Get-FileHash (Join-Path $docs $file.Name) -Algorithm SHA256).Hash.ToLowerInvariant()
+        $actual = (Get-FileHash (Join-Path $fixtures $file.Name) -Algorithm SHA256).Hash.ToLowerInvariant()
         Assert-Equal $file.Value $actual "$Stem checksum $($file.Name)"
     }
     Assert-Equal 4 @($manifest.files_sha256.PSObject.Properties).Count "$Stem checksum file count"
@@ -415,7 +387,7 @@ function Test-ExpandedCalibration {
     Assert-Equal 83 $observed.Count "$Stem raw gap count"
 
     $reported = [Collections.Generic.HashSet[int]]::new()
-    $capabilityRows = Get-MarkdownTableRows -Lines $markdown -Marker 'The normalized capability gaps are:'
+    $capabilityRows = Get-CalibrationTableRows -Summary $summary -Marker 'The normalized capability gaps are:'
     foreach ($row in $capabilityRows) {
         if ($row[3] -notmatch '/issues/(\d+)') { throw "$Stem capability lacks issue URL." }
         $issue = [int]$Matches[1]
@@ -425,9 +397,10 @@ function Test-ExpandedCalibration {
     }
     Assert-Equal $stats.Count $reported.Count "$Stem complete capability statistics"
     $soleTotal = ($stats.Values | ForEach-Object { $_.Sole } | Measure-Object -Sum).Sum
-    $markdownText = $markdown -join "`n"
-    foreach ($summary in @("**$anyNew cards**", "**$newOnly cards**", "**$soleTotal cards**")) {
-        if (-not $markdownText.Contains($summary)) { throw "$Stem omits derived summary '$summary'." }
+    $derivedSummary = @($anyNew, $newOnly, $soleTotal)
+    Assert-Equal 3 @($summary.new_capability_summary).Count "$Stem summary metric count"
+    for ($index = 0; $index -lt $derivedSummary.Count; $index++) {
+        Assert-Equal $derivedSummary[$index] $summary.new_capability_summary[$index] "$Stem summary metric $index"
     }
     foreach ($set in $rulings) {
         if ($set.sample_id -eq 'ferocidon') { continue }
@@ -442,12 +415,12 @@ function Test-ExpandedCalibration {
 function Test-CurrentStandardCalibration {
     param([string] $Repo, [string] $Stem)
 
-    $docs = Join-Path $Repo 'docs'
-    $rows = @(Import-Csv (Join-Path $docs "$Stem.csv"))
-    $population = @(Import-Csv (Join-Path $docs "$Stem-population.csv"))
-    $gaps = @(Import-Csv (Join-Path $docs "$Stem-gaps.csv"))
-    $manifest = Get-Content (Join-Path $docs "$Stem-manifest.json") -Raw | ConvertFrom-Json
-    $authority = Get-Content (Join-Path $docs "$Stem-authority.json") -Raw | ConvertFrom-Json
+    $fixtures = Join-Path $Repo 'tests/fixtures/card-coverage-calibration'
+    $rows = @(Import-Csv (Join-Path $fixtures "$Stem.csv"))
+    $population = @(Import-Csv (Join-Path $fixtures "$Stem-population.csv"))
+    $gaps = @(Import-Csv (Join-Path $fixtures "$Stem-gaps.csv"))
+    $manifest = Get-Content (Join-Path $fixtures "$Stem-manifest.json") -Raw | ConvertFrom-Json
+    $authority = Get-Content (Join-Path $fixtures "$Stem-authority.json") -Raw | ConvertFrom-Json
 
     Assert-Equal 6 $manifest.version "$Stem manifest version"
     Assert-Equal 160 $manifest.sample_size "$Stem manifest sample size"
@@ -464,7 +437,7 @@ function Test-CurrentStandardCalibration {
         if ($file.Name -notmatch ('^' + [regex]::Escape($Stem) + '[a-z-]*\.(csv|json)$')) {
             throw "$Stem contains an unsafe checksum path '$($file.Name)'."
         }
-        $actual = (Get-FileHash (Join-Path $docs $file.Name) -Algorithm SHA256).Hash.ToLowerInvariant()
+        $actual = (Get-FileHash (Join-Path $fixtures $file.Name) -Algorithm SHA256).Hash.ToLowerInvariant()
         Assert-Equal $file.Value $actual "$Stem checksum $($file.Name)"
     }
     Assert-Equal 4 @($manifest.files_sha256.PSObject.Properties).Count "$Stem checksum file count"
@@ -548,30 +521,30 @@ function Test-CurrentStandardCalibration {
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $calibrations = @(
     @{
-        Csv = Join-Path $repo 'docs\card-coverage-calibration-2026-08.csv'
-        Markdown = Join-Path $repo 'docs\card-coverage-calibration-2026-08.md'
+        Csv = Join-Path $repo 'tests\fixtures\card-coverage-calibration\card-coverage-calibration-2026-08.csv'
+        Summary = Join-Path $repo 'tests\fixtures\card-coverage-calibration\card-coverage-calibration-2026-08-summary.json'
     },
     @{
-        Csv = Join-Path $repo 'docs\card-coverage-calibration-2026-08-18.csv'
-        Markdown = Join-Path $repo 'docs\card-coverage-calibration-2026-08-18.md'
+        Csv = Join-Path $repo 'tests\fixtures\card-coverage-calibration\card-coverage-calibration-2026-08-18.csv'
+        Summary = Join-Path $repo 'tests\fixtures\card-coverage-calibration\card-coverage-calibration-2026-08-18-summary.json'
         RequireGapTraceability = $true
     },
     @{
-        Csv = Join-Path $repo 'docs\card-coverage-calibration-2026-08-26.csv'
-        Markdown = Join-Path $repo 'docs\card-coverage-calibration-2026-08-26.md'
+        Csv = Join-Path $repo 'tests\fixtures\card-coverage-calibration\card-coverage-calibration-2026-08-26.csv'
+        Summary = Join-Path $repo 'tests\fixtures\card-coverage-calibration\card-coverage-calibration-2026-08-26-summary.json'
         RequireGapTraceability = $true
         RequireCapabilityStats = $true
     },
     @{
-        Csv = Join-Path $repo 'docs\card-coverage-calibration-2026-08-27.csv'
-        Markdown = Join-Path $repo 'docs\card-coverage-calibration-2026-08-27.md'
+        Csv = Join-Path $repo 'tests\fixtures\card-coverage-calibration\card-coverage-calibration-2026-08-27.csv'
+        Summary = Join-Path $repo 'tests\fixtures\card-coverage-calibration\card-coverage-calibration-2026-08-27-summary.json'
         ExpectedRows = 360
         ExpectedStrata = 12
         RowsPerStratum = 30
     },
     @{
-        Csv = Join-Path $repo 'docs\card-coverage-calibration-2026-09-01.csv'
-        Markdown = Join-Path $repo 'docs\card-coverage-calibration-2026-09-01.md'
+        Csv = Join-Path $repo 'tests\fixtures\card-coverage-calibration\card-coverage-calibration-2026-09-01.csv'
+        Summary = Join-Path $repo 'tests\fixtures\card-coverage-calibration\card-coverage-calibration-2026-09-01-summary.json'
         ExpectedRows = 160
         ExpectedStrata = 8
         RowsPerStratum = 20
@@ -579,7 +552,7 @@ $calibrations = @(
 )
 
 foreach ($calibration in $calibrations) {
-    $parameters = @{ CsvPath = $calibration.Csv; MarkdownPath = $calibration.Markdown }
+    $parameters = @{ CsvPath = $calibration.Csv; SummaryPath = $calibration.Summary }
     foreach ($key in 'RequireGapTraceability', 'RequireCapabilityStats', 'ExpectedRows', 'ExpectedStrata', 'RowsPerStratum') {
         if ($calibration.ContainsKey($key)) { $parameters[$key] = $calibration[$key] }
     }

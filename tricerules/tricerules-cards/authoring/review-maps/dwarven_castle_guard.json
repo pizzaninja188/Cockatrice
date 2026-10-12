@@ -30,11 +30,11 @@
       "covers": "the dies trigger creates one registered 1/1 colorless Hero creature token"
     },
     {
-      "test": "issue_465_token_blockers::issue_465_token_blockers_maps_definitions",
+      "test": "mechanic_registry::issue_465_token_blockers::issue_465_token_blockers_maps_definitions",
       "covers": "reviewed identity, characteristics, trigger and effects of dwarven_castle_guard"
     },
     {
-      "test": "issue_465_token_blockers::issue_465_token_blockers_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_465_token_blockers::issue_465_token_blockers_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for dwarven_castle_guard"
     }
   ],

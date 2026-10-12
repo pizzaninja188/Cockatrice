@@ -57,11 +57,11 @@
       "covers": "the entry trigger deals 6 damage to a targeted creature an opponent controls (a 7/7 survives), only an opponent's creature is a legal target, and the Cycling {2} hand ability discards the card to draw"
     },
     {
-      "test": "issue_misc17_batch::issue_misc17_batch_maps_definitions",
+      "test": "batch_registry::issue_misc17_batch::issue_misc17_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flash, the opponent-creature damage trigger, and the Cycling {2} hand ability of Runaway Boulder"
     },
     {
-      "test": "issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Runaway Boulder"
     }
   ],

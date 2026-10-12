@@ -13,7 +13,7 @@
   "tokens": ["food"],
   "semantic_fixtures": [
     { "test": "scenario issue_misc26_batch::issue_misc26_sharepot_creates_food_then_rejects_land_target_and_destroys_creature", "covers": "real entry creates Food; land target rejects before cost; valid activation sacrifices source and destroys creature; beginning-combat activation rejects" },
-    { "test": "issue_misc26_batch::issue_misc26_batch_registers_five_exact_oracle_identities", "covers": "printed artifact identity and mana cost" }
+    { "test": "batch_registry::issue_misc26_batch::issue_misc26_batch_registers_five_exact_oracle_identities", "covers": "printed artifact identity and mana cost" }
   ],
   "complete_definition_review_confirmed": true
 }

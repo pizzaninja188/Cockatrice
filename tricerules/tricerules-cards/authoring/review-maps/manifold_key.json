@@ -76,7 +76,7 @@
       "covers": "the three-mana activation prevents a target from being blocked; when used after a legal block is declared, that creature remains blocked as stated in the card ruling"
     },
     {
-      "test": "deck_coverage_manifold_key::manifold_key_registers_its_artifact_untap_and_unblockable_activations",
+      "test": "deck_registry::deck_coverage_manifold_key::manifold_key_registers_its_artifact_untap_and_unblockable_activations",
       "covers": "exact identity, mana cost, artifact type, both costs, source exclusion, artifact and creature target contracts, untap effect, and unblockable restriction"
     }
   ],

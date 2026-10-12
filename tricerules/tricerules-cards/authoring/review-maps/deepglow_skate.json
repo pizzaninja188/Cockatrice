@@ -52,7 +52,7 @@
       "covers": "three nonconsecutive players use published permanent ids"
     },
     {
-      "test": "deck_coverage_deepglow_skate::deepglow_skate_exact_printed_identity_and_optional_permanent_target_group",
+      "test": "deck_registry::deck_coverage_deepglow_skate::deepglow_skate_exact_printed_identity_and_optional_permanent_target_group",
       "covers": "Exact printed blue five mana 3/3 Fish identity, one ETB instruction and zero to unsigned maximum permanent targets"
     }
   ],

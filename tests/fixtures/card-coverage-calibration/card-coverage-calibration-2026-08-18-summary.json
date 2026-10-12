@@ -1,0 +1,196 @@
+{
+  "tables": {
+    "## Result": [
+      [
+        "Fully implementable now",
+        "62",
+        "34.4%"
+      ],
+      [
+        "Partially implementable now",
+        "56",
+        "31.1%"
+      ],
+      [
+        "Full or partial",
+        "118",
+        "65.6%"
+      ],
+      [
+        "Blocked",
+        "62",
+        "34.4%"
+      ],
+      [
+        "Total",
+        "180",
+        "100.0%"
+      ]
+    ],
+    "By stratum:": [
+      [
+        "Foundations (FDN)",
+        "33",
+        "13",
+        "14",
+        "60"
+      ],
+      [
+        "Duskmourn: House of Horror (DSK)",
+        "11",
+        "22",
+        "27",
+        "60"
+      ],
+      [
+        "Tarkir: Dragonstorm (TDM)",
+        "18",
+        "21",
+        "21",
+        "60"
+      ]
+    ],
+    "Full raw-label traceability:": [
+      [
+        "#72",
+        "`planeswalker_targets`"
+      ],
+      [
+        "#96",
+        "`library_partition_choice`, `surveil`"
+      ],
+      [
+        "#97",
+        "`conditional_enters_tapped`, `global_entry_counter_replacement`"
+      ],
+      [
+        "#98",
+        "`face_down_permanents`, `manifest_dread`"
+      ],
+      [
+        "#99",
+        "`room_state_condition`, `room_unlock_trigger`, `rooms`"
+      ],
+      [
+        "#100",
+        "`omen`"
+      ],
+      [
+        "#101",
+        "`cycling`, `graveyard_activated_ability`"
+      ],
+      [
+        "#102",
+        "`once_per_turn_activation`"
+      ],
+      [
+        "#103",
+        "`ward`"
+      ],
+      [
+        "#104",
+        "`behold`, `kicker_cast_option`"
+      ],
+      [
+        "#105",
+        "`harmonize`"
+      ],
+      [
+        "#106",
+        "`mobilize`"
+      ],
+      [
+        "#107",
+        "`disjunctive_graveyard_filter`, `graveyard_card_exile`, `graveyard_result_condition`, `graveyard_to_library`"
+      ],
+      [
+        "#108",
+        "`graveyard_card_count_condition`, `graveyard_card_type_count`"
+      ],
+      [
+        "#109",
+        "`linked_exile`"
+      ],
+      [
+        "#110",
+        "`conditional_search_destination`, `library_filter_power`, `multi_zone_named_search`, `named_library_search`, `owner_library_placement_choice`"
+      ],
+      [
+        "#111",
+        "`attacked_this_turn_condition`, `spells_cast_this_turn_condition`, `turn_indexed_draw_trigger`, `turn_indexed_spell_cost_reduction`, `turn_indexed_spell_trigger`"
+      ],
+      [
+        "#112",
+        "`affinity`, `static_spell_cost_reduction`, `target_dependent_cost_reduction`"
+      ],
+      [
+        "#113",
+        "`characteristic_setting_and_ability_loss`"
+      ],
+      [
+        "#114",
+        "`disjunctive_target_filter`"
+      ],
+      [
+        "#115",
+        "`attached_combat_damage_trigger`, `attached_damage_trigger`, `conditional_attached_modifier`"
+      ],
+      [
+        "#116",
+        "`conditional_effect_branch`, `conditional_static_scope`"
+      ],
+      [
+        "#117",
+        "`fight`"
+      ],
+      [
+        "#118",
+        "`targeted_combat_damage_prevention`"
+      ],
+      [
+        "#119",
+        "`self_block_restriction`"
+      ],
+      [
+        "#120",
+        "`return_source_to_hand`, `sacrifice_cost_exclude_source`"
+      ],
+      [
+        "#121",
+        "`player_set_discard_result`, `player_set_draw`"
+      ],
+      [
+        "#122",
+        "`paid_card_characteristics_condition`"
+      ],
+      [
+        "#123",
+        "`impulse_play`"
+      ],
+      [
+        "#124",
+        "`counter_types`, `stun_counters`"
+      ],
+      [
+        "#125",
+        "`death_exile_replacement`"
+      ],
+      [
+        "#126",
+        "`private_hand_exile`"
+      ],
+      [
+        "#127",
+        "`trigger_event_power_filter`"
+      ],
+      [
+        "#128",
+        "`combat_phase_trigger`, `second_main_phase_trigger`"
+      ],
+      [
+        "#129",
+        "`special_action_mana_restriction`"
+      ]
+    ]
+  }
+}

@@ -1,0 +1,258 @@
+{
+  "tables": {
+    "## Result": [
+      [
+        "Fully implementable now",
+        "90",
+        "50.0%"
+      ],
+      [
+        "Partially implementable now",
+        "72",
+        "40.0%"
+      ],
+      [
+        "Full or partial",
+        "162",
+        "90.0%"
+      ],
+      [
+        "Blocked",
+        "18",
+        "10.0%"
+      ],
+      [
+        "Total",
+        "180",
+        "100.0%"
+      ]
+    ],
+    "By stratum:": [
+      [
+        "Edge of Eternities (EOE)",
+        "29",
+        "26",
+        "5",
+        "60"
+      ],
+      [
+        "Avatar: The Last Airbender (TLA)",
+        "36",
+        "17",
+        "7",
+        "60"
+      ],
+      [
+        "Lorwyn Eclipsed (ECL)",
+        "25",
+        "29",
+        "6",
+        "60"
+      ]
+    ],
+    "Full raw-label traceability:": [
+      [
+        "#113",
+        "`temporary_animation`, `temporary_base_pt`, `temporary_color_change`"
+      ],
+      [
+        "#144",
+        "`tap_permanent_ability_cost`, `tap_permanent_resolution_cost`"
+      ],
+      [
+        "#145",
+        "`convoke`"
+      ],
+      [
+        "#146",
+        "`waterbend`"
+      ],
+      [
+        "#147",
+        "`charge_counters`, `station`"
+      ],
+      [
+        "#148",
+        "`void_history`, `warp`"
+      ],
+      [
+        "#149",
+        "`airbend`"
+      ],
+      [
+        "#150",
+        "`earthbend`"
+      ],
+      [
+        "#151",
+        "`firebending`"
+      ],
+      [
+        "#152",
+        "`exhaust_once_per_object`"
+      ],
+      [
+        "#153",
+        "`blight`"
+      ],
+      [
+        "#154",
+        "`changeling`"
+      ],
+      [
+        "#155",
+        "`attached_object_zone_effect`, `equipment_enters_attachment`, `return_graveyard_source_to_hand`"
+      ],
+      [
+        "#156",
+        "`attached_becomes_tapped_trigger`, `becomes_tapped_trigger`, `sacrifice_event_trigger`, `self_leaves_battlefield_trigger`"
+      ],
+      [
+        "#157",
+        "`counter_removal`, `counter_transfer`, `prohibit_counter_placement`, `wither`"
+      ],
+      [
+        "#158",
+        "`attacked_with_subtype_this_turn`, `battlefield_union_count_condition`, `cards_drawn_this_turn_condition`, `conditional_activated_cost_reduction`, `count_scaled_static_pt`, `distinct_name_battlefield_count`, `graveyard_subtype_condition`, `permanent_entered_this_turn_condition`, `source_counter_condition`, `spell_mana_value_trigger_filter`, `tapped_creature_count_condition`, `target_damage_history_condition`, `trigger_object_subtype_filter`"
+      ],
+      [
+        "#159",
+        "`cast_cost_conditional_search_filter`, `library_second_from_top`, `milled_result_choice`, `multi_card_impulse_play`, `soft_counter_payment_result`, `target_characteristic_conditional_effect`, `target_post_effect_condition`"
+      ],
+      [
+        "#160",
+        "`blocker_count_restriction`, `blocker_power_restriction`, `blocking_target_filter`"
+      ],
+      [
+        "#161",
+        "`delayed_trigger_on_next_controller_turn`, `other_player_untap_trigger`"
+      ],
+      [
+        "#162",
+        "`tapped_token_creation`"
+      ]
+    ],
+    "The normalized capability gaps are:": [
+      [
+        "Richer characteristic, aggregate, and turn-history predicates",
+        "18",
+        "16",
+        "[#158](https://github.com/pizzaninja188/Cockatrice/issues/158)"
+      ],
+      [
+        "Blight payments",
+        "8",
+        "6",
+        "[#153](https://github.com/pizzaninja188/Cockatrice/issues/153)"
+      ],
+      [
+        "Attachment entry and source-relative zone actions",
+        "8",
+        "5",
+        "[#155](https://github.com/pizzaninja188/Cockatrice/issues/155)"
+      ],
+      [
+        "Tapped, leave, and sacrifice observers",
+        "8",
+        "8",
+        "[#156](https://github.com/pizzaninja188/Cockatrice/issues/156)"
+      ],
+      [
+        "Warp and Void",
+        "7",
+        "7",
+        "[#148](https://github.com/pizzaninja188/Cockatrice/issues/148)"
+      ],
+      [
+        "Changeling",
+        "7",
+        "6",
+        "[#154](https://github.com/pizzaninja188/Cockatrice/issues/154)"
+      ],
+      [
+        "Typed resolution receipts and result cohorts",
+        "7",
+        "6",
+        "[#159](https://github.com/pizzaninja188/Cockatrice/issues/159)"
+      ],
+      [
+        "Counter manipulation, prohibition, and Wither",
+        "6",
+        "4",
+        "[#157](https://github.com/pizzaninja188/Cockatrice/issues/157)"
+      ],
+      [
+        "Convoke",
+        "4",
+        "4",
+        "[#145](https://github.com/pizzaninja188/Cockatrice/issues/145)"
+      ],
+      [
+        "Selectable tap-payment substrate",
+        "3",
+        "3",
+        "[#144](https://github.com/pizzaninja188/Cockatrice/issues/144)"
+      ],
+      [
+        "Waterbend",
+        "3",
+        "1",
+        "[#146](https://github.com/pizzaninja188/Cockatrice/issues/146)"
+      ],
+      [
+        "Earthbend",
+        "3",
+        "2",
+        "[#150](https://github.com/pizzaninja188/Cockatrice/issues/150)"
+      ],
+      [
+        "Firebending",
+        "3",
+        "1",
+        "[#151](https://github.com/pizzaninja188/Cockatrice/issues/151)"
+      ],
+      [
+        "Blocking-specific filters and restrictions",
+        "3",
+        "2",
+        "[#160](https://github.com/pizzaninja188/Cockatrice/issues/160)"
+      ],
+      [
+        "Existing characteristic-setting layers",
+        "3",
+        "2",
+        "[#113](https://github.com/pizzaninja188/Cockatrice/issues/113)"
+      ],
+      [
+        "Station and charge thresholds",
+        "2",
+        "2",
+        "[#147](https://github.com/pizzaninja188/Cockatrice/issues/147)"
+      ],
+      [
+        "Exhaust lifetime limits",
+        "2",
+        "0",
+        "[#152](https://github.com/pizzaninja188/Cockatrice/issues/152)"
+      ],
+      [
+        "Controller-relative turn hooks",
+        "2",
+        "2",
+        "[#161](https://github.com/pizzaninja188/Cockatrice/issues/161)"
+      ],
+      [
+        "Tapped token creation",
+        "2",
+        "2",
+        "[#162](https://github.com/pizzaninja188/Cockatrice/issues/162)"
+      ],
+      [
+        "Airbend",
+        "1",
+        "1",
+        "[#149](https://github.com/pizzaninja188/Cockatrice/issues/149)"
+      ]
+    ]
+  }
+}

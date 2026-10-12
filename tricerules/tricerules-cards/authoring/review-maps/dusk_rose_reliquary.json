@@ -57,11 +57,11 @@
       "covers": "sacrificing a creature or an artifact pays the additional cost; an opponent's removal targeting the Reliquary triggers Ward {2} with the opponent as payer; the entry trigger exiles a target opposing creature (the shared artifact-or-creature target filter is asserted in the registry map) and returns it to the battlefield when the Reliquary leaves"
     },
     {
-      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
+      "test": "mechanic_registry::issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
       "covers": "reviewed identity, cost, types, Ward trigger and linked-exile entry trigger of Dusk Rose Reliquary"
     },
     {
-      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Dusk Rose Reliquary"
     }
   ],

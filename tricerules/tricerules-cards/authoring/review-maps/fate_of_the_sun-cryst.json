@@ -41,11 +41,11 @@
       "covers": "a tapped creature target makes the {2} reduction apply and the nonland permanent is destroyed; an untapped target gets no reduction"
     },
     {
-      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "test": "batch_registry::issue_misc16_batch::issue_misc16_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the tapped-creature cost reduction, the nonland-permanent destroy effect, and targeting of Fate of the Sun-Cryst"
     },
     {
-      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Fate of the Sun-Cryst"
     }
   ],

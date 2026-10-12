@@ -29,13 +29,13 @@
 - **Status:** `Supported` for the exact one-mana-per-option, tap-only battlefield activation
   demonstrated by Astral Cornucopia.
 - **Typed symbols:** `SpellEffectKind::ProduceManaPerSourceCounter` and `ManaAmount` in
-  `tricerules/tricerules-cards/src/primitives/effects.rs`; `ActivatedAbilityDef::mana_options` and
+  `tricerules/tricerules-card-model/src/primitives/effects.rs`; `ActivatedAbilityDef::mana_options` and
   `ActivatedAbilityDef::mana_source_counter` in
-  `tricerules/tricerules-cards/src/primitives/abilities.rs`.
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs`.
 - **Implementation references:** loader:
   `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`; validator:
-  `tricerules/tricerules-cards/src/primitives/effects.rs#SpellEffectKind::validate` and
-  `tricerules/tricerules-cards/src/primitives/abilities.rs#ActivatedAbilityDef::validate_shape`;
+  `tricerules/tricerules-card-model/src/primitives/effects.rs#SpellEffectKind::validate` and
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs#ActivatedAbilityDef::validate_shape`;
   engine option calculation:
   `tricerules/tricerules-core/src/engine/casting.rs#GameEngine::active_mana_options`; immediate
   ability handling: `tricerules/tricerules-core/src/engine/casting.rs#GameEngine::activate_ability`
@@ -105,10 +105,10 @@
 - **Reviewed paths:**
   - `tricerules/tricerules-cards/data/astral_cornucopia.ron`
   - `tricerules/tricerules-cards/authoring/review-maps/astral_cornucopia.json`
-  - `tricerules/tricerules-cards/src/primitives/abilities.rs`
-  - `tricerules/tricerules-cards/src/primitives/effects.rs`
-  - `tricerules/tricerules-cards/src/primitives/presentation.rs`
-  - `tricerules/tricerules-cards/src/primitives/tests.rs`
+  - `tricerules/tricerules-card-model/src/primitives/abilities.rs`
+  - `tricerules/tricerules-card-model/src/primitives/effects.rs`
+  - `tricerules/tricerules-card-model/src/primitives/presentation.rs`
+  - `tricerules/tricerules-card-model/src/primitives/tests.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/casting.rs`
   - `tricerules/tricerules-core/src/engine/legal_actions.rs`

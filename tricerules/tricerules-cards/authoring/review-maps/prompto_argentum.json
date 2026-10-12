@@ -38,7 +38,7 @@
       "covers": "three-mana noncreature cast does not trigger; seven-mana noncreature cast creates Treasure before its spell; creature cast does not trigger"
     },
     {
-      "test": "issue_misc31_batch::issue_misc31_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc31_batch::issue_misc31_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
     },
     {

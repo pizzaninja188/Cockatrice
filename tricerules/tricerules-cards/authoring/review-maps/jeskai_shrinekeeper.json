@@ -15,7 +15,7 @@
   "tokens": [],
   "semantic_fixtures": [
     { "test": "scenario issue_misc24_batch::issue_misc24_jeskai_shrinekeeper_rewards_combat_damage_to_player", "covers": "attacking alone gives no reward; three combat damage to a player triggers one life and one draw" },
-    { "test": "issue_misc24_batch::issue_misc24_batch_maps_printed_cards_and_distinct_life_triggers", "covers": "printed identity, flying, haste, and the self combat-damage trigger" }
+    { "test": "batch_registry::issue_misc24_batch::issue_misc24_batch_maps_printed_cards_and_distinct_life_triggers", "covers": "printed identity, flying, haste, and the self combat-damage trigger" }
   ],
   "complete_definition_review_confirmed": true
 }

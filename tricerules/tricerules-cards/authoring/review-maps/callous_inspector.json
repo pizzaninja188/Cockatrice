@@ -46,11 +46,11 @@
       "covers": "the dies trigger makes the source deal 1 damage to its controller and creates one Clue token"
     },
     {
-      "test": "issue_misc22_batch::issue_misc22_batch_maps_definitions",
+      "test": "batch_registry::issue_misc22_batch::issue_misc22_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Menace, the 1 damage to you, and the Clue token of Callous Inspector"
     },
     {
-      "test": "issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Callous Inspector"
     }
   ],

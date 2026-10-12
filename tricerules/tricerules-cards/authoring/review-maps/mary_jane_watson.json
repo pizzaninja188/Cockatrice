@@ -28,11 +28,11 @@
       "covers": "a Spider the controller controls entering draws a card once each turn; a second Spider and a non-Spider do not draw"
     },
     {
-      "test": "issue_misc9_batch::issue_misc9_batch_maps_definitions",
+      "test": "batch_registry::issue_misc9_batch::issue_misc9_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc9_mary_jane_watson_draws_once_per_turn_for_a_spider"
     },
     {
-      "test": "issue_misc9_batch::issue_misc9_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc9_batch::issue_misc9_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc9_mary_jane_watson_draws_once_per_turn_for_a_spider"
     }
   ],

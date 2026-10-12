@@ -29,11 +29,11 @@
       "covers": "a creature with mana value 3 or greater is exiled while a mana value 2 creature is not a legal target"
     },
     {
-      "test": "issue_removal_batch::issue_removal_batch_maps_definitions",
+      "test": "mechanic_registry::issue_removal_batch::issue_removal_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and effects of epic_downfall"
     },
     {
-      "test": "issue_removal_batch::issue_removal_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_removal_batch::issue_removal_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for epic_downfall"
     }
   ],

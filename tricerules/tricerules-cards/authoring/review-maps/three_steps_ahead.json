@@ -61,11 +61,11 @@
       "covers": "each mode charges only its own additional cost; the counter mode counters a target spell, the copy mode creates a token copy of a target artifact or creature you control, and the draw-discard mode draws two then discards one"
     },
     {
-      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
+      "test": "mechanic_registry::issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
       "covers": "reviewed identity, mana cost, spree group, three linked modes and their targeting of Three Steps Ahead"
     },
     {
-      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Three Steps Ahead"
     }
   ],

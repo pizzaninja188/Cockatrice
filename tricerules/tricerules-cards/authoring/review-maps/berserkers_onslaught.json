@@ -32,7 +32,7 @@
       "covers": "the controlled attacker gains double strike, while the controller's bystander and an opponent's attacker do not; the attacker deals combat damage in both steps and loses the continuous grant after combat"
     },
     {
-      "test": "deck_coverage_berserkers_onslaught::berserkers_onslaught_registers_its_attacking_creature_double_strike_grant",
+      "test": "deck_registry::deck_coverage_berserkers_onslaught::berserkers_onslaught_registers_its_attacking_creature_double_strike_grant",
       "covers": "exact card identity, printed characteristics, Oracle line mapping, and the live controller/attacker filter with the Double Strike keyword"
     }
   ],

@@ -43,7 +43,7 @@
     {"test": "scenario issue_480_tainted_treats::tainted_treats_uses_copied_battlefield_mana_value_after_destroy", "covers": "copied battlefield mana value survives target destruction by generation"},
     {"test": "scenario issue_480_tainted_treats::tainted_treats_treats_x_as_zero_on_the_battlefield", "covers": "X in the destroyed permanent's battlefield mana cost contributes zero despite counters"},
     {"test": "scenario issue_480_tainted_treats::tainted_treats_can_destroy_artifact_and_rejects_enchantment", "covers": "artifact is legal and enchantment is not"},
-    {"test": "issue_480_tainted_treats::issue_480_registers_complete_tainted_treats", "covers": "source-backed complete definition and targeting contract"}
+    {"test": "mechanic_registry::issue_480_tainted_treats::issue_480_registers_complete_tainted_treats", "covers": "source-backed complete definition and targeting contract"}
   ],
   "complete_definition_review_confirmed": true
 }

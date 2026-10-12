@@ -21,7 +21,7 @@
   "tokens": [],
   "semantic_fixtures": [
     {"test": "scenario issue_misc40_batch::issue_486_fancy_footwork", "covers": "one or two targets, partial legality, fully illegal resolution, untap and +2/+2"},
-    {"test": "issue_486_fancy_footwork::issue_486_fancy_footwork_identity", "covers": "exact Oracle identity and complete typed effects"}
+    {"test": "mechanic_registry::issue_486_fancy_footwork::issue_486_fancy_footwork_identity", "covers": "exact Oracle identity and complete typed effects"}
   ],
   "complete_definition_review_confirmed": true
 }

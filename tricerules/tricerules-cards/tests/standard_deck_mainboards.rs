@@ -1,3 +1,6 @@
+#[path = "suites/layout.rs"]
+mod test_layout;
+
 use tricerules_cards::primitives::{
     AbilityCost, CardTypeFilter, CombatRestrictionScope, EffectSubject, EventZone, GameCondition,
     ObjectCastCostKind, PlayerRecipient, ReturnController, SpellEffectKind, StackSpellFilter,

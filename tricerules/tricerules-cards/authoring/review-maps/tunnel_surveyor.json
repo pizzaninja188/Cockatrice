@@ -30,11 +30,11 @@
       "covers": "entering creates one 1/1 white Glimmer enchantment creature token"
     },
     {
-      "test": "issue_misc10_batch::issue_misc10_batch_maps_definitions",
+      "test": "batch_registry::issue_misc10_batch::issue_misc10_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc10_tunnel_surveyor_creates_a_glimmer"
     },
     {
-      "test": "issue_misc10_batch::issue_misc10_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc10_batch::issue_misc10_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc10_tunnel_surveyor_creates_a_glimmer"
     }
   ],

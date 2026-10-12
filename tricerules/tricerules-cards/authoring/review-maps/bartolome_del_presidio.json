@@ -28,11 +28,11 @@
       "covers": "the sacrifice-another-creature-or-artifact ability puts a +1/+1 counter on the source; the source alone cannot pay"
     },
     {
-      "test": "issue_misc5_batch::issue_misc5_batch_maps_definitions",
+      "test": "batch_registry::issue_misc5_batch::issue_misc5_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of bartolome_del_presidio"
     },
     {
-      "test": "issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for bartolome_del_presidio"
     }
   ],

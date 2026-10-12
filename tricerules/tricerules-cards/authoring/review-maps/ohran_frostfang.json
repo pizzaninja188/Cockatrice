@@ -40,7 +40,7 @@
   "tokens": [],
   "semantic_fixtures": [
     {
-      "test": "deck_coverage_ohran_frostfang::ohran_frostfang_registers_its_exact_characteristics_and_typed_abilities",
+      "test": "deck_registry::deck_coverage_ohran_frostfang::ohran_frostfang_registers_its_exact_characteristics_and_typed_abilities",
       "covers": "exact identity, printed characteristics, Oracle line mapping, controller-and-attacking Deathtouch grant, and one draw per controlled creature combat-damage-to-player event"
     },
     {

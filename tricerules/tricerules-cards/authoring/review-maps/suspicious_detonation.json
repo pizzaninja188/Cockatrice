@@ -58,14 +58,14 @@
     },
     {
       "covers": "typed effect, ability, identity, costs and target wiring",
-      "test": "issue_misc47_batch::issue_misc47_maps_each_uncounterable_spell_to_its_complete_effect"
+      "test": "batch_registry::issue_misc47_batch::issue_misc47_maps_each_uncounterable_spell_to_its_complete_effect"
     },
     {
       "covers": "registered identity and printed characteristics",
-      "test": "issue_misc47_batch::issue_misc47_uncounterable_removal_cards_are_registered"
+      "test": "batch_registry::issue_misc47_batch::issue_misc47_uncounterable_removal_cards_are_registered"
     },
     {
-      "test": "issue_misc47_batch::issue_misc47_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc47_batch::issue_misc47_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "normalized Oracle fingerprint matches the pinned source"
     }
   ],

@@ -45,11 +45,11 @@
       "covers": "the entry trigger puts a +1/+1 counter on a chosen creature you control without flying and rejects a flyer"
     },
     {
-      "test": "issue_misc20_batch::issue_misc20_batch_maps_definitions",
+      "test": "batch_registry::issue_misc20_batch::issue_misc20_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flying, the without-flying counter restriction, and its targeting of Pileated Provisioner"
     },
     {
-      "test": "issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Pileated Provisioner"
     }
   ],

@@ -26,11 +26,11 @@
       "covers": "the spell creates exactly four registered 1/1 white Dog tokens"
     },
     {
-      "test": "issue_misc3_batch::issue_misc3_batch_maps_definitions",
+      "test": "batch_registry::issue_misc3_batch::issue_misc3_batch_maps_definitions",
       "covers": "reviewed identity, characteristics, trigger and effects of release_the_dogs"
     },
     {
-      "test": "issue_misc3_batch::issue_misc3_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc3_batch::issue_misc3_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for release_the_dogs"
     }
   ],

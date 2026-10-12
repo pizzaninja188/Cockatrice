@@ -40,7 +40,7 @@
   "tokens": [],
   "semantic_fixtures": [
     {
-      "test": "issue_476_flying_anthems::issue_476_empyrean_eagle_excludes_itself_from_its_flying_anthem",
+      "test": "mechanic_registry::issue_476_flying_anthems::issue_476_empyrean_eagle_excludes_itself_from_its_flying_anthem",
       "covers": "complete registered identity, printed Flying, and other-controlled-flyers scope with source exclusion"
     },
     {

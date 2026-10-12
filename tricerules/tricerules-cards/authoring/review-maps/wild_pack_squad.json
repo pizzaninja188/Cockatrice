@@ -33,11 +33,11 @@
       "covers": "at the beginning of combat the controller may grant up to one target creature first strike and vigilance until end of turn"
     },
     {
-      "test": "issue_look_batch::issue_look_batch_maps_definitions",
+      "test": "batch_registry::issue_look_batch::issue_look_batch_maps_definitions",
       "covers": "reviewed identity, characteristics, trigger and effects of wild_pack_squad"
     },
     {
-      "test": "issue_look_batch::issue_look_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_look_batch::issue_look_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for wild_pack_squad"
     }
   ],

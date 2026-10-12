@@ -12,7 +12,7 @@
   ],
   "tokens": [],
   "semantic_fixtures": [
-    {"test": "issue_296_every_draw::issue_296_registers_both_complete_cards_with_distinct_characteristics", "covers": "exact Bird 1/2 face, Flying, controller draw trigger, and one self +1/+1 counter"},
+    {"test": "mechanic_registry::issue_296_every_draw::issue_296_registers_both_complete_cards_with_distinct_characteristics", "covers": "exact Bird 1/2 face, Flying, controller draw trigger, and one self +1/+1 counter"},
     {"test": "scenario issue_296_every_draw::both_complete_cards_trigger_once_per_card_in_a_two_card_draw", "covers": "Ravenhill Flock receives two counters from two distinct successful Divination draws"},
     {"test": "scenario issue_296_every_draw::a_single_effect_draw_triggers_once_and_an_opponents_draw_does_not", "covers": "one Visionary draw gives one counter; an opponent turn-based draw gives none"},
     {"test": "scenario issue_296_every_draw::an_empty_library_draw_attempt_creates_no_every_draw_trigger", "covers": "attempting to draw with an empty library creates no counter trigger"}

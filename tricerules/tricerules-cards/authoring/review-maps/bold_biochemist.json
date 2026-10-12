@@ -36,11 +36,11 @@
       "covers": "the power-up ability puts a +1/+1 counter on the source, draws two, is reduced when it entered this turn, and can be activated only once per object"
     },
     {
-      "test": "issue_misc10_batch::issue_misc10_batch_maps_definitions",
+      "test": "batch_registry::issue_misc10_batch::issue_misc10_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc10_bold_biochemist_power_up_is_once_per_object"
     },
     {
-      "test": "issue_misc10_batch::issue_misc10_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc10_batch::issue_misc10_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc10_bold_biochemist_power_up_is_once_per_object"
     }
   ],

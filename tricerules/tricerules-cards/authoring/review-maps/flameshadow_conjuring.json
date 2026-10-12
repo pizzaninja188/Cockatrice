@@ -90,7 +90,7 @@
       "covers": "Scrap Mastery returns two nontoken artifact creatures simultaneously; each gets a distinct trigger and the controller can pay for one and decline the other"
     },
     {
-      "test": "deck_coverage_flameshadow_conjuring::flameshadow_conjuring_is_registered_as_a_complete_card",
+      "test": "deck_registry::deck_coverage_flameshadow_conjuring::flameshadow_conjuring_is_registered_as_a_complete_card",
       "covers": "exact card identity, cost, type, trigger filter, optional payment, copy sequence, indefinite haste, and delayed exile definition"
     }
   ],

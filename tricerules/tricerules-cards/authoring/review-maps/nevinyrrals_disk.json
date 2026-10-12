@@ -56,7 +56,7 @@
       "covers": "the actual Disk enters tapped, cannot activate while tapped, then pays {1} and Tap; its ability remains on the stack and resolves across both players"
     },
     {
-      "test": "deck_coverage_nevinyrrals_disk::nevinyrrals_disk_registers_entry_replacement_and_mass_destroy_activation",
+      "test": "deck_registry::deck_coverage_nevinyrrals_disk::nevinyrrals_disk_registers_entry_replacement_and_mass_destroy_activation",
       "covers": "exact identity, normal layout, artifact type, entry replacement, activation costs, and the artifact/creature/enchantment union filter"
     }
   ],

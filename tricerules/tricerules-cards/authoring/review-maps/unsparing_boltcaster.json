@@ -33,11 +33,11 @@
       "covers": "the entry trigger deals 5 damage to an opponent's creature already dealt damage this turn and rejects an undamaged creature"
     },
     {
-      "test": "issue_misc19_batch::issue_misc19_batch_maps_definitions",
+      "test": "batch_registry::issue_misc19_batch::issue_misc19_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the dealt-damage-this-turn entry damage, and its targeting of Unsparing Boltcaster"
     },
     {
-      "test": "issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Unsparing Boltcaster"
     }
   ],

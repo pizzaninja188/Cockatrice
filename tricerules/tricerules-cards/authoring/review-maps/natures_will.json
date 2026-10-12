@@ -38,7 +38,7 @@
   "tokens": [],
   "semantic_fixtures": [
     {
-      "test": "deck_coverage_natures_will::nature_s_will_registers_its_grouped_combat_damage_ability",
+      "test": "deck_registry::deck_coverage_natures_will::nature_s_will_registers_its_grouped_combat_damage_ability",
       "covers": "exact identity, printed characteristics, Oracle line mapping, grouped damaged-player trigger cardinality, and the ordered land tap/untap effects"
     },
     {

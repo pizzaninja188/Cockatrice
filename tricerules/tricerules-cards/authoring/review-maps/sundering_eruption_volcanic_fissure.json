@@ -91,11 +91,11 @@
       "covers": "this back face charges 3 life or enters tapped on decline/unaffordable payment and produces red"
     },
     {
-      "test": "deck_coverage_mh3_mdfcs_registry::pilot3_registers_both_complete_mdfc_identities_and_land_faces",
+      "test": "deck_registry::deck_coverage_mh3_mdfcs_registry::pilot3_registers_both_complete_mdfc_identities_and_land_faces",
       "covers": "whole-card identity, both printed faces, mana cost, type, color, and back-face entry and mana abilities"
     },
     {
-      "test": "deck_coverage_mh3_mdfcs_registry::sundering_front_keeps_target_controller_search_and_dynamic_restriction_ordered",
+      "test": "deck_registry::deck_coverage_mh3_mdfcs_registry::sundering_front_keeps_target_controller_search_and_dynamic_restriction_ordered",
       "covers": "required land target, target-controller optional basic search, tapped destination, and dynamic matching restriction"
     }
   ],

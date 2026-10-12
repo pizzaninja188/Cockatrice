@@ -21,10 +21,10 @@
 
 - **Status:** `Supported` for the tested X values and player sets in the cited scenarios.
 - **Typed symbols:** `SpellEffectKind::Draw`, `PlayerRecipient::EachPlayer`, and `Amount::X` in
-  `tricerules/tricerules-cards/src/primitives/effects.rs`.
+  `tricerules/tricerules-card-model/src/primitives/effects.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`
   and `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`; validator:
-  `tricerules/tricerules-cards/src/primitives/effects.rs#SpellEffectKind::validate_list`;
+  `tricerules/tricerules-card-model/src/primitives/effects.rs#SpellEffectKind::validate_list`;
   cast/choice consumer: `tricerules/tricerules-core/src/engine/casting.rs#GameEngine::cast_spell`;
   draw consumer: `tricerules/tricerules-core/src/engine/resolution/zones.rs#draw` and
   `tricerules/tricerules-core/src/engine/resolution/mod.rs#SpellEffectKind::Draw`.
@@ -64,7 +64,7 @@
   - `tricerules/tricerules-cards/data/prosperity.ron`
   - `tricerules/tricerules-cards/authoring/review-maps/prosperity.json`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_prosperity.rs`
-  - `tricerules/tricerules-cards/src/primitives/effects.rs`
+  - `tricerules/tricerules-card-model/src/primitives/effects.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/casting.rs`
   - `tricerules/tricerules-core/src/engine/resolution/zones.rs`

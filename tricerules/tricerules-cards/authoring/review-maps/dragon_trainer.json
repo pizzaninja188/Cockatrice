@@ -30,11 +30,11 @@
       "covers": "the entry trigger creates one registered 4/4 red Dragon token with flying"
     },
     {
-      "test": "issue_misc3_batch::issue_misc3_batch_maps_definitions",
+      "test": "batch_registry::issue_misc3_batch::issue_misc3_batch_maps_definitions",
       "covers": "reviewed identity, characteristics, trigger and effects of dragon_trainer"
     },
     {
-      "test": "issue_misc3_batch::issue_misc3_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc3_batch::issue_misc3_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for dragon_trainer"
     }
   ],

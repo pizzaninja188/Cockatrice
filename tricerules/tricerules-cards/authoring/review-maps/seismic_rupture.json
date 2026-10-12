@@ -24,11 +24,11 @@
       "covers": "two damage is dealt to each creature without flying and no damage to creatures with flying"
     },
     {
-      "test": "issue_removal_batch::issue_removal_batch_maps_definitions",
+      "test": "mechanic_registry::issue_removal_batch::issue_removal_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and effects of seismic_rupture"
     },
     {
-      "test": "issue_removal_batch::issue_removal_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_removal_batch::issue_removal_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for seismic_rupture"
     }
   ],

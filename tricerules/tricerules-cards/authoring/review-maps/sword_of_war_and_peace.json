@@ -31,11 +31,11 @@
   ],
   "semantic_fixtures": [
     {
-      "test": "deck_coverage_sword_of_war_and_peace::sword_registers_exact_single_face_and_three_clauses",
+      "test": "deck_registry::deck_coverage_sword_of_war_and_peace::sword_registers_exact_single_face_and_three_clauses",
       "covers": "registers exact single face and three clauses"
     },
     {
-      "test": "deck_coverage_sword_of_war_and_peace::sword_attached_protection_defaults_roundtrips_and_validates_conditions",
+      "test": "deck_registry::deck_coverage_sword_of_war_and_peace::sword_attached_protection_defaults_roundtrips_and_validates_conditions",
       "covers": "attached protection defaults roundtrips and validates conditions"
     },
     {

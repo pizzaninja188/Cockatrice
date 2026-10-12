@@ -28,11 +28,11 @@
       "covers": "casting a spell with mana value 4 or greater draws a card; a lower-mana-value spell does not"
     },
     {
-      "test": "issue_misc7_batch::issue_misc7_batch_maps_definitions",
+      "test": "batch_registry::issue_misc7_batch::issue_misc7_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc7_tanufel_rimespeaker_draws_for_a_four_plus_spell"
     },
     {
-      "test": "issue_misc7_batch::issue_misc7_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc7_batch::issue_misc7_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc7_tanufel_rimespeaker_draws_for_a_four_plus_spell"
     }
   ],

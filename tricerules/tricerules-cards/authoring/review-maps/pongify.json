@@ -42,7 +42,7 @@
       "covers": "an illegal target makes the spell fail to resolve and creates no Ape"
     },
     {
-      "test": "deck_coverage_pongify::pongify_has_exact_identity_target_and_ape_token_contract",
+      "test": "deck_registry::deck_coverage_pongify::pongify_has_exact_identity_target_and_ape_token_contract",
       "covers": "card/face characteristics, exact effect ordering, creature target, target-controller recipient, and token characteristics"
     }
   ],

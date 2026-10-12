@@ -54,11 +54,11 @@
       "covers": "entering creates a 1/1 white Glimmer enchantment creature token and equipping attaches for +1/+1"
     },
     {
-      "test": "issue_misc12_batch::issue_misc12_batch_maps_definitions",
+      "test": "batch_registry::issue_misc12_batch::issue_misc12_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, entry token trigger, attached modifier, and equip ability of Glimmerlight"
     },
     {
-      "test": "issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Glimmerlight"
     }
   ],

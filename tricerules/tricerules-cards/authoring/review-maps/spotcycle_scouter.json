@@ -44,11 +44,11 @@
       "covers": "entering scries two private cards and Crew 1 taps a creature to animate the Vehicle for the turn"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_maps_definitions",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, scry entry trigger, and Crew aggregate tap of Spotcycle Scouter"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Spotcycle Scouter"
     }
   ],

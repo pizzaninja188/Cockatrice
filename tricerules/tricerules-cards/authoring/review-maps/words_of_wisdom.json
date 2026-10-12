@@ -31,7 +31,7 @@
       "covers": "a cast without the required blue and generic mana is rejected without moving the card or changing libraries"
     },
     {
-      "test": "deck_coverage_words_of_wisdom::words_of_wisdom_registers_its_ordered_player_draws",
+      "test": "deck_registry::deck_coverage_words_of_wisdom::words_of_wisdom_registers_its_ordered_player_draws",
       "covers": "the exact Oracle identity, normal instant face, mana cost, and ordered controller/opponent draw effects"
     }
   ],

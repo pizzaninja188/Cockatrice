@@ -40,11 +40,11 @@
       "covers": "another artifact you control entering puts a +1/+1 counter on the Automaton, while a nonartifact does not trigger; the Automaton has trample"
     },
     {
-      "test": "issue_misc23_batch::issue_misc23_batch_maps_definitions",
+      "test": "batch_registry::issue_misc23_batch::issue_misc23_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Trample, the another-artifact entry watcher, and the +1/+1 counter on the source of Machinesmith Automaton"
     },
     {
-      "test": "issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Machinesmith Automaton"
     }
   ],

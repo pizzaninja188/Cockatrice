@@ -34,11 +34,11 @@
       "covers": "the spell deals 4 damage to a targeted creature and gains 2 life, and rejects a land as a target"
     },
     {
-      "test": "issue_misc19_batch::issue_misc19_batch_maps_definitions",
+      "test": "batch_registry::issue_misc19_batch::issue_misc19_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the creature-or-planeswalker damage, the life gain, and targeting of Defibrillating Current"
     },
     {
-      "test": "issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Defibrillating Current"
     }
   ],

@@ -26,9 +26,9 @@
 - **Status:** `Supported` for the one-result, tapped-battlefield behavior and the two tested filter
   shapes described above.
 - **Typed symbols:** `SpellEffectKind::SearchLibrary`, `SearchDestination::Battlefield`, and
-  `ZoneCardFilter` in `tricerules/tricerules-cards/src/primitives/effects.rs`.
+  `ZoneCardFilter` in `tricerules/tricerules-card-model/src/primitives/effects.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`;
-  validator: `tricerules/tricerules-cards/src/primitives/effects.rs#SpellEffectKind::validate`;
+  validator: `tricerules/tricerules-card-model/src/primitives/effects.rs#SpellEffectKind::validate`;
   engine choice producer: `tricerules/tricerules-core/src/engine/resolution/zones.rs#search_library`;
   selection and destination consumer:
   `tricerules/tricerules-core/src/engine/custom_resolution/library_search.rs#finish_library_search`.
@@ -78,7 +78,7 @@
   - `tricerules/tricerules-cards/authoring/review-maps/rampant_growth.json`
   - `tricerules/tricerules-cards/authoring/review-maps/farseek.json`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_search_lands.rs`
-  - `tricerules/tricerules-cards/src/primitives/effects.rs`
+  - `tricerules/tricerules-card-model/src/primitives/effects.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/resolution/zones.rs`
   - `tricerules/tricerules-core/src/engine/custom_resolution/library_search.rs`

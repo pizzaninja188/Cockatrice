@@ -37,11 +37,11 @@
       "covers": "destroys an artifact and creates a Food; cast with no target it still creates a Food; a ground creature is rejected"
     },
     {
-      "test": "issue_misc8_batch::issue_misc8_batch_maps_definitions",
+      "test": "batch_registry::issue_misc8_batch::issue_misc8_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc8_spider_food_destroys_or_makes_food"
     },
     {
-      "test": "issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc8_spider_food_destroys_or_makes_food"
     }
   ],

@@ -33,11 +33,11 @@
       "covers": "the entry trigger destroys up to one target noncreature artifact; an artifact creature and a nonartifact permanent are not legal targets, and choosing no target is legal"
     },
     {
-      "test": "issue_misc1_batch::issue_misc1_batch_maps_definitions",
+      "test": "batch_registry::issue_misc1_batch::issue_misc1_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and effects of rock_soldiers"
     },
     {
-      "test": "issue_misc1_batch::issue_misc1_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc1_batch::issue_misc1_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for rock_soldiers"
     }
   ],

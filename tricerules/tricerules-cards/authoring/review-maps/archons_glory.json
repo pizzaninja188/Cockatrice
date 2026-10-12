@@ -52,11 +52,11 @@
       "covers": "Bargain rejects a creature, an opponent's Treasure, and a stale Treasure generation without moving objects, consuming mana, or casting the spell"
     },
     {
-      "test": "issue_322_bargain::the_four_complete_bargain_cards_register_with_optional_receipts_and_shared_targets",
+      "test": "mechanic_registry::issue_322_bargain::the_four_complete_bargain_cards_register_with_optional_receipts_and_shared_targets",
       "covers": "the exact reviewed identity, optional Bargain cost group, artifact/enchantment/token eligibility, and linked conditional spell effect"
     },
     {
-      "test": "issue_322_bargain::bargain_card_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_322_bargain::bargain_card_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Archon's Glory"
     }
   ],

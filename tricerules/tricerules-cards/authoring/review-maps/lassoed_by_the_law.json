@@ -47,11 +47,11 @@
       "covers": "the entry triggers exile an opponent's nonland permanent until the source leaves (returning it) and create a Mercenary token"
     },
     {
-      "test": "issue_misc14_batch::issue_misc14_batch_maps_definitions",
+      "test": "batch_registry::issue_misc14_batch::issue_misc14_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the exile-until-leaves trigger with targeting, and the Mercenary token trigger of Lassoed by the Law"
     },
     {
-      "test": "issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Lassoed by the Law"
     }
   ],

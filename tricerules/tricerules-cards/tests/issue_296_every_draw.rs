@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{

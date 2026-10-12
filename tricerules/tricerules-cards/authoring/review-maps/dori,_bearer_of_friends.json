@@ -12,7 +12,7 @@
   "tokens": ["treasure"],
   "semantic_fixtures": [
     { "test": "scenario issue_misc26_batch::issue_misc26_dori_creates_treasure_on_entry_and_has_trample", "covers": "real entry creates one Treasure for its controller and Dori has trample" },
-    { "test": "issue_misc26_batch::issue_misc26_batch_registers_five_exact_oracle_identities", "covers": "printed legendary Dwarf Warrior name, cost and power/toughness" }
+    { "test": "batch_registry::issue_misc26_batch::issue_misc26_batch_registers_five_exact_oracle_identities", "covers": "printed legendary Dwarf Warrior name, cost and power/toughness" }
   ],
   "complete_definition_review_confirmed": true
 }

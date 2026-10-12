@@ -52,11 +52,11 @@
       "covers": "the entry search offers a basic Plains and a mana-value-1 creature but excludes a non-Plains basic and a mana-value-2 creature"
     },
     {
-      "test": "issue_misc19_batch::issue_misc19_batch_maps_definitions",
+      "test": "batch_registry::issue_misc19_batch::issue_misc19_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flying, the two-branch entry search, and Warp {1}{W} of Starfield Shepherd"
     },
     {
-      "test": "issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Starfield Shepherd"
     }
   ],

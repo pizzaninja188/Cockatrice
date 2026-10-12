@@ -1,6 +1,6 @@
 //! Reviewed independently against Scryfall named-card and rulings endpoints, 2026-09-19.
 //! Primitive semantics and executed composition live in core scenario tests, not this mapping.
-mod common;
+use crate::common;
 use common::FaceExpectation;
 use tricerules_cards::primitives::PlayerRecipient;
 use tricerules_cards::{Amount, SpellEffectKind, TriggerCondition};

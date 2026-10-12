@@ -18,7 +18,7 @@
   "tokens": [],
   "semantic_fixtures": [
     {
-      "test": "deck_coverage_zurs_weirding::zurs_weirding_has_its_exact_printed_identity",
+      "test": "deck_registry::deck_coverage_zurs_weirding::zurs_weirding_has_its_exact_printed_identity",
       "covers": "exact Oracle identity, mana cost, Enchantment type, and one ability mapped to both printed paragraphs"
     },
     {

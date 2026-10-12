@@ -21,12 +21,12 @@
 
 - **Status:** `Supported` for these two events on the same Ichor Wellspring ability.
 - **Typed symbols:** `TriggerCondition::WhenSelfEntersOrIsPutIntoGraveyardFromBattlefield` in
-  `tricerules/tricerules-cards/src/primitives/abilities.rs`; `SpellEffectKind::Draw` in
-  `tricerules/tricerules-cards/src/primitives/effects.rs`.
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs`; `SpellEffectKind::Draw` in
+  `tricerules/tricerules-card-model/src/primitives/effects.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`
   and `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`; validator:
-  `tricerules/tricerules-cards/src/primitives/abilities.rs#TriggeredAbilityDef::validate_shape`
-  and `tricerules/tricerules-cards/src/primitives/effects.rs#SpellEffectKind::validate_list`;
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs#TriggeredAbilityDef::validate_shape`
+  and `tricerules/tricerules-card-model/src/primitives/effects.rs#SpellEffectKind::validate_list`;
   event collector: `tricerules/tricerules-core/src/engine/triggers.rs#collect_event_triggers`;
   draw consumer: `tricerules/tricerules-core/src/engine/resolution/zones.rs#draw`.
 - **Evidence and limits:** The fixture confirms the entry trigger exists, destroys the source before
@@ -64,8 +64,8 @@
   - `tricerules/tricerules-cards/data/ichor_wellspring.ron`
   - `tricerules/tricerules-cards/authoring/review-maps/ichor_wellspring.json`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_ichor_wellspring.rs`
-  - `tricerules/tricerules-cards/src/primitives/abilities.rs`
-  - `tricerules/tricerules-cards/src/primitives/effects.rs`
+  - `tricerules/tricerules-card-model/src/primitives/abilities.rs`
+  - `tricerules/tricerules-card-model/src/primitives/effects.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/triggers.rs`
   - `tricerules/tricerules-core/src/engine/resolution/zones.rs`

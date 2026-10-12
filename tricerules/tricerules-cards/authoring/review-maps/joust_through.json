@@ -35,11 +35,11 @@
       "covers": "3 damage to a target attacking creature and 1 life to the caster; a nonattacking creature is rejected"
     },
     {
-      "test": "issue_misc8_batch::issue_misc8_batch_maps_definitions",
+      "test": "batch_registry::issue_misc8_batch::issue_misc8_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc8_joust_through_hits_an_attacker_and_gains_life"
     },
     {
-      "test": "issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc8_joust_through_hits_an_attacker_and_gains_life"
     }
   ],

@@ -76,11 +76,11 @@
       "covers": "combat damage settles player departure before creature deaths and targeted triggers"
     },
     {
-      "test": "issue_511_maze_of_ith::maze_is_the_exact_single_face_land_with_one_shared_attacking_target_and_no_mana_ability",
+      "test": "mechanic_registry::issue_511_maze_of_ith::maze_is_the_exact_single_face_land_with_one_shared_attacking_target_and_no_mana_ability",
       "covers": "maze is the exact single face land with one shared attacking target and no mana ability"
     },
     {
-      "test": "issue_511_maze_of_ith::outgoing_combat_prevention_rejects_player_and_noncreature_target_filters",
+      "test": "mechanic_registry::issue_511_maze_of_ith::outgoing_combat_prevention_rejects_player_and_noncreature_target_filters",
       "covers": "outgoing combat prevention rejects player and noncreature target filters"
     }
   ],

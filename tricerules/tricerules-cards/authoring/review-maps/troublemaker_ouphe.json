@@ -48,11 +48,11 @@
       "covers": "an unbargained Ouphe and a Clone permanent copy do not satisfy SelfWasBargained"
     },
     {
-      "test": "issue_322_bargain::the_four_complete_bargain_cards_register_with_optional_receipts_and_shared_targets",
+      "test": "mechanic_registry::issue_322_bargain::the_four_complete_bargain_cards_register_with_optional_receipts_and_shared_targets",
       "covers": "the exact reviewed identity, optional Bargain cost group, artifact/enchantment/token eligibility, and linked self-entry ability"
     },
     {
-      "test": "issue_322_bargain::bargain_card_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_322_bargain::bargain_card_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Troublemaker Ouphe"
     }
   ],

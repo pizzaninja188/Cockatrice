@@ -38,11 +38,11 @@
       "covers": "the attack trigger is placed even with no creature that has power 4 or greater, creates a registered 3/1 red Dinosaur token only when the controller has one as the ability resolves (power added in response qualifies), and creates none when the last such creature leaves before resolution"
     },
     {
-      "test": "issue_465_token_blockers::issue_465_token_blockers_maps_definitions",
+      "test": "mechanic_registry::issue_465_token_blockers::issue_465_token_blockers_maps_definitions",
       "covers": "reviewed identity, characteristics, trigger and effects of scalestorm_summoner"
     },
     {
-      "test": "issue_465_token_blockers::issue_465_token_blockers_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_465_token_blockers::issue_465_token_blockers_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for scalestorm_summoner"
     }
   ],

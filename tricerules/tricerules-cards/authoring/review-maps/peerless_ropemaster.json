@@ -33,11 +33,11 @@
       "covers": "the entry trigger returns a tapped creature to its owner's hand and rejects an untapped creature"
     },
     {
-      "test": "issue_misc19_batch::issue_misc19_batch_maps_definitions",
+      "test": "batch_registry::issue_misc19_batch::issue_misc19_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the up-to-one tapped-creature bounce, and its targeting of Peerless Ropemaster"
     },
     {
-      "test": "issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Peerless Ropemaster"
     }
   ],

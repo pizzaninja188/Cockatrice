@@ -68,7 +68,7 @@
   "tokens": [],
   "semantic_fixtures": [
     {
-      "test": "deck_coverage_devotion_gods::devotion_gods_register_exact_faces_costs_types_keywords_and_oracle_lines",
+      "test": "deck_registry::deck_coverage_devotion_gods::devotion_gods_register_exact_faces_costs_types_keywords_and_oracle_lines",
       "covers": "Exact complete face, cost, legendary God types, Indestructible, all abilities, recipient filters, amounts and Oracle presentation spans"
     },
     {

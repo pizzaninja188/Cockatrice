@@ -14,7 +14,7 @@
   "tokens": [],
   "semantic_fixtures": [
     { "test": "scenario issue_misc24_batch::issue_misc24_wylie_duke_gains_and_draws_when_tapped", "covers": "an actual tap event, rather than entering or attacking, gives the source controller one life and one card" },
-    { "test": "issue_misc24_batch::issue_misc24_batch_maps_printed_cards_and_distinct_life_triggers", "covers": "printed identity, vigilance, tap observer, and ordered life-then-draw effects" }
+    { "test": "batch_registry::issue_misc24_batch::issue_misc24_batch_maps_printed_cards_and_distinct_life_triggers", "covers": "printed identity, vigilance, tap observer, and ordered life-then-draw effects" }
   ],
   "complete_definition_review_confirmed": true
 }

@@ -79,7 +79,7 @@
       "covers": "logged zone condition changes replay deterministically"
     },
     {
-      "test": "deck_coverage_anger::anger_exact_definition_and_zone_specific_schema_boundaries",
+      "test": "deck_registry::deck_coverage_anger::anger_exact_definition_and_zone_specific_schema_boundaries",
       "covers": "Exact printed creature characteristics, haste, typed graveyard static and Oracle line mapping; bounded land enum, generic keyword composition and rejection of graveyard runtime lifetime in authored resolving effects"
     }
   ],

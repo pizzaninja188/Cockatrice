@@ -24,11 +24,11 @@
       "covers": "all attacking creatures return to their owners' hands while nonattacking creatures stay"
     },
     {
-      "test": "issue_misc1_batch::issue_misc1_batch_maps_definitions",
+      "test": "batch_registry::issue_misc1_batch::issue_misc1_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and effects of aetherize"
     },
     {
-      "test": "issue_misc1_batch::issue_misc1_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc1_batch::issue_misc1_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for aetherize"
     }
   ],

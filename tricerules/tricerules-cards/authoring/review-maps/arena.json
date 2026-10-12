@@ -16,7 +16,7 @@
   "semantic_fixtures": [
     {
       "covers": "Exact colorless Land identity, no mana ability, {3} plus Tap costs, staged controller/opponent target groups and one complete Oracle line presentation",
-      "test": "deck_coverage_arena::arena_registers_its_complete_opponent_chosen_fight_ability"
+      "test": "deck_registry::deck_coverage_arena::arena_registers_its_complete_opponent_chosen_fight_ability"
     },
     {
       "covers": "announces both targets before payment and fights tapped creatures",

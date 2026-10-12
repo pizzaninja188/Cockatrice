@@ -2,7 +2,9 @@
 
 Use this short execution path for card campaigns. Scope, models and delivery permissions come
 from current user/campaign policy, not an older checklist. Root/subsystem AGENTS.md retain authority.
-Load reference sections when their subject applies.
+For a new card task, read authoring reference sections 1–3 (sources, authority and tiers),
+then only the applicable definition, presentation and evidence sections. Generator/workbench
+references are needed only when using or changing those tools. Do not reload unchanged guidance.
 
 | Requirement | Source of truth |
 |---|---|
@@ -11,7 +13,7 @@ Load reference sections when their subject applies.
 | Commands and final affected-side verification | [Verification guide](AGENT-VERIFICATION.md) |
 | Relevant engine interactions | [Interaction checklist](RULES-INTERACTION-CHECKLIST.md) |
 | Tool arguments and fixture boundaries | [Workbench reference](../tricerules/tricerules-cards/authoring/BATCH-WORKBENCH.md) |
-| Independent semantic review | [Reviewer contract](../.agents/skills/cockatrice-workflow/reviewer-template.md) |
+| Independent semantic review | [Reviewer contract](CARD-REVIEW.md) |
 
 Reuse these records. A checklist may point to an existing preflight, test or review; it need not
 repeat the narrative. Packets retain mechanical facts, not semantic approval. Optional indexes,
@@ -29,6 +31,9 @@ draft schemas and packet generation are unnecessary when existing evidence suppl
    lint, structural evidence and metadata. Reuse unchanged passing prechecks.
 4. Freeze explicit intended paths/evidence. Obtain independent inspection-only semantic review.
    Correct material findings and review affected deltas when prior assumptions remain valid.
+   Formatting, clerical fixes and a planned passing final gate do not trigger another review;
+   defer optional polish. Changes affecting semantics or required evidence need delta review.
+   Preserve one evidence record; follow-up requests reference the existing contract.
 5. Run the full affected-side gate on stable reviewed content, record acceptance, and deliver under
    existing authorization before another code increment. Do not ask again for an authorized
    scope/destination. Actual sandbox rejection remains an access boundary.

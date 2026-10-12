@@ -35,11 +35,11 @@
       "covers": "a target creature the controller controls gets +1/+0 and gains indestructible; an opponent creature is rejected"
     },
     {
-      "test": "issue_misc8_batch::issue_misc8_batch_maps_definitions",
+      "test": "batch_registry::issue_misc8_batch::issue_misc8_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc8_masterful_flourish_pumps_and_grants_indestructible"
     },
     {
-      "test": "issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc8_masterful_flourish_pumps_and_grants_indestructible"
     }
   ],

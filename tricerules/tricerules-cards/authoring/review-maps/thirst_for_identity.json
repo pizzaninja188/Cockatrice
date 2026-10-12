@@ -29,11 +29,11 @@
       "covers": "draws three cards, rejects an empty discard, and accepts discarding one creature as the resolution-time alternative"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_maps_definitions",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, and the exact draw/discard spell effects of Thirst for Identity"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Thirst for Identity"
     }
   ],

@@ -36,7 +36,7 @@
       "covers": "declining the optional discard leaves the hand and library unchanged"
     },
     {
-      "test": "deck_coverage_quicksmith_genius::quicksmith_genius_registers_its_artifact_loot_trigger",
+      "test": "deck_registry::deck_coverage_quicksmith_genius::quicksmith_genius_registers_its_artifact_loot_trigger",
       "covers": "the exact Oracle identity, printed characteristics, controller artifact-entry trigger and optional discard-then-draw effect"
     }
   ],

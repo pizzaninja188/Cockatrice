@@ -62,11 +62,11 @@
       "covers": "without paying the blight the spell allows exactly one mode, and paying blight 2 (all counters on one creature) is required to choose both modes; the modes destroy a target artifact or enchantment and a target creature with mana value 3 or greater"
     },
     {
-      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
+      "test": "mechanic_registry::issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
       "covers": "reviewed identity, mana cost, optional blight cost, all-modes cast-cost link and both destroy modes of Pyrrhic Strike"
     },
     {
-      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Pyrrhic Strike"
     }
   ],

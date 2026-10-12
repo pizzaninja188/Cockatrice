@@ -45,11 +45,11 @@
       "covers": "gives a targeted creature -1/-1 until end of turn (expiring in cleanup) and cycles {B} from hand for a card"
     },
     {
-      "test": "issue_misc12_batch::issue_misc12_batch_maps_definitions",
+      "test": "batch_registry::issue_misc12_batch::issue_misc12_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, targeted -1/-1 pump and targeting, and the Cycling {B} hand ability of Locust Spray"
     },
     {
-      "test": "issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Locust Spray"
     }
   ],

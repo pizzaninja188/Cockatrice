@@ -30,11 +30,11 @@
       "covers": "puts one +1/+1 counter on a target creature and grants flying and indestructible until end of turn"
     },
     {
-      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
+      "test": "batch_registry::issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
       "covers": "reviewed identity, mana cost, types, effects and target group of lightfoot_technique"
     },
     {
-      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for lightfoot_technique"
     }
   ],

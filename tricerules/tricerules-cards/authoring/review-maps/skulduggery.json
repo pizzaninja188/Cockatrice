@@ -34,7 +34,7 @@
       "covers": "mandatory own and opposing targets; one illegal target leaves the other effect"
     },
     {
-      "test": "issue_misc40_batch::issue_misc40_registers_six_exact_card_identities",
+      "test": "batch_registry::issue_misc40_batch::issue_misc40_registers_six_exact_card_identities",
       "covers": "printed identity, layout, mana cost and type line"
     }
   ],

@@ -14,7 +14,7 @@
 //! timestamps), 502.3 (untap-step restriction), and 602.5 (prohibited activations) govern the
 //! asserted shapes.
 
-mod common;
+use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{

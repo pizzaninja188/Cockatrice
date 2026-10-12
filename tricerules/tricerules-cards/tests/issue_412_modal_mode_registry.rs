@@ -5,7 +5,7 @@
 //! types, keywords, and mode structure; modal-only bullets never leak into ordinary
 //! `spell_effect`/`effect` slots.
 
-mod common;
+use crate::common;
 use common::FaceExpectation;
 
 use tricerules_cards::primitives::{

@@ -64,11 +64,11 @@
       "covers": "sacrificing a creature pays the additional cost; the entry trigger makes each opponent discard a card and lose two life while the controller draws a card and gains two life"
     },
     {
-      "test": "issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
+      "test": "mechanic_registry::issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flying keyword, cast-cost group and entry trigger of Arbiter of Woe"
     },
     {
-      "test": "issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Arbiter of Woe"
     }
   ],

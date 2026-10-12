@@ -1,73 +1,76 @@
 # Cockatrice fork — agent context
 
-## Native Windows Computer Use
+This is the entry point for repository work. Infer phase, scope and completion gates from the
+current request; carry forward authorization and acceptance deferrals. Planning stays read-only.
 
-- Manual Cockatrice interaction must use the trusted `node_repl` → `@oai/sky` path: initialize Sky, enumerate with `sky.list_apps()` and `sky.list_windows()`, select returned window objects, and refresh state after every action. Do not use `cua_repl` for native app control.
-- Launch `scripts/launch-ruled-game.ps1 -Dev` from the interactive Windows user context when visible clients are required. If the clients have window titles but are missing from the taskbar, check whether they run as `CodexSandboxOffline`; stop that run and relaunch from the interactive context.
+## Required workflow
 
-## Mandatory workflow
+- Preserve unrelated edits. Keep one coherent outcome; avoid unrelated cleanup or optional polish.
+- Use Windows/PowerShell. For testable behavior, prove an intended focused red before implementation,
+  then focused green after each coherent increment. Once stable, run the full affected-side gate.
+  Check exit codes. Documentation and mechanical changes need their actual contract checks, not
+  manufactured executable tests.
+- Trace changed ruled contracts through engine, protobuf, relay and client. Change and verify every
+  affected producer/consumer; explain unaffected surfaces briefly as N/A. Proto changes require both
+  Rust and C++. Preserve freeform gating.
+- Reuse valid final verification on unchanged content, dependencies and environment. A later commit
+  request alone does not require another run. Fix material defects; defer optional polish after green.
+- Give reproducible manual steps when interaction, networking, privacy or physical identity matters.
+  Distinguish automated, agent-operated GUI, user-confirmed, deferred and N/A evidence. Explicit manual
+  deferral permits applicable automated work and already-authorized delivery to proceed.
 
-1. **Build and test after every coherent code-change increment.** An increment may batch inseparable edits needed to reach one compilable or testable state; it does not mean every line edit needs its own build. Prove the relevant focused gate after each increment, then run the full affected-side gate once the implementation is stable. Never report completion until every required command exits 0; check the exit code rather than eyeballing logs. Read-only investigation needs no build.
-2. **Use the Windows PowerShell build and test recipes.** This checkout's active agent workflow is Windows-only.
-3. **Ruled work is end-to-end.** Trace every affected producer and consumer and implement all necessary changes across engine, protobuf, Servatrice relay, and Cockatrice UI. Leave unaffected components unchanged and explain why their gates are N/A. Any `.proto` change must keep both C++ and Rust buildable.
-4. **Do not break freeform.** Gate new UI and command paths on ruled mode.
-5. **Optimize this pre-release fork for the long term.** Prefer the simplest complete architecture over compatibility layers, speculative abstractions, or stopgaps. Large coherent changes are welcome when every increment leaves a working product.
-6. **Extract fork behavior from upstream files instead of restructuring them in place.** Upstream deltas should converge toward a member pointer, one friend declaration, and short ruled call-site guards. New fork-owned C++ files use the `ruled_` prefix (`rules_relay` predates it); client fork files live under `cockatrice/src/game/ruled/`.
-7. **Read [docs/REFACTOR-ROADMAP.md](docs/REFACTOR-ROADMAP.md) before a refactor or cross-component structural change.** Preserve player-set-generic behavior and the roadmap's ownership boundaries.
-8. **Use red/green TDD for testable behavior changes.** Add a focused regression, run it and confirm the intended failure, then make the smallest coherent fix. Refactors need characterization coverage when existing behavior is not protected. Do not manufacture tests for documentation, formatting, generated output, or purely mechanical work.
-9. **Give manual test steps when hands-on behavior matters.** Distinguish steps actually performed from steps recommended to the user.
-10. **Complete the [rules interaction checklist](docs/RULES-INTERACTION-CHECKLIST.md) before finalizing a substantive ruled, protocol, relay, or client plan.** Mark genuinely irrelevant sections N/A instead of silently skipping them.
+## Authority and architecture
 
-## Architecture and authority
+Tricerules is the single ruled-state writer. Servatrice authenticates, relays, binds physical cards
+and filters private information. Cockatrice displays engine state and submits engine-offered actions;
+Oracle display data never decides legality. State-affecting choices remain logged and deterministic.
+Keep definition IDs, engine ObjectIds/generations, Oracle names and physical card IDs distinct.
 
-Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before cross-component work. It contains the system diagram, command lifecycle, identity glossary, hidden-information model, effect-ordering ownership, fork-ownership table, and extension recipes.
+Extract substantial fork logic from upstream files into fork-owned files; keep short guarded hooks.
+New fork-owned C++ uses `ruled_` (legacy `rules_relay` excepted); client files belong under
+`cockatrice/src/game/ruled/`. Preserve player-set-generic behavior.
 
-- **Freeform** is the legacy casual path. **Ruled** is server-authoritative MTG-style play.
-- **`tricerules`** is the single writer of ruled state. Rules logic lives there, not in Servatrice or the client.
-- **Servatrice** authenticates, relays protobuf, binds physical objects, and filters hidden information. It does not decide rules legality.
-- **Cockatrice** displays engine state and submits engine-provided legal actions. It must not infer ruled legality from Oracle display data.
-- **Determinism** is `(seed, command log) -> state`; choices and dev commands that affect state must remain logged commands.
-- Keep `ruled_v1.proto` aligned across every Rust and C++ consumer. Treat engine `ObjectId`, tricerules `card_id`, Oracle name, `Server_Card.id`, hand slot, and face index as distinct identities.
+For a reusable primitive/public protocol term, compare the closest existing API and name two real
+cards or mechanics it supports. If only one use fits, justify necessary specialized behavior rather
+than inventing uses or parameters. Private helpers/state need a concrete purpose.
 
-Before adding a reusable rules primitive or public protocol vocabulary, name at least two real cards or two distinct mechanics it supports. Compare the closest existing primitive and explain why reuse, extension, or separation is correct. Generalize only for demonstrated uses; if only one use fits, justify the necessary specialized behavior instead of inventing a second use or speculative parameters. Private implementation helpers and necessary state fields need a concrete purpose, not two card examples.
+Oracle governs cards; current official Comprehensive Rules govern mechanics. Fetch relevant rulings
+and verify exact CR citations. Substantive ruled reports include MTG applicability/compliance or
+deferral; other work states “No MTG rules surface area.”
 
-Comprehensive Rules govern mechanics and Oracle governs card-specific behavior. Verify exact CR numbers and quotations against the current official rules, and fetch card rulings rather than coding non-obvious interactions from memory. For substantive ruled work, finish with an **MTG applicability** note stating the governed concepts and compliance or deferral; otherwise state “No MTG rules surface area.”
+## Load only the relevant guidance
 
-## Guidance routing
+Read each applicable instruction file once per task; search reference sections as needed. A link
+does not require loading every linked document, example or historical record.
 
-Load only the guidance relevant to the task:
-
-| Work area | Required guidance |
+| Task | Read |
 |---|---|
-| Any build, test, lint, or pre-commit verification | [docs/AGENT-VERIFICATION.md](docs/AGENT-VERIFICATION.md) |
-| Card authoring, generation, or card-specific custom effects | [tricerules/AGENTS.md](tricerules/AGENTS.md) and [tricerules/tricerules-cards/authoring/CARD-AUTHORING.md](tricerules/tricerules-cards/authoring/CARD-AUTHORING.md) |
-| Rust rules engine or shared primitives outside a card-authoring task | [tricerules/AGENTS.md](tricerules/AGENTS.md) |
-| Game UI, ruled client state, prompts, or manual two-client checks | [cockatrice/src/game/AGENTS.md](cockatrice/src/game/AGENTS.md) |
-| Structural or cross-component work | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/REFACTOR-ROADMAP.md](docs/REFACTOR-ROADMAP.md), and [docs/RULES-INTERACTION-CHECKLIST.md](docs/RULES-INTERACTION-CHECKLIST.md) |
-| Current work selection and dependency status | [GitHub Issues](https://github.com/pizzaninja188/Cockatrice/issues); query the live issue, then re-check current code before trusting historical plans |
+| Documentation/mechanical changes | Relevant documents; [documentation checks](docs/AGENT-VERIFICATION.md#verification-ladder) |
+| Rust engine | [Rust guidance](tricerules/AGENTS.md); relevant [verification](docs/AGENT-VERIFICATION.md) sections |
+| Card authoring/capabilities | [Rust guidance](tricerules/AGENTS.md), [execution path](docs/AUTHORING-WORKFLOW.md); authoring reference sections selected there |
+| Game UI/manual checks | [Game guidance](cockatrice/src/game/AGENTS.md); touched class/interaction sections of its README |
+| Structural/cross-component changes | Relevant [architecture](docs/ARCHITECTURE.md) sections; [interaction checklist](docs/RULES-INTERACTION-CHECKLIST.md) before finalizing a substantive plan |
+| Independent card review | [Reviewer contract](docs/CARD-REVIEW.md), when delegation is authorized |
+| Selecting work/dependencies | Live [GitHub Issues](https://github.com/pizzaninja188/Cockatrice/issues), current code, history and worktree |
 
-## Verification ladder
+Verification commands, metadata preparation and evidence reuse are owned by
+[AGENT-VERIFICATION.md](docs/AGENT-VERIFICATION.md). Use its quiet runner for noisy commands and
+retain full failure logs. Updating external source datasets requires separate authorization.
+If a running executable blocks linking, stop only its exact process and rebuild.
 
-Use the exact commands and affected-side matrix in [docs/AGENT-VERIFICATION.md](docs/AGENT-VERIFICATION.md).
-Use `scripts/verify.ps1` for final affected-side verification; keep focused red/green commands on the quiet runner. Card-data verification uses `scripts/update-card-data.ps1 -Mode Check`. Regenerating required metadata from existing local inputs with `-Mode Refresh` is part of authorized card implementation; review its diff. Updating external source datasets requires separate authorization.
+## Manual Windows interaction
 
-The verification guide owns the red/green, stabilization, final and manual ladder; do not duplicate
-its command sequence in task records. Card campaigns use [docs/AUTHORING-WORKFLOW.md](docs/AUTHORING-WORKFLOW.md).
+Use trusted `node_repl` → `@oai/sky`: initialize, enumerate apps/windows, select returned windows,
+and refresh state after actions. Do not use browser-only `cua_repl` for native control. Launch
+`scripts/launch-ruled-game.ps1 -Dev` in the interactive user context; clients owned by
+`CodexSandboxOffline` do not establish visible acceptance. See the game guide for launch/stop steps.
 
-Reuse passing final verification evidence for delivery when tested content, dependencies, and the relevant environment remain unchanged. Rerun affected gates only when changes, failures, or unresolved concerns invalidate that evidence; a later commit request alone does not invalidate it.
+## Delivery
 
-On Windows, use `scripts/run-quiet-command.ps1` for commands with noisy successful output. It retains the complete log under `build/verification-logs`, prints a concise success line, prints the full log on failure, and preserves the exact exit code. Never suppress a failure log.
-
-If a build fails only because a running executable is locked, stop the exact Cockatrice process holding it and rebuild. Do not treat a successful compile followed by a failed link as a passing build.
-
-## Task discipline
-
-- Keep one task centered on one coherent outcome. Compact long histories at a stable milestone; start a separate task when the outcome changes.
-- Infer the goal, phase, scope, and completion gates from the request and current context. A direct request to implement or fix an identified problem authorizes implementation without a separately approved plan. Ask only when unresolved information materially changes scope or correctness; continue independent authorized work meanwhile. Planning-only requests remain read-only.
-- Batch independent reads and searches. Keep successful command output concise and show detailed logs on failure.
-- Separate required work from optional polish. Do not perform unrelated cleanup while implementing an approved plan.
-- Once a decision-complete plan is approved, implement it directly without reopening settled design choices.
-- When the user explicitly defers manual testing, record it as deferred and finish applicable automated gates and any already-authorized delivery. Distinguish agent-performed acceptance from user-confirmed acceptance; never claim deferred tests were performed.
-- When asked to commit, stage only intended files, inspect the staged diff, make one focused commit, and preserve unrelated work.
-
-The repository [Cockatrice workflow skill](.agents/skills/cockatrice-workflow/SKILL.md) routes issue planning, implementation, and authorized delivery through this guidance.
+Implement an approved design without reopening settled decisions. Ask only when unresolved scope
+or correctness materially changes the outcome; continue independent authorized work meanwhile.
+Do not infer commit/push authorization from implementation alone. When authorized, stage only
+reviewed paths/hunks, inspect the staged diff, commit, push to the authorized destination, verify
+the remote SHA and reconcile directly affected issues within scope. Preserve unrelated work.
+Git lock permission errors require supported approval; never remove an active or ambiguous lock.
+Confirmed stale recovery must use the authorized narrow recovery path. Do not create another tracker.

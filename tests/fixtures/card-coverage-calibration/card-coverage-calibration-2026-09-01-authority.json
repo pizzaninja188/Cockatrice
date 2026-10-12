@@ -1,0 +1,22 @@
+{
+  "captured_at_utc": "2026-09-01T16:56:17.9105601Z",
+  "standard_format": "https://magic.wizards.com/en/formats/standard",
+  "comprehensive_rules": "https://media.wizards.com/2026/downloads/MagicCompRules%2020260819.txt",
+  "rules_effective": "2026-08-07",
+  "release_notes": {
+    "TMT": "https://magic.wizards.com/en/news/feature/teenage-mutant-ninja-turtles-release-notes",
+    "SOS": "https://magic.wizards.com/en/news/feature/secrets-of-strixhaven-release-notes",
+    "MSH": "https://magic.wizards.com/en/news/feature/marvel-super-heroes-release-notes",
+    "HOB": "https://magic.wizards.com/en/news/feature/the-hobbit-release-notes"
+  },
+  "update_bulletins": {
+    "TMT": "https://magic.wizards.com/en/news/announcements/teenage-mutant-ninja-turtles-update-bulletin",
+    "SOS": "https://magic.wizards.com/en/news/announcements/secrets-of-strixhaven-update-bulletin",
+    "HOB": "https://magic.wizards.com/en/news/announcements/the-hobbit-update-bulletin"
+  },
+  "local_card_database": {
+    "sha256": "bd001fcea73c3c3763d729fbad9d0528a456ca4a8219e76ad5ef55058e08d729",
+    "last_write_utc": "2026-08-31T07:27:00.2285717Z",
+    "note": "Local Cockatrice cards.xml supplied the 2026 card text and printing UUID population because the public Scryfall API had not indexed all four sets at capture time."
+  }
+}

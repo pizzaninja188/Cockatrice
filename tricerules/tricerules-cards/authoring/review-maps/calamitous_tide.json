@@ -32,7 +32,7 @@
       "covers": "two owner-specific returns, zero targets, draw then discard, and all-targets-illegal fizzle"
     },
     {
-      "test": "issue_misc43_batch::issue_misc43_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc43_batch::issue_misc43_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost and type line"
     }
   ],

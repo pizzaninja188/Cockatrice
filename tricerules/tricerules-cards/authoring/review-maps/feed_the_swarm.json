@@ -61,7 +61,7 @@
       "covers": "complete cast and resolution uses the copied battlefield mana value after the target leaves"
     },
     {
-      "test": "issue_483_feed_the_swarm::issue_483_registers_complete_feed_the_swarm",
+      "test": "mechanic_registry::issue_483_feed_the_swarm::issue_483_registers_complete_feed_the_swarm",
       "covers": "exact source-backed face identity and ordered typed target destruction and life loss"
     }
   ],

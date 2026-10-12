@@ -24,11 +24,11 @@
       "covers": "a tapped Thousand Moons Infantry untaps during an opponent's untap step"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_maps_definitions",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, and the untap static ability of Thousand Moons Infantry"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Thousand Moons Infantry"
     }
   ],

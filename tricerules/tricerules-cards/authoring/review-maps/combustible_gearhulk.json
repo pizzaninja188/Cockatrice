@@ -73,7 +73,7 @@
       "covers": "when the sole target leaves before resolution, the trigger does not offer a branch or mill cards"
     },
     {
-      "test": "deck_coverage_combustible_gearhulk::combustible_gearhulk_registers_its_exact_identity_and_etb_choice",
+      "test": "deck_registry::deck_coverage_combustible_gearhulk::combustible_gearhulk_registers_its_exact_identity_and_etb_choice",
       "covers": "exact Oracle identity, cost, types, stats, first strike, trigger presentation, target group, branch recipients, mill and damage order, and private result expression"
     }
   ],

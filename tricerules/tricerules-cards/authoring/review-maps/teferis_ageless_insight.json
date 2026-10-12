@@ -84,7 +84,7 @@
                                   "covers":  "foreign source departure finishes scheduled draw without repeating step action"
                               },
                               {
-                                  "test":  "deck_coverage_draw_replacements::insight_exact_legendary_identity_and_first_successful_own_draw_step_exception",
+                                  "test":  "deck_registry::deck_coverage_draw_replacements::insight_exact_legendary_identity_and_first_successful_own_draw_step_exception",
                                   "covers":  "Exact printed identity, cost, type, legendary status, controller replacement condition and Oracle presentation."
                               }
                           ],

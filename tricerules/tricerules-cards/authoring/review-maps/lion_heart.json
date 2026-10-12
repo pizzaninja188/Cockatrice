@@ -57,11 +57,11 @@
       "covers": "entering deals 2 damage from the Equipment to a chosen target and equipping grants +2/+1"
     },
     {
-      "test": "issue_misc15_batch::issue_misc15_batch_maps_definitions",
+      "test": "batch_registry::issue_misc15_batch::issue_misc15_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, entry damage with targeting, attached +2/+1, and equip {2} of Lion Heart"
     },
     {
-      "test": "issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Lion Heart"
     }
   ],

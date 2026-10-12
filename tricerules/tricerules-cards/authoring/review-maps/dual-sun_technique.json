@@ -34,7 +34,7 @@
       "covers": "own target gains double strike; draw depends on its current plus-one counter"
     },
     {
-      "test": "issue_misc39_batch::issue_misc39_registers_six_exact_card_identities",
+      "test": "batch_registry::issue_misc39_batch::issue_misc39_registers_six_exact_card_identities",
       "covers": "printed identity, layout, mana cost, type line and absent numeric characteristics"
     }
   ],

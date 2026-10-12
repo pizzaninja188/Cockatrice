@@ -28,11 +28,11 @@
       "covers": "casting an instant or sorcery deals 2 damage to each opponent; a creature spell does not"
     },
     {
-      "test": "issue_misc7_batch::issue_misc7_batch_maps_definitions",
+      "test": "batch_registry::issue_misc7_batch::issue_misc7_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc7_guttersnipe_damages_each_opponent_for_an_instant_or_sorcery"
     },
     {
-      "test": "issue_misc7_batch::issue_misc7_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc7_batch::issue_misc7_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc7_guttersnipe_damages_each_opponent_for_an_instant_or_sorcery"
     }
   ],

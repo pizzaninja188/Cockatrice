@@ -13,12 +13,12 @@ edition = "2021"
 license = "GPL-2.0-only"
 rust-version = "1.74"
 
-# Hundreds of card-test executables otherwise duplicate full debug information,
-# and incremental caches grow across every engine increment in long campaigns.
-# Keep line tables for failure diagnosis; explicit Cargo profile overrides still work.
+# Shared card-test suites avoid duplicating the corpus across hundreds of binaries.
+# Keep limited debug information and incremental reuse for fast local rebuilds;
+# explicit Cargo profile overrides still work.
 [profile.dev]
 debug = 1
-incremental = false
+incremental = true
 
 [workspace.dependencies]
 prost = "0.13"

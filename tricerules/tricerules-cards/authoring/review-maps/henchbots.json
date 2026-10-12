@@ -33,11 +33,11 @@
       "covers": "the entry trigger only targets tapped opponent creatures and returns the exiled card when the source leaves"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_maps_definitions",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, entry trigger, exile-until-leaves effect, and targeting of Henchbots"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Henchbots"
     }
   ],

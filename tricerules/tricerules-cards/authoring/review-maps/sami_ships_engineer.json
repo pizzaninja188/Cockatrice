@@ -34,11 +34,11 @@
       "covers": "with two tapped creatures the end-step trigger creates a tapped Robot token, and with fewer it does not"
     },
     {
-      "test": "issue_misc21_batch::issue_misc21_batch_maps_definitions",
+      "test": "batch_registry::issue_misc21_batch::issue_misc21_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the two-tapped-creatures condition, and the tapped Robot token of Sami, Ship's Engineer"
     },
     {
-      "test": "issue_misc21_batch::issue_misc21_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc21_batch::issue_misc21_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Sami, Ship's Engineer"
     }
   ],

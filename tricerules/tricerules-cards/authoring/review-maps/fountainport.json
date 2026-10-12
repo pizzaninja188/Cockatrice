@@ -55,7 +55,7 @@
       "covers": "colorless mana, token sacrifice draw, pay-life Fish, and Treasure abilities with tap/mana costs"
     },
     {
-      "test": "issue_misc31_batch::issue_misc31_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc31_batch::issue_misc31_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
     }
   ],

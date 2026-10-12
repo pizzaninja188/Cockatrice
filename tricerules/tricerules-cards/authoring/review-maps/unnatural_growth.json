@@ -7,7 +7,7 @@
     {"face_id": "unnatural_growth", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/triggered_abilities/0"]}
   ],
   "semantic_fixtures": [
-    {"covers": "Complete one-face green Enchantment, cost five, each-combat mandatory untargeted trigger and exact Oracle line", "test": "deck_coverage_unnatural_growth::growth_registers_complete_single_combat_trigger_and_exact_oracle_mapping"},
+    {"covers": "Complete one-face green Enchantment, cost five, each-combat mandatory untargeted trigger and exact Oracle line", "test": "deck_registry::deck_coverage_unnatural_growth::growth_registers_complete_single_combat_trigger_and_exact_oracle_mapping"},
     {"covers": "Paid actual Growth independently doubles unequal P/T on all three players' combat boundaries; opponents and noncreatures excluded; wrong actor preserves state", "test": "scenario deck_coverage_unnatural_growth::growth_paid_card_doubles_unequal_creatures_on_every_players_combat"},
     {"covers": "Two triggers apply independently, with resolution-time membership for entrants between and after resolutions", "test": "scenario deck_coverage_unnatural_growth::growth_two_triggers_snapshot_membership_at_each_resolution"},
     {"covers": "Saved trigger controller and current derived creature control; destroying changed-control source does not stop trigger", "test": "scenario deck_coverage_unnatural_growth::growth_uses_saved_trigger_controller_current_control_and_survives_source_departure"},

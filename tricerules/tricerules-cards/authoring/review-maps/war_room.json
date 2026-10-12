@@ -26,8 +26,8 @@
     { "test": "scenario deck_coverage_war_room::war_room_paid_ability_draws_after_source_departure", "covers": "paid stack ability survives source departure" },
     { "test": "scenario deck_coverage_war_room::war_room_exact_life_payment_is_accepted_before_existing_state_based_loss", "covers": "exact life payment is accepted before normal state-based loss" },
     { "test": "scenario deck_coverage_war_room::war_room_replays_accepted_mana_activation_draw_and_pass_commands", "covers": "accepted commands reproduce batches and full diagnostic state from identical seeded fixture" },
-    { "test": "issue_510_war_room::war_room_registers_the_complete_exact_card_and_two_mapped_abilities", "covers": "exact identity, single land face, both lines, costs, C production and untargeted draw" },
-    { "test": "issue_510_war_room::dynamic_commander_life_cost_does_not_weaken_fixed_zero_life_validation", "covers": "specialized cost validation preserves positive fixed PayLife constraint" }
+    { "test": "mechanic_registry::issue_510_war_room::war_room_registers_the_complete_exact_card_and_two_mapped_abilities", "covers": "exact identity, single land face, both lines, costs, C production and untargeted draw" },
+    { "test": "mechanic_registry::issue_510_war_room::dynamic_commander_life_cost_does_not_weaken_fixed_zero_life_validation", "covers": "specialized cost validation preserves positive fixed PayLife constraint" }
   ],
   "complete_definition_review_confirmed": true
 }

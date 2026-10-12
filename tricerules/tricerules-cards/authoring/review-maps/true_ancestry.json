@@ -38,7 +38,7 @@
       "covers": "registered-card cast, target groups, resolution order, and Oracle outcome"
     },
     {
-      "test": "issue_misc36_batch::issue_misc36_registers_three_exact_card_identities",
+      "test": "batch_registry::issue_misc36_batch::issue_misc36_registers_three_exact_card_identities",
       "covers": "printed identity and characteristics"
     }
   ],

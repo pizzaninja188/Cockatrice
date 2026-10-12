@@ -43,11 +43,11 @@
       "covers": "casting without discarding is rejected; discarding a card pays the additional cost; resolution draws two cards and creates one Treasure artifact token controlled by the caster"
     },
     {
-      "test": "issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
+      "test": "mechanic_registry::issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
       "covers": "reviewed identity, cost, types, cast-cost group and draw/token effects of Seize the Spoils"
     },
     {
-      "test": "issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Seize the Spoils"
     }
   ],

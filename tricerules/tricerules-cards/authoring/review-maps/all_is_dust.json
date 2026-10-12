@@ -72,7 +72,7 @@
       "covers": "paid cast and owner choices replay serialized commands identically"
     },
     {
-      "test": "deck_coverage_all_is_dust::all_is_dust_exact_printed_kindred_eldrazi_definition_and_five_color_union",
+      "test": "deck_registry::deck_coverage_all_is_dust::all_is_dust_exact_printed_kindred_eldrazi_definition_and_five_color_union",
       "covers": "Exact printed colorless seven mana Kindred Sorcery Eldrazi identity and single untargeted five color union"
     }
   ],

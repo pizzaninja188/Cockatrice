@@ -68,11 +68,11 @@
       "covers": "per the 2024-04-12 ruling, a fizzled Aura put into the graveyard from the stack does not draw a card"
     },
     {
-      "test": "issue_misc12_batch::issue_misc12_batch_maps_definitions",
+      "test": "batch_registry::issue_misc12_batch::issue_misc12_batch_maps_definitions",
       "covers": "reviewed identity, Flash, Aura attach, attached +3/+2 reach, and the self-graveyard draw of Reach for the Sky"
     },
     {
-      "test": "issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Reach for the Sky"
     }
   ],

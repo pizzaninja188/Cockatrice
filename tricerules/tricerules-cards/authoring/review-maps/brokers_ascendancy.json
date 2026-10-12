@@ -38,7 +38,7 @@
   "tokens": [],
   "semantic_fixtures": [
     {
-      "test": "deck_coverage_brokers_ascendancy::brokers_ascendancy_registers_its_characteristics_and_end_step_mapping",
+      "test": "deck_registry::deck_coverage_brokers_ascendancy::brokers_ascendancy_registers_its_characteristics_and_end_step_mapping",
       "covers": "exact registered identity, printed characteristics, end-step controller trigger, and both typed counter clauses"
     },
     {

@@ -24,11 +24,11 @@
       "covers": "a prior spell this turn makes the {3} generic reduction apply; without one the reduced cost is unpayable"
     },
     {
-      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "test": "batch_registry::issue_misc16_batch::issue_misc16_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, and the conditional reduction of Gigastorm Titan"
     },
     {
-      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Gigastorm Titan"
     }
   ],

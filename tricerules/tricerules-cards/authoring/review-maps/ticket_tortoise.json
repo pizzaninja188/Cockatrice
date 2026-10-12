@@ -46,11 +46,11 @@
       "covers": "complete Ticket Tortoise success; strict per-opponent land comparison; false-at-entry and later-change nonretroactivity; resolution-time recheck; physical token event and controller"
     },
     {
-      "test": "issue_479_land_comparison::issue_479_ticket_tortoise_is_a_complete_conditioned_treasure_card",
+      "test": "mechanic_registry::issue_479_land_comparison::issue_479_ticket_tortoise_is_a_complete_conditioned_treasure_card",
       "covers": "pinned Oracle identity, mana cost, Artifact Creature type line, 3/1 characteristics, Defender, condition and Treasure token effect"
     },
     {
-      "test": "issue_479_land_comparison::issue_479_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_479_land_comparison::issue_479_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned Oracle line fingerprint for Ticket Tortoise"
     }
   ],

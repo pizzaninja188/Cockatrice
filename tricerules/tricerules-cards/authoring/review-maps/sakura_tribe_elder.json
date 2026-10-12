@@ -34,7 +34,7 @@
       "covers": "the creature can activate without tapping while summoning sick, pays its own sacrifice cost before resolution, searches for a basic land rather than a nonbasic land, and puts the chosen land onto the battlefield tapped before shuffling"
     },
     {
-      "test": "deck_coverage_sakura_tribe_elder::sakura_tribe_elder_registers_its_complete_sacrifice_search_ability",
+      "test": "deck_registry::deck_coverage_sakura_tribe_elder::sakura_tribe_elder_registers_its_complete_sacrifice_search_ability",
       "covers": "exact identity and characteristics, sacrifice-only cost, basic-land filter, tapped destination, and shuffle"
     }
   ],

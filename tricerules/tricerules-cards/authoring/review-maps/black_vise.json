@@ -79,11 +79,11 @@
       "covers": "paid cast parks before entry for private opponent choice"
     },
     {
-      "test": "deck_coverage_black_vise::chosen_opponent_links_require_one_matching_printed_pair",
+      "test": "deck_registry::deck_coverage_black_vise::chosen_opponent_links_require_one_matching_printed_pair",
       "covers": "chosen opponent links require one matching printed pair"
     },
     {
-      "test": "deck_coverage_black_vise::chosen_opponent_upkeep_cannot_be_statically_or_dynamically_granted",
+      "test": "deck_registry::deck_coverage_black_vise::chosen_opponent_upkeep_cannot_be_statically_or_dynamically_granted",
       "covers": "chosen opponent upkeep cannot be statically or dynamically granted"
     },
     {

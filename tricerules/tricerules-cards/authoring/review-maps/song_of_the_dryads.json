@@ -88,7 +88,7 @@
       "covers": "copied song uses its current aura recipient and detaches a transformed aura"
     },
     {
-      "test": "deck_coverage_land_type_pair::song_exact_identity_enchants_any_permanent_and_sets_colorless_forest",
+      "test": "deck_registry::deck_coverage_land_type_pair::song_exact_identity_enchants_any_permanent_and_sets_colorless_forest",
       "covers": "Exact identity, complete typed clauses, face ID, costs, type line, supertype and Oracle presentation mapping."
     }
   ],

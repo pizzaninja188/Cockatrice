@@ -45,11 +45,11 @@
       "covers": "the Dinotomaton has menace and its entry trigger grants menace to a chosen creature you control"
     },
     {
-      "test": "issue_misc20_batch::issue_misc20_batch_maps_definitions",
+      "test": "batch_registry::issue_misc20_batch::issue_misc20_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Menace, and the targeted menace entry grant of Dinotomaton"
     },
     {
-      "test": "issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Dinotomaton"
     }
   ],

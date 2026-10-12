@@ -32,11 +32,11 @@
       "covers": "the entry trigger mills exactly the top three cards and gains exactly three life"
     },
     {
-      "test": "issue_etb_batch::issue_etb_batch_maps_definitions",
+      "test": "batch_registry::issue_etb_batch::issue_etb_batch_maps_definitions",
       "covers": "reviewed identity, characteristics, trigger and effects of shinra_reinforcements"
     },
     {
-      "test": "issue_etb_batch::issue_etb_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_etb_batch::issue_etb_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for shinra_reinforcements"
     }
   ],

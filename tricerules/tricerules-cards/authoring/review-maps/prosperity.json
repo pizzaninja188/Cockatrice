@@ -38,7 +38,7 @@
       "covers": "each player draws all available cards, the subsequent failed draws are deferred until resolution completes, and simultaneous losses produce a draw as confirmed by Scryfall ruling"
     },
     {
-      "test": "deck_coverage_prosperity::prosperity_registers_its_variable_all_player_draw",
+      "test": "deck_registry::deck_coverage_prosperity::prosperity_registers_its_variable_all_player_draw",
       "covers": "the exact Oracle identity, normal layout, {X}{U} sorcery characteristics, and one X draw for each player"
     }
   ],

@@ -26,11 +26,11 @@
       "covers": "the entry trigger creates two registered 1/1 white Rabbit tokens"
     },
     {
-      "test": "issue_etb_batch::issue_etb_batch_maps_definitions",
+      "test": "batch_registry::issue_etb_batch::issue_etb_batch_maps_definitions",
       "covers": "reviewed identity, characteristics, trigger and effects of head_of_the_homestead"
     },
     {
-      "test": "issue_etb_batch::issue_etb_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_etb_batch::issue_etb_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for head_of_the_homestead"
     }
   ],

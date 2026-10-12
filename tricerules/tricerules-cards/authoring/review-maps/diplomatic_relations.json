@@ -40,15 +40,15 @@
     },
     {
       "covers": "the direct-RON target filters, effect order, vigilance grant and two mandatory target groups",
-      "test": "issue_misc48_batch::issue_misc48_maps_buffs_and_power_damage_to_the_same_creature_targets"
+      "test": "batch_registry::issue_misc48_batch::issue_misc48_maps_buffs_and_power_damage_to_the_same_creature_targets"
     },
     {
       "covers": "registered identity, mana cost and Instant characteristics",
-      "test": "issue_misc48_batch::issue_misc48_two_target_power_damage_spells_are_registered"
+      "test": "batch_registry::issue_misc48_batch::issue_misc48_two_target_power_damage_spells_are_registered"
     },
     {
       "covers": "normalized Oracle fingerprint matches the pinned source",
-      "test": "issue_misc48_batch::issue_misc48_batch_fingerprints_match_the_pinned_oracle_text"
+      "test": "batch_registry::issue_misc48_batch::issue_misc48_batch_fingerprints_match_the_pinned_oracle_text"
     }
   ],
   "complete_definition_review_confirmed": true

@@ -58,11 +58,11 @@
       "covers": "the Vehicle has reach and its battlefield-to-graveyard move creates one Clue token (not an investigate)"
     },
     {
-      "test": "issue_misc18_batch::issue_misc18_batch_maps_definitions",
+      "test": "batch_registry::issue_misc18_batch::issue_misc18_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Reach, the dies Clue token, and Crew 2 of Fire Nation Warship"
     },
     {
-      "test": "issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Fire Nation Warship"
     }
   ],

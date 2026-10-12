@@ -72,11 +72,11 @@
       "covers": "standstill on battlefield during twincast copy is not triggered by copy creation"
     },
     {
-      "test": "issue_512_standstill::standstill_is_complete_one_face_enchantment_with_automatic_sacrifice_gated_opponent_draw",
+      "test": "mechanic_registry::issue_512_standstill::standstill_is_complete_one_face_enchantment_with_automatic_sacrifice_gated_opponent_draw",
       "covers": "standstill is complete one face enchantment with automatic sacrifice gated opponent draw"
     },
     {
-      "test": "issue_512_standstill::sacrifice_receipt_validation_accepts_real_producers_and_rejects_wrong_or_missing_predecessor",
+      "test": "mechanic_registry::issue_512_standstill::sacrifice_receipt_validation_accepts_real_producers_and_rejects_wrong_or_missing_predecessor",
       "covers": "sacrifice receipt validation accepts real producers and rejects wrong or missing predecessor"
     }
   ],

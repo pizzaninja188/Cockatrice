@@ -52,11 +52,11 @@
       "covers": "the first mode puts a +1/+1 counter on a target creature and makes it unblockable this turn, and the second mode makes a target artifact or creature's owner choose top or bottom of their library"
     },
     {
-      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
+      "test": "mechanic_registry::issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
       "covers": "reviewed identity, mana cost, spree group, two linked modes and their targeting of Jailbreak Scheme"
     },
     {
-      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Jailbreak Scheme"
     }
   ],

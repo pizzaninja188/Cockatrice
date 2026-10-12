@@ -52,11 +52,11 @@
       "covers": "entering gains 2 life and equipping {1} attaches to a controlled creature for +1/+1 while rejecting an opponent's creature"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_maps_definitions",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, entry trigger, attached modifier, and equip ability of Well-Worn Spatula"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Well-Worn Spatula"
     }
   ],

@@ -53,11 +53,11 @@
       "covers": "Eject survives an opposing counterspell, bounces a nonland permanent, draws, and rejects a land target"
     },
     {
-      "test": "issue_misc13_batch::issue_misc13_batch_maps_definitions",
+      "test": "batch_registry::issue_misc13_batch::issue_misc13_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, can't-be-countered, the nonland-permanent bounce and its targeting, and the draw of Eject"
     },
     {
-      "test": "issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Eject"
     }
   ],

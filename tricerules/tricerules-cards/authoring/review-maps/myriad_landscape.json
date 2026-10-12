@@ -96,19 +96,19 @@
       "covers": "actual myriad searching player departure cancels search and entry order without moves"
     },
     {
-      "test": "deck_coverage_search_lands::myriad_landscape_complete_definition_is_exact_and_all_lines_are_presented",
+      "test": "deck_registry::deck_coverage_search_lands::myriad_landscape_complete_definition_is_exact_and_all_lines_are_presented",
       "covers": "myriad landscape complete definition is exact and all lines are presented"
     },
     {
-      "test": "deck_coverage_search_lands::shared_land_search_constraint_is_typed_and_round_trips",
+      "test": "deck_registry::deck_coverage_search_lands::shared_land_search_constraint_is_typed_and_round_trips",
       "covers": "shared land search constraint is typed and round trips"
     },
     {
-      "test": "deck_coverage_search_lands::shared_land_search_rejects_every_unsupported_shape",
+      "test": "deck_registry::deck_coverage_search_lands::shared_land_search_rejects_every_unsupported_shape",
       "covers": "shared land search rejects every unsupported shape"
     },
     {
-      "test": "deck_coverage_search_lands::ordinary_searches_keep_their_default_schema_and_semantics",
+      "test": "deck_registry::deck_coverage_search_lands::ordinary_searches_keep_their_default_schema_and_semantics",
       "covers": "ordinary searches keep their default schema and semantics"
     }
   ],

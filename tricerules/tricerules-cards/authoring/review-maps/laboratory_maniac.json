@@ -77,7 +77,7 @@
     },
     {
       "covers": "Exact printed identity, complete authored clauses, cost, type, loyalty or power/toughness, and Oracle presentation.",
-      "test": "deck_coverage_draw_replacements::laboratory_maniac_exact_identity_and_empty_library_replacement"
+      "test": "deck_registry::deck_coverage_draw_replacements::laboratory_maniac_exact_identity_and_empty_library_replacement"
     }
   ],
   "tokens": []

@@ -40,11 +40,11 @@
       "covers": "the entry trigger gives a chosen creature +2/+4 until end of turn"
     },
     {
-      "test": "issue_misc15_batch::issue_misc15_batch_maps_definitions",
+      "test": "batch_registry::issue_misc15_batch::issue_misc15_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flying, and the targeted entry pump of Friendly Ghost"
     },
     {
-      "test": "issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Friendly Ghost"
     }
   ],

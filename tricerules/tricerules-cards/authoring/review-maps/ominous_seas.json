@@ -68,7 +68,7 @@
       "covers": "controller draws add one Foreshadow counter each; Cycling from hand draws and triggers; seven counters cannot pay eight; eight counters pay the cost and resolve into one blue 8/8 Kraken"
     },
     {
-      "test": "deck_coverage_ominous_seas::ominous_seas_registers_draw_foreshadow_cycling_and_kraken_activation",
+      "test": "deck_registry::deck_coverage_ominous_seas::ominous_seas_registers_draw_foreshadow_cycling_and_kraken_activation",
       "covers": "exact card identity, draw-trigger counter, eight-counter activation, token characteristics, and hand-only Cycling cost and draw"
     }
   ],

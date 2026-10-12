@@ -33,11 +33,11 @@
       "covers": "attacking makes another target attacking creature (any controller) unblockable; the source and nonattacking creatures are rejected"
     },
     {
-      "test": "issue_misc5_batch::issue_misc5_batch_maps_definitions",
+      "test": "batch_registry::issue_misc5_batch::issue_misc5_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of clammy_prowler"
     },
     {
-      "test": "issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for clammy_prowler"
     }
   ],

@@ -76,7 +76,7 @@
       "covers": "copied song uses its current aura recipient and detaches a transformed aura"
     },
     {
-      "test": "deck_coverage_land_type_pair::yavimaya_exact_identity_adds_forest_to_every_land_without_authored_mana",
+      "test": "deck_registry::deck_coverage_land_type_pair::yavimaya_exact_identity_adds_forest_to_every_land_without_authored_mana",
       "covers": "Exact identity, complete typed clauses, face ID, costs, type line, supertype and Oracle presentation mapping."
     }
   ],

@@ -14,7 +14,7 @@
   "tokens": ["mutant_r_2_2"],
   "semantic_fixtures": [
     { "test": "scenario issue_misc25_batch::issue_misc25_mighty_mutanimals_own_token_triggers_alliance_on_chosen_creature", "covers": "the real ETB token triggers alliance exactly once, opposing creatures cannot be targets, and the chosen own creature receives one counter rather than the source" },
-    { "test": "issue_misc25_batch::issue_misc25_batch_registers_five_exact_oracle_identities", "covers": "printed Mutant Rebel identity, cost and power/toughness" }
+    { "test": "batch_registry::issue_misc25_batch::issue_misc25_batch_registers_five_exact_oracle_identities", "covers": "printed Mutant Rebel identity, cost and power/toughness" }
   ],
   "complete_definition_review_confirmed": true
 }

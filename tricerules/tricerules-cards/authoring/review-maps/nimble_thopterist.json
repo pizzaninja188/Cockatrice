@@ -30,11 +30,11 @@
       "covers": "each actual card creates the exact owned token count with its printed type, color, size, and flying where applicable"
     },
     {
-      "test": "issue_misc27_batch::issue_misc27_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc27_batch::issue_misc27_registers_five_exact_card_identities",
       "covers": "printed card characteristics, mana cost, and source keywords"
     },
     {
-      "test": "issue_misc27_batch::issue_misc27_token_templates_match_printed_characteristics",
+      "test": "batch_registry::issue_misc27_batch::issue_misc27_token_templates_match_printed_characteristics",
       "covers": "referenced token registry templates and printed token characteristics"
     }
   ],

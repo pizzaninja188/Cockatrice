@@ -84,7 +84,7 @@
                                   "covers":  "foreign source departure finishes scheduled draw without repeating step action"
                               },
                               {
-                                  "test":  "deck_coverage_draw_replacements::thought_reflection_exact_printed_identity_and_mandatory_controller_draw_replacement",
+                                  "test":  "deck_registry::deck_coverage_draw_replacements::thought_reflection_exact_printed_identity_and_mandatory_controller_draw_replacement",
                                   "covers":  "Exact printed identity, cost, type, legendary status, controller replacement condition and Oracle presentation."
                               }
                           ],

@@ -66,11 +66,11 @@
       "covers": "this back face charges 3 life or enters tapped on decline/unaffordable payment and produces green"
     },
     {
-      "test": "deck_coverage_mh3_mdfcs_registry::pilot3_registers_both_complete_mdfc_identities_and_land_faces",
+      "test": "deck_registry::deck_coverage_mh3_mdfcs_registry::pilot3_registers_both_complete_mdfc_identities_and_land_faces",
       "covers": "whole-card identity, both printed faces, mana cost, type, color, and back-face entry and mana abilities"
     },
     {
-      "test": "deck_coverage_mh3_mdfcs_registry::bridgeworks_front_requires_its_controller_target_and_keeps_fight_optional",
+      "test": "deck_registry::deck_coverage_mh3_mdfcs_registry::bridgeworks_front_requires_its_controller_target_and_keeps_fight_optional",
       "covers": "required and optional target-group bounds, filters, prompts, and effect bindings"
     }
   ],

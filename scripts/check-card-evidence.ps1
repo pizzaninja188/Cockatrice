@@ -5,7 +5,7 @@
     This checks structure and executable test identity, not semantic equivalence or test success.
     The full Rust gate must also pass on the same content. Only build artifacts are written.
     Map filenames must equal the canonical handwritten RON filename stem. References use either
-    "scenario module::test" (tricerules-core) or "integration_target::test" (tricerules-cards).
+    "scenario module::test" (tricerules-core) or "suite::module::test" (tricerules-cards).
 #>
 [CmdletBinding()]
 param([string] $OracleBulk, [switch] $Preparation, [string] $MapListJson, [string] $MapListFile)

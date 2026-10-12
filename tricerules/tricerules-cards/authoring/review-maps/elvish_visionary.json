@@ -28,7 +28,7 @@
       "covers": "accepted creature cast, ETB trigger creation, bounded resolution, exact one-card draw"
     },
     {
-      "test": "issue_448_semantic_mapping::pilot_draw_mappings_are_exact",
+      "test": "mechanic_registry::issue_448_semantic_mapping::pilot_draw_mappings_are_exact",
       "covers": "reviewed identity, characteristics, trigger ID, presentation, trigger, and draw effect"
     }
   ],

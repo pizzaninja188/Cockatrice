@@ -44,11 +44,11 @@
       "covers": "with two tapped creatures the end-step trigger puts a +1/+1 counter on each other creature you control (not the Vanguard) and the Vanguard has lifelink"
     },
     {
-      "test": "issue_misc21_batch::issue_misc21_batch_maps_definitions",
+      "test": "batch_registry::issue_misc21_batch::issue_misc21_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Lifelink, the two-tapped-creatures condition, and the team-wide counter of Dawnstrike Vanguard"
     },
     {
-      "test": "issue_misc21_batch::issue_misc21_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc21_batch::issue_misc21_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Dawnstrike Vanguard"
     }
   ],

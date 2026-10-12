@@ -57,11 +57,11 @@
       "covers": "the entry trigger destroys a targeted permanent and equipping for {3} gives the equipped creature +3/+3"
     },
     {
-      "test": "issue_misc17_batch::issue_misc17_batch_maps_definitions",
+      "test": "batch_registry::issue_misc17_batch::issue_misc17_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the entry destroy, the +3/+3 attached modifier, and equip {3} of Meteor Sword"
     },
     {
-      "test": "issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Meteor Sword"
     }
   ],

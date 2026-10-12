@@ -22,11 +22,11 @@
       "covers": "Artifact spell matches, nonartifact spell does not, and reduced generic payment succeeds"
     },
     {
-      "test": "issue_341_static_spell_cost_filter::issue_341_batch_maps_definitions",
+      "test": "mechanic_registry::issue_341_static_spell_cost_filter::issue_341_batch_maps_definitions",
       "covers": "reviewed printed characteristics and exact Artifact filter"
     },
     {
-      "test": "issue_341_static_spell_cost_filter::issue_341_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_341_static_spell_cost_filter::issue_341_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned Oracle text fingerprint"
     }
   ],

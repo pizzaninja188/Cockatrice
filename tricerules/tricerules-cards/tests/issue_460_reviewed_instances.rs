@@ -16,7 +16,7 @@
 //! CR 608.2b (target revalidation), CR 514.2 (end-of-turn duration), CR 118.3 (life loss),
 //! CR 601.2f (static cost reductions) and CR 601.2a (spells cast this turn) govern them.
 
-mod common;
+use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{

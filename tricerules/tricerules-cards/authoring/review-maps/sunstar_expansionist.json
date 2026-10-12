@@ -50,11 +50,11 @@
       "covers": "complete Sunstar Expansionist success; Lander event identity and controller; controller-landfall +1/+0 pump and cleanup"
     },
     {
-      "test": "issue_479_land_comparison::issue_479_sunstar_expansionist_has_both_complete_entry_and_landfall_abilities",
+      "test": "mechanic_registry::issue_479_land_comparison::issue_479_sunstar_expansionist_has_both_complete_entry_and_landfall_abilities",
       "covers": "pinned Oracle identity and characteristics; conditioned Lander ETB; separately authored controller landfall trigger and +1/+0 source pump"
     },
     {
-      "test": "issue_479_land_comparison::issue_479_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_479_land_comparison::issue_479_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned Oracle line fingerprint for Sunstar Expansionist"
     }
   ],

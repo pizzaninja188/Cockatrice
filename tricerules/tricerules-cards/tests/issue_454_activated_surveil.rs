@@ -8,7 +8,7 @@
 //! output. CR 701.25 (surveil), CR 602.2b (activated-ability costs), CR 614.1c (enters tapped),
 //! and CR 605 (mana abilities) govern the asserted shapes.
 
-mod common;
+use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{

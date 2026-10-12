@@ -54,11 +54,11 @@
       "covers": "entering creates two 1/1 white Soldier creature tokens"
     },
     {
-      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "test": "batch_registry::issue_misc16_batch::issue_misc16_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flying, the two-Soldier entry trigger, and Crew 6 of S.H.I.E.L.D. Helicarrier"
     },
     {
-      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for S.H.I.E.L.D. Helicarrier"
     }
   ],

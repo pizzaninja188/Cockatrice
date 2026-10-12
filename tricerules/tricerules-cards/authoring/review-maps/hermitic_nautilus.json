@@ -36,11 +36,11 @@
       "covers": "the {1}{U} ability gives the source +3/-3 until end of turn"
     },
     {
-      "test": "issue_misc15_batch::issue_misc15_batch_maps_definitions",
+      "test": "batch_registry::issue_misc15_batch::issue_misc15_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Vigilance, and the self-pump ability of Hermitic Nautilus"
     },
     {
-      "test": "issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Hermitic Nautilus"
     }
   ],

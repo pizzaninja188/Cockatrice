@@ -78,7 +78,7 @@
       "covers": "playing the back face as a land enters it tapped, prevents its mana ability before untap, and taps to add green mana immediately after untapping"
     },
     {
-      "test": "deck_coverage_khalni_ambush::khalni_ambush_and_khalni_territory_register_both_faces",
+      "test": "deck_registry::deck_coverage_khalni_ambush::khalni_ambush_and_khalni_territory_register_both_faces",
       "covers": "exact identity, both face names and types, spell cost, two ordered target groups, fight effect, tapped entry, and green mana ability"
     }
   ],

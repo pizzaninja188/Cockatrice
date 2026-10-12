@@ -12,7 +12,7 @@
   "tokens": ["human_citizen_gw_1_1"],
   "semantic_fixtures": [
     { "test": "scenario issue_misc25_batch::issue_misc25_news_helicopter_creates_one_exact_human_citizen", "covers": "the real entry creates one exact green-white Human Citizen token and the Construct has flying" },
-    { "test": "issue_misc25_batch::issue_misc25_batch_registers_five_exact_oracle_identities", "covers": "printed identity, type, cost and power/toughness" }
+    { "test": "batch_registry::issue_misc25_batch::issue_misc25_batch_registers_five_exact_oracle_identities", "covers": "printed identity, type, cost and power/toughness" }
   ],
   "complete_definition_review_confirmed": true
 }

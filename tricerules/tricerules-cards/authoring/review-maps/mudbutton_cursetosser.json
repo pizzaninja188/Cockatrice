@@ -57,11 +57,11 @@
       "covers": "beholding a Goblin or paying {2} pays the additional cost; a Goblin permanent and a Goblin card in hand are legal behold choices while a non-Goblin permanent is rejected; the creature cannot block; when it dies it destroys a target creature an opponent controls with power 2 or less but cannot target a larger creature"
     },
     {
-      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
+      "test": "mechanic_registry::issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
       "covers": "reviewed identity, printed P/T, cost, can't-block static ability and dies trigger of Mudbutton Cursetosser"
     },
     {
-      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Mudbutton Cursetosser"
     }
   ],

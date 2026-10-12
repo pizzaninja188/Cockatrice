@@ -62,7 +62,7 @@
       "covers": "if the only target is countered first, Swan Song does not resolve and creates no Bird"
     },
     {
-      "test": "deck_coverage_swan_song::swan_song_registers_its_exact_spell_filter_and_bird_token",
+      "test": "deck_registry::deck_coverage_swan_song::swan_song_registers_its_exact_spell_filter_and_bird_token",
       "covers": "exact card identity, allowed spell-type union, target-controller recipient, effect order, and blue 2/2 Bird characteristics"
     }
   ],

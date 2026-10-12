@@ -48,11 +48,11 @@
       "covers": "beholding an Elf or paying {2} pays the additional cost; the tap mana ability adds {G}{G} only while an Elf card is in the controller's graveyard and is rejected when it is not"
     },
     {
-      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
+      "test": "mechanic_registry::issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
       "covers": "reviewed identity, printed P/T, cost, tap cost, graveyard condition and {G}{G} effect of Lys Alana Dignitary"
     },
     {
-      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Lys Alana Dignitary"
     }
   ],

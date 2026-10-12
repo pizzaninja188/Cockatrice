@@ -36,11 +36,11 @@
       "covers": "destroying a target creature creates a Food token; a land is not a legal target"
     },
     {
-      "test": "issue_misc5_batch::issue_misc5_batch_maps_definitions",
+      "test": "batch_registry::issue_misc5_batch::issue_misc5_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of bake_into_a_pie"
     },
     {
-      "test": "issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for bake_into_a_pie"
     }
   ],

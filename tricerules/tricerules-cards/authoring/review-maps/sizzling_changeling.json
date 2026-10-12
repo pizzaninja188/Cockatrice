@@ -40,11 +40,11 @@
       "covers": "the dies trigger exiles the exact top card of the controller's library; the play-until-the-end-of-your-next-turn permission is the shared ExileTopWithPlayPermission primitive, exercised by the exile-play regression"
     },
     {
-      "test": "issue_misc22_batch::issue_misc22_batch_maps_definitions",
+      "test": "batch_registry::issue_misc22_batch::issue_misc22_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the Changeling characteristic-defining ability, and the exile-top play permission of Sizzling Changeling"
     },
     {
-      "test": "issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Sizzling Changeling"
     }
   ],

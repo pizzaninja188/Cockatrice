@@ -38,7 +38,7 @@
       "covers": "Ranger's Guile targets a creature its controller controls; on resolution it grants exactly +1/+1 and Hexproof; an opponent cannot target that creature while Hexproof lasts; both effects expire at end of turn"
     },
     {
-      "test": "deck_coverage_rangers_guile::rangers_guile_registers_its_complete_targeted_pump_and_hexproof",
+      "test": "deck_registry::deck_coverage_rangers_guile::rangers_guile_registers_its_complete_targeted_pump_and_hexproof",
       "covers": "exact identity, color, cost, types, target-own-creature filter, +1/+1, Hexproof and one target group applying to both effects"
     }
   ],

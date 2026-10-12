@@ -72,11 +72,11 @@
       "covers": "the Artifact Land enters tapped and {2}, Sacrifice this land draws a card"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_maps_definitions",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, enters-tapped ability, colourless and any-colour mana abilities, and sacrifice-to-draw of Scene of the Crime"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Scene of the Crime"
     }
   ],

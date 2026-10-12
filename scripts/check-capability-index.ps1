@@ -144,7 +144,7 @@ function Get-ReviewedPaths {
         Add-CheckError $Entry "Missing or blank 'Reviewed paths' list."
         return @()
     }
-    $paths = @([regex]::Matches($block.Groups['paths'].Value, '(?m)^\s*-\s+`(?<path>[^`]+)`[ \t]*$') |
+    $paths = @([regex]::Matches($block.Groups['paths'].Value, '(?m)^\s*-\s+`(?<path>[^`]+)`[ \t]*\r?$') |
         ForEach-Object { $_.Groups['path'].Value.Trim() })
     if ($paths.Count -eq 0) { Add-CheckError $Entry "'Reviewed paths' must list at least one path." }
     return $paths

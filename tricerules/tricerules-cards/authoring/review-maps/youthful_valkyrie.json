@@ -40,11 +40,11 @@
       "covers": "another Angel you control entering adds a +1/+1 counter, the Valkyrie does not trigger on its own entry, and a non-Angel does not trigger it"
     },
     {
-      "test": "issue_misc17_batch::issue_misc17_batch_maps_definitions",
+      "test": "batch_registry::issue_misc17_batch::issue_misc17_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flying, the self-excluding Angel-entry watcher, and its +1/+1 counter of Youthful Valkyrie"
     },
     {
-      "test": "issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Youthful Valkyrie"
     }
   ],

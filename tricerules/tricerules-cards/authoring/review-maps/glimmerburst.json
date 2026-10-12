@@ -31,11 +31,11 @@
       "covers": "the caster draws two cards and creates one registered 1/1 white Glimmer enchantment creature token"
     },
     {
-      "test": "issue_misc3_batch::issue_misc3_batch_maps_definitions",
+      "test": "batch_registry::issue_misc3_batch::issue_misc3_batch_maps_definitions",
       "covers": "reviewed identity, characteristics, trigger and effects of glimmerburst"
     },
     {
-      "test": "issue_misc3_batch::issue_misc3_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc3_batch::issue_misc3_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for glimmerburst"
     }
   ],

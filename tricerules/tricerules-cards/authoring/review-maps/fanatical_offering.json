@@ -43,11 +43,11 @@
       "covers": "casting without the sacrifice is rejected; sacrificing an artifact or a creature each pay the mandatory additional cost; resolution draws two cards and creates one Map artifact token controlled by the caster"
     },
     {
-      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
+      "test": "mechanic_registry::issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
       "covers": "reviewed identity, cost, types, cast-cost group and draw/Map effects of Fanatical Offering"
     },
     {
-      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Fanatical Offering"
     }
   ],

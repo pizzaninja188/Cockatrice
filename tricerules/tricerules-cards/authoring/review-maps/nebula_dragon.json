@@ -45,11 +45,11 @@
       "covers": "the entry trigger deals 3 damage from the Dragon to a chosen target"
     },
     {
-      "test": "issue_misc15_batch::issue_misc15_batch_maps_definitions",
+      "test": "batch_registry::issue_misc15_batch::issue_misc15_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flying, the entry damage effect, and targeting of Nebula Dragon"
     },
     {
-      "test": "issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Nebula Dragon"
     }
   ],

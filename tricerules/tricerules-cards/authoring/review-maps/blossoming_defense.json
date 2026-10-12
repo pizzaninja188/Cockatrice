@@ -30,11 +30,11 @@
       "covers": "gives a target creature you control +2/+2 and hexproof; an opponent's creature is not a legal target"
     },
     {
-      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
+      "test": "batch_registry::issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
       "covers": "reviewed identity, mana cost, types, effects and target group of blossoming_defense"
     },
     {
-      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for blossoming_defense"
     }
   ],

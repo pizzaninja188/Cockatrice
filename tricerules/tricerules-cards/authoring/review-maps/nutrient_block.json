@@ -52,11 +52,11 @@
       "covers": "sacrificing the Food gains 3 life and the battlefield-to-graveyard zone change draws a card"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_maps_definitions",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_maps_definitions",
       "covers": "reviewed identity, Indestructible keyword, sacrifice ability, and dies trigger of Nutrient Block"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Nutrient Block"
     }
   ],

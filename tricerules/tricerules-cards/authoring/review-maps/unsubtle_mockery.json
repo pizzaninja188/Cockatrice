@@ -35,11 +35,11 @@
       "covers": "4 damage destroys a 2/2 and then the caster surveils 1"
     },
     {
-      "test": "issue_misc8_batch::issue_misc8_batch_maps_definitions",
+      "test": "batch_registry::issue_misc8_batch::issue_misc8_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc8_unsubtle_mockery_deals_four_then_surveils"
     },
     {
-      "test": "issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc8_unsubtle_mockery_deals_four_then_surveils"
     }
   ],

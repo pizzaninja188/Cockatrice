@@ -30,11 +30,11 @@
       "covers": "the {1}-tap-and-pay-1-life ability creates one Treasure token and costs the controller 1 life"
     },
     {
-      "test": "issue_misc6_batch::issue_misc6_batch_maps_definitions",
+      "test": "batch_registry::issue_misc6_batch::issue_misc6_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc6_treasure_dredger_pays_life_for_a_treasure"
     },
     {
-      "test": "issue_misc6_batch::issue_misc6_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc6_batch::issue_misc6_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc6_treasure_dredger_pays_life_for_a_treasure"
     }
   ],

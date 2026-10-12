@@ -68,7 +68,7 @@
       "covers": "the first ability taps for one colorless mana immediately; the second rejects a nonartifact or opposing graveyard target without paying costs, then pays two, taps and sacrifices this land, and returns the selected controller-owned artifact only on resolution"
     },
     {
-      "test": "deck_coverage_buried_ruin::buried_ruin_registers_colorless_mana_and_targeted_artifact_recovery",
+      "test": "deck_registry::deck_coverage_buried_ruin::buried_ruin_registers_colorless_mana_and_targeted_artifact_recovery",
       "covers": "exact land identity, printed mana cost and type, both battlefield activations, ordered costs, artifact-only controller graveyard filter, hand destination, and mandatory single-target presentation"
     },
     {

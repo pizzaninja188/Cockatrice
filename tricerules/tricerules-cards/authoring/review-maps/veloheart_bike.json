@@ -56,11 +56,11 @@
       "covers": "entering gains 2 life, the mana ability adds one mana of any color, and Crew 2 animates the Vehicle"
     },
     {
-      "test": "issue_misc12_batch::issue_misc12_batch_maps_definitions",
+      "test": "batch_registry::issue_misc12_batch::issue_misc12_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, entry life trigger, any-color mana ability, and Crew 2 of Veloheart Bike"
     },
     {
-      "test": "issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Veloheart Bike"
     }
   ],

@@ -101,10 +101,14 @@ It never deletes artifacts or changes permissions. `CARGO_TARGET_DIR` overrides 
 relative overrides resolve from `tricerules`. The capacity check is a minimum headroom check,
 not a guarantee that an arbitrary build will fit. Standalone preflight accepts `-MinimumFreeGiB`.
 
-The workspace development profile (also inherited by tests) uses line-level debug information
-and disables incremental compilation. This reduces artifact growth across long engine-authoring
-campaigns and avoids the host's failed incremental-cache hard links. Release settings are unchanged.
-Explicit Cargo profile/environment overrides still take precedence. After changing profiles,
+The workspace development profile (also inherited by tests) uses limited debug information
+and enables incremental compilation. Shared card-test suites reduce duplicated binaries and
+symbols; incremental reuse speeds changed-crate rebuilds. Controlled local whitespace-invalidating
+workspace test builds took about 15-18 seconds with incremental compilation versus 45-58 seconds
+without it, with no hard-link warnings through the supported verification environment. These are
+build-stage measurements, not complete-card authoring times. Release settings are unchanged.
+Explicit Cargo profile/environment overrides still take precedence; `CARGO_INCREMENTAL=0` is an
+optional temporary storage tradeoff, not the development default. After changing profiles,
 old artifacts remain on disk: with no competing builds, verify the target path and use
 `cargo clean --profile dev` from `tricerules` to reclaim disposable debug output. Keep campaign
 checkpoints and verification logs outside that target directory; do not automatically clean them.
@@ -125,6 +129,15 @@ relevant environment remain unchanged. Rerun affected gates when changes, failur
 concerns invalidate that evidence. A commit request alone does not require another invocation.
 Missing sources or tools are failures,
 not permission to omit a required gate. Diagnose unrelated baseline drift before changing it.
+
+Card registry regressions share five explicit integration-test suites in
+`tricerules/tricerules-cards/tests/suites/`. Their source modules and assertions stay separate;
+each suite shares one executable and global registry initialization. Use `--test deck_registry`
+with a `deck_coverage_duplicant::` filter, for example, during focused iteration. The Standard
+suite includes a membership regression that requires every top-level card test source to belong
+to exactly one harness. New source files must be registered there; `autotests = false` prevents
+Cargo from also compiling each module as a separate executable. Review maps cite the real
+`suite::module::test` identity, and the evidence gate still builds and lists exact Cargo artifacts.
 
 For handwritten card additions, run the batch preparation command after focused semantic green.
 It checks formatting, canonical IDs, generic registry conformance, optional exact actual-card
@@ -177,6 +190,23 @@ semantic approval false and the final gate pending. This is not red evidence, de
 package stabilization, semantic approval or final affected-side verification. After independent
 frozen-patch review, run the normal full gate on unchanged content. Reuse passing preparation
 instead of executing it again solely to assemble another review packet.
+
+## Bounded conformance workers
+
+Ordinary runs keep one internal conformance worker and share strict results within the process.
+For an explicitly bounded parallel coverage run, use the following settings. Coverage sweeps
+share a lock, results retain deterministic order, worker failures fail the gate, and no results
+are cached across processes or source changes. Campaign overrides take precedence.
+
+```powershell
+$env:TRICERULES_CONFORMANCE_WORKERS = '4'
+$env:RUST_TEST_THREADS = '1'
+$env:CARGO_BUILD_JOBS = '4'
+./scripts/verify.ps1 -Side Rust -CardData
+```
+
+These settings govern conformance execution, Rust test threads and Cargo compilation separately;
+they are not a claim about end-to-end authoring throughput.
 
 ## Worker example
 
@@ -326,12 +356,11 @@ Applicable illegal paths still need coverage; untargeted effects do not need art
 tests. Complete-definition review remains required. New successful generic conformance cases
 need no baseline rows; unclassified fixture gaps and changes to existing reviewed rows still fail.
 
-For the reusable fixture pilot, run focused `scenario semantic_fixtures`, the ported Divination
-and Pawpatch scenarios, and the `issue_448_semantic_mapping` and `issue_412_modal_mode_registry`
-registry binaries through the quiet runner. Then run generator tests with
-`cargo test --features gencards -p tricerules-cards --bin gen-cards` and finish with
-`./scripts/verify.ps1 -Side Rust -CardData`. Generator implementation changes additionally need
-feature-enabled Clippy. Shared fixture reuse does not reduce the final affected-side gates.
+For shared semantic-fixture changes, run the affected `scenario semantic_fixtures` cases
+and card regressions through the quiet runner. Mapping/modal registry regressions are modules
+in `--test mechanic_registry`, selected by their exact module/test filters. Generator changes
+also require generator-feature tests and lint. Finish with the normal Rust/CardData gate;
+unchanged fixture regressions need no separate pilot workflow.
 
 | Change touches | Iteration build | Focused tests | Final gate |
 |---|---|---|---|

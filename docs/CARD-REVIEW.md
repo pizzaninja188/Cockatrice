@@ -1,8 +1,8 @@
-# Card-authoring reviewer delegation
+# Card-authoring review contract
 
-The root fills the fields below and includes this contract in every initial or follow-up
-card-authoring review delegation. This template does not itself authorize spawning agents.
-Use the host's permitted delegation mechanism and the campaign's configured model/effort.
+For an authorized initial review, supply this contract and the scope below. Follow-up reviews
+reference the same contract and supply only the material delta and affected evidence. This document
+does not authorize spawning agents; use the host's permitted mechanism and current model policy.
 
 ## Scope supplied by the root
 

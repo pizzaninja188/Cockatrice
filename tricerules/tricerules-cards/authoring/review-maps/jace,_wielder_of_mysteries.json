@@ -109,7 +109,7 @@
     },
     {
       "covers": "Exact printed identity, complete authored clauses, cost, type, loyalty or power/toughness, and Oracle presentation.",
-      "test": "deck_coverage_draw_replacements::jace_wielder_exact_identity_loyalty_target_mill_draw_and_final_win"
+      "test": "deck_registry::deck_coverage_draw_replacements::jace_wielder_exact_identity_loyalty_target_mill_draw_and_final_win"
     }
   ],
   "tokens": []

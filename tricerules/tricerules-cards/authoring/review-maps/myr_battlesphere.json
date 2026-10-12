@@ -126,15 +126,15 @@
       "covers": "parked attacked damage finishes when recipient chooser concedes"
     },
     {
-      "test": "deck_coverage_myr_battlesphere::myr_battlesphere_complete_definition_and_rules_named_token_are_exact",
+      "test": "deck_registry::deck_coverage_myr_battlesphere::myr_battlesphere_complete_definition_and_rules_named_token_are_exact",
       "covers": "myr battlesphere complete definition and rules named token are exact"
     },
     {
-      "test": "deck_coverage_myr_battlesphere::myr_attack_consumer_rejects_missing_incompatible_and_wrong_trigger_producers",
+      "test": "deck_registry::deck_coverage_myr_battlesphere::myr_attack_consumer_rejects_missing_incompatible_and_wrong_trigger_producers",
       "covers": "myr attack consumer rejects missing incompatible and wrong trigger producers"
     },
     {
-      "test": "deck_coverage_myr_battlesphere::myr_attack_consumer_rejects_reflexive_trigger_context",
+      "test": "deck_registry::deck_coverage_myr_battlesphere::myr_attack_consumer_rejects_reflexive_trigger_context",
       "covers": "reflexive child cannot admit the otherwise valid attack producer and consumer without attack context"
     }
   ],

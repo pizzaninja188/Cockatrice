@@ -40,11 +40,11 @@
       "covers": "the optional entry branch searches a basic land onto the top of the library and the sacrifice ability draws a card"
     },
     {
-      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "test": "batch_registry::issue_misc16_batch::issue_misc16_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the optional basic-land search entry trigger, and the sacrifice-to-draw ability of Fountainport Bell"
     },
     {
-      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Fountainport Bell"
     }
   ],

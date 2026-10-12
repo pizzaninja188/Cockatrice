@@ -21,11 +21,11 @@
 
 - **Status:** `Supported` for Mind Stone's one-card draw after its three activation costs.
 - **Typed symbols:** `AbilityCost::Mana`, `AbilityCost::Tap`, and `AbilityCost::SacrificeSelf` in
-  `tricerules/tricerules-cards/src/primitives/costs.rs`; `SpellEffectKind::Draw` in
-  `tricerules/tricerules-cards/src/primitives/effects.rs`.
+  `tricerules/tricerules-card-model/src/primitives/costs.rs`; `SpellEffectKind::Draw` in
+  `tricerules/tricerules-card-model/src/primitives/effects.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`
   and `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`; validator:
-  `tricerules/tricerules-cards/src/primitives/abilities.rs#ActivatedAbilityDef::validate_shape`;
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs#ActivatedAbilityDef::validate_shape`;
   activation costs: `tricerules/tricerules-core/src/engine/casting.rs#GameEngine::activate_ability`;
   draw consumer: `tricerules/tricerules-core/src/engine/resolution/zones.rs#draw`.
 - **Evidence and limits:** The test captures the top card and both zone sizes, confirms a failed
@@ -63,9 +63,9 @@
   - `tricerules/tricerules-cards/data/mind_stone.ron`
   - `tricerules/tricerules-cards/authoring/review-maps/mind_stone.json`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_mind_stone.rs`
-  - `tricerules/tricerules-cards/src/primitives/costs.rs`
-  - `tricerules/tricerules-cards/src/primitives/effects.rs`
-  - `tricerules/tricerules-cards/src/primitives/abilities.rs`
+  - `tricerules/tricerules-card-model/src/primitives/costs.rs`
+  - `tricerules/tricerules-card-model/src/primitives/effects.rs`
+  - `tricerules/tricerules-card-model/src/primitives/abilities.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/casting.rs`
   - `tricerules/tricerules-core/src/engine/resolution/zones.rs`

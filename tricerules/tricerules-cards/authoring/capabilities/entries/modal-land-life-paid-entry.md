@@ -16,7 +16,7 @@
 ## Runtime support
 
 - **Status:** `Supported` for the exact self-entry, three-life form above.
-- **Typed symbols:** `StaticAbilityDef::EntersTapped`, `EntersTappedAffected::Self_`, and `EntryCost::PayLife { amount: 3 }` in `tricerules/tricerules-cards/src/primitives/abilities.rs`; the authored face also uses `SpellEffectKind::ProduceMana` and `AbilityCost::Tap`.
+- **Typed symbols:** `StaticAbilityDef::EntersTapped`, `EntersTappedAffected::Self_`, and `EntryCost::PayLife { amount: 3 }` in `tricerules/tricerules-card-model/src/primitives/abilities.rs`; the authored face also uses `SpellEffectKind::ProduceMana` and `AbilityCost::Tap`.
 - **Implementation references:** embedded loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`; typed entry-cost lookup: `tricerules/tricerules-core/src/engine/replacement.rs#GameEngine::entry_unless_cost`; choice creation and payment eligibility: `tricerules/tricerules-core/src/engine/replacement.rs#GameEngine::park_entry_cost_choice`; validated payment, life loss, and replacement completion: `tricerules/tricerules-core/src/engine/replacement.rs#GameEngine::finish_entry_cost_choice`.
 - **Evidence and limits:** The engine recognizes the self-entry replacement on the proposed event, asks the destination controller, marks the payment branch unavailable when life is insufficient, records an accepted life payment, and applies the tapped replacement on decline. The shared land scenario asserts both faces' exact life totals, battlefield/tapped state, and mana colors. Other life amounts, additional entry replacements, and interactions with global or conditional tapped-entry effects are not established by these card scenarios.
 
@@ -36,7 +36,7 @@
 ## Semantic test coverage
 
 - `scenario deck_coverage_mh3_mdfcs::both_mh3_land_faces_offer_three_life_and_produce_their_exact_color` — `tricerules/tricerules-core/tests/scenario/deck_coverage_mh3_mdfcs.rs#both_mh3_land_faces_offer_three_life_and_produce_their_exact_color` — `Exercised`: for each card, accepts a selectable payment at 20 life and asserts 17 life plus an untapped battlefield land; declines at 20 and asserts a tapped land with no life loss; at 2 life rejects payment and asserts decline still enters tapped; then checks the exact single printed mana color and zero in every other color.
-- `deck_coverage_mh3_mdfcs_registry::pilot3_registers_both_complete_mdfc_identities_and_land_faces` — `tricerules/tricerules-cards/tests/deck_coverage_mh3_mdfcs_registry.rs#pilot3_registers_both_complete_mdfc_identities_and_land_faces` — `Exercised`: both whole-card identities have two modal faces; both land backs have the exact three-life self-entry replacement, tap cost, and their single printed mana option.
+- `deck_registry::deck_coverage_mh3_mdfcs_registry::pilot3_registers_both_complete_mdfc_identities_and_land_faces` — `tricerules/tricerules-cards/tests/deck_coverage_mh3_mdfcs_registry.rs#pilot3_registers_both_complete_mdfc_identities_and_land_faces` — `Exercised`: both whole-card identities have two modal faces; both land backs have the exact three-life self-entry replacement, tap cost, and their single printed mana option.
 - **Uncovered behavior:** Interactions of this entry cost with another simultaneous entry replacement, life totals outside the tested payable/unpayable boundaries, conditional or global enters-tapped effects, and exact presentation in a live GUI are outside the cited tests.
 - **Inapplicable cases:** `N/A` — targets, target departure, hidden library choices, and protocol/client rules decisions for the shared entry behavior. The front-face interactions are covered separately in each card's review map and scenario tests.
 
@@ -48,7 +48,7 @@ The land-face abilities map the entry replacement to Oracle line 1 and the mana 
 
 - **Reviewed revision:** `28b399c0db5ce664fb21ab1bf73c945f2ef4e665`.
 - **Reviewed paths:**
-  - `tricerules/tricerules-cards/src/primitives/abilities.rs`
+  - `tricerules/tricerules-card-model/src/primitives/abilities.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/replacement.rs`
   - `tricerules/tricerules-cards/src/bin/gen_cards/recipes.rs`

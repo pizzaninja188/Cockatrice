@@ -61,11 +61,11 @@
       "covers": "the entry trigger exiles an opponent's artifact or creature until the Vehicle leaves (then it returns), Crew 3 animates it, and Cycling {W} draws from hand"
     },
     {
-      "test": "issue_misc13_batch::issue_misc13_batch_maps_definitions",
+      "test": "batch_registry::issue_misc13_batch::issue_misc13_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, exile-until-leaves trigger, Crew 3, and the Cycling {W} hand ability of Detention Chariot"
     },
     {
-      "test": "issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Detention Chariot"
     }
   ],

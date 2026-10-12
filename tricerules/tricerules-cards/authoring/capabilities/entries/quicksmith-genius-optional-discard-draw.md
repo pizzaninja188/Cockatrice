@@ -22,13 +22,13 @@
 - **Status:** `Supported` for one controlled artifact-entry event and the optional discard/draw
   choice shown in the cited fixture.
 - **Typed symbols:** `TriggerCondition::WheneverPermanentEntersBattlefield` in
-  `tricerules/tricerules-cards/src/primitives/abilities.rs`; `SpellEffectKind::DrawDiscard` and
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs`; `SpellEffectKind::DrawDiscard` and
   `DrawDiscardOrder::DiscardThenDraw` in
-  `tricerules/tricerules-cards/src/primitives/effects.rs`.
+  `tricerules/tricerules-card-model/src/primitives/effects.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`
   and `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`; validator:
-  `tricerules/tricerules-cards/src/primitives/abilities.rs#TriggeredAbilityDef::validate_shape`
-  and `tricerules/tricerules-cards/src/primitives/effects.rs#SpellEffectKind::validate_list`;
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs#TriggeredAbilityDef::validate_shape`
+  and `tricerules/tricerules-card-model/src/primitives/effects.rs#SpellEffectKind::validate_list`;
   trigger collector: `tricerules/tricerules-core/src/engine/triggers.rs#collect_event_triggers`;
   choice/effect consumer: `tricerules/tricerules-core/src/engine/resolution/zones.rs#draw_discard`.
 - **Evidence and limits:** The selected-card case checks the controller's hand-card choice, the selected
@@ -71,8 +71,8 @@
   - `tricerules/tricerules-cards/data/quicksmith_genius.ron`
   - `tricerules/tricerules-cards/authoring/review-maps/quicksmith_genius.json`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_quicksmith_genius.rs`
-  - `tricerules/tricerules-cards/src/primitives/abilities.rs`
-  - `tricerules/tricerules-cards/src/primitives/effects.rs`
+  - `tricerules/tricerules-card-model/src/primitives/abilities.rs`
+  - `tricerules/tricerules-card-model/src/primitives/effects.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/triggers.rs`
   - `tricerules/tricerules-core/src/engine/resolution/zones.rs`

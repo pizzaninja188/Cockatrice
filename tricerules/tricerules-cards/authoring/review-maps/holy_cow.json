@@ -48,11 +48,11 @@
       "covers": "the entry trigger gains 2 life and then parks a scry 1 library-top choice"
     },
     {
-      "test": "issue_misc17_batch::issue_misc17_batch_maps_definitions",
+      "test": "batch_registry::issue_misc17_batch::issue_misc17_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flash, Flying, and the entry gain-life-and-scry of Holy Cow"
     },
     {
-      "test": "issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Holy Cow"
     }
   ],

@@ -56,7 +56,7 @@
       "covers": "draw three versus target-spell counter and draw one, required stack target, and no draw after the sole target is countered first"
     },
     {
-      "test": "issue_misc42_batch::issue_misc42_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc42_batch::issue_misc42_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost and type line"
     }
   ],

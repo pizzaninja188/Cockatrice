@@ -28,11 +28,11 @@
       "covers": "the {2}-tap-and-sacrifice ability draws a card after sacrificing a land (the artifact branch is asserted structurally); the source itself is not a legal sacrifice"
     },
     {
-      "test": "issue_misc4_batch::issue_misc4_batch_maps_definitions",
+      "test": "batch_registry::issue_misc4_batch::issue_misc4_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of slagdrill_scrapper"
     },
     {
-      "test": "issue_misc4_batch::issue_misc4_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc4_batch::issue_misc4_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for slagdrill_scrapper"
     }
   ],

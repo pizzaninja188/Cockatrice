@@ -53,11 +53,11 @@
       "covers": "the entry trigger gives a chosen creature +2/+0 and indestructible, and Swampcycling {2} discards the card to search up a Swamp"
     },
     {
-      "test": "issue_misc20_batch::issue_misc20_batch_maps_definitions",
+      "test": "batch_registry::issue_misc20_batch::issue_misc20_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the entry pump-and-indestructible, and the Swampcycling {2} hand ability of Rampaging Spiketail"
     },
     {
-      "test": "issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Rampaging Spiketail"
     }
   ],

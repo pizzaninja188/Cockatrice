@@ -1,0 +1,1426 @@
+[
+  {
+    "sample_id": "100",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "529f259a-df66-4283-bc28-de3933c42e67",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "An Adventure spell means an instant or sorcery spell with the Adventure spell type. Permanent spells that you cast which have an Adventure won't cause this ability to trigger."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "529f259a-df66-4283-bc28-de3933c42e67",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "If an effect copies an Adventure spell, that copy is exiled as it resolves. It ceases to exist as a state-based action; it's not possible to cast the copy as a permanent."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "529f259a-df66-4283-bc28-de3933c42e67",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Chancellor of Tales can copy any Adventure spell, not just one with targets."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "529f259a-df66-4283-bc28-de3933c42e67",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "The copy is created on the stack, so it's not \"cast.\" Abilities that trigger when a player casts a spell won't trigger."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "529f259a-df66-4283-bc28-de3933c42e67",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "The copy will have the same targets as the spell it's copying unless you choose new ones. You may change any number of the targets, including all of them or none of them. If, for one of the targets, you can't choose a new legal target, then it remains unchanged (even if the current target is illegal)."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "529f259a-df66-4283-bc28-de3933c42e67",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Chancellor of Tales's ability and the copy it creates both resolve before the Adventure spell. They resolve even if the Adventure spell is countered before the copy is created."
+      }
+    ]
+  },
+  {
+    "sample_id": "101",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "0828d891-f7c3-4e51-b42e-6ce88d48ac8b",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Icewrought Sentry's last ability will trigger only when an effect instructs you to tap an opponent's creature. It won't trigger if a spell or ability you control instructs an opponent to tap a creature they control. For example, if you control Tangle Wire and an opponent taps an untapped creature they control as part of the resolution of Tangle Wire's triggered ability, Icewrought Sentry's ability won't trigger."
+      }
+    ]
+  },
+  {
+    "sample_id": "109",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "fba2fa87-3f2a-4a9f-a19e-a1f9dada4118",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Each celebration ability has a different effect."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "fba2fa87-3f2a-4a9f-a19e-a1f9dada4118",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Some celebration abilities trigger at specific parts of the turn and check whether two or more nonland permanents entered the battlefield under your control already in that turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "fba2fa87-3f2a-4a9f-a19e-a1f9dada4118",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Others are static abilities that give creatures abilities or power and toughness increases as long as two or more nonland permanents entered the battlefield under your control that turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "fba2fa87-3f2a-4a9f-a19e-a1f9dada4118",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Celebration abilities only care if two or more nonland permanents entered the battlefield under your control in a turn. They won't get more powerful if more than two permanents entered the battlefield under your control in a turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "fba2fa87-3f2a-4a9f-a19e-a1f9dada4118",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "The permanents that entered the battlefield don't need to remain on the battlefield or under your control. Celebration abilities are checking for past events, not the current game state."
+      }
+    ]
+  },
+  {
+    "sample_id": "113",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "c736935a-e006-4a67-b942-e8ccf1cd9abb",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "You may target a creature that is already tapped with Sharae's first ability. If the target creature is already tapped as it resolves, you will still put a stun counter on it."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "c736935a-e006-4a67-b942-e8ccf1cd9abb",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Sharae of Numbing Depths's last ability will trigger only when an effect instructs you to tap one or more creatures your opponents control. It won't trigger if a spell or ability you control instructs an opponent to tap a creature they control. For example, if you control Tangle Wire and an opponent taps an untapped creature they control as part of the resolution of Tangle Wire's triggered ability, Sharae's ability won't trigger."
+      }
+    ]
+  },
+  {
+    "sample_id": "121",
+    "data": []
+  },
+  {
+    "sample_id": "142",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "b7f56bbb-961a-4641-9446-7292ef188b1d",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "Some cards refer to a player who has \"descended this turn.\" This means that a permanent card has been put into that player's graveyard from anywhere this turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "b7f56bbb-961a-4641-9446-7292ef188b1d",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "Some cards refer to the number of times a player descended this turn. Those cards care about the number of permanent cards put into that player's graveyard from anywhere this turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "b7f56bbb-961a-4641-9446-7292ef188b1d",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "In either case, it doesn't matter if those cards are still in that player's graveyard."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "b7f56bbb-961a-4641-9446-7292ef188b1d",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "A permanent card is an artifact, battle, creature, enchantment, land, or planeswalker card. Tokens are not cards, and while tokens are put into the graveyard before ceasing to exist, that action doesn't count as a player having descended."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "b7f56bbb-961a-4641-9446-7292ef188b1d",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "Multiple cards have abilities that begin with \"At the beginning of your end step, if you descended this turn.\" These cards don't need to have been under your control at the time you descended. For example, if a permanent card is put into your graveyard during your first main phase and you cast Stalactite Stalker your second main phase, its ability will trigger at the beginning of your end step."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "b7f56bbb-961a-4641-9446-7292ef188b1d",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "Abilities that begin with \"At the beginning of your end step, if you descended this turn\" will trigger only once during your end step, no matter how many times you descended this turn. However, if you haven't descended this turn as your end step begins, the ability won't trigger at all. It's not possible to put a permanent card into your graveyard during the end step in time to have the ability trigger."
+      }
+    ]
+  },
+  {
+    "sample_id": "160",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "d491995f-e9b2-4187-852c-8a4c2495eaca",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "Some cards refer to a player who has \"descended this turn.\" This means that a permanent card has been put into that player's graveyard from anywhere this turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "d491995f-e9b2-4187-852c-8a4c2495eaca",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "Some cards refer to the number of times a player descended this turn. Those cards care about the number of permanent cards put into that player's graveyard from anywhere this turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "d491995f-e9b2-4187-852c-8a4c2495eaca",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "In either case, it doesn't matter if those cards are still in that player's graveyard."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "d491995f-e9b2-4187-852c-8a4c2495eaca",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "A permanent card is an artifact, battle, creature, enchantment, land, or planeswalker card. Tokens are not cards, and while tokens are put into the graveyard before ceasing to exist, that action doesn't count as a player having descended."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "d491995f-e9b2-4187-852c-8a4c2495eaca",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "Multiple cards have abilities that begin with \"At the beginning of your end step, if you descended this turn.\" These cards don't need to have been under your control at the time you descended. For example, if a permanent card is put into your graveyard during your first main phase and you cast Stalactite Stalker your second main phase, its ability will trigger at the beginning of your end step."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "d491995f-e9b2-4187-852c-8a4c2495eaca",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "Abilities that begin with \"At the beginning of your end step, if you descended this turn\" will trigger only once during your end step, no matter how many times you descended this turn. However, if you haven't descended this turn as your end step begins, the ability won't trigger at all. It's not possible to put a permanent card into your graveyard during the end step in time to have the ability trigger."
+      }
+    ]
+  },
+  {
+    "sample_id": "163",
+    "data": []
+  },
+  {
+    "sample_id": "180",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "97607bf5-ca7b-4b1b-963e-390faf6e413e",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "Some cards refer to a player who has \"descended this turn.\" This means that a permanent card has been put into that player's graveyard from anywhere this turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "97607bf5-ca7b-4b1b-963e-390faf6e413e",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "Some cards refer to the number of times a player descended this turn. Those cards care about the number of permanent cards put into that player's graveyard from anywhere this turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "97607bf5-ca7b-4b1b-963e-390faf6e413e",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "In either case, it doesn't matter if those cards are still in that player's graveyard."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "97607bf5-ca7b-4b1b-963e-390faf6e413e",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "A permanent card is an artifact, battle, creature, enchantment, land, or planeswalker card. Tokens are not cards, and while tokens are put into the graveyard before ceasing to exist, that action doesn't count as a player having descended."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "97607bf5-ca7b-4b1b-963e-390faf6e413e",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "Multiple cards have abilities that begin with \"At the beginning of your end step, if you descended this turn.\" These cards don't need to have been under your control at the time you descended. For example, if a permanent card is put into your graveyard during your first main phase and you cast Stalactite Stalker your second main phase, its ability will trigger at the beginning of your end step."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "97607bf5-ca7b-4b1b-963e-390faf6e413e",
+        "source": "wotc",
+        "published_at": "2023-11-10",
+        "comment": "Abilities that begin with \"At the beginning of your end step, if you descended this turn\" will trigger only once during your end step, no matter how many times you descended this turn. However, if you haven't descended this turn as your end step begins, the ability won't trigger at all. It's not possible to put a permanent card into your graveyard during the end step in time to have the ability trigger."
+      }
+    ]
+  },
+  {
+    "sample_id": "184",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "91f7672c-3090-48f4-8586-0426341c3159",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "If you target a creature or planeswalker with ward, you may still pay the ward cost, but Suspicious Detonation won't be countered even if you don't."
+      }
+    ]
+  },
+  {
+    "sample_id": "194",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "1f4d3a96-bc30-4362-9c1f-40bf79f78e78",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "If multiple creature cards leave your graveyard at the same time, Rot Farm Mortipede's ability will trigger only once."
+      }
+    ]
+  },
+  {
+    "sample_id": "20",
+    "data": []
+  },
+  {
+    "sample_id": "209",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "d412150d-3c70-44cf-97cd-965c438e7303",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "In the unusual case where Due Diligence's second ability triggers and then Due Diligence becomes attached to the target of its own triggered ability before that ability resolves, when the triggered ability tries to resolve, it won't resolve and none of its effects will happen."
+      }
+    ]
+  },
+  {
+    "sample_id": "212",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "85fdfa3c-4912-496a-bbcb-1ae13a34e917",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "If an effect refers to a Food, it means any Food artifact, not just a Food artifact token. For example, you can tap Krovod Haunch to pay for Apothecary White's activated ability."
+      }
+    ]
+  },
+  {
+    "sample_id": "225",
+    "data": []
+  },
+  {
+    "sample_id": "229",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "a89f9072-cf06-429f-a9b8-c11b5731ddd3",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "The \"to solve\" ability of Case of the Gorgon's Kiss looks at what type the cards are after they move to the graveyard to determine whether the ability should trigger, regardless of any types they may have had before they were in the graveyard. For example, a creature card that has become a noncreature permanent will count toward the ability's condition when it's put into a graveyard. By contrast, a noncreature card that has become a creature on the battlefield will not count toward the ability's condition when it's put into a graveyard."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a89f9072-cf06-429f-a9b8-c11b5731ddd3",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "Tokens are not cards and, as such, do not count toward Case of the Gorgon's Kiss \"to solve\" ability."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a89f9072-cf06-429f-a9b8-c11b5731ddd3",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "Each Case has two special keyword abilities: to solve and solved."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a89f9072-cf06-429f-a9b8-c11b5731ddd3",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "\"To Solve — [condition]\" means \"At the beginning of your end step, if [condition] and this Case is not solved, it becomes solved.\""
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a89f9072-cf06-429f-a9b8-c11b5731ddd3",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "The meaning of \"solved\" differs based on what type of ability follows it. \"Solved — [activated ability]\" means \"[Activated ability]. Activate only if this Case is solved.\" Activated abilities contain a colon. They're generally written \"[Cost]: [Effect].\" "
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a89f9072-cf06-429f-a9b8-c11b5731ddd3",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "\"Solved — [Triggered ability]\" means \"[Triggered ability]. This ability triggers only if this Case is solved.\" Triggered abilities use the word \"when,\" \"whenever,\" or \"at.\" They're often written as \"[Trigger condition], [effect].\""
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a89f9072-cf06-429f-a9b8-c11b5731ddd3",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "\"Solved — [static ability]\" means \"As long as this Case is solved, [static ability].\" Static abilities are written as statements, such as \"Creatures you control get +1/+1\" or \"Instant and sorcery spells you cast cost {1} less to cast.\""
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a89f9072-cf06-429f-a9b8-c11b5731ddd3",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "\"To solve\" abilities will check for their condition twice: once when the ability would trigger, and once when it resolves. If the condition isn't true at the beginning of your end step, the ability won't trigger at all. If the condition isn't true when the ability resolves, the Case won't become solved."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a89f9072-cf06-429f-a9b8-c11b5731ddd3",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "Once a Case becomes solved, it stays solved until it leaves the battlefield."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a89f9072-cf06-429f-a9b8-c11b5731ddd3",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "Cases don't lose their other abilities when they become solved."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a89f9072-cf06-429f-a9b8-c11b5731ddd3",
+        "source": "wotc",
+        "published_at": "2024-02-02",
+        "comment": "Being solved is not part of a permanent's copiable values. A permanent that becomes a copy of a solved Case is not solved. A solved Case that somehow becomes a copy of a different Case stays solved."
+      }
+    ]
+  },
+  {
+    "sample_id": "237",
+    "data": []
+  },
+  {
+    "sample_id": "24",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "e43e8c00-f1e7-49d2-bb27-f1c16d85cc22",
+        "source": "wotc",
+        "published_at": "2022-10-14",
+        "comment": "If a noncreature artifact is returned to the battlefield this way and another effect would cause that artifact to be a creature while it is on the battlefield (such as the ability of March of the Machines), that artifact will enter the battlefield with an additional +1/+1 counter."
+      }
+    ]
+  },
+  {
+    "sample_id": "245",
+    "data": []
+  },
+  {
+    "sample_id": "251",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "2c22af49-c6ef-4de6-bb84-6b3e99879148",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "If you controlled a Mount as you finished casting Steer Clear, it doesn’t matter whether you still control one as the spell resolves. Steer Clear will still deal 4 damage."
+      }
+    ]
+  },
+  {
+    "sample_id": "253",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "d3ce7c83-986f-410a-ae00-6c1c1f918a2b",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "The value of X is determined only once, as Thunder Salvo resolves."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "d3ce7c83-986f-410a-ae00-6c1c1f918a2b",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Thunder Salvo will count any other spells you’ve cast this turn. It doesn’t matter if the other spells resolved, didn’t resolve, were countered, or are still on the stack."
+      }
+    ]
+  },
+  {
+    "sample_id": "258",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "eec7d4f4-4141-49ed-8978-aefacc0a6609",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A player commits a crime as they cast a spell, activate an ability, or put a triggered ability on the stack that targets at least one opponent, at least one permanent, spell, or ability an opponent controls, and/or at least one card in an opponent’s graveyard."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "eec7d4f4-4141-49ed-8978-aefacc0a6609",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "The spell or ability that constituted a crime doesn’t have to have resolved yet or at all. As soon as you’re finished casting the spell, activating the ability, or putting the triggered ability on the stack, you’ve committed a crime."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "eec7d4f4-4141-49ed-8978-aefacc0a6609",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "For example, an ability that triggers when you cast a spell that targets an opponent will trigger at the same time as an ability that triggers whenever you commit a crime. Those abilities can be put on the stack in either order (if you control them both), and they’ll both resolve before the spell that caused them to trigger."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "eec7d4f4-4141-49ed-8978-aefacc0a6609",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A player can commit only one crime per spell or ability they control. Targeting multiple opponents, permanents, spells, abilities, and/or cards with the same spell or ability doesn’t constitute committing multiple crimes."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "eec7d4f4-4141-49ed-8978-aefacc0a6609",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Changing the target or targets of a spell or ability won’t affect whether or not the controller of that spell or ability has committed a crime. Only the initial targets chosen for that spell or ability are used to determine whether or not its controller committed a crime."
+      }
+    ]
+  },
+  {
+    "sample_id": "261",
+    "data": []
+  },
+  {
+    "sample_id": "269",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "116eea43-4235-4608-8c6a-599e860ae2f1",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Hardbristle Bandit’s last ability resolves before the spell or ability that caused it to trigger. It resolves even if that spell or ability is countered."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "116eea43-4235-4608-8c6a-599e860ae2f1",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A player commits a crime as they cast a spell, activate an ability, or put a triggered ability on the stack that targets at least one opponent, at least one permanent, spell, or ability an opponent controls, and/or at least one card in an opponent’s graveyard."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "116eea43-4235-4608-8c6a-599e860ae2f1",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "The spell or ability that constituted a crime doesn’t have to have resolved yet or at all. As soon as you’re finished casting the spell, activating the ability, or putting the triggered ability on the stack, you’ve committed a crime."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "116eea43-4235-4608-8c6a-599e860ae2f1",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "For example, an ability that triggers when you cast a spell that targets an opponent will trigger at the same time as an ability that triggers whenever you commit a crime. Those abilities can be put on the stack in either order (if you control them both), and they’ll both resolve before the spell that caused them to trigger."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "116eea43-4235-4608-8c6a-599e860ae2f1",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A player can commit only one crime per spell or ability they control. Targeting multiple opponents, permanents, spells, abilities, and/or cards with the same spell or ability doesn’t constitute committing multiple crimes."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "116eea43-4235-4608-8c6a-599e860ae2f1",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Changing the target or targets of a spell or ability won’t affect whether or not the controller of that spell or ability has committed a crime. Only the initial targets chosen for that spell or ability are used to determine whether or not its controller committed a crime."
+      }
+    ]
+  },
+  {
+    "sample_id": "272",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "4f815ca4-0197-48c7-bfa2-5eb937c615e6",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Take for a Ride can target any creature, even one that’s untapped or one you already control."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "4f815ca4-0197-48c7-bfa2-5eb937c615e6",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Gaining control of a creature doesn’t cause you to gain control of any Auras or Equipment attached to it."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "4f815ca4-0197-48c7-bfa2-5eb937c615e6",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A player commits a crime as they cast a spell, activate an ability, or put a triggered ability on the stack that targets at least one opponent, at least one permanent, spell, or ability an opponent controls, and/or at least one card in an opponent’s graveyard."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "4f815ca4-0197-48c7-bfa2-5eb937c615e6",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "The spell or ability that constituted a crime doesn’t have to have resolved yet or at all. As soon as you’re finished casting the spell, activating the ability, or putting the triggered ability on the stack, you’ve committed a crime."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "4f815ca4-0197-48c7-bfa2-5eb937c615e6",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "For example, an ability that triggers when you cast a spell that targets an opponent will trigger at the same time as an ability that triggers whenever you commit a crime. Those abilities can be put on the stack in either order (if you control them both), and they’ll both resolve before the spell that caused them to trigger."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "4f815ca4-0197-48c7-bfa2-5eb937c615e6",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A player can commit only one crime per spell or ability they control. Targeting multiple opponents, permanents, spells, abilities, and/or cards with the same spell or ability doesn’t constitute committing multiple crimes."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "4f815ca4-0197-48c7-bfa2-5eb937c615e6",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Changing the target or targets of a spell or ability won’t affect whether or not the controller of that spell or ability has committed a crime. Only the initial targets chosen for that spell or ability are used to determine whether or not its controller committed a crime."
+      }
+    ]
+  },
+  {
+    "sample_id": "273",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "0c9ec9a1-738a-4f69-b367-5dbf3d046bf1",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A player commits a crime as they cast a spell, activate an ability, or put a triggered ability on the stack that targets at least one opponent, at least one permanent, spell, or ability an opponent controls, and/or at least one card in an opponent’s graveyard."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "0c9ec9a1-738a-4f69-b367-5dbf3d046bf1",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "The spell or ability that constituted a crime doesn’t have to have resolved yet or at all. As soon as you’re finished casting the spell, activating the ability, or putting the triggered ability on the stack, you’ve committed a crime."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "0c9ec9a1-738a-4f69-b367-5dbf3d046bf1",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "For example, an ability that triggers when you cast a spell that targets an opponent will trigger at the same time as an ability that triggers whenever you commit a crime. Those abilities can be put on the stack in either order (if you control them both), and they’ll both resolve before the spell that caused them to trigger."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "0c9ec9a1-738a-4f69-b367-5dbf3d046bf1",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A player can commit only one crime per spell or ability they control. Targeting multiple opponents, permanents, spells, abilities, and/or cards with the same spell or ability doesn’t constitute committing multiple crimes."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "0c9ec9a1-738a-4f69-b367-5dbf3d046bf1",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Changing the target or targets of a spell or ability won’t affect whether or not the controller of that spell or ability has committed a crime. Only the initial targets chosen for that spell or ability are used to determine whether or not its controller committed a crime."
+      }
+    ]
+  },
+  {
+    "sample_id": "278",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "45687a24-e8cb-4864-8721-410eb8320aab",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "You don’t have to choose a target for Gold Rush. However, if you do, and that creature is an illegal target at the time Gold Rush tries to resolve, it won’t resolve and none of its effects will happen. You won’t create a Treasure token."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "45687a24-e8cb-4864-8721-410eb8320aab",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Count the number of Treasures you control as Gold Rush resolves to determine how big a bonus the target creature receives. That bonus won’t change even if the number of Treasures you control does during the turn."
+      }
+    ]
+  },
+  {
+    "sample_id": "280",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "ddf34404-39dd-4dcf-a706-ec78d47167e9",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "If one or more outlaws you control die at the same time that Rakish Crew leaves the battlefield, its last ability triggers for each of those outlaws."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "ddf34404-39dd-4dcf-a706-ec78d47167e9",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A card, spell, or permanent is an outlaw if it has the Assassin, Mercenary, Pirate, Rogue, or Warlock creature type. It doesn’t matter if it has more than one of those creature types; as long as it has at least one, it’s an outlaw."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "ddf34404-39dd-4dcf-a706-ec78d47167e9",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Outlaw is not a creature type. If an effect asks you to choose a creature type, you can’t choose outlaw."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "ddf34404-39dd-4dcf-a706-ec78d47167e9",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "If an ability refers to an outlaw or whether a player controls an outlaw, it’s referring only to permanents with one or more of the creature types specified above. Notably, it’s not referring to any spell or card not on the battlefield. However, other abilities may refer to an “outlaw spell” or “outlaw card” in a zone other than the battlefield. Those abilities refer to spells and cards with one or more of the specified creature types."
+      }
+    ]
+  },
+  {
+    "sample_id": "281",
+    "data": []
+  },
+  {
+    "sample_id": "282",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "a66d8dc6-ced4-4b24-b0c2-3557b2a851be",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A card, spell, or permanent is an outlaw if it has the Assassin, Mercenary, Pirate, Rogue, or Warlock creature type. It doesn't matter if it has more than one of those creature types; as long as it has at least one, it's an outlaw."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a66d8dc6-ced4-4b24-b0c2-3557b2a851be",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Outlaw is not a creature type. If an effect asks you to choose a creature type, you can't choose outlaw."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a66d8dc6-ced4-4b24-b0c2-3557b2a851be",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "If an ability refers to an outlaw or whether a player controls an outlaw, it's referring only to permanents with one or more of the creature types specified above. Notably, it's not referring to any spell or card not on the battlefield. However, other abilities may refer to an \"outlaw spell\" or \"outlaw card\" in a zone other than the battlefield. Those abilities refer to spells and cards with one or more of the specified creature types."
+      }
+    ]
+  },
+  {
+    "sample_id": "283",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "0c38f159-367b-4e4b-94cd-bf1b0721c3a8",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Noncreature spells that were cast before Magebane Lizard entered the battlefield count. If Magebane Lizard enters the battlefield after a player has already cast a noncreature spell in the same turn, that spell will be counted by Magebane Lizard’s triggered ability if that player casts another noncreature spell that turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "0c38f159-367b-4e4b-94cd-bf1b0721c3a8",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Magebane Lizard’s ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered."
+      }
+    ]
+  },
+  {
+    "sample_id": "286",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "9f4d0133-0ecc-4498-8a47-4906321faae2",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "At the beginning of your end step, Emergent Haunting’s ability will check to see if you’ve cast a spell from your hand this turn or if Emergent Haunting is a creature. If either is true, the ability won’t trigger at all. If the ability does trigger, it will check again as it tries to resolve. If either is true as the ability tries to resolve, the ability won’t do anything."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "9f4d0133-0ecc-4498-8a47-4906321faae2",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Emergent Haunting’s first ability doesn’t have a duration, which means it remains a creature indefinitely."
+      }
+    ]
+  },
+  {
+    "sample_id": "288",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "c0535854-e4e7-43e4-bc5c-7cc95fb17929",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A permanent card is an artifact, battle, creature, enchantment, land, or planeswalker card."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "c0535854-e4e7-43e4-bc5c-7cc95fb17929",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "If the mana cost of a card in your graveyard includes {X}, X is 0 for the purpose of determining its mana value."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "c0535854-e4e7-43e4-bc5c-7cc95fb17929",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "If you return an Aura to the battlefield this way, you choose what the Aura will enchant just before it enters the battlefield. An Aura returning to the battlefield this way doesn’t target the player or permanent it will enchant, so permanents or players with hexproof may be chosen; however, the chosen recipient must be able to legally be enchanted by the Aura, so a player or permanent with protection from one of the Aura’s qualities can’t be chosen this way. If there’s nothing legal for the Aura to enchant, it stays in the graveyard."
+      }
+    ]
+  },
+  {
+    "sample_id": "289",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "70bea459-f6e9-411a-bd33-339bf95ea47a",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A player commits a crime as they cast a spell, activate an ability, or put a triggered ability on the stack that targets at least one opponent, at least one permanent, spell, or ability an opponent controls, and/or at least one card in an opponent’s graveyard."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "70bea459-f6e9-411a-bd33-339bf95ea47a",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "The spell or ability that constituted a crime doesn’t have to have resolved yet or at all. As soon as you’re finished casting the spell, activating the ability, or putting the triggered ability on the stack, you’ve committed a crime."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "70bea459-f6e9-411a-bd33-339bf95ea47a",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "For example, an ability that triggers when you cast a spell that targets an opponent will trigger at the same time as an ability that triggers whenever you commit a crime. Those abilities can be put on the stack in either order (if you control them both), and they’ll both resolve before the spell that caused them to trigger."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "70bea459-f6e9-411a-bd33-339bf95ea47a",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A player can commit only one crime per spell or ability they control. Targeting multiple opponents, permanents, spells, abilities, and/or cards with the same spell or ability doesn’t constitute committing multiple crimes."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "70bea459-f6e9-411a-bd33-339bf95ea47a",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Changing the target or targets of a spell or ability won’t affect whether or not the controller of that spell or ability has committed a crime. Only the initial targets chosen for that spell or ability are used to determine whether or not its controller committed a crime."
+      }
+    ]
+  },
+  {
+    "sample_id": "292",
+    "data": []
+  },
+  {
+    "sample_id": "296",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "5538d4cf-98eb-4e20-a9c1-42c7cdcad194",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "You choose which ability the target creature gets as Rattleback Apothecary’s triggered ability resolves."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "5538d4cf-98eb-4e20-a9c1-42c7cdcad194",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A player commits a crime as they cast a spell, activate an ability, or put a triggered ability on the stack that targets at least one opponent, at least one permanent, spell, or ability an opponent controls, and/or at least one card in an opponent’s graveyard."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "5538d4cf-98eb-4e20-a9c1-42c7cdcad194",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "The spell or ability that constituted a crime doesn’t have to have resolved yet or at all. As soon as you’re finished casting the spell, activating the ability, or putting the triggered ability on the stack, you’ve committed a crime."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "5538d4cf-98eb-4e20-a9c1-42c7cdcad194",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "For example, an ability that triggers when you cast a spell that targets an opponent will trigger at the same time as an ability that triggers whenever you commit a crime. Those abilities can be put on the stack in either order (if you control them both), and they’ll both resolve before the spell that caused them to trigger."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "5538d4cf-98eb-4e20-a9c1-42c7cdcad194",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A player can commit only one crime per spell or ability they control. Targeting multiple opponents, permanents, spells, abilities, and/or cards with the same spell or ability doesn’t constitute committing multiple crimes."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "5538d4cf-98eb-4e20-a9c1-42c7cdcad194",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Changing the target or targets of a spell or ability won’t affect whether or not the controller of that spell or ability has committed a crime. Only the initial targets chosen for that spell or ability are used to determine whether or not its controller committed a crime."
+      }
+    ]
+  },
+  {
+    "sample_id": "299",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "d37e0127-6f68-438e-8b9e-a71bb3c34733",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Forsaken Miner's last ability triggers only if Forsaken Miner is in your graveyard at the moment you cast a spell, activate an ability, or put a triggered ability on the stack with one or more targets that constitute a crime. For example, if you cast a sorcery spell that destroyed two target creatures and your targets were a creature controlled by an opponent and Forsaken Miner, Forsaken Miner's ability won't trigger. However, if you cast a spell with an additional cost of \"Sacrifice a creature\" and you sacrifice Forsaken Miner to pay that cost, Forsaken Miner's ability will trigger as long as you committed a crime with that spell."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "d37e0127-6f68-438e-8b9e-a71bb3c34733",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "You choose whether to pay {B} as the triggered ability is resolving. Once the ability starts resolving, it's too late for anyone to respond by removing Forsaken Miner from your graveyard to stop you from bringing it back."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "d37e0127-6f68-438e-8b9e-a71bb3c34733",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A player commits a crime as they cast a spell, activate an ability, or put a triggered ability on the stack that targets at least one opponent, at least one permanent, spell, or ability an opponent controls, and/or at least one card in an opponent's graveyard."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "d37e0127-6f68-438e-8b9e-a71bb3c34733",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "The spell or ability that constituted a crime doesn't have to have resolved yet or at all. As soon as you're finished casting the spell, activating the ability, or putting the triggered ability on the stack, you've committed a crime."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "d37e0127-6f68-438e-8b9e-a71bb3c34733",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "For example, an ability that triggers when you cast a spell that targets an opponent will trigger at the same time as an ability that triggers whenever you commit a crime. Those abilities can be put on the stack in either order (if you control them both), and they'll both resolve before the spell that caused them to trigger."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "d37e0127-6f68-438e-8b9e-a71bb3c34733",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "A player can commit only one crime per spell or ability they control. Targeting multiple opponents, permanents, spells, abilities, and/or cards with the same spell or ability doesn't constitute committing multiple crimes."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "d37e0127-6f68-438e-8b9e-a71bb3c34733",
+        "source": "wotc",
+        "published_at": "2024-04-12",
+        "comment": "Changing the target or targets of a spell or ability won't affect whether or not the controller of that spell or ability has committed a crime. Only the initial targets chosen for that spell or ability are used to determine whether or not its controller committed a crime."
+      }
+    ]
+  },
+  {
+    "sample_id": "308",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "5fe3aabd-3271-41bf-ae50-f6efaba7c4ae",
+        "source": "wotc",
+        "published_at": "2024-11-08",
+        "comment": "Food is an artifact type. Even though it appears on some creatures, it's never a creature type."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "5fe3aabd-3271-41bf-ae50-f6efaba7c4ae",
+        "source": "wotc",
+        "published_at": "2024-11-08",
+        "comment": "You can't sacrifice a Food to pay multiple costs. For example, you can't sacrifice a Food token to activate its own ability and also to activate Maraleaf Rider's ability."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "5fe3aabd-3271-41bf-ae50-f6efaba7c4ae",
+        "source": "wotc",
+        "published_at": "2024-11-08",
+        "comment": "Whatever you do, don't eat the delicious cards."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "5fe3aabd-3271-41bf-ae50-f6efaba7c4ae",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "Carrot Cake's first ability will trigger whether you sacrifice it to pay the cost of its own last ability or due to another cost or effect. For example, if you sacrifice Carrot Cake in order to forage, you'll still create a Rabbit token and scry 1. It's delicious no matter how it's served!"
+      }
+    ]
+  },
+  {
+    "sample_id": "319",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "99007c40-1eb5-4c3a-9889-6d12417d8191",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "Once Nightwhorl Hermit has been blocked, putting enough cards in your graveyard to reach a total of seven or more cards won’t cause it to become unblocked."
+      }
+    ]
+  },
+  {
+    "sample_id": "321",
+    "data": []
+  },
+  {
+    "sample_id": "334",
+    "data": []
+  },
+  {
+    "sample_id": "337",
+    "data": []
+  },
+  {
+    "sample_id": "338",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "08e173e3-4c28-49d2-bb57-ccf533f20daf",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "Abilities that trigger whenever you “expend N” only trigger when you reach that specific amount of mana spent on casting spells that turn. This can only happen once per turn. For example, if you’ve spent three mana on spells so far this turn and you control a permanent with an ability that triggers “whenever you expend 4,” that ability will trigger the next time you spend at least one mana to cast a spell this turn. It won’t trigger again if you spend another four mana to cast spells later in the turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "08e173e3-4c28-49d2-bb57-ccf533f20daf",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "If the cost to cast a spell is increased, decreased, or changed because of additional or alternative costs, expend counts only the mana you actually spent."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "08e173e3-4c28-49d2-bb57-ccf533f20daf",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "A permanent with an ability that triggers whenever you “expend N” will see mana you spent to cast spells the turn it enters, including mana you spent before it entered. For example, if you cast Junkblade Bruiser (a creature with a mana value of 5 and an ability that triggers whenever you expend 4) by paying its full cost of five mana, you’ll already have spent four mana on spells before Junkblade Bruiser enters, and therefore its ability that triggers whenever you expend 4 won’t be able to trigger at all that turn."
+      }
+    ]
+  },
+  {
+    "sample_id": "339",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "5ba19dbe-9dbb-4cc9-81a3-18c26f27bd0f",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "Abilities that trigger whenever you “expend N” only trigger when you reach that specific amount of mana spent on casting spells that turn. This can only happen once per turn. For example, if you’ve spent three mana on spells so far this turn and you control a permanent with an ability that triggers “whenever you expend 4,” that ability will trigger the next time you spend at least one mana to cast a spell this turn. It won’t trigger again if you spend another four mana to cast spells later in the turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "5ba19dbe-9dbb-4cc9-81a3-18c26f27bd0f",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "If the cost to cast a spell is increased, decreased, or changed because of additional or alternative costs, expend counts only the mana you actually spent."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "5ba19dbe-9dbb-4cc9-81a3-18c26f27bd0f",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "A permanent with an ability that triggers whenever you “expend N” will see mana you spent to cast spells the turn it enters, including mana you spent before it entered. For example, if you cast Junkblade Bruiser (a creature with a mana value of 5 and an ability that triggers whenever you expend 4) by paying its full cost of five mana, you’ll already have spent four mana on spells before Junkblade Bruiser enters, and therefore its ability that triggers whenever you expend 4 won’t be able to trigger at all that turn."
+      }
+    ]
+  },
+  {
+    "sample_id": "341",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "9d14c7bd-7802-401c-b02b-c7f3c51b007f",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "Abilities that trigger whenever you “expend N” only trigger when you reach that specific amount of mana spent on casting spells that turn. This can only happen once per turn. For example, if you’ve spent three mana on spells so far this turn and you control a permanent with an ability that triggers “whenever you expend 4,” that ability will trigger the next time you spend at least one mana to cast a spell this turn. It won’t trigger again if you spend another four mana to cast spells later in the turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "9d14c7bd-7802-401c-b02b-c7f3c51b007f",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "If the cost to cast a spell is increased, decreased, or changed because of additional or alternative costs, expend counts only the mana you actually spent."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "9d14c7bd-7802-401c-b02b-c7f3c51b007f",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "A permanent with an ability that triggers whenever you “expend N” will see mana you spent to cast spells the turn it enters, including mana you spent before it entered. For example, if you cast Junkblade Bruiser (a creature with a mana value of 5 and an ability that triggers whenever you expend 4) by paying its full cost of five mana, you’ll already have spent four mana on spells before Junkblade Bruiser enters, and therefore its ability that triggers whenever you expend 4 won’t be able to trigger at all that turn."
+      }
+    ]
+  },
+  {
+    "sample_id": "342",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "104baa4e-a3f3-45dc-979d-4c58b659ba1a",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "The value of X is calculated only once, as Brambleguard Captain’s ability resolves."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "104baa4e-a3f3-45dc-979d-4c58b659ba1a",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "If Brambleguard Captain’s power is negative as its ability resolves, the target creature will get +0/+0 until end of turn. At least they’ll know Brambleguard Captain appreciates them."
+      }
+    ]
+  },
+  {
+    "sample_id": "343",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "578ddb51-e128-43e5-a115-471f0cae1222",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "Star Charter’s last ability cares whether you gained or lost life this turn, not how your life total changed. For example, if you gained 2 life and lost 2 life in the same turn, you still gained and lost life that turn, even though your life total is the same as it was at the start of the turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "578ddb51-e128-43e5-a115-471f0cae1222",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "If you haven’t gained or lost life during the turn when your end step begins, Star Charter’s last ability won’t trigger at all. Gaining or losing life during your end step won’t cause the ability to trigger."
+      }
+    ]
+  },
+  {
+    "sample_id": "347",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "7d2a7741-1dff-4fac-92d8-abea24f23f97",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "Three Tree Scribe’s ability triggers whenever a creature you control goes to any zone other than the graveyard from the battlefield. They could be returned to your hand, your library, or exiled, for example."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "7d2a7741-1dff-4fac-92d8-abea24f23f97",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "If Three Tree Scribe leaves the battlefield without dying at the same time one or more other creatures you control leave the battlefield without dying, its ability will still trigger once for each of those creatures, including itself."
+      }
+    ]
+  },
+  {
+    "sample_id": "35",
+    "data": []
+  },
+  {
+    "sample_id": "353",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "25a63171-a1a0-4c61-ac61-49bb59fe83c1",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "Thought-Stalker Warlock’s triggered ability cares whether an opponent lost life this turn, not how their life total changed. For example, an opponent who gained 2 life and lost 1 life in the same turn still lost life."
+      }
+    ]
+  },
+  {
+    "sample_id": "354",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "fb8f7047-280b-464f-aca2-6add3e21df8f",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "You pay all costs and follow all timing rules for cards played this way. For example, if the exiled card is a land card, you may play it only during your main phase while the stack is empty."
+      }
+    ]
+  },
+  {
+    "sample_id": "359",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "d767463b-0fc9-43fc-a85f-e60f030f9b96",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "Flamecache Gecko’s ability cares whether an opponent lost life this turn, not how their life total changed. For example, an opponent who gained 2 life and lost 1 life in the same turn still lost life."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "d767463b-0fc9-43fc-a85f-e60f030f9b96",
+        "source": "wotc",
+        "published_at": "2024-07-26",
+        "comment": "Flamecache Gecko’s first ability isn’t a mana ability. It uses the stack and can be responded to."
+      }
+    ]
+  },
+  {
+    "sample_id": "360",
+    "data": []
+  },
+  {
+    "sample_id": "44",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "afe8fd01-f0c7-46a5-9e9c-e8b9599cd19a",
+        "source": "wotc",
+        "published_at": "2022-10-14",
+        "comment": "If the targeted creature card has an {X} in its mana cost, X is 0."
+      }
+    ]
+  },
+  {
+    "sample_id": "47",
+    "data": []
+  },
+  {
+    "sample_id": "54",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "a23c4378-9242-46a0-9f62-ca91f0baa428",
+        "source": "wotc",
+        "published_at": "2022-10-14",
+        "comment": "If Slagstone Refinery is put into a graveyard from the battlefield or exiled from the battlefield at the same time that one or more other nontoken artifacts controlled by the same player are put into a graveyard from the battlefield and/or exiled from the battlefield, its triggered ability will trigger once for each of them plus once for itself."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a23c4378-9242-46a0-9f62-ca91f0baa428",
+        "source": "wotc",
+        "published_at": "2022-10-14",
+        "comment": "Powerstone tokens are a kind of predefined token. Each one has the artifact subtype \"Powerstone\" and the ability \"{T}: Add {C}. This mana can't be spent to cast a nonartifact spell.\""
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a23c4378-9242-46a0-9f62-ca91f0baa428",
+        "source": "wotc",
+        "published_at": "2022-10-14",
+        "comment": "You can use the {C} added by a Powerstone token on anything that isn't a nonartifact spell. This includes paying costs to activate abilities of both artifact and nonartifact permanents, paying ward costs, and so on."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a23c4378-9242-46a0-9f62-ca91f0baa428",
+        "source": "wotc",
+        "published_at": "2022-10-14",
+        "comment": "Although all the cards in The Brothers' War that create Powerstone tokens create a tapped Powerstone token, entering the battlefield tapped isn't part of the token's definition. Notably, if you create a token that is a copy of a Powerstone token, the token copy won't enter the battlefield tapped."
+      }
+    ]
+  },
+  {
+    "sample_id": "57",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "4eba0e29-985b-4763-9a70-0946ba044b43",
+        "source": "wotc",
+        "published_at": "2022-10-14",
+        "comment": "The last ability will trigger if you discard artifact cards for any reason, not just due to its activated ability."
+      }
+    ]
+  },
+  {
+    "sample_id": "60",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "bd0c0e85-ff24-46c9-a547-4f633355c131",
+        "source": "wotc",
+        "published_at": "2022-10-14",
+        "comment": "Spells and abilities that cause players to gain life still resolve while Giant Cindermaw is on the battlefield. No player will gain life, but any other effects of that spell or ability will happen."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "bd0c0e85-ff24-46c9-a547-4f633355c131",
+        "source": "wotc",
+        "published_at": "2022-10-14",
+        "comment": "If an effect says to set a player's life total to a number that's higher than the player's current life total while Giant Cindermaw is on the battlefield, the player's life total doesn't change."
+      }
+    ]
+  },
+  {
+    "sample_id": "65",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "21153db6-552a-4956-a53a-a9dfb6968629",
+        "source": "wotc",
+        "published_at": "2024-11-08",
+        "comment": "Food is an artifact type. Even though it appears on some creatures, it's never a creature type."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "21153db6-552a-4956-a53a-a9dfb6968629",
+        "source": "wotc",
+        "published_at": "2024-11-08",
+        "comment": "You can't sacrifice a Food to pay multiple costs. For example, you can't sacrifice a Food token to activate its own ability and also to activate Maraleaf Rider's ability."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "21153db6-552a-4956-a53a-a9dfb6968629",
+        "source": "wotc",
+        "published_at": "2024-11-08",
+        "comment": "Whatever you do, don't eat the delicious cards."
+      }
+    ]
+  },
+  {
+    "sample_id": "68",
+    "data": []
+  },
+  {
+    "sample_id": "74",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "8fc049e7-a16d-4b48-b930-5c346f6718b9",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Activating Verdant Outrider's ability after it has become blocked by a creature with power 2 or less won't cause it to become unblocked."
+      }
+    ]
+  },
+  {
+    "sample_id": "76",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "a7736614-cdd3-43bd-ab3e-461e3e24ed40",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Enchantment tokens (such as Roles) that are sacrificed, destroyed, or would otherwise go to the graveyard are put into their owner's graveyard before ceasing to exist. If you controlled the token, Warehouse Tabby's ability will trigger."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "a7736614-cdd3-43bd-ab3e-461e3e24ed40",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "If Warehouse Tabby leaves the battlefield while it has an Aura you control attached to it or at the same time as another creature with an Aura you control attached to it, its ability won't trigger for those enchantments unless they were destroyed by the same effect that caused Warehouse Tabby to leave the battlefield."
+      }
+    ]
+  },
+  {
+    "sample_id": "85",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "68f7d1bf-48c7-483e-b17f-a60008854b46",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Each celebration ability has a different effect."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "68f7d1bf-48c7-483e-b17f-a60008854b46",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Some celebration abilities trigger at specific parts of the turn and check whether two or more nonland permanents entered the battlefield under your control already in that turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "68f7d1bf-48c7-483e-b17f-a60008854b46",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Others are static abilities that give creatures abilities or power and toughness increases as long as two or more nonland permanents entered the battlefield under your control that turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "68f7d1bf-48c7-483e-b17f-a60008854b46",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Celebration abilities only care if two or more nonland permanents entered the battlefield under your control in a turn. They won't get more powerful if more than two permanents entered the battlefield under your control in a turn."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "68f7d1bf-48c7-483e-b17f-a60008854b46",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "The permanents that entered the battlefield don't need to remain on the battlefield or under your control. Celebration abilities are checking for past events, not the current game state."
+      }
+    ]
+  },
+  {
+    "sample_id": "87",
+    "data": []
+  },
+  {
+    "sample_id": "97",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "450a9b73-9024-4103-b9f9-216a2f395cff",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "If you controlled a Faerie as you finished casting Faerie Fencing, it doesn't matter whether you still control one as the spell resolves. The target creature will still get an additional -3/-3."
+      }
+    ]
+  },
+  {
+    "sample_id": "98",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "4c0a8eed-f2e2-4821-8011-6e6ad2081936",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "You may target a creature that is already tapped with Solitary Sanctuary's first ability. If the target creature is already tapped as it resolves, you will still put a stun counter on it."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "4c0a8eed-f2e2-4821-8011-6e6ad2081936",
+        "source": "wotc",
+        "published_at": "2023-09-01",
+        "comment": "Solitary Sanctuary's last ability will trigger only when an effect instructs you to tap an opponent's creature. It won't trigger if a spell or ability you control instructs an opponent to tap a creature they control. For example, if you control Tangle Wire and an opponent taps an untapped creature they control as part of the resolution of Tangle Wire's triggered ability, Solitary Sanctuary's ability won't trigger."
+      }
+    ]
+  },
+  {
+    "sample_id": "ferocidon",
+    "data": [
+      {
+        "object": "ruling",
+        "oracle_id": "3e5ca524-8dd1-4f7f-a467-5210d768b8a1",
+        "source": "wotc",
+        "published_at": "2017-09-29",
+        "comment": "Spells and abilities that cause players to gain life still resolve while Rampaging Ferocidon is on the battlefield. No player will gain life, but any other effects of that spell or ability will happen."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "3e5ca524-8dd1-4f7f-a467-5210d768b8a1",
+        "source": "wotc",
+        "published_at": "2017-09-29",
+        "comment": "If an effect says to set a player's life total to a number that's higher than the player's current life total while Rampaging Ferocidon is on the battlefield, the player's life total doesn't change."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "3e5ca524-8dd1-4f7f-a467-5210d768b8a1",
+        "source": "wotc",
+        "published_at": "2017-09-29",
+        "comment": "Rampaging Ferocidon's last ability triggers whenever any player has a creature enter the battlefield, including you."
+      },
+      {
+        "object": "ruling",
+        "oracle_id": "3e5ca524-8dd1-4f7f-a467-5210d768b8a1",
+        "source": "wotc",
+        "published_at": "2017-09-29",
+        "comment": "If another creature enters the battlefield at the same time as Rampaging Ferocidon, its last ability triggers."
+      }
+    ]
+  }
+]

@@ -28,11 +28,11 @@
       "covers": "attacking gives each creature you control +1/+1 until end of turn"
     },
     {
-      "test": "issue_misc15_batch::issue_misc15_batch_maps_definitions",
+      "test": "batch_registry::issue_misc15_batch::issue_misc15_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, and the attack team-pump trigger of Dauntless Veteran"
     },
     {
-      "test": "issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Dauntless Veteran"
     }
   ],

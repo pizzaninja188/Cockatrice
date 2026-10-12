@@ -52,7 +52,7 @@
       "covers": "controller-only fixed-set pump, zero or two permanent-card returns, nonpermanent exclusion"
     },
     {
-      "test": "issue_misc42_batch::issue_misc42_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc42_batch::issue_misc42_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost and type line"
     }
   ],

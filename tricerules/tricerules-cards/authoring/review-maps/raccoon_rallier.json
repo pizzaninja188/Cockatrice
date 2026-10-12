@@ -29,11 +29,11 @@
       "covers": "the tap ability grants a target creature the controller controls haste at sorcery speed; an opponent creature is rejected"
     },
     {
-      "test": "issue_misc6_batch::issue_misc6_batch_maps_definitions",
+      "test": "batch_registry::issue_misc6_batch::issue_misc6_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc6_raccoon_rallier_grants_haste_at_sorcery_speed"
     },
     {
-      "test": "issue_misc6_batch::issue_misc6_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc6_batch::issue_misc6_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc6_raccoon_rallier_grants_haste_at_sorcery_speed"
     }
   ],

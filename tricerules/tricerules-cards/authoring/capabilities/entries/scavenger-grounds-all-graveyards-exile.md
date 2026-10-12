@@ -22,13 +22,13 @@
 
 - **Status:** `Supported` for the tested all-player exile and controlled-Desert cost.
 - **Typed symbols:** `AbilityCost::Mana`, `AbilityCost::Tap`, and
-  `AbilityCost::SacrificePermanent` in `tricerules/tricerules-cards/src/primitives/costs.rs`;
+  `AbilityCost::SacrificePermanent` in `tricerules/tricerules-card-model/src/primitives/costs.rs`;
   `TargetFilter.required_subtypes` and `TargetController::You` in
-  `tricerules/tricerules-cards/src/primitives/targeting.rs`; `SpellEffectKind::ExileGraveyards` and
-  `RelativePlayerSet::All` in `tricerules/tricerules-cards/src/primitives/effects.rs`.
+  `tricerules/tricerules-card-model/src/primitives/targeting.rs`; `SpellEffectKind::ExileGraveyards` and
+  `RelativePlayerSet::All` in `tricerules/tricerules-card-model/src/primitives/effects.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`
   and `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`; validator:
-  `tricerules/tricerules-cards/src/primitives/abilities.rs#ActivatedAbilityDef::validate_shape`;
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs#ActivatedAbilityDef::validate_shape`;
   activation cost consumer: `tricerules/tricerules-core/src/engine/casting.rs#GameEngine::activate_ability`;
   effect consumer: `tricerules/tricerules-core/src/engine/resolution/zones.rs#exile_graveyards`.
 - **Evidence and limits:** Both a different controlled Desert and the source itself are tested as
@@ -71,10 +71,10 @@
   - `tricerules/tricerules-cards/data/scavenger_grounds.ron`
   - `tricerules/tricerules-cards/authoring/review-maps/scavenger_grounds.json`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_scavenger_grounds.rs`
-  - `tricerules/tricerules-cards/src/primitives/abilities.rs`
-  - `tricerules/tricerules-cards/src/primitives/costs.rs`
-  - `tricerules/tricerules-cards/src/primitives/effects.rs`
-  - `tricerules/tricerules-cards/src/primitives/targeting.rs`
+  - `tricerules/tricerules-card-model/src/primitives/abilities.rs`
+  - `tricerules/tricerules-card-model/src/primitives/costs.rs`
+  - `tricerules/tricerules-card-model/src/primitives/effects.rs`
+  - `tricerules/tricerules-card-model/src/primitives/targeting.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/casting.rs`
   - `tricerules/tricerules-core/src/engine/resolution/zones.rs`

@@ -40,11 +40,11 @@
       "covers": "another Frog you control entering adds a +1/+1 counter, while a non-listed subtype does not; the Mightcaller has trample"
     },
     {
-      "test": "issue_misc23_batch::issue_misc23_batch_maps_definitions",
+      "test": "batch_registry::issue_misc23_batch::issue_misc23_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Trample, the four-branch Frog/Rabbit/Raccoon/Squirrel entry watcher, and its +1/+1 counter of Valley Mightcaller"
     },
     {
-      "test": "issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Valley Mightcaller"
     }
   ],

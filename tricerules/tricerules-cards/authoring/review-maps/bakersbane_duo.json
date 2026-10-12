@@ -42,7 +42,7 @@
       "covers": "ETB Food; fourth mana actually spent triggers one temporary +1/+1; no later repeat or retroactive trigger after entering"
     },
     {
-      "test": "issue_misc30_batch::issue_misc30_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc30_batch::issue_misc30_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
     }
   ],

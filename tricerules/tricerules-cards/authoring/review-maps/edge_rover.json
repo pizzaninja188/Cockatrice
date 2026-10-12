@@ -42,11 +42,11 @@
       "covers": "the dies trigger creates one Lander token for each player and the Rover has reach"
     },
     {
-      "test": "issue_misc22_batch::issue_misc22_batch_maps_definitions",
+      "test": "batch_registry::issue_misc22_batch::issue_misc22_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Reach, and the each-player Lander token of Edge Rover"
     },
     {
-      "test": "issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Edge Rover"
     }
   ],

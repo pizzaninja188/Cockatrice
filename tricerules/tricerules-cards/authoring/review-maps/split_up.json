@@ -48,7 +48,7 @@
       "covers": "tapped versus untapped creature sweeps"
     },
     {
-      "test": "issue_misc41_batch::issue_misc41_registers_six_exact_card_identities",
+      "test": "batch_registry::issue_misc41_batch::issue_misc41_registers_six_exact_card_identities",
       "covers": "printed identity, layout, mana cost and type line"
     }
   ],

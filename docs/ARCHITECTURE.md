@@ -1,12 +1,8 @@
 # Architecture — ruled mode
 
-Read this before any cross-component work. It describes how the three processes fit together,
-what each one owns, and the conventions that are impossible to re-derive from a single file.
-
-Companions: **[AGENTS.md](../AGENTS.md)** (day-to-day rules for implementing cards and shipping
-changes) and **[REFACTOR-ROADMAP.md](REFACTOR-ROADMAP.md)** (structural work, standing design
-rules, the trigger-gated backlog). Where they overlap, they win on their own subject: AGENTS.md
-on workflow, the roadmap on what to restructure, this file on how the pieces relate.
+For structural or cross-component work, read the sections relevant to the changed contract.
+This document owns architecture and structural constraints; [AGENTS.md](../AGENTS.md) owns
+workflow. Current work and dependencies live in GitHub Issues, not a historical refactor sequence.
 
 For local structured evidence, privacy boundaries, deterministic reconstruction, and live resume,
 see [RULED-DIAGNOSTICS.md](RULED-DIAGNOSTICS.md).
@@ -108,7 +104,7 @@ client cannot act as another seat. Then
 UI courtesy, never sent to the engine). Everything else goes to
 `RulesRelay::playerCommand`, which writes a length-prefixed `IpcEnvelope{PlayerCommand}` on the
 loopback socket and blocks for the `IpcResponse` — synchronously, under `Server_Game::gameMutex`.
-That is deliberate (see the roadmap's "Do NOT do": don't make the relay async).
+That is deliberate: keep synchronous relay request/response under the game mutex.
 
 **5 — Decide (engine).** `GameEngine::player_command_ipc` → `apply_command` → `dispatch_command`,
 which rejects previews, routes concede first, gates on a parked resolution, and dispatches to
@@ -328,10 +324,43 @@ candidates reach only the deciding player; `REVEALED`, `TARGET_OBJECTS` and `LEG
 public. Unknown values are treated as private.
 
 **Known, accepted exposures:** replays contain both players' hidden information by design (the
-full command log). Document that before any replay-sharing feature ships — it is on the roadmap's
-security-audit backlog entry.
+full command log). Before public deployment or replay sharing, verify authenticated sender
+binding, loopback-only sidecar access and explicit disclosure of full-hidden-information captures.
 
 ---
+
+### Public reveal contract
+
+`CardsRevealed` is the single public payload: occurrence ID, source effect identity/description,
+zone owner, source zone, and immutable card identities (ObjectId, zone-change generation,
+definition ID and display name). It is used directly for an instant event, nested in
+`ResolutionChoiceRequired.public_reveal`, or in `ActivePublicRevealSnapshot`.
+
+1. An instant reveal calls `engine::reveals::reveal_cards` **before** moving/reordering its cards.
+   The helper supports multiple source-owner/zone groups in deterministic encounter order.
+2. A public choice over one source cohort uses `reveal_choice`; a custom resolution interrupt
+   sets `public_reveal`. The engine's existing candidate list, eligibility and deciding player
+   still govern selection. Private looks leave public metadata absent.
+3. Active-duration reveal producers publish the same payload with a stable source-occurrence
+   ID through the active snapshot. New durations belong in the engine, not in the widget.
+4. Instant/choice occurrence IDs are assigned once at the accepted command boundary, after
+   automatic settlement. Repeated publication retains the ID; revealing the same physical card
+   again gets another ID. Intermediate active snapshots retain their occurrences when replaced.
+5. Servatrice routes public snapshot data without trying to recover it from the card's later
+   physical zone. Choice click IDs remain temporary and recipient-appropriate. The old ordinary
+   `Event_RevealCards` projection is removed from ruled reveals, so it cannot create duplicates
+   or invoke the library-top popup exception.
+6. `RuledRevealState` owns occurrence history, active-choice association and local dismissal.
+   `RuledRevealWindows` is the only public window owner. New reveal mechanics need no Qt popup
+   branch. A window title identifies the revealing zone's owner, zone and source effect.
+
+Completed cards use inert synthetic display IDs. Only the current public choice window is tagged
+with its occurrence ID and may map a click to an engine candidate. A later choice cannot reuse
+an older window's transient candidate indices. Historical snapshots never follow a card into
+another hidden zone. The existing replay-seek suppression flag skips historical popup creation;
+normal playback restores still-active reveals. Reconnect restores active public state, not a
+newly reconstructed history of completed reveals.
+
 
 ## 6. Effect ordering — where ordering is decided
 
@@ -359,7 +388,7 @@ Do not re-derive this per card.
 - **Timestamps.** Continuous effects carry CR 613.7 timestamps stamped from `command_index`;
   `ordered_effects` sorts by timestamp with the vector index as a deterministic tiebreak. That
   function is also the documented insertion point for CR 613.8 dependency ordering, which is
-  deferred until the first Humility-class card (roadmap backlog).
+  assessed when a concrete Humility-class card needs it; check current code and tracker first.
 - **State-based actions.** `engine/state_based.rs` runs the CR 704.4 fixed point: `apply_sbas`
   loops `apply_sbas_once` until nothing changes, with per-rule passes (704.5f/g/h/j/m/p, plus
   CR 122.3 counter annihilation). SBAs are **not** checked while a tier-3 resolution is parked;
@@ -401,8 +430,10 @@ What grows is **board complexity**. The hot paths, in the order they are likely 
 **Measure before optimizing.** The paired stress scenario in
 `tricerules-core/tests/scenario/performance.rs` drives a large board through a full turn under
 `--release` with a wall-time assertion, so growth shows up as a failing test. Determinism makes
-any profile exactly reproducible. Two deferred wins have named triggers in the roadmap backlog
-(binary card-data embed; two-letter sharding of the generated RON tree) — don't pre-build them.
+any profile exactly reproducible. Consider binary card-data embedding only after measured
+registry startup exceeds roughly one second or CI regresses; preserve embedded data and replay
+hashing rather than runtime file loading. Consider two-letter generated-data sharding only when
+a directory exceeds roughly 2,000 files. These are triggers for assessment, not scheduled work.
 
 ---
 
@@ -433,6 +464,25 @@ the one-line `RULED_PAYLOAD` case, and implements `RuledClientHost`.
 
 ---
 
+### Structural constraints and extension triggers
+
+- Separate pure code motion from behavior changes; characterize unprotected behavior before moving it.
+- Keep player sets generic and rules-semantic opponent tests on `GameState::are_opponents`.
+- Keep typed RON keyed by card identity, without set metadata or a separate scripting language.
+- Preserve the ruled/freeform layering, synchronous relay request/response under the game mutex,
+  and one prompt-mode enum. Removed protobuf tags remain reserved; avoid speculative compatibility
+  layers in this single-repository fork.
+- Keep scenario tests in a shared executable; split large helpers by setup/assertion concern,
+  not per-card theme. Use `TurnHistory` for new turn-memory facts, not scattered `GameState` fields.
+- Choices use logged park/resume commands, never blocking mid-resolution callbacks. Future AI or
+  what-if work must assess replay-based approaches before deep-copying whole game states.
+- Extend layer dependency ordering when a concrete card needs it; inspect current implementation
+  and interactions first. Historical plans do not prove a capability missing or delivered.
+- Scenario save/load and crash recovery are feature requests, not prerequisite refactors. The
+  current reconstruction/resume path is documented in [RULED-DIAGNOSTICS.md](RULED-DIAGNOSTICS.md).
+- Prioritize extraction when a new mechanic would otherwise grow upstream hooks. Choose unresolved
+  work from the live tracker; do not resurrect a completed roadmap step or pre-build trigger-gated work.
+
 ## 9. Extension recipes
 
 These recipes summarize ownership and affected files. Card-specific procedure lives in the
@@ -450,8 +500,8 @@ identity contract changed.
 
 ### Add a primitive (`SpellEffectKind`, `TriggerCondition`, `AbilityCost`, …)
 
-1. **Name two real cards it covers**, or widen the parameters until you can. This gate is the
-   whole scaling strategy.
+1. Compare the closest existing primitive and name two real cards or distinct mechanics.
+   If only one use fits, justify necessary specialized behavior; do not widen speculatively.
 2. Variant in the right `tricerules-card-model/src/primitives/` submodule (`effects`, `targeting`,
    `costs`, `abilities`, `keywords`) — the re-exports keep `primitives::X` paths and RON serde
    names stable.

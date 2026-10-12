@@ -65,11 +65,11 @@
       "covers": "a permanent card entering the graveyard satisfies Descend for the end-step +1/+1 counter, and the sacrifice activation gives -X/-X where X is the Stalker's power"
     },
     {
-      "test": "issue_misc21_batch::issue_misc21_batch_maps_definitions",
+      "test": "batch_registry::issue_misc21_batch::issue_misc21_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Menace, the Descend condition, the +1/+1 counter, and the power-scaled activation of Stalactite Stalker"
     },
     {
-      "test": "issue_misc21_batch::issue_misc21_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc21_batch::issue_misc21_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Stalactite Stalker"
     }
   ],

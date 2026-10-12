@@ -35,11 +35,11 @@
       "covers": "destroying the target creature then surveilling 1 offers the surveil choice to the caster"
     },
     {
-      "test": "issue_misc8_batch::issue_misc8_batch_maps_definitions",
+      "test": "batch_registry::issue_misc8_batch::issue_misc8_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc8_hour_of_defeat_destroys_then_surveils"
     },
     {
-      "test": "issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc8_hour_of_defeat_destroys_then_surveils"
     }
   ],

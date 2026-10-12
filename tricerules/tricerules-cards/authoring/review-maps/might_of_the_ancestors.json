@@ -33,11 +33,11 @@
       "covers": "at the beginning of combat a target creature you control gets +2/+0 and gains vigilance until end of turn, and an opponent's creature is not a legal target"
     },
     {
-      "test": "issue_look_batch::issue_look_batch_maps_definitions",
+      "test": "batch_registry::issue_look_batch::issue_look_batch_maps_definitions",
       "covers": "reviewed identity, characteristics, trigger and effects of might_of_the_ancestors"
     },
     {
-      "test": "issue_look_batch::issue_look_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_look_batch::issue_look_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for might_of_the_ancestors"
     }
   ],

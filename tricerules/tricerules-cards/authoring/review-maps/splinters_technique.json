@@ -36,11 +36,11 @@
       "covers": "the spell searches the library for a card and puts it into hand"
     },
     {
-      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "test": "batch_registry::issue_misc16_batch::issue_misc16_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the sneak alternative cost, and the unrestricted tutor of Splinter's Technique"
     },
     {
-      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Splinter's Technique"
     }
   ],

@@ -46,7 +46,7 @@
       "covers": "a target that leaves the battlefield before resolution makes the spell fail to resolve"
     },
     {
-      "test": "deck_coverage_beast_within::beast_within_targets_any_permanent_and_gives_a_beast_to_its_controller",
+      "test": "deck_registry::deck_coverage_beast_within::beast_within_targets_any_permanent_and_gives_a_beast_to_its_controller",
       "covers": "exact printed identity, any-permanent target, effect order, target-controller recipient, and token characteristics"
     }
   ],

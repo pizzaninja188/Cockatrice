@@ -22,8 +22,8 @@
 - **Status:** `Supported` for the one-Treasure entry and dies triggers.
 - **Typed symbols:** `TriggerCondition::WhenSelfEntersBattlefield` and the implementation variant
   `TriggerCondition::WhenSelfDies` (the battlefield-to-graveyard event) in
-  `tricerules/tricerules-cards/src/primitives/abilities.rs`;
-  `SpellEffectKind::CreateTokens` in `tricerules/tricerules-cards/src/primitives/effects.rs`.
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs`;
+  `SpellEffectKind::CreateTokens` in `tricerules/tricerules-card-model/src/primitives/effects.rs`.
 - **Implementation references:** Loader and token validation:
   `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`; trigger
   collector: `tricerules/tricerules-core/src/engine/triggers.rs#collect_event_triggers`; token
@@ -65,8 +65,8 @@
   - `tricerules/tricerules-cards/data/tokens/treasure.ron`
   - `tricerules/tricerules-cards/authoring/review-maps/prized_statue.json`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_prized_statue.rs`
-  - `tricerules/tricerules-cards/src/primitives/abilities.rs`
-  - `tricerules/tricerules-cards/src/primitives/effects.rs`
+  - `tricerules/tricerules-card-model/src/primitives/abilities.rs`
+  - `tricerules/tricerules-card-model/src/primitives/effects.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/triggers.rs`
   - `tricerules/tricerules-core/src/engine/resolution/tokens.rs`

@@ -30,11 +30,11 @@
       "covers": "gives a target creature +2/+2 and indestructible until end of turn"
     },
     {
-      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
+      "test": "batch_registry::issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
       "covers": "reviewed identity, mana cost, types, effects and target group of adamant_will"
     },
     {
-      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for adamant_will"
     }
   ],

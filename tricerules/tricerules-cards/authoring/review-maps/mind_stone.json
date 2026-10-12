@@ -56,7 +56,7 @@
       "covers": "the draw ability rejects unpaid activation, sacrifices as a cost, then draws exactly one card on resolution"
     },
     {
-      "test": "deck_coverage_mind_stone::mind_stone_registers_its_colorless_mana_and_sacrifice_draw_abilities",
+      "test": "deck_registry::deck_coverage_mind_stone::mind_stone_registers_its_colorless_mana_and_sacrifice_draw_abilities",
       "covers": "exact identity, {2} artifact characteristics, Oracle line mappings, mana output, ordered activation costs and draw effect"
     }
   ],

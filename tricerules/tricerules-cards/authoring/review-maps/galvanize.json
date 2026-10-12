@@ -29,7 +29,7 @@
       "covers": "actual registered galvanize resolution and target behavior"
     },
     {
-      "test": "issue_misc33_batch::issue_misc33_registers_seven_exact_card_identities",
+      "test": "batch_registry::issue_misc33_batch::issue_misc33_registers_seven_exact_card_identities",
       "covers": "printed characteristics for galvanize"
     }
   ],

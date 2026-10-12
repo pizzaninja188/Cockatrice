@@ -25,14 +25,14 @@
 
 - **Status:** `Supported` for the unrestricted-controller artifact target and tested outcomes.
 - **Typed symbols:** `AbilityCost::Mana`, `AbilityCost::Tap`, `AbilityCost::TapPermanents`, and
-  `ObjectPaymentConstraint::ExactCount` in `tricerules/tricerules-cards/src/primitives/costs.rs`;
+  `ObjectPaymentConstraint::ExactCount` in `tricerules/tricerules-card-model/src/primitives/costs.rs`;
   `SpellEffectKind::Untap` and
-  `EffectSubject::Chosen` in `tricerules/tricerules-cards/src/primitives/effects.rs`;
-  `TargetFilter.permanent_types` in `tricerules/tricerules-cards/src/primitives/targeting.rs`.
+  `EffectSubject::Chosen` in `tricerules/tricerules-card-model/src/primitives/effects.rs`;
+  `TargetFilter.permanent_types` in `tricerules/tricerules-card-model/src/primitives/targeting.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`
   and `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`; validator:
-  `tricerules/tricerules-cards/src/primitives/abilities.rs#ActivatedAbilityDef::validate_shape`
-  and `tricerules/tricerules-cards/src/primitives/targeting.rs#TargetingDef::validate_optional`; activation and target validation:
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs#ActivatedAbilityDef::validate_shape`
+  and `tricerules/tricerules-card-model/src/primitives/targeting.rs#TargetingDef::validate_optional`; activation and target validation:
   `tricerules/tricerules-core/src/engine/casting.rs#GameEngine::activate_ability` and
   `tricerules/tricerules-core/src/engine/targeting.rs#validate_ability_targets`; consumer:
   `tricerules/tricerules-core/src/engine/resolution/misc.rs#untap`.
@@ -95,10 +95,10 @@
   - `tricerules/tricerules-cards/authoring/review-maps/clock_of_omens.json`
   - `tricerules/tricerules-cards/tests/deck_coverage_clock_of_omens.rs`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_clock_of_omens.rs`
-  - `tricerules/tricerules-cards/src/primitives/costs.rs`
-  - `tricerules/tricerules-cards/src/primitives/effects.rs`
-  - `tricerules/tricerules-cards/src/primitives/abilities.rs`
-  - `tricerules/tricerules-cards/src/primitives/targeting.rs`
+  - `tricerules/tricerules-card-model/src/primitives/costs.rs`
+  - `tricerules/tricerules-card-model/src/primitives/effects.rs`
+  - `tricerules/tricerules-card-model/src/primitives/abilities.rs`
+  - `tricerules/tricerules-card-model/src/primitives/targeting.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/casting.rs`
   - `tricerules/tricerules-core/src/engine/targeting.rs`

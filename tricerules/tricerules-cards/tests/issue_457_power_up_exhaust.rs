@@ -12,7 +12,7 @@
 //! official 2026-09-25 Comprehensive Rules), CR 702.177 (Exhaust), and CR 122.1 (counters) govern
 //! the asserted shapes.
 
-mod common;
+use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{

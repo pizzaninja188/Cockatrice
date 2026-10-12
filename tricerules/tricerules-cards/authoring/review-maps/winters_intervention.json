@@ -33,11 +33,11 @@
       "covers": "two damage is dealt to a target creature and the caster gains two life; a noncreature is not a legal target"
     },
     {
-      "test": "issue_dmg2_batch::issue_dmg2_batch_maps_definitions",
+      "test": "batch_registry::issue_dmg2_batch::issue_dmg2_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and effects of winters_intervention"
     },
     {
-      "test": "issue_dmg2_batch::issue_dmg2_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_dmg2_batch::issue_dmg2_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for winters_intervention"
     }
   ],

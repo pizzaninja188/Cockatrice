@@ -85,11 +85,11 @@
       "covers": "the self-attack trigger offers only creature targets an opponent controls, places exactly one +1/+1 counter, rejects the controller's own creatures and the source, and a stale target is revalidated away at resolution"
     },
     {
-      "test": "issue_430_direct_ron::issue_430_sunset_saboteur_maps_menace_ward_and_attack_trigger",
+      "test": "mechanic_registry::issue_430_direct_ron::issue_430_sunset_saboteur_maps_menace_ward_and_attack_trigger",
       "covers": "reviewed identity, printed P/T, the Menace keyword, Ward trigger/payment, and the controller-relative attack trigger and target group"
     },
     {
-      "test": "issue_430_direct_ron::issue_430_direct_ron_fingerprint_matches_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_430_direct_ron::issue_430_direct_ron_fingerprint_matches_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for the face"
     }
   ],

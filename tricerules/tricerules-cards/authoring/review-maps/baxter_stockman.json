@@ -42,7 +42,7 @@
       "covers": "entry Robot; beginning of own combat targets artifact creature, rejecting nonartifact; +3/+0 and first strike/vigilance expire at end of turn"
     },
     {
-      "test": "issue_misc31_batch::issue_misc31_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc31_batch::issue_misc31_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
     },
     {

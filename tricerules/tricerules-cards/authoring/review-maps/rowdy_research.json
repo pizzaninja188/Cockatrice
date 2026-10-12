@@ -36,11 +36,11 @@
       "covers": "the cost is reduced by one per declared attacker and the spell draws three cards"
     },
     {
-      "test": "issue_misc13_batch::issue_misc13_batch_maps_definitions",
+      "test": "batch_registry::issue_misc13_batch::issue_misc13_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, per-attacker generic reduction, and draw three of Rowdy Research"
     },
     {
-      "test": "issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Rowdy Research"
     }
   ],

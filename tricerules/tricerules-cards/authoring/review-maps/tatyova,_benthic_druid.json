@@ -32,11 +32,11 @@
       "covers": "a land entering under the controller's control gains one life and draws a card; a nonland permanent entering does not trigger it"
     },
     {
-      "test": "issue_look_batch::issue_look_batch_maps_definitions",
+      "test": "batch_registry::issue_look_batch::issue_look_batch_maps_definitions",
       "covers": "reviewed identity, characteristics, trigger and effects of Tatyova, Benthic Druid"
     },
     {
-      "test": "issue_look_batch::issue_look_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_look_batch::issue_look_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Tatyova, Benthic Druid"
     }
   ],

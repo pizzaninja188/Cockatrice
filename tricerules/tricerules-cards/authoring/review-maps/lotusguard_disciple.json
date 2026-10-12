@@ -45,11 +45,11 @@
       "covers": "the entry trigger grants lifelink and indestructible to a chosen creature or Vehicle"
     },
     {
-      "test": "issue_misc20_batch::issue_misc20_batch_maps_definitions",
+      "test": "batch_registry::issue_misc20_batch::issue_misc20_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flying, the two-branch two-keyword grant, and its targeting of Lotusguard Disciple"
     },
     {
-      "test": "issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Lotusguard Disciple"
     }
   ],

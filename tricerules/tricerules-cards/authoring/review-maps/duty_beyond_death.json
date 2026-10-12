@@ -41,11 +41,11 @@
       "covers": "sacrificing a creature pays the additional cost; every creature the caster controls gains indestructible until end of turn and one +1/+1 counter; an opponent's creature receives neither"
     },
     {
-      "test": "issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
+      "test": "mechanic_registry::issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
       "covers": "reviewed identity, cost, types, cast-cost group and mass keyword/counter effects of Duty Beyond Death"
     },
     {
-      "test": "issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Duty Beyond Death"
     }
   ],

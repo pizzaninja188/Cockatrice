@@ -14,7 +14,7 @@
   ],
   "semantic_fixtures": [
     {
-      "test": "deck_coverage_commander_mana::arcane_signet_and_command_tower_use_only_the_commanders_declared_identity",
+      "test": "deck_registry::deck_coverage_commander_mana::arcane_signet_and_command_tower_use_only_the_commanders_declared_identity",
       "covers": "exact typed definition and dynamic commander-identity mana primitive"
     },
     {

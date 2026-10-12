@@ -45,11 +45,11 @@
       "covers": "the sacrifice alternative and the {3}{B} alternative each pay the announced additional cost; the spell exiles a target creature or planeswalker; neither alternative can be omitted"
     },
     {
-      "test": "issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
+      "test": "mechanic_registry::issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
       "covers": "reviewed identity, cost, types, cast-cost group options and target group of Eaten Alive"
     },
     {
-      "test": "issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Eaten Alive"
     }
   ],

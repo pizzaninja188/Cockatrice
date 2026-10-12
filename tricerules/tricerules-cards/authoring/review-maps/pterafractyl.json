@@ -52,11 +52,11 @@
       "covers": "casting with X=2 enters with two +1/+1 counters (3/2 from a 1/0 base) and gains 2 life"
     },
     {
-      "test": "issue_misc13_batch::issue_misc13_batch_maps_definitions",
+      "test": "batch_registry::issue_misc13_batch::issue_misc13_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flying, enters-with-X-counters, and the entry life trigger of Pterafractyl"
     },
     {
-      "test": "issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Pterafractyl"
     }
   ],

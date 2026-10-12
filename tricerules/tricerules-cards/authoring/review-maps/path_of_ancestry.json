@@ -41,7 +41,7 @@
   "tokens": [],
   "semantic_fixtures": [
     {
-      "test": "deck_coverage_commander_mana::path_of_ancestry_maps_as_a_complete_handwritten_commander_mana_definition",
+      "test": "deck_registry::deck_coverage_commander_mana::path_of_ancestry_maps_as_a_complete_handwritten_commander_mana_definition",
       "covers": "the exact Path of Ancestry land, enters-tapped ability, tap-for-commander-identity mana, and its spending rider"
     },
     {

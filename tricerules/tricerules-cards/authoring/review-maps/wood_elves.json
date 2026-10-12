@@ -28,11 +28,11 @@
       "covers": "the entry search offers a Forest but not an Island and puts the chosen Forest onto the battlefield"
     },
     {
-      "test": "issue_misc20_batch::issue_misc20_batch_maps_definitions",
+      "test": "batch_registry::issue_misc20_batch::issue_misc20_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, and the Forest entry search onto the battlefield of Wood Elves"
     },
     {
-      "test": "issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Wood Elves"
     }
   ],

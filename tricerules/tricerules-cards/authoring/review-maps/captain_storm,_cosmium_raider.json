@@ -33,11 +33,11 @@
       "covers": "an artifact the controller controls entering puts a +1/+1 counter on a target Pirate they control; a nonartifact does not trigger and an opponent creature is not a legal target"
     },
     {
-      "test": "issue_misc5_batch::issue_misc5_batch_maps_definitions",
+      "test": "batch_registry::issue_misc5_batch::issue_misc5_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of captain_storm,_cosmium_raider"
     },
     {
-      "test": "issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for captain_storm,_cosmium_raider"
     }
   ],

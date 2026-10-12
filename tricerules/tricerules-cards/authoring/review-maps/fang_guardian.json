@@ -45,11 +45,11 @@
       "covers": "the entry trigger gives another target creature or Vehicle you control +2/+2, and the Guardian cannot target itself"
     },
     {
-      "test": "issue_misc20_batch::issue_misc20_batch_maps_definitions",
+      "test": "batch_registry::issue_misc20_batch::issue_misc20_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flash, the two-branch +2/+2 pump, and its targeting of Fang Guardian"
     },
     {
-      "test": "issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Fang Guardian"
     }
   ],

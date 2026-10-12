@@ -46,11 +46,11 @@
       "covers": "entering creates one 1/1 colorless Hero creature token"
     },
     {
-      "test": "issue_misc18_batch::issue_misc18_batch_maps_definitions",
+      "test": "batch_registry::issue_misc18_batch::issue_misc18_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the entry Hero token, and Crew 1 of Magitek Armor"
     },
     {
-      "test": "issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Magitek Armor"
     }
   ],

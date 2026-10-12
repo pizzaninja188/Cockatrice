@@ -28,11 +28,11 @@
       "covers": "another creature the controller controls entering puts a +1/+1 counter on that creature; the source and noncreatures are excluded"
     },
     {
-      "test": "issue_misc7_batch::issue_misc7_batch_maps_definitions",
+      "test": "batch_registry::issue_misc7_batch::issue_misc7_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc7_good_fortune_unicorn_counters_an_entering_creature"
     },
     {
-      "test": "issue_misc7_batch::issue_misc7_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc7_batch::issue_misc7_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc7_good_fortune_unicorn_counters_an_entering_creature"
     }
   ],

@@ -78,7 +78,7 @@
       "covers": "refresh recounts live legends and sanitizes excess payment"
     },
     {
-      "test": "deck_coverage_boseiju::boseiju_exact_identity_maps_printed_mana_and_complete_channel",
+      "test": "deck_registry::deck_coverage_boseiju::boseiju_exact_identity_maps_printed_mana_and_complete_channel",
       "covers": "Exact identity, complete printed mana and Channel clauses, costs, derived legendary-creature count, target and search qualifications, and Oracle presentation."
     }
   ],

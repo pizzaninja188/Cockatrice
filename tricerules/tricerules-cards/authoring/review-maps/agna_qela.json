@@ -48,11 +48,11 @@
       "covers": "the land enters tapped without a basic land and untapped with one, then the {2}{U} loot draws and privately discards"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_maps_definitions",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, conditional enters-tapped replacement, mana ability, and loot ability of Agna Qel'a"
     },
     {
-      "test": "issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Agna Qel'a"
     }
   ],

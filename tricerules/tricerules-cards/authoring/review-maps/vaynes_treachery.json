@@ -46,11 +46,11 @@
       "covers": "an unkicked cast gives -2/-2; the kicked cast sacrifices an artifact or creature and gives -6/-6"
     },
     {
-      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "test": "batch_registry::issue_misc16_batch::issue_misc16_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the kicker sacrifice cast-cost group, the base and conditional pumps, and the shared target of Vayne's Treachery"
     },
     {
-      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Vayne's Treachery"
     }
   ],

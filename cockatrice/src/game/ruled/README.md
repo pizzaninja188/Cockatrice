@@ -86,8 +86,8 @@ replies, and allows one submission after an authoritative complete preview. Spel
 engine transaction without accepting a client-supplied total. `RuledPaymentUi` adapts that model
 to spell casts, activated abilities, permanent actions, and parked resolution payments. It owns
 object highlights, mana contribution clicks, engine cancellation, and nested suspension around
-mana abilities. Previews never tap cards or spend mana. See
-[Waterbend acceptance](../../../../docs/ISSUE-146-WATERBEND.md).
+mana abilities. Previews never tap cards or spend mana. Historical Waterbend acceptance
+[is recorded on issue #146](https://github.com/pizzaninja188/Cockatrice/issues/146#issuecomment-5458728218).
 
 `ruled_payment_progression.cpp` implements the same `RuledPaymentUi` bridge's cast/activation
 entry and face/cast-method selection, initialization, cost-group progression, cost-object clicks,
@@ -248,9 +248,8 @@ widget is never shown. Qt module additions for tests go in `cmake/FindQtRuntime.
 
 `ruled_autopilot.{h,cpp}` — `RuledAutopilot`. Not part of the view model: it is the client half of
 `scripts/launch-ruled-game.ps1`, which brings up sidecar + servatrice + two clients already sitting
-in a started ruled game. Manual verification is the only check the ruled UI has (there is
-deliberately no GUI click automation — see the roadmap's "Do NOT do"), so the pre-game ceremony
-being ten clicks every time was the thing making manual runs rare.
+in a started ruled game. GUI acceptance remains separate from automated tests; the launcher
+removes repeated pre-game setup before checking the real interaction paths.
 
 Off unless `--autopilot host|join` is passed; a normally-launched client never constructs one.
 
@@ -282,7 +281,7 @@ without editing a deck file, playing lands, or passing turns.
 
 Off unless `--dev-console` is passed, and only built for a ruled non-replay game. **That gate is
 cosmetic.** The enforcing one is engine-side (`tricerules-core/src/engine/dev.rs`), because a
-client is never trusted; see the roadmap's dev-loop backlog entry for both halves.
+client is never trusted; both gates must be enabled before dev commands are accepted.
 
 Split in two on purpose:
 
@@ -316,7 +315,8 @@ Three grammar rules worth knowing before extending it:
 
 Adding a primitive is a proto arm, a `parse` case, and an engine handler — no new UI.
 
-Public reveals use the shared contract documented in [the reveal audit](../../../../docs/REVEAL-AUDIT.md). Private look/search choices never publish public reveal metadata.
+Public reveals use the [architecture contract](../../../../docs/ARCHITECTURE.md#public-reveal-contract).
+Private look/search choices never publish public reveal metadata.
 
 Optional choices use engine-authored bounds or decline flags. `Decline` submits an empty
 resolution answer or removes the active optional cast-cost group's staged payments;
@@ -332,3 +332,84 @@ opening labels or counts button clicks. Seat buttons use the published player ID
 continues to use `HAND_ACTION_OPENING_BOTTOM` and the existing acknowledged command sequence.
 Waiting seats receive no actionable permissions. The relay retains opening snapshots for
 reconnect and clears them when opening ends; session reset clears the client mirror.
+
+## Acceptance carried forward from retired reports
+
+These are retained limits and repeatable checks, not new acceptance claims or a request to run
+every historical check on each task. Issue delivery comments preserve dated results. Only the
+applicable changed interaction needs new acceptance; use the game guidance for execution.
+
+- Convoke (#145), Earthbend (#150), counter/Wither work (#157), and token copies (#46) have
+  agent-operated GUI results on their closed issues; these do not establish human acceptance.
+- Waterbend [#146](https://github.com/pizzaninja188/Cockatrice/issues/146#issuecomment-5458728218)
+  did not complete desktop combat-timing or live zone-change stale-selection checks. A pre-existing
+  freeform hidden-stack observation was outside that delivery; a clean general freeform-stack pass
+  was not claimed. Token-copy #46 did not exercise separate freeform or missing-image fallback.
+- Historical card deferrals to #155/#159 must not be treated as current blockers: both issues are
+  now closed. Check current code and tracker for those cards rather than copying old report status.
+- Blight's full six-card desktop checklist remains recommended beyond its focused performed checks.
+- Colorstorm Stallion/double-faced token copies and registered-seat reconnect were not manually
+  accepted in #237. Public reveal acceptance was explicitly deferred. Architecture fixtures did not
+  establish visible acceptance of draw-replacement/private-discard consumers.
+
+### Public reveals — deferred
+
+Start two clients with `scripts/launch-ruled-game.ps1 -Dev`.
+
+1. Behold a hand card with Elven Passage. Both clients should see the same named card; close the
+   window on one client and confirm it remains on the other.
+2. Put Spyglass Siren onto the battlefield, resolve its trigger, and use the Map on a creature.
+   Use a Forest-only deck for this case so the top card is a land. Both clients should
+   see the land window after it moves to hand, with no extra decision or counter.
+3. Repeat in a game with a Storm Crow-only deck for a nonland top card. There should be one
+   public window per client. Only its controller can choose graveyard or top; after confirming,
+   both windows remain read-only and closeable.
+4. Leave that completed window open during a second public choice. Clicking an old image must
+   not select a candidate in the new choice. Reveal the same card again and check that it is a
+   distinct occurrence; ordinary priority updates must not duplicate either window.
+5. Resolve Mystical Tutor and Commune with Nature. Only the actually revealed card becomes
+   public; the rest of the library/look remains private. Check source labels and retained images
+   after movement/shuffling. Check Gifts Ungiven's split from both seats.
+6. Leave a cast-cost/Ninjutsu reveal active while resolving another reveal; neither window should
+   overwrite the other. Rejoin during the active reveal, then let its source leave the stack and
+   confirm that the restored window becomes a dismissible snapshot.
+
+### Colorstorm Stallion and double-faced copies — not performed
+
+In two ruled dev clients, reach a main phase and use the active player's dev console:
+
+```text
+put bf Colorstorm Stallion ready
+put hand Tidings
+mana UUUUU
+```
+
+1. Cast Tidings and resolve only Opus. Both boards should show the original at 4/4 and one
+   distinct 3/3 token while Tidings remains on the stack. Inspect haste, ward, and Opus on the
+   copy. Resolve Tidings. A later five-mana spell should trigger both Stallions independently.
+2. Put Reckless Waif on the battlefield and Cackling Counterpart in hand; add `UUU`, cast
+   Counterpart targeting Waif, and resolve. Remove the original with the dev command or a
+   spell. After a turn with no spells, resolve the token's upkeep trigger. Both clients should
+   show Merciless Predator at 3/2 with its back-face ability and no duplicate token.
+3. Reconnect a registered seat. Verify the transformed token's face, base/effective P/T,
+   abilities, and count match the other client. Bounce the token with Unsummon; it should
+   disappear on both boards and never remain in hand.
+
+### Blight — remaining recommended matrix
+
+Start two dev clients with seed 153 and arrange the named cards/mana.
+
+- With a ready Gristle Glutton, a tapped/newly controlled Grizzly Bears, and Tatterkite, activate Glutton. The prompt must say “Blight 1”; Bears is selectable, Tatterkite is not. Cancel once: neither seat should see a committed tap or counter. Repeat and confirm: both seats see the source tap and Bears become 1/1. Only the controller chooses a discard; one card is drawn after an actual discard.
+- Cast Cinder Strike, first skipping Blight, then paying it. Confirm 2 versus 4 damage. The Blight creature picker must not become a target-selection prompt or offer hand cards. Wild Unraveling must require exactly one of Blight 2 or the additional {1}.
+- Resolve Dream Seizer with the 1/1 Bears available. Choose Blight, select Bears, and leave the opponent's discard prompt open. Both clients must still show the same Bears on the battlefield. Only the opponent sees discard candidates. Complete discard: that exact Bears moves to its owner's graveyard on both clients.
+- Resolve both Blighted Blackthorn's entry and attack triggers. Paying Blight 2 draws one card and loses one life; declining does neither. A tapped attacker can be chosen to receive the counters.
+- Resolve Chaos Spewer. Choosing Blight must require one eligible creature when available. Cancelling the {2} payment returns to the required choice. If the source has left before resolution and no eligible creature remains, choosing Blight completes without demanding mana or leaving a stuck prompt.
+- Check a fresh freeform game: ordinary card movement and activation menus retain their existing behavior.
+
+### Draw replacement and simultaneous discard — not established by architecture fixtures
+
+For affected consumers, check threshold/one-versus-all library choices; zero/partial/full
+discard with count-only announcements and private identities; Abundance's public revealed prefix
+with private bottom ordering; Tomorrow's private selection; reconnect at pending stages;
+source/drawer/controller concession; exact physical movement and effect tail once. These steps
+are retained from the architecture delivery; later card-level evidence must be checked separately.

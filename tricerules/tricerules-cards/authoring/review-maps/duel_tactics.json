@@ -41,7 +41,7 @@
       "covers": "one damage and cant-block on one target plus graveyard flashback exile"
     },
     {
-      "test": "issue_misc44_batch::issue_misc44_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc44_batch::issue_misc44_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost and type line"
     }
   ],

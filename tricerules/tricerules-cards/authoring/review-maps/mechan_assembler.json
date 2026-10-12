@@ -11,7 +11,7 @@
   "tokens": ["robot_c_2_2"],
   "semantic_fixtures": [
     { "test": "scenario issue_misc25_batch::issue_misc25_mechan_assembler_excludes_itself_and_caps_artifact_entries", "covers": "its own entry produces nothing; another artifact entry makes one Robot; further artifact and Robot entries in that turn make no extra tokens" },
-    { "test": "issue_misc25_batch::issue_misc25_batch_registers_five_exact_oracle_identities", "covers": "printed Robot Artificer identity, cost and power/toughness" }
+    { "test": "batch_registry::issue_misc25_batch::issue_misc25_batch_registers_five_exact_oracle_identities", "covers": "printed Robot Artificer identity, cost and power/toughness" }
   ],
   "complete_definition_review_confirmed": true
 }

@@ -92,11 +92,11 @@
       "covers": "each mode alone and both together; all five outlaw subtypes including Changeling are damaged exactly once, non-outlaws and noncreatures are excluded by the matching mode, both players are covered, and only linked additional costs are paid"
     },
     {
-      "test": "issue_359_direct_ron_batch3::issue_359_caught_in_the_crossfire_maps_both_printed_clauses",
+      "test": "mechanic_registry::issue_359_direct_ron_batch3::issue_359_caught_in_the_crossfire_maps_both_printed_clauses",
       "covers": "registered identity, face, mana cost, type and color; Spree options and links; targetless DamageAll definitions and exact outlaw subtype union/complement"
     },
     {
-      "test": "issue_359_direct_ron_batch3::issue_359_caught_in_the_crossfire_fingerprint_matches_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_359_direct_ron_batch3::issue_359_caught_in_the_crossfire_fingerprint_matches_the_pinned_oracle_text",
       "covers": "the generated normalized Oracle fingerprint for this pinned identity"
     }
   ],

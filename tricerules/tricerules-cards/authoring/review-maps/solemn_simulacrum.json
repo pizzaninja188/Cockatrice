@@ -56,7 +56,7 @@
       "covers": "declining the ETB search neither changes the library nor shuffles, and declining the dies branch does not draw"
     },
     {
-      "test": "deck_coverage_solemn_simulacrum::solemn_simulacrum_registers_both_optional_triggered_abilities",
+      "test": "deck_registry::deck_coverage_solemn_simulacrum::solemn_simulacrum_registers_both_optional_triggered_abilities",
       "covers": "exact identity, characteristics, both triggers, basic-land filter, tapped destination, shuffle, controller draw, and Oracle-line mappings"
     }
   ],

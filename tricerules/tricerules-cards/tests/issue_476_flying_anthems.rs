@@ -5,7 +5,7 @@
 //! investigating. Empyrean Eagle's ruling confirms damage remains marked if it leaves. CR 613.1f
 //! and 613.1g place current keyword abilities before layer-7 power/toughness modification.
 
-mod common;
+use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{

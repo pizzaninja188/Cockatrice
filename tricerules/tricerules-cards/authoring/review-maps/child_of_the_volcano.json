@@ -44,11 +44,11 @@
       "covers": "a permanent card put into the graveyard this turn makes the end-step intervening-if hold and add a +1/+1 counter, while no descent adds none"
     },
     {
-      "test": "issue_misc14_batch::issue_misc14_batch_maps_definitions",
+      "test": "batch_registry::issue_misc14_batch::issue_misc14_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Trample, and the descend end-step counter trigger of Child of the Volcano"
     },
     {
-      "test": "issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Child of the Volcano"
     }
   ],

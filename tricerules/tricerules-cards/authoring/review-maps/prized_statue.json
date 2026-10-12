@@ -37,7 +37,7 @@
       "covers": "casting Prized Statue creates one Treasure; destroying the artifact and putting it into a graveyard creates one more; the controller receives both"
     },
     {
-      "test": "deck_coverage_prized_statue::prized_statue_registers_its_entry_and_graveyard_triggers",
+      "test": "deck_registry::deck_coverage_prized_statue::prized_statue_registers_its_entry_and_graveyard_triggers",
       "covers": "exact identity, two trigger events presented from the same Oracle line, and one controller Treasure token from each event"
     }
   ],

@@ -24,11 +24,11 @@
       "covers": "the caster draws a number of cards equal to the announced X"
     },
     {
-      "test": "issue_misc2_batch::issue_misc2_batch_maps_definitions",
+      "test": "batch_registry::issue_misc2_batch::issue_misc2_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and effects of mind_spring"
     },
     {
-      "test": "issue_misc2_batch::issue_misc2_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc2_batch::issue_misc2_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for mind_spring"
     }
   ],

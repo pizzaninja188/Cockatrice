@@ -10,12 +10,8 @@ This directory documents bounded, reusable rules patterns that card authors can 
 preflighting a complete card. An entry describes reviewed evidence and its limits. It is not a
 rules source, generator input, registry, or substitute for reviewing the full card.
 
-Phase 2 seeded ten entries from shipped card definitions, review maps, engine paths, and semantic
-scenario assertions. The pilot added source-counter-scaled mana after Astral Cornucopia and life-paid
-modal land entry after two MH3 cards. All three pilot batches completed on 2026-09-27; the
-[pilot protocol](PILOT.md) records the baseline and comparison, including its limits. Entries remain
-lookup aids, not pilot measurements or proof of support for a new card. Measurement records stay
-outside the catalogue. The template below is not evidence and must not be counted as catalog content.
+Entries are optional evidence-finding aids. Completed lookup experiments are preserved in Git
+history; they impose no workflow, measurement or catalogue-maintenance steps.
 
 ## Keep three questions separate
 
@@ -92,12 +88,8 @@ authoritative for their respective content; the index points to them instead of 
 | [Single library search result to battlefield](entries/single-library-search-to-battlefield.md) | Library search | Rampant Growth and Farseek put one filtered result onto the battlefield tapped and shuffle; multiple results or split destinations are outside the evidence. |
 | [Modal land face with life-paid untapped entry](entries/modal-land-life-paid-entry.md) | Battlefield-entry replacement | Both named MH3 back faces may pay 3 life to avoid entering tapped; direct-RON definitions and exact life/color outcomes are tested. |
 
-The ten Phase 2 entries inspect the cited RON, review-map, test, and engine source at their recorded
-revisions; those tests were inspected, not run during that documentation work. The two entries
-added during the pilot record separate card evidence and tests for Astral Cornucopia and the two
-named MH3 cards. No manual client acceptance is claimed for any entry. Whole-card readiness remains
-unassessed for the ten Phase 2 entries. The completed pilot did not produce comparable lookup-time
-measurements; see [PILOT.md](PILOT.md) for the results and limits.
+Entries describe inspected evidence at their recorded revisions; no new test execution or manual
+acceptance is implied. Check the actual linked definitions and tests before relying on a claim.
 
 ## Catalogue boundary
 
@@ -128,7 +120,7 @@ Add an entry only when repeated real authoring work demonstrates that the refere
 a useful shortcut. A lookup miss or a newly supported mechanic alone does not require one. Do not
 try to catalogue every mechanic or create an entry for each card. An outside-
 deck card may help validate related semantics, but it does not expand the selected campaign or admit
-that card. Keep pilot measurement records outside this catalogue as directed in [PILOT.md](PILOT.md).
+that card. Keep experiment measurements outside this catalogue.
 
 ## Optional source-only checker
 

@@ -36,7 +36,7 @@
       "covers": "target creature destroyed, its controller receives Inkling; legal indestructible and illegal target cases"
     },
     {
-      "test": "issue_misc37_batch::issue_misc37_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc37_batch::issue_misc37_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost, type line, absent numeric characteristics"
     }
   ],

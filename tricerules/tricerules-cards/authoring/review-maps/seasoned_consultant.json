@@ -28,11 +28,11 @@
       "covers": "attacking with three or more creatures pumps the Consultant +2/+0; two attackers do not"
     },
     {
-      "test": "issue_misc9_batch::issue_misc9_batch_maps_definitions",
+      "test": "batch_registry::issue_misc9_batch::issue_misc9_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc9_seasoned_consultant_pumps_when_three_attack"
     },
     {
-      "test": "issue_misc9_batch::issue_misc9_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc9_batch::issue_misc9_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc9_seasoned_consultant_pumps_when_three_attack"
     }
   ],

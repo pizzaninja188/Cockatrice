@@ -36,11 +36,11 @@
       "covers": "attacking creatures get +2/+0 and the card can be flashback-cast from the graveyard, then is exiled"
     },
     {
-      "test": "issue_misc13_batch::issue_misc13_batch_maps_definitions",
+      "test": "batch_registry::issue_misc13_batch::issue_misc13_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, attacking-creature pump, and the flashback alternative cost of Auron's Inspiration"
     },
     {
-      "test": "issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Auron's Inspiration"
     }
   ],

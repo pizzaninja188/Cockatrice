@@ -21,11 +21,11 @@
 
 - **Status:** `Supported` for Lotus Petal's five one-mana color choices.
 - **Typed symbols:** `AbilityCost::Tap` and `AbilityCost::SacrificeSelf` in
-  `tricerules/tricerules-cards/src/primitives/costs.rs`; `SpellEffectKind::ProduceMana` and
-  `ManaAmount` in `tricerules/tricerules-cards/src/primitives/effects.rs`.
+  `tricerules/tricerules-card-model/src/primitives/costs.rs`; `SpellEffectKind::ProduceMana` and
+  `ManaAmount` in `tricerules/tricerules-card-model/src/primitives/effects.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`
   and `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`; validator:
-  `tricerules/tricerules-cards/src/primitives/abilities.rs#ActivatedAbilityDef::validate_shape`;
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs#ActivatedAbilityDef::validate_shape`;
   engine consumer: `tricerules/tricerules-core/src/engine/casting.rs#GameEngine::activate_ability`
   and `tricerules/tricerules-core/src/engine/resolution/misc.rs#produce_mana`.
 - **Evidence and limits:** The semantic fixture iterates over all five options and asserts the
@@ -65,9 +65,9 @@
   - `tricerules/tricerules-cards/data/lotus_petal.ron`
   - `tricerules/tricerules-cards/authoring/review-maps/lotus_petal.json`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_lotus_petal.rs`
-  - `tricerules/tricerules-cards/src/primitives/costs.rs`
-  - `tricerules/tricerules-cards/src/primitives/effects.rs`
-  - `tricerules/tricerules-cards/src/primitives/abilities.rs`
+  - `tricerules/tricerules-card-model/src/primitives/costs.rs`
+  - `tricerules/tricerules-card-model/src/primitives/effects.rs`
+  - `tricerules/tricerules-card-model/src/primitives/abilities.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/casting.rs`
   - `tricerules/tricerules-core/src/engine/resolution/misc.rs`

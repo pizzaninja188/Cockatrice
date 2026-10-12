@@ -40,11 +40,11 @@
       "covers": "another creature you control entering makes the Sharpshooter deal 1 damage to a target opponent; the Sharpshooter has reach"
     },
     {
-      "test": "issue_misc23_batch::issue_misc23_batch_maps_definitions",
+      "test": "batch_registry::issue_misc23_batch::issue_misc23_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Reach, the creature entry watcher, and the 1 damage to a target opponent of Shocking Sharpshooter"
     },
     {
-      "test": "issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Shocking Sharpshooter"
     }
   ],

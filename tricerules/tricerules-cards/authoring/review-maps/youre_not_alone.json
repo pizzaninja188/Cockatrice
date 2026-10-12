@@ -29,7 +29,7 @@
       "covers": "two versus three own creatures at resolution; +2/+2 versus +4/+4 instead"
     },
     {
-      "test": "issue_misc39_batch::issue_misc39_registers_six_exact_card_identities",
+      "test": "batch_registry::issue_misc39_batch::issue_misc39_registers_six_exact_card_identities",
       "covers": "printed identity, layout, mana cost, type line and absent numeric characteristics"
     }
   ],

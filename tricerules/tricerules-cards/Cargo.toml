@@ -3,6 +3,7 @@ name = "tricerules-cards"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
+autotests = false
 
 [dependencies]
 tricerules-card-model = { path = "../tricerules-card-model" }
@@ -41,3 +42,23 @@ required-features = ["checklist"]
 name = "gen-cards"
 path = "src/bin/gen_cards.rs"
 required-features = ["gencards"]
+
+[[test]]
+name = "batch_registry"
+path = "tests/suites/batch_registry.rs"
+
+[[test]]
+name = "deck_registry"
+path = "tests/suites/deck_registry.rs"
+
+[[test]]
+name = "generated_registry"
+path = "tests/suites/generated_registry.rs"
+
+[[test]]
+name = "mechanic_registry"
+path = "tests/suites/mechanic_registry.rs"
+
+[[test]]
+name = "standard_registry"
+path = "tests/suites/standard_registry.rs"

@@ -22,7 +22,7 @@
       "covers": "private basic-land-only search excludes nonbasic Taiga, moves the chosen basic to the battlefield tapped, and shuffles"
     },
     {
-      "test": "deck_coverage_search_lands::rampant_growth_searches_for_a_basic_land_and_enters_tapped",
+      "test": "deck_registry::deck_coverage_search_lands::rampant_growth_searches_for_a_basic_land_and_enters_tapped",
       "covers": "exact printed identity and typed basic-land filter, destination, and search defaults"
     }
   ],

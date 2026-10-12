@@ -39,7 +39,7 @@
       "covers": "same target player draws two then loses two; optional any creature receives counter"
     },
     {
-      "test": "issue_misc40_batch::issue_misc40_registers_six_exact_card_identities",
+      "test": "batch_registry::issue_misc40_batch::issue_misc40_registers_six_exact_card_identities",
       "covers": "printed identity, layout, mana cost and type line"
     }
   ],

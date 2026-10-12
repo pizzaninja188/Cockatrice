@@ -29,11 +29,11 @@
       "covers": "a target creature or Vehicle returns to its owner's hand while other permanents are not legal targets"
     },
     {
-      "test": "issue_misc2_batch::issue_misc2_batch_maps_definitions",
+      "test": "batch_registry::issue_misc2_batch::issue_misc2_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and effects of bounce_off"
     },
     {
-      "test": "issue_misc2_batch::issue_misc2_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc2_batch::issue_misc2_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for bounce_off"
     }
   ],

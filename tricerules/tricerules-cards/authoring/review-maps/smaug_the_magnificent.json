@@ -47,7 +47,7 @@
       "covers": "attack trigger targets any target and uses live Treasure count; upkeep creates one Treasure"
     },
     {
-      "test": "issue_misc31_batch::issue_misc31_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc31_batch::issue_misc31_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
     }
   ],

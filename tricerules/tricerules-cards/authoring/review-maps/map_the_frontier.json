@@ -24,7 +24,7 @@
       "covers": "up-to-two private search, basic-or-Desert filter, illegal exclusion, tapped battlefield entry, and shuffle continuation"
     },
     {
-      "test": "issue_misc45_batch::issue_misc45_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc45_batch::issue_misc45_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost and type line"
     }
   ],

@@ -70,7 +70,7 @@
       "covers": "an untapped artifact is a legal target and remains untapped after resolution"
     },
     {
-      "test": "deck_coverage_clock_of_omens::clock_of_omens_registers_its_complete_artifact_untap_ability",
+      "test": "deck_registry::deck_coverage_clock_of_omens::clock_of_omens_registers_its_complete_artifact_untap_ability",
       "covers": "single artifact face, four-mana printed cost, exact two-artifact controlled tap cost including its source, Oracle line presentation, and unrestricted artifact target definition"
     }
   ],

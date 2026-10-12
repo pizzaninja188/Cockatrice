@@ -1,0 +1,202 @@
+{
+  "tables": {
+    "## Result": [
+      [
+        "Fully implementable now",
+        "146",
+        "40.6%"
+      ],
+      [
+        "Partially implementable now",
+        "136",
+        "37.8%"
+      ],
+      [
+        "Full or partial",
+        "282",
+        "78.3%"
+      ],
+      [
+        "Blocked",
+        "78",
+        "21.7%"
+      ],
+      [
+        "Total",
+        "360",
+        "100.0%"
+      ]
+    ],
+    "By stratum:": [
+      [
+        "BRO-common",
+        "16",
+        "10",
+        "4",
+        "30"
+      ],
+      [
+        "BRO-uncommon",
+        "6",
+        "14",
+        "10",
+        "30"
+      ],
+      [
+        "WOE-common",
+        "15",
+        "9",
+        "6",
+        "30"
+      ],
+      [
+        "WOE-uncommon",
+        "11",
+        "12",
+        "7",
+        "30"
+      ],
+      [
+        "LCI-common",
+        "18",
+        "8",
+        "4",
+        "30"
+      ],
+      [
+        "LCI-uncommon",
+        "9",
+        "13",
+        "8",
+        "30"
+      ],
+      [
+        "MKM-common",
+        "19",
+        "8",
+        "3",
+        "30"
+      ],
+      [
+        "MKM-uncommon",
+        "10",
+        "13",
+        "7",
+        "30"
+      ],
+      [
+        "OTJ-common",
+        "15",
+        "11",
+        "4",
+        "30"
+      ],
+      [
+        "OTJ-uncommon",
+        "3",
+        "15",
+        "12",
+        "30"
+      ],
+      [
+        "BLB-common",
+        "17",
+        "9",
+        "4",
+        "30"
+      ],
+      [
+        "BLB-uncommon",
+        "7",
+        "14",
+        "9",
+        "30"
+      ]
+    ],
+    "The normalized capability gaps are:": [
+      [
+        "zone-aware target and cohort characteristic predicates",
+        "21",
+        "11",
+        "[#176](https://github.com/pizzaninja188/Cockatrice/issues/176)"
+      ],
+      [
+        "filtered and batched permanent event observers",
+        "14",
+        "10",
+        "[#168](https://github.com/pizzaninja188/Cockatrice/issues/168)"
+      ],
+      [
+        "reusable public quantity expressions for counts, scaling, and source power",
+        "20",
+        "9",
+        "[#165](https://github.com/pizzaninja188/Cockatrice/issues/165)"
+      ],
+      [
+        "composable blocker restrictions and conditional evasion",
+        "5",
+        "5",
+        "[#174](https://github.com/pizzaninja188/Cockatrice/issues/174)"
+      ],
+      [
+        "committed graveyard-entry and sacrifice turn facts",
+        "6",
+        "3",
+        "[#167](https://github.com/pizzaninja188/Cockatrice/issues/167)"
+      ],
+      [
+        "Expend thresholds from actual mana spent casting spells",
+        "3",
+        "3",
+        "[#172](https://github.com/pizzaninja188/Cockatrice/issues/172)"
+      ],
+      [
+        "committed Crime events and turn predicates",
+        "7",
+        "2",
+        "[#171](https://github.com/pizzaninja188/Cockatrice/issues/171)"
+      ],
+      [
+        "actor-aware tap events and grouped tap triggers",
+        "3",
+        "2",
+        "[#169](https://github.com/pizzaninja188/Cockatrice/issues/169)"
+      ],
+      [
+        "life-gain and life-loss turn history",
+        "3",
+        "2",
+        "[#170](https://github.com/pizzaninja188/Cockatrice/issues/170)"
+      ],
+      [
+        "automatic cast-completion condition snapshots",
+        "2",
+        "2",
+        "[#173](https://github.com/pizzaninja188/Cockatrice/issues/173)"
+      ],
+      [
+        "continuous prohibitions on gaining life",
+        "1",
+        "1",
+        "[#175](https://github.com/pizzaninja188/Cockatrice/issues/175)"
+      ],
+      [
+        "per-turn trigger limits with stable ability identity",
+        "6",
+        "0",
+        "[#164](https://github.com/pizzaninja188/Cockatrice/issues/164)"
+      ],
+      [
+        "filtered spell-cast facts and cast-origin history",
+        "6",
+        "0",
+        "[#166](https://github.com/pizzaninja188/Cockatrice/issues/166)"
+      ]
+    ]
+  },
+  "new_capability_summary": [
+    89,
+    56,
+    50
+  ]
+}

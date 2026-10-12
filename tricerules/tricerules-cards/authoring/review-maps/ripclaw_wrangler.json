@@ -44,11 +44,11 @@
       "covers": "the entry trigger makes each opponent privately discard a card in APNAP order"
     },
     {
-      "test": "issue_misc12_batch::issue_misc12_batch_maps_definitions",
+      "test": "batch_registry::issue_misc12_batch::issue_misc12_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, untargeted entry discard trigger, and Crew 2 of Ripclaw Wrangler"
     },
     {
-      "test": "issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Ripclaw Wrangler"
     }
   ],

@@ -33,11 +33,11 @@
       "covers": "the entry trigger puts one +1/+1 counter on a target creature and gains one life; if the target is illegal at resolution the trigger does not resolve and no life is gained"
     },
     {
-      "test": "issue_etb_batch::issue_etb_batch_maps_definitions",
+      "test": "batch_registry::issue_etb_batch::issue_etb_batch_maps_definitions",
       "covers": "reviewed identity, characteristics, trigger and effects of sunshower_druid"
     },
     {
-      "test": "issue_etb_batch::issue_etb_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_etb_batch::issue_etb_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for sunshower_druid"
     }
   ],

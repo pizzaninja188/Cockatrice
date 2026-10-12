@@ -64,11 +64,11 @@
       "covers": "equipping for {2} and 2 life grants the equipped creature hexproof and makes it unblockable; the Adventure face sacrifices a creature to draw two, and resolves to exile for later casting as the permanent"
     },
     {
-      "test": "issue_338_direct_ron_batch3::issue_338_direct_ron_batch3_maps_definitions",
+      "test": "mechanic_registry::issue_338_direct_ron_batch3::issue_338_direct_ron_batch3_maps_definitions",
       "covers": "reviewed identity, faces, attached hexproof/unblockable modifier, equip cost and Adventure cost/effect of My Precious // Allure of Power"
     },
     {
-      "test": "issue_338_direct_ron_batch3::issue_338_direct_ron_batch3_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_338_direct_ron_batch3::issue_338_direct_ron_batch3_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprints for both faces of My Precious // Allure of Power"
     }
   ],

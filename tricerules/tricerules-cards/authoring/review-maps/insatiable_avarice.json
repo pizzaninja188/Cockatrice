@@ -51,11 +51,11 @@
       "covers": "the tutor mode searches for one card and puts it on top of the library, and the draw mode makes a target player draw three cards and lose three life"
     },
     {
-      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
+      "test": "mechanic_registry::issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
       "covers": "reviewed identity, mana cost, spree group, two linked modes and their targeting of Insatiable Avarice"
     },
     {
-      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Insatiable Avarice"
     }
   ],

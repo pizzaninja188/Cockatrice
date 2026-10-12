@@ -51,7 +51,7 @@
       "covers": "uncounterability, target controller loses 3 after exile, caster gains 3, illegal target no life changes"
     },
     {
-      "test": "issue_misc37_batch::issue_misc37_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc37_batch::issue_misc37_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost, type line, absent numeric characteristics"
     }
   ],

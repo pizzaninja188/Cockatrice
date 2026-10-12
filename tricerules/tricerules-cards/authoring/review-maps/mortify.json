@@ -29,11 +29,11 @@
       "covers": "destroys a target creature or enchantment (a noncreature, nonenchantment permanent is illegal)"
     },
     {
-      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
+      "test": "batch_registry::issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
       "covers": "reviewed identity, mana cost, types, effects and target group of mortify"
     },
     {
-      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for mortify"
     }
   ],

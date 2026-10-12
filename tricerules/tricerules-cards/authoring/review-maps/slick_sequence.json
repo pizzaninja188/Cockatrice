@@ -37,7 +37,7 @@
       "covers": "two damage to a permanent or player and resolution-time draw after another spell"
     },
     {
-      "test": "issue_misc44_batch::issue_misc44_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc44_batch::issue_misc44_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost and type line"
     }
   ],

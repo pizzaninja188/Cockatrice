@@ -33,11 +33,11 @@
       "covers": "the entry trigger returns a creature card from the graveyard to hand and rejects a land card"
     },
     {
-      "test": "issue_misc19_batch::issue_misc19_batch_maps_definitions",
+      "test": "batch_registry::issue_misc19_batch::issue_misc19_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the creature-or-Food graveyard return, and its targeting of Ragamuffin Raptor"
     },
     {
-      "test": "issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Ragamuffin Raptor"
     }
   ],

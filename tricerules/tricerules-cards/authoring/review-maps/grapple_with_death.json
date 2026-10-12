@@ -33,11 +33,11 @@
       "covers": "an artifact or creature is destroyed and its controller gains one life, while a nonartifact noncreature permanent is not a legal target"
     },
     {
-      "test": "issue_removal_batch::issue_removal_batch_maps_definitions",
+      "test": "mechanic_registry::issue_removal_batch::issue_removal_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and effects of grapple_with_death"
     },
     {
-      "test": "issue_removal_batch::issue_removal_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_removal_batch::issue_removal_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for grapple_with_death"
     }
   ],

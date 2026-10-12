@@ -30,11 +30,11 @@
       "covers": "destroys a target creature or a target enchantment and its controller loses exactly two life; if the target is illegal at resolution the spell does not resolve and no life is lost"
     },
     {
-      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
+      "test": "batch_registry::issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
       "covers": "reviewed identity, mana cost, types, effects and target group of withering_torment"
     },
     {
-      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for withering_torment"
     }
   ],

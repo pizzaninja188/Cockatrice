@@ -52,11 +52,11 @@
       "covers": "the optional entry branch searches a basic land into hand and Crew 2 animates the Vehicle"
     },
     {
-      "test": "issue_misc13_batch::issue_misc13_batch_maps_definitions",
+      "test": "batch_registry::issue_misc13_batch::issue_misc13_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flying, the optional basic-land search entry trigger, and Crew 2 of Strixhaven Skycoach"
     },
     {
-      "test": "issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Strixhaven Skycoach"
     }
   ],

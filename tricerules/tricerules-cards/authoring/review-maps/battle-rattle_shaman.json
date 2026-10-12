@@ -33,11 +33,11 @@
       "covers": "the beginning-of-combat trigger lets the controller give a targeted creature +2/+0 until end of turn"
     },
     {
-      "test": "issue_misc18_batch::issue_misc18_batch_maps_definitions",
+      "test": "batch_registry::issue_misc18_batch::issue_misc18_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the optional beginning-of-combat pump, and its targeting of Battle-Rattle Shaman"
     },
     {
-      "test": "issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Battle-Rattle Shaman"
     }
   ],

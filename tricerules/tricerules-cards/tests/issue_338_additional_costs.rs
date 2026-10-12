@@ -12,7 +12,7 @@
 //! of generator output. CR 601.2b (announced additional costs), 701.4 (behold), 701.30 (blight),
 //! 701.16 (discard), and 602.5 (announced cost receipts) govern the asserted shapes.
 
-mod common;
+use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{

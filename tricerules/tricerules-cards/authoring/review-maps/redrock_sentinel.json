@@ -38,7 +38,7 @@
       "covers": "defender keyword; land and tap costs paid before resolution; draw and Treasure follow, repeated tapped activation rejected"
     },
     {
-      "test": "issue_misc29_batch::issue_misc29_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc29_batch::issue_misc29_registers_five_exact_card_identities",
       "covers": "printed identity, layout, cost, type, and numeric characteristics"
     }
   ],

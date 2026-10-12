@@ -16,7 +16,7 @@
 //! attacking is not "attacked"), CR 111.1 (tokens), and CR 122.1 (+1/+1 counters) govern the
 //! asserted shapes.
 
-mod common;
+use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{

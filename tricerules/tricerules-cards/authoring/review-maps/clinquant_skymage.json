@@ -12,7 +12,7 @@
   ],
   "tokens": [],
   "semantic_fixtures": [
-    {"test": "issue_296_every_draw::issue_296_registers_both_complete_cards_with_distinct_characteristics", "covers": "exact Bird Wizard 1/1 face, Flying, controller draw trigger, and one self +1/+1 counter"},
+    {"test": "mechanic_registry::issue_296_every_draw::issue_296_registers_both_complete_cards_with_distinct_characteristics", "covers": "exact Bird Wizard 1/1 face, Flying, controller draw trigger, and one self +1/+1 counter"},
     {"test": "scenario issue_296_every_draw::both_complete_cards_trigger_once_per_card_in_a_two_card_draw", "covers": "Clinquant Skymage receives two counters from two distinct successful Divination draws"},
     {"test": "scenario issue_296_every_draw::pending_draw_triggers_do_not_put_counters_on_a_new_source_generation", "covers": "pending triggers from old source incarnation do not counter a returned Clinquant Skymage"},
     {"test": "scenario issue_296_every_draw::own_turn_based_draw_triggers_after_the_opponents_turn", "covers": "own turn-based draw gives one counter after an opponent turn produces none"}

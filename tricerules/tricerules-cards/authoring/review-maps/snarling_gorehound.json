@@ -40,11 +40,11 @@
       "covers": "a power-2-or-less creature you control entering parks a surveil 1 choice, while a power-4 creature does not; the Gorehound has menace"
     },
     {
-      "test": "issue_misc23_batch::issue_misc23_batch_maps_definitions",
+      "test": "batch_registry::issue_misc23_batch::issue_misc23_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Menace, the power-AtMost(2) entry watcher, and the surveil 1 of Snarling Gorehound"
     },
     {
-      "test": "issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Snarling Gorehound"
     }
   ],

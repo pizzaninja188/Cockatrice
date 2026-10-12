@@ -62,11 +62,11 @@
       "covers": "the counter mode places exactly two +1/+1 counters on a target creature, the trample mode grants trample until end of turn, and the grant mode grants a quoted combat-damage trigger that draws two cards"
     },
     {
-      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
+      "test": "mechanic_registry::issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
       "covers": "reviewed identity, mana cost, spree group, three linked modes and their targeting of Trash the Town"
     },
     {
-      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Trash the Town"
     }
   ],

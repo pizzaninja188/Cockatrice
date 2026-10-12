@@ -28,11 +28,11 @@
       "covers": "a card leaving the controller's graveyard puts a +1/+1 counter on the source; a card leaving an opponent's graveyard does not"
     },
     {
-      "test": "issue_misc7_batch::issue_misc7_batch_maps_definitions",
+      "test": "batch_registry::issue_misc7_batch::issue_misc7_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc7_spirit_mascot_counters_when_a_card_leaves_the_graveyard"
     },
     {
-      "test": "issue_misc7_batch::issue_misc7_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc7_batch::issue_misc7_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc7_spirit_mascot_counters_when_a_card_leaves_the_graveyard"
     }
   ],

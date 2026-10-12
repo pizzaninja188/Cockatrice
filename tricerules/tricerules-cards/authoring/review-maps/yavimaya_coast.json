@@ -25,7 +25,7 @@
   "tokens": [],
   "semantic_fixtures": [
     {
-      "test": "issue_494_damage_mana::issue_494_registers_exact_complete_definitions",
+      "test": "mechanic_registry::issue_494_damage_mana::issue_494_registers_exact_complete_definitions",
       "covers": "the exact Oracle identity and both complete activated-ability definitions"
     },
     {

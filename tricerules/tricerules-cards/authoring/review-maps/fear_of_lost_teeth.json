@@ -37,11 +37,11 @@
       "covers": "the dies trigger deals one damage to a chosen any-target and its controller gains one life"
     },
     {
-      "test": "issue_dmg2_batch::issue_dmg2_batch_maps_definitions",
+      "test": "batch_registry::issue_dmg2_batch::issue_dmg2_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and effects of fear_of_lost_teeth"
     },
     {
-      "test": "issue_dmg2_batch::issue_dmg2_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_dmg2_batch::issue_dmg2_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for fear_of_lost_teeth"
     }
   ],

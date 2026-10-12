@@ -42,11 +42,11 @@
       "covers": "the dies trigger creates a 1/1 black Rat token that can't block and the Spearguard has haste"
     },
     {
-      "test": "issue_misc22_batch::issue_misc22_batch_maps_definitions",
+      "test": "batch_registry::issue_misc22_batch::issue_misc22_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Haste, and the dies Rat token of Harried Spearguard"
     },
     {
-      "test": "issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Harried Spearguard"
     }
   ],

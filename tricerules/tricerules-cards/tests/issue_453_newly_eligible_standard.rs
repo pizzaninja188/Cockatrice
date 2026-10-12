@@ -11,7 +11,7 @@
 //! (dies triggers), 702.108 (prowess), 715 (Adventure), 303.4 (Aura attach), 113.6 (graveyard
 //! abilities), and 111.10b (Food).
 
-mod common;
+use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{

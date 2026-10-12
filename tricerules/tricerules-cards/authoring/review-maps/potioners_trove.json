@@ -13,7 +13,7 @@
   "tokens": [],
   "semantic_fixtures": [
     { "test": "scenario issue_misc24_batch::issue_misc24_potioners_trove_requires_own_instant_or_sorcery_for_life", "covers": "the life activation rejects no spell, an own creature, and an opponent's instant; an own instant enables it and gains two life, while the independent mana activation has no spell prerequisite" },
-    { "test": "issue_misc24_batch::issue_misc24_batch_maps_printed_cards_and_distinct_life_triggers", "covers": "printed identity and two activated abilities with a condition on the life activation" }
+    { "test": "batch_registry::issue_misc24_batch::issue_misc24_batch_maps_printed_cards_and_distinct_life_triggers", "covers": "printed identity and two activated abilities with a condition on the life activation" }
   ],
   "complete_definition_review_confirmed": true
 }

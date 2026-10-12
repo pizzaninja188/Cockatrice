@@ -28,11 +28,11 @@
       "covers": "the dies trigger returns a targeted mana-value-2-or-less creature card to the battlefield and rejects a mana-value-4 creature card"
     },
     {
-      "test": "issue_misc22_batch::issue_misc22_batch_maps_definitions",
+      "test": "batch_registry::issue_misc22_batch::issue_misc22_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, and the mana-value-2-or-less graveyard return of Driver of the Dead"
     },
     {
-      "test": "issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Driver of the Dead"
     }
   ],

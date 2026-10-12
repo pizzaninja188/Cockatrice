@@ -8,7 +8,7 @@
     {"face_id":"metalwork_colossus","start_line":2,"end_line":2,"typed_paths":["/faces/0/activated_abilities/0"]}
   ],
   "semantic_fixtures": [
-    {"test":"deck_coverage_metalwork_colossus::metalwork_registers_exact_single_face_and_both_clauses","covers":"Exact colorless single face, printed eleven, Artifact Creature Construct ten/ten and both complete clauses with graveyard source and second Oracle line"},
+    {"test":"deck_registry::deck_coverage_metalwork_colossus::metalwork_registers_exact_single_face_and_both_clauses","covers":"Exact colorless single face, printed eleven, Artifact Creature Construct ten/ten and both complete clauses with graveyard source and second Oracle line"},
     {"test":"scenario deck_coverage_metalwork_colossus::metalwork_sums_mana_values_excludes_creatures_opponents_and_floors_at_zero","covers":"Actual announcement sums one and four mana values, excludes artifact creatures, opposing artifacts and nonartifacts, includes tapped objects and floors eleven or larger sums at zero"},
     {"test":"scenario deck_coverage_metalwork_colossus::metalwork_uses_derived_types_control_copy_and_battlefield_x_mana_value","covers":"Current derived control and types, ordinary token zero and copied token mana value four, actual Astral Cornucopia battlefield X zero despite seven charge counters"},
     {"test":"scenario deck_coverage_metalwork_colossus::metalwork_locked_real_ironworks_payment_paid_cast_and_serialized_replay","covers":"Actual Ironworks sacrifice after announcement retains five mana cost, pays generated mana, resolves ten/ten MV eleven and serialized replay; wrong actor, nonzero X, incomplete mana and nonmana interference rejected atomically"},

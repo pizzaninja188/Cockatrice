@@ -48,7 +48,7 @@
       "covers": "draw four versus damage to both players creatures and planeswalker, not artifact or players"
     },
     {
-      "test": "issue_misc42_batch::issue_misc42_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc42_batch::issue_misc42_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost and type line"
     }
   ],

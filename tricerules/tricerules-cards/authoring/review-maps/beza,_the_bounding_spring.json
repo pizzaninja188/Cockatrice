@@ -62,7 +62,7 @@
       "covers": "a Treasure that enters as a creature changes the later live creature comparison during the same resolution"
     },
     {
-      "test": "issue_490_beza::issue_490_registers_beza_as_a_complete_standard_identity",
+      "test": "mechanic_registry::issue_490_beza::issue_490_registers_beza_as_a_complete_standard_identity",
       "covers": "pinned Oracle identity, mana cost, Legendary Creature — Elemental Elk type line, 4/5 characteristics and all four ordered conditional clauses"
     }
   ],

@@ -33,7 +33,7 @@
       "covers": "temporary control, untap, haste, Treasure, end-step reversion and illegal-target fizzle"
     },
     {
-      "test": "issue_misc30_batch::issue_misc30_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc30_batch::issue_misc30_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
     }
   ],

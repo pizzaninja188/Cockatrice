@@ -26,7 +26,7 @@
       "covers": "an out-of-range color choice is rejected without tapping or sacrificing the source or adding mana"
     },
     {
-      "test": "deck_coverage_lotus_petal::lotus_petal_registers_its_free_artifact_and_five_color_mana_ability",
+      "test": "deck_registry::deck_coverage_lotus_petal::lotus_petal_registers_its_free_artifact_and_five_color_mana_ability",
       "covers": "the exact identity, {0} artifact characteristics, tap and sacrifice costs, Oracle-line presentation, and five one-color mana options"
     }
   ],

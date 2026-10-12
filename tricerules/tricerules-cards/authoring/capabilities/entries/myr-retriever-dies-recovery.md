@@ -21,14 +21,14 @@
 
 - **Status:** `Supported` for this dies trigger and its tested graveyard filter/return path.
 - **Typed symbols:** `TriggerCondition::WhenSelfDies` in
-  `tricerules/tricerules-cards/src/primitives/abilities.rs`; `SpellEffectKind::MoveGraveyardCards`,
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs`; `SpellEffectKind::MoveGraveyardCards`,
   `TargetObjectExclusion::Source`, and `GraveyardDestination::Hand` in
-  `tricerules/tricerules-cards/src/primitives/effects.rs`; `TargetGroupDef` in
-  `tricerules/tricerules-cards/src/primitives/targeting.rs`.
+  `tricerules/tricerules-card-model/src/primitives/effects.rs`; `TargetGroupDef` in
+  `tricerules/tricerules-card-model/src/primitives/targeting.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`
   and `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`; validator:
-  `tricerules/tricerules-cards/src/primitives/abilities.rs#TriggeredAbilityDef::validate_shape`
-  and `tricerules/tricerules-cards/src/primitives/targeting.rs#TargetingDef::validate_optional`; target validator:
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs#TriggeredAbilityDef::validate_shape`
+  and `tricerules/tricerules-card-model/src/primitives/targeting.rs#TargetingDef::validate_optional`; target validator:
   `tricerules/tricerules-core/src/engine/targeting.rs#validate_ability_targets`; consumer:
   `tricerules/tricerules-core/src/engine/resolution/zones.rs#move_graveyard_cards`.
 - **Evidence and limits:** After a board wipe, the test checks the simultaneous-death artifact is
@@ -66,9 +66,9 @@
   - `tricerules/tricerules-cards/data/myr_retriever.ron`
   - `tricerules/tricerules-cards/authoring/review-maps/myr_retriever.json`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_myr_retriever.rs`
-  - `tricerules/tricerules-cards/src/primitives/abilities.rs`
-  - `tricerules/tricerules-cards/src/primitives/effects.rs`
-  - `tricerules/tricerules-cards/src/primitives/targeting.rs`
+  - `tricerules/tricerules-card-model/src/primitives/abilities.rs`
+  - `tricerules/tricerules-card-model/src/primitives/effects.rs`
+  - `tricerules/tricerules-card-model/src/primitives/targeting.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/targeting.rs`
   - `tricerules/tricerules-core/src/engine/resolution/zones.rs`

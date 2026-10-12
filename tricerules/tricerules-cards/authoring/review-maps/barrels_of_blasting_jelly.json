@@ -45,11 +45,11 @@
       "covers": "the {1} mana ability adds one mana of any color and cannot be activated again that turn; the sacrifice ability deals 5 damage to a targeted creature"
     },
     {
-      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "test": "batch_registry::issue_misc16_batch::issue_misc16_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the once-per-turn any-color mana ability, and the sacrifice damage ability of Barrels of Blasting Jelly"
     },
     {
-      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Barrels of Blasting Jelly"
     }
   ],

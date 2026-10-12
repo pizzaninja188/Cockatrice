@@ -204,6 +204,18 @@ function New-FreshnessFixture {
     }
 }
 
+foreach ($lineEnding in @("`n", "`r`n")) {
+    $lineEndingFixture = New-CapabilityFixture
+    try {
+        $entry = (Get-CapabilityEntryText).Replace("`r`n", "`n").Replace("`n", $lineEnding)
+        Write-CapabilityText (Get-CapabilityEntryPath $lineEndingFixture) $entry
+        $result = Invoke-CapabilityChecker -Root $lineEndingFixture
+        $label = if ($lineEnding -eq "`n") { 'LF' } else { 'CRLF' }
+        Assert-CapabilityTest ($result.ExitCode -eq 0) "Valid $label entry was rejected: $($result.Output)"
+    }
+    finally { Remove-CapabilityFixture $lineEndingFixture }
+}
+
 $fixture = New-CapabilityFixture
 try {
     $result = Invoke-CapabilityChecker -Root $fixture

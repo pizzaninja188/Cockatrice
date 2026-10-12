@@ -76,7 +76,7 @@
       "covers": "private image and public wording do not leak land eligibility"
     },
     {
-      "test": "deck_coverage_search_lands::into_the_wilds_complete_definition_and_oracle_presentation_are_exact",
+      "test": "deck_registry::deck_coverage_search_lands::into_the_wilds_complete_definition_and_oracle_presentation_are_exact",
       "covers": "exact identity, single green enchantment face, cost, mandatory own-upkeep trigger, specialized effect and entire Oracle line presentation"
     }
   ],

@@ -58,11 +58,11 @@
       "covers": "the second card drawn in a turn adds a +1/+1 counter, the Seeker has vigilance, and its death creates one Clue token"
     },
     {
-      "test": "issue_misc18_batch::issue_misc18_batch_maps_definitions",
+      "test": "batch_registry::issue_misc18_batch::issue_misc18_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Vigilance, the second-draw counter, and the dies Clue token of Knowledge Seeker"
     },
     {
-      "test": "issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Knowledge Seeker"
     }
   ],

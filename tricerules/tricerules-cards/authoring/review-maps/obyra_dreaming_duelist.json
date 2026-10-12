@@ -44,11 +44,11 @@
       "covers": "another Faerie you control entering makes each opponent lose 1 life while a non-Faerie does not"
     },
     {
-      "test": "issue_misc17_batch::issue_misc17_batch_maps_definitions",
+      "test": "batch_registry::issue_misc17_batch::issue_misc17_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flash, Flying, the self-excluding Faerie-entry watcher, and its each-opponent life loss of Obyra, Dreaming Duelist"
     },
     {
-      "test": "issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Obyra, Dreaming Duelist"
     }
   ],

@@ -52,11 +52,11 @@
       "covers": "casting a noncreature spell pumps the Mentor (prowess), and the reduction makes {2}{U} castable with {1}{U} while without the Mentor it is not"
     },
     {
-      "test": "issue_misc14_batch::issue_misc14_batch_maps_definitions",
+      "test": "batch_registry::issue_misc14_batch::issue_misc14_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Haste, the prowess trigger, and the instant/sorcery generic reduction of Stormcatch Mentor"
     },
     {
-      "test": "issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Stormcatch Mentor"
     }
   ],

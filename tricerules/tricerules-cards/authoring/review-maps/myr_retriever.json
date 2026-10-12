@@ -48,7 +48,7 @@
       "covers": "a simultaneously dying artifact is a legal target; the source, a nonartifact in its controller's graveyard, and an artifact in the opponent's graveyard are illegal; the selected card returns to its controller's hand"
     },
     {
-      "test": "deck_coverage_myr_retriever::myr_retriever_registers_its_targeted_death_trigger",
+      "test": "deck_registry::deck_coverage_myr_retriever::myr_retriever_registers_its_targeted_death_trigger",
       "covers": "exact card identity, artifact creature characteristics, dies trigger, and mandatory single graveyard-card target"
     },
     {

@@ -20,12 +20,12 @@
 ## Runtime support
 
 - **Status:** `Supported` for the exact one-colorless, tap-only ability in the two cited cards.
-- **Typed symbols:** `AbilityCost::Tap` in `tricerules/tricerules-cards/src/primitives/costs.rs`;
+- **Typed symbols:** `AbilityCost::Tap` in `tricerules/tricerules-card-model/src/primitives/costs.rs`;
   `SpellEffectKind::ProduceMana` and `ManaAmount` in
-  `tricerules/tricerules-cards/src/primitives/effects.rs`.
+  `tricerules/tricerules-card-model/src/primitives/effects.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`
   and `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`; validator:
-  `tricerules/tricerules-cards/src/primitives/abilities.rs#ActivatedAbilityDef::validate_shape`;
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs#ActivatedAbilityDef::validate_shape`;
   engine consumer: `tricerules/tricerules-core/src/engine/casting.rs#GameEngine::activate_ability`
   and `tricerules/tricerules-core/src/engine/resolution/misc.rs#produce_mana`.
 - **Evidence and limits:** Both checked-in semantic scenarios assert one colorless mana, a tapped
@@ -70,9 +70,9 @@
   - `tricerules/tricerules-cards/authoring/review-maps/scavenger_grounds.json`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_mind_stone.rs`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_scavenger_grounds.rs`
-  - `tricerules/tricerules-cards/src/primitives/costs.rs`
-  - `tricerules/tricerules-cards/src/primitives/effects.rs`
-  - `tricerules/tricerules-cards/src/primitives/abilities.rs`
+  - `tricerules/tricerules-card-model/src/primitives/costs.rs`
+  - `tricerules/tricerules-card-model/src/primitives/effects.rs`
+  - `tricerules/tricerules-card-model/src/primitives/abilities.rs`
   - `tricerules/tricerules-cards/src/registry.rs`
   - `tricerules/tricerules-core/src/engine/casting.rs`
   - `tricerules/tricerules-core/src/engine/resolution/misc.rs`

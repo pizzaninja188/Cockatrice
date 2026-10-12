@@ -28,11 +28,11 @@
       "covers": "an enchantment the controller controls leaving the battlefield for a graveyard draws a card; a nonenchantment permanent does not trigger"
     },
     {
-      "test": "issue_misc5_batch::issue_misc5_batch_maps_definitions",
+      "test": "batch_registry::issue_misc5_batch::issue_misc5_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of ashioks_reaper"
     },
     {
-      "test": "issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for ashioks_reaper"
     }
   ],

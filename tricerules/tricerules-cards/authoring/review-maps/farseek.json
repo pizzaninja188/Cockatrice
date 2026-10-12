@@ -22,7 +22,7 @@
       "covers": "private OR search accepts Plains, Island, Swamp, Mountain, and matching nonbasic Taiga, excludes Forest alone, enters tapped, and shuffles"
     },
     {
-      "test": "deck_coverage_search_lands::farseek_uses_four_or_branches_for_land_subtypes_and_enters_tapped",
+      "test": "deck_registry::deck_coverage_search_lands::farseek_uses_four_or_branches_for_land_subtypes_and_enters_tapped",
       "covers": "exact printed identity and four distinct typed OR branches, destination, and search defaults"
     }
   ],

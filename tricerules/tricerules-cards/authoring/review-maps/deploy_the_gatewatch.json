@@ -68,7 +68,7 @@
       "covers": "paid cast selects two planeswalkers then random bottoms only the rest"
     },
     {
-      "test": "deck_coverage_search_lands::deploy_the_gatewatch_complete_definition_and_identity_are_exact",
+      "test": "deck_registry::deck_coverage_search_lands::deploy_the_gatewatch_complete_definition_and_identity_are_exact",
       "covers": "Exact released Oracle identity, single white Sorcery face, cost, no targets, complete specialized effect; physical spell artwork supplies Oracle presentation"
     }
   ],

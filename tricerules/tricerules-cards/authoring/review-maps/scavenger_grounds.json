@@ -76,7 +76,7 @@
       "covers": "Scavenger Grounds can pay its own Desert sacrifice cost, remains an ability on the stack after entering its owner's graveyard, and is exiled with all graveyard cards when that ability resolves"
     },
     {
-      "test": "deck_coverage_scavenger_grounds::scavenger_grounds_registers_colorless_mana_and_all_graveyards_exile",
+      "test": "deck_registry::deck_coverage_scavenger_grounds::scavenger_grounds_registers_colorless_mana_and_all_graveyards_exile",
       "covers": "exact card identity and Desert type, both battlefield abilities, the one-colorless mana output, ordered mana/tap/controlled-Desert costs, source-self eligibility, no targets, and an all-player graveyard exile effect"
     }
   ],

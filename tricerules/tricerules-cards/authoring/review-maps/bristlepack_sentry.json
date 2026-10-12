@@ -36,11 +36,11 @@
       "covers": "a controlled power-4 creature unlocks the attack while defender otherwise keeps it out of combat"
     },
     {
-      "test": "issue_misc14_batch::issue_misc14_batch_maps_definitions",
+      "test": "batch_registry::issue_misc14_batch::issue_misc14_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Defender, and the maximum-power condition of Bristlepack Sentry"
     },
     {
-      "test": "issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Bristlepack Sentry"
     }
   ],

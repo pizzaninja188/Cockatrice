@@ -41,7 +41,7 @@
       "covers": "two counters always, keywords only after own life gain this turn and at resolution"
     },
     {
-      "test": "issue_misc38_batch::issue_misc38_registers_five_exact_card_identities",
+      "test": "batch_registry::issue_misc38_batch::issue_misc38_registers_five_exact_card_identities",
       "covers": "printed identity, layout, mana cost, type line, absent numeric characteristics"
     }
   ],

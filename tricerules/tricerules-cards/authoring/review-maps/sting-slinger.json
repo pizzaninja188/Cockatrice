@@ -28,11 +28,11 @@
       "covers": "the {1}{R}-tap-and-blight-1 ability places a -1/-1 counter and deals 2 damage to each opponent"
     },
     {
-      "test": "issue_misc10_batch::issue_misc10_batch_maps_definitions",
+      "test": "batch_registry::issue_misc10_batch::issue_misc10_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc10_sting_slinger_blights_for_damage"
     },
     {
-      "test": "issue_misc10_batch::issue_misc10_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc10_batch::issue_misc10_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc10_sting_slinger_blights_for_damage"
     }
   ],

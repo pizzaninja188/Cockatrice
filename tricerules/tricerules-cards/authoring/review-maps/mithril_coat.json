@@ -109,7 +109,7 @@
       "covers": "Equip costs three mana, targets any creature you control including a nonlegendary creature, and is rejected outside sorcery timing without payment"
     },
     {
-      "test": "deck_coverage_mithril_coat::mithril_coat_registers_its_legendary_etb_and_any_creature_equip",
+      "test": "deck_registry::deck_coverage_mithril_coat::mithril_coat_registers_its_legendary_etb_and_any_creature_equip",
       "covers": "registered identity, printed characteristics, keyword abilities, the legendary-only ETB target, line 4 attached modifier, and three-mana Equip target and timing"
     }
   ],

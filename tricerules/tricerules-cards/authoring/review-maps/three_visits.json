@@ -22,7 +22,7 @@
       "covers": "private Forest-subtype search accepts nonbasic Taiga, moves the chosen object to the battlefield untapped, and shuffles"
     },
     {
-      "test": "deck_coverage_search_lands::three_visits_searches_for_a_forest_subtype_and_enters_untapped",
+      "test": "deck_registry::deck_coverage_search_lands::three_visits_searches_for_a_forest_subtype_and_enters_untapped",
       "covers": "exact printed identity and typed subtype filter, destination, and search defaults"
     }
   ],

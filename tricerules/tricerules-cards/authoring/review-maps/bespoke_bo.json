@@ -57,11 +57,11 @@
       "covers": "the entry trigger returns an opponent's nonland permanent to hand and equipping for {3} gives the equipped creature +2/+1 and vigilance"
     },
     {
-      "test": "issue_misc18_batch::issue_misc18_batch_maps_definitions",
+      "test": "batch_registry::issue_misc18_batch::issue_misc18_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, the up-to-one-other nonland bounce, the +2/+1 vigilance modifier, and equip {3} of Bespoke Bō"
     },
     {
-      "test": "issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Bespoke Bō"
     }
   ],

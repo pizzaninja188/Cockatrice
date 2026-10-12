@@ -56,7 +56,7 @@
       "covers": "the {1}, tap, sacrifice costs are required; the source moves to its owner's graveyard before the ability draws one card"
     },
     {
-      "test": "deck_coverage_waterlogged_grove::waterlogged_grove_registers_both_complete_abilities",
+      "test": "deck_registry::deck_coverage_waterlogged_grove::waterlogged_grove_registers_both_complete_abilities",
       "covers": "exact printed identity, both ability costs, the two chosen mana outputs, and the draw effect"
     }
   ],

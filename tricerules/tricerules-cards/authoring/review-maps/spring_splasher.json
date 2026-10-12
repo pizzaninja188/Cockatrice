@@ -37,11 +37,11 @@
       "covers": "the attack trigger gives a target creature the defending player controls -3/-0, rejects the controller's own creature and the attacking source as illegal targets, and leaves an untargeted creature unchanged"
     },
     {
-      "test": "issue_dies_batch::issue_dies_batch_maps_definitions",
+      "test": "batch_registry::issue_dies_batch::issue_dies_batch_maps_definitions",
       "covers": "reviewed identity, characteristics, trigger and effects of spring_splasher"
     },
     {
-      "test": "issue_dies_batch::issue_dies_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_dies_batch::issue_dies_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for spring_splasher"
     }
   ],

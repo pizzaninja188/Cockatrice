@@ -30,11 +30,11 @@
       "covers": "dying creates a Treasure token"
     },
     {
-      "test": "issue_misc9_batch::issue_misc9_batch_maps_definitions",
+      "test": "batch_registry::issue_misc9_batch::issue_misc9_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc9_undercity_dire_rat_makes_a_treasure_when_it_dies"
     },
     {
-      "test": "issue_misc9_batch::issue_misc9_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc9_batch::issue_misc9_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc9_undercity_dire_rat_makes_a_treasure_when_it_dies"
     }
   ],

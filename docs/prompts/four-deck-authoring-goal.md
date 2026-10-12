@@ -43,7 +43,7 @@ bounded packets for explicit model overrides. Workers inspect or propose; the ro
 Independent next-capability research may overlap review, without competing writers or Cargo runs.
 Use ambient/default build/test worker counts for ordinary checks. For bounded final Rust/CardData
 coverage runs, use the configuration documented in
-[the architecture improvements](../CARD-AUTHORING-ARCHITECTURE-IMPROVEMENTS.md):
+[the verification guide](../AGENT-VERIFICATION.md#bounded-conformance-workers):
 `TRICERULES_CONFORMANCE_WORKERS=4`, `RUST_TEST_THREADS=1`, `CARGO_BUILD_JOBS=4`.
 
 ## Execution and handoff
@@ -57,7 +57,7 @@ missing-card count alone. Start by assessing Kami's nine checkpointed remaining 
 hard blockers; compare another deck if its completion path is cheaper. Include compatible shared
 cards and ready cards from other selected decks when they amortize preparation/review/final gates.
 
-Start from the reviewed architecture improvements and refresh exact blocker classifications.
+Start from current engine capabilities and saved reviewed evidence; refresh exact blocker classifications.
 Flux (Kami) and Abundance (Bello) are in the frozen corpus and can use the new primitives; preflight
 their complete cards before admission. Demonstration consumers outside the corpus, including
 Tomorrow, Shoreline Looter, Accumulate Wisdom, Tersa and Steal the Show, do not expand this campaign.

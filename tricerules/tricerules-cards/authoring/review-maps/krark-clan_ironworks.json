@@ -38,7 +38,7 @@
       "covers": "the mana ability can be activated during spell payment and its output can commit the pending spell"
     },
     {
-      "test": "deck_coverage_krark_clan_ironworks::krark_clan_ironworks_registers_its_artifact_sacrifice_mana_ability",
+      "test": "deck_registry::deck_coverage_krark_clan_ironworks::krark_clan_ironworks_registers_its_artifact_sacrifice_mana_ability",
       "covers": "exact identity, artifact characteristics, Oracle line mapping, controlled artifact sacrifice filter, and two colorless output"
     }
   ],

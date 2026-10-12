@@ -29,11 +29,11 @@
       "covers": "the tap ability makes another target creature the controller controls with power 2 or less unblockable; the source and power-3 creatures are rejected, and a target that grows above power 2 before resolution resolves with no effect"
     },
     {
-      "test": "issue_misc6_batch::issue_misc6_batch_maps_definitions",
+      "test": "batch_registry::issue_misc6_batch::issue_misc6_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc6_deserters_disciple_makes_a_small_attacker_unblockable"
     },
     {
-      "test": "issue_misc6_batch::issue_misc6_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc6_batch::issue_misc6_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc6_deserters_disciple_makes_a_small_attacker_unblockable"
     }
   ],

@@ -16,7 +16,7 @@
   "tokens": ["knight_w_2_2_vigilance"],
   "semantic_fixtures": [
     { "test": "scenario issue_misc25_batch::issue_misc25_hopeful_vigil_sacrifice_scries_but_bounce_does_not", "covers": "real entry creates a vigilant Knight; cost-only sacrifice moves the enchantment to graveyard and presents scry 2; returning it to hand does not scry" },
-    { "test": "issue_misc25_batch::issue_misc25_batch_registers_five_exact_oracle_identities", "covers": "printed enchantment identity and mana cost" }
+    { "test": "batch_registry::issue_misc25_batch::issue_misc25_batch_registers_five_exact_oracle_identities", "covers": "printed enchantment identity and mana cost" }
   ],
   "complete_definition_review_confirmed": true
 }

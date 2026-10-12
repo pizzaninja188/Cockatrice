@@ -29,11 +29,11 @@
       "covers": "the {1}-and-tap ability gives a target creature +1/+1 at sorcery speed; activation in the declare-attackers step is rejected"
     },
     {
-      "test": "issue_misc6_batch::issue_misc6_batch_maps_definitions",
+      "test": "batch_registry::issue_misc6_batch::issue_misc6_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc6_brave_kin_duo_pumps_a_target_at_sorcery_speed"
     },
     {
-      "test": "issue_misc6_batch::issue_misc6_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc6_batch::issue_misc6_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc6_brave_kin_duo_pumps_a_target_at_sorcery_speed"
     }
   ],

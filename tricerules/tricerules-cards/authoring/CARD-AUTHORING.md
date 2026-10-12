@@ -994,36 +994,11 @@ presentation metadata does not make missing mechanics complete.
 
 ## 10. Verify and review
 
-Use red/green TDD for behavior changes: add the smallest focused regression, confirm its intended
-failure, implement one coherent increment, and rerun it. Finish with the exact Rust and card-data
-gates in [`docs/AGENT-VERIFICATION.md`](../../../docs/AGENT-VERIFICATION.md).
-
-For handwritten card-data changes, refresh presentation fingerprints and the validated checklist,
-review the resulting diff, then run final verification from the repository root:
-
-```powershell
-./scripts/prepare-card-batch.ps1
-# Review the prepared diff and obtain independent semantic approval before the final gate.
-./scripts/verify.ps1 -Side Rust -CardData
-```
-
-The preparation command catches canonical-ID and generic conformance fixture failures before
-refresh or review, and defaults to four build/test workers. It does not replace the batch's
-actual-card semantic assertions. If these prechecks already passed on unchanged content, call
-`update-card-data.ps1 -Mode Refresh -MetadataOnly` directly to avoid repeating them.
-Use `-Side Both` when C++ contracts are affected. Use `update-card-data.ps1 -Mode Refresh`
-without `-MetadataOnly` when changing recipes or
-generated RON. Refresh uses pinned local input and is preparation, not a verification gate;
-it does not fetch new data or enable `--include-new`. The final gate performs the full Check,
-including maps, non-ignored test references, recipes, presentation and checklist drift. Do not
-run another standalone Check between Refresh and that gate. Check leaves tracked files unchanged.
-The legacy checklist generator's `--check` validates names but still writes its output; do not
-use it as a read-only drift check. Source overrides and retained failure evidence are described
-in the verification guide.
-
-Complete the ruled interaction checklist when adding or changing a substantive primitive,
-protocol, relay, or client contract. Rust-only status is N/A for C++ testing only after confirming
-that presentation transport, visibility, physical identity, and client behavior did not change.
+Follow the [execution path](../../../docs/AUTHORING-WORKFLOW.md) for preparation, frozen semantic
+review and delivery. Commands, worker settings, metadata Refresh/Check and final affected-side
+gates are owned by [AGENT-VERIFICATION.md](../../../docs/AGENT-VERIFICATION.md).
+Use focused red/green checks during iteration and one final full gate on stable reviewed content;
+reuse valid evidence. Reusing mechanics does not waive actual-card semantics or applicable acceptance.
 
 ### Reusable semantic evidence
 
@@ -1243,8 +1218,17 @@ definitions and the pinned source. Map filenames equal the canonical RON filenam
 The checker uses directory-mode `--review-existing` to load and deduplicate the corpus once for
 the entire batch, with packets written outside data. Checked-in maps must be fully resolved and
 confirmed; review output remains evidence, never proof of mechanical equivalence.
-Semantic references use `scenario module::test` for tricerules-core or `integration_target::test`
-for tricerules-cards. The gate resolves exact Cargo identifiers and rejects missing or ignored
+Semantic references use `scenario module::test` for tricerules-core or `suite::module::test`
+for tricerules-cards. Card registry tests share five explicit Cargo suites under `tests/suites/`:
+`deck_registry`, `generated_registry`, `batch_registry`, `mechanic_registry`, and
+`standard_registry`. Add a new test source to exactly one suite with a `#[path]` module;
+the suite-membership regression rejects omitted or duplicated sources. Keep card assertions
+in their existing source modules rather than adding another executable per card.
+Load shared helpers once in the suite harness; cases import `crate::common` rather than
+declaring `mod common` repeatedly inside the same executable.
+For example, run one exact registry regression with
+`cargo test -p tricerules-cards --test deck_registry deck_coverage_duplicant::duplicant_has_its_exact_printed_identity -- --exact`.
+The gate resolves exact Cargo identifiers and rejects missing or ignored
 tests. Canonical CardData Check includes it. Listing is not proof of execution: the full Rust suite
 must pass on the same content, and review must confirm the cases exercise the named cards and
 clauses. Draft packets may still describe planned fixtures before tests exist.
@@ -1260,8 +1244,7 @@ required final checks; a later delivery request alone does not invalidate passin
 
 The root owns all command execution that can write artifacts, including tests, builds, Cargo,
 formatting, verification, generators, metadata checks and review packets. Independent reviewers
-inspect the frozen patch and existing evidence using the workflow skill's
-[reviewer template](../../../.agents/skills/cockatrice-workflow/reviewer-template.md).
+inspect the frozen patch and existing evidence using the [reviewer contract](../../../docs/CARD-REVIEW.md).
 They request missing commands from the root rather than rerunning gates themselves. Independence
 means independent semantic judgment; it does not require duplicate test execution.
 

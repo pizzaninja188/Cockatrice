@@ -44,11 +44,11 @@
       "covers": "a controller life change this turn satisfies the intervening-if and the end-step trigger parks a surveil 1 choice; the Soothsayer has flying"
     },
     {
-      "test": "issue_misc21_batch::issue_misc21_batch_maps_definitions",
+      "test": "batch_registry::issue_misc21_batch::issue_misc21_batch_maps_definitions",
       "covers": "reviewed identity, printed characteristics, Flying, the life-change condition, and the surveil 1 of Starlit Soothsayer"
     },
     {
-      "test": "issue_misc21_batch::issue_misc21_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc21_batch::issue_misc21_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Starlit Soothsayer"
     }
   ],

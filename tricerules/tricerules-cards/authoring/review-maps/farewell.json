@@ -79,7 +79,7 @@
       "covers": "serialized paid reverse modal command replays identically"
     },
     {
-      "test": "deck_coverage_farewell::farewell_exact_white_sorcery_identity_and_one_to_four_printed_order_modes",
+      "test": "deck_registry::deck_coverage_farewell::farewell_exact_white_sorcery_identity_and_one_to_four_printed_order_modes",
       "covers": "Exact white six mana sorcery, choose one to four distinct printed modes, and explicitly untargeted roles"
     }
   ],

@@ -50,11 +50,11 @@
       "covers": "sacrificing a creature or an enchantment, or paying {2}, each pay the additional cost; five damage is dealt to the target creature; a creature destroyed by any effect later in the turn is exiled instead, not only when this spell's damage is lethal"
     },
     {
-      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
+      "test": "mechanic_registry::issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
       "covers": "reviewed identity, cost, types, cast-cost group options, damage/exile effects and target group of Betrayer's Bargain"
     },
     {
-      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Betrayer's Bargain"
     }
   ],

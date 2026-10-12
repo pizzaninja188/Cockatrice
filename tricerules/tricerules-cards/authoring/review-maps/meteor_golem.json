@@ -33,11 +33,11 @@
       "covers": "entering destroys a target nonland permanent an opponent controls; a land and the controller's own permanent are rejected"
     },
     {
-      "test": "issue_misc9_batch::issue_misc9_batch_maps_definitions",
+      "test": "batch_registry::issue_misc9_batch::issue_misc9_batch_maps_definitions",
       "covers": "reviewed identity, characteristics and abilities of issue_misc9_meteor_golem_destroys_an_opponent_nonland_permanent"
     },
     {
-      "test": "issue_misc9_batch::issue_misc9_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_misc9_batch::issue_misc9_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for issue_misc9_meteor_golem_destroys_an_opponent_nonland_permanent"
     }
   ],

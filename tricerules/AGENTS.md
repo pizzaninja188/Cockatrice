@@ -17,8 +17,9 @@ Game start is gated on `ValidateDeck`. An unimplemented mainboard card blocks ru
 
 ## Card authoring
 
-Before adding or changing a card, card generator, card-specific primitive, or custom effect, read
-[the canonical card authoring guide](tricerules-cards/authoring/CARD-AUTHORING.md). It owns the
+Before card or card-capability work, follow [the execution path](../docs/AUTHORING-WORKFLOW.md).
+Read sections 1–3 of [the authoring reference](tricerules-cards/authoring/CARD-AUTHORING.md), then
+search only applicable mechanics, presentation, generation and evidence sections. It owns the
 Scryfall and rulings lookup workflow, implementation-tier decision, RON and custom-Rust shapes,
 stable identity, Oracle presentation mappings, partial-card tracking, generation, and card
 completion checklist. Do not copy nearby legacy RON as a substitute for following the guide.

@@ -101,7 +101,7 @@
   "tokens": [],
   "semantic_fixtures": [
     {
-      "test": "deck_coverage_scrap_trawler::scrap_trawler_registers_as_a_complete_card",
+      "test": "deck_registry::deck_coverage_scrap_trawler::scrap_trawler_registers_as_a_complete_card",
       "covers": "exact Scrap Trawler identity, printed characteristics, both trigger conditions, artifact graveyard filters, strict event-value comparison, hand destination, and one required target per trigger"
     },
     {

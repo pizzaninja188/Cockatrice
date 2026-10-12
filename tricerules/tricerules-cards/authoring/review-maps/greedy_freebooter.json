@@ -34,11 +34,11 @@
       "covers": "the dies trigger scrys one card before creating one registered Treasure token, in that order"
     },
     {
-      "test": "issue_dies_batch::issue_dies_batch_maps_definitions",
+      "test": "batch_registry::issue_dies_batch::issue_dies_batch_maps_definitions",
       "covers": "reviewed identity, characteristics, trigger and effects of greedy_freebooter"
     },
     {
-      "test": "issue_dies_batch::issue_dies_batch_fingerprints_match_the_pinned_oracle_text",
+      "test": "batch_registry::issue_dies_batch::issue_dies_batch_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for greedy_freebooter"
     }
   ],

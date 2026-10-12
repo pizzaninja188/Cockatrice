@@ -41,11 +41,11 @@
       "covers": "casting without a legal sacrifice is rejected; sacrificing a creature pays the mandatory additional cost; the spell exiles a target creature and a target planeswalker while a nonmatching permanent is refused"
     },
     {
-      "test": "issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
+      "test": "mechanic_registry::issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
       "covers": "reviewed identity, cost, types, cast-cost group, spell effect and target group of Worthy Cost"
     },
     {
-      "test": "issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
+      "test": "mechanic_registry::issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
       "covers": "pinned normalized Oracle text fingerprint for Worthy Cost"
     }
   ],

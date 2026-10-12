@@ -49,7 +49,7 @@
       "covers": "CR 608.2b: an illegal only target prevents both exile and conditional Scry"
     },
     {
-      "test": "issue_481_conditional_library_choices::issue_481_registers_both_complete_cards_and_exact_conditional_effects",
+      "test": "mechanic_registry::issue_481_conditional_library_choices::issue_481_registers_both_complete_cards_and_exact_conditional_effects",
       "covers": "complete card identity, face constants, target group, ordered exile and conditional Scry payload"
     }
   ],
