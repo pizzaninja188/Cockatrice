@@ -3244,6 +3244,7 @@ impl GameEngine {
                 source_face_change,
                 ability_index: Some(ability_index),
                 activated_ability: None,
+                activated_ability_occurrence: None,
                 triggered_ability: Some(ability),
                 is_triggered: true,
                 is_copy: false,
@@ -4221,6 +4222,69 @@ mod tests {
     }
 
     #[test]
+    fn stack_trigger_program_owner_uses_the_frozen_static_grant_path() {
+        let (mut engine, source) = trigger_limit_source();
+        let mut ability = limited_dies_ability(&engine);
+        ability.effect = vec![SpellEffectKind::GainLife {
+            amount: Amount::Fixed(1),
+        }];
+        ability.targeting = None;
+        ability.may = false;
+        let mut values = engine.copiable_values_for(source).unwrap();
+        values.face.static_abilities = vec![IdentifiedAbility::fallback(
+            "static_01",
+            StaticAbilityDef::ConditionalSelfModifier {
+                condition: GameCondition::ActivePlayer {
+                    players: RelativePlayerSet::Controller,
+                },
+                remove_creature: false,
+                set_types: None,
+                add_types: tricerules_card_model::primitives::TypeLineAddition::default(),
+                base_power: None,
+                base_toughness: None,
+                delta_power: 0,
+                delta_toughness: 0,
+                keywords: vec![],
+                activated_abilities: vec![],
+                triggered_abilities: vec![ability],
+                can_attack_as_though_without_defender: false,
+            },
+        )
+        .unwrap()];
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .copiable_values = Some(values);
+        engine.emit_static_abilities_on_enter(source);
+        stage_limited_dies_grants(&mut engine, source);
+
+        let mut events = Vec::new();
+        engine.flush_staged_triggers(&mut events);
+        let item = engine.state.stack.last().expect("trigger is on the stack");
+        let owner = item
+            .ability_program_owner()
+            .expect("static-granted trigger has an authored program owner");
+        assert_eq!(
+            owner,
+            tricerules_card_model::ProgramOwnerId::ability(engine.ability_definition(
+                source,
+                0,
+                vec![
+                    AbilityId::new("static_01").unwrap(),
+                    AbilityId::new("triggered_01").unwrap(),
+                ],
+            )),
+            "the parent static and nested trigger IDs bind the source identity",
+        );
+        assert!(matches!(
+            item.trigger_use_key.as_ref().map(|key| &key.ability_origin),
+            Some(TriggerAbilityOrigin::StaticGrant { source_id, .. }) if *source_id == source
+        ));
+    }
+
+    #[test]
     fn issue_164_room_door_slots_survive_unlocking_an_earlier_door() {
         let (mut engine, source) = trigger_limit_source();
         let ability = limited_dies_ability(&engine);
@@ -4741,6 +4805,7 @@ mod tests {
             source_face_change: 0,
             ability_index: None,
             activated_ability: None,
+            activated_ability_occurrence: None,
             triggered_ability: None,
             is_triggered: false,
             is_copy,

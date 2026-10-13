@@ -2667,6 +2667,10 @@ pub struct StackItem {
     /// Snapshot of an activated ability's complete definition. Granted abilities resolve from
     /// this value after their granting effect has disappeared.
     pub activated_ability: Option<ActivatedAbilityDef>,
+    /// Immutable authored occurrence captured when the ability was announced, before any costs
+    /// can remove its static grant. The exact presentation and live source are deliberately not
+    /// consulted when resolving the owner of a future authored program.
+    pub activated_ability_occurrence: Option<ActivatedAbilityOccurrence>,
     /// Snapshot of a triggered ability's complete definition. Printed and granted triggers both
     /// resolve from this value after their source or granting effect has disappeared.
     pub triggered_ability: Option<TriggeredAbilityDef>,
@@ -2743,6 +2747,35 @@ pub struct StackPresentation {
 }
 
 impl StackItem {
+    /// Resolve the authored owner bound to this stack ability, if its occurrence has one.
+    ///
+    /// Static grants retain the parent definition and source incarnation even after payment or
+    /// later zone changes remove that grant. Resolving grants and keyword-only origins are not
+    /// authored program identities. This is metadata only: `None` never gates existing ability
+    /// announcement or resolution.
+    pub fn ability_program_owner(&self) -> Option<ProgramOwnerId> {
+        let definition = if self.is_triggered {
+            match &self.trigger_use_key.as_ref()?.ability_origin {
+                TriggerAbilityOrigin::Printed(definition)
+                | TriggerAbilityOrigin::StaticGrant { definition, .. } => definition,
+                TriggerAbilityOrigin::SpellKeyword(_) | TriggerAbilityOrigin::ResolvingGrant(_) => {
+                    return None;
+                }
+            }
+        } else {
+            match self.activated_ability_occurrence.as_ref()? {
+                ActivatedAbilityOccurrence::Printed(definition) => definition,
+                ActivatedAbilityOccurrence::Granted(TriggerAbilityOrigin::StaticGrant {
+                    definition,
+                    ..
+                }) => definition,
+                ActivatedAbilityOccurrence::IntrinsicLandMana
+                | ActivatedAbilityOccurrence::Granted(_) => return None,
+            }
+        };
+        Some(ProgramOwnerId::ability(definition.clone()))
+    }
+
     pub fn cast_cost_condition_matches(&self, condition: &CastCostReceiptCondition) -> bool {
         self.cast_cost_receipts.iter().any(|receipt| {
             receipt.group_id.as_ref() == Some(&condition.group_id)

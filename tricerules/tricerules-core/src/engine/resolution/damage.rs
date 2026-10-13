@@ -538,6 +538,7 @@ mod damage_source_tests {
             source_face_change: 0,
             ability_index: None,
             activated_ability: None,
+            activated_ability_occurrence: None,
             triggered_ability: None,
             is_triggered: source_permanent_id.is_some(),
             is_copy: false,

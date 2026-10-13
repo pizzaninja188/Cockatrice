@@ -34,6 +34,7 @@ pub(super) struct AnnouncedAbilityActivation {
     card_id: String,
     face_up_index: usize,
     ability: ActivatedAbilityDef,
+    activated_ability_occurrence: ActivatedAbilityOccurrence,
     ability_text: String,
     source_token_identity: Option<rv1::TokenIdentity>,
     card_name: String,
@@ -1686,6 +1687,7 @@ impl GameEngine {
             source_face_change: 0,
             ability_index: None,
             activated_ability: None,
+            activated_ability_occurrence: None,
             triggered_ability: None,
             is_triggered: false,
             is_copy: prepare_source.is_some(),
@@ -2654,6 +2656,7 @@ impl GameEngine {
             card_id,
             face_up_index,
             ability_text,
+            activated_ability_occurrence: effective.occurrence.clone(),
             source_token_identity,
             card_name,
             activation_reveal_id: None,
@@ -2727,6 +2730,7 @@ impl GameEngine {
             card_id,
             face_up_index,
             ability,
+            activated_ability_occurrence,
             ability_text,
             source_token_identity,
             card_name,
@@ -2788,6 +2792,7 @@ impl GameEngine {
             source_face_change,
             ability_index: Some(ability_index),
             activated_ability: Some(ability.clone()),
+            activated_ability_occurrence: Some(activated_ability_occurrence),
             triggered_ability: None,
             is_triggered: false,
             is_copy: false,
@@ -3947,6 +3952,7 @@ impl GameEngine {
             source_face_change: 0,
             ability_index: None,
             activated_ability: None,
+            activated_ability_occurrence: None,
             triggered_ability: None,
             is_triggered: false,
             is_copy: false,
@@ -6669,5 +6675,232 @@ mod mana_payment_tests {
             Err(EngineError::Illegal(_))
         ));
         assert_eq!(e.state.players[0].life, 1); // unchanged on failure
+    }
+
+    #[test]
+    fn static_grant_owner_is_frozen_before_its_source_leaves_and_returns() {
+        const GRANTOR: &str = r#"(id: "program_grantor", name: "Program Grantor", face_id: "program_grantor",
+                types: ["Artifact"],
+                static_abilities: [(
+                    ability_id: "static_01", presentation: Fallback,
+                    definition: GrantActivatedAbilityToPermanents(
+                        filter: (kind: Creature, controller: You),
+                        activated_abilities: [(
+                            ability_id: "activated_01", presentation: Fallback,
+                            costs: [SacrificePermanent(filter: (kind: AnyPermanent, controller: You, permanent_types: [Artifact]))],
+                            effect: [GainLife(amount: 1)],
+                        )],
+                    ),
+                )],
+            )"#;
+        const RECIPIENT: &str = r#"(id: "program_recipient", name: "Program Recipient", face_id: "program_recipient",
+            types: ["Creature"], power: 2, toughness: 2)"#;
+        let registry = CardRegistry::from_chunks_and_tokens(
+            &[
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                GRANTOR,
+                RECIPIENT,
+            ],
+            &[],
+        )
+        .expect("static grant fixture is valid");
+        let mut e = engine_with_priority();
+        e.registry = Box::leak(Box::new(registry));
+        let place = |engine: &mut GameEngine, card: &str| {
+            engine
+                .apply_dev_command(&rv1::DevCommand {
+                    target_player_id: 0,
+                    dev: Some(rv1::dev_command::Dev::PutCardInZone(
+                        rv1::DevPutCardInZone {
+                            card_name: card.into(),
+                            zone: rv1::DevZone::Battlefield as i32,
+                            ready: true,
+                        },
+                    )),
+                })
+                .expect("put fixture permanent on battlefield");
+            engine.state.next_object_id - 1
+        };
+        let grantor = place(&mut e, "Program Grantor");
+        let recipient = place(&mut e, "Program Recipient");
+        e.reconcile_activated_ability_slots();
+
+        let effective = e
+            .effective_activated_abilities(recipient)
+            .into_iter()
+            .find(|ability| matches!(ability.occurrence, ActivatedAbilityOccurrence::Granted(_)))
+            .expect("grantor supplies the recipient's activated ability");
+        let ActivatedAbilityOccurrence::Granted(TriggerAbilityOrigin::StaticGrant {
+            source_id,
+            source_zone_change,
+            definition,
+        }) = effective.occurrence.clone()
+        else {
+            panic!("the announced occurrence is the authored static grant");
+        };
+        assert_eq!(source_id, grantor);
+        let exact_owner = tricerules_card_model::ProgramOwnerId::ability(definition.clone());
+        let batch = e
+            .apply_scenario_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                        rv1::ActivateAbility {
+                            source_object_id: recipient,
+                            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+                            ability_index: effective.slot,
+                            expected_zone_change_generation: e
+                                .state
+                                .zone_change_generation
+                                .get(&recipient)
+                                .copied()
+                                .unwrap_or_default(),
+                            cost_selections: vec![rv1::CostSelection {
+                                cost_index: 0,
+                                selection: Some(rv1::cost_selection::Selection::PermanentId(
+                                    grantor,
+                                )),
+                            }],
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect("the granted ability can sacrifice its grantor and resolve later");
+        let frozen_occurrence = {
+            let stack_item = e
+                .state
+                .stack
+                .last()
+                .expect("activated ability is on the stack");
+            assert_eq!(stack_item.card_id, "program_recipient");
+            assert_eq!(
+                stack_item.ability_program_owner(),
+                Some(exact_owner.clone())
+            );
+            assert_eq!(
+                stack_item.activated_ability_occurrence,
+                Some(effective.occurrence.clone()),
+                "the full grant source incarnation and nested path survive payment",
+            );
+            let copied_stack_item = stack_item.clone();
+            assert_eq!(
+                copied_stack_item.activated_ability_occurrence,
+                Some(effective.occurrence.clone()),
+                "stack copies retain the bound occurrence",
+            );
+            assert_eq!(
+                copied_stack_item.ability_program_owner(),
+                Some(exact_owner.clone()),
+                "stack copies keep the exact program owner",
+            );
+            stack_item.activated_ability_occurrence.clone()
+        };
+        assert_eq!(e.state.objects[&grantor].zone, Zone::Graveyard);
+
+        super::super::resolution::move_object_to_zone(
+            &mut e.state,
+            e.registry,
+            grantor,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("move the same grantor object back to the battlefield");
+        e.emit_static_abilities_on_enter(grantor);
+        e.reconcile_activated_ability_slots();
+        let returned_occurrence = e
+            .effective_activated_abilities(recipient)
+            .into_iter()
+            .find(|ability| matches!(ability.occurrence, ActivatedAbilityOccurrence::Granted(_)))
+            .expect("the returned grantor supplies a fresh ability occurrence")
+            .occurrence;
+        assert_ne!(returned_occurrence, effective.occurrence);
+        assert_eq!(
+            e.state.stack.last().unwrap().ability_program_owner(),
+            Some(exact_owner),
+            "the old stack item remains bound to its original owner after a return",
+        );
+        assert!(batch
+            .events
+            .iter()
+            .any(|event| matches!(event.ev, Some(rv1::ruled_event::Ev::StackPushed(_)))));
+        let Some(ActivatedAbilityOccurrence::Granted(TriggerAbilityOrigin::StaticGrant {
+            source_zone_change: captured_generation,
+            ..
+        })) = frozen_occurrence
+        else {
+            panic!("stack item keeps the original static grant occurrence");
+        };
+        assert_eq!(captured_generation, source_zone_change);
+        assert_ne!(
+            e.state.zone_change_generation[&grantor], captured_generation,
+            "returning grantor is a new source incarnation",
+        );
+
+        let mut resolving_ability = effective.definition.clone();
+        resolving_ability.costs.clear();
+        e.state.add_activated_ability_grant(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(recipient),
+            kind: ContinuousEffectKind::GrantActivatedAbility(Box::new(resolving_ability)),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: e.state.command_index + 1,
+        });
+        e.reconcile_activated_ability_slots();
+        let resolving_grant = e
+            .effective_activated_abilities(recipient)
+            .into_iter()
+            .find(|ability| {
+                matches!(
+                    ability.occurrence,
+                    ActivatedAbilityOccurrence::Granted(TriggerAbilityOrigin::ResolvingGrant(_))
+                )
+            })
+            .expect("resolving grants remain live legacy activated abilities");
+        let resolving_batch = e
+            .apply_scenario_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                        rv1::ActivateAbility {
+                            source_object_id: recipient,
+                            source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+                            ability_index: resolving_grant.slot,
+                            expected_zone_change_generation: e
+                                .state
+                                .zone_change_generation
+                                .get(&recipient)
+                                .copied()
+                                .unwrap_or_default(),
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect("a resolving grant can still be activated and put on the stack");
+        let resolving_item = e
+            .state
+            .stack
+            .last()
+            .expect("resolving grant is on the stack");
+        assert_eq!(
+            resolving_item.activated_ability_occurrence,
+            Some(resolving_grant.occurrence)
+        );
+        assert_eq!(
+            resolving_item.ability_program_owner(),
+            None,
+            "a runtime grant without an authored owner does not gain a guessed program identity",
+        );
+        assert!(resolving_batch
+            .events
+            .iter()
+            .any(|event| matches!(event.ev, Some(rv1::ruled_event::Ev::StackPushed(_)))));
+        let life_before = e.state.players[0].life;
+        e.resolve_top_of_stack(&mut Vec::new())
+            .expect("legacy resolving-grant effect remains executable");
+        assert_eq!(e.state.players[0].life, life_before + 1);
     }
 }

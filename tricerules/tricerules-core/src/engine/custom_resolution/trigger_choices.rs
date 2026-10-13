@@ -236,6 +236,7 @@ impl GameEngine {
             source_face_change,
             ability_index: Some(ability_index),
             activated_ability: None,
+            activated_ability_occurrence: None,
             triggered_ability: Some(ability),
             is_triggered: true,
             is_copy: false,

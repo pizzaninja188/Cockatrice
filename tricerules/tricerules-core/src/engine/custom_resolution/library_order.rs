@@ -921,6 +921,7 @@ mod into_the_wilds_tests {
             source_face_change: 0,
             ability_index: None,
             activated_ability: None,
+            activated_ability_occurrence: None,
             triggered_ability: None,
             is_triggered: false,
             is_copy: false,
