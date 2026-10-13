@@ -347,7 +347,6 @@ pub(super) struct TokenCreationRequest<'a> {
     pub(super) count: u32,
     pub(super) recipients: Vec<PlayerId>,
     pub(super) spell_label: &'a str,
-    pub(super) item: &'a StackItem,
 }
 
 pub(super) fn token_identity(values: &CopiableValues) -> rv1::TokenIdentity {
@@ -1084,6 +1083,9 @@ impl GameEngine {
             .stack
             .pop()
             .ok_or(EngineError::Illegal("empty stack"))?;
+        // Bind authored program owners from this exact stack occurrence before target
+        // revalidation or the stack-wide fizzle check can consume it through legacy resolution.
+        let compiled_program_owners = self.compiled_resolution_program_owners(&top)?;
         // Preserve whether the caster actually chose any targets before CR 608.2b removes
         // targets that have become illegal. This distinguishes an optional-target spell cast
         // with zero targets (which resolves normally) from one whose chosen targets all became
@@ -1506,38 +1508,9 @@ impl GameEngine {
             return Ok(ResolutionProgress::Parked);
         }
 
-        if !is_ability {
-            if let Some(face) = self
-                .registry
-                .get(&top.card_id)
-                .and_then(|definition| definition.face(top.face_index))
-                .filter(|face| face.spell_program.is_some())
-            {
-                let owner = tricerules_card_model::ProgramOwnerId::face(
-                    top.card_id.clone(),
-                    face.face_id.clone(),
-                );
-                let compiled = self
-                    .registry
-                    .compiled_program_for_owner(&owner)
-                    .ok_or(EngineError::Illegal("spell program was not compiled"))?;
-                let program = ProgramRunState {
-                    owner,
-                    frames: vec![ProgramFrame {
-                        path: Vec::new(),
-                        next_instruction: 0,
-                        yield_to: Vec::new(),
-                    }],
-                    slots: vec![None; compiled.slots.len()],
-                    in_flight: None,
-                };
-                return self.run_program_with_previous(
-                    &top,
-                    program,
-                    EffectResult::default(),
-                    events,
-                );
-            }
+        if let Some(owners) = compiled_program_owners {
+            let program = self.begin_program_run(&top, owners)?;
+            return self.run_program_with_previous(&top, program, EffectResult::default(), events);
         }
         self.run_effect_list(&top, &spell_label, resolution_effects, 0, events)
     }
@@ -3116,11 +3089,11 @@ impl GameEngine {
     fn create_tokens(
         &mut self,
         request: TokenCreationRequest<'_>,
+        stack: ParkedStackResolution,
         enters_tapped: bool,
         delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<Option<Vec<TriggerObjectRef>>, EngineError> {
-        let item = request.item.clone();
         let (entries, logs) = self.prepare_token_entries(request, enters_tapped)?;
         let created_ids = entries
             .iter()
@@ -3128,8 +3101,8 @@ impl GameEngine {
             .collect::<Vec<_>>();
         // CR 603.6: one token-making instruction puts all of its tokens onto the battlefield
         // simultaneously, so every entrant exists before their ETB triggers are collected.
-        if self.begin_token_entry_batch(
-            item,
+        if self.begin_token_entry_batch_with_stack(
+            stack,
             entries,
             logs,
             TokenEntryBatchOptions {
@@ -3175,7 +3148,6 @@ impl GameEngine {
             count,
             recipients,
             spell_label,
-            item: _,
         } = request;
         let registry = self.registry;
         let values = if let Some(copy) = copy {

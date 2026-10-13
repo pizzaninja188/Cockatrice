@@ -13,9 +13,9 @@ pub(super) fn amass(
         AmountContext::for_stack_item(cx.top, cx.controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
+    let parked_stack = cx.parked_stack();
     let mut candidates = cx.engine.amass_candidates(cx.controller);
     if candidates.is_empty() {
-        let item = cx.top.clone();
         let (entries, logs) = cx.engine.prepare_token_entries(
             TokenCreationRequest {
                 token_id: subtype.token_id(),
@@ -23,12 +23,11 @@ pub(super) fn amass(
                 count: 1,
                 recipients: vec![cx.controller],
                 spell_label: cx.spell_label,
-                item: &item,
             },
             false,
         )?;
-        if cx.engine.begin_token_entry_batch(
-            item,
+        if cx.engine.begin_token_entry_batch_with_stack(
+            parked_stack.clone(),
             entries,
             logs,
             TokenEntryBatchOptions {
@@ -46,7 +45,7 @@ pub(super) fn amass(
         [] => Ok(EffectOutcome::Continue),
         [chosen] => {
             let result = cx.engine.apply_amass(
-                ParkedStackResolution::new(cx.top.clone()),
+                parked_stack.clone(),
                 *chosen,
                 cx.controller,
                 PendingAmass { subtype, count },
@@ -62,7 +61,7 @@ pub(super) fn amass(
         }
         _ => {
             cx.engine.park_amass_choice(
-                ParkedStackResolution::new(cx.top.clone()),
+                parked_stack,
                 cx.controller,
                 PendingAmass { subtype, count },
                 candidates,
@@ -275,12 +274,7 @@ impl GameEngine {
         else {
             return Ok(finish_with_events(self, events));
         };
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            result,
-            events,
-        )
+        self.complete_parked_stack_with_previous(stack, result, events)
     }
 
     pub(in crate::engine) fn finish_amass_after_token_entry(
@@ -292,12 +286,7 @@ impl GameEngine {
         let controller = stack.item.controller;
         let candidates = self.amass_candidates(controller);
         match candidates.as_slice() {
-            [] => self.complete_parked_resolution_with_previous(
-                stack.item,
-                stack.resume_effect_index,
-                EffectResult::default(),
-                events,
-            ),
+            [] => self.complete_parked_stack_with_previous(stack, EffectResult::default(), events),
             [chosen] => {
                 let Some(result) = self.apply_amass(
                     stack.clone(),
@@ -310,12 +299,7 @@ impl GameEngine {
                 else {
                     return Ok(finish_with_events(self, events));
                 };
-                self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    result,
-                    events,
-                )
+                self.complete_parked_stack_with_previous(stack, result, events)
             }
             _ => {
                 let label = object_display_name(&self.state, self.registry, stack.item.id);

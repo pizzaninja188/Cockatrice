@@ -171,10 +171,11 @@ explicit. Use player-set-generic logic rather than two-player arithmetic.
 Use `spell_program` for supported ordered spell actions that need explicit results or nested
 conditional suspension. It is currently limited to targetless Instant/Sorcery faces and is the
 face's sole resolution owner: do not combine it with `spell_effect`, `modal_spell` or `custom_effect`.
-The finite tree has `Perform` leaves and nested `If` blocks; no loops, jumps or authored functions.
+The finite tree has `Perform` leaves and nested `If`/`IfResult` blocks; no loops, jumps or authored functions.
 
 Accepted leaves are `Draw`, `Discard`, `ChoosePermanents`, `UntapChosenPermanents`,
-`SelectHandCards` and `PutSelectedHandCardsOnLibraryTop`. Draw/discard recipients and permanent
+`SelectHandCards`, `PutSelectedHandCardsOnLibraryTop` and ordinary fixed-count controller
+`CreateTokens` without delayed sacrifice. Draw/discard recipients and permanent
 choosers must be `Controller`; draw and hand-selection counts must be fixed literals. Discard
 retains the existing validated `DiscardQuantity` choices. Permanent filters cannot use
 `DefendingPlayer` or `AttachedObject`, including inside `any_of`, and constraints must be empty.
@@ -187,6 +188,21 @@ selection. There is no implicit "previous instruction" input. Bindings cannot be
 read forward/across sibling scopes. Each branch explicitly lists its `yields`; both arms must
 yield compatible types, and an `If` binding exports their joined result to its parent.
 Conditions are evaluated on entry and are not reevaluated after a private choice resumes.
+
+`Discard` produces a typed result containing committed discard batches, captured card-type
+knowledge and a separate outcome. `IfResult` can inspect an earlier in-scope discard binding:
+`DiscardCount(result: "discarded", players: Controller, card_type: Some(Nonland), min: Some(1))`
+or `DiscardOutcome(result: "discarded", outcome: ChosenToPay)`. Counts use committed receipts;
+an unrevealed discard into a hidden destination has unknown characteristics and cannot satisfy a
+card-type predicate. A public madness exile retains known characteristics. Results become usable
+only after the discard transaction, replacement choices and chosen ordering finish.
+
+`Discard(quantity: OptionalExact(2))` offers either zero or exactly two eligible cards, with the
+same rule for any positive literal. The server rejects a partial nonzero answer before mutation.
+An empty answer yields `Declined`; too few eligible cards yields `Unpayable` without a prompt.
+An exact choice yields `ChosenToPay` independently of replacement destinations or receipt count.
+Use that outcome for a subsequent "if you do" instruction. Mandatory discard yields `Performed`;
+do not infer optional payment from a nonempty receipt or an ordinary `UpTo` selection.
 
 For example, the land-choice tail of Frantic Search is:
 
@@ -212,6 +228,9 @@ Sculptor's draw/put-back ability, without admitting their other mechanics or abi
 Selection does not move cards; the placement instruction uses generation-bound selected identities.
 The two hand-selection/placement leaves are program-only and are rejected in ordinary effect lists.
 Legacy `DrawDiscard` definitions and generator templates remain supported until separately migrated.
+Their complete owners already lower through this runner, including exact activated/triggered owners
+and every sibling mode of an affected modal container. This internal lowering does not admit authored
+ability/mode programs or targetful `spell_program` definitions; those need the next schema increment.
 
 ### Printed-card filters and graveyard targets
 

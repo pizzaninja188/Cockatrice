@@ -19,12 +19,13 @@ pub(super) fn create_token_copies(
         AmountContext::for_stack_item(cx.top, cx.controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
+    let parked_stack = cx.parked_stack();
     if source == TokenCopySource::Source {
         if let Some(snapshot) = cx.engine.source_token_copy_snapshot(cx.top) {
             let Some(produced_objects) = cx.engine.create_tokens_from_copy(
                 &snapshot,
                 count,
-                cx.top,
+                parked_stack.clone(),
                 cx.spell_label,
                 cx.events,
             )?
@@ -40,7 +41,7 @@ pub(super) fn create_token_copies(
             let Some(produced_objects) = cx.engine.create_tokens_from_copy(
                 &snapshot,
                 count,
-                cx.top,
+                parked_stack.clone(),
                 cx.spell_label,
                 cx.events,
             )?
@@ -65,7 +66,7 @@ pub(super) fn create_token_copies(
             let Some(produced_objects) = cx.engine.create_tokens_from_copy(
                 &snapshot,
                 count,
-                cx.top,
+                parked_stack.clone(),
                 cx.spell_label,
                 cx.events,
             )?
@@ -77,12 +78,17 @@ pub(super) fn create_token_copies(
         return Ok(EffectOutcome::Continue);
     }
     for source in cx.targets {
-        if cx
-            .engine
-            .create_copied_tokens(*source, count, cx.top, cx.spell_label, cx.events)?
-        {
+        let Some(produced_objects) = cx.engine.create_copied_tokens(
+            *source,
+            count,
+            parked_stack.clone(),
+            cx.spell_label,
+            cx.events,
+        )?
+        else {
             return Ok(EffectOutcome::Suspended);
-        }
+        };
+        cx.effect_result.produced_objects.extend(produced_objects);
     }
     Ok(EffectOutcome::Continue)
 }
@@ -118,6 +124,7 @@ pub(super) fn populate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineErr
         "Choose a creature token you control to populate ({}).",
         cx.spell_label
     );
+    let parked_stack = cx.parked_stack();
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
@@ -164,7 +171,7 @@ pub(super) fn populate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineErr
             unique_names: false,
         },
         continuation: ResolutionContinuation::Populate {
-            stack: ParkedStackResolution::new(cx.top.clone()),
+            stack: parked_stack,
             candidate_generations,
         },
     });
@@ -188,33 +195,32 @@ impl GameEngine {
         &mut self,
         source: ObjectId,
         count: u32,
-        item: &StackItem,
+        stack: ParkedStackResolution,
         label: &str,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<bool, EngineError> {
+    ) -> Result<Option<Vec<TriggerObjectRef>>, EngineError> {
         let Some(object) = self.state.objects.get(&source) else {
-            return Ok(false);
+            return Ok(Some(Vec::new()));
         };
         if object.zone != Zone::Battlefield {
-            return Ok(false);
+            return Ok(Some(Vec::new()));
         }
         let Some(snapshot) = copying::token_copy_snapshot_from(&self.state, self.registry, source)
         else {
-            return Ok(false);
+            return Ok(Some(Vec::new()));
         };
-        Ok(self
-            .create_tokens_from_copy(&snapshot, count, item, label, events)?
-            .is_none())
+        self.create_tokens_from_copy(&snapshot, count, stack, label, events)
     }
 
     fn create_tokens_from_copy(
         &mut self,
         snapshot: &TokenCopySnapshot,
         count: u32,
-        item: &StackItem,
+        stack: ParkedStackResolution,
         label: &str,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<Option<Vec<TriggerObjectRef>>, EngineError> {
+        let item = stack.item.clone();
         self.create_tokens(
             TokenCreationRequest {
                 token_id: &snapshot.token_id,
@@ -222,8 +228,8 @@ impl GameEngine {
                 count,
                 recipients: vec![item.controller],
                 spell_label: label,
-                item,
             },
+            stack,
             false,
             None,
             events,
@@ -256,21 +262,21 @@ impl GameEngine {
         }
         let stack = stack.clone();
         let mut events = Vec::new();
-        if self.create_copied_tokens(chosen, 1, &stack.item, "Populate", &mut events)? {
+        let Some(produced_objects) =
+            self.create_copied_tokens(chosen, 1, stack.clone(), "Populate", &mut events)?
+        else {
             if let Some(resolution) = self.state.pending_resolution.as_mut() {
                 if let Some(parked) = resolution.continuation.stack_mut() {
                     parked.resume_effect_index = stack.resume_effect_index;
                     parked.previous_result = stack.previous_result;
+                    parked.program = stack.program;
                 }
             }
             return Ok(super::super::events::finish_with_events(self, events));
-        }
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            stack.previous_result,
-            events,
-        )
+        };
+        let mut previous_result = stack.previous_result.clone();
+        previous_result.produced_objects = produced_objects;
+        self.complete_parked_stack_with_previous(stack, previous_result, events)
     }
 }
 
@@ -289,6 +295,7 @@ pub(super) fn create_tokens(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let item = cx.top.clone();
+    let parked_stack = cx.parked_stack();
     let recipients = player_recipients(cx, who);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
@@ -306,8 +313,8 @@ pub(super) fn create_tokens(
             count,
             recipients,
             spell_label,
-            item: &item,
         },
+        parked_stack,
         tapped,
         sacrifice_timing,
         events,
@@ -329,7 +336,7 @@ pub(super) fn create_token_batch(
     let SpellEffectKind::CreateTokenBatch { tokens } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let item = cx.top.clone();
+    let parked_stack = cx.parked_stack();
     let mut entries = Vec::new();
     let mut logs = Vec::new();
     // Prepare every variant before processing any entry replacement or committing any member.
@@ -341,7 +348,6 @@ pub(super) fn create_token_batch(
                 count: 1,
                 recipients: vec![cx.controller],
                 spell_label: cx.spell_label,
-                item: &item,
             },
             false,
         )?;
@@ -352,8 +358,8 @@ pub(super) fn create_token_batch(
         .iter()
         .map(|entry| entry.event.object_id)
         .collect::<Vec<_>>();
-    if cx.engine.begin_token_entry_batch(
-        item,
+    if cx.engine.begin_token_entry_batch_with_stack(
+        parked_stack,
         entries,
         logs,
         TokenEntryBatchOptions::default(),
@@ -378,6 +384,7 @@ pub(super) fn create_attacking_tokens(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let item = cx.top.clone();
+    let parked_stack = cx.parked_stack();
     let controller = cx.controller;
     let count = cx.engine.resolve_amount(
         &count,
@@ -400,14 +407,17 @@ pub(super) fn create_attacking_tokens(
             count,
             recipients: vec![controller],
             spell_label: cx.spell_label,
-            item: &item,
         },
         true,
     )?;
+    let minted_ids = entries
+        .iter()
+        .map(|entry| entry.event.object_id)
+        .collect::<Vec<_>>();
     if options.len() == 1 {
         let defenders = vec![options[0]; entries.len()];
-        if cx.engine.begin_token_entry_batch(
-            item,
+        if cx.engine.begin_token_entry_batch_with_stack(
+            parked_stack.clone(),
             entries,
             logs,
             TokenEntryBatchOptions {
@@ -419,6 +429,7 @@ pub(super) fn create_attacking_tokens(
         )? {
             return Ok(EffectOutcome::Suspended);
         }
+        cx.effect_result.produced_objects = cx.engine.token_entry_object_refs(&minted_ids);
         return Ok(EffectOutcome::Continue);
     }
 
@@ -483,7 +494,7 @@ pub(super) fn create_attacking_tokens(
             unique_names: false,
         },
         continuation: ResolutionContinuation::AttackingTokenDefenders {
-            stack: ParkedStackResolution::new(item),
+            stack: parked_stack,
             entries,
             logs,
             chosen_defenders: Vec::new(),

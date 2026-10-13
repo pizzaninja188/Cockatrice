@@ -101,16 +101,24 @@ impl GameEngine {
         &mut self,
         receipts: Vec<(PlayerId, Vec<DiscardReceipt>)>,
         out: &mut Vec<rv1::RuledEvent>,
-    ) {
-        let events = receipts
+    ) -> Vec<DiscardBatch> {
+        let batches = receipts
             .into_iter()
             .filter_map(|(player, cards)| {
-                (!cards.is_empty()).then_some(GameEvent::Discarded(DiscardBatch { player, cards }))
+                (!cards.is_empty()).then_some(DiscardBatch { player, cards })
             })
             .collect::<Vec<_>>();
-        if !events.is_empty() {
-            self.fire_triggers(&events, out);
+        if !batches.is_empty() {
+            self.fire_triggers(
+                &batches
+                    .iter()
+                    .cloned()
+                    .map(GameEvent::Discarded)
+                    .collect::<Vec<_>>(),
+                out,
+            );
         }
+        batches
     }
 }
 
@@ -377,6 +385,7 @@ impl GameEngine {
         let mut events = Vec::new();
         let mut result = CardResultCohort::default();
         let mut discard_receipts: Vec<(PlayerId, Vec<DiscardReceipt>)> = Vec::new();
+        let mut typed_cards = Vec::new();
         for card in &batch.cards {
             let destination = card.destination.expect("all discard destinations chosen");
             let (name, moved, discard_receipt) = self.commit_discard_to(
@@ -387,13 +396,6 @@ impl GameEngine {
                 batch.revealed,
             )?;
             events.push(moved);
-            match discard_receipts
-                .iter_mut()
-                .find(|(player, _)| *player == card.player)
-            {
-                Some((_, receipts)) => receipts.push(discard_receipt),
-                None => discard_receipts.push((card.player, vec![discard_receipt])),
-            }
             let mut receipt = super::payment::card_result_entry(
                 &self.state,
                 self.registry,
@@ -401,6 +403,24 @@ impl GameEngine {
                 card.player,
                 card.object.object_id,
             );
+            let type_knowledge = if destination == Zone::Library
+                && discard_receipt.known_card_id.is_none()
+            {
+                crate::state::DiscardCardTypeKnowledge::UnknownHidden
+            } else {
+                crate::state::DiscardCardTypeKnowledge::Known(receipt.matched_card_types.clone())
+            };
+            typed_cards.push(crate::state::DiscardCardResultEntry {
+                affected_player: card.player,
+                type_knowledge,
+            });
+            match discard_receipts
+                .iter_mut()
+                .find(|(player, _)| *player == card.player)
+            {
+                Some((_, receipts)) => receipts.push(discard_receipt),
+                None => discard_receipts.push((card.player, vec![discard_receipt])),
+            }
             if destination == Zone::Library && !batch.revealed {
                 receipt.matched_card_types.clear();
             }
@@ -414,7 +434,6 @@ impl GameEngine {
                 format!("P{} discards {name}.", card.player)
             }));
         }
-        self.fire_discard_batches(discard_receipts, &mut events);
         // Moves use the normal zone funnel, then apply the owner's explicit top-first order.
         for card in &batch.cards {
             if card.destination == Some(Zone::Library) {
@@ -431,6 +450,16 @@ impl GameEngine {
                 library.retain(|other| other != oid);
                 library.push_front(*oid);
             }
+        }
+        // Keep the per-player semantic discard batches in commit order, and publish them only
+        // after every replacement destination and any chosen library order are committed.
+        let discard_batches = self.fire_discard_batches(discard_receipts, &mut events);
+        if let Some(early_result) = stack.previous_result.program_discard_result.as_ref() {
+            result.program_discard_result = Some(crate::state::ProgramDiscardResult {
+                outcome: early_result.outcome,
+                batches: discard_batches,
+                cards: typed_cards,
+            });
         }
         if let Some((player, count)) = batch.draw_after {
             let completion = super::draw::DrawCompletion::ResumeEffects {

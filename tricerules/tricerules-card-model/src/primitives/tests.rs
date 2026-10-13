@@ -161,6 +161,328 @@ fn zone_card_filter_omits_unset_color_match_from_ron() {
 }
 
 #[test]
+fn registry_lowers_the_complete_draw_discard_spell_owner() {
+    let ron = r#"(
+        id: "whole_draw_discard_fixture", name: "Whole Draw Discard Fixture",
+        face_id: "whole_draw_discard_fixture", types: ["Sorcery"],
+        spell_effect: [Draw(count: 1), DrawDiscard(
+            who: Controller, draw_count: 1, discard_count: 1,
+            order: DrawThenDiscard, optional: false
+        )]
+    )"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[ron], &[])
+        .expect("valid draw/discard fixture should load");
+    let owner = crate::ProgramOwnerId::face(
+        "whole_draw_discard_fixture",
+        crate::CardFaceId::new("whole_draw_discard_fixture").unwrap(),
+    );
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("every DrawDiscard-bearing owner should have a compiled whole-body program");
+    assert_eq!(program.owner, owner);
+    assert_eq!(program.body.steps.len(), 3);
+    assert!(matches!(
+        &program.body.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Draw { .. })
+    ));
+    assert!(matches!(
+        &program.body.steps[1].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Draw { count: crate::primitives::Amount::Fixed(1), .. })
+    ));
+    assert!(matches!(
+        &program.body.steps[2].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Discard {
+                quantity: crate::primitives::DiscardQuantity::Exact(1), ..
+            })
+    ));
+}
+
+#[test]
+fn optional_exact_discard_is_a_typed_exact_n_operation() {
+    let effect = crate::primitives::SpellEffectKind::Discard {
+        who: crate::primitives::PlayerRecipient::Controller,
+        quantity: crate::primitives::DiscardQuantity::OptionalExact(2),
+    };
+    assert!(effect
+        .validate(crate::primitives::EffectContext::Spell)
+        .is_ok());
+}
+
+#[test]
+fn registry_lowers_every_mode_of_an_affected_modal_owner_by_stable_mode_id() {
+    let ron = r#"(
+        id: "modal_draw_discard_fixture", name: "Modal Draw Discard Fixture",
+        face_id: "modal_draw_discard_fixture", types: ["Sorcery"],
+        modal_spell: (
+            min_modes: 1, max_modes: 1,
+            modes: [
+                (mode_id: "mode_01", presentation: Fallback,
+                    effects: [DrawDiscard(who: Controller, draw_count: 1,
+                        discard_count: 1, order: DrawThenDiscard, optional: false)]),
+                (mode_id: "mode_02", presentation: Fallback,
+                    effects: [Draw(count: 2)]),
+                (mode_id: "mode_03", presentation: Fallback,
+                    effects: [CounterTargetSpell()],
+                    targeting: Some((groups: [(min: 1, max: 1,
+                        prompt: "Choose target spell", effect_indices: [0])]))),
+                (mode_id: "mode_04", presentation: Fallback,
+                    effects: [CreateTokenCopies(count: 1,
+                        source: Chosen((kind: Creature, controller: You)))],
+                    targeting: Some((groups: [(min: 1, max: 1,
+                        prompt: "Choose target creature you control", effect_indices: [0])])))
+            ]
+        )
+    )"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[ron], &[])
+        .expect("valid modal fixture should load");
+    for (mode, expected_len) in [
+        ("mode_01", 2),
+        ("mode_02", 1),
+        ("mode_03", 1),
+        ("mode_04", 1),
+    ] {
+        let owner = crate::ProgramOwnerId::face_mode(
+            "modal_draw_discard_fixture",
+            crate::CardFaceId::new("modal_draw_discard_fixture").unwrap(),
+            crate::ModeId::new(mode).unwrap(),
+        );
+        let program = registry
+            .compiled_program_for_owner(&owner)
+            .expect("every mode in an affected modal owner must be lowered");
+        assert_eq!(program.owner, owner);
+        assert_eq!(program.body.steps.len(), expected_len);
+        if mode == "mode_03" || mode == "mode_04" {
+            assert_eq!(
+                program.target_projection,
+                crate::primitives::ProgramTargetProjection::ModeLocal {
+                    mode_id: crate::ModeId::new(mode).unwrap(),
+                }
+            );
+            assert_eq!(program.target_bindings.len(), 1);
+            assert_eq!(
+                program.target_bindings[0]
+                    .source_effect_path
+                    .root_effect_index,
+                0
+            );
+            assert_eq!(program.target_bindings[0].target_group_index, 0);
+            assert_eq!(program.target_bindings[0].role_index, 0);
+        }
+    }
+}
+
+#[test]
+fn registry_lowers_validated_targeted_spell_siblings_in_owner_order() {
+    let ron = r#"(
+        id: "targeted_draw_discard_fixture", name: "Targeted Draw Discard Fixture",
+        face_id: "targeted_draw_discard_fixture", types: ["Sorcery"],
+        spell_effect: [
+            DamageTarget(amount: 5, target: (kind: Creature)),
+            ReturnToOwnersHand(subject: Chosen((kind: Creature))),
+            DrawDiscard(who: Controller, draw_count: 2, discard_count: 1,
+                order: DrawThenDiscard, optional: false)
+        ],
+        targeting: Some((groups: [
+            (min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0]),
+            (min: 0, max: 2, prompt: "Choose up to two target creatures", effect_indices: [1])
+        ]))
+    )"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[ron], &[])
+        .expect("target roles and source operations should pass their ordinary validators");
+    let owner = crate::ProgramOwnerId::face(
+        "targeted_draw_discard_fixture",
+        crate::CardFaceId::new("targeted_draw_discard_fixture").unwrap(),
+    );
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("targeted DrawDiscard owner should compile as one whole body");
+    assert_eq!(program.body.steps.len(), 4);
+    assert!(matches!(
+        &program.body.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::DamageTarget { .. })
+    ));
+    assert!(matches!(
+        &program.body.steps[1].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::ReturnToOwnersHand { .. })
+    ));
+    assert_eq!(program.target_bindings.len(), 2);
+    assert_eq!(
+        program.target_bindings[0]
+            .source_effect_path
+            .root_effect_index,
+        0
+    );
+    assert_eq!(
+        program.target_bindings[0].source_effect_path,
+        program.body.steps[0].source_effect_path.clone().unwrap()
+    );
+    assert_eq!(program.target_bindings[0].target_group_index, 0);
+    assert_eq!(program.target_bindings[0].role_index, 0);
+    assert_eq!(
+        program.target_bindings[1]
+            .source_effect_path
+            .root_effect_index,
+        1
+    );
+    assert_eq!(
+        program.target_bindings[1].source_effect_path,
+        program.body.steps[1].source_effect_path.clone().unwrap()
+    );
+    assert_eq!(program.target_bindings[1].target_group_index, 1);
+    assert_eq!(program.target_bindings[1].role_index, 0);
+    assert_eq!(
+        program.body.steps[2].source_effect_path,
+        Some(crate::primitives::SourceEffectPath {
+            root_effect_index: 2,
+            nested_steps: Vec::new(),
+        })
+    );
+    assert_eq!(
+        program.body.steps[3].source_effect_path,
+        program.body.steps[2].source_effect_path
+    );
+}
+
+#[test]
+fn registry_rejects_nested_target_roles_until_the_program_path_is_modeled() {
+    let ron = r#"(
+        id: "nested_target_program_fixture", name: "Nested Target Program Fixture",
+        face_id: "nested_target_program_fixture", types: ["Sorcery"],
+        spell_effect: [
+            Conditional(condition: ControllerLibraryEmpty,
+                effect: Destroy(subject: Chosen((kind: Creature)))),
+            DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
+                order: DrawThenDiscard, optional: false)
+        ],
+        targeting: Some((groups: [
+            (min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])
+        ]))
+    )"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[ron], &[])
+        .expect_err("conditional target bindings cannot be emitted with a root-only path");
+    assert!(
+        format!("{error}").contains("nested target roles inside Conditional"),
+        "{error}"
+    );
+}
+
+#[test]
+fn registry_lowers_recruit_discard_count_branch_to_its_typed_result_slot() {
+    let card = r#"(
+        id: "discard_branch_fixture", name: "Discard Branch Fixture",
+        face_id: "discard_branch_fixture", types: ["Creature"], power: 2, toughness: 2,
+        triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+            trigger: WhenSelfEntersBattlefield,
+            effect: [
+                DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
+                    order: DrawThenDiscard, optional: false),
+                ChooseResolutionBranch(chooser: Controller, optional: false,
+                    selection: FirstApplicable, branches: [
+                        (branch_id: "create_soldier", presentation: Fallback, cost: None,
+                            requirement: CardResultCount(filter: (source: PreviousEffect,
+                                action: Discard, players: Controller, card_type: Some(Nonland)),
+                                min: Some(1), max: None),
+                            effects: [CreateTokens(token: "soldier_w_1_1", count: 1,
+                                who: Controller, tapped: false, sacrifice_timing: None)]),
+                        (branch_id: "otherwise", presentation: Fallback, cost: None,
+                            requirement: Always, effects: [])
+                    ], otherwise: [])
+            ])]
+    )"#;
+    let token = r#"(id: "soldier_w_1_1", name: "Soldier", face_id: "soldier_w_1_1",
+        types: ["Creature", "Soldier"], colors: [White], power: 1, toughness: 1)"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[card], &[token])
+        .expect("typed discard branch and registered token should load");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "discard_branch_fixture".into(),
+        face_id: crate::CardFaceId::new("discard_branch_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("the complete triggered owner should compile");
+    assert_eq!(program.body.steps.len(), 3);
+    let crate::primitives::CompiledInstructionKind::If { condition, yes, no } =
+        &program.body.steps[2].kind
+    else {
+        panic!("Recruit branch must consume the typed discard result");
+    };
+    let crate::primitives::CompiledProgramCondition::Result(
+        crate::primitives::CompiledProgramResultCondition::DiscardCount { result, min, .. },
+    ) = condition.as_ref()
+    else {
+        panic!("Recruit branch must use the typed discard count condition");
+    };
+    assert_eq!(*min, Some(1));
+    assert_eq!(
+        program.slot(*result).unwrap().result_type,
+        crate::primitives::ResultType::DiscardResult {
+            who: crate::primitives::PlayerRecipient::Controller,
+            cardinality: crate::primitives::Cardinality {
+                min: 0,
+                max: Some(1)
+            },
+            optional_payment: false,
+        }
+    );
+    assert!(matches!(
+        &yes.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::CreateTokens { .. })
+    ));
+    assert_eq!(
+        yes.steps[0].source_effect_path,
+        Some(crate::primitives::SourceEffectPath {
+            root_effect_index: 1,
+            nested_steps: vec![crate::primitives::SourceEffectPathStep::BranchEffect {
+                branch_id: crate::ChoiceId::new("create_soldier").unwrap(),
+                effect_index: 0,
+            }],
+        })
+    );
+    assert!(no.steps.is_empty());
+}
+
+#[test]
+fn registry_requires_a_draw_step_producer_for_affected_player_program_input() {
+    let make_card = |trigger| {
+        format!(
+            r#"(id: "affected_draw_fixture", name: "Affected Draw Fixture",
+                face_id: "affected_draw_fixture", types: ["Creature"], power: 1, toughness: 1,
+                triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                    trigger: {trigger}, effect: [DrawDiscard(who: AffectedPlayer,
+                        draw_count: 1, discard_count: 1, order: DrawThenDiscard,
+                        optional: false)])])"#
+        )
+    };
+    let wrong_trigger = make_card("WhenSelfEntersBattlefield");
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&wrong_trigger], &[])
+        .expect_err("an unrelated event does not supply an affected player");
+    assert!(format!("{error}").contains("trigger does not supply"));
+
+    let draw_step = make_card("AtBeginningOfDrawStep(player: AnyPlayer)");
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&draw_step], &[])
+        .expect("the generic draw-step trigger supplies its event player");
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "affected_draw_fixture".into(),
+        face_id: crate::CardFaceId::new("affected_draw_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    assert_eq!(
+        registry
+            .compiled_program_for_owner(&owner)
+            .unwrap()
+            .required_inputs,
+        vec![crate::primitives::ProgramRequiredInput::TriggerAffectedPlayer]
+    );
+}
+
+#[test]
 fn land_type_additions_and_replacements_validate_distinct_subtype_rules() {
     let forest: super::TypeLineAddition = ron::from_str("(land_types: [Forest])").unwrap();
     assert!(
@@ -4012,6 +4334,83 @@ fn choose_lands_instruction(id: &str, bind: &str) -> String {
 }
 
 #[test]
+fn program_conditions_roundtrip_legacy_game_and_typed_discard_result_ron() {
+    let game_ron = r#"(steps: [(id: "if", kind: If(
+        condition: AllOf([
+            ControllerLibraryEmpty,
+            CardsInHand(players: Relative(Controller), min: Some(1)),
+        ]),
+        yes: (steps: [], yields: []),
+        no: (steps: [], yields: []),
+    ))], yields: [])"#;
+    let game: super::AuthoredBlock =
+        ron::from_str(game_ron).expect("legacy game-condition program RON remains accepted");
+    let game_roundtrip: super::AuthoredBlock =
+        ron::from_str(&ron::ser::to_string(&game).expect("legacy program serializes"))
+            .expect("serialized legacy program parses back");
+    assert_eq!(game_roundtrip, game);
+
+    let result_ron = r#"(steps: [(id: "if_result", kind: IfResult(
+        condition: DiscardCount(
+            result: "discarded",
+            players: Controller,
+            card_type: Some(Nonland),
+            min: Some(1),
+            max: None,
+        ),
+        yes: (steps: [], yields: []),
+        no: (steps: [], yields: []),
+    ))], yields: [])"#;
+    let result: super::AuthoredBlock =
+        ron::from_str(result_ron).expect("typed result program condition parses");
+    let result_roundtrip: super::AuthoredBlock =
+        ron::from_str(&ron::ser::to_string(&result).expect("typed result program serializes"))
+            .expect("serialized typed result program parses back");
+    assert_eq!(result_roundtrip, result);
+}
+
+#[test]
+fn program_compiler_resolves_only_dominating_discard_result_conditions() {
+    let definition = program_fixture(
+        r#"(steps: [
+            (id: "discard", bind: ["discarded"], kind: Perform(Discard(
+                who: Controller, quantity: OptionalExact(2)
+            ))),
+            (id: "paid", kind: IfResult(
+                condition: DiscardOutcome(result: "discarded", outcome: ChosenToPay),
+                yes: (steps: [], yields: []),
+                no: (steps: [], yields: []),
+            )),
+        ], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("a typed optional discard result can control a later program branch");
+    let owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    assert!(registry.compiled_program_for_owner(&owner).is_some());
+
+    for (result, expected) in [
+        ("later", "not in scope"),
+        ("drawn", "not a compatible discard result"),
+    ] {
+        let body = format!(
+            r#"(steps: [
+                (id: "draw", bind: ["drawn"], kind: Perform(Draw(count: 1))),
+                (id: "paid", kind: IfResult(
+                    condition: DiscardOutcome(result: "{result}", outcome: ChosenToPay),
+                    yes: (steps: [], yields: []), no: (steps: [], yields: []),
+                )),
+            ], yields: [])"#
+        );
+        let invalid = program_fixture(&body);
+        let error = invalid_program_reason(&invalid);
+        assert!(error.contains(expected), "{error}");
+    }
+}
+
+#[test]
 fn spell_program_typechecks_a_generation_bound_permanent_result_consumer() {
     let program = format!(
         "(steps: [{}, (id: \"untap_lands\", input: Some(\"lands\"), kind: Perform(UntapChosenPermanents))], yields: [])",
@@ -4121,6 +4520,99 @@ fn program_compiler_preserves_owner_context_and_local_target_projection() {
     assert_eq!(
         compiled_ability.target_projection,
         super::ProgramTargetProjection::OwnerLocal
+    );
+}
+
+#[test]
+fn program_compiler_rejects_untyped_dynamic_and_event_bound_leaf_parameters() {
+    let compile_error = |effect: &str, context: super::EffectContext| {
+        let body: super::AuthoredBlock = ron::from_str(&format!(
+            r#"(steps: [(id: "effect", bind: [], input: None,
+                kind: Perform({effect}))], yields: [])"#
+        ))
+        .expect("leaf fixture parses");
+        let program = super::CardProgram { body };
+        let owner = match context {
+            super::EffectContext::Spell => crate::ProgramOwnerId::face(
+                "leaf_contract_fixture",
+                crate::CardFaceId::new("leaf_contract_fixture").unwrap(),
+            ),
+            super::EffectContext::Ability => {
+                crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+                    card_id: "leaf_contract_fixture".into(),
+                    face_id: crate::CardFaceId::new("leaf_contract_fixture").unwrap(),
+                    ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+                })
+            }
+        };
+        super::CompiledProgram::compile(owner, context, &program)
+            .expect_err("unsupported dynamic or event-bound parameter must fail closed")
+    };
+
+    for (effect, context, expected) in [
+        (
+            "DamageTarget(amount: Conditional(condition: ControllerLibraryEmpty, when_true: 1, otherwise: 2), target: (kind: Creature))",
+            super::EffectContext::Spell,
+            "DamageTarget amount must be fixed, or X",
+        ),
+        (
+            "CounterTargetSpell(unless_controller_pays: Some(EventCount))",
+            super::EffectContext::Spell,
+            "spells cannot reference a trigger event's count",
+        ),
+        (
+            "ReturnToOwnersHand(subject: PreviousEffectObject)",
+            super::EffectContext::Spell,
+            "owner-local chosen target",
+        ),
+        (
+            "CreateTokenCopies(count: 1, source: Source)",
+            super::EffectContext::Ability,
+            "owner-local chosen target",
+        ),
+        (
+            "DamageTarget(amount: 1, target: (kind: Creature, controller: DefendingPlayer))",
+            super::EffectContext::Spell,
+            "defending player outside its typed program inputs",
+        ),
+    ] {
+        let error = compile_error(effect, context);
+        assert!(error.contains(expected), "{effect}: {error}");
+    }
+}
+
+#[test]
+fn authored_program_rejects_targeted_leaf_without_compiled_binding() {
+    let definition = program_fixture(
+        r#"(steps: [(id: "damage", bind: [], kind: Perform(
+            DamageTarget(amount: 3, target: (kind: Creature))
+        ))], yields: [])"#,
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect_err("authored target-bearing leaf has no owner-local target schema");
+    assert!(
+        error
+            .to_string()
+            .contains("has no owner-local target binding"),
+        "{error}"
+    );
+}
+
+#[test]
+fn authored_program_rejects_unknown_token_references() {
+    let definition = program_fixture(
+        r#"(steps: [(id: "tokens", bind: [], kind: Perform(
+            CreateTokens(token: "missing_token", count: 1, who: Controller,
+                tapped: false, sacrifice_timing: None)
+        ))], yields: [])"#,
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect_err("CreateTokens must reference a token in the loaded token namespace");
+    assert!(
+        error
+            .to_string()
+            .contains("references unknown token 'missing_token'"),
+        "{error}"
     );
 }
 

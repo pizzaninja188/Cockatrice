@@ -155,8 +155,12 @@ impl GameEngine {
         }
 
         let mut events = Vec::new();
-        if self.begin_token_entry_batch(
-            stack.item.clone(),
+        let created_ids = entries
+            .iter()
+            .map(|entry| entry.event.object_id)
+            .collect::<Vec<_>>();
+        if self.begin_token_entry_batch_with_stack(
+            stack.clone(),
             entries,
             logs,
             TokenEntryBatchOptions {
@@ -170,11 +174,8 @@ impl GameEngine {
         )? {
             return Ok(finish_with_events(self, events));
         }
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            stack.previous_result,
-            events,
-        )
+        let mut previous_result = stack.previous_result.clone();
+        previous_result.produced_objects = self.token_entry_object_refs(&created_ids);
+        self.complete_parked_stack_with_previous(stack, previous_result, events)
     }
 }

@@ -1807,10 +1807,12 @@ mod result_count_tests {
                 entry(9, 103, 1, discard, CardTypeFilter::Creature),
                 entry(27, 104, 1, CardResultAction::Mill, land),
             ],
+            program_discard_result: None,
         }
         .into();
         let payment = CardResultCohort {
             cards: vec![entry(27, 105, 1, discard, land)],
+            program_discard_result: None,
         };
         let mut filter = CardResultFilter {
             source: CardResultSource::PreviousEffect,
@@ -1889,6 +1891,7 @@ mod result_count_tests {
                     matched_card_types: vec![CardTypeFilter::Land],
                 },
             ],
+            program_discard_result: None,
         }
         .into();
         let filter = CardResultFilter {

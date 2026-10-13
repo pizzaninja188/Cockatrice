@@ -1,7 +1,13 @@
 # Composable card execution and authoring contract
 
-Status (2026-10-13): target design with a bounded targetless Instant/Sorcery implementation pilot
-and a cross-component resolution-prompt identity implementation.
+Status (2026-10-13): target design with a bounded targetless Instant/Sorcery implementation pilot,
+cross-component resolution-prompt identity, exact compiled owner identities, and immutable ability
+binding. The DrawDiscard migration now lowers whole legacy owners into the same runner, including
+every sibling of an affected modal container. Its census is 41 existing card identities, 42
+DrawDiscard bodies and three additional modal siblings: 45 compiled owners, not 45 card admissions.
+Typed discard outcomes and replacement/entry/payment continuations retain the owning frame.
+Authored ability/mode programs, explicit authored target bindings, card/template conversion and
+retirement of the legacy DrawDiscard family remain the next migration increments.
 The [active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-targetless-spell-programs)
 owns currently accepted syntax and restrictions. The broader operations, contexts and custom-effect
 integration below remain migration targets. Prompt identity applies to legacy resolution choices

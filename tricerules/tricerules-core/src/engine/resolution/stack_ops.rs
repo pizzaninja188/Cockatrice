@@ -12,6 +12,7 @@ pub(super) fn counter_target_spell(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let parked_stack = cx.parked_stack();
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;
@@ -111,7 +112,7 @@ pub(super) fn counter_target_spell(
                     unique_names: false,
                 },
                 continuation: ResolutionContinuation::ManaPayment {
-                    stack: ParkedStackResolution::new(cx.top.clone()),
+                    stack: parked_stack,
                     payment: PendingManaPayment {
                         waterbend: false,
                         variable_mana_contribution: false,

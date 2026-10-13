@@ -298,12 +298,7 @@ impl GameEngine {
                 }
                 let mut previous_result = stack.previous_result.clone();
                 previous_result.produced_objects = self.token_entry_object_refs(&created_ids);
-                self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    previous_result,
-                    events,
-                )
+                self.complete_parked_stack_with_previous(stack, previous_result, events)
             }
             SimultaneousEntryBatch::Observer(batch) => {
                 self.commit_observer_return_batch(batch.ready, &mut events)?;
@@ -576,7 +571,6 @@ mod tests {
                         count: 2,
                         recipients: vec![0],
                         spell_label: "stale fixture",
-                        item: &item,
                     },
                     false,
                 )
@@ -816,7 +810,6 @@ mod tests {
                     count: 2,
                     recipients: vec![0],
                     spell_label: "fixture copies",
-                    item: &item,
                 },
                 false,
             )
@@ -910,7 +903,6 @@ mod tests {
                     count: 2,
                     recipients: vec![0],
                     spell_label: "create soldiers",
-                    item: &stack,
                 },
                 false,
             )

@@ -600,6 +600,9 @@ pub enum HandChoiceVisibility {
 /// Untargeted discard quantity, shared by Stoke Genius and Dangerous Wager.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DiscardQuantity {
+    /// The affected player may discard none, or exactly this many cards (never a partial cohort).
+    /// Used by the typed resolution runner; unlike `UpTo`, this preserves an all-or-nothing choice.
+    OptionalExact(u32),
     /// Tersa Lightshatter: choose zero through this maximum, clamped to the current hand.
     UpTo(u32),
     /// Flux / Steal the Show: every cardinality, including zero, is a legal choice.
@@ -5684,7 +5687,9 @@ impl SpellEffectKind {
         }
 
         if let SpellEffectKind::Discard {
-            quantity: crate::primitives::DiscardQuantity::Exact(0),
+            quantity:
+                crate::primitives::DiscardQuantity::Exact(0)
+                | crate::primitives::DiscardQuantity::OptionalExact(0),
             ..
         } = self
         {

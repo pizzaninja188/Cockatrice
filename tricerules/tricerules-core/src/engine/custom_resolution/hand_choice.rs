@@ -378,10 +378,25 @@ impl GameEngine {
     /// Commit a fully selected cohort, or park its discard replacements without finishing the tail.
     pub(in crate::engine) fn apply_player_set_discard(
         &mut self,
-        stack: ParkedStackResolution,
+        mut stack: ParkedStackResolution,
         discard: &PendingPlayerSetDiscard,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<Option<CardResultCohort>, EngineError> {
+        let program_discard_outcome = stack.program.as_ref().map(|_| {
+            discard
+                .choices
+                .iter()
+                .enumerate()
+                .find(|(_, choice)| choice.optional_exact)
+                .map(|(index, _)| {
+                    if discard.selections.get(index).is_some_and(Vec::is_empty) {
+                        tricerules_card_model::DiscardResultOutcome::Declined
+                    } else {
+                        tricerules_card_model::DiscardResultOutcome::ChosenToPay
+                    }
+                })
+                .unwrap_or(tricerules_card_model::DiscardResultOutcome::Performed)
+        });
         if discard
             .choices
             .iter()
@@ -392,6 +407,14 @@ impl GameEngine {
                     && self.has_discard_library_replacement(choice.player)
             })
         {
+            if let Some(outcome) = program_discard_outcome {
+                stack.previous_result.program_discard_result =
+                    Some(crate::state::ProgramDiscardResult {
+                        outcome,
+                        batches: Vec::new(),
+                        cards: Vec::new(),
+                    });
+            }
             let selected = discard
                 .choices
                 .iter()
@@ -420,6 +443,7 @@ impl GameEngine {
             .unwrap_or_else(|| stack.item.card_id.clone());
         let mut result = CardResultCohort::default();
         let mut discard_receipts: Vec<(PlayerId, Vec<crate::state::DiscardReceipt>)> = Vec::new();
+        let mut typed_cards = Vec::new();
         for (choice, selection) in discard.choices.iter().zip(&discard.selections) {
             for object_id in selection {
                 let (entry, discard_receipt) = resolution::zones::perform_discard_action(
@@ -432,6 +456,18 @@ impl GameEngine {
                         .selection_cause(selection)
                         .expect("validated discard selection"),
                 )?;
+                typed_cards.push(crate::state::DiscardCardResultEntry {
+                    affected_player: choice.player,
+                    type_knowledge: if discard_receipt.destination == Zone::Library
+                        && discard_receipt.known_card_id.is_none()
+                    {
+                        crate::state::DiscardCardTypeKnowledge::UnknownHidden
+                    } else {
+                        crate::state::DiscardCardTypeKnowledge::Known(
+                            entry.matched_card_types.clone(),
+                        )
+                    },
+                });
                 result.cards.push(entry);
                 match discard_receipts
                     .iter_mut()
@@ -442,7 +478,14 @@ impl GameEngine {
                 }
             }
         }
-        self.fire_discard_batches(discard_receipts, events);
+        let batches = self.fire_discard_batches(discard_receipts, events);
+        if let Some(outcome) = program_discard_outcome {
+            result.program_discard_result = Some(crate::state::ProgramDiscardResult {
+                outcome,
+                batches,
+                cards: typed_cards,
+            });
+        }
         Ok(Some(result))
     }
 }

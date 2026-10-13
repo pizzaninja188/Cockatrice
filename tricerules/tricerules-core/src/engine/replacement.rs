@@ -2422,12 +2422,7 @@ impl GameEngine {
                 controller_at_event: *controller,
             });
         }
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            previous_result,
-            events,
-        )
+        self.complete_parked_stack_with_previous(stack, previous_result, events)
     }
 
     pub(super) fn replacement_stack_source_presentation(
@@ -4817,6 +4812,7 @@ impl GameEngine {
             if let Some(parked) = pending.continuation.stack_mut() {
                 parked.resume_effect_index = stack.resume_effect_index;
                 parked.previous_result = stack.previous_result.clone();
+                parked.program = stack.program.clone();
             }
         }
     }
@@ -5038,12 +5034,7 @@ impl GameEngine {
         }
         let mut previous_result = stack.previous_result.clone();
         previous_result.produced_objects = self.token_entry_object_refs(&created_ids);
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            previous_result,
-            events,
-        )
+        self.complete_parked_stack_with_previous(stack, previous_result, events)
     }
 
     fn park_copy_source_choice(
@@ -5882,14 +5873,36 @@ impl GameEngine {
         Ok(trigger_events)
     }
 
+    #[cfg(test)]
     pub(super) fn begin_token_entry_batch(
         &mut self,
         item: StackItem,
+        entries: Vec<TokenBattlefieldEntry>,
+        logs: Vec<String>,
+        options: TokenEntryBatchOptions,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        self.begin_token_entry_batch_with_stack(
+            ParkedStackResolution::new(item),
+            entries,
+            logs,
+            options,
+            events,
+        )
+    }
+
+    /// Begin a token entry transaction with the exact continuation that owns it. Authored
+    /// programs advance their cursor before dispatch; replacement and timestamp-order choices
+    /// must therefore retain that cursor rather than reconstructing a stack item later.
+    pub(in crate::engine) fn begin_token_entry_batch_with_stack(
+        &mut self,
+        stack: ParkedStackResolution,
         mut entries: Vec<TokenBattlefieldEntry>,
         mut logs: Vec<String>,
         options: TokenEntryBatchOptions,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
+        let item = stack.item.clone();
         let mut result_object_ids = entries
             .iter()
             .map(|entry| entry.event.object_id)
@@ -5915,7 +5928,10 @@ impl GameEngine {
                 completion,
                 events,
             ) {
-                BattlefieldEntryProgress::Parked => return Ok(true),
+                BattlefieldEntryProgress::Parked => {
+                    self.transfer_entry_choice_resume(&stack);
+                    return Ok(true);
+                }
                 BattlefieldEntryProgress::Skipped(event) => {
                     self.restore_skipped_battlefield_entry(&event)?;
                     self.state.objects.remove(&event.object_id);
@@ -5932,14 +5948,7 @@ impl GameEngine {
                 }),
             }
         }
-        self.finish_prepared_token_batch(
-            ParkedStackResolution::new(item),
-            ready,
-            result_object_ids,
-            logs,
-            options,
-            events,
-        )
+        self.finish_prepared_token_batch(stack, ready, result_object_ids, logs, options, events)
     }
 
     fn continue_token_entry_batch(
@@ -6510,12 +6519,7 @@ impl GameEngine {
                     }],
                     ..EffectResult::default()
                 };
-                self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    previous_result,
-                    events,
-                )
+                self.complete_parked_stack_with_previous(stack, previous_result, events)
             }
             BattlefieldEntryCompletion::TokenBatch(batch) => {
                 let amass = batch.options.amass;
@@ -6534,12 +6538,7 @@ impl GameEngine {
                 }
                 let mut previous_result = stack.previous_result.clone();
                 previous_result.produced_objects = self.token_entry_object_refs(&created_ids);
-                self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    previous_result,
-                    events,
-                )
+                self.complete_parked_stack_with_previous(stack, previous_result, events)
             }
             BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
                 batch.ready.push(event);

@@ -1,6 +1,240 @@
 use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use prost::Message;
+use std::collections::BTreeSet;
+
+fn legacy_effects_contain_draw_discard(
+    effects: &[tricerules_card_model::primitives::SpellEffectKind],
+) -> bool {
+    fn contains(effect: &tricerules_card_model::primitives::SpellEffectKind) -> bool {
+        use tricerules_card_model::primitives::{ResolvingPermanentModifier, SpellEffectKind};
+        match effect {
+            SpellEffectKind::DrawDiscard { .. } => true,
+            SpellEffectKind::Conditional { effect, .. }
+            | SpellEffectKind::ConditionalCastCost { effect, .. } => contains(effect),
+            SpellEffectKind::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => branches
+                .iter()
+                .flat_map(|branch| &branch.effects)
+                .chain(otherwise)
+                .any(contains),
+            SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
+                ability.effect.iter().any(contains)
+            }
+            SpellEffectKind::GrantTriggeredAbility { ability, .. }
+            | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
+                ability.effect.iter().any(contains)
+            }
+            SpellEffectKind::ApplyPermanentModifier {
+                modifier: ResolvingPermanentModifier::GrantActivatedAbility(ability),
+                ..
+            } => ability.effect.iter().any(contains),
+            _ => false,
+        }
+    }
+
+    effects.iter().any(contains)
+}
+
+fn insert_legacy_activated_owner(
+    owners: &mut BTreeSet<tricerules_card_model::ProgramOwnerId>,
+    card_id: &str,
+    face_id: &tricerules_card_model::CardFaceId,
+    ability_path: Vec<tricerules_card_model::AbilityId>,
+    ability: &tricerules_card_model::ActivatedAbilityDef,
+) {
+    if legacy_effects_contain_draw_discard(&ability.effect) {
+        owners.insert(tricerules_card_model::ProgramOwnerId::ability(
+            tricerules_card_model::AbilityDefinitionId {
+                card_id: card_id.to_owned(),
+                face_id: face_id.clone(),
+                ability_path,
+            },
+        ));
+    }
+}
+
+fn insert_legacy_triggered_owner(
+    owners: &mut BTreeSet<tricerules_card_model::ProgramOwnerId>,
+    card_id: &str,
+    face_id: &tricerules_card_model::CardFaceId,
+    ability_path: Vec<tricerules_card_model::AbilityId>,
+    ability: &tricerules_card_model::TriggeredAbilityDef,
+) {
+    let definition = tricerules_card_model::AbilityDefinitionId {
+        card_id: card_id.to_owned(),
+        face_id: face_id.clone(),
+        ability_path,
+    };
+    if let Some(modal) = &ability.modal {
+        if modal
+            .modes
+            .iter()
+            .any(|mode| legacy_effects_contain_draw_discard(&mode.effects))
+        {
+            for mode in &modal.modes {
+                owners.insert(tricerules_card_model::ProgramOwnerId::ability_mode(
+                    definition.clone(),
+                    mode.mode_id.clone(),
+                ));
+            }
+        }
+    } else if legacy_effects_contain_draw_discard(&ability.effect) {
+        owners.insert(tricerules_card_model::ProgramOwnerId::ability(definition));
+    }
+}
+
+fn embedded_draw_discard_source_owners() -> BTreeSet<tricerules_card_model::ProgramOwnerId> {
+    use tricerules_card_model::primitives::StaticAbilityDef;
+    let registry = tricerules_cards::registry::global();
+    let mut owners = BTreeSet::new();
+    for card in registry.definitions() {
+        for face in &card.faces {
+            if legacy_effects_contain_draw_discard(&face.spell_effect) {
+                owners.insert(tricerules_card_model::ProgramOwnerId::face(
+                    card.id.clone(),
+                    face.face_id.clone(),
+                ));
+            }
+            if let Some(modal) = &face.modal_spell {
+                if modal
+                    .modes
+                    .iter()
+                    .any(|mode| legacy_effects_contain_draw_discard(&mode.effects))
+                {
+                    for mode in &modal.modes {
+                        owners.insert(tricerules_card_model::ProgramOwnerId::face_mode(
+                            card.id.clone(),
+                            face.face_id.clone(),
+                            mode.mode_id.clone(),
+                        ));
+                    }
+                }
+            }
+
+            for ability in &face.activated_abilities {
+                insert_legacy_activated_owner(
+                    &mut owners,
+                    &card.id,
+                    &face.face_id,
+                    vec![ability.ability_id.clone()],
+                    ability,
+                );
+            }
+            for ability in &face.triggered_abilities {
+                insert_legacy_triggered_owner(
+                    &mut owners,
+                    &card.id,
+                    &face.face_id,
+                    vec![ability.ability_id.clone()],
+                    ability,
+                );
+            }
+            for bar in &face.class_level_bars {
+                insert_legacy_activated_owner(
+                    &mut owners,
+                    &card.id,
+                    &face.face_id,
+                    vec![bar.level_ability.ability_id.clone()],
+                    &bar.level_ability,
+                );
+                for ability in &bar.activated_abilities {
+                    insert_legacy_activated_owner(
+                        &mut owners,
+                        &card.id,
+                        &face.face_id,
+                        vec![ability.ability_id.clone()],
+                        ability,
+                    );
+                }
+                for ability in &bar.triggered_abilities {
+                    insert_legacy_triggered_owner(
+                        &mut owners,
+                        &card.id,
+                        &face.face_id,
+                        vec![ability.ability_id.clone()],
+                        ability,
+                    );
+                }
+            }
+
+            for parent in face.static_abilities.iter().chain(
+                face.class_level_bars
+                    .iter()
+                    .flat_map(|bar| &bar.static_abilities),
+            ) {
+                let parent_id = parent.ability_id.clone();
+                let (activated, triggered) = match &parent.definition {
+                    StaticAbilityDef::AttachedModifier {
+                        activated_abilities,
+                        triggered_abilities,
+                        ..
+                    }
+                    | StaticAbilityDef::ConditionalSelfModifier {
+                        activated_abilities,
+                        triggered_abilities,
+                        ..
+                    } => (
+                        activated_abilities.as_slice(),
+                        triggered_abilities.as_slice(),
+                    ),
+                    StaticAbilityDef::GrantActivatedAbilityToPermanents {
+                        activated_abilities,
+                        ..
+                    } => (activated_abilities.as_slice(), &[][..]),
+                    StaticAbilityDef::GrantTriggeredAbilityToPermanents {
+                        triggered_abilities,
+                        ..
+                    }
+                    | StaticAbilityDef::ConditionalPermanentTransformation {
+                        triggered_abilities,
+                        ..
+                    } => (&[][..], triggered_abilities.as_slice()),
+                    _ => (&[][..], &[][..]),
+                };
+                for ability in activated {
+                    insert_legacy_activated_owner(
+                        &mut owners,
+                        &card.id,
+                        &face.face_id,
+                        vec![parent_id.clone(), ability.ability_id.clone()],
+                        ability,
+                    );
+                }
+                for ability in triggered {
+                    insert_legacy_triggered_owner(
+                        &mut owners,
+                        &card.id,
+                        &face.face_id,
+                        vec![parent_id.clone(), ability.ability_id.clone()],
+                        ability,
+                    );
+                }
+            }
+        }
+    }
+    owners
+}
+
+#[test]
+fn embedded_draw_discard_source_owner_census_is_complete() {
+    let registry = tricerules_cards::registry::global();
+    let owners = embedded_draw_discard_source_owners();
+    assert_eq!(
+        owners.len(),
+        45,
+        "embedded source-lowered owner census changed"
+    );
+    for owner in &owners {
+        let program = registry
+            .compiled_program_for_owner(owner)
+            .unwrap_or_else(|| panic!("missing compiled program for exact source owner {owner:?}"));
+        assert_eq!(&program.owner, owner);
+    }
+}
 
 #[test]
 fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
@@ -97,6 +331,1099 @@ fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
     assert_eq!(e.state.players[0].library[1], first, "first chosen below");
     assert_eq!(e.state.players[0].hand.len(), hand_before - 1 + 3 - 2);
     assert_eq!(count_card_id_in_graveyard(&e, 0, "brainstorm"), 1);
+}
+
+#[test]
+fn optional_exact_discard_requires_zero_or_the_full_payment_before_branching() {
+    let program = r#"(
+        id: "optional_exact_discard_program",
+        name: "Optional Exact Discard Program",
+        face_id: "optional_exact_discard_program",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_program: Some((body: (
+            steps: [
+                (id: "discard_two", bind: ["discard_result"], kind: Perform(
+                    Discard(who: Controller, quantity: OptionalExact(2)))),
+                (id: "draw_if_paid", kind: IfResult(
+                    condition: DiscardOutcome(
+                        result: "discard_result", outcome: ChosenToPay),
+                    yes: (steps: [
+                        (id: "paid_draw", kind: Perform(Draw(count: 1)))
+                    ], yields: []),
+                    no: (steps: [], yields: [])
+                ))
+            ],
+            yields: []
+        )))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                program,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("optional exact program fixture registry validates"),
+    ));
+    let decks = Some(vec![vec!["island".into(); 30], vec!["forest".into(); 30]]);
+    let mut engine = GameEngine::new(registry, 9_427, &[0, 1], 20, decks, true)
+        .expect("optional exact fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_card_into_hand(&mut engine, 0, "optional_exact_discard_program");
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(
+                hand_index_for_card(&engine, 0, "optional_exact_discard_program"),
+                Vec::new(),
+            ),
+        )
+        .expect("cast the zero-cost optional exact program");
+    let first_passer = engine.state.priority_player_id();
+    engine
+        .apply_scenario_command(first_passer, &pass())
+        .expect("first player passes priority");
+    let second_passer = engine.state.priority_player_id();
+    let prompt_batch = engine
+        .apply_scenario_command(second_passer, &pass())
+        .expect("second player passes and resolves the spell to its discard choice");
+
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("optional exact discard prompts when two cards are available");
+    let prompt = prompt_batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+            _ => None,
+        })
+        .expect("discard choice publication");
+    assert_eq!(prompt.min, 0);
+    assert_eq!(prompt.max, 2);
+    assert_eq!(
+        prompt.selection_alternatives.len(),
+        1,
+        "OptionalExact has one nonzero exact-payment alternative; zero is represented by min = 0"
+    );
+    assert_eq!(prompt.selection_alternatives[0].count, 2);
+    assert_eq!(
+        prompt.selection_alternatives[0].candidate_indices,
+        (0..prompt.candidate_object_ids.len() as u32).collect::<Vec<_>>(),
+        "every eligible card is available for the exact payment"
+    );
+    assert_eq!(
+        prompt.prompt_text,
+        "P0: choose zero or exactly 2 cards to discard."
+    );
+    assert_eq!(pending.presentation.choice_kind, ChoiceKind::HandCards);
+    assert_eq!((pending.presentation.min, pending.presentation.max), (0, 2));
+    let candidates = pending.presentation.candidates.clone();
+    assert!(candidates.len() >= 2);
+    let draws_before_choice = engine.state.turn_history.current.player(0).cards_drawn;
+
+    let before_partial = engine
+        .diagnostic_snapshot()
+        .expect("snapshot before partial answer");
+    assert!(
+        engine
+            .apply_scenario_command(0, &submit_resolution_choice(vec![candidates[0]]))
+            .is_err(),
+        "one card is neither a decline nor an exact-two payment"
+    );
+    assert_eq!(
+        engine
+            .diagnostic_snapshot()
+            .expect("snapshot after rejected partial answer"),
+        before_partial,
+        "partial optional payment rejects before mutating the prompt, hand, RNG, or command index"
+    );
+
+    engine
+        .apply_scenario_command(
+            0,
+            &submit_resolution_choice(candidates.iter().take(2).copied().collect()),
+        )
+        .expect("submit the exact-two payment");
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before_choice + 1,
+        "the typed ChosenToPay outcome draws once after the discard transaction commits"
+    );
+    assert!(candidates
+        .iter()
+        .take(2)
+        .all(|object| engine.state.objects[object].zone == tricerules_core::Zone::Graveyard));
+
+    inject_card_into_hand(&mut engine, 0, "optional_exact_discard_program");
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(
+                hand_index_for_card(&engine, 0, "optional_exact_discard_program"),
+                Vec::new(),
+            ),
+        )
+        .expect("cast a second optional exact program to exercise decline");
+    pass_priority_round(&mut engine);
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the second optional exact program also offers a choice");
+    assert_eq!((pending.presentation.min, pending.presentation.max), (0, 2));
+    let hand_before_decline = engine.state.players[0].hand.clone();
+    let draws_before_decline = engine.state.turn_history.current.player(0).cards_drawn;
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
+        .expect("decline by submitting no cards");
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.players[0].hand, hand_before_decline);
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before_decline,
+        "the Declined outcome skips the paid-only branch"
+    );
+}
+
+#[test]
+fn source_lowered_soft_counter_resumes_at_its_following_discard_after_payment() {
+    let counter = r#"(
+        id: "program_counter_then_loot",
+        name: "Program Counter Then Loot",
+        face_id: "program_counter_then_loot",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [
+            CounterTargetSpell(spell_filter: (), unless_controller_pays: Some(1)),
+            DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
+                order: DrawThenDiscard, optional: false)
+        ],
+        targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target spell",
+            effect_indices: [0])]))
+    )"#;
+    let target = r#"(
+        id: "program_counter_target",
+        name: "Program Counter Target",
+        face_id: "program_counter_target",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [Draw(count: 1)]
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                counter,
+                target,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("soft-counter program fixture registry validates"),
+    ));
+    let decks = Some(vec![
+        deck_with("island", &["program_counter_target"]),
+        deck_with("forest", &["program_counter_then_loot"]),
+    ]);
+    let mut engine = GameEngine::new(registry, 9_431, &[0, 1], 20, decks, true)
+        .expect("soft-counter program fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_card_into_hand(&mut engine, 0, "program_counter_target");
+    inject_card_into_hand(&mut engine, 1, "program_counter_then_loot");
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(
+                hand_index_for_card(&engine, 0, "program_counter_target"),
+                Vec::new(),
+            ),
+        )
+        .expect("cast the spell that will be targeted");
+    let target_spell = engine.state.stack.last().expect("target spell on stack").id;
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("give the opponent priority to respond");
+    engine.state.players[0].mana_pool.colorless = 1;
+    engine
+        .apply_scenario_command(
+            1,
+            &cast_spell(
+                hand_index_for_card(&engine, 1, "program_counter_then_loot"),
+                vec![TargetRef {
+                    object_id: target_spell,
+                    kind: TargetRefKind::Stack as i32,
+                    group_index: 0,
+                    ..Default::default()
+                }],
+            ),
+        )
+        .expect("cast the source-lowered soft counter in response");
+    let draws_before = engine.state.turn_history.current.player(1).cards_drawn;
+    pass_priority_round(&mut engine);
+
+    let payment = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the target controller may pay the soft-counter cost");
+    assert_eq!(payment.presentation.choice_kind, ChoiceKind::ManaPayment);
+    assert_eq!(payment.deciding_player, 0);
+    submit_mana_resolution_decision(
+        &mut engine,
+        0,
+        tricerules_proto::ruled::v1::ResolutionChoiceDecision::PayMana,
+    )
+    .expect("pay to preserve the target spell");
+
+    let discard = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the source-lowered instruction after the payment must resume");
+    assert_eq!(discard.presentation.choice_kind, ChoiceKind::HandCards);
+    assert_eq!(discard.deciding_player, 1);
+    assert!(engine
+        .state
+        .stack
+        .iter()
+        .any(|item| item.id == target_spell));
+    let discarded = discard.presentation.candidates[0];
+    engine
+        .apply_scenario_command(1, &submit_resolution_choice(vec![discarded]))
+        .expect("finish the resumed draw-discard instruction");
+    assert_eq!(
+        engine.state.objects[&discarded].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert!(engine
+        .state
+        .stack
+        .iter()
+        .any(|item| item.id == target_spell));
+    assert_eq!(
+        engine.state.turn_history.current.player(1).cards_drawn,
+        draws_before + 1
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(
+        engine.state.stack.len() == 1,
+        "the target spell remains on stack"
+    );
+}
+
+#[test]
+fn source_lowered_soft_counter_resumes_at_its_following_discard_after_declined_payment() {
+    let counter = r#"(
+        id: "program_counter_then_loot_decline",
+        name: "Program Counter Then Loot Decline",
+        face_id: "program_counter_then_loot_decline",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [
+            CounterTargetSpell(spell_filter: (), unless_controller_pays: Some(1)),
+            DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
+                order: DrawThenDiscard, optional: false)
+        ],
+        targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target spell",
+            effect_indices: [0])]))
+    )"#;
+    let target = r#"(
+        id: "program_counter_decline_target",
+        name: "Program Counter Decline Target",
+        face_id: "program_counter_decline_target",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [Draw(count: 1)]
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                counter,
+                target,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("soft-counter decline fixture registry validates"),
+    ));
+    let decks = Some(vec![
+        deck_with("island", &["program_counter_decline_target"]),
+        deck_with("forest", &["program_counter_then_loot_decline"]),
+    ]);
+    let mut engine = GameEngine::new(registry, 9_432, &[0, 1], 20, decks, true)
+        .expect("soft-counter decline fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_card_into_hand(&mut engine, 0, "program_counter_decline_target");
+    inject_card_into_hand(&mut engine, 1, "program_counter_then_loot_decline");
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(
+                hand_index_for_card(&engine, 0, "program_counter_decline_target"),
+                Vec::new(),
+            ),
+        )
+        .expect("cast the spell that will be targeted");
+    let target_spell = engine.state.stack.last().expect("target spell on stack").id;
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("give the opponent priority to respond");
+    engine.state.players[0].mana_pool.colorless = 1;
+    engine
+        .apply_scenario_command(
+            1,
+            &cast_spell(
+                hand_index_for_card(&engine, 1, "program_counter_then_loot_decline"),
+                vec![TargetRef {
+                    object_id: target_spell,
+                    kind: TargetRefKind::Stack as i32,
+                    group_index: 0,
+                    ..Default::default()
+                }],
+            ),
+        )
+        .expect("cast the source-lowered soft counter in response");
+    let draws_before = engine.state.turn_history.current.player(1).cards_drawn;
+    pass_priority_round(&mut engine);
+
+    let payment = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the target controller may decline the soft-counter cost");
+    assert_eq!(payment.presentation.choice_kind, ChoiceKind::ManaPayment);
+    assert_eq!(payment.deciding_player, 0);
+    submit_mana_resolution_decision(
+        &mut engine,
+        0,
+        tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,
+    )
+    .expect("decline to preserve the target spell");
+
+    let discard = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the source-lowered instruction after a declined payment must resume");
+    assert_eq!(discard.presentation.choice_kind, ChoiceKind::HandCards);
+    assert_eq!(discard.deciding_player, 1);
+    assert!(!engine
+        .state
+        .stack
+        .iter()
+        .any(|item| item.id == target_spell));
+    assert_eq!(
+        engine.state.objects[&target_spell].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    let discarded = discard.presentation.candidates[0];
+    engine
+        .apply_scenario_command(1, &submit_resolution_choice(vec![discarded]))
+        .expect("finish the resumed draw-discard instruction");
+    assert_eq!(
+        engine.state.objects[&discarded].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(1).cards_drawn,
+        draws_before + 1
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(
+        engine.state.stack.is_empty(),
+        "both spells have left the stack"
+    );
+}
+
+#[test]
+fn source_lowered_copy_tokens_resume_after_entry_counter_replacement_and_order_choices() {
+    let program = r#"(
+        id: "copy_then_draw_program",
+        name: "Copy Then Draw Program",
+        face_id: "copy_then_draw_program",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        modal_spell: (
+            min_modes: 1,
+            max_modes: 1,
+            modes: [
+                (mode_id: "copy_mode", presentation: Fallback,
+                    effects: [
+                        DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
+                            order: DrawThenDiscard, optional: false),
+                        CreateTokenCopies(count: 2,
+                            source: Chosen((kind: Creature, controller: You))),
+                        Draw(count: 1)
+                    ],
+                    targeting: Some((groups: [(min: 1, max: 1,
+                        prompt: "Choose target creature you control", effect_indices: [1])])))
+            ]
+        )
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                program,
+                include_str!("../../../tricerules-cards/data/orb_of_dreams.ron"),
+                include_str!("../../../tricerules-cards/data/doubling_season.ron"),
+                include_str!("../../../tricerules-cards/data/laezel,_vlaakiths_champion.ron"),
+                include_str!("../../../tricerules-cards/data/pentavus.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[include_str!(
+                "../../../tricerules-cards/data/tokens/pentavite_c_1_1_flying.ron"
+            )],
+        )
+        .expect("copy-token program registry validates"),
+    ));
+    let decks = Some(vec![vec!["island".into(); 30], vec!["forest".into(); 30]]);
+    let mut engine = GameEngine::new(registry, 9_429, &[0, 1], 20, decks, true)
+        .expect("copy-token program fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_card_into_hand(&mut engine, 0, "pentavus");
+    let source = move_ready_to_battlefield(&mut engine, 0, "pentavus");
+    assert_eq!(
+        engine.state.objects[&source].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert_eq!(
+        engine.state.objects[&source].counter_count(tricerules_cards::CounterKind::PlusOnePlusOne),
+        5
+    );
+    inject_permanent_on_battlefield(&mut engine, 0, "orb_of_dreams");
+    inject_permanent_on_battlefield(&mut engine, 0, "orb_of_dreams");
+    inject_permanent_on_battlefield(&mut engine, 0, "doubling_season");
+    inject_permanent_on_battlefield(&mut engine, 0, "laezel,_vlaakiths_champion");
+    inject_card_into_hand(&mut engine, 0, "copy_then_draw_program");
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_modal_spell(
+                hand_index_for_card(&engine, 0, "copy_then_draw_program"),
+                vec![(0, target_object(source))],
+            ),
+        )
+        .expect("cast the source-lowered token-copy program");
+    pass_priority_round(&mut engine);
+    let discard = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the lowered DrawDiscard chooser runs before token creation");
+    assert_eq!(discard.presentation.choice_kind, ChoiceKind::HandCards);
+    let discarded = discard.presentation.candidates[0];
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discarded]))
+        .expect("complete the first lowered DrawDiscard leaf");
+    let draws_before_entries = engine.state.turn_history.current.player(0).cards_drawn;
+    assert_eq!(draws_before_entries, draws_before + 1);
+
+    // Doubling Season doubles the two copied tokens. The resulting batch parks for each token's
+    // tapped-entry and entry-counter replacements, then for simultaneous-entry order. Completing
+    // each choice must retain the source program cursor.
+    let mut entry_replacement_choices = 0;
+    let mut counter_replacement_choices = 0;
+    let mut entry_order_choices = 0;
+    while let Some(pending) = engine.state.pending_resolution.as_ref() {
+        let choice_kind = pending.presentation.choice_kind;
+        let prompt = pending.presentation.prompt.clone();
+        let candidates = pending.presentation.candidates.clone();
+        match choice_kind {
+            ChoiceKind::ReplacementEffect => {
+                let replacement = *candidates
+                    .first()
+                    .expect("replacement choice has an application candidate");
+                if prompt.contains("counter replacement") {
+                    counter_replacement_choices += 1;
+                    engine
+                        .apply_scenario_command(0, &submit_resolution_choice(vec![replacement]))
+                        .expect("choose one token entry-counter replacement");
+                } else {
+                    entry_replacement_choices += 1;
+                    engine
+                        .apply_scenario_command(0, &submit_resolution_choice(vec![replacement]))
+                        .expect("choose one token-entry replacement");
+                }
+            }
+            ChoiceKind::SimultaneousEntryOrder => {
+                entry_order_choices += 1;
+                engine
+                    .apply_scenario_command(0, &submit_resolution_choice(candidates))
+                    .expect("order the simultaneous copied-token entries");
+            }
+            other => panic!("unexpected token-copy continuation choice: {other:?}"),
+        }
+    }
+    assert_eq!(entry_replacement_choices, 8);
+    assert_eq!(counter_replacement_choices, 4);
+    assert_eq!(entry_order_choices, 1);
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before_entries + 1,
+        "the source-lowered program resumes after replacement and ordering choices"
+    );
+    let copied_tokens = engine
+        .state
+        .objects
+        .values()
+        .filter(|object| {
+            object.is_token()
+                && object.card_id == "pentavus"
+                && object.zone == tricerules_core::Zone::Battlefield
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(copied_tokens.len(), 4);
+    assert!(copied_tokens.iter().all(|object| object.tapped));
+    assert!(copied_tokens.iter().all(|object| {
+        matches!(
+            object
+                .counters
+                .get(&tricerules_cards::CounterKind::PlusOnePlusOne),
+            Some(11 | 12)
+        )
+    }));
+}
+
+#[test]
+fn source_lowered_recruit_finishes_after_its_token_entry_replacement_choice() {
+    let decks = Some(vec![
+        deck_with("plains", &["long_lake_nuisance", "grizzly_bears"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9_430,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("Recruit source-lowering fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_in_hand(&mut engine, 0, "grizzly_bears");
+    let discarded = engine.state.players[0]
+        .hand
+        .iter()
+        .copied()
+        .find(|object| engine.state.objects[object].card_id == "grizzly_bears")
+        .expect("Recruit's known nonland discard");
+    move_ready_to_battlefield(&mut engine, 0, "long_lake_nuisance");
+    // Add the replacement sources after Recruit enters so the fixture exercises only token-entry
+    // replacement suspension, not the same replacements on the source permanent.
+    inject_permanent_on_battlefield(&mut engine, 0, "orb_of_dreams");
+    inject_permanent_on_battlefield(&mut engine, 0, "orb_of_dreams");
+    pass_both_players(&mut engine);
+
+    let discard_choice = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Recruit's source-lowered discard choice");
+    assert_eq!(
+        discard_choice.presentation.choice_kind,
+        ChoiceKind::HandCards
+    );
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discarded]))
+        .expect("discard the Recruit's nonland card");
+
+    let mut replacement_choices = 0;
+    while let Some(pending) = engine.state.pending_resolution.as_ref() {
+        assert_eq!(
+            pending.presentation.choice_kind,
+            ChoiceKind::ReplacementEffect
+        );
+        let replacement = pending.presentation.candidates[0];
+        engine
+            .apply_scenario_command(0, &submit_resolution_choice(vec![replacement]))
+            .expect("choose the token's Orb of Dreams replacement");
+        replacement_choices += 1;
+        assert!(
+            replacement_choices <= 2,
+            "unexpected repeated token entry choices"
+        );
+    }
+    assert!(
+        replacement_choices > 0,
+        "the token entry replacement suspended resolution"
+    );
+
+    let soldiers = battlefield_token_oids(&engine, 0, "human_soldier_w_1_1");
+    assert_eq!(soldiers.len(), 1);
+    assert!(engine.state.objects[&soldiers[0]].tapped);
+    assert_eq!(
+        engine.state.objects[&discarded].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert!(
+        engine.state.stack.is_empty(),
+        "the triggered program exits once"
+    );
+}
+
+#[test]
+fn optional_exact_discard_through_library_of_leng_draws_after_hidden_replacement() {
+    let program = r#"(
+        id: "optional_exact_leng_program",
+        name: "Optional Exact Leng Program",
+        face_id: "optional_exact_leng_program",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_program: Some((body: (
+            steps: [
+                (id: "discard_one", bind: ["discard_result"], kind: Perform(
+                    Discard(who: Controller, quantity: OptionalExact(1)))),
+                (id: "draw_if_paid", kind: IfResult(
+                    condition: DiscardOutcome(
+                        result: "discard_result", outcome: ChosenToPay),
+                    yes: (steps: [
+                        (id: "paid_draw", kind: Perform(Draw(count: 1)))
+                    ], yields: []),
+                    no: (steps: [], yields: [])
+                ))
+            ],
+            yields: []
+        )))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                program,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/library_of_leng.ron"),
+            ],
+            &[],
+        )
+        .expect("optional exact Library of Leng fixture registry validates"),
+    ));
+    let decks = Some(vec![vec!["island".into(); 30], vec!["forest".into(); 30]]);
+    let mut engine = GameEngine::new(registry, 9_428, &[0, 1], 20, decks, true)
+        .expect("optional exact Leng fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_permanent_on_battlefield(&mut engine, 0, "library_of_leng");
+    let hidden_nonland = inject_card_into_hand(&mut engine, 0, "grizzly_bears");
+    inject_card_into_hand(&mut engine, 0, "optional_exact_leng_program");
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(
+                hand_index_for_card(&engine, 0, "optional_exact_leng_program"),
+                Vec::new(),
+            ),
+        )
+        .expect("cast the zero-cost optional exact Leng program");
+    pass_priority_round(&mut engine);
+
+    let discard = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("optional exact discard choice");
+    assert_eq!((discard.presentation.min, discard.presentation.max), (0, 1));
+    assert!(discard.presentation.candidates.contains(&hidden_nonland));
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+    let generation_before = engine
+        .state
+        .zone_change_generation
+        .get(&hidden_nonland)
+        .copied()
+        .unwrap_or(0);
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![hidden_nonland]))
+        .expect("choose the full optional payment");
+
+    let replacement = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Library of Leng replacement choice");
+    assert_eq!(
+        replacement.presentation.choice_kind,
+        ChoiceKind::PrivateReplacement
+    );
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![1]))
+        .expect("put the paid discard on top of the library");
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(
+        engine.state.objects[&hidden_nonland].zone,
+        tricerules_core::Zone::Hand
+    );
+    assert!(engine.state.players[0].hand.contains(&hidden_nonland));
+    assert_eq!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&hidden_nonland)
+            .copied(),
+        Some(generation_before + 2),
+        "the card moved to the library as a hidden discard, then the follow-up draw moved it back"
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before + 1,
+        "ChosenToPay remains true through an unknown hidden cohort, so the follow-up draw resolves"
+    );
+}
+
+#[test]
+fn discard_count_branch_counts_public_madness_exile_as_known_nonland() {
+    let program = r#"(
+        id: "known_madness_discard_program",
+        name: "Known Madness Discard Program",
+        face_id: "known_madness_discard_program",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_program: Some((body: (
+            steps: [
+                (id: "discard_one", bind: ["discard_result"], kind: Perform(
+                    Discard(who: Controller, quantity: Exact(1)))),
+                (id: "draw_if_known_nonland", kind: IfResult(
+                    condition: DiscardCount(
+                        result: "discard_result", players: Controller,
+                        card_type: Some(Nonland), min: Some(1), max: None),
+                    yes: (steps: [
+                        (id: "known_nonland_draw", kind: Perform(Draw(count: 1)))
+                    ], yields: []),
+                    no: (steps: [], yields: [])
+                ))
+            ],
+            yields: []
+        )))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                program,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/fiery_temper.ron"),
+                include_str!("../../../tricerules-cards/data/library_of_leng.ron"),
+            ],
+            &[],
+        )
+        .expect("known Madness discard fixture registry validates"),
+    ));
+    let decks = Some(vec![vec!["island".into(); 30], vec!["forest".into(); 30]]);
+    let mut engine = GameEngine::new(registry, 9_429, &[0, 1], 20, decks, true)
+        .expect("known Madness fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_permanent_on_battlefield(&mut engine, 0, "library_of_leng");
+    let madness_card = inject_card_into_hand(&mut engine, 0, "fiery_temper");
+    inject_card_into_hand(&mut engine, 0, "known_madness_discard_program");
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(
+                hand_index_for_card(&engine, 0, "known_madness_discard_program"),
+                Vec::new(),
+            ),
+        )
+        .expect("cast the zero-cost program");
+    pass_priority_round(&mut engine);
+
+    let discard = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("mandatory discard choice");
+    assert!(discard.presentation.candidates.contains(&madness_card));
+    let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![madness_card]))
+        .expect("choose the Madness card");
+    let replacement = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Library of Leng replacement choice");
+    assert_eq!(
+        replacement.presentation.choice_kind,
+        ChoiceKind::PrivateReplacement
+    );
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![2]))
+        .expect("choose the public Madness exile destination");
+
+    assert_eq!(
+        engine.state.objects[&madness_card].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before + 1,
+        "a public Madness exile retains known nonland types for DiscardCount"
+    );
+}
+
+#[test]
+fn modal_source_lowered_program_binds_each_modes_targets_after_the_global_fizzle_check() {
+    let modal_program = r#"(
+        id: "modal_targeted_draw_discard_program",
+        name: "Modal Targeted Draw Discard Program",
+        face_id: "modal_targeted_draw_discard_program",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        modal_spell: (
+            min_modes: 2,
+            max_modes: 2,
+            modes: [
+                (mode_id: "first_mode", presentation: Fallback,
+                    effects: [
+                        DamageTarget(amount: 1, target: (kind: Creature)),
+                        DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
+                            order: DiscardThenDraw, optional: true)
+                    ],
+                    targeting: Some((groups: [(min: 1, max: 1,
+                        prompt: "Choose a creature for the first mode", effect_indices: [0])]))),
+                (mode_id: "second_mode", presentation: Fallback,
+                    effects: [
+                        DamageTarget(amount: 1, target: (kind: Creature)),
+                        DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
+                            order: DiscardThenDraw, optional: true)
+                    ],
+                    targeting: Some((groups: [(min: 1, max: 1,
+                        prompt: "Choose a creature for the second mode", effect_indices: [0])])))
+            ]
+        )
+    )"#;
+    let fatal_ping = r#"(
+        id: "targeted_fatal_ping",
+        name: "Targeted Fatal Ping",
+        face_id: "targeted_fatal_ping",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [TargetPlayerLosesLife(amount: 1, target: (kind: AnyPlayer))],
+        targeting: Some((groups: [(min: 1, max: 1,
+            prompt: "Choose a player", effect_indices: [0])]))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                modal_program,
+                fatal_ping,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+            ],
+            &[],
+        )
+        .expect("modal target fixture registry validates"),
+    ));
+    let decks = Some(vec![
+        vec!["island".into(); 30],
+        vec!["forest".into(); 30],
+        vec!["island".into(); 30],
+    ]);
+    let mut engine = GameEngine::new(registry, 9_428, &[0, 1, 2], 20, decks, true)
+        .expect("three-player modal target fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    engine.state.players[1].life = 1;
+    inject_card_into_hand(&mut engine, 1, "grizzly_bears");
+    inject_card_into_hand(&mut engine, 2, "grizzly_bears");
+    let first_mode_target = put_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    let second_mode_target = put_creature_on_battlefield(&mut engine, 2, "grizzly_bears");
+    inject_card_into_hand(&mut engine, 0, "modal_targeted_draw_discard_program");
+    inject_card_into_hand(&mut engine, 2, "targeted_fatal_ping");
+
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_modal_spell(
+                hand_index_for_card(&engine, 0, "modal_targeted_draw_discard_program"),
+                vec![
+                    (0, target_object(first_mode_target)),
+                    (1, target_object(second_mode_target)),
+                ],
+            ),
+        )
+        .expect("cast both stable modes with owner-local player targets");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("the casting player passes priority");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("the first opponent passes priority");
+    engine
+        .apply_scenario_command(
+            2,
+            &cast_spell(
+                hand_index_for_card(&engine, 2, "targeted_fatal_ping"),
+                target_player(1),
+            ),
+        )
+        .expect("the third player responds by eliminating the first mode's target");
+    pass_priority_round(&mut engine);
+    assert!(engine.state.players[1].has_lost);
+    pass_priority_round(&mut engine);
+
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .deciding_player,
+        0
+    );
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
+        .expect("decline the first mode's optional discard");
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .deciding_player,
+        0
+    );
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
+        .expect("decline the second mode's optional discard");
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(
+        !engine.state.objects.contains_key(&first_mode_target),
+        "the first mode's target left with its eliminated player"
+    );
+    assert_eq!(
+        engine.state.objects[&second_mode_target].damage, 1,
+        "the second mode retains its own target and continues after the one global fizzle check"
+    );
+}
+
+#[test]
+fn modal_source_lowered_program_fizzles_once_when_all_mode_targets_are_illegal() {
+    let modal_program = r#"(
+        id: "all_illegal_modal_draw_discard_program",
+        name: "All Illegal Modal Draw Discard Program",
+        face_id: "all_illegal_modal_draw_discard_program",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        modal_spell: (
+            min_modes: 2,
+            max_modes: 2,
+            modes: [
+                (mode_id: "first_mode", presentation: Fallback,
+                    effects: [
+                        DamageTarget(amount: 1, target: (kind: Creature)),
+                        DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
+                            order: DiscardThenDraw, optional: true)
+                    ],
+                    targeting: Some((groups: [(min: 1, max: 1,
+                        prompt: "Choose a creature for the first mode", effect_indices: [0])]))),
+                (mode_id: "second_mode", presentation: Fallback,
+                    effects: [
+                        DamageTarget(amount: 1, target: (kind: Creature)),
+                        DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
+                            order: DiscardThenDraw, optional: true)
+                    ],
+                    targeting: Some((groups: [(min: 1, max: 1,
+                        prompt: "Choose a creature for the second mode", effect_indices: [0])])))
+            ]
+        )
+    )"#;
+    let fatal_ping = r#"(
+        id: "all_illegal_targeted_fatal_ping",
+        name: "All Illegal Targeted Fatal Ping",
+        face_id: "all_illegal_targeted_fatal_ping",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [TargetPlayerLosesLife(amount: 1, target: (kind: AnyPlayer))],
+        targeting: Some((groups: [(min: 1, max: 1,
+            prompt: "Choose a player", effect_indices: [0])]))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                modal_program,
+                fatal_ping,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+            ],
+            &[],
+        )
+        .expect("all-illegal modal target fixture registry validates"),
+    ));
+    let decks = Some(vec![
+        vec!["island".into(); 30],
+        vec!["forest".into(); 30],
+        vec!["island".into(); 30],
+    ]);
+    let mut engine = GameEngine::new(registry, 9_429, &[0, 1, 2], 20, decks, true)
+        .expect("all-illegal modal target fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    engine.state.players[1].life = 1;
+    inject_card_into_hand(&mut engine, 1, "grizzly_bears");
+    inject_card_into_hand(&mut engine, 1, "grizzly_bears");
+    let first_mode_target = put_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    let second_mode_target = put_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    inject_card_into_hand(&mut engine, 0, "all_illegal_modal_draw_discard_program");
+    inject_card_into_hand(&mut engine, 2, "all_illegal_targeted_fatal_ping");
+    let cards_drawn_before_resolution = engine.state.turn_history.current.player(0).cards_drawn;
+    let modal_card = engine.state.players[0].hand
+        [hand_index_for_card(&engine, 0, "all_illegal_modal_draw_discard_program")];
+
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_modal_spell(
+                hand_index_for_card(&engine, 0, "all_illegal_modal_draw_discard_program"),
+                vec![
+                    (0, target_object(first_mode_target)),
+                    (1, target_object(second_mode_target)),
+                ],
+            ),
+        )
+        .expect("cast both modes with currently legal targets controlled by one player");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("the casting player passes priority");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("the first opponent passes priority");
+    engine
+        .apply_scenario_command(
+            2,
+            &cast_spell(
+                hand_index_for_card(&engine, 2, "all_illegal_targeted_fatal_ping"),
+                target_player(1),
+            ),
+        )
+        .expect("the third player responds by eliminating both mode targets' controller");
+    pass_priority_round(&mut engine);
+    pass_priority_round(&mut engine);
+
+    assert!(engine.state.players[1].has_lost);
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        cards_drawn_before_resolution,
+        "the stack-wide fizzle prevents every mode's draw-discard instruction"
+    );
+    assert_eq!(
+        engine.state.objects[&modal_card].zone,
+        tricerules_core::Zone::Graveyard,
+        "a spell with all targets illegal leaves the stack without resolving its program"
+    );
 }
 
 #[test]

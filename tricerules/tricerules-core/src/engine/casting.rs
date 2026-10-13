@@ -1636,6 +1636,7 @@ impl GameEngine {
                 .iter()
                 .map(|cost| cost.result().clone())
                 .collect(),
+            program_discard_result: None,
         };
         let cast_cost_receipts = payment.cast_cost_receipts;
         let chosen_cast_cost_labels = cast_cost_receipts
@@ -2809,6 +2810,7 @@ impl GameEngine {
                     .iter()
                     .map(|cost| cost.result().clone())
                     .collect(),
+                program_discard_result: None,
             },
             search_results: Default::default(),
             exiled_cohorts: Default::default(),

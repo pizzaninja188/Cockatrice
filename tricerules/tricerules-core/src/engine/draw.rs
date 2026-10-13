@@ -17,6 +17,7 @@ struct DrawReplacementIdentity {
 #[cfg(test)]
 mod library_replacement_tests {
     use super::*;
+    use crate::state::ProgramFrame;
 
     fn fixture(kind: &str, size: usize) -> GameEngine {
         let source = format!(
@@ -598,6 +599,7 @@ mod library_replacement_tests {
         let draw_outputs = compiled.body.steps[0].outputs.clone();
         let program = ProgramRunState {
             owner,
+            pending_owners: Vec::new(),
             frames: vec![ProgramFrame {
                 path: Vec::new(),
                 next_instruction: 1,

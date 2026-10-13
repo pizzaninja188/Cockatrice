@@ -14,8 +14,8 @@ use tricerules_card_model::primitives::{
 use tricerules_card_model::primitives::{PlayerRecipient, ResolutionBranchDef};
 pub use tricerules_card_model::AbilityDefinitionId;
 use tricerules_card_model::{
-    is_creature_type, AbilityLinkId, CardFace, ChoiceId, ExiledCohortId, ManaCost, ManaSymbol,
-    ModeId, ProgramOwnerId, SearchResultId,
+    is_creature_type, AbilityLinkId, CardFace, ChoiceId, DiscardResultOutcome, ExiledCohortId,
+    ManaCost, ManaSymbol, ModeId, ProgramOwnerId, SearchResultId,
 };
 use tricerules_proto::ruled::v1::{ChoiceKind, ResolutionChoiceRequired, RuledEvent, TokenCreated};
 
@@ -175,6 +175,32 @@ pub(crate) struct CardResultEntry {
 #[derive(serde::Serialize, Debug, Clone, Default)]
 pub(crate) struct CardResultCohort {
     pub cards: Vec<CardResultEntry>,
+    #[serde(default)]
+    pub program_discard_result: Option<ProgramDiscardResult>,
+}
+
+/// Type facts captured for one committed card in a typed discard result. A hidden Library of Leng
+/// destination records `UnknownHidden`; an empty known type list is never used as a proxy for
+/// hidden information.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) enum DiscardCardTypeKnowledge {
+    Known(Vec<CardTypeFilter>),
+    UnknownHidden,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct DiscardCardResultEntry {
+    pub affected_player: PlayerId,
+    pub type_knowledge: DiscardCardTypeKnowledge,
+}
+
+/// Typed result of one program-owned discard instruction. Semantic CR 701.9 receipts and the
+/// non-identifying card cohort are retained separately for event consumers and result branches.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct ProgramDiscardResult {
+    pub outcome: DiscardResultOutcome,
+    pub batches: Vec<DiscardBatch>,
+    pub cards: Vec<DiscardCardResultEntry>,
 }
 
 /// Private typed output of one primitive resolution instruction. Card cohorts and semantic
@@ -183,6 +209,7 @@ pub(crate) struct CardResultCohort {
 #[derive(serde::Serialize, Debug, Clone, Default)]
 pub(crate) struct EffectResult {
     pub cards: Vec<CardResultEntry>,
+    pub program_discard_result: Option<ProgramDiscardResult>,
     pub produced_objects: Vec<TriggerObjectRef>,
     /// Exact generation-bound cards selected privately from a hand by a resolution program.
     /// They remain in the hand until a later typed program operation moves them.
@@ -246,6 +273,7 @@ impl From<CardResultCohort> for EffectResult {
     fn from(cohort: CardResultCohort) -> Self {
         Self {
             cards: cohort.cards,
+            program_discard_result: cohort.program_discard_result,
             produced_objects: Vec::new(),
             selected_hand_cards: Vec::new(),
             produced_object_provenance: None,
@@ -1229,7 +1257,7 @@ pub(crate) struct ProgramFrame {
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum ProgramValue {
     DrawReceipt(Vec<TriggerObjectRef>),
-    DiscardReceipt(Vec<CardResultEntry>),
+    DiscardResult(ProgramDiscardResult),
     PermanentSelection(Vec<TriggerObjectRef>),
     HandSelection(Vec<TriggerObjectRef>),
 }
@@ -1237,6 +1265,10 @@ pub(crate) enum ProgramValue {
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct ProgramRunState {
     pub owner: ProgramOwnerId,
+    /// Remaining selected mode owners, in the exact order announced on the stack. Each unit has
+    /// its own fresh slot frame; parking retains this queue alongside the active owner.
+    #[serde(default)]
+    pub pending_owners: Vec<ProgramOwnerId>,
     pub frames: Vec<ProgramFrame>,
     pub slots: Vec<Option<ProgramValue>>,
     /// Output slots of the operation whose domain transaction is in flight. An empty vector is
@@ -2021,6 +2053,9 @@ pub struct PendingPlayerDiscardChoice {
     pub candidate_generations: Vec<(ObjectId, u64)>,
     pub required: u32,
     pub variable: bool,
+    /// OptionalExact may be declined, but a paid answer must select the full exact quantity.
+    #[serde(default)]
+    pub optional_exact: bool,
     pub alternative_filter: Option<ZoneCardFilter>,
     pub alternative_candidates: Vec<ObjectId>,
 }
@@ -2028,7 +2063,7 @@ pub struct PendingPlayerDiscardChoice {
 impl PendingPlayerDiscardChoice {
     pub(crate) fn minimum(&self) -> u32 {
         // Bounds are public. Do not reveal whether this private hand contains a match.
-        if self.variable {
+        if self.variable || self.optional_exact {
             0
         } else if self.alternative_filter.is_none() {
             self.required
@@ -2039,7 +2074,8 @@ impl PendingPlayerDiscardChoice {
 
     pub(crate) fn selection_cause(&self, chosen: &[ObjectId]) -> Option<DiscardCause> {
         // Prefer the ordinary instruction when a one-card hand also satisfies it.
-        if chosen.len() == self.required as usize
+        if (self.optional_exact && chosen.is_empty())
+            || chosen.len() == self.required as usize
             || (self.variable && chosen.len() <= self.required as usize)
         {
             Some(DiscardCause::Effect)

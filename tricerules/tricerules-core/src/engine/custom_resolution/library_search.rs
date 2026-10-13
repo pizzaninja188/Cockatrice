@@ -1390,6 +1390,7 @@ mod tests {
                     zone_change_generation: 7,
                     matched_card_types: vec![card_type],
                 }],
+                program_discard_result: None,
             }
             .into();
 

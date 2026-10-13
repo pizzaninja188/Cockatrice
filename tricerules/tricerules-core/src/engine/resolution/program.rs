@@ -5,9 +5,13 @@
 //! has not completed yet.
 
 use super::*;
-use crate::state::{ProgramArm, ProgramFrame, ProgramPathStep, ProgramRunState, ProgramValue};
+use crate::state::{
+    DiscardCardTypeKnowledge, ProgramArm, ProgramDiscardResult, ProgramFrame, ProgramPathStep,
+    ProgramRunState, ProgramValue,
+};
 use tricerules_card_model::primitives::{
-    CompiledBlock, CompiledInstructionKind, CompiledProgram, ResultSlotId, ResultType,
+    CompiledBlock, CompiledInstructionKind, CompiledProgram, CompiledProgramCondition,
+    CompiledProgramResultCondition, ProgramRequiredInput, ResultSlotId, ResultType,
 };
 
 #[cfg(test)]
@@ -75,6 +79,157 @@ fn trip_program_failpoint(point: ProgramFailpoint) -> Result<(), EngineError> {
 }
 
 impl GameEngine {
+    /// Select the exact immutable program units for this stack occurrence. A compiled modal
+    /// container owns every sibling mode, so any missing sibling is an invariant failure rather
+    /// than a reason to mix program execution with the legacy flattened effect list.
+    pub(in crate::engine) fn compiled_resolution_program_owners(
+        &self,
+        top: &StackItem,
+    ) -> Result<Option<Vec<tricerules_card_model::ProgramOwnerId>>, EngineError> {
+        use tricerules_card_model::ProgramOwnerId;
+
+        let is_ability = top.ability_text.is_some();
+        let base_owner = if is_ability {
+            let Some(owner) = top.ability_program_owner() else {
+                // Intrinsic mana, keyword-granted, and resolving-grant abilities retain their
+                // legacy behavior because they have no authored definition owner.
+                return Ok(None);
+            };
+            owner
+        } else {
+            let Some(face) = self
+                .registry
+                .get(&top.card_id)
+                .and_then(|definition| definition.face(top.face_index))
+            else {
+                return Ok(None);
+            };
+            ProgramOwnerId::face(top.card_id.clone(), face.face_id.clone())
+        };
+
+        let owner_for_mode = |mode_id: &tricerules_card_model::ModeId| match &base_owner {
+            ProgramOwnerId::Face(face) => ProgramOwnerId::FaceMode {
+                face: face.clone(),
+                mode_id: mode_id.clone(),
+            },
+            ProgramOwnerId::Ability(ability) => ProgramOwnerId::AbilityMode {
+                ability: ability.clone(),
+                mode_id: mode_id.clone(),
+            },
+            ProgramOwnerId::FaceMode { .. } | ProgramOwnerId::AbilityMode { .. } => {
+                unreachable!("stack abilities carry their unsuffixed authored owner")
+            }
+        };
+        let selected_mode_has_compiled_owner = || {
+            top.chosen_modes.iter().any(|chosen| {
+                self.registry
+                    .compiled_program_for_owner(&owner_for_mode(&chosen.mode_id))
+                    .is_some()
+            })
+        };
+
+        // Authored abilities resolve from the exact definition captured when the occurrence was
+        // announced. A currently indexed face ability is display/source data, not a recovery path
+        // for a compiled body that was lost from the stack item.
+        if is_ability {
+            let has_captured_body = if top.is_triggered {
+                top.triggered_ability.is_some()
+            } else {
+                top.activated_ability.is_some()
+            };
+            if !has_captured_body
+                && (self
+                    .registry
+                    .compiled_program_for_owner(&base_owner)
+                    .is_some()
+                    || selected_mode_has_compiled_owner())
+            {
+                return Err(EngineError::ProgramInvariant(
+                    "compiled ability program is missing its captured definition",
+                ));
+            }
+        }
+
+        if !top.chosen_modes.is_empty() {
+            let modal = if top.is_triggered {
+                top.triggered_ability
+                    .as_ref()
+                    .and_then(|ability| ability.modal.as_ref())
+            } else if is_ability {
+                None
+            } else {
+                self.registry
+                    .get(&top.card_id)
+                    .and_then(|definition| definition.face(top.face_index))
+                    .and_then(|face| face.modal_spell.as_ref())
+            };
+            if top.is_triggered && modal.is_none() && selected_mode_has_compiled_owner() {
+                return Err(EngineError::ProgramInvariant(
+                    "compiled modal ability is missing its captured mode definition",
+                ));
+            }
+            if let Some(modal) = modal {
+                let sibling_owners = modal
+                    .modes
+                    .iter()
+                    .map(|mode| owner_for_mode(&mode.mode_id))
+                    .collect::<Vec<_>>();
+                let any_sibling_compiled = sibling_owners
+                    .iter()
+                    .any(|owner| self.registry.compiled_program_for_owner(owner).is_some());
+                if any_sibling_compiled {
+                    if sibling_owners
+                        .iter()
+                        .any(|owner| self.registry.compiled_program_for_owner(owner).is_none())
+                    {
+                        return Err(EngineError::ProgramInvariant(
+                            "compiled modal owner is missing a sibling mode program",
+                        ));
+                    }
+                    let selected_owners = top
+                        .chosen_modes
+                        .iter()
+                        .map(|chosen| {
+                            if modal.mode_by_id(&chosen.mode_id).is_none() {
+                                return Err(EngineError::ProgramInvariant(
+                                    "stack item selected an unknown modal program owner",
+                                ));
+                            }
+                            let owner = owner_for_mode(&chosen.mode_id);
+                            self.registry
+                                .compiled_program_for_owner(&owner)
+                                .map(|_| owner)
+                                .ok_or(EngineError::ProgramInvariant(
+                                    "selected modal sibling program was not compiled",
+                                ))
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    return Ok(Some(selected_owners));
+                }
+            }
+        }
+
+        if self
+            .registry
+            .compiled_program_for_owner(&base_owner)
+            .is_some()
+        {
+            return Ok(Some(vec![base_owner]));
+        }
+        if !is_ability
+            && self
+                .registry
+                .get(&top.card_id)
+                .and_then(|definition| definition.face(top.face_index))
+                .is_some_and(|face| face.spell_program.is_some())
+        {
+            return Err(EngineError::ProgramInvariant(
+                "authored spell program owner was not compiled",
+            ));
+        }
+        Ok(None)
+    }
+
     pub(in crate::engine) fn current_program_perform(
         &self,
         program_state: &ProgramRunState,
@@ -131,6 +286,35 @@ impl GameEngine {
             })
     }
 
+    pub(in crate::engine) fn begin_program_run(
+        &self,
+        top: &StackItem,
+        mut owners: Vec<tricerules_card_model::ProgramOwnerId>,
+    ) -> Result<ProgramRunState, EngineError> {
+        let owner = owners
+            .first()
+            .cloned()
+            .ok_or(EngineError::ProgramInvariant(
+                "resolution program has no selected owner",
+            ))?;
+        let compiled = self.registry.compiled_program_for_owner(&owner).ok_or(
+            EngineError::ProgramInvariant("selected resolution program owner was not compiled"),
+        )?;
+        validate_program_unit_inputs(top, compiled)?;
+        owners.remove(0);
+        Ok(ProgramRunState {
+            owner,
+            pending_owners: owners,
+            frames: vec![ProgramFrame {
+                path: Vec::new(),
+                next_instruction: 0,
+                yield_to: Vec::new(),
+            }],
+            slots: vec![None; compiled.slots.len()],
+            in_flight: None,
+        })
+    }
+
     fn run_program_with_previous_inner(
         &mut self,
         top: &StackItem,
@@ -141,22 +325,27 @@ impl GameEngine {
         if self.state.is_terminal() {
             return Ok(ResolutionProgress::GameEnded);
         }
-        let expected_owner = self
-            .registry
-            .get(&top.card_id)
-            .and_then(|definition| definition.face(top.face_index))
-            .map(|face| {
-                tricerules_card_model::ProgramOwnerId::face(
-                    top.card_id.clone(),
-                    face.face_id.clone(),
-                )
+        let expected_owners =
+            self.compiled_resolution_program_owners(top)?
+                .ok_or(EngineError::ProgramInvariant(
+                    "parked resolution program lost its exact authored owner",
+                ))?;
+        // The active owner advances through selected modal units as each one finishes. The
+        // pending list is the immutable suffix after that active unit; derive its position from
+        // the suffix length so repeated selections of the same mode remain unambiguous.
+        let active_owner_index = expected_owners
+            .len()
+            .checked_sub(program_state.pending_owners.len().saturating_add(1));
+        if active_owner_index
+            .and_then(|index| expected_owners.get(index).map(|owner| (index, owner)))
+            .is_none_or(|(index, owner)| {
+                owner != &program_state.owner
+                    || expected_owners.get(index + 1..)
+                        != Some(program_state.pending_owners.as_slice())
             })
-            .ok_or(EngineError::ProgramInvariant(
-                "resolution program lost its exact face owner",
-            ))?;
-        if program_state.owner != expected_owner {
+        {
             return Err(EngineError::ProgramInvariant(
-                "resolution program owner identity changed",
+                "resolution program owner sequence changed",
             ));
         }
 
@@ -164,23 +353,23 @@ impl GameEngine {
         // compiled tree remains borrowed from this immutable process-wide registry throughout;
         // only the currently executing leaf operation is cloned.
         let registry = self.registry;
-        let compiled = registry
+        let active_compiled = registry
             .compiled_program_for_owner(&program_state.owner)
             .ok_or(EngineError::ProgramInvariant(
                 "compiled resolution program disappeared",
             ))?;
-        if compiled.owner != program_state.owner
-            || compiled.context != tricerules_card_model::EffectContext::Spell
-            || !matches!(
-                compiled.target_projection,
-                tricerules_card_model::ProgramTargetProjection::OwnerLocal
-            )
+        if active_compiled.owner != program_state.owner
+            || active_compiled.context != program_state.owner.effect_context()
+            || active_compiled.target_projection != program_state.owner.target_projection()
         {
             return Err(EngineError::ProgramInvariant(
-                "non-face program context is unsupported by the runtime",
+                "resolution program context or target projection changed",
             ));
         }
-        if program_state.slots.len() != compiled.slots.len() || program_state.frames.is_empty() {
+        validate_program_unit_inputs(top, active_compiled)?;
+        if program_state.slots.len() != active_compiled.slots.len()
+            || program_state.frames.is_empty()
+        {
             return Err(EngineError::ProgramInvariant(
                 "invalid resolution program cursor",
             ));
@@ -189,7 +378,12 @@ impl GameEngine {
         if let Some(outputs) = program_state.in_flight.take() {
             #[cfg(test)]
             trip_program_failpoint(ProgramFailpoint::DomainCommitted)?;
-            capture_program_outputs(compiled, &mut program_state, &outputs, &previous_result)?;
+            capture_program_outputs(
+                active_compiled,
+                &mut program_state,
+                &outputs,
+                &previous_result,
+            )?;
             #[cfg(test)]
             if !outputs.is_empty() {
                 trip_program_failpoint(ProgramFailpoint::SlotPublished)?;
@@ -207,6 +401,26 @@ impl GameEngine {
         loop {
             if self.state.is_terminal() {
                 return Ok(ResolutionProgress::GameEnded);
+            }
+            let compiled = registry
+                .compiled_program_for_owner(&program_state.owner)
+                .ok_or(EngineError::ProgramInvariant(
+                    "compiled resolution program disappeared",
+                ))?;
+            if compiled.owner != program_state.owner
+                || compiled.context != program_state.owner.effect_context()
+                || compiled.target_projection != program_state.owner.target_projection()
+            {
+                return Err(EngineError::ProgramInvariant(
+                    "resolution program context or target projection changed",
+                ));
+            }
+            validate_program_unit_inputs(top, compiled)?;
+            if program_state.slots.len() != compiled.slots.len() || program_state.frames.is_empty()
+            {
+                return Err(EngineError::ProgramInvariant(
+                    "invalid resolution program cursor",
+                ));
             }
             let Some(frame_index) = program_state.frames.len().checked_sub(1) else {
                 return Err(EngineError::ProgramInvariant(
@@ -247,11 +461,24 @@ impl GameEngine {
                     continue;
                 }
 
-                let label = registry
-                    .get(&top.card_id)
-                    .and_then(|definition| definition.face(top.face_index))
-                    .map(|face| face.name.to_string())
-                    .unwrap_or_else(|| top.card_id.clone());
+                if let Some(next_owner) = program_state.pending_owners.first().cloned() {
+                    let next = registry.compiled_program_for_owner(&next_owner).ok_or(
+                        EngineError::ProgramInvariant("selected modal sibling program disappeared"),
+                    )?;
+                    validate_program_unit_inputs(top, next)?;
+                    program_state.pending_owners.remove(0);
+                    program_state.owner = next_owner;
+                    program_state.frames = vec![ProgramFrame {
+                        path: Vec::new(),
+                        next_instruction: 0,
+                        yield_to: Vec::new(),
+                    }];
+                    program_state.slots = vec![None; next.slots.len()];
+                    program_state.in_flight = None;
+                    continue;
+                }
+
+                let label = self.build_resolution_effects(top).1;
                 self.finish_deferred_stack_exit(top, DeferredStackExit::Resolved, events)?;
                 events.push(ev_log(format!("{label} resolves.")));
                 seat_resolved_spell_last_in_graveyard(&mut self.state, top.id);
@@ -264,9 +491,20 @@ impl GameEngine {
                     let condition = condition.clone();
                     let outputs = instruction.outputs.clone();
                     let parent_path = path;
-                    let selected_arm = if self
-                        .condition_holds(&condition, ConditionContext::for_stack_item(top))
-                    {
+                    let holds = match condition.as_ref() {
+                        CompiledProgramCondition::Game(condition) => {
+                            self.condition_holds(condition, ConditionContext::for_stack_item(top))
+                        }
+                        CompiledProgramCondition::Result(condition) => {
+                            program_result_condition_holds(
+                                &self.state,
+                                top,
+                                &program_state,
+                                condition,
+                            )?
+                        }
+                    };
+                    let selected_arm = if holds {
                         ProgramArm::Yes
                     } else {
                         ProgramArm::No
@@ -288,6 +526,11 @@ impl GameEngine {
                     let effect = effect.as_ref().clone();
                     let outputs = instruction.outputs.clone();
                     let input = instruction.input;
+                    let target_context = program_target_context(
+                        top,
+                        compiled,
+                        instruction.source_effect_path.as_ref(),
+                    )?;
                     program_state.frames[frame_index].next_instruction += 1;
                     program_state.in_flight = Some(outputs.clone());
 
@@ -319,31 +562,64 @@ impl GameEngine {
                         .and_then(|definition| definition.face(top.face_index))
                         .map(|face| face.name.to_string())
                         .unwrap_or_else(|| top.card_id.clone());
-                    let mut cx = EffectCx {
-                        engine: self,
-                        events,
-                        targets: &[],
-                        targets_by_role: &[],
-                        target_damage: &[],
-                        target_group_indices: &[],
-                        top,
-                        controller: top.controller,
-                        affected_player: top.controller,
-                        spell_label: &label,
-                        previous_effect_result: &previous,
-                        effect_result: &mut result,
-                        effect_index: instruction_index as u32,
-                        program_state: Some(program_state.clone()),
-                    };
-                    let outcome = if matches!(
-                        &effect,
-                        SpellEffectKind::SelectHandCards { .. }
-                            | SpellEffectKind::PutSelectedHandCardsOnLibraryTop
-                    ) {
-                        run_program_only_leaf(&mut cx, effect)?
-                    } else {
-                        dispatch::execute_effect(&mut cx, effect)?
-                    };
+                    let outcome =
+                        if target_context.has_bindings && target_context.targets.is_empty() {
+                            // CR 608.2b has already taken the one stack-wide target snapshot. A
+                            // source-lowered leaf whose own owner-local role groups are now empty is
+                            // skipped while its program unit and any later selected modes continue.
+                            if outputs.iter().any(|slot_id| {
+                                compiled.slot(*slot_id).is_some_and(|slot| {
+                                    matches!(slot.result_type, ResultType::DiscardResult { .. })
+                                })
+                            }) {
+                                result.program_discard_result = Some(ProgramDiscardResult {
+                                    outcome: tricerules_card_model::DiscardResultOutcome::Unpayable,
+                                    batches: Vec::new(),
+                                    cards: Vec::new(),
+                                });
+                            }
+                            EffectOutcome::Continue
+                        } else {
+                            let affected_player = if compiled
+                                .required_inputs
+                                .contains(&ProgramRequiredInput::TriggerAffectedPlayer)
+                            {
+                                top.trigger_context
+                                    .affected_player
+                                    .ok_or(EngineError::ProgramInvariant(
+                                    "resolution program is missing its captured affected player",
+                                ))?
+                            } else {
+                                top.trigger_context
+                                    .affected_player
+                                    .unwrap_or(top.controller)
+                            };
+                            let mut cx = EffectCx {
+                                engine: self,
+                                events,
+                                targets: &target_context.targets,
+                                targets_by_role: &target_context.targets_by_role,
+                                target_damage: &target_context.target_damage,
+                                target_group_indices: &target_context.target_group_indices,
+                                top,
+                                controller: top.controller,
+                                affected_player,
+                                spell_label: &label,
+                                previous_effect_result: &previous,
+                                effect_result: &mut result,
+                                effect_index: instruction_index as u32,
+                                program_state: Some(program_state.clone()),
+                            };
+                            if matches!(
+                                &effect,
+                                SpellEffectKind::SelectHandCards { .. }
+                                    | SpellEffectKind::PutSelectedHandCardsOnLibraryTop
+                            ) {
+                                run_program_only_leaf(&mut cx, effect)?
+                            } else {
+                                dispatch::execute_effect(&mut cx, effect)?
+                            }
+                        };
 
                     self.refresh_hideaway_look_permissions();
                     if outcome == EffectOutcome::GameEnded {
@@ -403,6 +679,97 @@ impl GameEngine {
     }
 }
 
+#[derive(Default)]
+struct ProgramTargetContext {
+    has_bindings: bool,
+    targets: Vec<ObjectId>,
+    targets_by_role: Vec<Vec<ObjectId>>,
+    target_damage: Vec<u32>,
+    target_group_indices: Vec<u32>,
+}
+
+/// Project the exact target records owned by one compiled instruction. The compiler retained
+/// source paths and role/group bindings; mode-local programs read only their stable mode's target
+/// records and never fall back to the stack-wide flattened target list.
+fn program_target_context(
+    top: &StackItem,
+    compiled: &CompiledProgram,
+    source_effect_path: Option<&tricerules_card_model::primitives::SourceEffectPath>,
+) -> Result<ProgramTargetContext, EngineError> {
+    if compiled.target_bindings.is_empty() {
+        return Ok(ProgramTargetContext::default());
+    }
+    let source_effect_path = source_effect_path.ok_or(EngineError::ProgramInvariant(
+        "source-lowered target program instruction lost its source effect path",
+    ))?;
+    let mut bindings = compiled
+        .target_bindings
+        .iter()
+        .filter(|binding| &binding.source_effect_path == source_effect_path)
+        .collect::<Vec<_>>();
+    if bindings.is_empty() {
+        return Ok(ProgramTargetContext::default());
+    }
+    bindings.sort_by_key(|binding| binding.role_index);
+    if bindings
+        .iter()
+        .enumerate()
+        .any(|(role_index, binding)| binding.role_index as usize != role_index)
+    {
+        return Err(EngineError::ProgramInvariant(
+            "source target bindings have a missing or repeated role index",
+        ));
+    }
+
+    let chosen_targets = match &compiled.target_projection {
+        tricerules_card_model::primitives::ProgramTargetProjection::OwnerLocal => {
+            top.targets.as_slice()
+        }
+        tricerules_card_model::primitives::ProgramTargetProjection::ModeLocal { mode_id } => top
+            .chosen_modes
+            .iter()
+            .find(|chosen| chosen.mode_id == *mode_id)
+            .map(|chosen| chosen.targets.as_slice())
+            .ok_or(EngineError::ProgramInvariant(
+                "mode-local target program has no matching chosen mode",
+            ))?,
+    };
+    let role_group_indices = bindings
+        .iter()
+        .map(|binding| binding.target_group_index)
+        .collect::<Vec<_>>();
+    let selected_targets = chosen_targets
+        .iter()
+        .filter(|target| role_group_indices.contains(&target.group_index))
+        .collect::<Vec<_>>();
+    let targets_by_role = bindings
+        .iter()
+        .map(|binding| {
+            chosen_targets
+                .iter()
+                .filter(|target| target.group_index == binding.target_group_index)
+                .map(|target| target.object_id)
+                .collect()
+        })
+        .collect();
+    Ok(ProgramTargetContext {
+        has_bindings: true,
+        targets: selected_targets
+            .iter()
+            .map(|target| target.object_id)
+            .collect(),
+        targets_by_role,
+        target_damage: selected_targets
+            .iter()
+            .map(|target| target.damage_amount)
+            .collect(),
+        target_group_indices: selected_targets
+            .iter()
+            .map(|target| target.group_index)
+            .collect(),
+    })
+}
+
 fn block_at_path<'a>(
     program: &'a CompiledProgram,
     path: &[ProgramPathStep],
@@ -441,7 +808,13 @@ fn capture_program_outputs(
             ResultType::DrawReceipt { .. } => {
                 ProgramValue::DrawReceipt(result.produced_objects.clone())
             }
-            ResultType::DiscardReceipt { .. } => ProgramValue::DiscardReceipt(result.cards.clone()),
+            ResultType::DiscardResult { .. } => {
+                ProgramValue::DiscardResult(result.program_discard_result.clone().ok_or(
+                    EngineError::ProgramInvariant(
+                        "discard instruction did not publish its typed result",
+                    ),
+                )?)
+            }
             ResultType::PermanentSelection { .. } => {
                 ProgramValue::PermanentSelection(result.produced_objects.clone())
             }
@@ -458,6 +831,77 @@ fn capture_program_outputs(
         *destination = Some(value);
     }
     Ok(())
+}
+
+fn validate_program_unit_inputs(
+    top: &StackItem,
+    compiled: &CompiledProgram,
+) -> Result<(), EngineError> {
+    if compiled
+        .required_inputs
+        .contains(&ProgramRequiredInput::TriggerAffectedPlayer)
+        && top.trigger_context.affected_player.is_none()
+    {
+        return Err(EngineError::ProgramInvariant(
+            "resolution program is missing its captured affected player",
+        ));
+    }
+    Ok(())
+}
+
+fn program_result_condition_holds(
+    state: &crate::state::GameState,
+    top: &StackItem,
+    run: &ProgramRunState,
+    condition: &CompiledProgramResultCondition,
+) -> Result<bool, EngineError> {
+    match condition {
+        CompiledProgramResultCondition::DiscardOutcome { result, outcome } => {
+            let Some(ProgramValue::DiscardResult(result)) =
+                run.slots.get(result.0 as usize).and_then(Option::as_ref)
+            else {
+                return Err(EngineError::ProgramInvariant(
+                    "discard outcome condition read an unavailable or wrong-typed slot",
+                ));
+            };
+            Ok(result.outcome == *outcome)
+        }
+        CompiledProgramResultCondition::DiscardCount {
+            result,
+            players,
+            card_type,
+            min,
+            max,
+        } => {
+            let Some(ProgramValue::DiscardResult(result)) =
+                run.slots.get(result.0 as usize).and_then(Option::as_ref)
+            else {
+                return Err(EngineError::ProgramInvariant(
+                    "discard count condition read an unavailable or wrong-typed slot",
+                ));
+            };
+            let count = result
+                .cards
+                .iter()
+                .filter(|card| {
+                    crate::engine::history::relative_player_set_contains(
+                        state,
+                        *players,
+                        top.controller,
+                        card.affected_player,
+                    )
+                })
+                .filter(|card| match (&card.type_knowledge, card_type) {
+                    (_, None) => true,
+                    (DiscardCardTypeKnowledge::Known(types), Some(kind)) => types.contains(kind),
+                    (DiscardCardTypeKnowledge::UnknownHidden, Some(_)) => false,
+                })
+                .count()
+                .min(u32::MAX as usize) as u32;
+            Ok(min.is_none_or(|minimum| count >= minimum)
+                && max.is_none_or(|maximum| count <= maximum))
+        }
+    }
 }
 
 fn run_program_only_leaf(
@@ -635,6 +1079,150 @@ mod invariant_rollback_tests {
         engine
     }
 
+    fn static_grant_modal_program_fixture() -> (
+        GameEngine,
+        tricerules_card_model::TriggeredAbilityDef,
+        tricerules_card_model::AbilityDefinitionId,
+        Vec<tricerules_card_model::ModeId>,
+    ) {
+        let card = r#"(
+            id: "static_modal_grant",
+            name: "Static Modal Grant",
+            face_id: "static_modal_grant_face",
+            types: ["Creature"], power: 2, toughness: 2,
+            static_abilities: [(
+                ability_id: "static_01", presentation: Fallback,
+                definition: GrantTriggeredAbilityToPermanents(
+                    filter: (kind: Creature, controller: You), condition: None,
+                    triggered_abilities: [(
+                        ability_id: "triggered_01", presentation: Fallback,
+                        trigger: WhenSelfEntersBattlefield,
+                        modal: Some((min_modes: 2, max_modes: 2, modes: [
+                            (mode_id: "first_mode", presentation: Fallback,
+                                effects: [
+                                    DamageTarget(amount: 1, target: (kind: Creature)),
+                                    DrawDiscard(who: Controller, draw_count: 1,
+                                        discard_count: 1, order: DiscardThenDraw,
+                                        optional: true)
+                                ],
+                                targeting: Some((groups: [(min: 1, max: 1,
+                                    prompt: "Choose first creature", effect_indices: [0])]))),
+                            (mode_id: "second_mode", presentation: Fallback,
+                                effects: [
+                                    DamageTarget(amount: 1, target: (kind: Creature)),
+                                    DrawDiscard(who: Controller, draw_count: 1,
+                                        discard_count: 1, order: DiscardThenDraw,
+                                        optional: true)
+                                ],
+                                targeting: Some((groups: [(min: 1, max: 1,
+                                    prompt: "Choose second creature", effect_indices: [0])])))
+                        ])),
+                    )],
+                ),
+            )],
+        )"#;
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+                &[
+                    card,
+                    include_str!("../../../../tricerules-cards/data/island.ron"),
+                    include_str!("../../../../tricerules-cards/data/forest.ron"),
+                ],
+                &[],
+            )
+            .expect("static modal grant fixture registry validates"),
+        ));
+        let decks = Some(vec![
+            vec!["static_modal_grant".into(); 30],
+            vec!["island".into(); 30],
+        ]);
+        let engine = GameEngine::new(registry, 91_205, &[0, 1], 20, decks, true)
+            .expect("static modal grant fixture engine");
+        let face = registry
+            .get("static_modal_grant")
+            .and_then(|card| card.face(0))
+            .expect("fixture face");
+        let (grant_ability_id, ability) = match &face.static_abilities[0].definition {
+            tricerules_card_model::primitives::StaticAbilityDef::GrantTriggeredAbilityToPermanents {
+                triggered_abilities,
+                ..
+            } => (
+                face.static_abilities[0].ability_id.clone(),
+                triggered_abilities[0].clone(),
+            ),
+            other => panic!("unexpected static grant fixture: {other:?}"),
+        };
+        let owner = tricerules_card_model::AbilityDefinitionId {
+            card_id: "static_modal_grant".into(),
+            face_id: face.face_id.clone(),
+            ability_path: vec![grant_ability_id, ability.ability_id.clone()],
+        };
+        let modes = ability
+            .modal
+            .as_ref()
+            .expect("modal grant definition")
+            .modes
+            .iter()
+            .map(|mode| mode.mode_id.clone())
+            .collect();
+        (engine, ability, owner, modes)
+    }
+
+    fn static_grant_modal_stack_item(
+        engine: &GameEngine,
+        source_id: ObjectId,
+        ability: &tricerules_card_model::TriggeredAbilityDef,
+        definition: &tricerules_card_model::AbilityDefinitionId,
+        modes: &[tricerules_card_model::ModeId],
+        capture_body: bool,
+    ) -> StackItem {
+        use crate::state::{ChosenMode, StackTarget, TriggerAbilityOrigin, TriggerUseKey};
+
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source_id)
+            .copied()
+            .unwrap_or(0);
+        let mut top = engine.observer_return_item(source_id, 0);
+        top.id = engine.state.next_object_id.saturating_add(1);
+        top.card_id = "static_modal_grant".into();
+        top.ability_text = Some("static modal grant".into());
+        top.source_permanent_id = Some(source_id);
+        top.source_owner = Some(0);
+        top.source_zone_change = generation;
+        top.trigger_use_key = Some(TriggerUseKey {
+            object_id: source_id,
+            zone_change_generation: generation,
+            ability_origin: TriggerAbilityOrigin::StaticGrant {
+                source_id,
+                source_zone_change: generation,
+                definition: definition.clone(),
+            },
+        });
+        top.ability_index = Some(usize::MAX);
+        top.triggered_ability = capture_body.then(|| ability.clone());
+        top.is_triggered = true;
+        top.is_copy = false;
+        top.chosen_modes = modes
+            .iter()
+            .map(|mode_id| ChosenMode {
+                mode_id: mode_id.clone(),
+                // A hand object is deliberately used as a stale target. If target snapshot/fizzle
+                // runs before owner validation, both selected modes would be consumed here.
+                targets: vec![StackTarget {
+                    object_id: source_id,
+                    group_index: 0,
+                    damage_amount: 0,
+                    kind: rv1::TargetRefKind::Permanent as i32,
+                    zone_change_generation: Some(generation),
+                    required_controller: None,
+                }],
+            })
+            .collect();
+        top
+    }
+
     fn pass_priority() -> RuledCommand {
         RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -739,5 +1327,148 @@ mod invariant_rollback_tests {
             );
             assert!(command_snapshot(&engine) == command_snapshot(&control));
         }
+    }
+
+    #[test]
+    fn chosen_to_pay_outcome_is_independent_of_an_empty_discard_receipt_cohort() {
+        let engine = program_resolution_fixture();
+        let top = engine.state.stack.last().expect("resolving spell").clone();
+        let result_slot = ResultSlotId(0);
+        let run = ProgramRunState {
+            owner: tricerules_card_model::ProgramOwnerId::face(
+                "brainstorm",
+                tricerules_card_model::CardFaceId::new("brainstorm").unwrap(),
+            ),
+            pending_owners: Vec::new(),
+            frames: vec![ProgramFrame {
+                path: Vec::new(),
+                next_instruction: 0,
+                yield_to: Vec::new(),
+            }],
+            slots: vec![Some(ProgramValue::DiscardResult(ProgramDiscardResult {
+                outcome: tricerules_card_model::DiscardResultOutcome::ChosenToPay,
+                batches: Vec::new(),
+                cards: Vec::new(),
+            }))],
+            in_flight: None,
+        };
+
+        assert!(program_result_condition_holds(
+            &engine.state,
+            &top,
+            &run,
+            &CompiledProgramResultCondition::DiscardOutcome {
+                result: result_slot,
+                outcome: tricerules_card_model::DiscardResultOutcome::ChosenToPay,
+            },
+        )
+        .expect("outcome condition evaluates"));
+        assert!(!program_result_condition_holds(
+            &engine.state,
+            &top,
+            &run,
+            &CompiledProgramResultCondition::DiscardCount {
+                result: result_slot,
+                players: tricerules_card_model::primitives::RelativePlayerSet::Controller,
+                card_type: Some(tricerules_card_model::primitives::CardTypeFilter::Nonland),
+                min: Some(1),
+                max: None,
+            },
+        )
+        .expect("count condition evaluates"));
+    }
+
+    #[test]
+    fn anvil_program_requires_its_captured_affected_player_before_running() {
+        use tricerules_card_model::ProgramOwnerId;
+
+        let engine = program_resolution_fixture();
+        let face = engine
+            .registry
+            .get("anvil_of_bogardan")
+            .and_then(|card| card.face(0))
+            .expect("Anvil face");
+        let ability = face
+            .triggered_abilities
+            .first()
+            .expect("Anvil draw-step trigger");
+        let owner = ProgramOwnerId::ability(tricerules_card_model::AbilityDefinitionId {
+            card_id: "anvil_of_bogardan".into(),
+            face_id: face.face_id.clone(),
+            ability_path: vec![ability.ability_id.clone()],
+        });
+        let compiled = engine
+            .registry
+            .compiled_program_for_owner(&owner)
+            .expect("Anvil trigger program was compiled");
+        assert!(compiled
+            .required_inputs
+            .contains(&ProgramRequiredInput::TriggerAffectedPlayer));
+
+        let mut top = engine
+            .state
+            .stack
+            .last()
+            .expect("fixture stack item")
+            .clone();
+        assert!(matches!(
+            validate_program_unit_inputs(&top, compiled),
+            Err(EngineError::ProgramInvariant(
+                "resolution program is missing its captured affected player"
+            ))
+        ));
+
+        top.trigger_context.affected_player = Some(1);
+        validate_program_unit_inputs(&top, compiled)
+            .expect("the captured draw-step actor satisfies the input guard");
+    }
+
+    #[test]
+    fn modal_trigger_owner_requires_its_captured_static_grant_definition_before_fizzle() {
+        use tricerules_card_model::ProgramOwnerId;
+
+        let (mut engine, ability, definition, modes) = static_grant_modal_program_fixture();
+        let source_id = engine.state.players[0].hand[0];
+        let missing_capture =
+            static_grant_modal_stack_item(&engine, source_id, &ability, &definition, &modes, false);
+        assert_eq!(
+            missing_capture.ability_program_owner(),
+            Some(ProgramOwnerId::ability(definition.clone()))
+        );
+        engine.state.stack.push(missing_capture);
+        let mut events = Vec::new();
+        let error = engine
+            .resolve_top_of_stack(&mut events)
+            .expect_err("a compiled targeted modal trigger cannot recover its missing body");
+        assert!(
+            matches!(
+                error,
+                EngineError::ProgramInvariant(
+                    "compiled ability program is missing its captured definition"
+                )
+            ),
+            "{error:?}"
+        );
+        assert!(
+            events.is_empty(),
+            "the invariant precedes the global fizzle"
+        );
+
+        let captured =
+            static_grant_modal_stack_item(&engine, source_id, &ability, &definition, &modes, true);
+        assert_eq!(
+            engine
+                .compiled_resolution_program_owners(&captured)
+                .expect("captured static grant owner validates"),
+            Some(
+                modes
+                    .iter()
+                    .map(|mode_id| {
+                        ProgramOwnerId::ability_mode(definition.clone(), mode_id.clone())
+                    })
+                    .collect::<Vec<_>>()
+            ),
+            "static-granted modal units use the complete captured ability path, not the face index"
+        );
     }
 }

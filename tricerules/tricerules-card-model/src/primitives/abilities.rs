@@ -1230,6 +1230,12 @@ impl TriggerCondition {
         )
     }
 
+    /// Whether this trigger contract captures the event player for a compiled ability input.
+    /// The source-lowered DrawDiscard cohort currently uses the generic draw-step producer.
+    pub(crate) fn supplies_program_affected_player(&self) -> bool {
+        matches!(self, Self::AtBeginningOfDrawStep { .. })
+    }
+
     pub(crate) fn supplies_targeting_stack_object(&self) -> bool {
         matches!(
             self,

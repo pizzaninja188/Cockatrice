@@ -57,6 +57,7 @@ impl GameEngine {
                 pending.deciding_player,
                 oid,
             )],
+            program_discard_result: None,
         };
 
         self.complete_parked_resolution_with_previous(

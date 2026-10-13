@@ -487,6 +487,10 @@ pub(super) fn discard(
     let SpellEffectKind::Discard { who, quantity } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let optional_exact = matches!(
+        &quantity,
+        tricerules_card_model::primitives::DiscardQuantity::OptionalExact(_)
+    );
     let recipients = player_recipients(cx, who);
     let mut choices = Vec::new();
     for player in recipients {
@@ -494,12 +498,34 @@ pub(super) fn discard(
             continue;
         };
         let hand = cx.engine.state.players[player_index].hand.clone();
+        let optional_exact_count = match &quantity {
+            tricerules_card_model::primitives::DiscardQuantity::OptionalExact(count) => {
+                Some(*count)
+            }
+            _ => None,
+        };
+        if optional_exact_count.is_some_and(|count| hand.len() < count as usize) {
+            // OptionalExact is not an "up to" instruction. An undersized candidate set is an
+            // unpayable result and must not expose a partial-selection prompt.
+            if cx.program_state.is_some() {
+                *cx.effect_result = EffectResult {
+                    program_discard_result: Some(crate::state::ProgramDiscardResult {
+                        outcome: tricerules_card_model::DiscardResultOutcome::Unpayable,
+                        batches: Vec::new(),
+                        cards: Vec::new(),
+                    }),
+                    ..EffectResult::default()
+                };
+            }
+            return Ok(EffectOutcome::Continue);
+        }
         let required = match &quantity {
             tricerules_card_model::primitives::DiscardQuantity::Exact(count)
             | tricerules_card_model::primitives::DiscardQuantity::UpTo(count)
             | tricerules_card_model::primitives::DiscardQuantity::UnlessOne { count, .. } => {
                 (*count).min(hand.len() as u32)
             }
+            tricerules_card_model::primitives::DiscardQuantity::OptionalExact(count) => *count,
             tricerules_card_model::primitives::DiscardQuantity::All
             | tricerules_card_model::primitives::DiscardQuantity::AnyNumber => hand.len() as u32,
         };
@@ -550,15 +576,33 @@ pub(super) fn discard(
                 .collect(),
             required,
             variable: matches!(
-                quantity,
+                &quantity,
                 tricerules_card_model::primitives::DiscardQuantity::UpTo(_)
                     | tricerules_card_model::primitives::DiscardQuantity::AnyNumber
             ),
+            optional_exact: optional_exact_count.is_some(),
             alternative_filter,
             alternative_candidates,
         });
     }
     if choices.is_empty() {
+        if cx.program_state.is_some() && cx.effect_result.program_discard_result.is_none() {
+            *cx.effect_result = EffectResult {
+                program_discard_result: Some(crate::state::ProgramDiscardResult {
+                    outcome: if optional_exact {
+                        // No eligible recipient means the optional payment cannot be made. Keep
+                        // it distinct from a completed mandatory discard, and never substitute a
+                        // controller or another player for an empty rules-defined player set.
+                        tricerules_card_model::DiscardResultOutcome::Unpayable
+                    } else {
+                        tricerules_card_model::DiscardResultOutcome::Performed
+                    },
+                    batches: Vec::new(),
+                    cards: Vec::new(),
+                }),
+                ..EffectResult::default()
+            };
+        }
         return Ok(EffectOutcome::Continue);
     }
 
@@ -618,7 +662,7 @@ pub(in crate::engine) fn park_player_set_discard_choice(
         .collect::<Vec<_>>();
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
     let mut selection_alternatives = Vec::new();
-    if choice.alternative_filter.is_some() {
+    if choice.optional_exact || choice.alternative_filter.is_some() {
         selection_alternatives.push(rv1::ResolutionSelectionAlternative {
             count: choice.required,
             candidate_indices: (0..candidates.len() as u32).collect(),
@@ -639,7 +683,17 @@ pub(in crate::engine) fn park_player_set_discard_choice(
             });
         }
     }
-    let prompt = if choice.variable {
+    let prompt = if choice.optional_exact {
+        let noun = if choice.required == 1 {
+            "card"
+        } else {
+            "cards"
+        };
+        format!(
+            "P{}: choose zero or exactly {} {noun} to discard.",
+            choice.player, choice.required
+        )
+    } else if choice.variable {
         format!(
             "P{}: choose zero to {} cards to discard.",
             choice.player, choice.required
@@ -6915,6 +6969,7 @@ pub(super) fn search_library(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::ProgramFrame;
 
     fn linked_exile_test_item(occurrence: crate::state::LinkedExileOccurrence) -> StackItem {
         StackItem {
@@ -6995,6 +7050,76 @@ mod tests {
         );
         assert!(engine.state.linked_exile_records.contains_key(&base_key));
         assert!(!engine.state.linked_exile_records.contains_key(&copy_key));
+    }
+
+    #[test]
+    fn optional_exact_discard_with_no_live_recipient_is_unpayable_without_fallback() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            90_098,
+            &[0, 1],
+            20,
+            Some(vec![vec!["island".into(); 30], vec!["forest".into(); 30]]),
+            true,
+        )
+        .expect("new game");
+        engine.concede_batch(1).expect("opponent concedes");
+
+        let mut top =
+            linked_exile_test_item(crate::state::LinkedExileOccurrence::NativeOrTokenBase);
+        top.trigger_context.affected_player = Some(0);
+        let owner = tricerules_card_model::ProgramOwnerId::face(
+            "nautiloid_ship",
+            tricerules_card_model::CardFaceId::new("nautiloid_ship").unwrap(),
+        );
+        let program_state = ProgramRunState {
+            owner,
+            pending_owners: Vec::new(),
+            frames: vec![ProgramFrame {
+                path: Vec::new(),
+                next_instruction: 0,
+                yield_to: Vec::new(),
+            }],
+            slots: Vec::new(),
+            in_flight: None,
+        };
+        let previous_result = EffectResult::default();
+        let mut effect_result = EffectResult::default();
+        let mut events = Vec::new();
+        let result = discard(
+            &mut EffectCx {
+                engine: &mut engine,
+                events: &mut events,
+                targets: &[],
+                targets_by_role: &[],
+                target_damage: &[],
+                target_group_indices: &[],
+                top: &top,
+                controller: 0,
+                affected_player: 0,
+                spell_label: "departed optional discard",
+                previous_effect_result: &previous_result,
+                effect_result: &mut effect_result,
+                effect_index: 0,
+                program_state: Some(program_state),
+            },
+            SpellEffectKind::Discard {
+                who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+                quantity: tricerules_card_model::primitives::DiscardQuantity::OptionalExact(1),
+            },
+        )
+        .expect("empty recipient cohort is handled as an outcome");
+
+        assert!(matches!(result, EffectOutcome::Continue));
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(
+            effect_result.program_discard_result.unwrap().outcome,
+            tricerules_card_model::DiscardResultOutcome::Unpayable
+        );
+        assert!(events.is_empty());
+        // The game-rule recipient is specifically "other than the captured affected player".
+        // A departed sole opponent must never cause a controller fallback choice.
+        assert!(!engine.state.players[0].hand.is_empty());
     }
 
     #[test]

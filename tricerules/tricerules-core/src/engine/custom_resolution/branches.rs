@@ -282,9 +282,12 @@ impl GameEngine {
         } else {
             stack.resume_effect_index
         };
-        let mut previous_result = stack.previous_result;
+        let mut previous_result = stack.previous_result.clone();
         if let Some(paid) = soft_counter_paid {
             previous_result.receipt = Some(ResolutionReceipt::CounterUnlessPaid { paid });
+        }
+        if stack.program.is_some() {
+            return self.complete_parked_stack_with_previous(stack, previous_result, events);
         }
         self.complete_parked_resolution_with_previous(stack.item, resume, previous_result, events)
     }
