@@ -135,6 +135,7 @@ fn resolve_with_source_and_target(
         previous_effect_result: &EffectResult::default(),
         effect_result: &mut result,
         effect_index: 0,
+        program_state: None,
     };
     let outcome = match effect {
         SpellEffectKind::TapAll { .. } => tap_all(&mut cx, effect),

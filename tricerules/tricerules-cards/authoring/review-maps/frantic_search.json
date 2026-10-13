@@ -5,7 +5,7 @@
     "face_id": "frantic_search",
     "start_line": 1,
     "end_line": 1,
-    "typed_paths": ["/faces/0/spell_effect/0", "/faces/0/spell_effect/1", "/faces/0/spell_effect/2"]
+    "typed_paths": ["/faces/0/spell_program/body/steps/0", "/faces/0/spell_program/body/steps/1", "/faces/0/spell_program/body/steps/2", "/faces/0/spell_program/body/steps/3"]
   }],
   "semantic_fixtures": [
     {

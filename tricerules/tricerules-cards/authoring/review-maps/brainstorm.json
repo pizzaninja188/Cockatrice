@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "oracle_id": "36cd2364-d113-47d1-b2c4-b088d9eb88dd",
+  "spans": [
+    {
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/1",
+        "/faces/0/spell_program/body/steps/2"
+      ],
+      "face_id": "brainstorm",
+      "start_line": 1,
+      "end_line": 1
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario custom_resolution::brainstorm_draws_three_then_returns_two_in_chosen_order",
+      "covers": "Paid U instant draws three individually, offers an exact private ordered two-card hand selection, and puts the last selected card on top."
+    },
+    {
+      "test": "scenario custom_resolution::brainstorm_put_back_emits_no_public_move_event",
+      "covers": "Concealed hand-to-library placement publishes no public PermanentMoved identity."
+    },
+    {
+      "test": "scenario custom_resolution::brainstorm_rejects_card_not_in_hand_without_mutating",
+      "covers": "A non-hand selection is rejected without mutating state, followed by a legal answer."
+    },
+    {
+      "test": "scenario custom_resolution::brainstorm_resolution_is_deterministic",
+      "covers": "The same seed and accepted resolution decisions reproduce the final state."
+    },
+    {
+      "test": "scenario custom_resolution::twincast_copy_and_original_brainstorm_own_independent_private_programs",
+      "covers": "Actual Twincast copy and original use separate controller-private choices and result bindings; wrong actor is rejected atomically and only the physical original exits once."
+    },
+    {
+      "test": "scenario deck_coverage_draw_replacements::brainstorm_stays_physically_on_stack_until_put_back_completes",
+      "covers": "The physical spell remains on Stack during the private choice and exits with exactly one generation change after completion."
+    },
+    {
+      "test": "scenario deck_coverage_draw_replacements::brainstorm_expanded_draw_and_private_ordered_putback_each_change_generation_once",
+      "covers": "Replacement-expanded draws finish before the ordered hand choice; each drawn or placed card changes generation once."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

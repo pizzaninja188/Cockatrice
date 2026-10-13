@@ -46,8 +46,22 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         if let Some(stack) = stack.as_mut() {
-            stack.resume_effect_index =
-                Some(self.build_resolution_effects(&stack.item).0.len() as u32);
+            if let Some(program) = stack.program.as_mut() {
+                // A departed resolving controller cannot finish the current instruction or any
+                // authored tail. Retain only a root end cursor so the ordinary deferred stack
+                // exit runs after independently owed observer returns.
+                program.frames.clear();
+                program.frames.push(crate::state::ProgramFrame {
+                    path: Vec::new(),
+                    next_instruction: u32::MAX,
+                    yield_to: Vec::new(),
+                });
+                program.in_flight = None;
+                stack.resume_effect_index = None;
+            } else {
+                stack.resume_effect_index =
+                    Some(self.build_resolution_effects(&stack.item).0.len() as u32);
+            }
         }
         if let Some(batch) = self.state.pending_observer_return_batch.as_mut() {
             batch.resume_stack = stack.clone();
@@ -60,10 +74,9 @@ impl GameEngine {
             return Ok(());
         }
         if let Some(stack) = stack {
-            let completed = self.complete_parked_resolution_with_previous(
-                stack.item,
-                stack.resume_effect_index,
-                stack.previous_result,
+            let completed = self.complete_parked_stack_with_previous(
+                stack.clone(),
+                stack.previous_result.clone(),
                 Vec::new(),
             )?;
             events.extend(completed.events);
@@ -84,6 +97,21 @@ impl GameEngine {
                     .get(&stack.item.id)
                     .is_some_and(|object| departed.contains(&object.owner))
         };
+        let discard_departed_suspended_program = self
+            .state
+            .pending_observer_return_batch
+            .as_ref()
+            .and_then(|batch| batch.suspended_resolution.as_ref())
+            .and_then(|pending| pending.continuation.stack())
+            .is_some_and(|stack| stack.program.is_some() && is_departed(stack));
+        if discard_departed_suspended_program {
+            if let Some(batch) = self.state.pending_observer_return_batch.as_mut() {
+                // The observer's return remains owed, but a departed spell owner cannot have
+                // their parked program choice restored after the independent return completes.
+                batch.suspended_resolution = None;
+                batch.suspended_replacement_event = None;
+            }
+        }
         let surviving_linked_land_resume =
             self.state
                 .pending_linked_exile_play
@@ -717,6 +745,7 @@ impl GameEngine {
         self.refresh_entry_creature_type_departure(&departed_objects, events)?;
         self.refresh_authored_branch_departure(events)?;
         self.refresh_targeted_player_permanent_choice_departure(events)?;
+        self.refresh_program_permanent_choice_departure(events)?;
         self.advance_departed_join_forces_payer(events)?;
         self.flush_staged_triggers(events);
         Ok(())

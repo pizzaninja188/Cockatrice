@@ -1,9 +1,13 @@
 # Composable card execution and authoring contract
 
-Status: proposed target design; production behavior is unchanged. This completes the contract-design
-step, not the implementation or migration pilot. Reviewed baseline:
-`41e4ccf463930d8384ac00eb60ac21f931646b38` (2026-10-12). The former deck campaign is outside this
-design's scope. Existing cards remain admitted only through the current runtime and evidence.
+Status (2026-10-12): target design with a bounded targetless Instant/Sorcery implementation pilot.
+The [active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-targetless-spell-programs)
+owns currently accepted syntax and restrictions. The broader operations, contexts, custom-effect
+integration and prompt-ID protocol below remain migration targets. In particular, this pilot does
+not promise correlation of stale or duplicate answers across successive identical prompts.
+The initial design was reviewed against `41e4ccf463930d8384ac00eb60ac21f931646b38` (2026-10-12).
+The former deck campaign remains outside scope. Cards require complete-card evidence and the
+applicable verification and visible acceptance gates independently of this design.
 
 ## Outcome and boundaries
 
@@ -26,7 +30,7 @@ semantic ownership. An instruction sequence never substitutes for a simultaneous
 
 ## Existing seams and concrete changes
 
-| Current contract | Target contract |
+| Legacy contract at the design baseline | Target contract |
 |---|---|
 | [`SpellEffectKind::validate_list`](../tricerules/tricerules-card-model/src/primitives/effects.rs) manually pairs preceding producers and consumers | One model-side program compiler checks operation signatures, typed bindings, scope, cardinality and context |
 | `Conditional` admits selected single instructions and rejects nesting | Finite nested conditional blocks share the runner; conditions are evaluated on entry |
@@ -54,7 +58,8 @@ branch-selection semantics are structural program nodes, rather than special cas
 containing copies of every existing operation. During migration, lower old effect-list syntax into
 the same compiled program. Retire old aliases and composition variants with their migrated families.
 
-The following is a proposed type boundary, not Rust/RON currently accepted by the loader:
+The following is the broader target type boundary, including future shapes. Use the active
+authoring reference for accepted Rust/RON rather than copying this sketch:
 
 ```rust
 // card-model: deserialized syntax; output types are inferred from operation signatures.
@@ -265,7 +270,7 @@ ordinary operation/program. Do not force genuinely distinct mechanics into loose
 
 ## Migration sequence and acceptance
 
-These are implementation dependencies for the next step, not work completed by this document:
+These are dependencies for the broader migration; the bounded pilot does not complete this list:
 
 1. Add the model/compiler and source-only legacy lowering with unchanged admitted behavior. Bind target
    roles and result provenance explicitly; characterize currently uncovered invariants before changes.
@@ -283,9 +288,11 @@ Deletion is mandatory when no admitted definition, custom effect, generated temp
 uses a superseded path and its independent assertions pass through the shared implementation. Temporary
 lowering has a family-specific retirement condition; there is no permanent second execution architecture.
 
-Migration inventory: retire `custom::Brainstorm`, `ResolutionStep::Draw`,
-`PostDrawPhase::BrainstormPutBack` and `DrawCompletion::BrainstormPutBack` once shared draw, private
-ordered hand selection and top placement pass their complete-card gates. Retain `custom::GiftsUngiven`
+Pilot retirement inventory: `custom::Brainstorm`, `ResolutionStep::Draw`, `PostDrawPhase`,
+`DrawCompletion::BrainstormPutBack`, the custom draw-completion bridge and its library-placement
+helper are removed. Brainstorm uses shared draw, private ordered hand selection and bound top
+placement through the program runner. Legacy `DrawDiscard` remains for unmigrated definitions and
+templates; removing it requires their separate family migration. Retain `custom::GiftsUngiven`
 until shared search/reveal, different chooser, subset/partition, movement and shuffle cover its full
 algorithm and target semantics, then retire its custom continuation use. Keep `custom_resolution/*`
 where it implements shared mechanic transactions, copy legality or entry/APNAP work; its directory

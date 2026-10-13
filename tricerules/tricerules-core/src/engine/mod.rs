@@ -22,11 +22,11 @@ use crate::state::{
     PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
     PendingResolutionPresentation, PendingTokenEntryBatch, PendingTrigger, PendingTriggerOrder,
     PendingWardPayment, PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
-    ReplacementPriority, ResolutionContinuation, ResolutionReceipt, RoomState,
-    SimultaneousEntryBatch, SpellCastMethod, StackItem, StackObjectRef, StackPresentation,
-    StackTarget, StagedTrigger, StagedTriggerGroup, StaticEmblemInstance, TokenBattlefieldEntry,
-    TokenEntryBatchOptions, TriggerAbilityOrigin, TriggerContext, TriggerObjectRef,
-    TriggerStackObjectRef, TriggerUseKey, TurnHistory, TurnObjectFact, TurnStep,
+    ProgramFrame, ProgramRunState, ReplacementPriority, ResolutionContinuation, ResolutionReceipt,
+    RoomState, SimultaneousEntryBatch, SpellCastMethod, StackItem, StackObjectRef,
+    StackPresentation, StackTarget, StagedTrigger, StagedTriggerGroup, StaticEmblemInstance,
+    TokenBattlefieldEntry, TokenEntryBatchOptions, TriggerAbilityOrigin, TriggerContext,
+    TriggerObjectRef, TriggerStackObjectRef, TriggerUseKey, TurnHistory, TurnObjectFact, TurnStep,
     UndoableManaAbility, Zone,
 };
 use crate::state::{DoubleFacedToken, TokenCopySnapshot};
@@ -1006,6 +1006,18 @@ pub enum EngineError {
     PowerToughnessNumericRange(&'static str),
     #[error("damage numeric range exceeded: {0}")]
     DamageNumericRange(&'static str),
+    #[error("resolution program invariant failed: {0}")]
+    ProgramInvariant(&'static str),
+}
+
+fn requires_complete_command_rollback(error: &EngineError) -> bool {
+    matches!(
+        error,
+        EngineError::LifeNumericRange(_)
+            | EngineError::PowerToughnessNumericRange(_)
+            | EngineError::DamageNumericRange(_)
+            | EngineError::ProgramInvariant(_)
+    )
 }
 
 /// Internal game events emitted at state-change sites to drive the unified trigger-collection pass
@@ -2473,7 +2485,8 @@ impl GameEngine {
         // `set_tapped` appends to this while the command runs; anything left over from an earlier
         // command (or from a rejected one, which never drains) is stale by definition.
         // An earlier instruction can change the numeric domain before a later gain, P/T change,
-        // or damage replacement. Capture the whole command; restore typed numeric failures below.
+        // or damage replacement. Capture the whole command; restore typed numeric and bounded
+        // authored-program invariant failures below.
         let numeric_checkpoint = self.numeric_checkpoint();
         self.state.untapped_this_command.clear();
         // Canonical settlement may discard every intermediate ZoneView and publish one final
@@ -2488,12 +2501,11 @@ impl GameEngine {
             )
         });
         let mut result = self.dispatch_command(player, cmd);
-        if matches!(
-            result,
-            Err(EngineError::LifeNumericRange(_)
-                | EngineError::PowerToughnessNumericRange(_)
-                | EngineError::DamageNumericRange(_))
-        ) {
+        if result
+            .as_ref()
+            .err()
+            .is_some_and(requires_complete_command_rollback)
+        {
             self.restore_numeric_checkpoint(numeric_checkpoint);
             return result;
         }
@@ -2501,12 +2513,7 @@ impl GameEngine {
             (result.as_mut(), auto_pass_policies, zone_view_cache_before)
         {
             if let Err(error) = self.settle_automatic_priority(policies, batch, cache_before) {
-                if matches!(
-                    error,
-                    EngineError::LifeNumericRange(_)
-                        | EngineError::PowerToughnessNumericRange(_)
-                        | EngineError::DamageNumericRange(_)
-                ) {
+                if requires_complete_command_rollback(&error) {
                     self.restore_numeric_checkpoint(numeric_checkpoint);
                 }
                 return Err(error);

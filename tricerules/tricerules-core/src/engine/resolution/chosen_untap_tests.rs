@@ -89,6 +89,7 @@ fn consume(engine: &mut GameEngine, chosen: Vec<TriggerObjectRef>) {
         previous_effect_result: &previous,
         effect_result: &mut result,
         effect_index: 2,
+        program_state: None,
     };
     assert_eq!(
         mass::untap_chosen_permanents(&mut cx).unwrap(),

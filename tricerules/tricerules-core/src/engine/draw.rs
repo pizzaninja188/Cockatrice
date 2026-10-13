@@ -532,6 +532,235 @@ mod library_replacement_tests {
             assert_eq!(engine.state.draw_step_progress, Some((0, 0, 0)));
         }
     }
+
+    #[test]
+    fn observer_restore_republishes_draw_replacements_without_losing_prior_receipts() {
+        fn add_draw_replacement(engine: &mut GameEngine, card_id: &str) -> ObjectId {
+            let source = engine.state.players[0].library[0];
+            resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                source,
+                Zone::Battlefield,
+                Some(0),
+            )
+            .unwrap();
+            engine.state.objects.get_mut(&source).unwrap().card_id = card_id.into();
+            source
+        }
+
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            121_081,
+            &[0, 1],
+            20,
+            Some(vec![vec!["forest".into(); 24]; 2]),
+            true,
+        )
+        .unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Draw;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+        engine.state.draw_step_progress = Some((0, 0, 0));
+        add_draw_replacement(&mut engine, "alhammarrets_archive");
+        add_draw_replacement(&mut engine, "teferis_ageless_insight");
+
+        let spell = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&spell).unwrap().card_id = "brainstorm".into();
+        engine.state.players[0].mana_pool.blue = 1;
+        let cast = rv1::CastSpell {
+            cast_method: rv1::CastMethod::Normal as i32,
+            source: Some(rv1::CastSource {
+                location: Some(rv1::cast_source::Location::HandIndex(0)),
+                expected_zone_change_generation: Some(
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&spell)
+                        .copied()
+                        .unwrap_or(0),
+                ),
+            }),
+            ..Default::default()
+        };
+        engine.cast_spell(0, &cast).unwrap();
+        let top = engine.state.stack.pop().expect("cast Brainstorm");
+        let compiled = engine
+            .registry
+            .compiled_program("brainstorm", "brainstorm")
+            .expect("Brainstorm's immutable program");
+        let draw_outputs = compiled.body.steps[0].outputs.clone();
+        let program = ProgramRunState {
+            card_id: "brainstorm".into(),
+            face_id: "brainstorm".into(),
+            frames: vec![ProgramFrame {
+                path: Vec::new(),
+                next_instruction: 1,
+                yield_to: Vec::new(),
+            }],
+            slots: vec![None; compiled.slots.len()],
+            in_flight: Some(draw_outputs),
+        };
+        let mut stack = ParkedStackResolution::new(top);
+        stack.program = Some(program);
+        let completion = DrawCompletion::ResumeEffects {
+            stack,
+            result: EffectResult::default(),
+        };
+        assert!(matches!(
+            engine
+                .start_draw_transaction(vec![(0, 3)], completion, "Brainstorm", &mut Vec::new())
+                .unwrap(),
+            DrawProgress::Parked
+        ));
+
+        let receipt_before = match engine.state.pending_replacement_event.as_ref().unwrap() {
+            PendingReplacementEvent::Draw(work) => {
+                assert_eq!(
+                    work.receipts.len(),
+                    1,
+                    "the first draw is already committed"
+                );
+                assert_eq!(work.requests.front().unwrap().drawn, 1);
+                work.receipts[0]
+            }
+            other => panic!("expected the live draw transaction, found {other:?}"),
+        };
+        assert_eq!(
+            engine.state.objects[&receipt_before.object_id].zone,
+            Zone::Hand
+        );
+        assert_eq!(
+            engine.state.zone_change_generation[&receipt_before.object_id],
+            receipt_before.zone_change_generation
+        );
+        let original_offer = engine.draw_replacement_choice_event().unwrap();
+        let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(original_offer)) =
+            original_offer.ev
+        else {
+            panic!("expected the original full replacement offer")
+        };
+        assert_eq!(
+            original_offer.choice_kind,
+            rv1::ChoiceKind::ReplacementEffect as i32
+        );
+        assert_eq!(original_offer.replacement_options.len(), 2);
+        assert_eq!(original_offer.deciding_player_id, 0);
+
+        // Observer capture temporarily owns these two pending values while its own choice runs.
+        let suspended_resolution = engine.state.pending_resolution.take();
+        let suspended_replacement_event = engine.state.pending_replacement_event.take();
+        assert!(suspended_resolution.is_some());
+        assert!(suspended_replacement_event.is_some());
+        let mut restored_events = Vec::new();
+        assert!(engine
+            .restore_suspended_observer_resolution(
+                suspended_resolution,
+                suspended_replacement_event,
+                &mut restored_events,
+            )
+            .unwrap());
+
+        let restored_offer = restored_events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => {
+                    Some(choice.clone())
+                }
+                _ => None,
+            })
+            .expect("restoration republishes the complete live replacement offer");
+        assert_eq!(
+            restored_offer.choice_kind,
+            rv1::ChoiceKind::ReplacementEffect as i32
+        );
+        assert_eq!(restored_offer.deciding_player_id, 0);
+        assert_eq!(
+            restored_offer.prompt_text,
+            "Choose which draw replacement applies next."
+        );
+        assert_eq!(restored_offer.min, 1);
+        assert_eq!(restored_offer.max, 1);
+        assert_eq!(restored_offer.replacement_options.len(), 2);
+        assert!(restored_offer
+            .replacement_options
+            .iter()
+            .all(|option| option.effect_summary == "Draw two cards instead."));
+        match engine.state.pending_replacement_event.as_ref().unwrap() {
+            PendingReplacementEvent::Draw(work) => {
+                assert_eq!(work.receipts, [receipt_before]);
+                assert_eq!(work.requests.front().unwrap().drawn, 1);
+                assert!(work.action.is_none());
+            }
+            other => panic!("expected the restored draw transaction, found {other:?}"),
+        }
+
+        // There is one live replacement choice for each remaining requested draw. Completing
+        // both proves the retained first receipt is neither dropped nor replayed.
+        let mut replacement_choices = 0;
+        while matches!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .map(|pending| &pending.continuation),
+            Some(ResolutionContinuation::DrawReplacement { .. })
+        ) {
+            let choice = engine
+                .draw_replacement_choice_event()
+                .and_then(|event| event.ev)
+                .and_then(|event| match event {
+                    rv1::ruled_event::Ev::ResolutionChoiceRequired(choice) => Some(choice),
+                    _ => None,
+                })
+                .expect("draw replacement offer");
+            engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![choice.candidate_object_ids[0]],
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            replacement_choices += 1;
+        }
+        assert_eq!(replacement_choices, 2);
+        let draw_receipts = engine.state.turn_history.current.player(0).cards_drawn;
+        assert_eq!(
+            draw_receipts, 9,
+            "the first receipt and each replacement child count once"
+        );
+        let choice = engine.state.pending_resolution.as_ref().unwrap();
+        assert!(matches!(
+            &choice.continuation,
+            ResolutionContinuation::HandChoice { hand_choice, .. }
+                if hand_choice.program_selection
+        ));
+        let put_back = choice.presentation.candidates[..2].to_vec();
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: put_back,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_replacement_event.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
+        assert_eq!(
+            engine.state.players[0]
+                .graveyard
+                .iter()
+                .filter(|object_id| **object_id == spell)
+                .count(),
+            1
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1246,28 +1475,21 @@ pub(crate) enum DrawCompletion {
         active_player: PlayerId,
         occurrence: u64,
     },
-    BrainstormPutBack {
-        stack: ParkedStackResolution,
-        step: u32,
-        scratch: Vec<ObjectId>,
-    },
 }
 
 impl DrawCompletion {
     fn stack(&self) -> Option<&ParkedStackResolution> {
         match self {
-            Self::ResumeEffects { stack, .. }
-            | Self::BeginDiscard { stack, .. }
-            | Self::BrainstormPutBack { stack, .. } => Some(stack),
+            Self::ResumeEffects { stack, .. } | Self::BeginDiscard { stack, .. } => Some(stack),
             Self::FinishDrawStep { .. } => None,
         }
     }
     fn transfer_stack(&mut self, parent: Option<ParkedStackResolution>) {
         if let Some(parent) = parent {
             match self {
-                Self::ResumeEffects { stack, .. }
-                | Self::BeginDiscard { stack, .. }
-                | Self::BrainstormPutBack { stack, .. } => *stack = parent,
+                Self::ResumeEffects { stack, .. } | Self::BeginDiscard { stack, .. } => {
+                    *stack = parent
+                }
                 Self::FinishDrawStep { .. } => {}
             }
         }
@@ -1944,12 +2166,7 @@ impl GameEngine {
         match completed.completion {
             DrawCompletion::ResumeEffects { stack, mut result } => {
                 result.produced_objects.extend(completed.receipts);
-                self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    result,
-                    events,
-                )
+                self.complete_parked_stack_with_previous(stack, result, events)
             }
             DrawCompletion::BeginDiscard {
                 stack,
@@ -1968,18 +2185,6 @@ impl GameEngine {
             } => {
                 self.finish_draw_step_action(active_player, occurrence, &mut events)?;
                 self.apply_sbas(&mut events)?;
-                Ok(finish_with_events(self, events))
-            }
-            DrawCompletion::BrainstormPutBack {
-                stack,
-                step,
-                scratch,
-            } => {
-                self.finish_brainstorm_draw(stack.item, step, scratch, &mut events)?;
-                if self.state.pending_resolution.is_none() {
-                    self.apply_sbas(&mut events)?;
-                    events.push(ev_priority_changed(self));
-                }
                 Ok(finish_with_events(self, events))
             }
         }

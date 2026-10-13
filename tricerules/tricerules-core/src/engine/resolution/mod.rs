@@ -50,6 +50,7 @@ mod mass;
 mod misc;
 #[cfg(test)]
 mod portal_sacrifice_tests;
+mod program;
 mod proliferate;
 mod pump_counters;
 mod restrictions;
@@ -75,16 +76,23 @@ struct EffectCx<'a> {
     /// activated abilities, and every trigger that doesn't name another player; differs only when
     /// a triggered ability says "**that player** …"
     /// ([`StackItem::trigger_context`] — Howling Mine).
-    /// Effects that act on the *controller* by rule (Brainstorm's draw, a self-pump) keep using
+    /// Effects that act on the *controller* by rule (a spell program's draw, a self-pump) keep using
     /// `controller`.
     affected_player: PlayerId,
     spell_label: &'a str,
     previous_effect_result: &'a EffectResult,
     effect_result: &'a mut EffectResult,
     effect_index: u32,
+    program_state: Option<ProgramRunState>,
 }
 
 impl EffectCx<'_> {
+    fn parked_stack(&self) -> ParkedStackResolution {
+        let mut stack = ParkedStackResolution::new(self.top.clone());
+        stack.program = self.program_state.clone();
+        stack
+    }
+
     fn previous_battlefield_object(&self) -> Option<ObjectId> {
         let [selected] = self.previous_effect_result.produced_objects.as_slice() else {
             return None;
@@ -1145,14 +1153,13 @@ impl GameEngine {
             let adventure_resolves_to_exile = is_adventure_spell && !adventure_fizzles;
             let resolves_to_battlefield_raw =
                 resolving_face.map(|f| f.is_permanent()).unwrap_or(false);
-            // A data-driven instant or sorcery may suspend for a mid-resolution choice. Keep its
-            // physical card on the stack until the whole effect list completes; immediate
-            // resolutions still publish the same final batch, while parked resolutions now keep
-            // the visible stack faithful to the resolution boundary. This includes Adventure;
-            // Brainstorm shares this boundary because its resumable draw can end the game.
-            // Other tier-3 custom spells retain their specialized exit ownership below.
-            let defer_authored_nonpermanent_exit = !resolves_to_battlefield_raw
-                && (custom_key.is_none() || custom_key.as_deref() == Some("brainstorm"));
+            // An authored instant or sorcery may suspend for a mid-resolution choice. Keep its
+            // physical card on the stack until the whole effect list or finite program completes;
+            // immediate resolutions still publish the same final batch, while parked resolutions
+            // keep the visible stack faithful to the resolution boundary. This includes Adventure.
+            // Tier-3 custom spells retain their specialized exit ownership below.
+            let defer_authored_nonpermanent_exit =
+                !resolves_to_battlefield_raw && custom_key.is_none();
             // CR 303.4f: an aura whose enchant target is no longer on the battlefield at resolution
             // is countered (goes to owner's graveyard) rather than entering the battlefield orphaned.
             let is_aura =
@@ -1341,8 +1348,9 @@ impl GameEngine {
         }
 
         // Tier-3 (CR 608): a custom effect owns this spell's resolution. The spell card has
-        // already moved to its zone above, except Brainstorm's deferred exit; hand off to the
-        // registered `CardEffect`, which either completes now or parks awaiting a player choice.
+        // already moved to its zone above; hand off to the registered `CardEffect`, which either
+        // completes now or parks awaiting a player choice. Authored programs use the data-driven
+        // deferred-exit path below.
         // A copy is excluded: the resumable custom machinery (`begin_custom_resolution`) expects the
         // spell's backing `GameObject`, which a copy lacks. Copying a tier-3 spell is a documented
         // limitation (the copy resolves its non-custom effects only, if any).
@@ -1494,6 +1502,36 @@ impl GameEngine {
             return Ok(ResolutionProgress::Parked);
         }
 
+        if !is_ability {
+            if let Some(face) = self
+                .registry
+                .get(&top.card_id)
+                .and_then(|definition| definition.face(top.face_index))
+                .filter(|face| face.spell_program.is_some())
+            {
+                let compiled = self
+                    .registry
+                    .compiled_program(&top.card_id, face.face_id.as_str())
+                    .ok_or(EngineError::Illegal("spell program was not compiled"))?;
+                let program = ProgramRunState {
+                    card_id: top.card_id.clone(),
+                    face_id: face.face_id.to_string(),
+                    frames: vec![ProgramFrame {
+                        path: Vec::new(),
+                        next_instruction: 0,
+                        yield_to: Vec::new(),
+                    }],
+                    slots: vec![None; compiled.slots.len()],
+                    in_flight: None,
+                };
+                return self.run_program_with_previous(
+                    &top,
+                    program,
+                    EffectResult::default(),
+                    events,
+                );
+            }
+        }
         self.run_effect_list(&top, &spell_label, resolution_effects, 0, events)
     }
 
@@ -1955,6 +1993,7 @@ impl GameEngine {
                     previous_effect_result: &previous_effect_result,
                     effect_result: &mut effect_result,
                     effect_index: index as u32,
+                    program_state: None,
                 };
                 dispatch::execute_effect(&mut cx, effect)?
             };
@@ -2366,6 +2405,7 @@ impl GameEngine {
                         if let Some(parked) = pending.continuation.stack_mut() {
                             parked.resume_effect_index = resume.resume_effect_index;
                             parked.previous_result = resume.previous_result.clone();
+                            parked.program = resume.program.clone();
                         }
                     }
                     self.state.pending_observer_return_batch = Some(PendingObserverReturnBatch {
@@ -2454,6 +2494,12 @@ impl GameEngine {
         if self.reconcile_departed_special_cast_resolution(events)? {
             return Ok(true);
         }
+        if self.refresh_suspended_program_draw_replacement(events)?
+            || self.refresh_suspended_program_discard_replacement(events)?
+            || self.refresh_suspended_program_choice(events)?
+        {
+            return Ok(true);
+        }
         if let Some(event) = self.special_cast_commander_choice_event() {
             events.push(event);
         } else if let Some(pending) = self.state.pending_resolution.as_ref() {
@@ -2463,6 +2509,122 @@ impl GameEngine {
                 }
             }
         }
+        Ok(true)
+    }
+
+    /// Resume the existing draw transaction and rebuild only its currently live replacement
+    /// prompt. Its receipts and node cursor may already contain committed work, so do not restart
+    /// the authored Draw instruction.
+    fn refresh_suspended_program_draw_replacement(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let Some(pending) = self.state.pending_resolution.as_ref() else {
+            return Ok(false);
+        };
+        let ResolutionContinuation::DrawReplacement { stack: Some(stack) } = &pending.continuation
+        else {
+            return Ok(false);
+        };
+        if stack.program.is_none()
+            || !matches!(
+                self.state.pending_replacement_event,
+                Some(crate::engine::replacement::PendingReplacementEvent::Draw(_))
+            )
+        {
+            return Ok(false);
+        }
+        self.reconcile_draw_departure(events)?;
+        Ok(true)
+    }
+
+    /// Re-enter the one authored chooser leaf that was suspended beneath an observer return.
+    /// Choice leaves have not committed a transaction, so rebuilding them is safe and lets their
+    /// normal domain handler refresh private candidates, generations, names, and the full prompt.
+    /// Controller-only program discards use a player-set continuation; that leaf can only be
+    /// restarted before its one chooser has answered. Parent frames and published slots remain.
+    fn refresh_suspended_program_choice(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let Some(pending) = self.state.pending_resolution.as_ref() else {
+            return Ok(false);
+        };
+        let stack = match &pending.continuation {
+            ResolutionContinuation::HandChoice { stack, hand_choice }
+                if hand_choice.program_selection && stack.program.is_some() =>
+            {
+                stack.clone()
+            }
+            ResolutionContinuation::PlayerSetDiscard { stack, discard }
+                if stack.program.is_some() =>
+            {
+                // The current compiler admits only the resolving controller as a program discard
+                // recipient. Its single prompt has no accepted prefix until it is answered.
+                let valid_controller_choice = discard.current == 0
+                    && discard.choices.len() == 1
+                    && discard.selections.is_empty()
+                    && discard.choices[0].player == stack.item.controller;
+                if !valid_controller_choice {
+                    return Err(EngineError::ProgramInvariant(
+                        "restored program discard choice has a committed player-set prefix",
+                    ));
+                }
+                stack.clone()
+            }
+            ResolutionContinuation::PermanentChoice { stack, .. } if stack.program.is_some() => {
+                stack.clone()
+            }
+            _ => return Ok(false),
+        };
+        let Some(mut program) = stack.program.clone() else {
+            return Ok(false);
+        };
+        let effect = self.current_program_perform(&program)?;
+        let chooser_leaf = match &pending.continuation {
+            ResolutionContinuation::HandChoice { hand_choice, .. }
+                if hand_choice.program_selection =>
+            {
+                matches!(effect, SpellEffectKind::SelectHandCards { .. })
+            }
+            ResolutionContinuation::PlayerSetDiscard { .. } => {
+                matches!(effect, SpellEffectKind::Discard { .. })
+            }
+            ResolutionContinuation::PermanentChoice { .. } => matches!(
+                effect,
+                SpellEffectKind::ChoosePermanents {
+                    chooser: tricerules_card_model::primitives::PlayerRecipient::Controller,
+                    ..
+                }
+            ),
+            _ => false,
+        };
+        if !chooser_leaf {
+            return Err(EngineError::ProgramInvariant(
+                "restored program choice does not match its in-flight chooser leaf",
+            ));
+        }
+        let Some(frame) = program.frames.last_mut() else {
+            return Err(EngineError::ProgramInvariant(
+                "restored program choice lost its active frame",
+            ));
+        };
+        frame.next_instruction =
+            frame
+                .next_instruction
+                .checked_sub(1)
+                .ok_or(EngineError::ProgramInvariant(
+                    "restored program chooser cursor is invalid",
+                ))?;
+        program.in_flight = None;
+        let mut retry = stack;
+        retry.program = Some(program);
+
+        self.state.pending_resolution = None;
+        self.state.pending_replacement_event = None;
+        let resumed =
+            self.complete_parked_stack_with_previous(retry, EffectResult::default(), Vec::new())?;
+        events.extend(resumed.events);
         Ok(true)
     }
 
@@ -2748,13 +2910,9 @@ impl GameEngine {
         let mut resumed = Vec::new();
         if !self.drain_immediate_observer_actions(stack.clone(), &mut resumed)? {
             if let Some(stack) = stack {
+                let previous_result = stack.previous_result.clone();
                 resumed = self
-                    .complete_parked_resolution_with_previous(
-                        stack.item,
-                        stack.resume_effect_index,
-                        stack.previous_result,
-                        resumed,
-                    )?
+                    .complete_parked_stack_with_previous(stack, previous_result, resumed)?
                     .events;
             }
         }
@@ -7394,6 +7552,223 @@ mod attached_subject_tests {
     }
 
     #[test]
+    fn observer_restore_republishes_leng_order_without_losing_discard_destinations() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            38_203,
+            &[0, 1],
+            20,
+            Some(vec![vec!["forest".into(); 24]; 2]),
+            true,
+        )
+        .unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+        let initial_hand_size = engine.state.players[0].hand.len();
+        let spell = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&spell).unwrap().card_id = "faithless_looting".into();
+        engine.state.players[0].mana_pool.red = 1;
+        add_battlefield_object(&mut engine, 0, "library_of_leng");
+
+        let cast = rv1::CastSpell {
+            cast_method: rv1::CastMethod::Normal as i32,
+            source: Some(rv1::CastSource {
+                location: Some(rv1::cast_source::Location::HandIndex(0)),
+                expected_zone_change_generation: Some(
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&spell)
+                        .copied()
+                        .unwrap_or(0),
+                ),
+            }),
+            ..Default::default()
+        };
+        engine.cast_spell(0, &cast).unwrap();
+        engine.resolve_top_of_stack(&mut Vec::new()).unwrap();
+        let discard_choice = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(
+            discard_choice.presentation.choice_kind,
+            rv1::ChoiceKind::HandCards
+        );
+        assert_eq!(
+            (
+                discard_choice.presentation.min,
+                discard_choice.presentation.max
+            ),
+            (2, 2)
+        );
+        let discarded = discard_choice.presentation.candidates[..2].to_vec();
+        let generations: Vec<_> = discarded
+            .iter()
+            .map(|object_id| {
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0)
+            })
+            .collect();
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: discarded.clone(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        let mut original_order_offer = None;
+        for _ in &discarded {
+            let choice = engine.state.pending_resolution.as_ref().unwrap();
+            assert_eq!(
+                choice.presentation.choice_kind,
+                rv1::ChoiceKind::PrivateReplacement
+            );
+            assert!(!choice.presentation.ordered);
+            let result = engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![1],
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            if let Some(offer) = result.events.iter().find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => {
+                    Some(choice.clone())
+                }
+                _ => None,
+            }) {
+                original_order_offer = Some(offer);
+            }
+        }
+        let original_order_offer = original_order_offer
+            .expect("the original discard batch publishes a full ordering offer");
+        let prior_batch = match engine.state.pending_replacement_event.as_ref().unwrap() {
+            crate::engine::replacement::PendingReplacementEvent::Discard(batch) => batch,
+            other => panic!("expected the saved Library of Leng batch, found {other:?}"),
+        };
+        assert_eq!(prior_batch.current, discarded.len());
+        assert_eq!(
+            prior_batch
+                .cards
+                .iter()
+                .map(|card| card.object.object_id)
+                .collect::<Vec<_>>(),
+            discarded
+        );
+        assert!(prior_batch
+            .cards
+            .iter()
+            .all(|card| card.destination == Some(Zone::Library)));
+        assert!(prior_batch.library_orders.is_empty());
+        let prior_order = engine.state.pending_resolution.as_ref().unwrap();
+        assert!(prior_order.presentation.ordered);
+        assert_eq!(prior_order.presentation.candidates, discarded);
+
+        // The observer temporarily owns both pending values. Restoring must continue the same
+        // discard batch and publish a fresh full ordering offer from its committed destinations.
+        let suspended_resolution = engine.state.pending_resolution.take();
+        let suspended_replacement_event = engine.state.pending_replacement_event.take();
+        assert!(suspended_resolution.is_some());
+        assert!(suspended_replacement_event.is_some());
+        let mut restored_events = Vec::new();
+        assert!(engine
+            .restore_suspended_observer_resolution(
+                suspended_resolution,
+                suspended_replacement_event,
+                &mut restored_events,
+            )
+            .unwrap());
+        let restored_offer = restored_events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => {
+                    Some(choice.clone())
+                }
+                _ => None,
+            })
+            .expect("restoration republishes the full Library of Leng ordering offer");
+        assert_eq!(
+            restored_offer, original_order_offer,
+            "restoration republishes the same serialized offer, including implicit-all candidate mask"
+        );
+        assert_eq!(
+            restored_offer.choice_kind,
+            rv1::ChoiceKind::PrivateReplacement as i32
+        );
+        assert_eq!(restored_offer.deciding_player_id, 0);
+        assert_eq!(restored_offer.source_object_id, spell);
+        assert_eq!(
+            restored_offer.prompt_text,
+            "Order discarded cards, top of library first."
+        );
+        assert_eq!(restored_offer.candidate_object_ids, discarded);
+        assert_eq!(restored_offer.candidate_names, ["Forest", "Forest"]);
+        assert_eq!((restored_offer.min, restored_offer.max), (2, 2));
+        assert!(restored_offer.ordered);
+        match engine.state.pending_replacement_event.as_ref().unwrap() {
+            crate::engine::replacement::PendingReplacementEvent::Discard(batch) => {
+                assert_eq!(batch.current, discarded.len());
+                assert!(batch
+                    .cards
+                    .iter()
+                    .all(|card| card.destination == Some(Zone::Library)));
+                assert!(batch.library_orders.is_empty());
+            }
+            other => panic!("expected the restored Library of Leng batch, found {other:?}"),
+        }
+
+        let final_order = vec![discarded[1], discarded[0]];
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: final_order.clone(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_replacement_event.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert_eq!(
+            engine.state.players[0]
+                .library
+                .iter()
+                .take(2)
+                .copied()
+                .collect::<Vec<_>>(),
+            final_order
+        );
+        for (object_id, generation) in discarded.iter().zip(generations) {
+            assert_eq!(engine.state.objects[object_id].zone, Zone::Library);
+            assert_eq!(
+                engine.state.zone_change_generation[object_id],
+                generation + 1
+            );
+        }
+        assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
+        assert_eq!(
+            engine.state.players[0]
+                .graveyard
+                .iter()
+                .filter(|object_id| **object_id == spell)
+                .count(),
+            1
+        );
+        assert_eq!(engine.state.turn_history.current.player(0).cards_drawn, 2);
+        assert_eq!(engine.state.players[0].hand.len(), initial_hand_size - 1);
+    }
+
+    #[test]
     fn authoring_scoped_result_keeps_you_and_opponents_relative_to_the_spell_controller() {
         use tricerules_card_model::primitives::{CardResultFilter, CardResultSource};
         let mut engine = GameEngine::new(
@@ -8315,6 +8690,7 @@ mod attached_subject_tests {
             previous_effect_result: &previous,
             effect_result: &mut result,
             effect_index: 1,
+            program_state: None,
         };
         life::lose_life(
             &mut cx,
@@ -8728,14 +9104,20 @@ mod attached_subject_tests {
                 20,
             )
             .unwrap();
-            // A permanent-front MDFC using the existing Brainstorm algorithm on its instant face
-            // exercises destination card types and the custom park/resume boundary together.
+            // A permanent-front MDFC using an authored spell program on its instant face
+            // exercises destination card types and the program park/resume boundary together.
             engine.registry = Box::leak(Box::new(
                 CardRegistry::from_chunks_and_tokens(
                     &[
                         r#"(id: "brainstorm", name: "Brainstorm", layout: ModalDfc, faces: [
                 (name: "Body", face_id: "body", types: ["Creature"], power: 2, toughness: 2),
-                (name: "Thought", face_id: "thought", types: ["Instant"], custom_effect: "brainstorm")])"#,
+                (name: "Thought", face_id: "thought", types: ["Instant"], spell_program: Some((body: (
+                    steps: [
+                        (id: "draw_three", kind: Perform(Draw(who: Controller, count: 3))),
+                        (id: "choose_put_back", bind: ["chosen"], kind: Perform(SelectHandCards(
+                            count: 2, ordered: true, prompt: "Choose cards for the library top."))),
+                        (id: "put_back", input: Some("chosen"), kind: Perform(PutSelectedHandCardsOnLibraryTop))
+                    ], yields: []))))])"#,
                         include_str!("../../../../tricerules-cards/data/island.ron"),
                         include_str!("../../../../tricerules-cards/data/forest.ron"),
                     ],
@@ -8774,7 +9156,7 @@ mod attached_subject_tests {
             assert_eq!(
                 engine.state.objects[&oid].zone,
                 Zone::Stack,
-                "Brainstorm's physical exit waits for its private put-back choice"
+                "the spell's physical exit waits for its private put-back choice"
             );
             assert!(
                 engine
@@ -10960,6 +11342,7 @@ mod attached_subject_tests {
             previous_effect_result: &previous_effect_result,
             effect_result: &mut effect_result,
             effect_index: 0,
+            program_state: None,
         };
 
         assert_eq!(player_recipients(&cx, PlayerRecipient::Controller), [10]);
@@ -11372,6 +11755,7 @@ mod source_keyword_tests {
             previous_effect_result: &previous_effect_result,
             effect_result: &mut effect_result,
             effect_index: 0,
+            program_state: None,
         };
 
         damage::damage_targets(&mut cx, effect).unwrap();
@@ -11419,6 +11803,7 @@ mod source_keyword_tests {
             previous_effect_result: &previous_effect_result,
             effect_result: &mut effect_result,
             effect_index: 0,
+            program_state: None,
         };
 
         mass::damage_all(&mut cx, effect).unwrap();

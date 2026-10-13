@@ -1360,6 +1360,7 @@ impl GameEngine {
                         item: *item,
                         resume_effect_index,
                         previous_result: EffectResult::default(),
+                        program: None,
                     },
                     effect_ids: candidate_effect_ids,
                 },

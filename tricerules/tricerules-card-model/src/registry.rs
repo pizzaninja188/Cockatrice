@@ -2,7 +2,7 @@ use crate::card_def::{CardDefinition, CardFace, Layout, RawCardDefinition};
 use crate::primitives::{
     AbilityCost, ActivatedCostModifier, AdditionalCost, Amount, BattlefieldAggregate,
     CardResultAction, CardResultSource, CastCostGroupDef, CastCostOptionDef,
-    CastCostReceiptCondition, EffectContext, FaceChangeAction, GameCondition,
+    CastCostReceiptCondition, CompiledProgram, EffectContext, FaceChangeAction, GameCondition,
     ObjectContributionKind, ResolutionBranchRequirement, SpecialActionAffected, SpellEffectKind,
     StaticAbilityDef, TargetController, TargetFilter, TargetKind, TargetingDef, TokenCopySource,
     TriggerCondition, ZoneCardFilter,
@@ -39,6 +39,8 @@ pub struct CardRegistry {
     /// characteristic queries work uniformly for token objects.
     tokens: HashMap<String, CardDefinition>,
     presentation_faces: HashMap<(String, String), PresentationFaceMetadata>,
+    /// Immutable, startup-validated execution forms kept apart from Oracle face data.
+    compiled_programs: HashMap<(String, String), CompiledProgram>,
 }
 
 /// Name-index key normalization, applied to both stored names and lookup queries.
@@ -3258,14 +3260,40 @@ impl CardRegistry {
                 // (it owns the `CardEffect` lookup; this crate has no engine access).
                 let resolution_owners = usize::from(!face.spell_effect.is_empty())
                     + usize::from(face.modal_spell.is_some())
-                    + usize::from(face.custom_effect.is_some());
+                    + usize::from(face.custom_effect.is_some())
+                    + usize::from(face.spell_program.is_some());
                 if resolution_owners > 1 {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),
-                        reason: "face has more than one of spell_effect, modal_spell, and \
+                        reason: "face has more than one of spell_effect, spell_program, modal_spell, and \
                                  custom_effect (one resolution owner allowed)"
                             .into(),
                     });
+                }
+                if let Some(program) = &face.spell_program {
+                    if !face.is_instant && !face.is_sorcery {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: "spell_program requires an instant or sorcery face".into(),
+                        });
+                    }
+                    if face.targeting.is_some() {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: "spell_program does not support ordinary cast-time targeting"
+                                .into(),
+                        });
+                    }
+                    let compiled =
+                        CompiledProgram::compile(&card.id, face.face_id.as_str(), program)
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: format!("spell_program: {reason}"),
+                            })?;
+                    reg.compiled_programs.insert(
+                        (card.id.clone(), face.face_id.as_str().to_owned()),
+                        compiled,
+                    );
                 }
                 let payment_actions =
                     spell_payment_result_actions(&face.additional_costs, &face.cast_cost_groups);
@@ -3845,6 +3873,12 @@ impl CardRegistry {
         face_id: &str,
     ) -> Option<&PresentationFaceMetadata> {
         self.presentation_faces
+            .get(&(card_id.to_string(), face_id.to_string()))
+    }
+
+    /// Immutable, startup-compiled program for one physical card face.
+    pub fn compiled_program(&self, card_id: &str, face_id: &str) -> Option<&CompiledProgram> {
+        self.compiled_programs
             .get(&(card_id.to_string(), face_id.to_string()))
     }
 

@@ -941,9 +941,9 @@ fn issue_309_primitive_draw_loss_finishes_the_effect_tail_before_sweeping() {
 
 #[test]
 fn issue_309_brainstorm_can_resume_after_deferred_library_loss() {
-    // Brainstorm is tier-3 custom resolution.  Its draw phase may mark a
-    // pending loss, but the private put-back choice remains answerable; only
-    // completion of that continuation commits the loss and clears the marker.
+    // Brainstorm's authored program may mark a pending loss during its draw,
+    // but its private put-back choice remains answerable. Only program completion
+    // commits the loss and clears the marker.
     let mut engine = GameEngine::new(
         tricerules_cards::registry::global(),
         309_031,

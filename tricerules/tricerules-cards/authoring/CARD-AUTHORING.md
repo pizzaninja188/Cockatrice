@@ -160,10 +160,58 @@ ability to represent each branch.
 | Resolution branch | `branch_id` |
 | Heterogeneous search slot | `slot_id` |
 | Restricted-mana rule | `restriction_id` |
+| Spell-program instruction | `id` (unique throughout the program tree) |
 
 For Rust engine behavior, reject illegal input with `EngineError::Illegal` rather than panicking.
 Keep steps, priority, event-time facts, new-object identity, hidden information, and player roles
 explicit. Use player-set-generic logic rather than two-player arithmetic.
+
+### Finite targetless spell programs
+
+Use `spell_program` for supported ordered spell actions that need explicit results or nested
+conditional suspension. It is currently limited to targetless Instant/Sorcery faces and is the
+face's sole resolution owner: do not combine it with `spell_effect`, `modal_spell` or `custom_effect`.
+The finite tree has `Perform` leaves and nested `If` blocks; no loops, jumps or authored functions.
+
+Accepted leaves are `Draw`, `Discard`, `ChoosePermanents`, `UntapChosenPermanents`,
+`SelectHandCards` and `PutSelectedHandCardsOnLibraryTop`. Draw/discard recipients and permanent
+choosers must be `Controller`; draw and hand-selection counts must be fixed literals. Discard
+retains the existing validated `DiscardQuantity` choices. Permanent filters cannot use
+`DefendingPlayer` or `AttachedObject`, including inside `any_of`, and constraints must be empty.
+`If` accepts `ControllerLibraryEmpty`, controller `CardsInHand`, and valid `AllOf`/`AnyOf`
+combinations of those conditions. Other contexts and leaf operations fail registration.
+
+`bind` names an operation's typed result. `input: Some("name")` consumes an earlier in-scope
+result: untap requires a permanent selection; library-top placement requires an ordered hand
+selection. There is no implicit "previous instruction" input. Bindings cannot be shadowed or
+read forward/across sibling scopes. Each branch explicitly lists its `yields`; both arms must
+yield compatible types, and an `If` binding exports their joined result to its parent.
+Conditions are evaluated on entry and are not reevaluated after a private choice resumes.
+
+For example, the land-choice tail of Frantic Search is:
+
+```ron
+spell_program: Some((body: (
+  steps: [
+    (id: "choose_lands", bind: ["lands"], kind: Perform(ChoosePermanents(
+      chooser: Controller,
+      filter: (kind: AnyPermanent, permanent_types: [Land]),
+      min: 0,
+      max: 3,
+    ))),
+    (id: "untap_lands", input: Some("lands"), kind: Perform(UntapChosenPermanents)),
+  ],
+  yields: [],
+))),
+```
+
+This fragment still needs the preceding draw/discard instructions and complete-card evidence.
+[Brainstorm](../data/brainstorm.ron) demonstrates fixed draws followed by private ordered hand
+selection and bound library-top placement; that body also fits Brainstone and Jace, the Mind
+Sculptor's draw/put-back ability, without admitting their other mechanics or ability contexts.
+Selection does not move cards; the placement instruction uses generation-bound selected identities.
+The two hand-selection/placement leaves are program-only and are rejected in ordinary effect lists.
+Legacy `DrawDiscard` definitions and generator templates remain supported until separately migrated.
 
 ### Printed-card filters and graveyard targets
 
@@ -532,6 +580,11 @@ checks it both before staging the reflexive trigger and again when that trigger 
 ## 6. Add a generic primitive or keyword
 
 Only add vocabulary after confirming existing data cannot express the behavior.
+
+The following list examples describe existing `spell_effect` syntax. Within a supported
+`spell_program`, use explicit `Perform` instructions and typed bindings as described in
+[the current program subset](#finite-targetless-spell-programs); do not insert `DrawDiscard`
+as a program leaf.
 
 Use `Discard(quantity: Exact(2))` for a fixed untargeted discard and
 `Discard(quantity: All)` for an entire hand, as on Stoke Genius. Whole-hand discard selects

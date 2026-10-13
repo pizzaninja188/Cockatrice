@@ -397,6 +397,12 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::ChoosePermanents { .. } => {
             choices::choose_permanents(cx, effect)?
         }
+        SpellEffectKind::SelectHandCards { .. }
+        | SpellEffectKind::PutSelectedHandCardsOnLibraryTop => {
+            return Err(EngineError::Illegal(
+                "program-only hand operation dispatched outside a resolution program",
+            ));
+        }
         effect @ SpellEffectKind::ChooseAndSacrifice { .. } => {
             mass::choose_and_sacrifice(cx, effect)?
         }

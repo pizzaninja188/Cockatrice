@@ -446,12 +446,37 @@ impl GameEngine {
                 }
             };
         }
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            result.into(),
-            events,
-        )
+        self.complete_parked_stack_with_previous(stack, result.into(), events)
+    }
+
+    /// Continue only the still-uncommitted discard batch that was suspended by an observer
+    /// return. Earlier destination decisions and top-order choices remain in the batch; cards do
+    /// not move until every required replacement choice is complete.
+    pub(super) fn refresh_suspended_program_discard_replacement(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let Some(pending) = self.state.pending_resolution.as_ref() else {
+            return Ok(false);
+        };
+        let ResolutionContinuation::DiscardReplacement { stack } = &pending.continuation else {
+            return Ok(false);
+        };
+        if stack.program.is_none() {
+            return Ok(false);
+        }
+        let Some(PendingReplacementEvent::Discard(batch)) =
+            self.state.pending_replacement_event.take()
+        else {
+            return Err(EngineError::ProgramInvariant(
+                "restored program discard replacement lost its batch",
+            ));
+        };
+        let stack = stack.clone();
+        self.state.pending_resolution = None;
+        let refreshed = self.continue_discard_batch(stack, *batch)?;
+        events.extend(refreshed.events);
+        Ok(true)
     }
 
     pub(super) fn finish_discard_replacement(

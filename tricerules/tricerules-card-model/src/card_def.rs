@@ -643,6 +643,10 @@ pub struct CardFace {
     /// (see [`SpellEffectKind`]). RON: `spell_effect: [DamageTarget(...), Draw(count: 1)]`.
     #[serde(default)]
     pub spell_effect: Vec<SpellEffectKind>,
+    /// Typed ordered resolution program for effects that need explicit suspension-safe result
+    /// bindings. Mutually exclusive with the other spell resolution owners at registry load.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spell_program: Option<crate::CardProgram>,
     #[serde(default)]
     pub targeting: Option<TargetingDef>,
     /// Modal data-driven spell effects. Mutually exclusive with `spell_effect` and
@@ -1080,6 +1084,8 @@ pub struct RawCardDefinition {
     pub defense: Option<u32>,
     #[serde(default)]
     pub spell_effect: Vec<SpellEffectKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spell_program: Option<crate::CardProgram>,
     #[serde(default)]
     pub targeting: Option<TargetingDef>,
     #[serde(default)]
@@ -1164,6 +1170,7 @@ impl RawCardDefinition {
                 loyalty: self.loyalty,
                 defense: self.defense,
                 spell_effect: self.spell_effect,
+                spell_program: self.spell_program,
                 targeting: self.targeting,
                 modal_spell: self.modal_spell,
                 custom_effect: self.custom_effect,

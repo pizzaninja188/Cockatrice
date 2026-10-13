@@ -1,10 +1,12 @@
-//! Complete-command rollback for typed life, power/toughness, and damage numeric failures.
+//! Complete-command rollback for typed numeric and authored-program invariant failures.
 use super::*;
 
 pub(super) struct NumericCheckpoint {
     state: GameState,
     pending_spell: Option<casting::PendingSpellCastInternal>,
     pending_ability: Option<activation::PendingAbilityActivationInternal>,
+    pending_counter_cost: Option<activation::PendingCounterCostInternal>,
+    pending_attack_declaration: Option<combat::PendingAttackDeclarationInternal>,
     private_zones: HashMap<PlayerId, PrivateZoneSnapshot>,
     battlefield: Option<BattlefieldViewSnapshot>,
     first_strike: bool,
@@ -16,6 +18,8 @@ impl GameEngine {
             state: self.state.clone(),
             pending_spell: self.pending_spell_cast_internal.clone(),
             pending_ability: self.pending_ability_activation_internal.clone(),
+            pending_counter_cost: self.pending_counter_cost_internal.clone(),
+            pending_attack_declaration: self.pending_attack_declaration_internal.clone(),
             private_zones: self.private_zone_cache.clone(),
             battlefield: self.battlefield_view_cache.clone(),
             first_strike: self.first_strike_step_pending_cache,
@@ -26,6 +30,8 @@ impl GameEngine {
         self.state = checkpoint.state;
         self.pending_spell_cast_internal = checkpoint.pending_spell;
         self.pending_ability_activation_internal = checkpoint.pending_ability;
+        self.pending_counter_cost_internal = checkpoint.pending_counter_cost;
+        self.pending_attack_declaration_internal = checkpoint.pending_attack_declaration;
         self.private_zone_cache = checkpoint.private_zones;
         self.battlefield_view_cache = checkpoint.battlefield;
         self.first_strike_step_pending_cache = checkpoint.first_strike;

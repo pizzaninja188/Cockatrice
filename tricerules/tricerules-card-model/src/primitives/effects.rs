@@ -1827,6 +1827,17 @@ pub enum SpellEffectKind {
         #[serde(default)]
         visibility: HandChoiceVisibility,
     },
+    /// Resolution-program-only private choice from the resolving controller's live hand.
+    /// Unlike ChooseHandCards, this action does not move cards; it yields a generation-keyed
+    /// hand cohort for an explicitly bound follow-up such as Brainstorm's library return.
+    SelectHandCards {
+        count: Amount,
+        #[serde(default)]
+        ordered: bool,
+        prompt: String,
+    },
+    /// Resolution-program-only movement of the exact cohort produced by SelectHandCards.
+    PutSelectedHandCardsOnLibraryTop,
     /// Destroy every battlefield permanent matching `kind` (CR 701.7). Untargeted, so it
     /// ignores hexproof/shroud and never fizzles. `kind` selects the affected set — `Creature`
     /// for Wrath of God / Day of Judgment, `AnyPermanent` for "destroy all permanents". Only
@@ -3531,6 +3542,8 @@ impl SpellEffectKind {
             | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
             | SpellEffectKind::ChooseResolutionBranch { .. }
             | SpellEffectKind::ChoosePermanents { .. }
+            | SpellEffectKind::SelectHandCards { .. }
+            | SpellEffectKind::PutSelectedHandCardsOnLibraryTop
             | SpellEffectKind::ChooseAndSacrifice { .. }
             | SpellEffectKind::CreateReflexiveTrigger { .. }
             | SpellEffectKind::Scry { .. }
@@ -4507,6 +4520,12 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if matches!(
+            self,
+            Self::SelectHandCards { .. } | Self::PutSelectedHandCardsOnLibraryTop
+        ) {
+            return Err("SelectHandCards and PutSelectedHandCardsOnLibraryTop are valid only inside a spell_program".into());
+        }
         if matches!(self, Self::ExileObservedObjects) && context != EffectContext::Ability {
             return Err("ExileObservedObjects requires an ability context".into());
         }

@@ -7,5 +7,14 @@
   mana_cost: "{R}",
   flashback_cost: Some("{2}{R}"),
   types: ["Sorcery"],
-  spell_effect: [DrawDiscard(draw_count: 2, discard_count: 2, order: DrawThenDiscard)],
+  spell_program: Some((body: (
+    steps: [
+      (id: "draw_two", kind: Perform(Draw(who: Controller, count: 2))),
+      (id: "discard_two", bind: ["discarded"], kind: Perform(Discard(
+        who: Controller,
+        quantity: Exact(2)
+      )))
+    ],
+    yields: []
+  ))),
 )

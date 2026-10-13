@@ -311,10 +311,9 @@ impl GameEngine {
                     return Ok(events::finish_with_events(self, events));
                 }
                 if let Some(stack) = batch.resume_stack {
-                    self.complete_parked_resolution_with_previous(
-                        stack.item,
-                        stack.resume_effect_index,
-                        stack.previous_result,
+                    self.complete_parked_stack_with_previous(
+                        stack.clone(),
+                        stack.previous_result.clone(),
                         events,
                     )
                 } else {

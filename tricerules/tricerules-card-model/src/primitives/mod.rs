@@ -10,6 +10,7 @@ mod costs;
 mod effects;
 mod keywords;
 mod presentation;
+mod program;
 mod targeting;
 
 pub use abilities::*;
@@ -18,6 +19,7 @@ pub use conditions::*;
 pub use costs::*;
 pub use effects::*;
 pub use keywords::*;
+pub use program::*;
 pub use targeting::*;
 
 #[cfg(test)]

@@ -310,6 +310,7 @@ fn frantic_search_paid_cast_private_discard_then_zero_one_three_lands() {
             find_resolution_choice(&batch).expect("private discard interrupts resolution");
         assert_eq!(discard.deciding_player_id, 10);
         assert_eq!(discard.choice_kind(), ChoiceKind::HandCards);
+        assert!(discard.public_reveal.is_none());
         assert_eq!((discard.min, discard.max), (2, 2));
         assert_eq!(e.state.players[0].library.len(), library_before - 2);
         assert_eq!(e.state.players[0].hand.len(), hand_before + 1);

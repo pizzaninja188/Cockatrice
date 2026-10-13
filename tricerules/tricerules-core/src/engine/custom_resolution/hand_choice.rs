@@ -52,6 +52,39 @@ impl GameEngine {
             ));
         }
 
+        if hand_choice.program_selection {
+            let selected_hand_cards = chosen
+                .iter()
+                .map(|object_id| {
+                    let generation = hand_choice
+                        .candidate_generations
+                        .iter()
+                        .find_map(|(candidate, generation)| {
+                            (candidate == object_id).then_some(*generation)
+                        })
+                        .expect("hand choice validated candidate generation");
+                    TriggerObjectRef {
+                        object_id: *object_id,
+                        zone_change_generation: generation,
+                        controller_at_event: hand_choice.affected_player,
+                    }
+                })
+                .collect();
+            return self.complete_parked_stack_with_previous(
+                stack,
+                EffectResult {
+                    selected_hand_cards,
+                    ..Default::default()
+                },
+                vec![ev_log(format!(
+                    "P{} chooses {} card{}.",
+                    hand_choice.affected_player,
+                    chosen.len(),
+                    if chosen.len() == 1 { "" } else { "s" },
+                ))],
+            );
+        }
+
         if hand_choice.action == HandCardAction::Discard
             && !chosen.is_empty()
             && self.has_discard_library_replacement(hand_choice.affected_player)
@@ -82,9 +115,8 @@ impl GameEngine {
         let mut events = vec![];
         if hand_choice.action == HandCardAction::PutOntoBattlefield {
             let Some(&object_id) = chosen.first() else {
-                return self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
+                return self.complete_parked_stack_with_previous(
+                    stack,
                     EffectResult::default(),
                     events,
                 );
@@ -151,12 +183,7 @@ impl GameEngine {
                 }
                 super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
                     self.restore_skipped_battlefield_entry(&entry)?;
-                    self.complete_parked_resolution_with_previous(
-                        stack.item,
-                        stack.resume_effect_index,
-                        EffectResult::default(),
-                        events,
-                    )
+                    self.complete_parked_stack_with_previous(stack, EffectResult::default(), events)
                 }
                 super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                     self.complete_pending_battlefield_entry(pending, *entry, completion, events)
@@ -202,12 +229,7 @@ impl GameEngine {
                 }
             };
         }
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            result.into(),
-            events,
-        )
+        self.complete_parked_stack_with_previous(stack, result.into(), events)
     }
 
     pub(super) fn finish_player_set_discard_choice(
@@ -351,12 +373,7 @@ impl GameEngine {
         else {
             return Ok(finish_with_events(self, events));
         };
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            result.into(),
-            events,
-        )
+        self.complete_parked_stack_with_previous(stack, result.into(), events)
     }
     /// Commit a fully selected cohort, or park its discard replacements without finishing the tail.
     pub(in crate::engine) fn apply_player_set_discard(

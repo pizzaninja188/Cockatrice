@@ -45,10 +45,13 @@ fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
         .pending_resolution
         .as_ref()
         .expect("parked Brainstorm");
-    assert!(matches!(
-        &pending.continuation,
-        ResolutionContinuation::Custom { key, step: 1, .. } if key == "brainstorm"
-    ));
+    assert!(
+        !matches!(
+            &pending.continuation,
+            ResolutionContinuation::Custom { key, .. } if key == "brainstorm"
+        ),
+        "Brainstorm must suspend through the standard program runner, not its per-card custom path"
+    );
     // Cast removed brainstorm from hand; begin drew three.
     assert_eq!(e.state.players[0].hand.len(), hand_before - 1 + 3);
     assert_eq!(e.state.players[0].library.len(), lib_before - 3);
@@ -69,6 +72,478 @@ fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
     assert_eq!(e.state.players[0].library[1], first, "first chosen below");
     assert_eq!(e.state.players[0].hand.len(), hand_before - 1 + 3 - 2);
     assert_eq!(count_card_id_in_graveyard(&e, 0, "brainstorm"), 1);
+}
+
+#[test]
+fn brainstorm_face_is_an_ordinary_authored_program() {
+    let face = tricerules_cards::registry::global()
+        .get("brainstorm")
+        .expect("Brainstorm registered")
+        .primary_face();
+    let normalized = serde_json::to_value(face).expect("face serializes for authoring consumers");
+
+    assert!(
+        normalized
+            .get("spell_program")
+            .is_some_and(|program| !program.is_null()),
+        "Brainstorm needs the normalized spell_program consumed by the card review and authoring tools"
+    );
+    assert!(face.spell_effect.is_empty());
+    assert!(face.custom_effect.is_none());
+}
+
+#[test]
+fn twincast_copy_and_original_brainstorm_own_independent_private_programs() {
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        9_382,
+        &[0, 1],
+        20,
+        Some(vec![vec!["island".into(); 30], vec!["forest".into(); 30]]),
+        true,
+    )
+    .expect("copy fixture game");
+    advance_to_main1_from_game_start(&mut engine);
+    let original = inject_card_into_hand(&mut engine, 0, "brainstorm");
+    let twincast = inject_card_into_hand(&mut engine, 1, "twincast");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let slot = hand_index_for_card(&engine, 0, "brainstorm");
+    engine
+        .apply_command(0, &cast_spell(slot, vec![]))
+        .expect("cast original Brainstorm");
+    let original_generation = engine.state.zone_change_generation[&original];
+    engine.apply_command(0, &pass()).expect("give P1 priority");
+    give_mana(
+        &mut engine,
+        1,
+        ManaGift {
+            u: 2,
+            ..Default::default()
+        },
+    );
+    let slot = hand_index_for_card(&engine, 1, "twincast");
+    engine
+        .apply_command(
+            1,
+            &cast_spell(
+                slot,
+                vec![tricerules_proto::ruled::v1::TargetRef {
+                    object_id: original,
+                    expected_zone_change_generation: Some(original_generation),
+                    ..Default::default()
+                }],
+            ),
+        )
+        .expect("Twincast targets the original spell");
+    pass_priority_round(&mut engine);
+    let copy = engine.state.stack.last().expect("copy on stack").clone();
+    assert!(copy.is_copy);
+    assert_eq!(copy.controller, 1);
+    assert_ne!(copy.id, original);
+    assert!(
+        !engine.state.objects.contains_key(&copy.id),
+        "the copy has no physical backing card"
+    );
+    assert_eq!(
+        engine.state.objects[&twincast].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    let original_hand = engine.state.players[0].hand.clone();
+    let original_library = engine.state.players[0].library.clone();
+
+    pass_priority_round(&mut engine);
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("copy's private choice");
+    assert_eq!(pending.deciding_player, 1);
+    assert_eq!(pending.presentation.source_object_id, copy.id);
+    assert_eq!(pending.presentation.choice_kind, ChoiceKind::HandCards);
+    assert_eq!(
+        pending.presentation.candidates,
+        engine.state.players[1].hand
+    );
+    let ResolutionContinuation::HandChoice { stack, hand_choice } = &pending.continuation else {
+        panic!("copy must use the ordinary private hand-choice transaction");
+    };
+    assert!(stack.item.is_copy && hand_choice.program_selection);
+    assert!(!serde_json::to_value(stack).unwrap()["program"].is_null());
+    let copy_selected: Vec<_> = pending
+        .presentation
+        .candidates
+        .iter()
+        .take(2)
+        .copied()
+        .collect();
+    let before_wrong_actor = serde_json::to_value(&engine.state).unwrap();
+    assert!(engine
+        .apply_command(0, &submit_resolution_choice(copy_selected.clone()))
+        .is_err());
+    assert_eq!(
+        serde_json::to_value(&engine.state).unwrap(),
+        before_wrong_actor
+    );
+    engine
+        .apply_command(1, &submit_resolution_choice(copy_selected.clone()))
+        .expect("finish copy");
+    assert_eq!(engine.state.players[1].library[0], copy_selected[1]);
+    assert_eq!(engine.state.players[1].library[1], copy_selected[0]);
+    assert_eq!(engine.state.players[0].hand, original_hand);
+    assert_eq!(engine.state.players[0].library, original_library);
+    assert!(!engine.state.objects.contains_key(&copy.id));
+    assert_eq!(engine.state.stack.len(), 1);
+    assert_eq!(engine.state.stack[0].id, original);
+    assert_eq!(
+        engine.state.objects[&original].zone,
+        tricerules_core::Zone::Stack
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&original],
+        original_generation
+    );
+    assert_eq!(count_card_id_in_graveyard(&engine, 1, "brainstorm"), 0);
+    let copy_hand_after = engine.state.players[1].hand.clone();
+    let copy_library_after = engine.state.players[1].library.clone();
+
+    pass_priority_round(&mut engine);
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("original's fresh private choice");
+    assert_eq!(pending.deciding_player, 0);
+    assert_eq!(pending.presentation.source_object_id, original);
+    assert_eq!(
+        pending.presentation.candidates,
+        engine.state.players[0].hand
+    );
+    assert!(pending
+        .presentation
+        .candidates
+        .iter()
+        .all(|oid| !copy_selected.contains(oid)));
+    let ResolutionContinuation::HandChoice { stack, hand_choice } = &pending.continuation else {
+        panic!("original must use the ordinary private hand-choice transaction");
+    };
+    assert!(!stack.item.is_copy && hand_choice.program_selection);
+    let original_program = serde_json::to_value(stack).unwrap();
+    assert!(
+        original_program["program"]["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(serde_json::Value::is_null),
+        "the original starts with fresh unfilled results after the copy has finished"
+    );
+    let original_selected: Vec<_> = pending
+        .presentation
+        .candidates
+        .iter()
+        .take(2)
+        .copied()
+        .collect();
+    engine
+        .apply_command(0, &submit_resolution_choice(original_selected.clone()))
+        .expect("finish original");
+    assert_eq!(engine.state.players[0].library[0], original_selected[1]);
+    assert_eq!(engine.state.players[0].library[1], original_selected[0]);
+    assert_eq!(engine.state.players[1].hand, copy_hand_after);
+    assert_eq!(engine.state.players[1].library, copy_library_after);
+    assert_eq!(
+        engine.state.objects[&original].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&original],
+        original_generation + 1
+    );
+    assert_eq!(count_card_id_in_graveyard(&engine, 0, "brainstorm"), 1);
+    assert_eq!(engine.state.turn_history.current.player(0).cards_drawn, 3);
+    assert_eq!(engine.state.turn_history.current.player(1).cards_drawn, 3);
+    assert!(engine.state.stack.is_empty() && engine.state.pending_resolution.is_none());
+}
+
+#[test]
+fn nested_program_keeps_entered_if_and_parent_tail_across_private_child_choices() {
+    // Both entered conditions see six cards. The nested true branch discards one, changing that
+    // count to five while the same leaf parks for its private choice and Library of Leng's
+    // replacement choice. Both levels explicitly yield a typed discard receipt; the captured
+    // nested branch, its child draw, and the parent tail must each finish exactly once.
+    let nested_program = r#"(
+        id: "nested_program",
+        name: "Nested Program",
+        face_id: "nested_program",
+        mana_cost: "{U}",
+        types: ["Instant"],
+        spell_program: Some((body: (
+            steps: [
+                (id: "outer_branch", bind: ["outer_receipt"], kind: If(
+                    condition: CardsInHand(
+                        players: Relative(Controller), min: Some(6), max: Some(6)),
+                    yes: (steps: [
+                        (id: "inner_branch", bind: ["inner_receipt"], kind: If(
+                            condition: CardsInHand(
+                                players: Relative(Controller), min: Some(6), max: Some(6)),
+                            yes: (steps: [
+                                (id: "inner_discard_yes", bind: ["inner_yes_receipt"], kind: Perform(
+                                    Discard(who: Controller, quantity: Exact(1))))
+                            ], yields: ["inner_yes_receipt"]),
+                            no: (steps: [
+                                (id: "inner_discard_no", bind: ["inner_no_receipt"], kind: Perform(
+                                    Discard(who: Controller, quantity: Exact(2))))
+                            ], yields: ["inner_no_receipt"])
+                        )),
+                        (id: "child_draw", kind: Perform(Draw(count: 1)))
+                    ], yields: ["inner_receipt"]),
+                    no: (steps: [
+                        (id: "outer_discard_no", bind: ["outer_no_receipt"], kind: Perform(
+                            Discard(who: Controller, quantity: Exact(2))))
+                    ], yields: ["outer_no_receipt"])
+                )),
+                (id: "parent_tail_draw", kind: Perform(Draw(count: 1)))
+            ],
+            yields: []
+        )))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                nested_program,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/library_of_leng.ron"),
+            ],
+            &[],
+        )
+        .expect("nested program fixture registry validates"),
+    ));
+    let decks = Some(vec![
+        vec![
+            "nested_program".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+        vec!["forest".into(); 30],
+    ]);
+    let mut engine =
+        GameEngine::new(registry, 9_381, &[0, 1], 20, decks, true).expect("nested program engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_permanent_on_battlefield(&mut engine, 0, "library_of_leng");
+    inject_library_card(&mut engine, 0, "island");
+    inject_library_card(&mut engine, 0, "island");
+
+    let first = cast_instant_and_resolve(
+        &mut engine,
+        0,
+        "nested_program",
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let discard_choice = find_resolution_choice(&first).expect("child discard choice");
+    assert_eq!(discard_choice.choice_kind(), ChoiceKind::HandCards);
+    assert_eq!((discard_choice.min, discard_choice.max), (1, 1));
+    assert_eq!(
+        engine.state.players[0].hand.len(),
+        6,
+        "both nested If conditions enter while the hand count is six"
+    );
+    let selected = *engine.state.players[0]
+        .hand
+        .first()
+        .expect("one card is available to discard");
+
+    let replacement = engine
+        .apply_command(0, &submit_resolution_choice(vec![selected]))
+        .expect("answer private child hand choice");
+    let replacement_choice = find_resolution_choice(&replacement)
+        .expect("Library of Leng replacement choice remains inside the child instruction");
+    assert_eq!(
+        replacement_choice.choice_kind(),
+        ChoiceKind::PrivateReplacement
+    );
+    assert_eq!((replacement_choice.min, replacement_choice.max), (1, 1));
+
+    let completed = engine
+        .apply_command(0, &submit_resolution_choice(vec![1]))
+        .expect("put the discarded card on top of the library");
+    assert!(find_resolution_choice(&completed).is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        2,
+        "the captured child draw and parent tail each complete exactly once"
+    );
+    assert_eq!(
+        engine.state.players[0].hand.len(),
+        7,
+        "one discard changes six cards to five, then child and parent each draw once"
+    );
+}
+
+#[test]
+fn authored_permanent_choice_refreshes_after_candidate_owner_concedes() {
+    let program = r#"(
+        id: "departed_choice_program",
+        name: "Departed Choice Program",
+        face_id: "departed_choice_program",
+        mana_cost: "{U}",
+        types: ["Instant"],
+        spell_program: Some((body: (
+            steps: [
+                (id: "draw", bind: ["draw_receipt"], kind: Perform(
+                    Draw(count: 1, who: Controller))),
+                (id: "choose_land", bind: ["chosen_land"], kind: Perform(
+                    ChoosePermanents(
+                        chooser: Controller,
+                        filter: (kind: AnyPermanent, permanent_types: [Land]),
+                        min: 1,
+                        max: 1
+                    ))),
+                (id: "untap_land", input: Some("chosen_land"), kind: Perform(
+                    UntapChosenPermanents))
+            ],
+            yields: []
+        )))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                program,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("departed-choice fixture registry validates"),
+    ));
+    let decks = Some(vec![
+        vec!["island".into(); 30],
+        vec!["forest".into(); 30],
+        vec!["forest".into(); 30],
+    ]);
+    let mut engine = GameEngine::new(registry, 9_383, &[0, 1, 2], 20, decks, true)
+        .expect("departed-choice fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+
+    let departed_land = inject_permanent_on_battlefield(&mut engine, 1, "forest");
+    let surviving_land = inject_permanent_on_battlefield(&mut engine, 2, "forest");
+    let unselected_land = inject_permanent_on_battlefield(&mut engine, 2, "island");
+    engine.state.objects.get_mut(&departed_land).unwrap().tapped = true;
+    engine
+        .state
+        .objects
+        .get_mut(&surviving_land)
+        .unwrap()
+        .tapped = true;
+    engine
+        .state
+        .objects
+        .get_mut(&unselected_land)
+        .unwrap()
+        .tapped = true;
+    let spell = inject_card_into_hand(&mut engine, 0, "departed_choice_program");
+    let hand_before_cast = engine.state.players[0].hand.len();
+    let draws_before_cast = engine.state.turn_history.current.player(0).cards_drawn;
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let slot = hand_index_for_card(&engine, 0, "departed_choice_program");
+    engine
+        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .expect("cast targetless choice program");
+    pass_priority_round(&mut engine);
+
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("land choice after exactly one draw");
+    assert_eq!(pending.deciding_player, 0);
+    assert_eq!(
+        pending.presentation.choice_kind,
+        ChoiceKind::PermanentObjects
+    );
+    assert_eq!(
+        pending.presentation.candidates,
+        vec![departed_land, surviving_land, unselected_land]
+    );
+    assert_eq!(engine.state.players[0].hand.len(), hand_before_cast);
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before_cast + 1
+    );
+    let stack_generation = engine.state.zone_change_generation[&spell];
+
+    engine.apply_command(1, &concede()).expect("P1 concedes");
+    assert!(!engine.state.objects.contains_key(&departed_land));
+    let refreshed = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("P0's land choice refreshes after P1 leaves");
+    assert_eq!(refreshed.deciding_player, 0);
+    assert_eq!(
+        refreshed.presentation.candidates,
+        vec![surviving_land, unselected_land]
+    );
+
+    let before_stale_answer = engine.diagnostic_snapshot().expect("diagnostic snapshot");
+    assert!(engine
+        .apply_command(0, &submit_resolution_choice(vec![departed_land]))
+        .is_err());
+    assert_eq!(
+        engine.diagnostic_snapshot().expect("diagnostic snapshot"),
+        before_stale_answer,
+        "a removed candidate cannot partially mutate the refreshed offer"
+    );
+
+    engine
+        .apply_command(0, &submit_resolution_choice(vec![surviving_land]))
+        .expect("choose P2's surviving land");
+    assert!(!engine.state.objects[&surviving_land].tapped);
+    assert!(engine.state.objects[&unselected_land].tapped);
+    assert_eq!(engine.state.players[0].hand.len(), hand_before_cast);
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        draws_before_cast + 1,
+        "refreshing and finishing the choice do not repeat the draw"
+    );
+    assert_eq!(
+        engine.state.objects[&spell].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&spell],
+        stack_generation + 1,
+        "the physical spell exits the stack once"
+    );
+    assert_eq!(
+        count_card_id_in_graveyard(&engine, 0, "departed_choice_program"),
+        1
+    );
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.players[1].has_lost);
+    assert!(!engine.state.players[0].has_lost && !engine.state.players[2].has_lost);
 }
 
 /// Putting cards back on top of the library must emit **no** `PermanentMoved`. That event is
@@ -475,7 +950,8 @@ fn custom_effect_claims() -> std::collections::BTreeMap<&'static str, Vec<&'stat
 ///
 /// Custom effects are 1:1 with card ids, like RON data cards — two cards wanting one algorithm
 /// is the signal to widen a primitive, not to share an impl. Without this check, two cards
-/// accidentally set to `custom_effect: "brainstorm"` would both silently resolve as Brainstorm.
+/// accidentally set to an unregistered `custom_effect` key would fail the forward registration
+/// check rather than silently using another card's implementation.
 /// Two faces of one card sharing a key fails too: the impl cannot tell faces apart either.
 #[test]
 fn every_custom_effect_key_has_exactly_one_card_and_one_impl() {

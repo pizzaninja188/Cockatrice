@@ -1213,6 +1213,7 @@ impl GameEngine {
                     if let Some(parked) = next_pending.continuation.stack_mut() {
                         parked.resume_effect_index = resume.resume_effect_index;
                         parked.previous_result = resume.previous_result.clone();
+                        parked.program = resume.program.clone();
                     }
                 }
                 return Ok(finish_with_events(self, events));
@@ -1256,12 +1257,8 @@ impl GameEngine {
             return Ok(finish_with_events(self, events));
         }
         if let Some(stack) = stack {
-            return self.complete_parked_resolution_with_previous(
-                stack.item,
-                stack.resume_effect_index,
-                stack.previous_result,
-                events,
-            );
+            let previous_result = stack.previous_result.clone();
+            return self.complete_parked_stack_with_previous(stack, previous_result, events);
         }
         self.apply_sbas(&mut events)?;
         if let Some(index) = self.state.player_idx(self.state.active_player_id()) {
@@ -1617,9 +1614,8 @@ impl GameEngine {
             pending.deciding_player,
             names.join(", ")
         ))];
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
+        self.complete_parked_stack_with_previous(
+            stack,
             EffectResult {
                 produced_objects,
                 ..Default::default()
@@ -2076,6 +2072,80 @@ impl GameEngine {
         Ok(())
     }
 
+    /// Reevaluate only an in-flight authored permanent-choice leaf after a player departs.
+    /// The active frame path and already-bound values remain intact, so no earlier branch or
+    /// operation is repeated against the changed battlefield.
+    pub(in crate::engine) fn refresh_program_permanent_choice_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(pending) = self.state.pending_resolution.take() else {
+            return Ok(());
+        };
+        let stack = match &pending.continuation {
+            ResolutionContinuation::PermanentChoice { stack, .. } if stack.program.is_some() => {
+                stack.clone()
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Ok(());
+            }
+        };
+        let Some(mut program) = stack.program.clone() else {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        };
+        let controller_live = self
+            .state
+            .player_idx(stack.item.controller)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let current_effect = if controller_live {
+            match self.current_program_perform(&program) {
+                Ok(effect) => Some(effect),
+                Err(error) => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(error);
+                }
+            }
+        } else {
+            None
+        };
+        if !matches!(
+            current_effect,
+            Some(SpellEffectKind::ChoosePermanents {
+                chooser: PlayerRecipient::Controller,
+                ..
+            })
+        ) {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+
+        let Some(next_instruction) = program
+            .frames
+            .last()
+            .and_then(|frame| frame.next_instruction.checked_sub(1))
+        else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::ProgramInvariant(
+                "resolution program choice cursor is invalid",
+            ));
+        };
+        program
+            .frames
+            .last_mut()
+            .expect("active program frame checked")
+            .next_instruction = next_instruction;
+        program.in_flight = None;
+        let mut retry = stack;
+        retry.program = Some(program);
+        self.state.pending_resolution = None;
+        let completed =
+            self.complete_parked_stack_with_previous(retry, EffectResult::default(), Vec::new())?;
+        events.extend(completed.events);
+        Ok(())
+    }
+
     fn finish_behold_choice(
         &mut self,
         pending: PendingResolution,
@@ -2211,6 +2281,7 @@ impl GameEngine {
                 item,
                 resume_effect_index,
                 previous_result,
+                program: None,
             };
             return self.advance_pending_linked_exile_play(cohort, ev);
         }
@@ -2242,6 +2313,40 @@ impl GameEngine {
         Ok(finish_with_events(self, ev))
     }
 
+    /// Resume a standard effect list or a finite authored program using the exact parked cursor.
+    /// Program continuations keep their immutable definition in the registry and carry only the
+    /// entered frame path, slot values, and operation awaiting its domain completion.
+    pub(super) fn complete_parked_stack_with_previous(
+        &mut self,
+        stack: ParkedStackResolution,
+        previous_result: EffectResult,
+        mut ev: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let Some(program) = stack.program.clone() else {
+            return self.complete_parked_resolution_with_previous(
+                stack.item,
+                stack.resume_effect_index,
+                previous_result,
+                ev,
+            );
+        };
+        let progress =
+            self.run_program_with_previous(&stack.item, program, previous_result, &mut ev)?;
+        if progress == super::resolution::ResolutionProgress::GameEnded {
+            return Ok(finish_with_events(self, ev));
+        }
+        if self.state.pending_resolution.is_none() {
+            self.apply_sbas(&mut ev)?;
+        }
+        if self.state.pending_resolution.is_none() {
+            if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
+                self.state.priority_idx = i;
+            }
+            ev.push(ev_priority_changed(self));
+        }
+        Ok(finish_with_events(self, ev))
+    }
+
     pub(super) fn park_or_finish(
         &mut self,
         item: StackItem,
@@ -2257,53 +2362,11 @@ impl GameEngine {
             // where the spell takes its place beneath whatever its resolution put in the
             // graveyard — e.g. Gifts Ungiven under the two cards it puts there.
             ResolutionStep::Done => {
-                if custom_key == "brainstorm" {
-                    self.finish_deferred_stack_exit(
-                        &item,
-                        super::resolution::DeferredStackExit::Resolved,
-                        events,
-                    )?;
-                }
                 super::resolution::finish_deferred_graveyard_entry(&mut self.state, &item);
                 seat_resolved_spell_last_in_graveyard(&mut self.state, item.id);
                 return Ok(super::resolution::ResolutionProgress::Completed);
             }
             ResolutionStep::NeedsChoice(it) => it,
-            ResolutionStep::Draw {
-                player,
-                count,
-                after: custom::PostDrawPhase::BrainstormPutBack,
-            } => {
-                let completion = super::draw::DrawCompletion::BrainstormPutBack {
-                    stack: ParkedStackResolution::new(item),
-                    step: step_no,
-                    scratch,
-                };
-                match self.start_draw_transaction(
-                    vec![(player, count)],
-                    completion,
-                    "Brainstorm",
-                    events,
-                )? {
-                    super::draw::DrawProgress::GameEnded => {
-                        return Ok(super::resolution::ResolutionProgress::GameEnded);
-                    }
-                    super::draw::DrawProgress::Parked => {
-                        return Ok(super::resolution::ResolutionProgress::Parked);
-                    }
-                    super::draw::DrawProgress::Complete(done) => {
-                        let super::draw::DrawCompletion::BrainstormPutBack {
-                            stack,
-                            step,
-                            scratch,
-                        } = done.completion
-                        else {
-                            unreachable!()
-                        };
-                        return self.finish_brainstorm_draw(stack.item, step, scratch, events);
-                    }
-                }
-            }
         };
         let candidate_card_ids: Vec<String> = interrupt
             .candidates
@@ -2391,28 +2454,5 @@ impl GameEngine {
             },
         });
         Ok(super::resolution::ResolutionProgress::Parked)
-    }
-
-    pub(super) fn finish_brainstorm_draw(
-        &mut self,
-        item: StackItem,
-        step: u32,
-        scratch: Vec<ObjectId>,
-        events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<super::resolution::ResolutionProgress, EngineError> {
-        let controller = item.controller;
-        let next = {
-            let ctx = ResolutionCtx::new(
-                &mut self.state,
-                self.registry,
-                events,
-                controller,
-                item.id,
-                step,
-                scratch.clone(),
-            );
-            custom::custom_effect_brainstorm::after_draw(&ctx)
-        };
-        self.park_or_finish(item, "brainstorm".to_string(), step, scratch, next, events)
     }
 }

@@ -811,6 +811,7 @@ mod cast_color_tests {
             previous_effect_result: &prior,
             effect_result: &mut result,
             effect_index: 0,
+            program_state: None,
         };
         copy_target_spell(
             &mut cx,

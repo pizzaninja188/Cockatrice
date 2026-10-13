@@ -10,6 +10,7 @@ references are needed only when using or changing those tools. Do not reload unc
 |---|---|
 | Scope, models, permissions and completion | Current campaign policy, e.g. [four-deck policy](prompts/four-deck-authoring-goal.md) |
 | Source research, typed semantics, presentation and admission | [Card authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md) |
+| Supported finite spell-program syntax | [Current program subset](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-targetless-spell-programs) |
 | Commands and final affected-side verification | [Verification guide](AGENT-VERIFICATION.md) |
 | Relevant engine interactions | [Interaction checklist](RULES-INTERACTION-CHECKLIST.md) |
 | Tool arguments and fixture boundaries | [Workbench reference](../tricerules/tricerules-cards/authoring/BATCH-WORKBENCH.md) |
@@ -18,6 +19,8 @@ references are needed only when using or changing those tools. Do not reload unc
 Reuse these records. A checklist may point to an existing preflight, test or review; it need not
 repeat the narrative. Packets retain mechanical facts, not semantic approval. Optional indexes,
 draft schemas and packet generation are unnecessary when existing evidence supplies the contract.
+The [composable execution contract](COMPOSABLE-CARD-EXECUTION.md) is the broader migration target;
+its proposed types and operations are not all accepted authoring syntax.
 
 ## Reuse-only cards
 

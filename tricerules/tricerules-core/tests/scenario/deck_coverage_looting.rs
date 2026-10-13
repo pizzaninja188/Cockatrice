@@ -54,12 +54,28 @@ fn resolve_top_stack(engine: &mut GameEngine) -> tricerules_proto::ruled::v1::Ru
         .expect("second player passes and the spell resolves")
 }
 
-fn resolve_two_card_discard(engine: &mut GameEngine, known_discard: u32, drawn: &[u32]) {
+fn resolve_two_card_discard(
+    engine: &mut GameEngine,
+    spell: u32,
+    known_discard: u32,
+    drawn: &[u32],
+) {
+    let stack_generation = engine.state.zone_change_generation[&spell];
     let batch = resolve_top_stack(engine);
     let choice = find_resolution_choice(&batch).expect("draw-then-discard choice");
     assert_eq!(choice.deciding_player_id, 0);
     assert_eq!(choice.choice_kind(), ChoiceKind::HandCards);
     assert_eq!((choice.min, choice.max), (2, 2));
+    assert!(
+        choice.public_reveal.is_none(),
+        "the discard offer must not reveal the hand"
+    );
+    assert_eq!(engine.state.objects[&spell].zone, Zone::Stack);
+    assert_eq!(
+        engine.state.zone_change_generation[&spell],
+        stack_generation
+    );
+    assert!(!choice.candidate_object_ids.contains(&spell));
     assert!(drawn
         .iter()
         .all(|object_id| choice.candidate_object_ids.contains(object_id)));
@@ -68,15 +84,32 @@ fn resolve_two_card_discard(engine: &mut GameEngine, known_discard: u32, drawn: 
         engine.apply_command(1, &pass()).is_err(),
         "no player can act between the draw and discard during resolution"
     );
+    let answer = submit_resolution_choice(vec![known_discard, drawn[0]]);
+    let before_wrong_player = engine
+        .diagnostic_snapshot()
+        .expect("diagnostic snapshot before wrong-player choice");
+    assert!(
+        engine.apply_command(1, &answer).is_err(),
+        "only the private hand's deciding player can answer"
+    );
+    assert_eq!(
+        engine
+            .diagnostic_snapshot()
+            .expect("diagnostic snapshot after wrong-player choice"),
+        before_wrong_player,
+        "a rejected wrong-player choice leaves the pending discard untouched"
+    );
     engine
-        .apply_command(
-            choice.deciding_player_id,
-            &submit_resolution_choice(vec![known_discard, drawn[0]]),
-        )
+        .apply_command(choice.deciding_player_id, &answer)
         .expect("discard the known card and one newly drawn card");
     assert_eq!(engine.state.objects[&known_discard].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&drawn[0]].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&drawn[1]].zone, Zone::Hand);
+    assert_eq!(
+        engine.state.zone_change_generation[&spell],
+        stack_generation + 1,
+        "the physical spell exits once, after the discard completes"
+    );
 }
 
 #[test]
@@ -98,7 +131,7 @@ fn careful_study_draws_two_then_discards_two_in_one_resolution() {
     semantic::accepted(&mut engine, 0, &cast_spell_face(slot, vec![], 0));
 
     assert_eq!(engine.state.objects[&spell].zone, Zone::Stack);
-    resolve_two_card_discard(&mut engine, known_discard, &drawn);
+    resolve_two_card_discard(&mut engine, spell, known_discard, &drawn);
     assert_eq!(engine.state.players[0].library.len(), library_before - 2);
     assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
 }
@@ -119,7 +152,7 @@ fn faithless_looting_uses_its_flashback_cost_and_exiles_after_resolution() {
     );
     let slot = hand_index_for_card(&engine, 0, FAITHLESS_LOOTING);
     semantic::accepted(&mut engine, 0, &cast_spell_face(slot, vec![], 0));
-    resolve_two_card_discard(&mut engine, first_discard, &normal_draws);
+    resolve_two_card_discard(&mut engine, spell, first_discard, &normal_draws);
     assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
 
     let flashback_draws = seat_on_top(&mut engine, 0, &["serra_angel", "island"]);
@@ -141,7 +174,7 @@ fn faithless_looting_uses_its_flashback_cost_and_exiles_after_resolution() {
         })),
     };
     semantic::accepted(&mut engine, 0, &flashback);
-    resolve_two_card_discard(&mut engine, second_discard, &flashback_draws);
+    resolve_two_card_discard(&mut engine, spell, second_discard, &flashback_draws);
     assert_eq!(engine.state.objects[&spell].zone, Zone::Exile);
     assert!(
         engine.apply_command(0, &flashback).is_err(),

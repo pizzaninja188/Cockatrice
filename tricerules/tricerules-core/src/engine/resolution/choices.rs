@@ -528,7 +528,8 @@ pub(super) fn choose_permanents(
             (targeted_player, targeted_player_cohort)
         {
             ResolutionContinuation::TargetedPlayerPermanentChoice {
-                stack: ParkedStackResolution::new(cx.top.clone())
+                stack: cx
+                    .parked_stack()
                     .with_previous_result(cx.previous_effect_result.clone()),
                 target_player,
                 cohort,
@@ -539,7 +540,8 @@ pub(super) fn choose_permanents(
             }
         } else {
             ResolutionContinuation::PermanentChoice {
-                stack: ParkedStackResolution::new(cx.top.clone())
+                stack: cx
+                    .parked_stack()
                     .with_previous_result(cx.previous_effect_result.clone()),
                 candidate_generations,
             }

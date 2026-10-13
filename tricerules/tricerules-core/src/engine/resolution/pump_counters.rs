@@ -1548,6 +1548,7 @@ mod growth_tests {
             previous_effect_result: &previous,
             effect_result: &mut result,
             effect_index: 0,
+            program_state: None,
         };
         double_power_toughness_all(
             &mut cx,

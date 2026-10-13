@@ -7,9 +7,10 @@ workflow. Current work and dependencies live in GitHub Issues, not a historical 
 For local structured evidence, privacy boundaries, deterministic reconstruction, and live resume,
 see [RULED-DIAGNOSTICS.md](RULED-DIAGNOSTICS.md).
 
-The proposed [composable card execution and authoring contract](COMPOSABLE-CARD-EXECUTION.md)
-describes the next composition redesign. It is a design target; the runtime described below remains
-the shipped architecture until its migration is implemented and verified.
+The [composable card execution and authoring contract](COMPOSABLE-CARD-EXECUTION.md) describes the
+broader composition target. A bounded targetless spell-program runner is implemented; the
+[active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-targetless-spell-programs)
+defines its supported syntax. Prompt-ID propagation and the remaining migration stay separate.
 
 ---
 
@@ -44,7 +45,7 @@ timestamps. It advances **only for accepted commands** (`engine/mod.rs::apply_co
 rejected command must not perturb replay, since replay re-applies only the accepted ones.
 Servatrice appends every accepted `RuledCommand`'s bytes to `GameReplay.ruled_command_log` and
 stamps `ruled_card_data_hash` from the sidecar's `SessionStart` handshake. Any mid-resolution player decision is itself a logged command
-(`SubmitResolutionChoice`), which is why tier-3 resolution is park/resume rather than a
+(`SubmitResolutionChoice`), which is why resolution choices use park/resume rather than a
 callback — see §6.
 
 **Rust card-data build boundary.** `tricerules-card-model` owns stable typed definitions,
@@ -405,13 +406,20 @@ Do not re-derive this per card.
   and battlefield entry use that channel today. Entry state is committed before CR 603 triggers,
   so "enters tapped" is never emitted as a later tap event. Regeneration remains a specialized
   destruction-replacement path until it first overlaps another applicable effect.
-- **Resolution.** `engine/resolution/mod.rs` owns stack setup, the fizzle check, the custom
-  (tier-3) handoff, and the **single exhaustive `SpellEffectKind` match**. Arms contain no logic:
+- **Resolution.** `engine/resolution/mod.rs` owns stack setup, the fizzle check and the custom
+  (tier-3) handoff. `engine/resolution/dispatch.rs` owns the exhaustive `SpellEffectKind` match:
   each delegates to a domain submodule (`damage`, `life`, `zones`, `pump_counters`, `mass`,
   `tokens`, `stack_ops`, `misc`). A new primitive is therefore still a compile error until an arm
   exists.
-- **Mid-resolution choices** never block. A tier-3 effect returns a `ResolutionInterrupt`; the
-  engine parks it in `GameState::pending_resolution`, emits `resolution_choice_required`, refuses
+- **Finite spell programs.** The model compiles lexical bindings and explicit branch yields into
+  an immutable registry program. `engine/resolution/program.rs` sequences its supported leaves,
+  retains entered branch paths/cursors and private typed result slots, and reuses draw, discard
+  and permanent-choice transactions. `ParkedStackResolution.program` carries that frame through
+  suspension; it never reconstructs an entered branch from changed live state. Brainstorm's
+  former card-specific draw/put-back continuation is retired. Other effect lists remain legacy
+  owners until their families migrate.
+- **Mid-resolution choices** never block. Domain transactions and custom `ResolutionInterrupt`s
+  park in `GameState::pending_resolution`, emit `resolution_choice_required`, refuse
   every command but `SubmitResolutionChoice`/`Concede`, and resumes on the answer. Because the
   answer is a logged command, determinism holds.
 

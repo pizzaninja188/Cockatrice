@@ -1567,7 +1567,7 @@ pub(crate) fn token_created_events(
 }
 
 // ---------------------------------------------------------------------------
-// Tier-3 custom resolution (resumable resolution): Brainstorm + Gifts Ungiven.
+// Shared choice helpers for resumable custom and authored-program resolution.
 // ---------------------------------------------------------------------------
 
 pub(crate) fn submit_resolution_choice(chosen: Vec<u32>) -> RuledCommand {

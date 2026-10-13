@@ -624,6 +624,7 @@ mod damage_source_tests {
             previous_effect_result: &previous_effect_result,
             effect_result: &mut effect_result,
             effect_index: 0,
+            program_state: None,
         };
         fight(
             &mut cx,

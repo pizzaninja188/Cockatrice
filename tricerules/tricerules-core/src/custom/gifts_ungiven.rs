@@ -5,7 +5,7 @@
 //! your hand. Then shuffle." The distinguishing tier-3 trait is that the *opponent* — not the
 //! spell's controller — decides part of the resolution (which two of a set the controller
 //! revealed). The generic [`ResolutionInterrupt::deciding_player`] carries that, so this needs no
-//! card-specific proto: the same interrupt/choice machinery as Brainstorm, only the decider differs.
+//! card-specific proto: the shared resolution-choice machinery is parameterized by the decider.
 //!
 //! Algorithm:
 //!   `begin`        — ask the controller to choose up to four library cards (the search).

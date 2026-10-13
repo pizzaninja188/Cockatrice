@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use tricerules_card_model::primitives::ResultSlotId;
 use tricerules_card_model::primitives::{
     ActivatedAbilityDef, ArmySubtype, CardResultAction, CardSearchZone, CardTypeFilter,
     CastCostReceiptCondition, Color, ConditionalSearchDestination, ContinuousEffectKind,
@@ -161,6 +162,9 @@ pub(crate) struct CardResultCohort {
 pub(crate) struct EffectResult {
     pub cards: Vec<CardResultEntry>,
     pub produced_objects: Vec<TriggerObjectRef>,
+    /// Exact generation-bound cards selected privately from a hand by a resolution program.
+    /// They remain in the hand until a later typed program operation moves them.
+    pub selected_hand_cards: Vec<TriggerObjectRef>,
     /// Provenance required by plural token-copy follow-ups. A general many-object result is not
     /// interchangeable with the exact cohort produced by one replacement-expanded copy effect.
     pub produced_object_provenance: Option<ProducedObjectProvenance>,
@@ -221,6 +225,7 @@ impl From<CardResultCohort> for EffectResult {
         Self {
             cards: cohort.cards,
             produced_objects: Vec::new(),
+            selected_hand_cards: Vec::new(),
             produced_object_provenance: None,
             receipt: None,
             mana_paid: None,
@@ -1164,6 +1169,10 @@ pub struct ParkedStackResolution {
     /// engine-private while a player answers the choice, then becomes the next primitive's
     /// `PreviousEffect` input.
     pub(crate) previous_result: EffectResult,
+    /// Immutable authored programs stay in `CardRegistry`; this cursor identifies the entered
+    /// blocks and typed slots needed to resume one exact operation after a private choice.
+    #[serde(default)]
+    pub(crate) program: Option<ProgramRunState>,
 }
 
 impl ParkedStackResolution {
@@ -1172,6 +1181,7 @@ impl ParkedStackResolution {
             item,
             resume_effect_index: None,
             previous_result: EffectResult::default(),
+            program: None,
         }
     }
 
@@ -1179,6 +1189,46 @@ impl ParkedStackResolution {
         self.previous_result = result;
         self
     }
+}
+
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProgramArm {
+    Yes,
+    No,
+}
+
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProgramPathStep {
+    pub instruction_index: u32,
+    pub arm: ProgramArm,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct ProgramFrame {
+    pub path: Vec<ProgramPathStep>,
+    pub next_instruction: u32,
+    /// Output slots declared by the parent If instruction, filled from this block's explicit
+    /// `yields` list when the captured child finishes.
+    pub yield_to: Vec<ResultSlotId>,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) enum ProgramValue {
+    DrawReceipt(Vec<TriggerObjectRef>),
+    DiscardReceipt(Vec<CardResultEntry>),
+    PermanentSelection(Vec<TriggerObjectRef>),
+    HandSelection(Vec<TriggerObjectRef>),
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct ProgramRunState {
+    pub card_id: String,
+    pub face_id: String,
+    pub frames: Vec<ProgramFrame>,
+    pub slots: Vec<Option<ProgramValue>>,
+    /// Output slots of the operation whose domain transaction is in flight. An empty vector is
+    /// still meaningful for a resultless operation; `None` means no operation is awaiting commit.
+    pub in_flight: Option<Vec<ResultSlotId>>,
 }
 
 /// Common publication and validation data carried by every resolution choice.
@@ -1923,6 +1973,10 @@ pub struct PendingStateBasedActionChoices {
 pub struct PendingHandChoice {
     pub affected_player: PlayerId,
     pub action: HandCardAction,
+    /// This choice only captures a generation-bound private selection for a resolution program;
+    /// it does not perform `action` or move the selected cards.
+    #[serde(default)]
+    pub program_selection: bool,
     pub candidate_generations: Vec<(ObjectId, u64)>,
     pub draw_after: u32,
     pub revealed: bool,

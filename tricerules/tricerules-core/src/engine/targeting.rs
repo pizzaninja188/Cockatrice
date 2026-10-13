@@ -1627,6 +1627,8 @@ fn validate_effect_targets(
         | SpellEffectKind::Discard { .. }
         | SpellEffectKind::Blight { .. }
         | SpellEffectKind::DrawDiscard { .. }
+        | SpellEffectKind::SelectHandCards { .. }
+        | SpellEffectKind::PutSelectedHandCardsOnLibraryTop
         | SpellEffectKind::GainLife { .. }
         | SpellEffectKind::Mill { .. }
         | SpellEffectKind::MillEachOpponentByHandSize

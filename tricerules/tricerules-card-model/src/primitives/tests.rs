@@ -3993,3 +3993,314 @@ fn chimil_discover_and_controller_spell_protection_are_typed() {
         "Chimil and Geological Appraiser need the Discover effect"
     );
 }
+
+fn program_fixture(body: &str) -> String {
+    format!(
+        r#"(id: "program_fixture", name: "Program Fixture", face_id: "program_fixture",
+            mana_cost: "{{0}}", types: ["Instant"],
+            spell_program: Some((body: {body})))"#
+    )
+}
+
+fn choose_lands_instruction(id: &str, bind: &str) -> String {
+    format!(
+        r#"(id: "{id}", bind: ["{bind}"], kind: Perform(ChoosePermanents(
+            chooser: Controller,
+            filter: (kind: AnyPermanent, permanent_types: [Land]),
+            min: 0, max: 3)))"#
+    )
+}
+
+#[test]
+fn spell_program_typechecks_a_generation_bound_permanent_result_consumer() {
+    let program = format!(
+        "(steps: [{}, (id: \"untap_lands\", input: Some(\"lands\"), kind: Perform(UntapChosenPermanents))], yields: [])",
+        choose_lands_instruction("choose_lands", "lands"),
+    );
+    let definition = program_fixture(&program);
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("a ChoosePermanents result may feed an explicitly bound untap instruction");
+    let face = registry
+        .get("program_fixture")
+        .expect("fixture registered")
+        .primary_face();
+    assert!(
+        face.spell_effect.is_empty(),
+        "program is the spell resolution owner"
+    );
+    assert!(face.custom_effect.is_none());
+    assert!(
+        face.spell_program.is_some(),
+        "program remains part of normalized face data"
+    );
+    assert!(
+        registry
+            .compiled_program("program_fixture", "program_fixture")
+            .is_some(),
+        "registry keeps the immutable compiled form separate from face data"
+    );
+    let normalized = ron::ser::to_string(face).expect("normalized face serializes");
+    assert!(
+        normalized.contains("spell_program"),
+        "the validated program must remain part of the normalized face"
+    );
+}
+
+#[test]
+fn spell_program_rejects_wrong_type_and_non_dominating_result_bindings() {
+    let wrong_type = program_fixture(
+        r#"(steps: [
+            (id: "draw", bind: ["drawn"], kind: Perform(Draw(count: 1))),
+            (id: "untap", input: Some("drawn"), kind: Perform(UntapChosenPermanents))
+          ], yields: [])"#,
+    );
+    let wrong_type_error = invalid_program_reason(&wrong_type);
+    assert!(
+        wrong_type_error.contains("wrong type"),
+        "{wrong_type_error}"
+    );
+
+    let out_of_scope = program_fixture(
+        r#"(steps: [(id: "if", bind: [], kind: If(condition: ControllerLibraryEmpty,
+            yes: (steps: [(id: "choose", bind: ["lands"], kind: Perform(ChoosePermanents(
+                chooser: Controller, filter: (kind: AnyPermanent, permanent_types: [Land]),
+                min: 0, max: 3)))], yields: []),
+            no: (steps: [], yields: []))),
+          (id: "untap", input: Some("lands"), kind: Perform(UntapChosenPermanents))], yields: [])"#,
+    );
+    let scope_error = invalid_program_reason(&out_of_scope);
+    assert!(scope_error.contains("not in scope"), "{scope_error}");
+}
+
+#[test]
+fn spell_program_requires_matching_explicit_if_result_joins() {
+    let joined = program_fixture(
+        r#"(steps: [(id: "if", bind: ["lands"], kind: If(condition: ControllerLibraryEmpty,
+            yes: (steps: [(id: "yes_choose", bind: ["yes_lands"], kind: Perform(ChoosePermanents(
+                chooser: Controller, filter: (kind: AnyPermanent, permanent_types: [Land]),
+                min: 0, max: 3)))], yields: ["yes_lands"]),
+            no: (steps: [(id: "no_choose", bind: ["no_lands"], kind: Perform(ChoosePermanents(
+                chooser: Controller, filter: (kind: AnyPermanent, permanent_types: [Land]),
+                min: 0, max: 3)))], yields: ["no_lands"]))),
+          (id: "untap", input: Some("lands"), kind: Perform(UntapChosenPermanents))], yields: [])"#,
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&joined], &[])
+        .expect("an explicit join of the same result type on each arm is well typed");
+
+    let mismatched = program_fixture(
+        r#"(steps: [(id: "if", bind: ["result"], kind: If(condition: ControllerLibraryEmpty,
+            yes: (steps: [(id: "yes_choose", bind: ["yes_lands"], kind: Perform(ChoosePermanents(
+                chooser: Controller, filter: (kind: AnyPermanent, permanent_types: [Land]),
+                min: 0, max: 3)))], yields: ["yes_lands"]),
+            no: (steps: [(id: "no_draw", bind: ["drawn"], kind: Perform(Draw(count: 1)))],
+                 yields: ["drawn"]))),
+          ], yields: [])"#,
+    );
+    let join_error = invalid_program_reason(&mismatched);
+    assert!(
+        join_error.contains("mismatched explicit yield types"),
+        "{join_error}"
+    );
+}
+
+fn invalid_program_reason(definition: &str) -> String {
+    match crate::CardRegistry::from_chunks_and_tokens(&[definition], &[]) {
+        Err(crate::registry::RegistryError::InvalidCard { reason, .. }) => reason,
+        Err(other) => panic!("program fixture failed before semantic validation: {other}"),
+        Ok(_) => panic!("invalid spell program was accepted"),
+    }
+}
+
+#[test]
+fn spell_program_rejects_implicit_previous_result_counts() {
+    for effect in [
+        r#"Draw(count: Count(CardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: All))))"#,
+        r#"SelectHandCards(count: Count(CardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: All))), ordered: true, prompt: "Choose")"#,
+    ] {
+        let definition = program_fixture(&format!(
+            "(steps: [(id: \"read\", kind: Perform({effect}))], yields: [])"
+        ));
+        let reason = invalid_program_reason(&definition);
+        assert!(reason.contains("result"), "{reason}");
+    }
+}
+
+#[test]
+fn spell_program_rejects_non_controller_context_and_cross_object_choices() {
+    let invalid_effects = [
+        (
+            "draw affected player",
+            r#"Draw(who: AffectedPlayer, count: 1)"#,
+            "Draw recipient supports only the resolving spell controller",
+        ),
+        (
+            "draw defending player",
+            r#"Draw(who: DefendingPlayer, count: 1)"#,
+            "Draw recipient supports only the resolving spell controller",
+        ),
+        (
+            "draw prior target controller",
+            r#"Draw(who: PreviousTargetedSpellController, count: 1)"#,
+            "Draw recipient supports only the resolving spell controller",
+        ),
+        (
+            "draw target-group controller",
+            r#"Draw(who: ControllerOfTargetGroup(group_index: 0), count: 1)"#,
+            "Draw recipient supports only the resolving spell controller",
+        ),
+        (
+            "discard event player",
+            r#"Discard(who: DefendingPlayer, quantity: Exact(1))"#,
+            "Discard recipient supports only the resolving spell controller",
+        ),
+        (
+            "choose for event player",
+            r#"ChoosePermanents(chooser: DefendingPlayer,
+                filter: (kind: AnyPermanent, permanent_types: [Land]), min: 0, max: 1)"#,
+            "ChoosePermanents chooser supports only the resolving spell controller",
+        ),
+        (
+            "choose with event-bound filter",
+            r#"ChoosePermanents(chooser: Controller,
+                filter: (kind: AnyPermanent, controller: DefendingPlayer,
+                    permanent_types: [Land]), min: 0, max: 1)"#,
+            "ChoosePermanents filter cannot use DefendingPlayer",
+        ),
+        (
+            "choose with untyped cross-object constraint",
+            r#"ChoosePermanents(chooser: Controller,
+                filter: (kind: AnyPermanent, permanent_types: [Artifact],
+                    required_subtypes: ["Equipment"]), min: 0, max: 1,
+                constraints: [EquipmentAttachableTo(recipient: PreviousEffectObject)])"#,
+            "ChoosePermanents constraints are not supported in spell_program",
+        ),
+        (
+            "choose with event-bound attached-object exclusion",
+            r#"ChoosePermanents(chooser: Controller,
+                filter: (kind: AnyPermanent, excluded_objects: [AttachedObject]),
+                min: 0, max: 1)"#,
+            "ChoosePermanents filter cannot use AttachedObject",
+        ),
+    ];
+
+    for (context, effect, expected_reason) in invalid_effects {
+        let definition = program_fixture(&format!(
+            "(steps: [(id: \"operation\", kind: Perform({effect}))], yields: [])"
+        ));
+        let reason = invalid_program_reason(&definition);
+        assert!(reason.contains(expected_reason), "{context}: {reason}");
+    }
+}
+
+#[test]
+fn spell_program_rejects_cast_cost_and_trigger_event_amounts() {
+    let cast_cost = r#"CastCost(cast_cost: (group_id: "cast_cost_01", option_id: "option_01"), when_true: 2, otherwise: 1)"#;
+    for (label, amount) in [
+        ("cast cost", cast_cost),
+        ("trigger event count", "EventCount"),
+    ] {
+        for (effect, expected_reason) in [
+            (
+                format!("Draw(count: {amount})"),
+                if label == "trigger event count" {
+                    "trigger event's count"
+                } else {
+                    "cast-cost amount"
+                },
+            ),
+            (
+                format!("SelectHandCards(count: {amount}, ordered: true, prompt: \"Choose\")"),
+                if label == "trigger event count" {
+                    "trigger event's count"
+                } else {
+                    "cast-cost amount"
+                },
+            ),
+        ] {
+            let definition = program_fixture(&format!(
+                "(steps: [(id: \"operation\", kind: Perform({effect}))], yields: [])"
+            ));
+            let reason = invalid_program_reason(&definition);
+            assert!(
+                reason.contains(expected_reason),
+                "{label}, {effect}: {reason}"
+            );
+        }
+    }
+}
+
+#[test]
+fn spell_program_rejects_dynamic_amount_selectors_and_if_contexts() {
+    for (label, amount) in [
+        (
+            "target-selected player count",
+            "Count(CardsInHand(players: ChosenTarget(group_index: 0, target_index: 0)))",
+        ),
+        (
+            "event-selected player count",
+            "Count(CardsInHand(players: AffectedPlayer))",
+        ),
+    ] {
+        for effect in [
+            format!("Draw(count: {amount})"),
+            format!("SelectHandCards(count: {amount}, ordered: true, prompt: \"Choose\")"),
+        ] {
+            let definition = program_fixture(&format!(
+                "(steps: [(id: \"operation\", kind: Perform({effect}))], yields: [])"
+            ));
+            let reason = invalid_program_reason(&definition);
+            assert!(
+                reason.contains("supports only a fixed literal"),
+                "{label}, {effect}: {reason}"
+            );
+        }
+    }
+
+    for (label, condition) in [
+        (
+            "target-selected player condition",
+            "CardsInHand(players: ChosenTarget(group_index: 0, target_index: 0), min: 1)",
+        ),
+        (
+            "event-selected player condition",
+            "CardsInHand(players: AffectedPlayer, min: 1)",
+        ),
+        (
+            "previous-object condition",
+            "ObjectMatches(object: PreviousEffectObject, filter: (kind: Creature))",
+        ),
+    ] {
+        let body = format!(
+            "(steps: [(id: \"if\", kind: If(condition: {condition}, yes: (steps: [], yields: []), no: (steps: [], yields: [])))], yields: [])"
+        );
+        let reason = invalid_program_reason(&program_fixture(&body));
+        assert!(
+            reason.contains("If condition uses context outside controller hand and library state"),
+            "{label}: {reason}"
+        );
+    }
+
+    let recursive_controller_condition = program_fixture(
+        r#"(steps: [(id: "if", kind: If(
+            condition: AllOf([
+                ControllerLibraryEmpty,
+                CardsInHand(players: Relative(Controller), min: 1),
+            ]),
+            yes: (steps: [], yields: []),
+            no: (steps: [], yields: [])))], yields: [])"#,
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&recursive_controller_condition], &[])
+        .expect("recursive controller-only hand/library predicates are in the pilot subset");
+}
+
+#[test]
+fn program_only_hand_operations_are_rejected_from_ordinary_effect_lists() {
+    let legacy = r#"(id: "legacy_program_leaf", name: "Legacy Program Leaf", face_id: "legacy_program_leaf",
+        types: ["Sorcery"], spell_effect: [SelectHandCards(count: 2, ordered: true, prompt: "Choose")])"#;
+    let reason = match crate::CardRegistry::from_chunks_and_tokens(&[legacy], &[]) {
+        Err(crate::registry::RegistryError::InvalidCard { reason, .. }) => reason,
+        Err(other) => panic!("legacy fixture failed before semantic validation: {other}"),
+        Ok(_) => panic!("program-only selection was accepted in spell_effect"),
+    };
+    assert!(reason.contains("only inside a spell_program"), "{reason}");
+}

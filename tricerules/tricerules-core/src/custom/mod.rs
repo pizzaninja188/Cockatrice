@@ -2,8 +2,8 @@
 //!
 //! Tiers 1 (RON data) and 2 (generic primitives) describe a card's resolution as
 //! `(effect_kind, parameters)` static data. A handful of cards instead need a *resolution
-//! algorithm*: a mid-resolution player choice over live objects (Brainstorm), or multiple
-//! players choosing interdependently over one revealed set (Gifts Ungiven). Those land here,
+//! algorithm*, such as multiple players choosing interdependently over one revealed set (Gifts
+//! Ungiven). Those land here,
 //! one [`CardEffect`] per file, keyed by card id.
 //!
 //! ## The narrow surface (do not widen it into a scripting layer)
@@ -61,16 +61,6 @@ pub trait CardEffect: Send + Sync {
 pub enum ResolutionStep {
     Done,
     NeedsChoice(ResolutionInterrupt),
-    Draw {
-        player: PlayerId,
-        count: u32,
-        after: PostDrawPhase,
-    },
-}
-
-/// Brainstorm's existing live-hand choice must begin only after its resumable draw finishes.
-pub enum PostDrawPhase {
-    BrainstormPutBack,
 }
 
 /// A request for one player to choose among `candidates` (object ids). Generic across every
@@ -88,7 +78,7 @@ pub struct ResolutionInterrupt {
     pub candidates: Vec<ObjectId>,
     pub min: u32,
     pub max: u32,
-    /// True when the chosen order is significant (Brainstorm: order the cards put back on top).
+    /// True when the chosen order is significant (for example, cards placed on top of a library).
     pub ordered: bool,
     /// True when all chosen objects must have distinct card names (Gifts Ungiven: "different names").
     /// The engine enforces this at choice submission; the card effect does not need to re-check.
@@ -174,35 +164,6 @@ impl<'a> ResolutionCtx<'a> {
             .player_idx(player)
             .map(|i| self.state.players[i].library.iter().copied().collect())
             .unwrap_or_default()
-    }
-
-    /// Put `oids` on top of their owner's library, `oids[0]` ending up on top (CR 120: "in any
-    /// order" is the player's chosen order, passed top-first). The cards are pulled from whatever
-    /// zone they are in first, so this also serves "move to top of library".
-    ///
-    /// **Emits no event, deliberately** — the library is a hidden zone, so per
-    /// [`public_move_event_destination`] there is nothing a public event may say about it. This is
-    /// the mutator where that matters most: announcing a Brainstorm put-back would tell the
-    /// opponent exactly which cards were hidden on top. Recipients learn the new library through
-    /// the per-player, per-recipient-redacted zone view instead.
-    pub fn put_on_top_of_library(&mut self, oids: &[ObjectId]) {
-        // Push in reverse so oids[0] is the final front (top) of the library.
-        for &oid in oids.iter().rev() {
-            let Some(owner) = self.state.objects.get(&oid).map(|o| o.owner) else {
-                continue;
-            };
-            let Some(idx) = self.state.player_idx(owner) else {
-                continue;
-            };
-            // Commit the ordinary CR 400.7 move/reset first, then reposition its physical card.
-            // No public movement event names a hidden hand/library card.
-            crate::engine::move_object_to_zone(self.state, self.registry, oid, Zone::Library, None)
-                .expect("validated custom library placement");
-            self.state.players[idx]
-                .library
-                .retain(|other| *other != oid);
-            self.state.players[idx].library.push_front(oid);
-        }
     }
 
     /// Shuffle `player`'s library (CR 701.19 "then shuffle"). Deterministic: the mix folds the
@@ -306,8 +267,8 @@ impl<'a> ResolutionCtx<'a> {
 /// `PermanentMoved` carries `card_id` at `FIELD_VISIBILITY_PUBLIC` (`ruled_v1.proto`), so it may
 /// only name a destination whose contents are public *by identity*. Hand and library are hidden
 /// zones (CR 400.2): their contents reach each player through the redacted per-player zone view,
-/// and announcing them here would leak — [`ResolutionCtx::put_on_top_of_library`] is the exact
-/// case. The stack is announced by the stack events, not this one.
+/// and announcing their card identities here would leak. The stack is announced by the stack
+/// events, not this one.
 ///
 /// Exhaustive on purpose: a new [`Zone`] variant must make this decision rather than inherit
 /// silence from a `_` arm.

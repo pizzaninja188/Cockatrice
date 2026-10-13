@@ -4,7 +4,16 @@
   face_id: "brainstorm",
   mana_cost: "{U}",
   types: ["Instant"],
-  // Tier-3: "Draw three cards, then put two cards from your hand on top of your library in any
-  // order." The put-back is a mid-resolution choice over live objects (see custom/brainstorm.rs).
-  custom_effect: "brainstorm",
+  spell_program: Some((body: (
+    steps: [
+      (id: "draw_three", kind: Perform(Draw(who: Controller, count: 3))),
+      (id: "choose_put_back", bind: ["chosen"], kind: Perform(SelectHandCards(
+        count: 2,
+        ordered: true,
+        prompt: "Brainstorm: choose cards from your hand to put on top of your library (last chosen on top)."
+      ))),
+      (id: "put_back", input: Some("chosen"), kind: Perform(PutSelectedHandCardsOnLibraryTop))
+    ],
+    yields: []
+  ))),
 )

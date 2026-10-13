@@ -325,6 +325,7 @@ pub(super) fn draw(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let drawers = player_recipients(cx, who);
+    let parked_stack = cx.parked_stack();
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let top = cx.top;
@@ -344,7 +345,7 @@ pub(super) fn draw(
         })
         .collect();
     let completion = super::super::draw::DrawCompletion::ResumeEffects {
-        stack: ParkedStackResolution::new(top.clone()),
+        stack: parked_stack,
         result: cx.effect_result.clone(),
     };
     match engine.start_draw_transaction(requests, completion, spell_label, events)? {
@@ -571,7 +572,7 @@ pub(super) fn discard(
             current: 0,
             selections,
         };
-        let stack = ParkedStackResolution::new(cx.top.clone());
+        let stack = cx.parked_stack();
         return match cx
             .engine
             .apply_player_set_discard(stack, &discard, cx.events)?
@@ -587,7 +588,7 @@ pub(super) fn discard(
     park_player_set_discard_choice(
         cx.engine,
         cx.events,
-        ParkedStackResolution::new(cx.top.clone()),
+        cx.parked_stack(),
         PendingPlayerSetDiscard {
             choices,
             current: 0,
@@ -1878,6 +1879,7 @@ pub(in crate::engine) fn resume_draw_then_discard(
         previous_effect_result: &previous,
         effect_result: &mut result,
         effect_index: stack.resume_effect_index.unwrap_or(1).saturating_sub(1),
+        program_state: stack.program.clone(),
     };
     let outcome = choose_hand_cards_for_player(
         &mut cx,
@@ -1935,6 +1937,7 @@ fn choose_hand_cards_for_player(
     let controller = cx.controller;
     let top = cx.top;
     let spell_label = cx.spell_label;
+    let parked_stack = cx.parked_stack();
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let Some(pi) = engine.state.player_idx(affected_player) else {
@@ -2025,7 +2028,7 @@ fn choose_hand_cards_for_player(
         )));
         if action == HandCardAction::Discard && draw_after > 0 && !optional {
             let completion = super::super::draw::DrawCompletion::ResumeEffects {
-                stack: ParkedStackResolution::new(top.clone()),
+                stack: parked_stack.clone(),
                 result: cx.effect_result.clone(),
             };
             match engine.start_draw_transaction(
@@ -2138,10 +2141,11 @@ fn choose_hand_cards_for_player(
             choice_kind,
         },
         continuation: ResolutionContinuation::HandChoice {
-            stack: ParkedStackResolution::new(top.clone()),
+            stack: parked_stack.clone(),
             hand_choice: PendingHandChoice {
                 affected_player,
                 action,
+                program_selection: false,
                 candidate_generations: eligible
                     .iter()
                     .map(|object_id| {
@@ -2160,6 +2164,112 @@ fn choose_hand_cards_for_player(
                 revealed: visibility == HandChoiceVisibility::PublicReveal,
                 draw_only_if_discarded: optional,
                 entry_cause,
+            },
+        },
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
+/// Ask the resolving controller to choose an exact-as-possible ordered cohort from their live
+/// hand for a typed resolution-program result. The selection itself is private and does not move
+/// cards; `finish_hand_choice` captures generation-bound references for a later instruction.
+pub(super) fn select_hand_cards_for_program(
+    cx: &mut EffectCx<'_>,
+    count: u32,
+    ordered: bool,
+    authored_prompt: &str,
+) -> Result<EffectOutcome, EngineError> {
+    let program = cx
+        .program_state
+        .clone()
+        .ok_or(EngineError::ProgramInvariant(
+            "hand selection has no owning program frame",
+        ))?;
+    let engine = &mut *cx.engine;
+    let top = cx.top;
+    let result = &mut *cx.effect_result;
+    let events = &mut *cx.events;
+    let Some(player_index) = engine.state.player_idx(top.controller) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let hand = engine.state.players[player_index].hand.clone();
+    let chosen_count = count.min(hand.len() as u32);
+    if chosen_count == 0 {
+        result.selected_hand_cards.clear();
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let (candidate_card_ids, candidate_names) = candidate_identities(engine, &hand);
+    let prompt = authored_prompt.trim().to_string();
+    if prompt.is_empty() {
+        return Err(EngineError::Illegal(
+            "resolution-program hand prompt is empty",
+        ));
+    }
+    let choice_kind = rv1::ChoiceKind::HandCards;
+    let stack = ParkedStackResolution {
+        item: top.clone(),
+        resume_effect_index: None,
+        previous_result: EffectResult::default(),
+        program: Some(program),
+    };
+    events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                deciding_player_id: top.controller,
+                source_object_id: top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: choice_kind as i32,
+                candidate_object_ids: hand.clone(),
+                candidate_card_ids,
+                candidate_names,
+                min: chosen_count,
+                max: chosen_count,
+                ordered,
+                candidate_selectable: vec![true; hand.len()],
+                public_reveal: None,
+                ..Default::default()
+            },
+        )),
+    });
+    events.push(ev_log(prompt.clone()));
+    engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player: top.controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: top.id,
+            candidates: hand.clone(),
+            min: chosen_count,
+            max: chosen_count,
+            ordered,
+            prompt,
+            choice_kind,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::HandChoice {
+            stack,
+            hand_choice: PendingHandChoice {
+                affected_player: top.controller,
+                // `program_selection` is handled before this fallback action can commit.
+                action: HandCardAction::Discard,
+                program_selection: true,
+                candidate_generations: hand
+                    .iter()
+                    .map(|object_id| {
+                        (
+                            *object_id,
+                            engine
+                                .state
+                                .zone_change_generation
+                                .get(object_id)
+                                .copied()
+                                .unwrap_or(0),
+                        )
+                    })
+                    .collect(),
+                draw_after: 0,
+                revealed: false,
+                draw_only_if_discarded: false,
+                entry_cause: None,
             },
         },
     });
