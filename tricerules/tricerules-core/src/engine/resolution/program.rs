@@ -81,7 +81,7 @@ impl GameEngine {
     ) -> Result<SpellEffectKind, EngineError> {
         let compiled = self
             .registry
-            .compiled_program(&program_state.card_id, &program_state.face_id)
+            .compiled_program_for_owner(&program_state.owner)
             .ok_or(EngineError::ProgramInvariant(
                 "compiled resolution program disappeared",
             ))?;
@@ -141,9 +141,22 @@ impl GameEngine {
         if self.state.is_terminal() {
             return Ok(ResolutionProgress::GameEnded);
         }
-        if program_state.card_id != top.card_id {
+        let expected_owner = self
+            .registry
+            .get(&top.card_id)
+            .and_then(|definition| definition.face(top.face_index))
+            .map(|face| {
+                tricerules_card_model::ProgramOwnerId::face(
+                    top.card_id.clone(),
+                    face.face_id.clone(),
+                )
+            })
+            .ok_or(EngineError::ProgramInvariant(
+                "resolution program lost its exact face owner",
+            ))?;
+        if program_state.owner != expected_owner {
             return Err(EngineError::ProgramInvariant(
-                "resolution program card identity changed",
+                "resolution program owner identity changed",
             ));
         }
 
@@ -152,10 +165,21 @@ impl GameEngine {
         // only the currently executing leaf operation is cloned.
         let registry = self.registry;
         let compiled = registry
-            .compiled_program(&program_state.card_id, &program_state.face_id)
+            .compiled_program_for_owner(&program_state.owner)
             .ok_or(EngineError::ProgramInvariant(
                 "compiled resolution program disappeared",
             ))?;
+        if compiled.owner != program_state.owner
+            || compiled.context != tricerules_card_model::EffectContext::Spell
+            || !matches!(
+                compiled.target_projection,
+                tricerules_card_model::ProgramTargetProjection::OwnerLocal
+            )
+        {
+            return Err(EngineError::ProgramInvariant(
+                "non-face program context is unsupported by the runtime",
+            ));
+        }
         if program_state.slots.len() != compiled.slots.len() || program_state.frames.is_empty() {
             return Err(EngineError::ProgramInvariant(
                 "invalid resolution program cursor",

@@ -152,7 +152,7 @@ pub enum CounterSnapshotSource {
 
 /// Where an effect is being resolved from. Controls validation that depends on context —
 /// e.g. [`EffectSubject::Source`] is only meaningful for an ability bound to a source permanent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EffectContext {
     /// A spell's `spell_effect` list (no source permanent to self-reference).
     Spell,

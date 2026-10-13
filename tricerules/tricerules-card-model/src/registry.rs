@@ -8,8 +8,8 @@ use crate::primitives::{
     TriggerCondition, ZoneCardFilter,
 };
 use crate::token_def::TokenDefinition;
-use crate::ManaSymbol;
 use crate::PresentationFaceMetadata;
+use crate::{ManaSymbol, ProgramOwnerId};
 use once_cell::sync::Lazy;
 use ron::extensions::Extensions;
 use ron::Options;
@@ -40,7 +40,7 @@ pub struct CardRegistry {
     tokens: HashMap<String, CardDefinition>,
     presentation_faces: HashMap<(String, String), PresentationFaceMetadata>,
     /// Immutable, startup-validated execution forms kept apart from Oracle face data.
-    compiled_programs: HashMap<(String, String), CompiledProgram>,
+    compiled_programs: HashMap<ProgramOwnerId, CompiledProgram>,
 }
 
 /// Name-index key normalization, applied to both stored names and lookup queries.
@@ -3284,16 +3284,19 @@ impl CardRegistry {
                                 .into(),
                         });
                     }
+                    let owner = ProgramOwnerId::face(card.id.clone(), face.face_id.clone());
                     let compiled =
-                        CompiledProgram::compile(&card.id, face.face_id.as_str(), program)
+                        CompiledProgram::compile(owner.clone(), EffectContext::Spell, program)
                             .map_err(|reason| RegistryError::InvalidCard {
                                 id: card.id.clone(),
                                 reason: format!("spell_program: {reason}"),
                             })?;
-                    reg.compiled_programs.insert(
-                        (card.id.clone(), face.face_id.as_str().to_owned()),
-                        compiled,
-                    );
+                    if reg.compiled_programs.insert(owner, compiled).is_some() {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: "multiple programs resolve to the same exact owner".into(),
+                        });
+                    }
                 }
                 let payment_actions =
                     spell_payment_result_actions(&face.additional_costs, &face.cast_cost_groups);
@@ -3876,10 +3879,21 @@ impl CardRegistry {
             .get(&(card_id.to_string(), face_id.to_string()))
     }
 
-    /// Immutable, startup-compiled program for one physical card face.
+    /// Compatibility lookup for an exact face-owned program.
+    ///
+    /// This preserves the original public API while delegating to the typed owner key. It does
+    /// not fall back if the exact face is absent.
     pub fn compiled_program(&self, card_id: &str, face_id: &str) -> Option<&CompiledProgram> {
-        self.compiled_programs
-            .get(&(card_id.to_string(), face_id.to_string()))
+        let face_id = crate::CardFaceId::new(face_id.to_owned()).ok()?;
+        self.compiled_program_for_owner(&ProgramOwnerId::face(card_id.to_owned(), face_id))
+    }
+
+    /// Immutable, startup-compiled program for one exact authored owner.
+    ///
+    /// The current registry admits face-owned programs only. Mode and ability owner IDs are
+    /// distinct lookup keys; this method never falls back to a parent face or sibling mode.
+    pub fn compiled_program_for_owner(&self, owner: &ProgramOwnerId) -> Option<&CompiledProgram> {
+        self.compiled_programs.get(owner)
     }
 
     /// Attach the embedded corpus's external-presentation compatibility metadata.

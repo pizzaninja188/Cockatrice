@@ -587,14 +587,17 @@ mod library_replacement_tests {
         };
         engine.cast_spell(0, &cast).unwrap();
         let top = engine.state.stack.pop().expect("cast Brainstorm");
+        let owner = tricerules_card_model::ProgramOwnerId::face(
+            "brainstorm",
+            tricerules_card_model::CardFaceId::new("brainstorm").unwrap(),
+        );
         let compiled = engine
             .registry
-            .compiled_program("brainstorm", "brainstorm")
+            .compiled_program_for_owner(&owner)
             .expect("Brainstorm's immutable program");
         let draw_outputs = compiled.body.steps[0].outputs.clone();
         let program = ProgramRunState {
-            card_id: "brainstorm".into(),
-            face_id: "brainstorm".into(),
+            owner,
             frames: vec![ProgramFrame {
                 path: Vec::new(),
                 next_instruction: 1,

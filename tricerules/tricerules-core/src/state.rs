@@ -12,9 +12,10 @@ use tricerules_card_model::primitives::{
     TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
 };
 use tricerules_card_model::primitives::{PlayerRecipient, ResolutionBranchDef};
+pub use tricerules_card_model::AbilityDefinitionId;
 use tricerules_card_model::{
     is_creature_type, AbilityLinkId, CardFace, ChoiceId, ExiledCohortId, ManaCost, ManaSymbol,
-    ModeId, SearchResultId,
+    ModeId, ProgramOwnerId, SearchResultId,
 };
 use tricerules_proto::ruled::v1::{ChoiceKind, ResolutionChoiceRequired, RuledEvent, TokenCreated};
 
@@ -274,14 +275,6 @@ pub struct PersistentActivationUseKey {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
     pub occurrence: ActivatedAbilityOccurrence,
-}
-
-/// Authored ability slot, independent of display names and flattened live ability indexes.
-#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AbilityDefinitionId {
-    pub card_id: String,
-    pub face_id: tricerules_card_model::CardFaceId,
-    pub ability_path: Vec<tricerules_card_model::AbilityId>,
 }
 
 /// CR 113.2c identity of an ability occurrence. Infernal Scarring's static grant and
@@ -1243,8 +1236,7 @@ pub(crate) enum ProgramValue {
 
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct ProgramRunState {
-    pub card_id: String,
-    pub face_id: String,
+    pub owner: ProgramOwnerId,
     pub frames: Vec<ProgramFrame>,
     pub slots: Vec<Option<ProgramValue>>,
     /// Output slots of the operation whose domain transaction is in flight. An empty vector is

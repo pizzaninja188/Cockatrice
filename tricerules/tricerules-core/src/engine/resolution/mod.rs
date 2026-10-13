@@ -1513,13 +1513,16 @@ impl GameEngine {
                 .and_then(|definition| definition.face(top.face_index))
                 .filter(|face| face.spell_program.is_some())
             {
+                let owner = tricerules_card_model::ProgramOwnerId::face(
+                    top.card_id.clone(),
+                    face.face_id.clone(),
+                );
                 let compiled = self
                     .registry
-                    .compiled_program(&top.card_id, face.face_id.as_str())
+                    .compiled_program_for_owner(&owner)
                     .ok_or(EngineError::Illegal("spell program was not compiled"))?;
                 let program = ProgramRunState {
-                    card_id: top.card_id.clone(),
-                    face_id: face.face_id.to_string(),
+                    owner,
                     frames: vec![ProgramFrame {
                         path: Vec::new(),
                         next_instruction: 0,

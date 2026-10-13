@@ -4033,16 +4033,94 @@ fn spell_program_typechecks_a_generation_bound_permanent_result_consumer() {
         face.spell_program.is_some(),
         "program remains part of normalized face data"
     );
+    let face_owner = crate::ProgramOwnerId::face(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&face_owner)
+        .expect("registry keeps the immutable compiled form separate from face data");
+    assert!(
+        std::ptr::eq(
+            compiled,
+            registry
+                .compiled_program("program_fixture", "program_fixture")
+                .expect("compatibility accessor resolves the exact face owner")
+        ),
+        "the existing face lookup delegates to the typed owner key"
+    );
+    assert_eq!(compiled.owner, face_owner);
+    assert_eq!(compiled.context, super::EffectContext::Spell);
+    assert_eq!(
+        compiled.target_projection,
+        super::ProgramTargetProjection::OwnerLocal,
+        "the program resolves targets through its exact owner's local projection"
+    );
     assert!(
         registry
-            .compiled_program("program_fixture", "program_fixture")
-            .is_some(),
-        "registry keeps the immutable compiled form separate from face data"
+            .compiled_program_for_owner(&crate::ProgramOwnerId::face_mode(
+                "program_fixture",
+                crate::CardFaceId::new("program_fixture").unwrap(),
+                crate::ModeId::new("same_local_name").unwrap(),
+            ))
+            .is_none(),
+        "a mode owner never falls back to its containing face program"
     );
     let normalized = ron::ser::to_string(face).expect("normalized face serializes");
     assert!(
         normalized.contains("spell_program"),
         "the validated program must remain part of the normalized face"
+    );
+}
+
+#[test]
+fn program_compiler_preserves_owner_context_and_local_target_projection() {
+    let definition = program_fixture(
+        r#"(steps: [(id: "draw", bind: ["drawn"], kind: Perform(Draw(count: 1)))], yields: [])"#,
+    );
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+        .expect("face program fixture registers");
+    let face = registry
+        .get("program_fixture")
+        .expect("fixture registered")
+        .primary_face();
+    let program = face.spell_program.as_ref().expect("authored face program");
+    let mode_id = crate::ModeId::new("choose_mode").unwrap();
+    let mode_owner = crate::ProgramOwnerId::face_mode(
+        "program_fixture",
+        crate::CardFaceId::new("program_fixture").unwrap(),
+        mode_id.clone(),
+    );
+
+    let compiled_mode =
+        super::CompiledProgram::compile(mode_owner.clone(), super::EffectContext::Spell, program)
+            .expect(
+                "compiler accepts the explicit spell context for metadata-only mode compilation",
+            );
+    assert_eq!(compiled_mode.owner, mode_owner);
+    assert_eq!(compiled_mode.context, super::EffectContext::Spell);
+    assert_eq!(
+        compiled_mode.target_projection,
+        super::ProgramTargetProjection::ModeLocal { mode_id },
+        "a mode's target projection is addressed by its stable local ModeId"
+    );
+
+    let ability_owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "program_fixture".into(),
+        face_id: crate::CardFaceId::new("program_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("activated_01").unwrap()],
+    });
+    let compiled_ability = super::CompiledProgram::compile(
+        ability_owner.clone(),
+        super::EffectContext::Ability,
+        program,
+    )
+    .expect("compiler carries the actual ability effect context");
+    assert_eq!(compiled_ability.owner, ability_owner);
+    assert_eq!(compiled_ability.context, super::EffectContext::Ability);
+    assert_eq!(
+        compiled_ability.target_projection,
+        super::ProgramTargetProjection::OwnerLocal
     );
 }
 

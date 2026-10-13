@@ -65,6 +65,73 @@ stable_id!(SearchResultId, "search result id");
 stable_id!(ExiledCohortId, "exiled cohort id");
 stable_id!(AbilityLinkId, "ability link id");
 
+/// Exact card-face definition identity used as the parent of face-owned programs and modes.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct CardFaceDefinitionId {
+    pub card_id: String,
+    pub face_id: CardFaceId,
+}
+
+impl CardFaceDefinitionId {
+    pub fn new(card_id: impl Into<String>, face_id: CardFaceId) -> Self {
+        Self {
+            card_id: card_id.into(),
+            face_id,
+        }
+    }
+}
+
+/// Exact authored ability slot, independent of display names and flattened live ability indexes.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct AbilityDefinitionId {
+    pub card_id: String,
+    pub face_id: CardFaceId,
+    pub ability_path: Vec<AbilityId>,
+}
+
+/// Exact authored owner of one compiled resolution program.
+///
+/// The owner includes its complete parent chain: a mode is scoped by its face or ability, and an
+/// ability by its card face and full nested ability path. Local mode and ability IDs therefore
+/// never become registry-wide keys.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum ProgramOwnerId {
+    Face(CardFaceDefinitionId),
+    FaceMode {
+        face: CardFaceDefinitionId,
+        mode_id: ModeId,
+    },
+    Ability(AbilityDefinitionId),
+    AbilityMode {
+        ability: AbilityDefinitionId,
+        mode_id: ModeId,
+    },
+}
+
+impl ProgramOwnerId {
+    pub fn face(card_id: impl Into<String>, face_id: CardFaceId) -> Self {
+        Self::Face(CardFaceDefinitionId::new(card_id, face_id))
+    }
+
+    pub fn face_mode(card_id: impl Into<String>, face_id: CardFaceId, mode_id: ModeId) -> Self {
+        Self::FaceMode {
+            face: CardFaceDefinitionId::new(card_id, face_id),
+            mode_id,
+        }
+    }
+
+    pub fn ability(definition: AbilityDefinitionId) -> Self {
+        Self::Ability(definition)
+    }
+
+    pub fn ability_mode(definition: AbilityDefinitionId, mode_id: ModeId) -> Self {
+        Self::AbilityMode {
+            ability: definition,
+            mode_id,
+        }
+    }
+}
+
 /// Stable identity and non-mechanical presentation metadata around an authored definition.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -236,5 +303,49 @@ mod tests {
                 "fallback"
             );
         }
+    }
+
+    #[test]
+    fn program_owner_identity_uses_the_exact_parent_and_typed_mode_id() {
+        let mode_id = ModeId::new("choose_mode").unwrap();
+        let ability_id = AbilityId::new("activated_01").unwrap();
+        let nested_id = AbilityId::new("nested_01").unwrap();
+        let face_front = CardFaceId::new("front").unwrap();
+        let face_back = CardFaceId::new("back").unwrap();
+
+        let definition_front: crate::AbilityDefinitionId = crate::identity::AbilityDefinitionId {
+            card_id: "owner_probe".into(),
+            face_id: face_front.clone(),
+            ability_path: vec![ability_id.clone()],
+        };
+        let definition_back = crate::AbilityDefinitionId {
+            card_id: "owner_probe".into(),
+            face_id: face_back.clone(),
+            ability_path: vec![ability_id.clone()],
+        };
+        let nested_definition = crate::AbilityDefinitionId {
+            card_id: "owner_probe".into(),
+            face_id: face_front.clone(),
+            ability_path: vec![ability_id.clone(), nested_id],
+        };
+
+        let owners = [
+            ProgramOwnerId::face("owner_probe", face_front.clone()),
+            ProgramOwnerId::face_mode("owner_probe", face_front.clone(), mode_id.clone()),
+            ProgramOwnerId::face_mode("owner_probe", face_back, mode_id.clone()),
+            ProgramOwnerId::ability(definition_front.clone()),
+            ProgramOwnerId::ability(definition_back.clone()),
+            ProgramOwnerId::ability_mode(definition_front, mode_id.clone()),
+            ProgramOwnerId::ability_mode(nested_definition, mode_id),
+        ];
+
+        assert_eq!(
+            owners
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            owners.len(),
+            "equal local ability and mode IDs under different parents stay distinct"
+        );
     }
 }

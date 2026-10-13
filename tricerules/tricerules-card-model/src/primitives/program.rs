@@ -9,6 +9,7 @@
 //! a separately typed context/result contract.
 
 use super::{Amount, EffectContext, GameCondition, PlayerRecipient, SpellEffectKind, TargetFilter};
+use crate::{ModeId, ProgramOwnerId};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -16,6 +17,36 @@ use std::collections::{HashMap, HashSet};
 #[serde(deny_unknown_fields)]
 pub struct CardProgram {
     pub body: AuthoredBlock,
+}
+
+/// Selects the target coordinates owned by a compiled program.
+///
+/// A mode-local projection uses its stable `ModeId` inside the exact parent carried by
+/// `CompiledProgram::owner`; it never refers to the stack-wide flattened mode or target index.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProgramTargetProjection {
+    OwnerLocal,
+    ModeLocal { mode_id: ModeId },
+}
+
+impl ProgramOwnerId {
+    pub fn effect_context(&self) -> EffectContext {
+        match self {
+            Self::Face(_) | Self::FaceMode { .. } => EffectContext::Spell,
+            Self::Ability(_) | Self::AbilityMode { .. } => EffectContext::Ability,
+        }
+    }
+
+    pub fn target_projection(&self) -> ProgramTargetProjection {
+        match self {
+            Self::Face(_) | Self::Ability(_) => ProgramTargetProjection::OwnerLocal,
+            Self::FaceMode { mode_id, .. } | Self::AbilityMode { mode_id, .. } => {
+                ProgramTargetProjection::ModeLocal {
+                    mode_id: mode_id.clone(),
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,34 +146,42 @@ pub enum CompiledInstructionKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompiledProgram {
-    pub card_id: String,
-    pub face_id: String,
+    pub owner: ProgramOwnerId,
+    pub context: EffectContext,
+    pub target_projection: ProgramTargetProjection,
     pub body: CompiledBlock,
     pub slots: Vec<CompiledSlot>,
 }
 
 struct Compiler {
+    context: EffectContext,
     slots: Vec<CompiledSlot>,
     instruction_ids: HashSet<String>,
 }
 
 impl CompiledProgram {
     pub fn compile(
-        card_id: impl Into<String>,
-        face_id: impl Into<String>,
+        owner: ProgramOwnerId,
+        context: EffectContext,
         program: &CardProgram,
     ) -> Result<Self, String> {
+        if owner.effect_context() != context {
+            return Err("program owner does not match the supplied effect context".into());
+        }
         if program.body.steps.is_empty() {
             return Err("program body must contain at least one instruction".into());
         }
+        let target_projection = owner.target_projection();
         let mut compiler = Compiler {
+            context,
             slots: Vec::new(),
             instruction_ids: HashSet::new(),
         };
         let (body, _) = compiler.compile_block(&program.body, &HashMap::new())?;
         Ok(Self {
-            card_id: card_id.into(),
-            face_id: face_id.into(),
+            owner,
+            context,
+            target_projection,
             body,
             slots: compiler.slots,
         })
@@ -176,7 +215,7 @@ impl Compiler {
                         compile_input(effect, instruction.input.as_deref(), &names, &self.slots)?;
                     (
                         input,
-                        validate_and_result_types(effect)?,
+                        validate_and_result_types(effect, self.context)?,
                         CompiledInstructionKind::Perform(effect.clone()),
                     )
                 }
@@ -401,10 +440,13 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
     })
 }
 
-fn validate_and_result_types(effect: &SpellEffectKind) -> Result<Vec<ResultType>, String> {
+fn validate_and_result_types(
+    effect: &SpellEffectKind,
+    context: EffectContext,
+) -> Result<Vec<ResultType>, String> {
     match effect {
         SpellEffectKind::Draw { who, count } => {
-            effect.validate(EffectContext::Spell)?;
+            effect.validate(context)?;
             validate_program_controller(*who, "Draw recipient")?;
             validate_program_amount(count)?;
             validate_fixed_program_amount("Draw count", count)?;
@@ -416,7 +458,7 @@ fn validate_and_result_types(effect: &SpellEffectKind) -> Result<Vec<ResultType>
             }])
         }
         SpellEffectKind::Discard { who, quantity } => {
-            effect.validate(EffectContext::Spell)?;
+            effect.validate(context)?;
             validate_program_controller(*who, "Discard recipient")?;
             Ok(vec![ResultType::DiscardReceipt {
                 who: *who,
@@ -433,7 +475,7 @@ fn validate_and_result_types(effect: &SpellEffectKind) -> Result<Vec<ResultType>
             constraints,
             ..
         } => {
-            effect.validate(EffectContext::Spell)?;
+            effect.validate(context)?;
             validate_program_controller(*chooser, "ChoosePermanents chooser")?;
             validate_program_choice_filter(filter)?;
             if !constraints.is_empty() {
@@ -451,7 +493,7 @@ fn validate_and_result_types(effect: &SpellEffectKind) -> Result<Vec<ResultType>
             }])
         }
         SpellEffectKind::UntapChosenPermanents => {
-            effect.validate(EffectContext::Spell)?;
+            effect.validate(context)?;
             Ok(Vec::new())
         }
         SpellEffectKind::SelectHandCards {
@@ -459,7 +501,7 @@ fn validate_and_result_types(effect: &SpellEffectKind) -> Result<Vec<ResultType>
             ordered,
             prompt,
         } => {
-            count.validate_effect(EffectContext::Spell)?;
+            count.validate_effect(context)?;
             validate_program_amount(count)?;
             validate_fixed_program_amount("SelectHandCards count", count)?;
             if prompt.trim().is_empty() {

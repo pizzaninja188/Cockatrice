@@ -6,7 +6,7 @@ pub mod state;
 
 pub use engine::{Characteristics, EngineDeck, EngineError, GameEngine};
 pub use state::{
-    AffectedScope, AttachmentRecipient, ContinuousEffect, GameObject, GameState, ObjectId,
-    OpeningSequence, PlayerId, TurnStep, Zone,
+    AbilityDefinitionId, AffectedScope, AttachmentRecipient, ContinuousEffect, GameObject,
+    GameState, ObjectId, OpeningSequence, PlayerId, TurnStep, Zone,
 };
 pub mod diagnostic_json;
