@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{
     Color, ContinuousEffectKind, CounterKind, EffectDuration, Keyword, StaticAbilityDef,
@@ -62,7 +63,7 @@ fn token_copy_and_populate_create_independent_tokens() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "cackling_counterpart");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .unwrap();
     pass_both_players(&mut engine);
     let token = engine.state.players[0]
@@ -78,14 +79,16 @@ fn token_copy_and_populate_create_independent_tokens() {
     ensure_in_hand(&mut engine, 0, "wake_the_reflections");
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "wake_the_reflections");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     let pending = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::CopySource);
     assert_eq!(pending.presentation.candidates, vec![token]);
     assert_eq!(pending.presentation.min, 1);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![token]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![token]))
         .unwrap();
     assert_eq!(engine.state.players[0].battlefield.len(), 3);
 }
@@ -123,10 +126,10 @@ fn cast_copy(engine: &mut GameEngine, source: u32) -> (u32, RuledEventBatch) {
     grant_pool(engine, 0);
     let slot = hand_index_for_card(engine, 0, "cackling_counterpart");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    let batch = engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let batch = engine.apply_scenario_command(1, &pass()).unwrap();
     let tokens = token_created_events(&batch);
     assert_eq!(tokens.len(), 1);
     (tokens[0].object_id, batch)
@@ -157,13 +160,13 @@ fn issue_237_double_faced_tokens_transform_and_populate_independently() {
     let (token, _) = cast_copy(&mut engine, source);
     begin_populate(&mut engine);
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![token]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![token]))
         .unwrap();
     let populated = token_created_events(&batch)[0].object_id;
     // Move the actual card away: both remaining Werewolf triggers must come from token faces.
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -193,7 +196,7 @@ fn issue_237_double_faced_tokens_transform_and_populate_independently() {
         } else {
             pass()
         };
-        engine.apply_command(player, &command).unwrap();
+        engine.apply_scenario_command(player, &command).unwrap();
     }
     answer_trigger_order_in_engine_order(&mut engine);
     assert_eq!(engine.state.stack.len(), 2);
@@ -216,7 +219,9 @@ fn begin_populate(engine: &mut GameEngine) {
     ensure_in_hand(engine, 0, "wake_the_reflections");
     grant_pool(engine, 0);
     let slot = hand_index_for_card(engine, 0, "wake_the_reflections");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(engine);
 }
 
@@ -290,7 +295,7 @@ fn cackling_counterpart_flashback_creates_a_token_and_exiles_the_spell() {
         .unwrap();
     grant_pool(&mut engine, 0);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CastSpell(CastSpell {
@@ -310,8 +315,8 @@ fn cackling_counterpart_flashback_creates_a_token_and_exiles_the_spell() {
             },
         )
         .unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    let batch = engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let batch = engine.apply_scenario_command(1, &pass()).unwrap();
     let tokens = token_created_events(&batch);
     assert_eq!(tokens.len(), 1);
     assert_ne!(tokens[0].object_id, first);
@@ -356,7 +361,7 @@ fn populate_resumes_effect_tail_after_a_copied_entry_choice() {
     apply_ability(&mut engine, 0, source, 0, vec![]).unwrap();
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .unwrap();
     assert_eq!(
         engine.state.players[0].life, 20,
@@ -373,7 +378,7 @@ fn populate_resumes_effect_tail_after_a_copied_entry_choice() {
         ChoiceKind::CopySource
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .unwrap();
     assert_eq!(engine.state.players[0].life, 23);
     assert!(engine.state.pending_resolution.is_none());
@@ -387,7 +392,7 @@ fn token_copy_and_populate_replay_identically() {
         let (copy, batch) = cast_copy(&mut engine, source);
         begin_populate(&mut engine);
         let chosen = engine
-            .apply_command(0, &submit_resolution_choice(vec![copy]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![copy]))
             .unwrap();
         (vec![batch, chosen], engine.state.command_index)
     }
@@ -439,7 +444,7 @@ fn issue_164_token_copy_has_its_own_cap_and_accepted_commands_replay_identically
             vec![]
         };
         let command = cast_spell(hand_index_for_card(&engine, 0, card), targets);
-        batches.push(engine.apply_command(0, &command).unwrap());
+        batches.push(engine.apply_scenario_command(0, &command).unwrap());
         commands.push((0, command));
         while !engine.state.stack.is_empty() {
             assert!(
@@ -448,7 +453,7 @@ fn issue_164_token_copy_has_its_own_cap_and_accepted_commands_replay_identically
             );
             for player in [0, 1] {
                 let command = pass();
-                batches.push(engine.apply_command(player, &command).unwrap());
+                batches.push(engine.apply_scenario_command(player, &command).unwrap());
                 commands.push((player, command));
                 for (order_player, order_command, order_batch) in
                     answer_simultaneous_entry_order_in_engine_order(&mut engine)
@@ -468,7 +473,7 @@ fn issue_164_token_copy_has_its_own_cap_and_accepted_commands_replay_identically
     let (mut replay, _) = setup();
     let replayed = commands
         .iter()
-        .map(|(player, command)| replay.apply_command(*player, command).unwrap())
+        .map(|(player, command)| replay.apply_scenario_command(*player, command).unwrap())
         .collect::<Vec<_>>();
     assert_eq!(replayed, batches);
     assert_eq!(
@@ -584,14 +589,14 @@ fn token_copy_populate_rejects_wrong_empty_duplicate_and_stale_choices() {
         (0, vec![copy, copy]),
     ] {
         assert!(engine
-            .apply_command(player, &submit_resolution_choice(chosen))
+            .apply_scenario_command(player, &submit_resolution_choice(chosen))
             .is_err());
         assert!(engine.state.pending_resolution.is_some());
         assert_eq!(engine.state.command_index, index);
     }
     *engine.state.zone_change_generation.entry(copy).or_default() += 1;
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![copy]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![copy]))
         .is_err());
     assert!(engine.state.pending_resolution.is_some());
     assert_eq!(engine.state.players[0].battlefield.len(), 2);
@@ -627,7 +632,7 @@ fn token_copy_populate_does_not_target_and_no_tokens_is_a_noop() {
         vec![copy]
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![copy]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![copy]))
         .unwrap();
     assert_eq!(engine.state.players[0].battlefield.len(), 3);
 }
@@ -640,7 +645,7 @@ fn token_copy_bounce_removes_only_the_token() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(copy)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(copy)))
         .unwrap();
     pass_both_players(&mut engine);
     assert!(!engine.state.objects.contains_key(&copy));
@@ -680,7 +685,7 @@ fn token_copy_copied_etb_and_populate_etb_each_trigger_once() {
     assert_eq!(engine.state.players[0].hand.len(), hand + 1);
     begin_populate(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![copy]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![copy]))
         .unwrap();
     assert_eq!(engine.state.stack.len(), 1);
     let hand = engine.state.players[0].hand.len();
@@ -744,10 +749,12 @@ fn token_copy_populate_uses_controller_not_owner_with_three_seats() {
     ensure_in_hand(&mut engine, 0, "wake_the_reflections");
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "wake_the_reflections");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     for _ in 0..3 {
         let player = engine.state.priority_player_id();
-        engine.apply_command(player, &pass()).unwrap();
+        engine.apply_scenario_command(player, &pass()).unwrap();
     }
     assert_eq!(
         engine
@@ -760,10 +767,10 @@ fn token_copy_populate_uses_controller_not_owner_with_three_seats() {
         vec![copy]
     );
     assert!(engine
-        .apply_command(7, &submit_resolution_choice(vec![third]))
+        .apply_scenario_command(7, &submit_resolution_choice(vec![third]))
         .is_err());
     engine
-        .apply_command(0, &submit_resolution_choice(vec![copy]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![copy]))
         .unwrap();
     let copied = engine.state.players[0]
         .battlefield
@@ -780,7 +787,7 @@ fn token_copy_target_that_leaves_before_resolution_creates_nothing() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "cackling_counterpart");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .unwrap();
     engine.state.objects.get_mut(&source).unwrap().zone = Zone::Graveyard;
     engine.state.players[0]
@@ -792,8 +799,8 @@ fn token_copy_target_that_leaves_before_resolution_creates_nothing() {
         .zone_change_generation
         .entry(source)
         .or_default() += 1;
-    engine.apply_command(0, &pass()).unwrap();
-    let batch = engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let batch = engine.apply_scenario_command(1, &pass()).unwrap();
     assert!(token_created_events(&batch).is_empty());
     assert!(engine.state.stack.is_empty());
 }
@@ -841,7 +848,7 @@ fn resolving_clone_with_source(source_card_id: &str, seed: u64) -> (GameEngine, 
     );
     let clone = hand_index_for_card(&engine, 0, "clone");
     engine
-        .apply_command(0, &cast_spell(clone, vec![]))
+        .apply_scenario_command(0, &cast_spell(clone, vec![]))
         .expect("cast Clone");
     pass_both_players(&mut engine);
     (engine, source)
@@ -892,7 +899,7 @@ fn clone_chooses_its_copy_source_during_resolution_not_casting() {
 
     let clone = hand_index_for_card(&engine, 0, "clone");
     let cast = engine
-        .apply_command(0, &cast_spell(clone, vec![]))
+        .apply_scenario_command(0, &cast_spell(clone, vec![]))
         .expect("cast Clone without a target");
     assert!(
         find_resolution_choice(&cast).is_none(),
@@ -927,7 +934,7 @@ fn clone_chooses_its_copy_source_during_resolution_not_casting() {
 fn issue_175_clone_copies_the_life_gain_prohibition() {
     let (mut engine, source) = resolving_clone_with_source("giant_cindermaw", 175_501);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .unwrap();
     let clone = battlefield_object_for_card(&engine, 0, "clone");
     assert_eq!(engine.effective_power(clone), Some(4));
@@ -935,7 +942,7 @@ fn issue_175_clone_copies_the_life_gain_prohibition() {
     // Leave the real copy as the only prohibition source, then activate an ordinary gain.
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -951,7 +958,7 @@ fn issue_175_clone_copies_the_life_gain_prohibition() {
         .unwrap();
     let gnomes = inject_creature_on_battlefield(&mut engine, 0, "bottle_gnomes");
     engine
-        .apply_command(0, &activate_ability(gnomes, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(gnomes, 0, vec![]))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.players[0].life, 20);
@@ -1009,13 +1016,15 @@ fn countered_clone_never_emits_a_copy_source_choice() {
 
     let clone = hand_index_for_card(&engine, 0, "clone");
     engine
-        .apply_command(0, &cast_spell(clone, vec![]))
+        .apply_scenario_command(0, &cast_spell(clone, vec![]))
         .expect("cast Clone");
     let clone_spell = engine.state.stack.last().expect("Clone on stack").id;
-    engine.apply_command(0, &pass()).expect("pass to opponent");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass to opponent");
     let scatter = hand_index_for_card(&engine, 1, "essence_scatter");
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_spell(
                 scatter,
@@ -1063,7 +1072,7 @@ fn clone_copies_printed_values_but_not_source_status_counters_damage_or_pump() {
     });
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("copy Serra Angel");
     let clone = battlefield_object_for_card(&engine, 0, "clone");
     let object = &engine.state.objects[&clone];
@@ -1106,7 +1115,7 @@ fn clone_copies_printed_values_but_not_source_status_counters_damage_or_pump() {
 fn clone_copies_safewright_cavalrys_blocker_cap() {
     let (mut engine, source) = resolving_clone_with_source("safewright_cavalry", 160_008);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("copy Safewright Cavalry");
     let clone = battlefield_object_for_card(&engine, 0, "clone");
     assert!(matches!(
@@ -1123,7 +1132,7 @@ fn clone_copies_safewright_cavalrys_blocker_cap() {
 fn conditional_characteristics_clone_inherits_the_copied_static_ability() {
     let (mut engine, source) = resolving_clone_with_source("gearsmith_guardian", 78_008);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("copy Gearsmith Guardian");
     let clone = battlefield_object_for_card(&engine, 0, "clone");
 
@@ -1140,7 +1149,7 @@ fn conditional_characteristics_clone_inherits_the_copied_static_ability() {
 fn clone_re_evaluates_entry_replacements_from_the_copied_face() {
     let (mut engine, source) = resolving_clone_with_source("diregraf_ghoul", 45_003);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("copy Diregraf Ghoul");
 
     let clone = battlefield_object_for_card(&engine, 0, "clone");
@@ -1168,7 +1177,7 @@ fn clone_decline_finishes_entry_and_zero_toughness_sba() {
         .expect("Clone object")
         .id;
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("decline copy");
 
     assert!(engine.state.pending_resolution.is_none());
@@ -1186,7 +1195,7 @@ fn stale_copy_source_is_rejected_without_clearing_the_choice() {
     engine.state.objects.get_mut(&source).expect("source").zone = Zone::Graveyard;
 
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .is_err());
     let pending = engine
         .state
@@ -1235,7 +1244,7 @@ fn copying_an_already_copied_clone_uses_its_layer_one_values() {
         grant_pool(&mut engine, 0);
         let hand_clone = hand_index_for_card(&engine, 0, "clone");
         engine
-            .apply_command(0, &cast_spell(hand_clone, vec![]))
+            .apply_scenario_command(0, &cast_spell(hand_clone, vec![]))
             .expect("cast Clone");
         pass_both_players(&mut engine);
         let actual_source = if source == 0 {
@@ -1249,7 +1258,7 @@ fn copying_an_already_copied_clone_uses_its_layer_one_values() {
             source
         };
         engine
-            .apply_command(0, &submit_resolution_choice(vec![actual_source]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![actual_source]))
             .expect("choose copy source");
     }
 
@@ -1298,7 +1307,7 @@ fn clone_can_copy_a_registry_backed_token() {
     grant_pool(&mut engine, 0);
     let alarm = hand_index_for_card(&engine, 0, "raise_the_alarm");
     engine
-        .apply_command(0, &cast_spell(alarm, vec![]))
+        .apply_scenario_command(0, &cast_spell(alarm, vec![]))
         .expect("cast Raise the Alarm");
     pass_both_players(&mut engine);
     let soldier = battlefield_token_oids(&engine, 0, "soldier_w_1_1")[0];
@@ -1306,11 +1315,11 @@ fn clone_can_copy_a_registry_backed_token() {
     grant_pool(&mut engine, 0);
     let clone = hand_index_for_card(&engine, 0, "clone");
     engine
-        .apply_command(0, &cast_spell(clone, vec![]))
+        .apply_scenario_command(0, &cast_spell(clone, vec![]))
         .expect("cast Clone");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![soldier]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![soldier]))
         .expect("copy Soldier token");
 
     let clone = battlefield_object_for_card(&engine, 0, "clone");
@@ -1332,7 +1341,7 @@ fn clone_can_copy_a_registry_backed_token() {
 fn copied_activated_ability_uses_the_effective_face() {
     let (mut engine, source) = resolving_clone_with_source("prodigal_sorcerer", 45_008);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("copy Prodigal Sorcerer");
     let clone = battlefield_object_for_card(&engine, 0, "clone");
     engine
@@ -1355,7 +1364,7 @@ fn copied_enters_trigger_is_put_on_the_stack_from_the_effective_face() {
     inject_library_card(&mut engine, 0, "forest");
     let hand_before = engine.state.players[0].hand.len();
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("copy Elvish Visionary");
 
     let trigger = engine.state.stack.last().expect("copied ETB trigger");
@@ -1369,7 +1378,7 @@ fn copied_enters_trigger_is_put_on_the_stack_from_the_effective_face() {
 fn leaving_the_battlefield_clears_copy_values_and_restores_clone() {
     let (mut engine, source) = resolving_clone_with_source("serra_angel", 45_009);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("copy Serra Angel");
     let clone = battlefield_object_for_card(&engine, 0, "clone");
     engine.enable_dev_commands();
@@ -1383,7 +1392,9 @@ fn leaving_the_battlefield_clears_copy_values_and_restores_clone() {
             })),
         })),
     };
-    engine.apply_command(0, &command).expect("move Clone");
+    engine
+        .apply_scenario_command(0, &command)
+        .expect("move Clone");
 
     let object = &engine.state.objects[&clone];
     assert_eq!(object.zone, Zone::Graveyard);
@@ -1425,7 +1436,7 @@ fn issue_237_double_faced_entry_choice_freezes_both_faces_before_suspending() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "cackling_counterpart");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .unwrap();
     pass_both_players(&mut engine);
     assert!(engine.state.pending_resolution.is_some());
@@ -1441,7 +1452,7 @@ fn issue_237_double_faced_entry_choice_freezes_both_faces_before_suspending() {
         .face
         .power = Some(9);
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .unwrap();
     let token = token_created_events(&batch)[0].object_id;
     assert_eq!(engine.effective_power(token), Some(1));

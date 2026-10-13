@@ -5,10 +5,11 @@
 //! 301.5b covers Equipment entering unattached; 115.1d/603.3d cover the targeted trigger and its
 //! no-legal-target case; 608.2b rechecks the target; 613.1f applies the granted keyword;
 //! 702.6a makes Equip sorcery-speed, 702.8a defines Flash timing, and 702.12a-b define indestructible.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::dev_command::Dev;
 use tricerules_proto::ruled::v1::{DevCommand, DevMoveCard, DevZone};
 
@@ -42,7 +43,7 @@ fn choose_trigger_target(object_id: u32) -> RuledCommand {
 fn move_isamaru_to_graveyard(engine: &mut GameEngine) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -79,7 +80,7 @@ fn mithril_coat_casts_with_flash_without_creatures_and_keeps_its_own_indestructi
     );
     let slot = hand_index_for_card(&engine, 0, MITHRIL_COAT);
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("Flash lets Mithril Coat be cast at instant timing with no creatures");
     assert_eq!(engine.state.objects[&coat].zone, Zone::Stack);
 
@@ -112,7 +113,7 @@ fn mithril_coat_etb_selects_only_a_legendary_creature_and_grants_indestructible(
 
     let slot = hand_index_for_card(&engine, 0, MITHRIL_COAT);
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Mithril Coat");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&coat].zone, Zone::Battlefield);
@@ -128,7 +129,7 @@ fn mithril_coat_etb_selects_only_a_legendary_creature_and_grants_indestructible(
     assert!(!legal_targets.contains(&nonlegendary));
 
     engine
-        .apply_command(0, &choose_trigger_target(legendary))
+        .apply_scenario_command(0, &choose_trigger_target(legendary))
         .expect("choose the only legal legendary creature");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -157,12 +158,12 @@ fn mithril_coat_remains_unattached_if_its_etb_target_becomes_illegal() {
 
     let slot = hand_index_for_card(&engine, 0, MITHRIL_COAT);
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Mithril Coat");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(0, &choose_trigger_target(legendary))
+        .apply_scenario_command(0, &choose_trigger_target(legendary))
         .expect("choose the legal legendary target");
     assert_eq!(engine.state.stack.len(), 1);
 
@@ -192,7 +193,7 @@ fn mithril_coat_equip_three_targets_any_controlled_creature_at_sorcery_speed() {
 
     let slot = hand_index_for_card(&engine, 0, MITHRIL_COAT);
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Mithril Coat");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&coat].attached_to, None);

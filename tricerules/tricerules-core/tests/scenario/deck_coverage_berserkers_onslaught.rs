@@ -3,10 +3,11 @@
 //! Scryfall Oracle and rulings were checked on 2026-09-26; its rulings endpoint has no entries.
 //! CR 613.1f places the granted ability in layer 6, and CR 702.4a-b governs double strike and
 //! its two combat-damage steps.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 
 const BERSERKERS_ONSLAUGHT: &str = "berserkers_onslaught";
 
@@ -29,7 +30,7 @@ fn cast_onslaught(engine: &mut GameEngine) -> u32 {
     grant_pool(engine, 0);
     let slot = hand_index_for_card(engine, 0, BERSERKERS_ONSLAUGHT);
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Berserkers' Onslaught");
     resolve_entire_stack_two_player(engine);
     assert_eq!(engine.state.objects[&object].zone, Zone::Battlefield);
@@ -39,7 +40,7 @@ fn cast_onslaught(engine: &mut GameEngine) -> u32 {
 fn pass_once(engine: &mut GameEngine) {
     let actor = engine.state.priority_player_id();
     engine
-        .apply_command(actor, &pass())
+        .apply_scenario_command(actor, &pass())
         .expect("pass priority toward the requested step");
 }
 
@@ -60,7 +61,7 @@ fn advance_to_step(engine: &mut GameEngine, wanted: TurnStep) {
 
 fn enter_declare_attackers(engine: &mut GameEngine, active_player: i32) {
     engine
-        .apply_command(active_player, &primitive_yield())
+        .apply_scenario_command(active_player, &primitive_yield())
         .expect("yield from main phase to beginning of combat");
     advance_to_step(engine, TurnStep::DeclareAttackers);
 }
@@ -75,7 +76,10 @@ fn advance_to_next_turn(engine: &mut GameEngine) {
             let player_index = engine.state.player_idx(player).expect("cleanup player");
             let excess = engine.state.players[player_index].hand.len() - 7;
             engine
-                .apply_command(player, &discard_cleanup_batch((0..excess as u32).collect()))
+                .apply_scenario_command(
+                    player,
+                    &discard_cleanup_batch((0..excess as u32).collect()),
+                )
                 .expect("discard down to hand size during cleanup");
         } else {
             pass_once(engine);
@@ -93,7 +97,10 @@ fn advance_to_player_main1(engine: &mut GameEngine, player: i32) {
             let player_index = engine.state.player_idx(player).expect("cleanup player");
             let excess = engine.state.players[player_index].hand.len() - 7;
             engine
-                .apply_command(player, &discard_cleanup_batch((0..excess as u32).collect()))
+                .apply_scenario_command(
+                    player,
+                    &discard_cleanup_batch((0..excess as u32).collect()),
+                )
                 .expect("discard down to hand size during cleanup");
         } else {
             pass_once(engine);
@@ -114,7 +121,7 @@ fn onslaught_grants_double_strike_only_to_its_controllers_attackers_for_both_dam
     assert!(!engine.effective_has_keyword(attacker, Keyword::DoubleStrike));
     enter_declare_attackers(&mut engine, 0);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare one attacker");
 
     assert!(
@@ -133,7 +140,7 @@ fn onslaught_grants_double_strike_only_to_its_controllers_attackers_for_both_dam
     pass_round(&mut engine);
     assert_eq!(engine.state.turn_step, TurnStep::DeclareBlockers);
     engine
-        .apply_command(1, &declare_blockers(vec![]))
+        .apply_scenario_command(1, &declare_blockers(vec![]))
         .expect("declare no blockers");
     pass_round(&mut engine);
 
@@ -160,7 +167,7 @@ fn onslaught_grants_double_strike_only_to_its_controllers_attackers_for_both_dam
     advance_to_player_main1(&mut engine, 1);
     enter_declare_attackers(&mut engine, 1);
     engine
-        .apply_command(1, &declare_attackers(vec![opposing_attacker]))
+        .apply_scenario_command(1, &declare_attackers(vec![opposing_attacker]))
         .expect("the opponent declares an attacker");
     assert!(
         !engine.effective_has_keyword(opposing_attacker, Keyword::DoubleStrike),

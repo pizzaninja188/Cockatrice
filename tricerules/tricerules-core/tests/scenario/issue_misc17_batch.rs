@@ -8,6 +8,7 @@
 //! (until-end-of-turn keyword grants), CR 701.22 (scry), CR 702.4 (double strike), CR 702.9
 //! (flying), CR 702.11 (hexproof), CR 702.17 (reach), CR 702.29 (cycling), CR 702.122 (crew),
 //! and CR 111.10 (Treasure token).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -145,7 +146,8 @@ fn issue_misc17_runaway_boulder_deals_six_to_an_opponent_creature() {
     let mine = inject_creature_on_battlefield(&mut own, 0, "grizzly_bears");
     cast(&mut own, 0, "runaway_boulder", vec![]);
     assert!(
-        own.apply_command(0, &choose_trigger_target(mine)).is_err(),
+        own.apply_scenario_command(0, &choose_trigger_target(mine))
+            .is_err(),
         "only an opponent's creature is a legal target"
     );
 
@@ -259,7 +261,8 @@ fn issue_misc17_plumecreed_escort_grants_hexproof_to_a_creature_you_control() {
     let enemy = inject_creature_on_battlefield(&mut own, 1, "grizzly_bears");
     cast(&mut own, 0, "plumecreed_escort", vec![]);
     assert!(
-        own.apply_command(0, &choose_trigger_target(enemy)).is_err(),
+        own.apply_scenario_command(0, &choose_trigger_target(enemy))
+            .is_err(),
         "an opponent's creature is not a legal target"
     );
 }

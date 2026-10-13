@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::CounterKind;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
@@ -60,10 +61,10 @@ fn setup_unblocked_sneak_card(
     ensure_card_in_hand(&mut engine, 0, "grizzly_bears");
     let attacker = put_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     let slot = hand_index_for_card(&engine, 0, sneak_card);
     (engine, attacker, slot)
 }
@@ -114,7 +115,9 @@ fn issue_179_sneak_returns_the_attacker_atomically_and_records_the_method() {
     let (mut engine, attacker, slot) = setup_unblocked_attacker(179_002);
     grant_pool(&mut engine, 0);
     let command = sneak_cast(&engine, slot, attacker);
-    let batch = engine.apply_command(0, &command).expect("pay Sneak cost");
+    let batch = engine
+        .apply_scenario_command(0, &command)
+        .expect("pay Sneak cost");
 
     assert_eq!(engine.state.objects[&attacker].zone, Zone::Hand);
     assert_eq!(engine.state.stack.len(), 1);
@@ -131,7 +134,7 @@ fn issue_179_sneak_creature_enters_tapped_and_attacking_the_same_player() {
     let foot_ninjas = engine.state.players[0].hand[slot];
     grant_pool(&mut engine, 0);
     let command = sneak_cast(&engine, slot, attacker);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     resolve_entire_stack_two_player(&mut engine);
 
     assert_eq!(engine.state.objects[&foot_ninjas].zone, Zone::Battlefield);
@@ -166,10 +169,10 @@ fn issue_179_shredders_technique_loses_life_only_after_destroying_an_enchantment
     let attacker = put_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let enchantment = deploy_to_battlefield(&mut engine, 1, "glorious_anthem", false);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
 
     let slot = hand_index_for_card(&engine, 0, "shredders_technique");
     grant_pool(&mut engine, 0);
@@ -179,7 +182,7 @@ fn issue_179_shredders_technique_loses_life_only_after_destroying_an_enchantment
     };
     cast.targets = target_object(enchantment);
     cast.targets[0].kind = TargetRefKind::Permanent as i32;
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     resolve_entire_stack_two_player(&mut engine);
 
     assert_eq!(engine.state.objects[&enchantment].zone, Zone::Graveyard);
@@ -211,7 +214,7 @@ fn issue_179_sneak_is_not_available_before_blockers_or_for_a_blocked_attacker() 
     let attacker = put_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let blocker = put_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .unwrap();
 
     assert!(!engine.initial_response_batch().legal_by_player[&0]
@@ -219,10 +222,10 @@ fn issue_179_sneak_is_not_available_before_blockers_or_for_a_blocked_attacker() 
         .iter()
         .any(|action| action.cast_method == CastMethod::Sneak as i32));
 
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -250,7 +253,7 @@ fn issue_179_stale_attacker_generation_rejects_the_whole_payment() {
         .entry(attacker)
         .or_insert(0) += 1;
 
-    assert!(engine.apply_command(0, &command).is_err());
+    assert!(engine.apply_scenario_command(0, &command).is_err());
     assert_eq!(engine.state.players[0].mana_pool, mana_before);
     assert_eq!(engine.state.players[0].hand, hand_before);
     assert_eq!(engine.state.objects[&attacker].zone, Zone::Battlefield);
@@ -266,7 +269,7 @@ fn issue_179_sneak_can_cast_a_sorcery_in_the_post_blockers_window() {
     let library_before = engine.state.players[0].library.len();
     grant_pool(&mut engine, 0);
     engine
-        .apply_command(0, &sneak_cast(&engine, slot, attacker))
+        .apply_scenario_command(0, &sneak_cast(&engine, slot, attacker))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
 
@@ -283,7 +286,7 @@ fn issue_179_sneak_entry_fires_etb_but_not_attack_triggers() {
     inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     grant_pool(&mut engine, 0);
     let command = sneak_cast(&engine, slot, attacker);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     pass_both_players(&mut engine);
 
     assert_eq!(engine.state.objects[&shredder].zone, Zone::Battlefield);
@@ -344,7 +347,7 @@ fn issue_179_sneak_inherits_planeswalker_and_battle_defenders() {
             .cloned()
             .expect("permanent defender assignment");
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -353,14 +356,14 @@ fn issue_179_sneak_inherits_planeswalker_and_battle_defenders() {
                 },
             )
             .unwrap();
-        engine.apply_command(0, &pass()).unwrap();
-        engine.apply_command(1, &pass()).unwrap();
+        engine.apply_scenario_command(0, &pass()).unwrap();
+        engine.apply_scenario_command(1, &pass()).unwrap();
         let paid_assignment = engine.state.combat.as_ref().unwrap().attack_assignments[&attacker];
         let slot = hand_index_for_card(&engine, 0, "foot_ninjas");
         let entrant = engine.state.players[0].hand[slot];
         grant_pool(&mut engine, 0);
         let command = sneak_cast(&engine, slot, attacker);
-        engine.apply_command(0, &command).unwrap();
+        engine.apply_scenario_command(0, &command).unwrap();
         resolve_entire_stack_two_player(&mut engine);
 
         assert_eq!(
@@ -408,7 +411,7 @@ fn issue_179_sneak_enters_tapped_but_not_attacking_when_the_defender_is_stale() 
         .cloned()
         .unwrap();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -417,16 +420,16 @@ fn issue_179_sneak_enters_tapped_but_not_attacking_when_the_defender_is_stale() 
             },
         )
         .unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     let slot = hand_index_for_card(&engine, 0, "foot_ninjas");
     let entrant = engine.state.players[0].hand[slot];
     grant_pool(&mut engine, 0);
     let command = sneak_cast(&engine, slot, attacker);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -474,26 +477,26 @@ fn issue_179_spell_copy_keeps_the_sneak_choice_without_repaying_it() {
     ensure_card_in_hand(&mut engine, 1, "twincast");
     let attacker = put_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     grant_pool(&mut engine, 0);
     grant_pool(&mut engine, 1);
     let sneak_slot = hand_index_for_card(&engine, 0, "donatellos_technique");
     let command = sneak_cast(&engine, sneak_slot, attacker);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     let original = engine.state.stack[0].clone();
 
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     let twincast_slot = hand_index_for_card(&engine, 1, "twincast");
     let mut stack_target = target_object(original.id);
     stack_target[0].kind = TargetRefKind::Stack as i32;
     engine
-        .apply_command(1, &cast_spell(twincast_slot, stack_target))
+        .apply_scenario_command(1, &cast_spell(twincast_slot, stack_target))
         .unwrap();
-    engine.apply_command(1, &pass()).unwrap();
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
 
     let copy = engine
         .state

@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration, Keyword};
 use tricerules_core::{AffectedScope, ContinuousEffect};
 use tricerules_proto::ruled::v1::{
@@ -62,14 +63,14 @@ fn setup_tidebinder_over_hellhound(seed: u64) -> (GameEngine, u32, u32, u32) {
     );
 
     engine
-        .apply_command(0, &activate_ability(hellhound, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_ability(hellhound, 0, Vec::new()))
         .expect("activate Fiery Hellhound");
     let ability_id = engine.state.stack.last().expect("ability on stack").id;
 
     let tidebinder_slot = hand_index_for_card(&engine, 0, "tishanas_tidebinder");
     let tidebinder = engine.state.players[0].hand[tidebinder_slot];
     engine
-        .apply_command(0, &cast_spell(tidebinder_slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(tidebinder_slot, Vec::new()))
         .expect("cast Tishana's Tidebinder with flash");
     pass_both_players(&mut engine);
     assert!(engine.state.players[0].battlefield.contains(&tidebinder));
@@ -89,12 +90,16 @@ fn issue_207_tidebinder_publishes_counters_and_links_ability_loss_to_its_source(
     assert_eq!(targets.valid_stack_ids, vec![ability_id]);
 
     engine
-        .apply_command(0, &choose_trigger_target(ability_id, TargetRefKind::Stack))
+        .apply_scenario_command(0, &choose_trigger_target(ability_id, TargetRefKind::Stack))
         .expect("target the activated ability");
     let first = engine.state.priority_player_id();
     let second = if first == 0 { 1 } else { 0 };
-    engine.apply_command(first, &pass()).expect("first pass");
-    let resolved = engine.apply_command(second, &pass()).expect("second pass");
+    engine
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    let resolved = engine
+        .apply_scenario_command(second, &pass())
+        .expect("second pass");
 
     assert!(resolved.events.iter().any(|event| matches!(
         &event.ev,
@@ -127,7 +132,7 @@ fn issue_207_tidebinder_publishes_counters_and_links_ability_loss_to_its_source(
     ensure_in_hand(&mut engine, 0, "unsummon");
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(tidebinder)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(tidebinder)))
         .expect("cast Unsummon at Tidebinder");
     resolve_entire_stack_two_player(&mut engine);
     assert!(
@@ -155,7 +160,7 @@ fn issue_207_counter_ability_rejects_a_spell_target() {
     assert!(!targets.contains(&spell_id));
     assert_eq!(targets.len(), 1, "only the activated ability is legal");
     assert!(engine
-        .apply_command(0, &choose_trigger_target(spell_id, TargetRefKind::Stack),)
+        .apply_scenario_command(0, &choose_trigger_target(spell_id, TargetRefKind::Stack),)
         .is_err());
 }
 
@@ -163,13 +168,13 @@ fn issue_207_counter_ability_rejects_a_spell_target() {
 fn issue_207_tidebinder_leaving_before_resolution_prevents_only_the_ability_loss() {
     let (mut engine, hellhound, ability_id, tidebinder) = setup_tidebinder_over_hellhound(207_003);
     engine
-        .apply_command(0, &choose_trigger_target(ability_id, TargetRefKind::Stack))
+        .apply_scenario_command(0, &choose_trigger_target(ability_id, TargetRefKind::Stack))
         .expect("target the activated ability");
 
     ensure_in_hand(&mut engine, 0, "unsummon");
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(tidebinder)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(tidebinder)))
         .expect("respond by removing Tidebinder");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -214,7 +219,7 @@ fn setup_wasp(seed: u64) -> (GameEngine, u32, u32) {
     let slot = hand_index_for_card(&engine, 0, "the_wondrous_wasp");
     let wasp = engine.state.players[0].hand[slot];
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast The Wondrous Wasp with flash");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
@@ -225,7 +230,7 @@ fn setup_wasp(seed: u64) -> (GameEngine, u32, u32) {
 fn issue_207_wasp_taps_and_removes_abilities_until_wasp_leaves() {
     let (mut engine, target, wasp) = setup_wasp(207_010);
     engine
-        .apply_command(0, &choose_trigger_target(target, TargetRefKind::Permanent))
+        .apply_scenario_command(0, &choose_trigger_target(target, TargetRefKind::Permanent))
         .expect("choose Wasp target");
     pass_both_players(&mut engine);
     assert!(engine.state.objects[&target].tapped);
@@ -234,7 +239,7 @@ fn issue_207_wasp_taps_and_removes_abilities_until_wasp_leaves() {
     ensure_in_hand(&mut engine, 0, "unsummon");
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(wasp)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(wasp)))
         .expect("cast Unsummon at Wasp");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -248,13 +253,13 @@ fn issue_207_wasp_taps_and_removes_abilities_until_wasp_leaves() {
 fn issue_207_wasp_leaving_before_resolution_still_taps_but_never_removes_abilities() {
     let (mut engine, target, wasp) = setup_wasp(207_011);
     engine
-        .apply_command(0, &choose_trigger_target(target, TargetRefKind::Permanent))
+        .apply_scenario_command(0, &choose_trigger_target(target, TargetRefKind::Permanent))
         .expect("choose Wasp target");
 
     ensure_in_hand(&mut engine, 0, "unsummon");
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(wasp)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(wasp)))
         .expect("remove Wasp before its trigger resolves");
     pass_both_players(&mut engine);
     pass_both_players(&mut engine);
@@ -267,7 +272,7 @@ fn issue_207_wasp_leaving_before_resolution_still_taps_but_never_removes_abiliti
 fn issue_207_optional_wasp_target_can_be_declined() {
     let (mut engine, target, _) = setup_wasp(207_012);
     engine
-        .apply_command(0, &choose_no_trigger_targets())
+        .apply_scenario_command(0, &choose_no_trigger_targets())
         .expect("choose zero targets for Wasp");
     assert!(engine.state.pending_triggers.is_empty());
     pass_both_players(&mut engine);
@@ -308,18 +313,18 @@ fn issue_207_tidebinder_can_counter_a_triggered_ability_and_affect_its_source() 
     let wasp_slot = hand_index_for_card(&engine, 0, "the_wondrous_wasp");
     let wasp = engine.state.players[0].hand[wasp_slot];
     engine
-        .apply_command(0, &cast_spell(wasp_slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(wasp_slot, Vec::new()))
         .expect("cast Wasp");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &choose_trigger_target(target, TargetRefKind::Permanent))
+        .apply_scenario_command(0, &choose_trigger_target(target, TargetRefKind::Permanent))
         .expect("put Wasp trigger on the stack");
     let wasp_trigger = engine.state.stack.last().expect("Wasp trigger").id;
 
     let tidebinder_slot = hand_index_for_card(&engine, 0, "tishanas_tidebinder");
     let tidebinder = engine.state.players[0].hand[tidebinder_slot];
     engine
-        .apply_command(0, &cast_spell(tidebinder_slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(tidebinder_slot, Vec::new()))
         .expect("cast Tidebinder over the trigger");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
@@ -331,7 +336,7 @@ fn issue_207_tidebinder_can_counter_a_triggered_ability_and_affect_its_source() 
         vec![wasp_trigger]
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_target(wasp_trigger, TargetRefKind::Stack),
         )
@@ -368,7 +373,7 @@ fn issue_207_tidebinder_checks_the_countered_sources_current_types() {
     ability.card_id = "forest".into();
 
     engine
-        .apply_command(0, &choose_trigger_target(ability_id, TargetRefKind::Stack))
+        .apply_scenario_command(0, &choose_trigger_target(ability_id, TargetRefKind::Stack))
         .expect("target the land-sourced ability");
     pass_both_players(&mut engine);
     assert!(!engine.state.stack.iter().any(|item| item.id == ability_id));
@@ -383,13 +388,13 @@ fn issue_207_tidebinder_checks_the_countered_sources_current_types() {
 fn issue_207_countered_ability_source_zone_change_does_not_affect_its_new_incarnation() {
     let (mut engine, hellhound, ability_id, _) = setup_tidebinder_over_hellhound(207_022);
     engine
-        .apply_command(0, &choose_trigger_target(ability_id, TargetRefKind::Stack))
+        .apply_scenario_command(0, &choose_trigger_target(ability_id, TargetRefKind::Stack))
         .expect("target the activated ability");
 
     ensure_in_hand(&mut engine, 0, "unsummon");
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(hellhound)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(hellhound)))
         .expect("remove the ability source before Tidebinder resolves");
     pass_both_players(&mut engine);
     let departed_generation = engine.state.zone_change_generation[&hellhound];

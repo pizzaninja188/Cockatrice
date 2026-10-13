@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::Keyword;
 use tricerules_core::Zone;
@@ -39,10 +40,10 @@ fn phantom_interference_casts_both_spree_modes_with_one_atomic_total() {
     e.state.priority_idx = 1;
     e.state.players[1].mana_pool.red = 1;
     let bolt_slot = hand_index_for_card(&e, 1, "lightning_bolt");
-    e.apply_command(1, &cast_spell(bolt_slot, target_player(0)))
+    e.apply_scenario_command(1, &cast_spell(bolt_slot, target_player(0)))
         .expect("opponent spell supplies the Spree target");
     let bolt = e.state.stack.last().unwrap().id;
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("pass priority to the Phantom Interference player");
 
     e.state.players[0].mana_pool.blue = 1;
@@ -66,7 +67,7 @@ fn phantom_interference_casts_both_spree_modes_with_one_atomic_total() {
             ..Default::default()
         })),
     };
-    e.apply_command(0, &command)
+    e.apply_scenario_command(0, &command)
         .expect("both distinct options in one group are legal");
 
     let phantom = e.state.stack.last().unwrap();
@@ -113,7 +114,7 @@ fn phantom_interference_rejects_a_cost_linked_to_an_unchosen_mode_atomically() {
             ..Default::default()
         })),
     };
-    assert!(e.apply_command(0, &command).is_err());
+    assert!(e.apply_scenario_command(0, &command).is_err());
     assert_eq!(e.state.players[0].mana_pool, before_mana);
     assert_eq!(e.state.players[0].hand, before_hand);
     assert_eq!(e.state.stack.len(), before_stack_len);
@@ -158,11 +159,15 @@ fn final_showdown_chooses_during_resolution_and_applies_modes_in_printed_order()
             ..Default::default()
         })),
     };
-    e.apply_command(0, &command).expect("cast all three modes");
+    e.apply_scenario_command(0, &command)
+        .expect("cast all three modes");
     let first = e.state.priority_player_id();
     let second = if first == 0 { 1 } else { 0 };
-    e.apply_command(first, &pass()).expect("first pass");
-    let resolving = e.apply_command(second, &pass()).expect("second pass");
+    e.apply_scenario_command(first, &pass())
+        .expect("first pass");
+    let resolving = e
+        .apply_scenario_command(second, &pass())
+        .expect("second pass");
     let choice = find_resolution_choice(&resolving).expect("resolution-time permanent choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::PermanentObjects);
     assert_eq!(choice.prompt_text, "Choose a creature you control.");
@@ -171,7 +176,7 @@ fn final_showdown_chooses_during_resolution_and_applies_modes_in_printed_order()
     assert!(choice.candidate_object_ids.contains(&own_other));
     assert!(!choice.candidate_object_ids.contains(&opposing));
 
-    e.apply_command(0, &submit_resolution_choice(vec![survivor]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![survivor]))
         .expect("choose the creature that gains indestructible");
     assert_eq!(e.state.objects[&survivor].zone, Zone::Battlefield);
     assert_eq!(e.state.objects[&own_other].zone, Zone::Graveyard);

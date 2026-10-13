@@ -1,8 +1,9 @@
 //! Issue #108: controller-relative graveyard card and distinct-card-type conditions.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::dev_command::Dev;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 use tricerules_proto::ruled::v1::{DevCommand, DevPutCardInZone, DevZone, RuledCommand};
@@ -22,7 +23,7 @@ fn put_ready(player: i32, card_name: &str) -> RuledCommand {
 
 fn put(engine: &mut GameEngine, player: i32, card_name: &str, card_id: &str) -> u32 {
     engine
-        .apply_command(player, &put_ready(player, card_name))
+        .apply_scenario_command(player, &put_ready(player, card_name))
         .unwrap_or_else(|error| panic!("put {card_name}: {error:?}"));
     battlefield_object_for_card(engine, player as usize, card_id)
 }
@@ -57,12 +58,12 @@ fn remove_from_graveyard(engine: &mut GameEngine, player: usize, object_id: u32)
 
 fn declare_as_attacker(engine: &mut GameEngine, attacker: u32) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("move to beginning of combat");
     pass_both_players(engine);
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
 }
 
@@ -172,9 +173,11 @@ fn issue_108_spineseeker_searches_for_and_reveals_a_basic_land() {
         "the ETB ability is on the stack"
     );
 
-    engine.apply_command(0, &pass()).expect("controller passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
     let search_batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and the ETB ability resolves");
     let choice = find_resolution_choice(&search_batch).expect("basic-land search choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
@@ -183,7 +186,7 @@ fn issue_108_spineseeker_searches_for_and_reveals_a_basic_land() {
     assert!(!choice.candidate_object_ids.contains(&taiga));
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .expect("choose and reveal Forest");
     assert_eq!(engine.state.objects[&forest].zone, Zone::Hand);
     assert!(engine.state.players[0].hand.contains(&forest));

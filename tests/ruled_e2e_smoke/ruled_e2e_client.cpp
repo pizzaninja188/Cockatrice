@@ -249,6 +249,11 @@ void SmokeClient::sendRuled(const ruled::v1::RuledCommand &cmd, const QString &w
     cont.set_game_id(gameId);
     std::string bytes;
     ruled::v1::RuledCommand explicitCommand = cmd;
+    if (explicitCommand.has_submit_resolution_choice() &&
+        explicitCommand.submit_resolution_choice().resolution_prompt_id() == 0 && resolutionPromptSnapshotValid &&
+        resolutionPromptActive && currentResolutionPromptId != 0 && resolutionPromptDeciderPlayerId == myId) {
+        explicitCommand.mutable_submit_resolution_choice()->set_resolution_prompt_id(currentResolutionPromptId);
+    }
     if (explicitCommand.has_cast_spell() &&
         explicitCommand.cast_spell().cast_method() == ruled::v1::CAST_METHOD_UNSPECIFIED) {
         explicitCommand.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
@@ -341,11 +346,39 @@ void SmokeClient::handleGameEventContainer(const GameEventContainer &cont)
 
 void SmokeClient::applyRuledBatch(const ruled::v1::RuledEventBatch &batch)
 {
-    if (batch.has_payment_preview()) {
+    const bool purePaymentPreview = batch.has_payment_preview() && batch.events_size() == 0 &&
+                                    batch.legal_by_player().empty();
+    if (purePaymentPreview) {
         ++paymentPreviewCount;
         paymentPreview = batch.payment_preview();
         onPaymentPreview(batch);
         return;
+    }
+    if (batch.has_resolution_prompt_state()) {
+        const auto &prompt = batch.resolution_prompt_state();
+        const bool decidingPlayerIsValid = prompt.active() ? prompt.deciding_player_id() >= 0
+                                                           : prompt.deciding_player_id() == 0;
+        const bool promptIdMatchesRecipient =
+            prompt.active() && prompt.deciding_player_id() == myId
+                ? prompt.has_resolution_prompt_id() && prompt.resolution_prompt_id() != 0
+                : !prompt.has_resolution_prompt_id();
+        resolutionPromptSnapshotValid = decidingPlayerIsValid && promptIdMatchesRecipient;
+        resolutionPromptActive = prompt.active();
+        resolutionPromptDeciderPlayerId = prompt.deciding_player_id();
+        currentResolutionPromptId = resolutionPromptSnapshotValid && prompt.active() &&
+                                            prompt.deciding_player_id() == myId && prompt.has_resolution_prompt_id()
+                                        ? prompt.resolution_prompt_id()
+                                        : 0;
+    } else {
+        resolutionPromptSnapshotValid = false;
+        resolutionPromptActive = false;
+        resolutionPromptDeciderPlayerId = -1;
+        currentResolutionPromptId = 0;
+    }
+    if (batch.has_payment_preview()) {
+        ++paymentPreviewCount;
+        paymentPreview = batch.payment_preview();
+        onPaymentPreview(batch);
     }
     const auto localLegal = batch.legal_by_player().find(myId);
     const bool spellAnnouncementBatch =

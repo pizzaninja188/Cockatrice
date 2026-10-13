@@ -1,10 +1,11 @@
 //! Mimic Vat's linked imprint and exact token-copy behavior.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::registry;
 use tricerules_cards::{
     ContinuousEffectKind, EffectDuration, Keyword, PermanentTypeFilter, TypeLineAddition,
 };
-use tricerules_core::{AffectedScope, ContinuousEffect, EngineDeck, GameEngine, TurnStep, Zone};
+use tricerules_core::{AffectedScope, ContinuousEffect, EngineDeck, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     dev_command, ruled_command::Cmd, DevCommand, DevMoveCard, DevZone, ResolutionChoiceDecision,
     RuledCommand, SubmitResolutionChoice,
@@ -26,7 +27,7 @@ fn creature_death_observer_retains_the_exact_event_object_for_imprint() {
     engine.state.objects.get_mut(&dying).unwrap().damage = 2;
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("lethal damage is checked during priority processing");
 
     assert_eq!(engine.state.objects[&dying].zone, Zone::Graveyard);
@@ -123,7 +124,7 @@ fn kill_creature(engine: &mut GameEngine, player: usize, card_id: &str, damage: 
     engine.state.objects.get_mut(&object).unwrap().damage = damage;
     let actor = engine.state.priority_player_id();
     engine
-        .apply_command(actor, &pass())
+        .apply_scenario_command(actor, &pass())
         .expect("lethal damage is checked during priority processing");
     assert_eq!(engine.state.objects[&object].zone, Zone::Graveyard);
     object
@@ -179,10 +180,11 @@ fn resolve_imprint_choice(
     );
     let actor = pending.deciding_player;
     engine
-        .apply_command(
+        .apply_scenario_command(
             actor,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: decision as i32,
                     selected_branch_index: 0,
                     ..Default::default()
@@ -202,7 +204,7 @@ fn move_card_to_zone(
 ) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             actor,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -237,7 +239,7 @@ fn activate_vat_copy(engine: &mut GameEngine, vat: u32) {
     grant_pool(engine, 0);
     let command = activate_ability_for(engine, vat, 0, Vec::new());
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("activate Mimic Vat's copy ability");
     resolve_entire_stack_two_player(engine);
 }
@@ -248,7 +250,7 @@ fn cast_metamorph_as_copy_of(engine: &mut GameEngine, player: usize, source: u32
     let slot = hand_index_for_card(engine, player, "phyrexian_metamorph");
     let actor = engine.state.players[player].id;
     engine
-        .apply_command(actor, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(actor, &cast_spell(slot, Vec::new()))
         .expect("cast Phyrexian Metamorph");
     pass_both_players(engine);
     let pending = engine
@@ -259,7 +261,7 @@ fn cast_metamorph_as_copy_of(engine: &mut GameEngine, player: usize, source: u32
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::CopySource);
     assert!(pending.presentation.candidates.contains(&source));
     engine
-        .apply_command(actor, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(actor, &submit_resolution_choice(vec![source]))
         .expect("choose the copy source");
     assert!(engine.state.players[player]
         .battlefield
@@ -269,21 +271,21 @@ fn cast_metamorph_as_copy_of(engine: &mut GameEngine, player: usize, source: u32
 
 fn advance_to_end_step(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main one to combat");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("begin combat");
     if engine.state.turn_step == TurnStep::DeclareAttackers {
         engine
-            .apply_command(0, &primitive_yield())
+            .apply_scenario_command(0, &primitive_yield())
             .expect("skip attackers");
     }
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("end combat to main two");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main two to end step");
     assert_eq!(engine.state.turn_step, TurnStep::EndStep);
 }
@@ -313,7 +315,7 @@ fn advance_until_next_turn_end_step(engine: &mut GameEngine, starting_turn_insta
             pass()
         };
         engine
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("pass through cleanup and the following turn");
         answer_simultaneous_entry_order_in_engine_order(engine);
         answer_trigger_order_in_engine_order(engine);
@@ -369,7 +371,7 @@ fn queued_activation_uses_the_current_link_after_reimprint_and_vat_leaves() {
     grant_pool(&mut engine, 0);
     let activation = activate_ability_for(&engine, vat, 0, Vec::new());
     engine
-        .apply_command(0, &activation)
+        .apply_scenario_command(0, &activation)
         .expect("activate Mimic Vat while Savannah Lions is linked");
     assert!(engine.state.stack.iter().any(|item| {
         item.source_permanent_id == Some(vat) && !item.is_triggered && item.card_id == MIMIC_VAT
@@ -379,7 +381,7 @@ fn queued_activation_uses_the_current_link_after_reimprint_and_vat_leaves() {
     engine.state.objects.get_mut(&second).unwrap().damage = 2;
     let actor = engine.state.priority_player_id();
     engine
-        .apply_command(actor, &pass())
+        .apply_scenario_command(actor, &pass())
         .expect("lethal damage creates a death trigger above the queued activation");
     assert_eq!(engine.state.objects[&second].zone, Zone::Graveyard);
 
@@ -446,7 +448,7 @@ fn commander_death_triggers_vat_before_its_state_based_move_to_command() {
     engine.state.objects.get_mut(&commander).unwrap().damage = 5;
     let actor = engine.state.priority_player_id();
     engine
-        .apply_command(actor, &pass())
+        .apply_scenario_command(actor, &pass())
         .expect("lethal damage puts Kokusho into its owner's graveyard");
 
     assert_eq!(engine.state.objects[&commander].zone, Zone::Graveyard);
@@ -501,10 +503,11 @@ fn commander_death_triggers_vat_before_its_state_based_move_to_command() {
     assert_eq!(pending.deciding_player, 1);
     assert!(pending.presentation.prompt.contains("command zone"));
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: ResolutionChoiceDecision::SelectBranch as i32,
                     selected_branch_index: 0,
                     ..Default::default()
@@ -551,7 +554,7 @@ fn manifested_instant_can_be_imprinted_but_cannot_be_copied() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "manifest_dread");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Manifest Dread");
     pass_both_players(&mut engine);
     let pending = engine
@@ -562,7 +565,7 @@ fn manifested_instant_can_be_imprinted_but_cannot_be_copied() {
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::ManifestDread);
     assert!(pending.presentation.candidates.contains(&instant));
     engine
-        .apply_command(
+        .apply_scenario_command(
             pending.deciding_player,
             &submit_resolution_choice(vec![instant]),
         )
@@ -577,7 +580,7 @@ fn manifested_instant_can_be_imprinted_but_cannot_be_copied() {
     engine.state.objects.get_mut(&instant).unwrap().damage = 2;
     let actor = engine.state.priority_player_id();
     engine
-        .apply_command(actor, &pass())
+        .apply_scenario_command(actor, &pass())
         .expect("lethal damage puts the manifested card into its owner's graveyard");
     assert_eq!(engine.state.objects[&instant].zone, Zone::Graveyard);
     resolve_imprint_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
@@ -606,7 +609,7 @@ fn animated_nontoken_artifact_can_be_imprinted_and_copied_as_a_noncreature() {
 
     engine.state.objects.get_mut(&artifact).unwrap().damage = 2;
     engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .expect("lethal damage puts the animated artifact into its owner's graveyard");
     assert_eq!(engine.state.objects[&artifact].zone, Zone::Graveyard);
 
@@ -644,7 +647,7 @@ fn mimic_vat_ignores_token_creature_deaths() {
     assert!(engine.state.objects[&token].token_origin.is_some());
     engine.state.objects.get_mut(&token).unwrap().damage = 2;
     engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .expect("lethal damage is checked during priority processing");
     assert!(
         !engine.state.objects.contains_key(&token),
@@ -661,7 +664,7 @@ fn simultaneous_deaths_keep_the_vat_pair_after_its_source_leaves() {
     engine.state.objects.get_mut(&first).unwrap().damage = 1;
     engine.state.objects.get_mut(&second).unwrap().damage = 2;
     engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .expect("one state-based-action check destroys both creatures");
     assert_eq!(engine.state.objects[&first].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&second].zone, Zone::Graveyard);
@@ -712,7 +715,7 @@ fn simultaneous_disk_sweep_keeps_vat_triggers_when_all_sources_leave_together() 
     grant_pool(&mut engine, 0);
     let activation = activate_ability_for(&engine, disk, 0, vec![]);
     engine
-        .apply_command(0, &activation)
+        .apply_scenario_command(0, &activation)
         .expect("activate Nevinyrral's Disk");
     pass_both_players(&mut engine);
 
@@ -818,7 +821,7 @@ fn linked_copy_entry_choice_resumes_before_haste_and_the_delayed_exile_are_added
 
     engine.state.objects.get_mut(&metamorph).unwrap().damage = 1;
     engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .expect("Metamorph dies");
     assert_eq!(engine.state.objects[&metamorph].zone, Zone::Graveyard);
     resolve_imprint_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
@@ -836,7 +839,7 @@ fn linked_copy_entry_choice_resumes_before_haste_and_the_delayed_exile_are_added
     );
     assert!(entry_choice.presentation.candidates.contains(&sorcerer));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![sorcerer]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![sorcerer]))
         .expect("finish the token's as-enters copy choice");
 
     let token = engine.state.players[0]
@@ -906,7 +909,7 @@ fn doubling_season_haste_and_one_delayed_exile_cover_the_complete_token_cohort()
     let surviving = tokens[1];
     engine.state.objects.get_mut(&departed).unwrap().damage = 1;
     engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .expect("one token leaves before the end step");
     assert!(!engine.state.objects.contains_key(&departed));
     assert_eq!(engine.state.objects[&surviving].zone, Zone::Battlefield);
@@ -950,18 +953,18 @@ fn countering_the_cohort_exile_keeps_both_hasty_tokens_and_releases_the_cohort()
     let delayed_exile = engine.state.stack.last().expect("one cohort trigger").id;
     assert_eq!(engine.state.stack.len(), 1);
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass priority to the opponent");
     let tidebinder = inject_card_into_hand(&mut engine, 1, "tishanas_tidebinder");
     grant_pool(&mut engine, 1);
     let slot = hand_index_for_card(&engine, 1, "tishanas_tidebinder");
     engine
-        .apply_command(1, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(1, &cast_spell(slot, Vec::new()))
         .expect("cast Tidebinder in response to the cohort trigger");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(1, &choose_stack_trigger_target(delayed_exile))
+        .apply_scenario_command(1, &choose_stack_trigger_target(delayed_exile))
         .expect("Tidebinder targets the delayed exile ability");
     pass_both_players(&mut engine);
 
@@ -995,7 +998,7 @@ fn a_copied_vat_uses_its_own_linked_exile_occurrence() {
     engine.state.objects.get_mut(&lion).unwrap().damage = 1;
     engine.state.objects.get_mut(&bear).unwrap().damage = 2;
     engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .expect("both lethal creatures die in the same state-based-action event");
     assert_eq!(engine.state.objects[&lion].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&bear].zone, Zone::Graveyard);
@@ -1033,7 +1036,7 @@ fn a_copied_vat_uses_its_own_linked_exile_occurrence() {
             .expect("the remaining simultaneous triggers are ordered")
             .deciding_player;
         engine
-            .apply_command(deciding_player, &submit_trigger_order(object_id))
+            .apply_scenario_command(deciding_player, &submit_trigger_order(object_id))
             .expect("put the selected trigger on the stack");
     }
 

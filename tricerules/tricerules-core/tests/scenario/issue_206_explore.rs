@@ -1,4 +1,5 @@
 //! Issue #206 — CR 701.44 Explore resolution and public library reveal choices.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{
@@ -65,7 +66,7 @@ fn begin_source_explore(seed: u64, top_card: Option<&str>) -> (GameEngine, u32, 
     grant_source_explore(&mut engine, source);
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("enter beginning of combat");
     assert_eq!(engine.state.turn_step, TurnStep::BeginCombat);
     assert!(engine
@@ -84,9 +85,11 @@ fn issue_206_nonland_explore_counters_then_offers_a_public_optional_graveyard_mo
 
     let first = engine.state.priority_player_id();
     let second = 1 - first;
-    engine.apply_command(first, &pass()).expect("first pass");
+    engine
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
     let batch = engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("resolve Explore trigger");
     let choice = find_resolution_choice(&batch).expect("Explore choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibraryLook);
@@ -104,7 +107,7 @@ fn issue_206_nonland_explore_counters_then_offers_a_public_optional_graveyard_mo
     );
 
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![below]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![below]))
         .is_err());
     assert!(engine.state.pending_resolution.is_some());
     assert_eq!(engine.state.players[0].library.front(), Some(&top));
@@ -120,7 +123,7 @@ fn issue_206_nonland_explore_counters_then_offers_a_public_optional_graveyard_mo
         .zone_change_generation
         .insert(top, revealed_generation + 1);
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .is_err());
     assert!(
         engine.state.pending_resolution.is_some(),
@@ -132,7 +135,7 @@ fn issue_206_nonland_explore_counters_then_offers_a_public_optional_graveyard_mo
         .insert(top, revealed_generation);
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![top]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top]))
         .expect("put the revealed nonland into the graveyard");
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&top].zone, Zone::Graveyard);
@@ -149,8 +152,8 @@ fn issue_206_land_explore_reveals_and_moves_the_land_to_hand_without_a_counter()
     let (mut engine, source, top) = begin_source_explore(206_002, Some("forest"));
     let top = top.expect("top card");
     let first = engine.state.priority_player_id();
-    engine.apply_command(first, &pass()).unwrap();
-    let batch = engine.apply_command(1 - first, &pass()).unwrap();
+    engine.apply_scenario_command(first, &pass()).unwrap();
+    let batch = engine.apply_scenario_command(1 - first, &pass()).unwrap();
     let reveal = batch
         .events
         .iter()
@@ -213,10 +216,10 @@ fn issue_206_departed_source_uses_last_known_controller_and_cannot_receive_a_cou
     let top = put_on_top(&mut engine, 0, "storm_crow");
     ensure_in_hand(&mut engine, 1, "murder");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("put Explore trigger on the stack");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("yield to responder");
     give_mana(
         &mut engine,
@@ -229,7 +232,7 @@ fn issue_206_departed_source_uses_last_known_controller_and_cannot_receive_a_cou
     );
     let murder_slot = hand_index_for_card(&engine, 1, "murder");
     engine
-        .apply_command(1, &cast_spell(murder_slot, target_object(source)))
+        .apply_scenario_command(1, &cast_spell(murder_slot, target_object(source)))
         .expect("destroy Explore source in response");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
@@ -276,10 +279,14 @@ fn issue_206_spyglass_siren_creates_a_map_whose_atomic_activation_explores() {
     );
     let slot = hand_index_for_card(&engine, 0, "spyglass_siren");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Spyglass Siren");
-    engine.apply_command(0, &pass()).expect("first pass");
-    let batch = engine.apply_command(1, &pass()).expect("resolve Siren");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("first pass");
+    let batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolve Siren");
     let log = batch
         .events
         .iter()
@@ -339,7 +346,7 @@ fn issue_206_spyglass_siren_creates_a_map_whose_atomic_activation_explores() {
         1
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("leave the revealed card on top");
     assert_eq!(engine.state.players[0].library.front(), Some(&top));
 }

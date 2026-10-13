@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     permanent_moved, ruled_command::Cmd, AbilitySourceZone, ActivateAbility, ChooseTriggerTarget,
@@ -25,7 +26,7 @@ fn cast_and_resolve_aura(
     give_mana(engine, 0, mana);
     let slot = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast issue #155 Aura");
     resolve_entire_stack_two_player(engine);
     battlefield_object_for_card(engine, 0, card_id)
@@ -61,11 +62,11 @@ fn issue_155_light_jammer_etb_attaches_and_grants_hexproof() {
 
     let slot = hand_index_for_card(&engine, 0, "illvoi_light_jammer");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Illvoi Light Jammer");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &choose_trigger_target(creature))
+        .apply_scenario_command(0, &choose_trigger_target(creature))
         .expect("choose the ETB attachment target");
     pass_both_players(&mut engine);
 
@@ -108,11 +109,11 @@ fn issue_274_coral_sword_etb_revalidates_shared_target_and_expires_first_strike(
         );
         let slot = hand_index_for_card(&engine, 0, "coral_sword");
         engine
-            .apply_command(0, &cast_spell(slot, Vec::new()))
+            .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
             .expect("cast Coral Sword");
         pass_both_players(&mut engine);
         engine
-            .apply_command(0, &choose_trigger_target(creature))
+            .apply_scenario_command(0, &choose_trigger_target(creature))
             .expect("choose Coral Sword target");
         (engine, creature)
     }
@@ -190,11 +191,11 @@ fn issue_155_new_equipment_generation_does_not_receive_the_old_attach_effect() {
     );
     let slot = hand_index_for_card(&engine, 0, "illvoi_light_jammer");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Illvoi Light Jammer");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &choose_trigger_target(creature))
+        .apply_scenario_command(0, &choose_trigger_target(creature))
         .expect("choose the ETB attachment target");
     let equipment = battlefield_object_for_card(&engine, 0, "illvoi_light_jammer");
     *engine
@@ -239,14 +240,14 @@ fn issue_155_merchant_returns_its_exact_graveyard_source_to_hand() {
     };
 
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("activate Merchant from the graveyard");
     pass_both_players(&mut engine);
 
     assert_eq!(engine.state.objects[&merchant].zone, Zone::Hand);
     assert!(engine.state.players[0].hand.contains(&merchant));
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect_err("the stale graveyard generation cannot be replayed");
 }
 
@@ -288,8 +289,12 @@ fn issue_155_path_uses_pre_sacrifice_attachment_and_the_creatures_owner() {
     );
     apply_ability(&mut engine, 0, aura, 0, Vec::new()).expect("activate Path");
     assert_eq!(engine.state.objects[&aura].zone, Zone::Graveyard);
-    engine.apply_command(0, &pass()).expect("controller pass");
-    let resolution = engine.apply_command(1, &pass()).expect("opponent pass");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller pass");
+    let resolution = engine
+        .apply_scenario_command(1, &pass())
+        .expect("opponent pass");
 
     assert_eq!(engine.state.objects[&creature].zone, Zone::Exile);
     assert!(engine.state.players[1].exile.contains(&creature));

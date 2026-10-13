@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::CounterKind;
 use tricerules_proto::ruled::v1::TargetRef;
@@ -30,7 +31,7 @@ fn engine_with_battalion_and_others(other_attackers: usize) -> (GameEngine, u32,
     );
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("move to beginning of combat");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -50,7 +51,7 @@ fn makeshift_battalion_does_not_trigger_with_fewer_than_two_other_attackers() {
     for other_attackers in 0..2 {
         let (mut engine, _battalion, attackers) = engine_with_battalion_and_others(other_attackers);
         engine
-            .apply_command(0, &declare_attackers(attackers))
+            .apply_scenario_command(0, &declare_attackers(attackers))
             .expect("declare attackers");
 
         assert!(
@@ -65,7 +66,7 @@ fn makeshift_battalion_triggers_once_at_or_above_the_threshold() {
     for other_attackers in [2, 3] {
         let (mut engine, battalion, attackers) = engine_with_battalion_and_others(other_attackers);
         engine
-            .apply_command(0, &declare_attackers(attackers))
+            .apply_scenario_command(0, &declare_attackers(attackers))
             .expect("declare attackers");
 
         assert_eq!(
@@ -82,7 +83,7 @@ fn makeshift_battalion_triggers_once_at_or_above_the_threshold() {
 fn makeshift_battalion_must_itself_be_declared_as_an_attacker() {
     let (mut engine, _battalion, attackers) = engine_with_battalion_and_others(3);
     engine
-        .apply_command(0, &declare_attackers(attackers[1..].to_vec()))
+        .apply_scenario_command(0, &declare_attackers(attackers[1..].to_vec()))
         .expect("declare only the other creatures");
 
     assert!(engine.state.stack.is_empty());
@@ -95,7 +96,7 @@ fn each_battalion_counts_the_other_declared_attackers_relative_to_itself() {
     attackers.insert(1, second_battalion);
 
     engine
-        .apply_command(0, &declare_attackers(attackers))
+        .apply_scenario_command(0, &declare_attackers(attackers))
         .expect("declare two Battalions and one other creature");
 
     assert_eq!(
@@ -118,7 +119,7 @@ fn attack_group_threshold_is_not_rechecked_when_the_trigger_resolves() {
     let (mut engine, battalion, attackers) = engine_with_battalion_and_others(2);
     let departing_attacker = attackers[1];
     engine
-        .apply_command(0, &declare_attackers(attackers))
+        .apply_scenario_command(0, &declare_attackers(attackers))
         .expect("declare Battalion and two other attackers");
     assert_eq!(engine.state.stack.len(), 1, "Battalion triggered");
 
@@ -133,7 +134,7 @@ fn attack_group_threshold_is_not_rechecked_when_the_trigger_resolves() {
     );
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 unsummon,
@@ -163,7 +164,7 @@ fn ordinary_self_attack_triggers_use_a_zero_other_attacker_threshold() {
     let (mut engine, _battalion, _attackers) = engine_with_battalion_and_others(0);
     let thief = inject_creature_on_battlefield(&mut engine, 0, "audacious_thief");
     engine
-        .apply_command(0, &declare_attackers(vec![thief]))
+        .apply_scenario_command(0, &declare_attackers(vec![thief]))
         .expect("attack with Audacious Thief alone");
 
     assert_eq!(engine.state.stack.len(), 1);

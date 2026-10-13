@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
 use tricerules_proto::ruled::v1::dev_command::Dev;
@@ -56,11 +57,11 @@ fn pack_mastiff_matches_copiable_names_and_snapshots_objects() {
     );
     let clone_in_hand = hand_index_for_card(&engine, 0, "clone");
     engine
-        .apply_command(0, &cast_spell(clone_in_hand, vec![]))
+        .apply_scenario_command(0, &cast_spell(clone_in_hand, vec![]))
         .expect("cast Clone");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![mastiff]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![mastiff]))
         .expect("copy Pack Mastiff");
     let clone = battlefield_object_for_card(&engine, 0, "clone");
     assert_eq!(
@@ -83,7 +84,7 @@ fn pack_mastiff_matches_copiable_names_and_snapshots_objects() {
         },
     );
     engine
-        .apply_command(0, &activate_ability(mastiff, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(mastiff, 0, vec![]))
         .expect("activate Pack Mastiff");
     pass_both_players(&mut engine);
 
@@ -94,10 +95,10 @@ fn pack_mastiff_matches_copiable_names_and_snapshots_objects() {
 
     engine.enable_dev_commands();
     engine
-        .apply_command(0, &move_card(0, DevZone::Hand, "Pack Mastiff"))
+        .apply_scenario_command(0, &move_card(0, DevZone::Hand, "Pack Mastiff"))
         .expect("bounce Pack Mastiff");
     engine
-        .apply_command(0, &move_card(0, DevZone::Battlefield, "Pack Mastiff"))
+        .apply_scenario_command(0, &move_card(0, DevZone::Battlefield, "Pack Mastiff"))
         .expect("return Pack Mastiff");
     assert_eq!(
         engine.effective_power(mastiff),
@@ -151,13 +152,13 @@ fn pridemalkin_rechecks_controller_and_counter_presence_continuously() {
     );
     let card = hand_index_for_card(&engine, 0, "pridemalkin");
     engine
-        .apply_command(0, &cast_spell(card, vec![]))
+        .apply_scenario_command(0, &cast_spell(card, vec![]))
         .expect("cast Pridemalkin");
     pass_both_players(&mut engine);
     let pridemalkin = battlefield_object_for_card(&engine, 0, "pridemalkin");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {

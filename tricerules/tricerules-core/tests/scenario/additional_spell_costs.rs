@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ruled_event::Ev, HandActionKind};
@@ -37,7 +38,7 @@ fn discard_spell_is_not_legal_when_it_is_the_only_hand_card() {
     retain_only_hand_object(&mut e, 0, thrill);
 
     let batch = e
-        .apply_command(0, &activate_ability(mountain, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(mountain, 0, vec![]))
         .unwrap();
     let legal = batch.legal_by_player.get(&0).unwrap();
     assert!(!legal.hand_actions.iter().any(|action| {
@@ -71,7 +72,7 @@ fn thrill_discards_the_selected_physical_card_then_draws_two() {
     e.state.players[0].mana_pool.colorless = 1;
 
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_costs(
                 spell_slot,
@@ -120,7 +121,7 @@ fn bone_splinters_can_sacrifice_its_own_target_and_then_fizzle() {
     e.state.players[0].mana_pool.black = 1;
     let spell_slot = hand_index_for_card(&e, 0, "bone_splinters");
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_with_costs(
             spell_slot,
@@ -158,7 +159,7 @@ fn insufficient_mana_leaves_every_nonmana_payment_uncommitted() {
     let stack_before = e.state.stack.len();
     let command_index_before = e.state.command_index;
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_with_costs(
             spell_slot,
@@ -205,7 +206,7 @@ fn tormenting_voice_and_village_rites_pay_their_authored_costs() {
     let discarded = e.state.players[0].hand[discarded_slot];
     e.state.players[0].mana_pool.red = 1;
     e.state.players[0].mana_pool.colorless = 1;
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_with_costs(
             voice_slot,
@@ -221,7 +222,7 @@ fn tormenting_voice_and_village_rites_pay_their_authored_costs() {
     let creature = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
     let rites_slot = hand_index_for_card(&e, 0, "village_rites");
     e.state.players[0].mana_pool.black = 1;
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_with_costs(
             rites_slot,
@@ -261,12 +262,12 @@ fn missing_wrong_zone_opponent_and_stale_selections_are_rejected() {
 
     let (mut missing, slot, _, _) = make_engine(5306);
     missing
-        .apply_command(0, &cast_spell_with_costs(slot, vec![], vec![]))
+        .apply_scenario_command(0, &cast_spell_with_costs(slot, vec![], vec![]))
         .expect_err("selection is mandatory");
 
     let (mut duplicate, slot, own, _) = make_engine(5311);
     duplicate
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_costs(
                 slot,
@@ -281,7 +282,7 @@ fn missing_wrong_zone_opponent_and_stale_selections_are_rejected() {
 
     let (mut wrong_zone, slot, _, _) = make_engine(5307);
     wrong_zone
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_costs(slot, vec![], vec![hand_cost_selection(0, 0)]),
         )
@@ -289,7 +290,7 @@ fn missing_wrong_zone_opponent_and_stale_selections_are_rejected() {
 
     let (mut opponent, slot, _, opposing) = make_engine(5308);
     opponent
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_costs(slot, vec![], vec![permanent_cost_selection(0, opposing)]),
         )
@@ -300,7 +301,7 @@ fn missing_wrong_zone_opponent_and_stale_selections_are_rejected() {
     stale.state.players[0].graveyard.push(own);
     stale.state.objects.get_mut(&own).unwrap().zone = Zone::Graveyard;
     stale
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_costs(slot, vec![], vec![permanent_cost_selection(0, own)]),
         )
@@ -327,7 +328,7 @@ fn command_path_rejects_discarding_the_spell_itself() {
     let slot = hand_index_for_card(&e, 0, "thrill_of_possibility");
     e.state.players[0].mana_pool.red = 1;
     e.state.players[0].mana_pool.colorless = 1;
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_with_costs(slot, vec![], vec![hand_cost_selection(0, slot as u32)]),
     )
@@ -353,7 +354,7 @@ fn sacrifice_spell_is_not_published_without_a_matching_permanent() {
     ensure_card_in_hand(&mut e, 0, "village_rites");
     let swamp = relocate_to_battlefield(&mut e, 0, "swamp", false);
     let batch = e
-        .apply_command(0, &activate_ability(swamp, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(swamp, 0, vec![]))
         .unwrap();
     assert!(
         !batch.legal_by_player[&0].hand_actions.iter().any(|action| {
@@ -385,7 +386,7 @@ fn sacrifice_dies_trigger_is_stacked_above_the_new_spell_with_lki() {
     e.state.players[0].mana_pool.black = 1;
 
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_costs(rites_slot, vec![], vec![permanent_cost_selection(0, elk)]),
         )

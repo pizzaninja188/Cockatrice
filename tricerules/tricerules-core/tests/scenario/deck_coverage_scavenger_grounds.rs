@@ -5,9 +5,10 @@
 //! CR 305.6 covers land mana abilities, 602.2a-b activation costs, 605.1a mana abilities,
 //! 701.21a sacrifice, 701.13a exile, 113.7a the ability's independence from its source, and
 //! 608.2h the resolution-time application of the exile effect.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 const SCAVENGER_GROUNDS: &str = "scavenger_grounds";
 
@@ -82,7 +83,7 @@ fn scavenger_grounds_rejects_non_deserts_and_opponent_deserts_without_partial_pa
         (opponent_desert, "the opponent controls this Desert"),
     ] {
         engine
-            .apply_command(0, &sacrifice_activation(&engine, source, selected))
+            .apply_scenario_command(0, &sacrifice_activation(&engine, source, selected))
             .unwrap_err();
         assert_eq!(engine.state.players[0].mana_pool.colorless, 2, "{reason}");
         assert_eq!(
@@ -117,7 +118,7 @@ fn scavenger_grounds_sacrifices_another_desert_then_exiles_all_graveyards_at_res
     );
 
     engine
-        .apply_command(0, &sacrifice_activation(&engine, source, sacrificed_desert))
+        .apply_scenario_command(0, &sacrifice_activation(&engine, source, sacrificed_desert))
         .expect("pay {2}, tap, and sacrifice a Desert");
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert!(engine.state.objects[&source].tapped);
@@ -164,7 +165,7 @@ fn scavenger_grounds_can_sacrifice_itself_and_exile_its_graveyard_card_on_resolu
 
     let activation = sacrifice_activation(&engine, source, source);
     engine
-        .apply_command(0, &activation)
+        .apply_scenario_command(0, &activation)
         .expect("Scavenger Grounds may sacrifice itself as its Desert cost");
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);

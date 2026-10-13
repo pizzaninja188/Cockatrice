@@ -1,5 +1,6 @@
 //! Existing-card regressions for the selected Myr Battlesphere damage prerequisites.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{
     Color, ContinuousEffectKind, ControllerReference, EffectDuration, Keyword, PermanentTypeFilter,
     TypeLineAddition,
@@ -32,7 +33,9 @@ fn ready(owner: usize) -> (GameEngine, u32) {
     .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_under_foreign_control(&mut engine, owner, 0, "scorch_spitter");
-    engine.apply_command(0, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(0, &primitive_yield())
+        .unwrap();
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
     (engine, source)
@@ -51,7 +54,7 @@ fn attack(engine: &mut GameEngine, source: u32, kind: TargetRefKind, target: u32
         .cloned()
         .expect("engine-published attack");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(rv1::DeclareAttackers {
@@ -111,7 +114,7 @@ fn foreign_trigger_survives_source_owner_departure_with_source_qualities() {
         ContinuousEffectKind::Layer5SetColors(vec![Color::Blue]),
     );
     attack(&mut engine, source, TargetRefKind::Player, 1);
-    engine.apply_command(2, &concede()).unwrap();
+    engine.apply_scenario_command(2, &concede()).unwrap();
     assert!(!engine.state.objects.contains_key(&source));
     assert_eq!(
         engine.state.stack.len(),
@@ -191,7 +194,7 @@ fn departed_attacked_player_receives_no_damage_from_surviving_trigger() {
         ContinuousEffectKind::Layer6AddKeyword(Keyword::Lifelink),
     );
     attack(&mut engine, source, TargetRefKind::Player, 1);
-    engine.apply_command(1, &concede()).unwrap();
+    engine.apply_scenario_command(1, &concede()).unwrap();
     pass_priority_round(&mut engine);
     assert_eq!(
         engine.state.players[1].life, 20,
@@ -220,7 +223,7 @@ fn parked_attacked_damage_finishes_when_recipient_chooser_concedes() {
             .deciding_player,
         1
     );
-    let batch = engine.apply_command(1, &concede()).unwrap();
+    let batch = engine.apply_scenario_command(1, &concede()).unwrap();
     assert!(
         engine.state.pending_resolution.is_none(),
         "no departed chooser remains"

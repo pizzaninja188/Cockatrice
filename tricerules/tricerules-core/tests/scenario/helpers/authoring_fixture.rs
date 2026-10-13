@@ -1,5 +1,6 @@
 //! Shared setup for scenarios and registry conformance; resources are not semantic proof.
 use super::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 
 /// Seed independently named draws in order; card expectations belong to the caller.
@@ -155,11 +156,12 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
     if card == "maze_of_ith" && ability == Some(0) {
         // Supply a legally declared attacker; do not weaken the target or baseline.
         let actor = e.state.active_player_id();
-        e.apply_command(actor, &super::primitive_yield()).unwrap();
+        e.apply_scenario_command(actor, &super::primitive_yield())
+            .unwrap();
         super::pass_priority_round(&mut e);
         let assignment =
             e.initial_response_batch().legal_by_player[&actor].legal_attack_assignments[0];
-        e.apply_command(
+        e.apply_scenario_command(
             actor,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {

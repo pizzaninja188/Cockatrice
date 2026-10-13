@@ -1,4 +1,5 @@
 //! Feed the Swarm: one legal target, ordered destroy/life loss, and CR 608.2b failure.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_core::state::CopiableValues;
@@ -35,13 +36,13 @@ fn cast(engine: &mut GameEngine, target: u32) {
     );
     let slot = hand_index_for_card(engine, 0, "feed_the_swarm");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap();
 }
 
 fn resolve(engine: &mut GameEngine) {
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
 }
 
 #[test]
@@ -109,7 +110,7 @@ fn feed_the_swarm_rejects_a_permanent_the_caster_controls() {
     );
     let slot = hand_index_for_card(&engine, 0, "feed_the_swarm");
     assert!(engine
-        .apply_command(0, &cast_spell(slot, target_object(own)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(own)))
         .is_err());
     assert_eq!(engine.state.objects[&own].zone, Zone::Battlefield);
     assert_eq!(engine.state.players[0].life, 20);

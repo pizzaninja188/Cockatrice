@@ -4,6 +4,7 @@
 //! this turn, instead tap it, remove it from combat, and clear all damage from it.
 //! Regeneration does NOT save a creature from toughness-0 (CR 704.5f — not a "destroy").
 //! Wrath of God's "can't be regenerated" bypasses shields (CR 701.19c).
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
@@ -40,11 +41,11 @@ fn regen_shield_placed_by_ability() {
             ..Default::default()
         },
     );
-    e.apply_command(0, &activate_ability(troll, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(troll, 0, vec![]))
         .expect("regenerate ability activates");
     // Resolve: both players pass.
-    e.apply_command(0, &pass()).expect("caster pass");
-    e.apply_command(1, &pass()).expect("other pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    e.apply_scenario_command(1, &pass()).expect("other pass");
     assert_eq!(
         e.state.objects.get(&troll).map(|o| o.regeneration_shields),
         Some(1),
@@ -80,8 +81,9 @@ fn regen_shield_consumed_on_lethal_damage_sba() {
         zone_view_rules_annotation_labels(&mut e, 0, troll),
         vec!["Regeneration shield"]
     );
-    e.apply_command(0, &pass()).expect("pass to trigger sba");
-    e.apply_command(1, &pass()).expect("second pass");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass to trigger sba");
+    e.apply_scenario_command(1, &pass()).expect("second pass");
     assert_eq!(
         e.state.objects.get(&troll).map(|o| o.zone),
         Some(tricerules_core::Zone::Battlefield),
@@ -113,8 +115,9 @@ fn no_shield_creature_dies_to_lethal_damage() {
     if let Some(o) = e.state.objects.get_mut(&skeletons) {
         o.damage = 1; // toughness = 1 → lethal
     }
-    e.apply_command(0, &pass()).expect("pass to trigger sba");
-    e.apply_command(1, &pass()).expect("second pass");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass to trigger sba");
+    e.apply_scenario_command(1, &pass()).expect("second pass");
     assert_eq!(
         e.state.objects.get(&skeletons).map(|o| o.zone),
         Some(tricerules_core::Zone::Graveyard),
@@ -132,8 +135,8 @@ fn shield_not_present_on_second_lethal() {
         o.damage = 3;
     }
     // First SBA sweep: shield consumed.
-    e.apply_command(0, &pass()).expect("pass");
-    e.apply_command(1, &pass()).expect("second pass");
+    e.apply_scenario_command(0, &pass()).expect("pass");
+    e.apply_scenario_command(1, &pass()).expect("second pass");
     assert_eq!(
         e.state.objects.get(&troll).map(|o| o.zone),
         Some(tricerules_core::Zone::Battlefield),
@@ -143,8 +146,8 @@ fn shield_not_present_on_second_lethal() {
     if let Some(o) = e.state.objects.get_mut(&troll) {
         o.damage = 3;
     }
-    e.apply_command(0, &pass()).expect("pass");
-    e.apply_command(1, &pass()).expect("second pass");
+    e.apply_scenario_command(0, &pass()).expect("pass");
+    e.apply_scenario_command(1, &pass()).expect("second pass");
     assert_eq!(
         e.state.objects.get(&troll).map(|o| o.zone),
         Some(tricerules_core::Zone::Graveyard),
@@ -183,10 +186,10 @@ fn wrath_bypasses_regen_shields() {
         },
     );
     let wrath_idx = hand_index_for_card(&e, 0, "wrath_of_god");
-    e.apply_command(0, &cast_spell(wrath_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(wrath_idx, vec![]))
         .expect("cast wrath");
-    e.apply_command(0, &pass()).expect("caster pass");
-    e.apply_command(1, &pass()).expect("other pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    e.apply_scenario_command(1, &pass()).expect("other pass");
     assert_eq!(
         e.state.objects.get(&skeletons).map(|o| o.zone),
         Some(tricerules_core::Zone::Graveyard),
@@ -215,8 +218,9 @@ fn toughness_zero_bypasses_regen_shield() {
         duration: EffectDuration::UntilEndOfTurn,
         timestamp: 0,
     });
-    e.apply_command(0, &pass()).expect("pass to trigger sba");
-    e.apply_command(1, &pass()).expect("second pass");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass to trigger sba");
+    e.apply_scenario_command(1, &pass()).expect("second pass");
     assert_eq!(
         e.state.objects.get(&troll).map(|o| o.zone),
         Some(tricerules_core::Zone::Graveyard),

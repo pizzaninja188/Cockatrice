@@ -1,9 +1,10 @@
 //! Actual-card upkeep scenarios for Ebony Owl Netsuke, Iron Maiden, Misers' Cage, and Viseling.
 #![allow(unused_imports)] // The shared scenario helper module re-exports many helpers.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Layout;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 
 fn set_hand_size(engine: &mut GameEngine, player: usize, count: usize) {
     while engine.state.players[player].hand.len() > count {
@@ -209,7 +210,7 @@ fn pass_all_players(engine: &mut GameEngine) {
         answer_trigger_order_in_engine_order(engine);
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("pass priority");
     }
 }

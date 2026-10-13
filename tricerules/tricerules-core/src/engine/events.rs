@@ -1238,6 +1238,7 @@ pub(super) fn default_deck_list(player_index: usize) -> Vec<String> {
 pub(super) fn finish_with_events(eng: &GameEngine, events: Vec<RuledEvent>) -> RuledEventBatch {
     let mut b = RuledEventBatch {
         payment_preview: None,
+        resolution_prompt_state: None,
         events,
         legal_by_player: Default::default(),
     };

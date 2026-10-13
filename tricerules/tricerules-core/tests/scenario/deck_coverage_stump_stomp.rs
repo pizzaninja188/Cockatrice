@@ -4,6 +4,7 @@
 //! CR 712.12 governs choosing the land face. CR 120.2b identifies the creature as the damage
 //! source, CR 608.2b rechecks both targets at resolution, CR 614.1c governs entering tapped, and
 //! CR 605.1a/605.3b govern the land's immediate mana ability.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -201,7 +202,7 @@ fn burnwillow_clearing_enters_tapped_and_produces_either_color_after_untapping()
             "Burnwillow Clearing enters tapped"
         );
         engine
-            .apply_command(0, &mana_option(&engine, land, option))
+            .apply_scenario_command(0, &mana_option(&engine, land, option))
             .expect_err("a tapped land cannot pay the mana ability's tap cost");
 
         advance_to_controller_next_main1(&mut engine);

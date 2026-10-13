@@ -1,4 +1,5 @@
 //! Psychosis Crawler: all-zone hand-size CDA and one life-loss trigger per successful draw.
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, EffectDuration, PermanentTypeFilter, TypeLineAddition,
@@ -136,9 +137,11 @@ fn crawler_draws_create_separate_life_loss_triggers_and_opponents_draws_do_not()
     );
     let hand_before = engine.state.players[0].hand.len();
     let slot = hand_index_for_card(&engine, 0, "divination");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     answer_trigger_order_in_engine_order(&mut engine);
     assert_eq!(
         engine.state.stack.len(),
@@ -168,7 +171,7 @@ fn crawler_dies_with_no_cards_at_the_next_state_based_action_check() {
     let source = relocate_to_battlefield(&mut engine, 0, CRAWLER, false);
     hand_size(&mut engine, 0, 0);
     assert_pt(&engine, source, (0, 0));
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
 }
 
@@ -194,7 +197,7 @@ fn crawler_projects_live_size_and_rejects_an_unoffered_activation_without_mutati
     assert!(projected.activated_abilities.is_empty());
     let before = serde_json::to_value(&engine.state).unwrap();
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 0, vec![]))
         .expect_err("Crawler has no activated ability");
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
 }
@@ -214,7 +217,9 @@ fn crawler_cast_counts_the_smaller_hand_and_copy_cda_is_not_a_frozen_size() {
         },
     );
     let slot = hand_index_for_card(&engine, 0, CRAWLER);
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(engine.state.objects[&source].zone, Zone::Stack);
     assert_pt(&engine, source, (3, 3));
     resolve_entire_stack_two_player(&mut engine);
@@ -232,10 +237,10 @@ fn crawler_cast_counts_the_smaller_hand_and_copy_cda_is_not_a_frozen_size() {
     );
     let slot = hand_index_for_card(&engine, 0, "cackling_counterpart");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    let batch = engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let batch = engine.apply_scenario_command(1, &pass()).unwrap();
     let copy = token_created_events(&batch)[0].object_id;
     assert_pt(&engine, copy, (3, 3));
     hand_size(&mut engine, 1, 5);
@@ -274,7 +279,9 @@ fn crawler_stack_cda_uses_the_spell_controller_instead_of_the_card_owner() {
         },
     );
     let slot = hand_index_for_card(&engine, 0, CRAWLER);
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     hand_size(&mut engine, 1, 5);
     // Fixture an other-player spell controller independently of the owner/base controller.
     engine.state.stack.last_mut().unwrap().controller = 1;
@@ -304,7 +311,7 @@ fn undefined_creature_stats_are_zero_and_counters_apply_while_noncreatures_have_
     assert_pt(&engine, land, (1, 1));
     let zero = inject_permanent_on_battlefield(&mut engine, 0, "forest");
     add_effect(&mut engine, zero, animation);
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     assert_eq!(engine.state.objects[&zero].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&land].zone, Zone::Battlefield);
 }
@@ -319,7 +326,7 @@ fn crawler_reserved_cast_cda_uses_the_pending_caster_before_stack_publication() 
         unreachable!()
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::BeginSpellCast(
@@ -369,7 +376,9 @@ fn crawler_survives_a_resolving_discard_then_draw_with_a_temporarily_empty_hand(
         },
     );
     let slot = hand_index_for_card(&engine, 0, "tolarian_winds");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_priority_round(&mut engine);
     answer_trigger_order_in_engine_order(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
@@ -396,7 +405,9 @@ fn casting_the_last_hand_card_kills_crawler_before_the_later_draw_spell_resolves
         },
     );
     let slot = hand_index_for_card(&engine, 0, "divination");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.players[0].hand.len(), 2);
@@ -419,7 +430,9 @@ fn failed_draw_creates_no_crawler_life_loss_trigger() {
         },
     );
     let slot = hand_index_for_card(&engine, 0, "divination");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.turn_history.current.player(0).cards_drawn, 0);
     assert_eq!(engine.state.players[1].life, 20);
@@ -443,7 +456,9 @@ fn captured_crawler_triggers_keep_their_controller_after_source_departure_in_mul
         },
     );
     let slot = hand_index_for_card(&engine, 0, "divination");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_priority_round(&mut engine);
     answer_trigger_order_in_engine_order(&mut engine);
     assert_eq!(engine.state.stack.len(), 2);

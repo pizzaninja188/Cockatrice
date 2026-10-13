@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::Keyword;
 
 fn advance_to_active_player_upkeep(engine: &mut GameEngine, player: i32) {
@@ -18,7 +19,7 @@ fn advance_to_active_player_upkeep(engine: &mut GameEngine, player: i32) {
             None => (engine.state.priority_player_id(), pass()),
         };
         engine
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("pass toward requested upkeep");
         if engine.state.active_player_id() == player
             && engine.state.turn_step == tricerules_core::TurnStep::Upkeep
@@ -209,10 +210,12 @@ fn thorin_grants_ward_to_controlled_artifacts_after_story_is_gained() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &pass()).expect("pass priority");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass priority");
     let unsummon = hand_index_for_card(&engine, 1, "unsummon");
     engine
-        .apply_command(1, &cast_spell(unsummon, target_object(target)))
+        .apply_scenario_command(1, &cast_spell(unsummon, target_object(target)))
         .expect("target Thorin-granted ward permanent");
 
     assert_eq!(engine.state.stack.len(), 2, "ward is above Unsummon");

@@ -6,6 +6,7 @@
 //! 118.12 (additional costs), 119/120 (life), 122.1 (counters), 301.5 (Food), 508 (attack
 //! triggers), 602 (activated abilities), 603.6 (entry/leaves triggers), 608.2b (target
 //! revalidation), 609.3 (intervening if), and 611.2c (until end of turn).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::CounterKind;
@@ -81,7 +82,7 @@ fn issue_misc5_acolyte_of_aclazotz_sacrifices_another_permanent() {
     let acolyte = inject_creature_on_battlefield(&mut alone, 0, "acolyte_of_aclazotz");
     assert!(
         alone
-            .apply_command(0, &activate_ability(acolyte, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability(acolyte, 0, vec![]))
             .is_err(),
         "the source is excluded from its own sacrifice cost"
     );
@@ -114,7 +115,7 @@ fn issue_misc5_bartolome_del_presidio_grows_after_sacrificing() {
     let bartolome = inject_creature_on_battlefield(&mut alone, 0, "bartolome_del_presidio");
     assert!(
         alone
-            .apply_command(0, &activate_ability(bartolome, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability(bartolome, 0, vec![]))
             .is_err(),
         "the source is the only permanent and is excluded"
     );
@@ -128,8 +129,9 @@ fn issue_misc5_captain_storm_triggers_on_a_controlled_artifact() {
     grant_pool(&mut e, 0);
     let slot = hand_index_for_card(&e, 0, "swiftfoot_boots");
     semantic::accepted(&mut e, 0, &cast_spell(slot, vec![]));
-    e.apply_command(0, &pass()).expect("caster passes");
-    e.apply_command(1, &pass()).expect("the artifact resolves");
+    e.apply_scenario_command(0, &pass()).expect("caster passes");
+    e.apply_scenario_command(1, &pass())
+        .expect("the artifact resolves");
     assert_eq!(
         e.state.pending_triggers.len(),
         1,
@@ -150,9 +152,11 @@ fn issue_misc5_captain_storm_triggers_on_a_controlled_artifact() {
     grant_pool(&mut no_trigger, 0);
     let slot = hand_index_for_card(&no_trigger, 0, "grizzly_bears");
     semantic::accepted(&mut no_trigger, 0, &cast_spell(slot, vec![]));
-    no_trigger.apply_command(0, &pass()).expect("caster passes");
     no_trigger
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    no_trigger
+        .apply_scenario_command(1, &pass())
         .expect("the creature resolves");
     assert_eq!(no_trigger.state.pending_triggers.len(), 0);
     assert_eq!(no_trigger.state.stack.len(), 0);
@@ -205,11 +209,11 @@ fn issue_misc5_battlesong_berserker_pumps_and_grants_menace() {
     let berserker = inject_creature_on_battlefield(&mut e, 0, "battlesong_berserker");
     let target = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let opponent = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![berserker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![berserker]))
         .expect("declare the Berserker as an attacker");
     assert_eq!(e.state.pending_triggers.len(), 1, "one attack, one trigger");
     assert!(
-        e.apply_command(0, &choose_trigger_target(opponent))
+        e.apply_scenario_command(0, &choose_trigger_target(opponent))
             .is_err(),
         "an opponent creature is outside the You filter"
     );
@@ -241,19 +245,21 @@ fn issue_misc5_clammy_prowler_makes_another_attacker_unblockable() {
     let fellow = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let bench = inject_creature_on_battlefield(&mut e, 0, "storm_crow");
     let opponent = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![prowler, fellow]))
+    e.apply_scenario_command(0, &declare_attackers(vec![prowler, fellow]))
         .expect("declare two attackers");
     assert_eq!(e.state.pending_triggers.len(), 1);
     assert!(
-        e.apply_command(0, &choose_trigger_target(prowler)).is_err(),
+        e.apply_scenario_command(0, &choose_trigger_target(prowler))
+            .is_err(),
         "the source is not 'another' creature"
     );
     assert!(
-        e.apply_command(0, &choose_trigger_target(bench)).is_err(),
+        e.apply_scenario_command(0, &choose_trigger_target(bench))
+            .is_err(),
         "a nonattacking controlled creature is not a legal target"
     );
     assert!(
-        e.apply_command(0, &choose_trigger_target(opponent))
+        e.apply_scenario_command(0, &choose_trigger_target(opponent))
             .is_err(),
         "a nonattacking opponent creature is not a legal target; the filter is not controller-scoped"
     );
@@ -294,7 +300,7 @@ fn issue_misc5_bake_into_a_pie_destroys_and_creates_food() {
     grant_pool(&mut bad, 0);
     let slot = hand_index_for_card(&bad, 0, "bake_into_a_pie");
     assert!(
-        bad.apply_command(0, &cast_spell(slot, target_object(land)))
+        bad.apply_scenario_command(0, &cast_spell(slot, target_object(land)))
             .is_err(),
         "a land is not a creature"
     );

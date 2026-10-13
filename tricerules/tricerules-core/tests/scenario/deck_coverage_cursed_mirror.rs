@@ -1,6 +1,7 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::CounterKind;
-use tricerules_core::{GameEngine, TurnStep};
+use tricerules_core::TurnStep;
 use tricerules_proto::ruled::v1::{dev_command::Dev, DevCommand, DevMoveCard, DevZone};
 
 fn cursed_mirror_engine() -> GameEngine {
@@ -52,6 +53,7 @@ fn animate_native_cursed_mirror_with_tough_cookie(engine: &mut GameEngine, mirro
 fn select_resolution_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -62,7 +64,7 @@ fn select_resolution_branch(index: u32) -> RuledCommand {
 fn move_named_card_to_zone(engine: &mut GameEngine, player: i32, card_name: &str, zone: DevZone) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             player,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -100,7 +102,7 @@ fn advance_to_next_turn_instance_capturing_batches(
         };
         batches.push(
             engine
-                .apply_command(actor, &command)
+                .apply_scenario_command(actor, &command)
                 .expect("pass through the end of the turn"),
         );
     }
@@ -122,7 +124,7 @@ fn advance_to_cleanup_priority(engine: &mut GameEngine) -> Vec<RuledEventBatch> 
         };
         batches.push(
             engine
-                .apply_command(actor, &command)
+                .apply_scenario_command(actor, &command)
                 .expect("pass through the turn until cleanup"),
         );
     }
@@ -166,7 +168,7 @@ fn cursed_mirror_temporarily_copies_a_creature_with_haste_then_restores_its_mana
         .position(|object_id| *object_id == mirror)
         .expect("selected physical Cursed Mirror in hand");
     engine
-        .apply_command(0, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
         .expect("cast Cursed Mirror");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -183,7 +185,7 @@ fn cursed_mirror_temporarily_copies_a_creature_with_haste_then_restores_its_mana
     assert!(pending.presentation.candidates.contains(&target));
     let deciding_player = pending.deciding_player;
     let copied_batch = engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![target]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![target]))
         .expect("choose an opponent's creature");
 
     let copied = engine
@@ -250,7 +252,7 @@ fn later_clone_entry_copy_replaces_mirror_haste_and_is_not_reverted_at_cleanup()
         .position(|object_id| *object_id == mirror)
         .expect("selected physical Cursed Mirror in hand");
     engine
-        .apply_command(0, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
         .expect("cast Cursed Mirror");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -266,7 +268,7 @@ fn later_clone_entry_copy_replaces_mirror_haste_and_is_not_reverted_at_cleanup()
     assert!(pending.presentation.candidates.contains(&clone));
     let deciding_player = pending.deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![clone]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![clone]))
         .expect("copy Clone first");
 
     let pending = engine
@@ -278,7 +280,7 @@ fn later_clone_entry_copy_replaces_mirror_haste_and_is_not_reverted_at_cleanup()
     assert!(pending.presentation.candidates.contains(&bear));
     let deciding_player = pending.deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![bear]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![bear]))
         .expect("let Clone's later copy effect replace Cursed Mirror's copy");
 
     let copied = engine.characteristics(mirror).expect("final copied Mirror");
@@ -316,7 +318,7 @@ fn mirror_copying_animated_mirror_chains_temporary_copy_and_expires_to_native_va
         .position(|object_id| *object_id == mirror)
         .expect("selected physical Cursed Mirror in hand");
     engine
-        .apply_command(0, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
         .expect("cast Cursed Mirror");
     pass_both_players(&mut engine);
 
@@ -331,7 +333,7 @@ fn mirror_copying_animated_mirror_chains_temporary_copy_and_expires_to_native_va
         .contains(&animated_mirror));
     let deciding_player = first_choice.deciding_player;
     engine
-        .apply_command(
+        .apply_scenario_command(
             deciding_player,
             &submit_resolution_choice(vec![animated_mirror]),
         )
@@ -348,7 +350,7 @@ fn mirror_copying_animated_mirror_chains_temporary_copy_and_expires_to_native_va
         .contains(&bears));
     let deciding_player = acquired_mirror_choice.deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![bears]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![bears]))
         .expect("the acquired Cursed Mirror replacement temporarily copies Bears");
     assert_eq!(
         engine.characteristics(mirror).unwrap().names,
@@ -382,7 +384,7 @@ fn mirror_clone_animated_mirror_chain_restores_the_intervening_persistent_copy()
         .position(|object_id| *object_id == mirror)
         .expect("selected physical Cursed Mirror in hand");
     engine
-        .apply_command(0, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
         .expect("cast Cursed Mirror");
     pass_both_players(&mut engine);
 
@@ -394,7 +396,7 @@ fn mirror_clone_animated_mirror_chain_restores_the_intervening_persistent_copy()
     assert!(mirror_choice.presentation.candidates.contains(&clone));
     let deciding_player = mirror_choice.deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![clone]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![clone]))
         .expect("the temporary Mirror effect copies Clone");
 
     let clone_choice = engine
@@ -408,7 +410,7 @@ fn mirror_clone_animated_mirror_chain_restores_the_intervening_persistent_copy()
         .contains(&animated_mirror));
     let deciding_player = clone_choice.deciding_player;
     engine
-        .apply_command(
+        .apply_scenario_command(
             deciding_player,
             &submit_resolution_choice(vec![animated_mirror]),
         )
@@ -439,7 +441,7 @@ fn mirror_clone_animated_mirror_chain_restores_the_intervening_persistent_copy()
         .contains(&bears));
     let deciding_player = acquired_mirror_choice.deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![bears]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![bears]))
         .expect("the acquired Cursed Mirror replacement temporarily copies Bears");
     assert_eq!(
         engine.characteristics(mirror).unwrap().names,
@@ -482,7 +484,7 @@ fn cleanup_sba_without_triggers_still_grants_cleanup_priority() {
         .position(|object_id| *object_id == mirror)
         .expect("selected physical Cursed Mirror in hand");
     engine
-        .apply_command(0, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
         .expect("cast Cursed Mirror");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -496,7 +498,7 @@ fn cleanup_sba_without_triggers_still_grants_cleanup_priority() {
         .expect("Cursed Mirror copy-source choice")
         .deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![target]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![target]))
         .expect("copy the opponent's creature");
 
     let pacifism = inject_permanent_on_battlefield(&mut engine, 0, "pacifism");
@@ -596,7 +598,7 @@ fn welder_returned_cursed_mirror_expires_its_entry_copy_at_cleanup() {
             },
         ],
     );
-    engine.apply_command(0, &exchange).unwrap();
+    engine.apply_scenario_command(0, &exchange).unwrap();
     pass_both_players(&mut engine);
     let deciding_player = engine
         .state
@@ -609,7 +611,7 @@ fn welder_returned_cursed_mirror_expires_its_entry_copy_at_cleanup() {
         tricerules_core::Zone::Graveyard
     );
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![target]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![target]))
         .expect("choose the creature as Cursed Mirror enters from the graveyard");
     assert_eq!(
         engine.state.objects[&mirror].zone,
@@ -649,7 +651,7 @@ fn welder_returned_cursed_mirror_expires_its_entry_copy_at_cleanup() {
             },
         ],
     );
-    engine.apply_command(0, &second_exchange).unwrap();
+    engine.apply_scenario_command(0, &second_exchange).unwrap();
     pass_both_players(&mut engine);
     let deciding_player = engine
         .state
@@ -658,7 +660,7 @@ fn welder_returned_cursed_mirror_expires_its_entry_copy_at_cleanup() {
         .expect("the new battlefield incarnation asks its copy choice")
         .deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![target]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![target]))
         .expect("copy the creature with the new incarnation");
     let generation = engine.state.zone_change_generation[&mirror];
     assert!(generation > first_generation);
@@ -697,7 +699,7 @@ fn mirror_copied_clever_impersonator_keeps_black_vise_opponent_choice_after_clea
         .position(|object_id| *object_id == mirror)
         .expect("selected physical Cursed Mirror in hand");
     engine
-        .apply_command(0, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
         .expect("cast Cursed Mirror");
     pass_both_players(&mut engine);
     let deciding_player = engine
@@ -707,7 +709,7 @@ fn mirror_copied_clever_impersonator_keeps_black_vise_opponent_choice_after_clea
         .expect("Cursed Mirror copy choice")
         .deciding_player;
     engine
-        .apply_command(
+        .apply_scenario_command(
             deciding_player,
             &submit_resolution_choice(vec![impersonator]),
         )
@@ -722,7 +724,7 @@ fn mirror_copied_clever_impersonator_keeps_black_vise_opponent_choice_after_clea
     assert!(pending.presentation.candidates.contains(&vise));
     let deciding_player = pending.deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![vise]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![vise]))
         .expect("let the later copy effect replace the Mirror copy");
 
     let pending = engine
@@ -736,7 +738,7 @@ fn mirror_copied_clever_impersonator_keeps_black_vise_opponent_choice_after_clea
     );
     let deciding_player = pending.deciding_player;
     engine
-        .apply_command(deciding_player, &select_resolution_branch(0))
+        .apply_scenario_command(deciding_player, &select_resolution_branch(0))
         .expect("choose the opponent for the acquired Black Vise ability");
     assert_eq!(
         engine.characteristics(mirror).unwrap().names,
@@ -774,7 +776,7 @@ fn mirrorworks_token_copy_of_cursed_mirror_expires_while_preserving_token_identi
         .position(|object_id| *object_id == mirror)
         .expect("selected physical Cursed Mirror in hand");
     engine
-        .apply_command(0, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
         .expect("cast Cursed Mirror");
     pass_both_players(&mut engine);
     let deciding_player = engine
@@ -784,7 +786,7 @@ fn mirrorworks_token_copy_of_cursed_mirror_expires_while_preserving_token_identi
         .expect("Cursed Mirror copy-source choice")
         .deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(Vec::new()))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(Vec::new()))
         .expect("leave the original artifact unmodified so Mirrorworks can copy it");
 
     for _ in 0..8 {
@@ -800,7 +802,7 @@ fn mirrorworks_token_copy_of_cursed_mirror_expires_while_preserving_token_identi
         .expect("Mirrorworks offers its optional token-copy branch")
         .deciding_player;
     engine
-        .apply_command(deciding_player, &select_resolution_branch(0))
+        .apply_scenario_command(deciding_player, &select_resolution_branch(0))
         .expect("pay for the Mirrorworks token copy");
     submit_mana_resolution_decision(
         &mut engine,
@@ -829,7 +831,7 @@ fn mirrorworks_token_copy_of_cursed_mirror_expires_while_preserving_token_identi
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::CopySource);
     let deciding_player = pending.deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![bear]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![bear]))
         .expect("copy Grizzly Bears with the token");
     assert_eq!(
         engine.characteristics(token).unwrap().names,
@@ -869,7 +871,7 @@ fn clone_of_a_copying_mirror_keeps_copiable_haste_after_mirror_reverts() {
         .position(|object_id| *object_id == mirror)
         .expect("selected physical Cursed Mirror in hand");
     engine
-        .apply_command(0, &cast_spell(mirror_hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(mirror_hand_index, Vec::new()))
         .expect("cast Cursed Mirror");
     pass_both_players(&mut engine);
     let deciding_player = engine
@@ -879,7 +881,7 @@ fn clone_of_a_copying_mirror_keeps_copiable_haste_after_mirror_reverts() {
         .expect("Cursed Mirror copy-source choice")
         .deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![target]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![target]))
         .expect("copy the opponent's creature");
     assert!(engine.effective_has_keyword(mirror, tricerules_cards::Keyword::Haste));
 
@@ -890,7 +892,7 @@ fn clone_of_a_copying_mirror_keeps_copiable_haste_after_mirror_reverts() {
         .position(|object_id| *object_id == clone)
         .expect("selected physical Clone in hand");
     engine
-        .apply_command(0, &cast_spell(clone_hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(clone_hand_index, Vec::new()))
         .expect("cast Clone while Mirror is a copy");
     pass_both_players(&mut engine);
     let pending = engine
@@ -902,7 +904,7 @@ fn clone_of_a_copying_mirror_keeps_copiable_haste_after_mirror_reverts() {
     assert!(pending.presentation.candidates.contains(&mirror));
     let deciding_player = pending.deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![mirror]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![mirror]))
         .expect("copy Mirror's copiable values");
     assert_eq!(
         engine.characteristics(clone).unwrap().names,
@@ -943,7 +945,7 @@ fn declining_cursed_mirror_copy_leaves_its_artifact_mana_ability_available() {
         .position(|object_id| *object_id == mirror)
         .expect("selected physical Cursed Mirror in hand");
     engine
-        .apply_command(0, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
         .expect("cast Cursed Mirror");
     pass_both_players(&mut engine);
     let deciding_player = engine
@@ -953,7 +955,7 @@ fn declining_cursed_mirror_copy_leaves_its_artifact_mana_ability_available() {
         .expect("optional Cursed Mirror copy-source choice")
         .deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(Vec::new()))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(Vec::new()))
         .expect("decline to copy a creature");
 
     assert_eq!(
@@ -986,7 +988,7 @@ fn copied_elvish_visionary_etb_ability_triggers_for_cursed_mirrors_controller() 
         .position(|object_id| *object_id == mirror)
         .expect("selected physical Cursed Mirror in hand");
     engine
-        .apply_command(0, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
         .expect("cast Cursed Mirror");
     pass_both_players(&mut engine);
     let hand_size_before_draw = engine.state.players[0].hand.len();
@@ -998,7 +1000,7 @@ fn copied_elvish_visionary_etb_ability_triggers_for_cursed_mirrors_controller() 
     assert!(pending.presentation.candidates.contains(&visionary));
     let deciding_player = pending.deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![visionary]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![visionary]))
         .expect("copy Elvish Visionary");
 
     assert_eq!(

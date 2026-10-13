@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
 use tricerules_core::{AffectedScope, ContinuousEffect};
 use tricerules_proto::ruled::v1::ResolutionChoiceDecision;
@@ -37,7 +38,7 @@ fn cast_unsummon_at_dirgur(seed: u64) -> (GameEngine, u32, u32) {
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     let spell_id = engine.state.players[0].hand[unsummon];
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(dirgur)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(dirgur)))
         .expect("cast Unsummon targeting Dirgur");
     (engine, dirgur, spell_id)
 }
@@ -72,7 +73,7 @@ fn cast_unsummon_at_spectral_snatcher(seed: u64) -> (GameEngine, u32, u32, u32) 
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     let spell_id = engine.state.players[0].hand[unsummon];
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(snatcher)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(snatcher)))
         .expect("cast Unsummon targeting Spectral Snatcher");
     (engine, snatcher, spell_id, discard)
 }
@@ -143,7 +144,7 @@ fn declining_mana_counters_the_exact_targeting_spell() {
     let (mut engine, _, spell_id) = cast_unsummon_at_dirgur(103_003);
     pass_both_players(&mut engine);
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -180,7 +181,7 @@ fn paying_discard_moves_the_selected_physical_card_and_preserves_the_spell() {
     assert!(pending.presentation.candidates.contains(&discard));
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![discard]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
         .expect("discard to pay Ward");
     assert_eq!(
         engine.state.objects[&discard].zone,
@@ -210,7 +211,7 @@ fn stale_discard_submission_is_rejected_without_clearing_the_choice() {
         .or_default() += 1;
 
     let error = engine
-        .apply_command(0, &submit_resolution_choice(vec![discard]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
         .expect_err("stale physical card must be rejected");
     assert!(matches!(error, tricerules_core::EngineError::Illegal(_)));
     assert!(engine.state.pending_resolution.is_some());
@@ -253,7 +254,7 @@ fn ward_does_not_trigger_for_its_controllers_spell() {
     );
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(dirgur)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(dirgur)))
         .expect("target own Ward permanent");
     assert_eq!(engine.state.stack.len(), 1);
     assert!(engine.state.pending_trigger_order.is_none());
@@ -276,7 +277,7 @@ fn ward_persists_after_its_source_leaves_the_battlefield() {
     pass_both_players(&mut engine);
     assert!(engine.state.pending_resolution.is_some());
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -330,14 +331,14 @@ fn ward_can_counter_an_exact_activated_ability_without_a_zone_move() {
         false,
     );
     engine
-        .apply_command(0, &activate_ability(prodigal, 0, target_object(dirgur)))
+        .apply_scenario_command(0, &activate_ability(prodigal, 0, target_object(dirgur)))
         .expect("activate Prodigal Sorcerer at Dirgur");
     assert_eq!(engine.state.stack.len(), 2);
     let ability_id = engine.state.stack[0].id;
 
     pass_both_players(&mut engine);
     let countered = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -402,7 +403,7 @@ fn each_ward_instance_creates_an_independent_orderable_trigger() {
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     let spell_id = engine.state.players[0].hand[unsummon];
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(dirgur)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(dirgur)))
         .expect("target two Ward instances");
 
     let order = engine
@@ -455,12 +456,12 @@ fn ward_can_counter_the_exact_targeted_triggered_ability() {
     );
     let kavu = hand_index_for_card(&engine, 0, "flametongue_kavu");
     engine
-        .apply_command(0, &cast_spell(kavu, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(kavu, Vec::new()))
         .expect("cast Flametongue Kavu");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -476,7 +477,7 @@ fn ward_can_counter_the_exact_targeted_triggered_ability() {
 
     pass_both_players(&mut engine);
     let countered = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -528,11 +529,11 @@ fn ward_can_counter_a_targeting_spell_copy_without_moving_a_card() {
     );
     let bolt = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(bolt, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(bolt, target_player(1)))
         .expect("cast Lightning Bolt");
     let bolt_id = engine.state.stack[0].id;
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass priority to the Twincast player");
 
     ensure_in_hand(&mut engine, 1, "twincast");
@@ -546,12 +547,12 @@ fn ward_can_counter_a_targeting_spell_copy_without_moving_a_card() {
     );
     let twincast = hand_index_for_card(&engine, 1, "twincast");
     engine
-        .apply_command(1, &cast_spell(twincast, target_object(bolt_id)))
+        .apply_scenario_command(1, &cast_spell(twincast, target_object(bolt_id)))
         .expect("cast Twincast");
     pass_both_players(&mut engine);
     assert!(engine.state.pending_resolution.is_some());
     engine
-        .apply_command(1, &submit_resolution_choice(vec![dirgur]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![dirgur]))
         .expect("retarget the copy to Dirgur");
     let copy_id = engine
         .state
@@ -573,7 +574,7 @@ fn ward_can_counter_a_targeting_spell_copy_without_moving_a_card() {
 
     pass_both_players(&mut engine);
     let countered = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -624,19 +625,80 @@ fn mana_abilities_remain_available_during_a_ward_payment() {
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     let spell_id = engine.state.players[0].hand[unsummon];
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(dirgur)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(dirgur)))
         .expect("cast Unsummon");
     pass_both_players(&mut engine);
     assert!(engine.state.pending_resolution.is_some());
 
-    engine
-        .apply_command(0, &activate_ability(first_island, 0, Vec::new()))
+    let original_offer_id = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Ward payment prompt")
+        .resolution_prompt_id
+        .get();
+    assert_ne!(original_offer_id, 0);
+
+    let unchanged_refresh = engine
+        .apply_scenario_command(0, &activate_ability(first_island, 0, Vec::new()))
         .expect("first mana ability during Ward");
-    engine
-        .apply_command(0, &activate_ability(second_island, 0, Vec::new()))
+    let unchanged_offer = find_resolution_choice(&unchanged_refresh)
+        .expect("the same Ward payment offer is republished");
+    assert_eq!(unchanged_offer.resolution_prompt_id, original_offer_id);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .resolution_prompt_id
+            .get(),
+        original_offer_id,
+        "an answer-semantics-preserving refresh retains its prompt ID"
+    );
+
+    let changed_refresh = engine
+        .apply_scenario_command(0, &activate_ability(second_island, 0, Vec::new()))
         .expect("second mana ability during Ward");
-    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
-        .expect("pay Ward with mana produced during the prompt");
+    let changed_offer = find_resolution_choice(&changed_refresh)
+        .expect("the newly payable Ward offer is republished");
+    let current_offer_id = changed_offer.resolution_prompt_id;
+    assert_ne!(current_offer_id, original_offer_id);
+    assert!(changed_offer.payment_currently_legal);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .resolution_prompt_id
+            .get(),
+        current_offer_id
+    );
+
+    let mut stale_answer = submit_resolution_decision(ResolutionChoiceDecision::Decline);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = stale_answer.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = original_offer_id;
+    let unchanged_state = format!("{:?}", engine.state);
+    assert!(engine.apply_command(0, &stale_answer).is_err());
+    assert_eq!(
+        format!("{:?}", engine.state),
+        unchanged_state,
+        "a stale offer cannot mutate the continuation, prompt allocator, or command-visible state"
+    );
+
+    submit_mana_resolution(
+        &mut engine,
+        0,
+        SubmitResolutionChoice {
+            resolution_prompt_id: current_offer_id,
+            decision: ResolutionChoiceDecision::PayMana as i32,
+            ..Default::default()
+        },
+    )
+    .expect("pay Ward with mana produced during the prompt");
     assert!(engine.state.stack.iter().any(|item| item.id == spell_id));
 }
 
@@ -675,22 +737,22 @@ fn declining_ward_rewinds_mana_abilities_activated_during_payment() {
     );
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(dirgur)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(dirgur)))
         .expect("cast Unsummon");
     pass_both_players(&mut engine);
 
     engine
-        .apply_command(0, &activate_ability(first_island, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_ability(first_island, 0, Vec::new()))
         .expect("first mana ability during Ward");
     engine
-        .apply_command(0, &activate_ability(second_island, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_ability(second_island, 0, Vec::new()))
         .expect("second mana ability during Ward");
     assert_eq!(engine.state.players[0].mana_pool.blue, 2);
     assert!(engine.state.objects[&first_island].tapped);
     assert!(engine.state.objects[&second_island].tapped);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -726,7 +788,7 @@ fn ward_payment_replays_deterministically_for_the_same_seed_and_commands() {
         let (mut engine, _, spell_id, discard) = cast_unsummon_at_spectral_snatcher(103_015);
         pass_both_players(&mut engine);
         engine
-            .apply_command(0, &submit_resolution_choice(vec![discard]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
             .expect("pay Ward by discarding");
         pass_both_players(&mut engine);
         (

@@ -5,6 +5,7 @@
 //! 701.7, 701.8, 701.21, and 701.22 govern targets, timing, costs, new-object identity,
 //! activated and triggered abilities, mana abilities, resolution, tokens, destruction,
 //! sacrifice, and scry.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -26,10 +27,10 @@ fn seat_on_top(engine: &mut GameEngine, player: usize, card_ids: &[&str]) -> Vec
 
 fn resolve_top_two_player(engine: &mut GameEngine) -> RuledEventBatch {
     engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .expect("first pass");
     engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .expect("second pass resolves")
 }
 
@@ -73,7 +74,7 @@ fn candy_trail_scry_is_private_then_sacrifice_gains_and_draws_in_order() {
     assert_eq!(choice.candidate_object_ids, top);
     assert!(choice.public_reveal.is_none());
     engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .expect("bottom one card and keep one on top");
 
     engine.state.players[0].life = 17;
@@ -204,7 +205,7 @@ fn hot_dog_cart_and_omni_cheese_use_tokens_and_selectable_mana_paths() {
     assert_eq!(battlefield_token_oids(&engine, 0, "food").len(), 1);
 
     engine
-        .apply_command(0, &activate_with_mana_option(&engine, cart, 0, 1))
+        .apply_scenario_command(0, &activate_with_mana_option(&engine, cart, 0, 1))
         .expect("Hot Dog Cart produces the selected blue mana");
     assert_eq!(engine.state.players[0].mana_pool.blue, 1);
 
@@ -218,7 +219,7 @@ fn hot_dog_cart_and_omni_cheese_use_tokens_and_selectable_mana_paths() {
         },
     );
     engine
-        .apply_command(0, &activate_with_mana_option(&engine, pizza, 0, 3))
+        .apply_scenario_command(0, &activate_with_mana_option(&engine, pizza, 0, 3))
         .expect("Omni-Cheese Pizza pays and sacrifices before making red mana");
     assert_eq!(engine.state.objects[&pizza].zone, Zone::Graveyard);
     assert_eq!(engine.state.players[0].mana_pool.red, 1);

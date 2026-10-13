@@ -5,6 +5,7 @@
 //! its chooser-private/public boundary; CR 603.6a governs the Landfall and creature-enter
 //! triggers and their controller scope; CR 605.1a/605.3b govern the {T} mana abilities and the
 //! color choice made at activation; CR 613.4c governs the live count-scaled self +1/+0.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::{TurnStep, Zone};
@@ -74,11 +75,13 @@ fn issue_333_pilfer_publicly_reveals_and_discards_only_a_nonland() {
 
     let spell = hand_index_for_card(&engine, 0, "pilfer");
     engine
-        .apply_command(0, &cast_spell(spell, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(spell, target_player(1)))
         .expect("cast Pilfer");
-    engine.apply_command(0, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
     let parked = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and Pilfer parks for the choice");
 
     let choice = find_resolution_choice(&parked).expect("opponent-hand choice");
@@ -120,7 +123,7 @@ fn issue_333_pilfer_publicly_reveals_and_discards_only_a_nonland() {
     ));
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![nonland]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![nonland]))
         .expect("choose the nonland card");
     assert_eq!(engine.state.objects[&nonland].zone, Zone::Graveyard);
     assert!(engine.state.players[1].hand.contains(&land));
@@ -146,17 +149,19 @@ fn issue_333_pilfer_rejects_ineligible_and_stale_choices_atomically() {
     );
     let spell = hand_index_for_card(&engine, 0, "pilfer");
     engine
-        .apply_command(0, &cast_spell(spell, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(spell, target_player(1)))
         .expect("cast Pilfer");
-    engine.apply_command(0, &pass()).expect("caster passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("resolution parks for the choice");
 
     let hand_before = engine.state.players[1].hand.clone();
     assert!(
         engine
-            .apply_command(0, &submit_resolution_choice(vec![land]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
             .is_err(),
         "a land is not a legal nonland selection"
     );
@@ -170,7 +175,7 @@ fn issue_333_pilfer_rejects_ineligible_and_stale_choices_atomically() {
         .or_default() += 1;
     assert!(
         engine
-            .apply_command(0, &submit_resolution_choice(vec![nonland]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![nonland]))
             .is_err(),
         "a stale generation must not satisfy the parked choice"
     );
@@ -194,7 +199,9 @@ fn issue_333_pilfer_requires_its_target_opponent() {
     );
     let spell = hand_index_for_card(&engine, 0, "pilfer");
     assert!(
-        engine.apply_command(0, &cast_spell(spell, vec![])).is_err(),
+        engine
+            .apply_scenario_command(0, &cast_spell(spell, vec![]))
+            .is_err(),
         "CR 601.2c: Pilfer cannot be cast without its mandatory opponent target"
     );
     assert_eq!(
@@ -221,12 +228,12 @@ fn issue_333_pilfer_fizzles_when_its_target_opponent_has_left_the_game() {
     );
     let spell = hand_index_for_card(&engine, 0, "pilfer");
     engine
-        .apply_command(0, &cast_spell(spell, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(spell, target_player(1)))
         .expect("cast Pilfer");
 
     engine.state.players[1].has_lost = true;
     let resolved = engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("the spell resolves with an illegal player target");
     assert!(
         find_resolution_choice(&resolved).is_none(),
@@ -318,14 +325,16 @@ fn issue_333_two_and_three_mana_abilities_produce_one_chosen_color() {
     let mut engine = main1_engine(333_007, &["transdimensional_bovine"], &[]);
     let bovine = move_ready_to_battlefield(&mut engine, 0, "transdimensional_bovine");
     let blue_two = activate_mana_option(&engine, bovine, 0, 1);
-    engine.apply_command(0, &blue_two).expect("tap for {U}{U}");
+    engine
+        .apply_scenario_command(0, &blue_two)
+        .expect("tap for {U}{U}");
     assert_eq!(engine.state.players[0].mana_pool.blue, 2);
     assert_eq!(engine.state.players[0].mana_pool.white, 0);
     assert_eq!(engine.state.players[0].mana_pool.green, 0);
     assert!(engine.state.objects[&bovine].tapped);
     let blue_again = activate_mana_option(&engine, bovine, 0, 1);
     assert!(
-        engine.apply_command(0, &blue_again).is_err(),
+        engine.apply_scenario_command(0, &blue_again).is_err(),
         "an already-tapped source cannot pay the tap cost again"
     );
 
@@ -333,7 +342,7 @@ fn issue_333_two_and_three_mana_abilities_produce_one_chosen_color() {
     let lotus = move_ready_to_battlefield(&mut engine, 0, "gilded_lotus");
     let red_three = activate_mana_option(&engine, lotus, 0, 3);
     engine
-        .apply_command(0, &red_three)
+        .apply_scenario_command(0, &red_three)
         .expect("tap for {R}{R}{R}");
     assert_eq!(engine.state.players[0].mana_pool.red, 3);
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);
@@ -341,7 +350,7 @@ fn issue_333_two_and_three_mana_abilities_produce_one_chosen_color() {
 
     let bad_option = activate_mana_option(&engine, lotus, 0, 5);
     assert!(
-        engine.apply_command(0, &bad_option).is_err(),
+        engine.apply_scenario_command(0, &bad_option).is_err(),
         "a fourth color option index is illegal"
     );
 }

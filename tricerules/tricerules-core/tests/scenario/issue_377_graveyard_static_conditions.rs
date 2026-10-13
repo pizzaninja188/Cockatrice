@@ -8,6 +8,7 @@
 //! cohort's ordinary clauses: entry mill/surveil/life/tokens, the hybrid activated surveil, the
 //! upkeep surveil, the optional upkeep mill, the enters-or-attacks loot, and the conditional
 //! Villain hexproof.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -39,7 +40,7 @@ fn stats(engine: &GameEngine, oid: u32) -> (u32, u32) {
 
 fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     pass_both_players(engine);
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
@@ -47,10 +48,10 @@ fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
 
 fn pass_to_declare_blockers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes after declaring attackers");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes after attackers are declared");
 }
 
@@ -90,7 +91,7 @@ fn issue_377_akawalli_descend_eight_boundary_limits_blockers() {
     assert_eq!(stats(&below, akawalli), (5, 5));
     advance_main1_to_declare_attackers(&mut below);
     below
-        .apply_command(0, &declare_attackers(vec![akawalli]))
+        .apply_scenario_command(0, &declare_attackers(vec![akawalli]))
         .expect("declare Akawalli");
     pass_to_declare_blockers(&mut below);
     assert_eq!(
@@ -101,7 +102,7 @@ fn issue_377_akawalli_descend_eight_boundary_limits_blockers() {
         "below Descend 8 both blockers remain legal"
     );
     below
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![
                 BlockPair {
@@ -127,11 +128,11 @@ fn issue_377_akawalli_descend_eight_boundary_limits_blockers() {
     }
     assert_eq!(stats(&at, akawalli), (7, 7));
     advance_main1_to_declare_attackers(&mut at);
-    at.apply_command(0, &declare_attackers(vec![akawalli]))
+    at.apply_scenario_command(0, &declare_attackers(vec![akawalli]))
         .expect("declare Akawalli");
     pass_to_declare_blockers(&mut at);
     assert!(
-        at.apply_command(
+        at.apply_scenario_command(
             1,
             &declare_blockers(vec![
                 BlockPair {
@@ -147,7 +148,7 @@ fn issue_377_akawalli_descend_eight_boundary_limits_blockers() {
         .is_err(),
         "Descend 8 stops a second blocking creature"
     );
-    at.apply_command(
+    at.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: akawalli,
@@ -285,9 +286,11 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
+    engine
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
     let mut batch = engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item");
     for (_, _, order_batch) in answer_simultaneous_entry_order_in_engine_order(engine) {
         batch.events.extend(order_batch.events);
@@ -319,7 +322,7 @@ fn advance_to_controller_next_upkeep(engine: &mut GameEngine, player: i32) {
         resolve_cleanup_discards_if_any(engine);
         let priority = engine.state.priority_player_id();
         engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("advance turn");
     }
     panic!("turn advancement stalled before P{player}'s next upkeep");
@@ -335,7 +338,7 @@ fn pass_until_choice_or_stack_empty(engine: &mut GameEngine) {
         }
         answer_trigger_order_in_engine_order(engine);
         let priority = engine.state.priority_player_id();
-        if engine.apply_command(priority, &pass()).is_err() {
+        if engine.apply_scenario_command(priority, &pass()).is_err() {
             assert!(
                 engine.state.pending_resolution.is_some(),
                 "unexpected stalled pass while resolving an upkeep trigger"
@@ -349,6 +352,7 @@ fn pass_until_choice_or_stack_empty(engine: &mut GameEngine) {
 fn select_optional_effect() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: 0,
             ..Default::default()
@@ -359,6 +363,7 @@ fn select_optional_effect() -> RuledCommand {
 fn decline_optional_effect() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::Decline as i32,
             ..Default::default()
         })),
@@ -392,7 +397,7 @@ fn issue_377_cephalid_surveils_three_on_entry() {
     let candidates = choice.presentation.candidates.clone();
     assert_eq!(candidates.len(), 3, "surveil three looks at three cards");
     engine
-        .apply_command(0, &submit_resolution_choice(candidates.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(candidates.clone()))
         .expect("choose the whole cohort for the graveyard");
     for object_id in candidates {
         assert_eq!(engine.state.objects[&object_id].zone, Zone::Graveyard);
@@ -406,7 +411,7 @@ fn issue_377_mind_drill_hybrid_activation_surveils_one() {
     grant_pool(&mut engine, 0);
     let command = activate_ability_for(&engine, source, 0, Vec::new());
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("the hybrid mana cost is payable from the pool");
     resolve_top_stack(&mut engine);
     let choice = engine
@@ -417,7 +422,7 @@ fn issue_377_mind_drill_hybrid_activation_surveils_one() {
     let candidates = choice.presentation.candidates.clone();
     assert_eq!(candidates.len(), 1);
     engine
-        .apply_command(0, &submit_resolution_choice(candidates.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(candidates.clone()))
         .expect("put the looked-at card into the graveyard");
     assert_eq!(engine.state.objects[&candidates[0]].zone, Zone::Graveyard);
 }
@@ -464,7 +469,7 @@ fn issue_377_dreadwing_entry_loot_takes_a_private_discard() {
         .expect("draw-then-discard parks the private discard");
     assert!(choice.presentation.candidates.contains(&known));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![known]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![known]))
         .expect("discard the known card");
     assert_eq!(engine.state.objects[&known].zone, Zone::Graveyard);
 }
@@ -521,7 +526,7 @@ fn issue_377_patchwork_beastie_optional_upkeep_mill_is_optional() {
         ChoiceKind::ResolutionBranch
     );
     decline
-        .apply_command(0, &decline_optional_effect())
+        .apply_scenario_command(0, &decline_optional_effect())
         .expect("decline the optional mill");
     assert_eq!(decline.state.players[0].library.len(), library_before);
 
@@ -541,7 +546,7 @@ fn issue_377_patchwork_beastie_optional_upkeep_mill_is_optional() {
         ChoiceKind::ResolutionBranch
     );
     accept
-        .apply_command(0, &select_optional_effect())
+        .apply_scenario_command(0, &select_optional_effect())
         .expect("accept the optional mill");
     assert_eq!(accept.state.objects[&top].zone, Zone::Graveyard);
 }

@@ -1,5 +1,6 @@
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use crate::helpers::ScenarioCommandExt;
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     permanent_moved::Destination, ruled_command::Cmd, ruled_event::Ev, ChoiceKind,
     ResolutionChoiceDecision, RuledCommand, RuledEventBatch, SubmitResolutionChoice,
@@ -8,6 +9,7 @@ use tricerules_proto::ruled::v1::{
 fn select_branch() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: 0,
             ..Default::default()
@@ -20,7 +22,7 @@ fn resolve_top(engine: &mut GameEngine) -> RuledEventBatch {
     for _ in 0..engine.state.players.len() {
         batch = Some(
             engine
-                .apply_command(engine.state.priority_player_id(), &pass())
+                .apply_scenario_command(engine.state.priority_player_id(), &pass())
                 .expect("priority pass"),
         );
     }
@@ -59,7 +61,7 @@ fn setup(seed: u64, with_graveyard_card: bool) -> (GameEngine, u32, Option<u32>)
 fn cast_and_park(engine: &mut GameEngine, target: u32) -> RuledEventBatch {
     let slot = hand_index_for_card(engine, 0, "heated_argument");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Heated Argument");
     let batch = resolve_top(engine);
     assert_eq!(engine.state.objects[&target].damage, 6);
@@ -81,7 +83,7 @@ fn issue_242_payment_exiles_exact_card_and_damages_current_controller() {
     let (mut engine, target, graveyard) = setup(242_001, true);
     let graveyard = graveyard.unwrap();
     cast_and_park(&mut engine, target);
-    engine.apply_command(0, &select_branch()).unwrap();
+    engine.apply_scenario_command(0, &select_branch()).unwrap();
     let pending = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::GraveyardCards);
     assert_eq!(pending.presentation.candidates, vec![graveyard]);
@@ -95,7 +97,7 @@ fn issue_242_payment_exiles_exact_card_and_damages_current_controller() {
     target_object.controller = 0;
 
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![graveyard]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![graveyard]))
         .expect("pay by exiling the selected incarnation");
     assert_eq!(engine.state.objects[&graveyard].zone, Zone::Exile);
     assert_eq!(engine.state.players[0].life, 18);
@@ -113,7 +115,7 @@ fn issue_242_decline_and_empty_graveyard_skip_the_contingent_damage() {
     let (mut declined, target, graveyard) = setup(242_002, true);
     cast_and_park(&mut declined, target);
     declined
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -127,7 +129,7 @@ fn issue_242_decline_and_empty_graveyard_skip_the_contingent_damage() {
     let (mut empty, target, _) = setup(242_003, false);
     let slot = hand_index_for_card(&empty, 0, "heated_argument");
     empty
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap();
     resolve_top(&mut empty);
     assert!(empty.state.pending_resolution.is_none());
@@ -142,7 +144,7 @@ fn issue_242_invalid_graveyard_selections_are_atomic() {
         let graveyard = graveyard.unwrap();
         let opposing = inject_graveyard_card(&mut engine, 1, "forest");
         cast_and_park(&mut engine, target);
-        engine.apply_command(0, &select_branch()).unwrap();
+        engine.apply_scenario_command(0, &select_branch()).unwrap();
         let chosen = match case {
             0 => vec![opposing],
             1 => vec![graveyard, graveyard],
@@ -166,7 +168,7 @@ fn issue_242_invalid_graveyard_selections_are_atomic() {
         };
         let before = serde_json::to_value(&engine.state).unwrap();
         assert!(engine
-            .apply_command(0, &submit_resolution_choice(chosen))
+            .apply_scenario_command(0, &submit_resolution_choice(chosen))
             .is_err());
         assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
         assert_eq!(engine.state.players[1].life, 20);
@@ -178,7 +180,7 @@ fn issue_242_illegal_sole_target_fizzles_before_damage_or_payment() {
     let (mut engine, target, graveyard) = setup(242_020, true);
     let slot = hand_index_for_card(&engine, 0, "heated_argument");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap();
     engine.state.players[1]
         .battlefield
@@ -206,12 +208,12 @@ fn issue_242_accepted_commands_replay_identically() {
         let graveyard = graveyard.unwrap();
         let slot = hand_index_for_card(&engine, 0, "heated_argument");
         let cast = engine
-            .apply_command(0, &cast_spell(slot, target_object(target)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
             .unwrap();
         let resolve = resolve_top(&mut engine);
-        let branch = engine.apply_command(0, &select_branch()).unwrap();
+        let branch = engine.apply_scenario_command(0, &select_branch()).unwrap();
         let payment = engine
-            .apply_command(0, &submit_resolution_choice(vec![graveyard]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![graveyard]))
             .unwrap();
         (
             vec![cast, resolve, branch, payment],

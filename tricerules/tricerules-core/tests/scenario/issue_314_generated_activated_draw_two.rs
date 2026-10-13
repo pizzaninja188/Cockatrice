@@ -6,6 +6,7 @@
 //! ability independent after activation; CR 121.1-121.4 and 704.5b govern the
 //! ordered draw and empty-library state-based action; CR 110.2 and 113.8 keep
 //! control and the ability's draw recipient on the activating player.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use prost::Message;
@@ -45,11 +46,11 @@ fn creature_engine(seed: u64, card_id: &str, draws: &[&str]) -> (GameEngine, u32
 fn resolve_top_two_player(engine: &mut GameEngine) {
     let first = engine.state.priority_player_id();
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first player passes priority");
     let second = engine.state.priority_player_id();
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second player passes priority");
 }
 
@@ -70,7 +71,7 @@ fn three_player_main1(seed: u64) -> GameEngine {
     while engine.state.turn_step != TurnStep::Main1 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("advance three-player turn");
     }
     engine
@@ -84,7 +85,7 @@ fn resolve_stack_three_player(engine: &mut GameEngine) {
             }
             let player = engine.state.priority_player_id();
             engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("three-player priority pass");
         }
     }
@@ -115,7 +116,7 @@ fn issue_314_mystic_pays_exact_cost_and_draws_two_in_order() {
     );
 
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 0, Vec::new()))
         .expect("Mystic Archaeologist pays {3}{U}{U}");
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);
@@ -143,7 +144,7 @@ fn issue_314_oscorp_requires_exact_blue_payment_and_rejects_atomic_misses() {
     );
     let before = wrong_color.state.players[0].mana_pool;
     wrong_color
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&wrong_color, source, 0, Vec::new()),
         )
@@ -163,7 +164,7 @@ fn issue_314_oscorp_requires_exact_blue_payment_and_rejects_atomic_misses() {
     );
     let before = short.state.players[0].mana_pool;
     short
-        .apply_command(0, &activate_ability_for(&short, source, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_ability_for(&short, source, 0, Vec::new()))
         .expect_err("five generic mana is insufficient for Oscorp");
     assert_eq!(short.state.players[0].mana_pool, before);
     assert!(short.state.stack.is_empty());
@@ -179,7 +180,7 @@ fn issue_314_oscorp_requires_exact_blue_payment_and_rejects_atomic_misses() {
         },
     );
     exact
-        .apply_command(0, &activate_ability_for(&exact, source, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_ability_for(&exact, source, 0, Vec::new()))
         .expect("Oscorp pays six generic and one blue");
     assert_eq!(exact.state.players[0].mana_pool.colorless, 1);
     assert_eq!(exact.state.players[0].mana_pool.blue, 0);
@@ -190,7 +191,7 @@ fn issue_314_oscorp_requires_exact_blue_payment_and_rejects_atomic_misses() {
 fn issue_314_activation_is_controller_only_and_controlled_player_draws() {
     let (mut engine, source, _) = creature_engine(314_005, "mystic_archaeologist", &[]);
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("P0 passes so the noncontroller holds priority");
     assert_eq!(engine.state.priority_player_id(), 1);
     give_mana(
@@ -205,7 +206,7 @@ fn issue_314_activation_is_controller_only_and_controlled_player_draws() {
     let before = engine.state.players[1].mana_pool;
     let command_index_before = engine.state.command_index;
     engine
-        .apply_command(1, &activate_ability_for(&engine, source, 0, Vec::new()))
+        .apply_scenario_command(1, &activate_ability_for(&engine, source, 0, Vec::new()))
         .expect_err("an opponent holding priority cannot activate a creature it does not control");
     assert_eq!(engine.state.players[1].mana_pool, before);
     assert_eq!(engine.state.command_index, command_index_before);
@@ -229,13 +230,13 @@ fn issue_314_activation_is_controller_only_and_controlled_player_draws() {
     );
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("P0 passes priority");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("P1 passes priority");
     engine
-        .apply_command(2, &activate_ability_for(&engine, source, 0, Vec::new()))
+        .apply_scenario_command(2, &activate_ability_for(&engine, source, 0, Vec::new()))
         .expect("P2 controls and activates the source");
     assert_eq!(engine.state.objects[&source].owner, 0);
     assert_eq!(engine.state.objects[&source].controller, 2);
@@ -267,7 +268,7 @@ fn issue_314_cannot_activate_from_real_non_battlefield_zone_without_mutation() {
     );
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(source)))
         .expect("cast Unsummon to move the source out of the battlefield");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
@@ -285,7 +286,7 @@ fn issue_314_cannot_activate_from_real_non_battlefield_zone_without_mutation() {
     let command_index_before = engine.state.command_index;
     let generation = engine.state.zone_change_generation[&source];
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 0, Vec::new()))
         .expect_err("a creature activated ability is unavailable from its hand");
     assert_eq!(engine.state.players[0].mana_pool, mana_before);
     assert_eq!(engine.state.command_index, command_index_before);
@@ -311,11 +312,11 @@ fn issue_314_ability_draws_after_source_leaves_before_resolution() {
         },
     );
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 0, Vec::new()))
         .expect("activate before responding");
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(source)))
         .expect("return the source while its ability is on the stack");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -344,7 +345,7 @@ fn issue_314_short_library_draws_available_card_then_commits_sba_loss() {
         },
     );
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 0, Vec::new()))
         .expect("activate draw-two ability");
     resolve_top_two_player(&mut engine);
 
@@ -378,7 +379,7 @@ fn issue_314_stale_generation_rejects_before_payment_and_commands_replay_identic
     );
     let unsummon = hand_index_for_card(&stale, 0, "unsummon");
     stale
-        .apply_command(0, &cast_spell(unsummon, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(source)))
         .expect("cast Unsummon to produce the first real zone change");
     resolve_entire_stack_two_player(&mut stale);
     assert_eq!(stale.state.objects[&source].zone, Zone::Hand);
@@ -396,7 +397,7 @@ fn issue_314_stale_generation_rejects_before_payment_and_commands_replay_identic
     );
     let source_hand_index = hand_index_for_card(&stale, 0, "mystic_archaeologist");
     stale
-        .apply_command(0, &cast_spell(source_hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(source_hand_index, Vec::new()))
         .expect("cast the same physical source for a fresh battlefield generation");
     resolve_entire_stack_two_player(&mut stale);
     assert_eq!(stale.state.objects[&source].zone, Zone::Battlefield);
@@ -416,7 +417,7 @@ fn issue_314_stale_generation_rejects_before_payment_and_commands_replay_identic
     let mana_before = stale.state.players[0].mana_pool;
     let command_index_before = stale.state.command_index;
     stale
-        .apply_command(0, &stale_command)
+        .apply_scenario_command(0, &stale_command)
         .expect_err("a command from the old battlefield generation cannot be replayed");
     assert_eq!(stale.state.players[0].mana_pool, mana_before);
     assert_eq!(stale.state.command_index, command_index_before);
@@ -428,7 +429,7 @@ fn issue_314_stale_generation_rejects_before_payment_and_commands_replay_identic
     );
 
     stale
-        .apply_command(0, &activate_ability_for(&stale, source, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_ability_for(&stale, source, 0, Vec::new()))
         .expect("a command captured from the fresh battlefield generation is accepted");
     assert_eq!(
         stale.state.players[0].mana_pool, pool_before_activation,
@@ -466,7 +467,7 @@ fn issue_314_stale_generation_rejects_before_payment_and_commands_replay_identic
         for (player, command) in commands {
             responses.push(
                 engine
-                    .apply_command(player, &command)
+                    .apply_scenario_command(player, &command)
                     .expect("replay command accepted")
                     .encode_to_vec(),
             );

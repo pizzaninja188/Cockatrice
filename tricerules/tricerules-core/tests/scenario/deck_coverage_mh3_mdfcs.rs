@@ -5,10 +5,11 @@
 //! and 118.3b govern the 3-life entry replacement; CR 701.14 governs fight; CR 608.2b rechecks
 //! targets; CR 701.23-24 govern optional search, tapped placement, and shuffle; CR 509.1b and
 //! 611.2a-c govern the dynamic until-end-of-turn blocking restriction.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{ContinuousEffectKind, CounterKind, EffectDuration, Keyword};
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     ruled_event::Ev, BlockPair, ChoiceKind, ResolutionChoiceDecision, TargetRef, TargetRefKind,
 };
@@ -52,7 +53,7 @@ fn cast_bridgeworks(engine: &mut GameEngine, targets: Vec<TargetRef>) -> u32 {
     );
     let slot = hand_index_for_card(engine, 0, BRIDGEWORKS);
     engine
-        .apply_command(0, &cast_spell_face(slot, targets, 0))
+        .apply_scenario_command(0, &cast_spell_face(slot, targets, 0))
         .expect("cast the Bridgeworks Battle face");
     spell
 }
@@ -96,13 +97,13 @@ fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
         .sole_defending_player_id()
         .expect("two-player combat has one defender");
     engine
-        .apply_command(active_player, &primitive_yield())
+        .apply_scenario_command(active_player, &primitive_yield())
         .expect("main1 to beginning of combat");
     engine
-        .apply_command(active_player, &pass())
+        .apply_scenario_command(active_player, &pass())
         .expect("active player passes in beginning of combat");
     engine
-        .apply_command(defending_player, &pass())
+        .apply_scenario_command(defending_player, &pass())
         .expect("defender passes in beginning of combat");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 }
@@ -114,10 +115,10 @@ fn pass_to_declare_blockers(engine: &mut GameEngine) {
         .sole_defending_player_id()
         .expect("two-player combat has one defender");
     engine
-        .apply_command(active_player, &pass())
+        .apply_scenario_command(active_player, &pass())
         .expect("active player passes after attackers are declared");
     engine
-        .apply_command(defending_player, &pass())
+        .apply_scenario_command(defending_player, &pass())
         .expect("defender passes after attackers are declared");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareBlockers);
 }
@@ -129,7 +130,7 @@ fn play_mdfc_land(
     let land = inject_card_into_hand(engine, 0, card_id);
     let slot = hand_index_for_card(engine, 0, card_id);
     let batch = engine
-        .apply_command(0, &play_land_face(slot, 1))
+        .apply_scenario_command(0, &play_land_face(slot, 1))
         .expect("play the land face");
     (land, batch)
 }
@@ -161,7 +162,7 @@ fn bridgeworks_requires_its_own_target_and_fights_only_when_the_optional_target_
 
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell_face(slot, vec![permanent_target(opponent, 0)], 0),
             )
@@ -169,7 +170,7 @@ fn bridgeworks_requires_its_own_target_and_fights_only_when_the_optional_target_
         "the required first target must be a creature its caster controls"
     );
     engine
-        .apply_command(0, &cast_spell_face(slot, vec![permanent_target(own, 0)], 0))
+        .apply_scenario_command(0, &cast_spell_face(slot, vec![permanent_target(own, 0)], 0))
         .expect("the optional opposing fight target may be omitted");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -234,7 +235,7 @@ fn both_mh3_land_faces_offer_three_life_and_produce_their_exact_color() {
         assert_eq!(choice.deciding_player_id, 0);
         assert_eq!((choice.min, choice.max), (0, 1));
         assert!(choice.resolution_branches[0].selectable);
-        paid.apply_command(
+        paid.apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -255,7 +256,7 @@ fn both_mh3_land_faces_offer_three_life_and_produce_their_exact_color() {
         let (land, offer) = play_mdfc_land(&mut declined, card_id);
         assert!(find_resolution_choice(&offer).is_some());
         declined
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &submit_resolution_decision(ResolutionChoiceDecision::Decline),
             )
@@ -270,14 +271,14 @@ fn both_mh3_land_faces_offer_three_life_and_produce_their_exact_color() {
             find_resolution_choice(&offer).expect("unaffordable payment still offers decline");
         assert!(!choice.resolution_branches[0].selectable);
         assert!(unable
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
             )
             .is_err());
         assert!(unable.state.pending_resolution.is_some());
         unable
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &submit_resolution_decision(ResolutionChoiceDecision::Decline),
             )
@@ -316,7 +317,7 @@ fn cast_sundering(engine: &mut GameEngine, target: u32) -> u32 {
     );
     let slot = hand_index_for_card(engine, 0, SUNDERING);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_face(slot, vec![permanent_target(target, 0)], 0),
         )
@@ -327,9 +328,11 @@ fn cast_sundering(engine: &mut GameEngine, target: u32) -> u32 {
 fn resolve_sundering_to_choice(
     engine: &mut GameEngine,
 ) -> tricerules_proto::ruled::v1::RuledEventBatch {
-    engine.apply_command(0, &pass()).expect("caster passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and Sundering resolves to its optional search")
 }
 
@@ -368,7 +371,7 @@ fn sundering_search_belongs_to_destroyed_land_controller_enters_tapped_and_check
     assert_eq!(choice.deciding_player_id, 1);
     assert_eq!((choice.min, choice.max), (0, 1));
     let search = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -379,7 +382,7 @@ fn sundering_search_belongs_to_destroyed_land_controller_enters_tapped_and_check
     assert!(choice.candidate_object_ids.contains(&basic));
     assert!(!choice.candidate_object_ids.contains(&nonbasic));
     let completion = engine
-        .apply_command(1, &submit_resolution_choice(vec![basic]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![basic]))
         .expect("target controller finds a basic land");
     assert_eq!(shuffle_logs(&completion, 1), 1);
     assert_eq!(engine.state.objects[&basic].zone, Zone::Battlefield);
@@ -397,7 +400,7 @@ fn sundering_search_belongs_to_destroyed_land_controller_enters_tapped_and_check
     let future_nonflyer = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare an attacker");
     pass_to_declare_blockers(&mut engine);
     let legal_pairs = &engine.initial_response_batch().legal_by_player[&1].legal_block_pairs;
@@ -416,7 +419,7 @@ fn sundering_search_belongs_to_destroyed_land_controller_enters_tapped_and_check
     );
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &declare_blockers(vec![BlockPair {
                     attacker_id: attacker,
@@ -442,7 +445,7 @@ fn sundering_search_belongs_to_destroyed_land_controller_enters_tapped_and_check
         "gaining flying after resolution removes the creature from the matching scope"
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -462,7 +465,7 @@ fn sundering_decline_skips_search_and_shuffle_but_keeps_restriction_until_cleanu
     let choice = find_resolution_choice(&first).expect("target controller optional search");
     assert_eq!(choice.deciding_player_id, 1);
     let completion = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -494,7 +497,7 @@ fn sundering_indestructible_land_still_allows_search_and_applies_restriction() {
     let choice = find_resolution_choice(&first).expect("indestructible target remains legal");
     assert_eq!(choice.deciding_player_id, 1);
     let search = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -502,7 +505,7 @@ fn sundering_indestructible_land_still_allows_search_and_applies_restriction() {
     let choice = find_resolution_choice(&search).expect("basic-land choice");
     assert!(choice.candidate_object_ids.contains(&basic));
     engine
-        .apply_command(1, &submit_resolution_choice(vec![basic]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![basic]))
         .expect("find Mountain");
     assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&basic].zone, Zone::Battlefield);
@@ -517,9 +520,11 @@ fn sundering_illegal_target_fizzles_search_and_block_restriction_together() {
     let library_before = engine.state.players[1].library.clone();
     let spell = cast_sundering(&mut engine, target);
     leave_battlefield_to_hand(&mut engine, 1, target);
-    engine.apply_command(0, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
     let completion = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("the spell's sole target is illegal");
     assert!(find_resolution_choice(&completion).is_none());
     assert!(engine.state.pending_resolution.is_none());

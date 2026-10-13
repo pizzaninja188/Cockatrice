@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{
     EffectSubject, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
@@ -39,7 +40,7 @@ fn infernal_scarring_grants_the_creature_controller_a_dies_trigger() {
         },
     );
     let aura_slot = hand_index_for_card(&e, 0, "infernal_scarring");
-    e.apply_command(0, &cast_spell(aura_slot, target_object(creature)))
+    e.apply_scenario_command(0, &cast_spell(aura_slot, target_object(creature)))
         .expect("cast Infernal Scarring");
     resolve_entire_stack_two_player(&mut e);
 
@@ -50,7 +51,8 @@ fn infernal_scarring_grants_the_creature_controller_a_dies_trigger() {
         .get_mut(&creature)
         .expect("enchanted creature")
         .damage = 2;
-    e.apply_command(0, &pass()).expect("lethal damage SBA");
+    e.apply_scenario_command(0, &pass())
+        .expect("lethal damage SBA");
 
     assert_eq!(
         e.state.stack.len(),
@@ -92,14 +94,15 @@ fn multiple_infernal_scarrings_create_distinct_orderable_triggers() {
     for _ in 0..2 {
         ensure_card_in_hand(&mut e, 0, "infernal_scarring");
         let aura = hand_index_for_card(&e, 0, "infernal_scarring");
-        e.apply_command(0, &cast_spell(aura, target_object(creature)))
+        e.apply_scenario_command(0, &cast_spell(aura, target_object(creature)))
             .expect("cast Infernal Scarring");
         resolve_entire_stack_two_player(&mut e);
     }
 
     let hand_before = e.state.players[1].hand.len();
     e.state.objects.get_mut(&creature).expect("creature").damage = 2;
-    e.apply_command(0, &pass()).expect("lethal damage SBA");
+    e.apply_scenario_command(0, &pass())
+        .expect("lethal damage SBA");
     let ordering = e
         .state
         .pending_trigger_order
@@ -143,17 +146,18 @@ fn infernal_scarring_removed_before_death_no_longer_grants_the_trigger() {
         },
     );
     let aura = hand_index_for_card(&e, 0, "infernal_scarring");
-    e.apply_command(0, &cast_spell(aura, target_object(creature)))
+    e.apply_scenario_command(0, &cast_spell(aura, target_object(creature)))
         .expect("cast Infernal Scarring");
     resolve_entire_stack_two_player(&mut e);
     let tranquility = hand_index_for_card(&e, 0, "tranquility");
-    e.apply_command(0, &cast_spell(tranquility, vec![]))
+    e.apply_scenario_command(0, &cast_spell(tranquility, vec![]))
         .expect("cast Tranquility");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.effective_power(creature), Some(2));
 
     e.state.objects.get_mut(&creature).expect("creature").damage = 2;
-    e.apply_command(0, &pass()).expect("lethal damage SBA");
+    e.apply_scenario_command(0, &pass())
+        .expect("lethal damage SBA");
     assert!(e.state.stack.is_empty());
     assert!(e.state.pending_trigger_order.is_none());
 }
@@ -187,7 +191,7 @@ fn abnormal_endurance_returns_the_exact_dead_creature_tapped_under_its_owner() {
         },
     );
     let spell_slot = hand_index_for_card(&e, 0, "abnormal_endurance");
-    e.apply_command(0, &cast_spell(spell_slot, target_object(creature)))
+    e.apply_scenario_command(0, &cast_spell(spell_slot, target_object(creature)))
         .expect("cast Abnormal Endurance");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.effective_power(creature), Some(4));
@@ -203,7 +207,8 @@ fn abnormal_endurance_returns_the_exact_dead_creature_tapped_under_its_owner() {
         .get_mut(&creature)
         .expect("affected creature")
         .damage = 2;
-    e.apply_command(0, &pass()).expect("lethal damage SBA");
+    e.apply_scenario_command(0, &pass())
+        .expect("lethal damage SBA");
     assert_eq!(e.state.stack.len(), 1, "the granted dies trigger fires");
     resolve_entire_stack_two_player(&mut e);
 
@@ -253,11 +258,12 @@ fn abnormal_endurance_does_not_return_a_card_that_left_the_graveyard() {
         },
     );
     let spell = hand_index_for_card(&e, 0, "abnormal_endurance");
-    e.apply_command(0, &cast_spell(spell, target_object(creature)))
+    e.apply_scenario_command(0, &cast_spell(spell, target_object(creature)))
         .expect("cast Abnormal Endurance");
     resolve_entire_stack_two_player(&mut e);
     e.state.objects.get_mut(&creature).expect("creature").damage = 2;
-    e.apply_command(0, &pass()).expect("lethal damage SBA");
+    e.apply_scenario_command(0, &pass())
+        .expect("lethal damage SBA");
     assert_eq!(e.state.stack.len(), 1);
 
     e.state.players[0].graveyard.retain(|&id| id != creature);
@@ -299,13 +305,13 @@ fn abnormal_endurance_granted_trigger_expires_at_cleanup() {
         },
     );
     let spell = hand_index_for_card(&e, 0, "abnormal_endurance");
-    e.apply_command(0, &cast_spell(spell, target_object(creature)))
+    e.apply_scenario_command(0, &cast_spell(spell, target_object(creature)))
         .expect("cast Abnormal Endurance");
     resolve_entire_stack_two_player(&mut e);
     end_active_turn(&mut e, 0);
 
     e.state.objects.get_mut(&creature).expect("creature").damage = 2;
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("next-turn lethal damage SBA");
     assert_eq!(
         e.state.objects[&creature].zone,
@@ -347,7 +353,7 @@ fn ray_of_command_control_loss_trigger_uses_the_stack_during_cleanup() {
         },
     );
     let spell_slot = hand_index_for_card(&e, 0, "ray_of_command");
-    e.apply_command(0, &cast_spell(spell_slot, target_object(creature)))
+    e.apply_scenario_command(0, &cast_spell(spell_slot, target_object(creature)))
         .expect("cast Ray of Command");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.objects[&creature].controller, 0);
@@ -407,18 +413,20 @@ fn ray_of_command_triggers_once_on_an_earlier_control_change() {
     }
 
     let first = hand_index_for_card(&e, 0, "ray_of_command");
-    e.apply_command(0, &cast_spell(first, target_object(creature)))
+    e.apply_scenario_command(0, &cast_spell(first, target_object(creature)))
         .expect("first Ray");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.objects[&creature].controller, 0);
 
-    e.apply_command(0, &pass()).expect("P0 passes priority");
+    e.apply_scenario_command(0, &pass())
+        .expect("P0 passes priority");
     let second = hand_index_for_card(&e, 1, "ray_of_command");
-    e.apply_command(1, &cast_spell(second, target_object(creature)))
+    e.apply_scenario_command(1, &cast_spell(second, target_object(creature)))
         .expect("second Ray");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("second Ray controller passes");
-    e.apply_command(0, &pass()).expect("second Ray resolves");
+    e.apply_scenario_command(0, &pass())
+        .expect("second Ray resolves");
 
     assert_eq!(e.state.objects[&creature].controller, 1);
     assert_eq!(
@@ -498,17 +506,17 @@ fn next_end_step_delayed_trigger_is_one_shot_and_keeps_object_identity() {
         })),
     });
 
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to combat");
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("begin combat");
     if e.state.turn_step == tricerules_core::TurnStep::DeclareAttackers {
-        e.apply_command(0, &primitive_yield())
+        e.apply_scenario_command(0, &primitive_yield())
             .expect("skip attackers");
     }
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("end combat to main2");
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main2 to end step");
 
     assert_eq!(e.state.stack.len(), 1);

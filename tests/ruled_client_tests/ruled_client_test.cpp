@@ -27,6 +27,7 @@
 
 #include <QBuffer>
 #include <QJsonArray>
+#include <QSet>
 #include <QSignalSpy>
 #include <QString>
 #include <QTest>
@@ -77,6 +78,7 @@ public:
     QVector<ruled::v1::RuledCommand> sentCommands;
     int dialogRequests = 0;
     QString lastDialogPrompt;
+    quint64 lastDialogPromptId = 0;
     QVector<quint32> lastDialogCandidateOids;
     QStringList lastDialogCandidateNames;
     bool lastDialogOrdered = false;
@@ -148,6 +150,7 @@ public:
         pendingAck = std::move(onFinished);
     }
     void requestResolutionChoiceDialog(const QString &prompt,
+                                       quint64 resolutionPromptId,
                                        const QVector<quint32> &candidateOids,
                                        const QStringList &candidateNames,
                                        int,
@@ -157,12 +160,15 @@ public:
     {
         ++dialogRequests;
         lastDialogPrompt = prompt;
+        lastDialogPromptId = resolutionPromptId;
         lastDialogCandidateOids = candidateOids;
         lastDialogCandidateNames = candidateNames;
         lastDialogOrdered = ordered;
         if (autoSubmitDialogChoice && !candidateOids.isEmpty()) {
             ruled::v1::RuledCommand command;
-            command.mutable_submit_resolution_choice()->add_chosen_object_ids(candidateOids.first());
+            auto *submission = command.mutable_submit_resolution_choice();
+            submission->set_resolution_prompt_id(resolutionPromptId);
+            submission->add_chosen_object_ids(candidateOids.first());
             sendRuledCommand(command);
         }
     }
@@ -203,8 +209,49 @@ protected:
         delete state;
     }
 
-    void apply(ruled::v1::RuledEventBatch batch)
+    template <typename Batch>
+    void apply(Batch &&batch)
     {
+        // Existing positive prompt fixtures predate prompt IDs. Give those fixtures an explicit
+        // synthetic offer only when they contain an uncorrelated RCR and no authoritative batch
+        // state. Tests for missing, zero, or stale IDs must use applyRaw() so this adapter never
+        // repairs the malformed payload being tested.
+        if (!batch.has_resolution_prompt_state()) {
+            int lastChoiceIndex = -1;
+            bool allChoiceIdsAreUnset = true;
+            for (int i = 0; i < batch.events_size(); ++i) {
+                const auto &event = batch.events(i);
+                if (!event.has_resolution_choice_required())
+                    continue;
+                lastChoiceIndex = i;
+                allChoiceIdsAreUnset &= event.resolution_choice_required().resolution_prompt_id() == 0;
+            }
+            if (lastChoiceIndex >= 0 && allChoiceIdsAreUnset) {
+                auto *activeChoice = batch.mutable_events(lastChoiceIndex)->mutable_resolution_choice_required();
+                const quint64 promptId = nextSyntheticResolutionPromptId++;
+                if (activeChoice->deciding_player_id() == host.localPlayerId()) {
+                    activeChoice->set_resolution_prompt_id(promptId);
+                }
+                auto *snapshot = batch.mutable_resolution_prompt_state();
+                snapshot->set_active(true);
+                snapshot->set_deciding_player_id(activeChoice->deciding_player_id());
+                if (activeChoice->deciding_player_id() == host.localPlayerId())
+                    snapshot->set_resolution_prompt_id(promptId);
+                // Earlier choices in one batch are transient publications. Their public reveal
+                // data is retained, while only the last RCR becomes answerable.
+                for (int i = 0; i < lastChoiceIndex; ++i) {
+                    auto *event = batch.mutable_events(i);
+                    if (event->has_resolution_choice_required())
+                        event->mutable_resolution_choice_required()->set_resolution_prompt_id(0);
+                }
+            }
+        }
+        applyRaw(batch);
+    }
+
+    void applyRaw(const ruled::v1::RuledEventBatch &input)
+    {
+        ruled::v1::RuledEventBatch batch = input;
         // Populate the shared snapshot for tests constructing a public choice. Tests can supply
         // an explicit reveal_id to exercise malformed payloads without this fixture completion.
         for (auto &event : *batch.mutable_events()) {
@@ -238,6 +285,17 @@ protected:
         ASSERT_TRUE(dispatcher->processPayload(payload));
     }
 
+    void stageChoiceForTest(RuledClientState::RuledPendingChoice choice)
+    {
+        const quint64 promptId = nextSyntheticResolutionPromptId++;
+        state->resolutionPromptSnapshotValid = true;
+        state->resolutionPromptActive = true;
+        state->resolutionPromptDeciderPlayerId = host.localPlayerId();
+        state->resolutionPromptId = promptId;
+        state->resolutionPromptSemantics.clear();
+        state->setPendingChoice(std::move(choice));
+    }
+
     /// Batch carrying just a phase change, to drive the combat state machine.
     static ruled::v1::RuledEventBatch phaseBatch(ruled::v1::PhaseId phase, int activePlayerId)
     {
@@ -247,6 +305,8 @@ protected:
         pc->set_active_player_id(activePlayerId);
         return batch;
     }
+
+    quint64 nextSyntheticResolutionPromptId = 1000;
 
     static ruled::v1::BattlefieldObjectMap::Entry *
     addPermanent(ruled::v1::RuledEvent *event, int playerId, quint32 oid, int serverCardId)
@@ -1017,6 +1077,283 @@ TEST_F(RuledClientTest, ZeroCostWaterbendCompletesWithoutAnImpossibleContributio
     ASSERT_TRUE(payment.apply(response));
     EXPECT_TRUE(payment.beginSubmission());
     EXPECT_FALSE(payment.beginSubmission());
+}
+
+TEST_F(RuledClientTest, ResolutionChoiceWithoutAuthoritativePromptSnapshotFailsClosed)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_source_object_id(8801);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_REVEALED);
+    choice->set_min(1);
+    choice->set_max(1);
+    choice->set_resolution_prompt_id(41);
+    choice->add_candidate_object_ids(8802);
+    choice->add_candidate_card_ids("PROMPT-CANDIDATE");
+    choice->add_candidate_server_card_ids(1);
+    choice->add_candidate_names("Prompt candidate");
+
+    // An event alone is not authoritative: a missing batch snapshot must not leave a stale or
+    // malformed UI action available, even when its private event ID is nonzero.
+    applyRaw(batch);
+
+    EXPECT_FALSE(state->pendingChoice.has_value());
+    EXPECT_EQ(state->choiceWaitingPlayerId, -1);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+}
+
+TEST_F(RuledClientTest, PurePaymentPreviewPreservesResolutionPromptAndStaging)
+{
+    ruled::v1::RuledEventBatch active;
+    auto *choice = active.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_source_object_id(8001);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(8002);
+    apply(active);
+    ASSERT_TRUE(state->pendingChoice.has_value());
+    ASSERT_NE(state->resolutionPromptId, 0u);
+    state->pendingChoice->selectedObjectOids.append(8002);
+    const quint64 promptId = state->resolutionPromptId;
+
+    ruled::v1::RuledEventBatch preview;
+    preview.mutable_payment_preview()->set_transaction_id(81);
+    std::string payload;
+    ASSERT_TRUE(preview.SerializeToString(&payload));
+    EXPECT_TRUE(dispatcher->processPayload(payload));
+
+    ASSERT_TRUE(state->pendingChoice.has_value());
+    EXPECT_EQ(state->resolutionPromptId, promptId);
+    EXPECT_EQ(state->pendingChoice->resolutionPromptId, promptId);
+    EXPECT_EQ(state->pendingChoice->selectedObjectOids, QVector<quint32>({8002}));
+}
+
+TEST_F(RuledClientTest, MixedPaymentPreviewDoesNotBypassMissingPromptSnapshotValidation)
+{
+    ruled::v1::RuledEventBatch mixed;
+    mixed.mutable_payment_preview()->set_transaction_id(82);
+    auto *choice = mixed.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_source_object_id(8003);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->set_resolution_prompt_id(8201);
+    choice->add_candidate_object_ids(8004);
+    std::string payload;
+    ASSERT_TRUE(mixed.SerializeToString(&payload));
+
+    EXPECT_TRUE(dispatcher->processPayload(payload));
+    EXPECT_FALSE(state->pendingChoice.has_value());
+    EXPECT_EQ(state->resolutionPromptId, 0u);
+    EXPECT_FALSE(state->resolutionPromptActive);
+}
+
+TEST_F(RuledClientTest, NewActivePromptWithoutMatchingRcrFailsClosed)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *prompt = batch.mutable_resolution_prompt_state();
+    prompt->set_active(true);
+    prompt->set_deciding_player_id(kLocalPlayer);
+    prompt->set_resolution_prompt_id(4101);
+
+    applyRaw(batch);
+
+    EXPECT_FALSE(state->pendingChoice.has_value());
+    EXPECT_EQ(state->resolutionPromptId, 0u);
+    EXPECT_TRUE(state->resolutionPromptSnapshotValid);
+    EXPECT_TRUE(state->resolutionPromptActive);
+    EXPECT_EQ(state->choiceWaitingPlayerId, -1);
+}
+
+TEST_F(RuledClientTest, InactivePromptWithoutRcrRetiresStagedChoice)
+{
+    ruled::v1::RuledEventBatch active;
+    auto *choice = active.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_source_object_id(8101);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(8102);
+    apply(active);
+
+    ASSERT_TRUE(state->pendingChoice.has_value());
+    ASSERT_NE(state->resolutionPromptId, 0u);
+    state->pendingChoice->selectedObjectOids.append(8102);
+    ruled::v1::RuledEventBatch inactive;
+    inactive.mutable_resolution_prompt_state()->set_active(false);
+    inactive.mutable_resolution_prompt_state()->set_deciding_player_id(0);
+    applyRaw(inactive);
+
+    EXPECT_FALSE(state->pendingChoice.has_value());
+    EXPECT_EQ(state->resolutionPromptId, 0u);
+    EXPECT_TRUE(state->resolutionPromptSnapshotValid);
+    EXPECT_FALSE(state->resolutionPromptActive);
+}
+
+TEST_F(RuledClientTest, SameActivePromptWithoutRcrRetainsStagedChoice)
+{
+    ruled::v1::RuledEventBatch active;
+    auto *choice = active.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_source_object_id(8201);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(8202);
+    apply(active);
+
+    ASSERT_TRUE(state->pendingChoice.has_value());
+    const quint64 promptId = state->resolutionPromptId;
+    state->pendingChoice->selectedObjectOids.append(8202);
+    ruled::v1::RuledEventBatch refresh;
+    refresh.mutable_resolution_prompt_state()->CopyFrom(active.resolution_prompt_state());
+    applyRaw(refresh);
+
+    ASSERT_TRUE(state->pendingChoice.has_value());
+    EXPECT_EQ(state->pendingChoice->resolutionPromptId, promptId);
+    EXPECT_EQ(state->pendingChoice->selectedObjectOids, QVector<quint32>({8202}));
+    EXPECT_EQ(state->resolutionPromptId, promptId);
+}
+
+TEST_F(RuledClientTest, SameActivePromptKeepsStagedChoiceAcrossTransientNonmatchingRcr)
+{
+    ruled::v1::RuledEventBatch active;
+    auto *choice = active.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_source_object_id(8251);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(8252);
+    apply(active);
+
+    ASSERT_TRUE(state->pendingChoice.has_value());
+    const quint64 promptId = state->resolutionPromptId;
+    state->pendingChoice->selectedObjectOids.append(8252);
+
+    ruled::v1::RuledEventBatch refresh;
+    refresh.mutable_resolution_prompt_state()->CopyFrom(active.resolution_prompt_state());
+    auto *transient = refresh.add_events()->mutable_resolution_choice_required();
+    transient->set_deciding_player_id(kLocalPlayer);
+    transient->set_source_object_id(8253);
+    transient->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
+    transient->set_resolution_prompt_id(0);
+    transient->set_min(1);
+    transient->set_max(1);
+    transient->add_candidate_object_ids(8254);
+    transient->add_candidate_card_ids("forest");
+    transient->add_candidate_names("Forest");
+    transient->add_candidate_server_card_ids(25);
+    transient->mutable_public_reveal()->set_zone_owner_player_id(kLocalPlayer + 1);
+
+    applyRaw(refresh);
+
+    ASSERT_TRUE(state->pendingChoice.has_value());
+    EXPECT_EQ(state->pendingChoice->resolutionPromptId, promptId);
+    EXPECT_EQ(state->pendingChoice->selectedObjectOids, QVector<quint32>({8252}));
+    EXPECT_EQ(state->resolutionPromptId, promptId);
+    ASSERT_EQ(state->reveals.entries().size(), 1);
+    EXPECT_EQ(state->reveals.entries().first().cards.first().name, QStringLiteral("Forest"));
+}
+
+TEST_F(RuledClientTest, MalformedMatchingRcrDoesNotFallBackToSameIdStaging)
+{
+    ruled::v1::RuledEventBatch active;
+    auto *choice = active.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_source_object_id(8261);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT);
+    choice->set_min(1);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(8262);
+    auto *option = choice->add_replacement_options();
+    option->set_application_id(8262);
+    option->set_effect_summary("Valid replacement");
+    apply(active);
+
+    ASSERT_TRUE(state->pendingChoice.has_value());
+    const quint64 promptId = state->resolutionPromptId;
+    ASSERT_NE(promptId, 0u);
+
+    ruled::v1::RuledEventBatch malformed;
+    malformed.mutable_resolution_prompt_state()->CopyFrom(active.resolution_prompt_state());
+    auto *bad = malformed.add_events()->mutable_resolution_choice_required();
+    bad->CopyFrom(active.events(0).resolution_choice_required());
+    bad->mutable_replacement_options(0)->clear_effect_summary();
+
+    applyRaw(malformed);
+
+    EXPECT_FALSE(state->pendingChoice.has_value());
+    EXPECT_EQ(state->resolutionPromptId, 0u);
+    EXPECT_TRUE(state->resolutionPromptActive);
+}
+
+TEST_F(RuledClientTest, InactiveTransientRcrKeepsItsPublicRevealButNeverStagesChoice)
+{
+    ruled::v1::RuledEventBatch batch;
+    batch.mutable_resolution_prompt_state()->set_active(false);
+    batch.mutable_resolution_prompt_state()->set_deciding_player_id(0);
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_source_object_id(8301);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
+    choice->set_resolution_prompt_id(0);
+    choice->add_candidate_object_ids(8302);
+    choice->add_candidate_card_ids("forest");
+    choice->add_candidate_names("Forest");
+    choice->add_candidate_server_card_ids(3);
+    choice->mutable_public_reveal()->set_zone_owner_player_id(kLocalPlayer + 1);
+
+    applyRaw(batch);
+
+    EXPECT_FALSE(state->pendingChoice.has_value());
+    EXPECT_FALSE(state->resolutionPromptActive);
+    EXPECT_EQ(state->resolutionPromptId, 0u);
+    ASSERT_EQ(state->reveals.entries().size(), 1);
+    EXPECT_EQ(state->reveals.entries().first().cards.first().name, QStringLiteral("Forest"));
+}
+
+TEST_F(RuledClientTest, SamePromptRefreshRebasesStagedServerHandlesByObjectId)
+{
+    auto makeBatch = [](int serverCardId) {
+        ruled::v1::RuledEventBatch batch;
+        auto *prompt = batch.mutable_resolution_prompt_state();
+        prompt->set_active(true);
+        prompt->set_deciding_player_id(kLocalPlayer);
+        prompt->set_resolution_prompt_id(8401);
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(kLocalPlayer);
+        choice->set_source_object_id(8400);
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+        choice->set_resolution_prompt_id(8401);
+        choice->set_min(1);
+        choice->set_max(2);
+        choice->add_candidate_object_ids(8402);
+        choice->add_candidate_card_ids("forest");
+        choice->add_candidate_names("Forest");
+        choice->add_candidate_server_card_ids(serverCardId);
+        choice->mutable_public_reveal()->set_zone_owner_player_id(kLocalPlayer);
+        return batch;
+    };
+
+    auto first = makeBatch(10);
+    applyRaw(first);
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    state->toggleResolutionHandPickCard(10);
+    ASSERT_EQ(state->pendingChoice->selectedServerCardIds, QList<int>({10}));
+
+    auto refreshed = makeBatch(110);
+    applyRaw(refreshed);
+
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->pendingChoice->resolutionPromptId, 8401u);
+    EXPECT_EQ(state->pendingChoice->selectedServerCardIds, QList<int>({110}));
+    EXPECT_EQ(state->pendingChoice->serverCardIdToOid.value(110), 8402u);
 }
 
 TEST_F(RuledClientTest, WaterbendRefreshAndImmediateRejectionPreserveStagingButNewPromptSupersedesAck)
@@ -2266,6 +2603,67 @@ TEST_F(RuledClientTest, StagedActivationRetainsPaymentWhileNestedReplacementOwns
     state->clearPendingChoice();
     EXPECT_TRUE(ruledActivationCanPay(*state, kLocalPlayer));
     EXPECT_EQ(state->payment.selection.mana().c(), 1u);
+}
+
+TEST_F(RuledClientTest, RetiringNestedReplacementPreservesStagedAbilityPayment)
+{
+    constexpr quint64 promptId = 9303;
+    auto *activation = &state->pendingAbilityActivation.emplace();
+    activation->set_transaction_id(92);
+    activation->set_revision(4);
+    activation->set_actor_player_id(kLocalPlayer);
+    activation->set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+
+    state->payment.begin();
+    ASSERT_TRUE(state->payment.payMana('U', 0, 51));
+
+    ruled::v1::RuledEventBatch replacement;
+    auto *snapshot = replacement.mutable_resolution_prompt_state();
+    snapshot->set_active(true);
+    snapshot->set_deciding_player_id(kLocalPlayer);
+    snapshot->set_resolution_prompt_id(promptId);
+    auto *choice = replacement.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT);
+    choice->set_resolution_prompt_id(promptId);
+    choice->set_min(1);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(7001);
+    auto *option = choice->add_replacement_options();
+    option->set_application_id(7001);
+    option->set_effect_summary("Mana damage replacement");
+    applyRaw(replacement);
+
+    ASSERT_TRUE(state->hasPendingReplacementEffect());
+    ASSERT_EQ(state->pendingChoice->resolutionPromptId, promptId);
+    EXPECT_TRUE(state->payment.active);
+    EXPECT_EQ(state->payment.selection.mana().u(), 1u);
+    EXPECT_EQ(state->payment.optimisticManaCounterSpendCount(51), 1);
+
+    state->submitReplacementEffect(0, state->pendingChoiceRevision);
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const quint64 submittedRevision = state->pendingChoiceRevision;
+
+    ruled::v1::RuledEventBatch inactive;
+    inactive.mutable_resolution_prompt_state()->set_active(false);
+    inactive.mutable_resolution_prompt_state()->set_deciding_player_id(0);
+    applyRaw(inactive);
+
+    EXPECT_GT(state->pendingChoiceRevision, submittedRevision);
+    EXPECT_FALSE(state->hasPendingReplacementEffect());
+    EXPECT_FALSE(state->pendingChoice.has_value());
+    EXPECT_TRUE(state->payment.active);
+    EXPECT_EQ(state->payment.selection.mana().u(), 1u);
+    EXPECT_EQ(state->payment.optimisticManaCounterSpendCount(51), 1);
+
+    host.answerPendingAck(false);
+    EXPECT_FALSE(state->hasPendingReplacementEffect());
+    EXPECT_FALSE(state->pendingChoice.has_value());
+    EXPECT_TRUE(state->payment.active);
+    EXPECT_EQ(state->payment.selection.mana().u(), 1u);
+    EXPECT_EQ(state->payment.optimisticManaCounterSpendCount(51), 1);
+    ASSERT_TRUE(state->pendingAbilityActivation.has_value());
+    EXPECT_EQ(state->pendingAbilityActivation->stage(), ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
 }
 
 TEST_F(RuledClientTest, HandSlotAndPublicZoneMapsAreQueryable)
@@ -5817,6 +6215,71 @@ TEST_F(RuledClientTest, SessionResetClosesAnOpenTriggerOrderingChoice)
     EXPECT_FALSE(state->hasPendingTriggerOrder());
 }
 
+TEST_F(RuledClientTest, FullSessionResetExpiresPromptAckAndRequiresFreshRcrWhenIdIsReused)
+{
+    constexpr quint64 promptId = 9301;
+    ruled::v1::RuledEventBatch paymentPrompt;
+    auto *snapshot = paymentPrompt.mutable_resolution_prompt_state();
+    snapshot->set_active(true);
+    snapshot->set_deciding_player_id(kLocalPlayer);
+    snapshot->set_resolution_prompt_id(promptId);
+    auto *paymentChoice = paymentPrompt.add_events()->mutable_resolution_choice_required();
+    paymentChoice->set_deciding_player_id(kLocalPlayer);
+    paymentChoice->set_choice_kind(ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+    paymentChoice->set_resolution_prompt_id(promptId);
+    paymentChoice->set_source_object_id(445);
+    paymentChoice->set_generic_mana_cost(1);
+    paymentChoice->set_payment_currently_legal(true);
+    applyRaw(paymentPrompt);
+    ASSERT_TRUE(state->isCurrentResolutionPrompt(promptId));
+    ASSERT_TRUE(state->isResolutionPaymentActive());
+
+    state->payment.begin(true);
+    state->payment.selection.mutable_mana()->set_c(1);
+    state->declineResolutionMana();
+    ASSERT_FALSE(state->pendingChoice.has_value());
+    ASSERT_EQ(host.sentCommands.size(), 1);
+
+    state->clearSessionState(RuledSessionResetScope::All);
+    EXPECT_FALSE(state->resolutionPromptSnapshotValid);
+    EXPECT_FALSE(state->resolutionPromptActive);
+    EXPECT_EQ(state->resolutionPromptDeciderPlayerId, -1);
+    EXPECT_EQ(state->resolutionPromptId, 0u);
+    EXPECT_TRUE(state->resolutionPromptSemantics.empty());
+    EXPECT_FALSE(state->isCurrentResolutionPrompt(promptId));
+
+    host.answerPendingAck(false);
+    EXPECT_FALSE(state->pendingChoice.has_value());
+    EXPECT_FALSE(state->isResolutionPaymentActive());
+    EXPECT_FALSE(state->payment.active);
+
+    // New sessions may restart their prompt counter. Reusing the number without a matching new
+    // RCR must stay unactionable; only the exact current offer may establish that identity again.
+    ruled::v1::RuledEventBatch reusedIdWithoutOffer;
+    auto *reusedSnapshot = reusedIdWithoutOffer.mutable_resolution_prompt_state();
+    reusedSnapshot->set_active(true);
+    reusedSnapshot->set_deciding_player_id(kLocalPlayer);
+    reusedSnapshot->set_resolution_prompt_id(promptId);
+    applyRaw(reusedIdWithoutOffer);
+    EXPECT_FALSE(state->isCurrentResolutionPrompt(promptId));
+    EXPECT_FALSE(state->pendingChoice.has_value());
+
+    ruled::v1::RuledEventBatch newOffer;
+    auto *newSnapshot = newOffer.mutable_resolution_prompt_state();
+    newSnapshot->set_active(true);
+    newSnapshot->set_deciding_player_id(kLocalPlayer);
+    newSnapshot->set_resolution_prompt_id(promptId);
+    auto *newChoice = newOffer.add_events()->mutable_resolution_choice_required();
+    newChoice->set_deciding_player_id(kLocalPlayer);
+    newChoice->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+    newChoice->set_resolution_prompt_id(promptId);
+    newChoice->add_candidate_object_ids(702);
+    newChoice->add_candidate_selectable(true);
+    applyRaw(newOffer);
+    EXPECT_TRUE(state->isCurrentResolutionPrompt(promptId));
+    EXPECT_TRUE(state->isPendingSpecialCastCandidate(702));
+}
+
 TEST_F(RuledClientTest, TriggerOrderRequiredIsNotPromptedForTheOpponent)
 {
     apply(triggerOrderBatch(kLocalPlayer + 1));
@@ -5957,10 +6420,15 @@ TEST_F(RuledClientTest, TriggerOrderReplacesAnyStalePendingChoice)
 TEST_F(RuledClientTest, ManaPaymentChoiceCreatesRefreshesAndSerializesDecisions)
 {
     QSignalSpy paymentUiSpy(state, &RuledClientState::resolutionPaymentUiChanged);
-    auto paymentBatch = [](bool legal) {
+    auto paymentBatch = [](bool legal, quint64 promptId) {
         ruled::v1::RuledEventBatch batch;
+        auto *snapshot = batch.mutable_resolution_prompt_state();
+        snapshot->set_active(true);
+        snapshot->set_deciding_player_id(kLocalPlayer);
+        snapshot->set_resolution_prompt_id(promptId);
         auto *rcr = batch.add_events()->mutable_resolution_choice_required();
         rcr->set_deciding_player_id(kLocalPlayer);
+        rcr->set_resolution_prompt_id(promptId);
         rcr->set_choice_kind(ruled::v1::CHOICE_KIND_MANA_PAYMENT);
         rcr->set_prompt_text("Pay {4} or decline.");
         rcr->set_generic_mana_cost(4);
@@ -5968,7 +6436,7 @@ TEST_F(RuledClientTest, ManaPaymentChoiceCreatesRefreshesAndSerializesDecisions)
         return batch;
     };
 
-    apply(paymentBatch(false));
+    apply(paymentBatch(false, 9401));
     ASSERT_EQ(paymentUiSpy.count(), 1);
     EXPECT_TRUE(paymentUiSpy.at(0).at(0).toBool());
     ASSERT_TRUE(state->isResolutionPaymentActive());
@@ -5991,17 +6459,32 @@ TEST_F(RuledClientTest, ManaPaymentChoiceCreatesRefreshesAndSerializesDecisions)
     apply(previewBatch);
     EXPECT_EQ(state->resolutionPaymentRemainingCost(), QStringLiteral("{3}"));
 
-    apply(paymentBatch(true));
-    ASSERT_EQ(paymentUiSpy.count(), 2);
-    EXPECT_TRUE(paymentUiSpy.at(1).at(0).toBool());
+    // Affordability is part of the engine's prompt fingerprint, so a changed answer-semantic
+    // offer arrives under a fresh ID and retires the previous prompt's payment state.
+    apply(paymentBatch(true, 9402));
+    ASSERT_GE(paymentUiSpy.count(), 2);
+    EXPECT_TRUE(paymentUiSpy.last().at(0).toBool());
     ASSERT_TRUE(state->resolutionPaymentCurrentlyLegal());
     state->payResolutionMana();
     ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().resolution_prompt_id(), 9402u);
     EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().decision(),
               ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
     EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().chosen_object_ids_size(), 0);
     EXPECT_FALSE(state->isResolutionPaymentActive());
-    host.answerPendingAck(true);
+
+    apply(paymentBatch(false, 9403));
+    ASSERT_TRUE(state->isResolutionPaymentActive());
+    ASSERT_TRUE(state->pendingChoice.has_value());
+    EXPECT_EQ(state->resolutionPromptId, 9403u);
+    EXPECT_EQ(state->pendingChoice->resolutionPromptId, 9403u);
+    host.answerPendingAck(false);
+    EXPECT_TRUE(state->isResolutionPaymentActive());
+    EXPECT_EQ(state->resolutionPromptId, 9403u)
+        << "a rejected ACK from the prior affordability offer must not restore its retired choice";
+    ASSERT_TRUE(state->pendingChoice.has_value());
+    EXPECT_EQ(state->pendingChoice->resolutionPromptId, 9403u);
+    EXPECT_FALSE(state->resolutionPaymentCurrentlyLegal());
 }
 
 TEST_F(RuledClientTest, VariableManaContributionWaitsForPreviewAndCanExplicitlyPayZero)
@@ -6072,6 +6555,88 @@ TEST_F(RuledClientTest, RejectedManaPaymentRestoresThePrompt)
     host.answerPendingAck(false);
     EXPECT_TRUE(state->isResolutionPaymentActive());
     EXPECT_TRUE(state->resolutionPaymentCurrentlyLegal());
+}
+
+TEST_F(RuledClientTest, RetiringPromptAfterSubmissionExpiresRejectedPaymentAck)
+{
+    constexpr quint64 promptId = 9201;
+    ruled::v1::RuledEventBatch active;
+    auto *snapshot = active.mutable_resolution_prompt_state();
+    snapshot->set_active(true);
+    snapshot->set_deciding_player_id(kLocalPlayer);
+    snapshot->set_resolution_prompt_id(promptId);
+    auto *choice = active.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+    choice->set_resolution_prompt_id(promptId);
+    choice->set_source_object_id(440);
+    choice->set_generic_mana_cost(1);
+    choice->set_payment_currently_legal(true);
+    applyRaw(active);
+    ASSERT_TRUE(state->isResolutionPaymentActive());
+
+    state->payment.begin(true);
+    state->payment.selection.mutable_mana()->set_c(1);
+    QSignalSpy finished(state, &RuledClientState::resolutionPaymentSubmissionFinished);
+    state->declineResolutionMana();
+    ASSERT_FALSE(state->pendingChoice.has_value());
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const quint64 submittedRevision = state->pendingChoiceRevision;
+
+    ruled::v1::RuledEventBatch inactive;
+    inactive.mutable_resolution_prompt_state()->set_active(false);
+    inactive.mutable_resolution_prompt_state()->set_deciding_player_id(0);
+    applyRaw(inactive);
+    EXPECT_GT(state->pendingChoiceRevision, submittedRevision);
+    EXPECT_FALSE(state->pendingChoice.has_value());
+    EXPECT_FALSE(state->payment.active);
+
+    host.answerPendingAck(false);
+    EXPECT_EQ(finished.count(), 0) << "the retired prompt's rejection callback must be ignored";
+    EXPECT_FALSE(state->pendingChoice.has_value());
+    EXPECT_FALSE(state->isResolutionPaymentActive());
+    EXPECT_FALSE(state->payment.active);
+}
+
+TEST_F(RuledClientTest, SamePromptRefreshDoesNotExpireSubmittedPaymentAck)
+{
+    constexpr quint64 promptId = 9202;
+    ruled::v1::RuledEventBatch active;
+    auto *snapshot = active.mutable_resolution_prompt_state();
+    snapshot->set_active(true);
+    snapshot->set_deciding_player_id(kLocalPlayer);
+    snapshot->set_resolution_prompt_id(promptId);
+    auto *choice = active.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+    choice->set_resolution_prompt_id(promptId);
+    choice->set_source_object_id(441);
+    choice->set_generic_mana_cost(1);
+    choice->set_payment_currently_legal(true);
+    applyRaw(active);
+    ASSERT_TRUE(state->isResolutionPaymentActive());
+
+    state->payment.begin(true);
+    state->payment.selection.mutable_mana()->set_c(1);
+    QSignalSpy finished(state, &RuledClientState::resolutionPaymentSubmissionFinished);
+    state->declineResolutionMana();
+    ASSERT_FALSE(state->pendingChoice.has_value());
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const quint64 submittedRevision = state->pendingChoiceRevision;
+
+    ruled::v1::RuledEventBatch refresh;
+    refresh.mutable_resolution_prompt_state()->CopyFrom(active.resolution_prompt_state());
+    applyRaw(refresh);
+    EXPECT_EQ(state->pendingChoiceRevision, submittedRevision);
+    EXPECT_EQ(state->resolutionPromptId, promptId);
+    EXPECT_FALSE(state->pendingChoice.has_value());
+
+    host.answerPendingAck(false);
+    EXPECT_EQ(finished.count(), 1);
+    ASSERT_TRUE(state->isResolutionPaymentActive());
+    EXPECT_EQ(state->pendingChoice->resolutionPromptId, promptId);
+    EXPECT_TRUE(state->payment.active);
+    EXPECT_FALSE(state->payment.submitting);
 }
 
 enum class ChoiceAckVariant
@@ -6270,7 +6835,7 @@ TEST_F(RuledClientTest, AuthorityRevocationSupersedesAllSixLateChoiceAcknowledge
                              << static_cast<int>(variant) << ", revoked=" << revoked << ", accepted=" << accepted);
                 host.sentCommands.clear();
                 const auto original = authorityChoice(variant);
-                state->setPendingChoice(original);
+                stageChoiceForTest(original);
                 state->payment.begin();
                 submitAuthorityChoice(state, variant);
                 ASSERT_EQ(host.sentCommands.size(), 1);
@@ -6298,7 +6863,7 @@ TEST_F(RuledClientTest, AuthorityRevocationSupersedesAllSixLateChoiceAcknowledge
 
 TEST_F(RuledClientTest, AuthorityChoiceRevisionProtectsNewPaymentFromSameSource)
 {
-    state->setPendingChoice(authorityChoice(ChoiceAckVariant::Payment));
+    stageChoiceForTest(authorityChoice(ChoiceAckVariant::Payment));
     state->payment.begin();
     state->declineResolutionMana();
     auto next = authoritySnapshot(true);
@@ -7119,6 +7684,7 @@ TEST_F(RuledClientTest, MadnessPaymentDoesNotTreatItsOwnOfferAsABlockingChoice)
         spell.sourceZoneChangeGeneration = 3;
         spell.castMethod = method;
         spell.castingPermissionId = 901;
+        spell.resolutionPromptId = state->resolutionPromptId;
         EXPECT_FALSE(pending.resolutionChoiceBlocksSpell(*state));
         EXPECT_TRUE(RuledPendingCast::matchesSpecialCastOffer(spell, *state));
         spell.waitingForTarget = true;
@@ -7761,6 +8327,145 @@ TEST_F(RuledClientTest, AppliesGenerationBoundGraveyardLandActionsBySource)
     ASSERT_EQ(faces.size(), 1);
     EXPECT_EQ(faces.first().faceIndex, 0);
     EXPECT_EQ(faces.first().zoneChangeGeneration, 23u);
+}
+
+TEST_F(RuledClientTest, SpecialCastPromptCaptureRejectsStalePromptIds)
+{
+    constexpr quint32 objectId = 214;
+    constexpr quint64 promptId = 9101;
+    ruled::v1::RuledEventBatch batch;
+    auto *snapshot = batch.mutable_resolution_prompt_state();
+    snapshot->set_active(true);
+    snapshot->set_deciding_player_id(kLocalPlayer);
+    snapshot->set_resolution_prompt_id(promptId);
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+    choice->set_resolution_prompt_id(promptId);
+    choice->add_candidate_object_ids(objectId);
+    choice->add_candidate_selectable(true);
+    applyRaw(batch);
+
+    ASSERT_TRUE(state->isPendingSpecialCastCandidate(objectId));
+    EXPECT_EQ(state->specialCastPromptIdForCandidate(objectId), promptId);
+    EXPECT_TRUE(state->isCurrentSpecialCastPrompt(promptId, objectId));
+    EXPECT_FALSE(state->isCurrentSpecialCastPrompt(promptId - 1, objectId));
+    EXPECT_FALSE(state->isCurrentSpecialCastPrompt(0, objectId));
+    EXPECT_EQ(state->specialCastPromptIdForCandidate(objectId + 1), 0u);
+}
+
+TEST_F(RuledClientTest, ZoneLandPlayOfferRequiresExactGenerationAndSpecialPromptId)
+{
+    constexpr quint32 objectId = 215;
+    constexpr quint64 promptId = 9102;
+    ruled::v1::RuledEventBatch batch;
+    auto *snapshot = batch.mutable_resolution_prompt_state();
+    snapshot->set_active(true);
+    snapshot->set_deciding_player_id(kLocalPlayer);
+    snapshot->set_resolution_prompt_id(promptId);
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+    choice->set_resolution_prompt_id(promptId);
+    choice->add_candidate_object_ids(objectId);
+    choice->add_candidate_selectable(true);
+    auto *land = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_land_actions();
+    land->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+    land->set_object_id(objectId);
+    land->set_face_index(1);
+    land->set_card_name("Timbercrown Pathway");
+    land->set_zone_change_generation(17);
+    applyRaw(batch);
+
+    EXPECT_TRUE(state->isCurrentZoneLandPlayOffer(objectId, RuledCastSource::Exile, 1, 17, promptId));
+    EXPECT_FALSE(state->isCurrentZoneLandPlayOffer(objectId, RuledCastSource::Exile, 1, 17, promptId - 1));
+    EXPECT_FALSE(state->isCurrentZoneLandPlayOffer(objectId, RuledCastSource::Exile, 1, 17, 0))
+        << "an active PlayCard candidate must not submit without its exact prompt ID";
+    EXPECT_FALSE(state->isCurrentZoneLandPlayOffer(objectId, RuledCastSource::Exile, 1, 18, promptId))
+        << "the same engine OID with a new zone generation is a different physical offer";
+}
+
+TEST_F(RuledClientTest, OrdinaryZoneLandOfferUsesNoResolutionPromptId)
+{
+    constexpr quint32 objectId = 216;
+    ruled::v1::RuledEventBatch batch;
+    auto *land = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_land_actions();
+    land->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_GRAVEYARD);
+    land->set_object_id(objectId);
+    land->set_face_index(0);
+    land->set_card_name("Forest");
+    land->set_zone_change_generation(23);
+    applyRaw(batch);
+
+    EXPECT_TRUE(state->isCurrentZoneLandPlayOffer(objectId, RuledCastSource::Graveyard, 0, 23, 0));
+    EXPECT_FALSE(state->isCurrentZoneLandPlayOffer(objectId, RuledCastSource::Graveyard, 0, 23, 1));
+}
+
+TEST_F(RuledClientTest, UnmatchedActivePromptBlocksUnboundZoneLandOffer)
+{
+    constexpr quint32 objectId = 217;
+    constexpr quint64 promptId = 9304;
+    const auto makeLandOffer = [this, objectId](ruled::v1::RuledEventBatch &batch) {
+        auto *land = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_land_actions();
+        land->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+        land->set_object_id(objectId);
+        land->set_face_index(0);
+        land->set_card_name("Forest");
+        land->set_zone_change_generation(24);
+    };
+
+    ruled::v1::RuledEventBatch active;
+    active.mutable_resolution_prompt_state()->set_active(true);
+    active.mutable_resolution_prompt_state()->set_deciding_player_id(kLocalPlayer);
+    active.mutable_resolution_prompt_state()->set_resolution_prompt_id(promptId);
+    makeLandOffer(active);
+    applyRaw(active);
+
+    ASSERT_TRUE(state->resolutionPromptSnapshotValid);
+    ASSERT_TRUE(state->resolutionPromptActive);
+    EXPECT_EQ(state->resolutionPromptId, 0u)
+        << "the final owner snapshot without its exact RCR is deliberately unactionable";
+    EXPECT_FALSE(state->isCurrentZoneLandPlayOffer(objectId, RuledCastSource::Exile, 0, 24, 0));
+
+    // A same-ID offer whose answer semantics change is unusable, but its valid final snapshot
+    // still identifies an active local prompt and must keep the ordinary-ID fallback closed.
+    ruled::v1::RuledEventBatch validSpecialOffer;
+    auto *validSnapshot = validSpecialOffer.mutable_resolution_prompt_state();
+    validSnapshot->set_active(true);
+    validSnapshot->set_deciding_player_id(kLocalPlayer);
+    validSnapshot->set_resolution_prompt_id(promptId);
+    auto *validRcr = validSpecialOffer.add_events()->mutable_resolution_choice_required();
+    validRcr->set_deciding_player_id(kLocalPlayer);
+    validRcr->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+    validRcr->set_resolution_prompt_id(promptId);
+    validRcr->add_candidate_object_ids(objectId);
+    validRcr->add_candidate_selectable(true);
+    makeLandOffer(validSpecialOffer);
+    applyRaw(validSpecialOffer);
+    ASSERT_TRUE(state->isCurrentZoneLandPlayOffer(objectId, RuledCastSource::Exile, 0, 24, promptId));
+
+    ruled::v1::RuledEventBatch changedSpecialOffer;
+    auto *changedSnapshot = changedSpecialOffer.mutable_resolution_prompt_state();
+    changedSnapshot->CopyFrom(validSpecialOffer.resolution_prompt_state());
+    auto *changedRcr = changedSpecialOffer.add_events()->mutable_resolution_choice_required();
+    changedRcr->CopyFrom(*validRcr);
+    changedRcr->set_candidate_object_ids(0, objectId + 1);
+    makeLandOffer(changedSpecialOffer);
+    applyRaw(changedSpecialOffer);
+    EXPECT_TRUE(state->resolutionPromptSnapshotValid);
+    EXPECT_TRUE(state->resolutionPromptActive);
+    EXPECT_EQ(state->resolutionPromptDeciderPlayerId, kLocalPlayer);
+    EXPECT_EQ(state->resolutionPromptId, 0u);
+    EXPECT_TRUE(state->hasActiveLocalResolutionPrompt());
+    EXPECT_FALSE(state->isCurrentZoneLandPlayOffer(objectId, RuledCastSource::Exile, 0, 24, 0));
+
+    ruled::v1::RuledEventBatch inactive;
+    inactive.mutable_resolution_prompt_state()->set_active(false);
+    inactive.mutable_resolution_prompt_state()->set_deciding_player_id(0);
+    makeLandOffer(inactive);
+    applyRaw(inactive);
+    EXPECT_FALSE(state->resolutionPromptActive);
+    EXPECT_TRUE(state->isCurrentZoneLandPlayOffer(objectId, RuledCastSource::Exile, 0, 24, 0));
 }
 
 TEST_F(RuledClientTest, CounterRemovalCostsAreRecognized)
@@ -8706,6 +9411,10 @@ TEST_F(RuledClientTest, LibraryAlternativesRejectedAckRestoresSelectionAndCannot
             choice->set_candidate_object_ids(0, 901u);
             choice->set_candidate_server_card_ids(0, 21);
             choice->set_candidate_names(0, "Forest");
+            const quint64 newerPromptId = nextSyntheticResolutionPromptId++;
+            auto *snapshot = batch.mutable_resolution_prompt_state();
+            snapshot->set_resolution_prompt_id(newerPromptId);
+            choice->set_resolution_prompt_id(newerPromptId);
             apply(batch);
             state->toggleResolutionHandPickCard(21);
         }
@@ -10253,7 +10962,7 @@ TEST_F(RuledClientTest, CancellingResolutionCostObjectsRepaintsClearedSelectionI
     choice.min = 0;
     choice.max = 1;
     choice.candidateOids = {100};
-    state->setPendingChoice(choice);
+    stageChoiceForTest(choice);
     state->toggleResolutionCostObject(100);
     ASSERT_TRUE(state->isResolutionCostObjectSelected(100));
 
@@ -10429,7 +11138,7 @@ TEST_F(RuledClientTest, DecliningProliferateSubmitsBothDomainsEmpty)
     choice.max = 2;
     choice.candidateOids = {100};
     choice.candidatePlayerIds = {kLocalPlayer + 1};
-    state->setPendingChoice(choice);
+    stageChoiceForTest(choice);
     state->toggleProliferateObject(100);
     state->toggleProliferatePlayer(kLocalPlayer + 1);
     host.sentCommands.clear();
@@ -10485,7 +11194,9 @@ TEST_F(RuledClientTest, CopySourceChoiceIsInteractiveOnlyForTheDecidingPlayer)
 
     EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource));
     ASSERT_EQ(promptFeed.count(), 1);
-    EXPECT_TRUE(promptFeed.at(0).at(0).toString().contains(QStringLiteral("Choose a creature for Clone to copy")));
+    EXPECT_TRUE(promptFeed.at(0).at(0).toString().isEmpty());
+    EXPECT_TRUE(state->isWaitingForChoice());
+    EXPECT_EQ(state->choiceWaitingPlayer(), kLocalPlayer + 1);
 }
 
 // The engine parks one choice at a time, so the holder is exclusive: installing a new choice
@@ -10584,10 +11295,10 @@ TEST_F(RuledClientTest, ReplacementEffectChoiceNeverUsesModalFallback)
     EXPECT_EQ(state->pendingChoiceRevision, revision);
     apply(batch);
     const auto refreshedRevision = state->pendingChoiceRevision;
-    EXPECT_NE(refreshedRevision, revision);
+    EXPECT_EQ(refreshedRevision, revision);
     host.answerPendingAck(false);
     EXPECT_EQ(state->pendingChoiceRevision, refreshedRevision);
-    state->submitReplacementEffect(0, revision);
+    EXPECT_FALSE(state->pendingChoice->replacementSubmitting);
     EXPECT_EQ(host.sentCommands.size(), 2);
     apply(ruled::v1::RuledEventBatch{});
     EXPECT_FALSE(state->hasPendingReplacementEffect());
@@ -10632,6 +11343,9 @@ TEST_F(RuledClientTest, ReplacementImagesPreserveDuplicateSourcesAndRejectMalfor
     EXPECT_EQ(host.dialogRequests, 0);
     choice->mutable_replacement_options(1)->set_application_id(7002);
     choice->set_deciding_player_id(kOpponent);
+    choice->set_resolution_prompt_id(0);
+    batch.mutable_resolution_prompt_state()->set_deciding_player_id(kOpponent);
+    batch.mutable_resolution_prompt_state()->clear_resolution_prompt_id();
     apply(batch);
     EXPECT_FALSE(state->hasPendingReplacementEffect());
     EXPECT_EQ(state->choiceWaitingPlayerId, kOpponent);
@@ -11062,8 +11776,32 @@ When Spyglass Siren enters, create a Map token.</text></face>
     EXPECT_EQ(timeline.last().at(0).toString(), QStringLiteral("Complete engine fallback\n"));
 }
 
-TEST(RuledPendingCastTest, SpecialCastSubmissionPreservesTheCompleteAnnouncement)
+TEST_F(RuledClientTest, SpecialCastSubmissionPreservesTheCompleteAnnouncementAndPromptId)
 {
+    ruled::v1::RuledEventBatch offerBatch;
+    auto *rcr = offerBatch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+    rcr->add_candidate_object_ids(70);
+    rcr->add_candidate_selectable(true);
+    auto *zoneOffer = (*offerBatch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
+    zoneOffer->set_object_id(70);
+    zoneOffer->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+    zoneOffer->set_zone_change_generation(6);
+    zoneOffer->set_cast_method(ruled::v1::CAST_METHOD_MADNESS);
+    zoneOffer->set_casting_permission_id(123456);
+    zoneOffer->set_cost("{R}");
+    apply(offerBatch);
+
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    spell.handIndex = 70;
+    spell.source = RuledCastSource::Exile;
+    spell.castMethod = ruled::v1::CAST_METHOD_MADNESS;
+    spell.castingPermissionId = 123456;
+    spell.sourceZoneChangeGeneration = 6;
+    spell.resolutionPromptId = state->resolutionPromptId;
+
     ruled::v1::RuledCommand proposal;
     auto *announcement = proposal.mutable_begin_spell_cast()->mutable_announcement();
     announcement->set_cast_method(ruled::v1::CAST_METHOD_MADNESS);
@@ -11071,14 +11809,149 @@ TEST(RuledPendingCastTest, SpecialCastSubmissionPreservesTheCompleteAnnouncement
     announcement->mutable_source()->set_exile_object_id(70);
     announcement->mutable_source()->set_expected_zone_change_generation(6);
     announcement->add_targets()->set_object_id(12);
-    auto submitted = RuledPendingCast::submissionCommand(proposal);
-    ASSERT_TRUE(submitted.has_submit_resolution_choice());
-    EXPECT_EQ(submitted.submit_resolution_choice().decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_SPELL);
-    EXPECT_EQ(submitted.submit_resolution_choice().spell_cast_announcement().SerializeAsString(),
+    auto submitted = RuledPendingCast::submissionCommand(proposal, &spell, state);
+    ASSERT_TRUE(submitted.has_value());
+    ASSERT_TRUE(submitted->has_submit_resolution_choice());
+    EXPECT_EQ(submitted->submit_resolution_choice().decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_SPELL);
+    EXPECT_EQ(submitted->submit_resolution_choice().resolution_prompt_id(), state->resolutionPromptId);
+    EXPECT_EQ(submitted->submit_resolution_choice().spell_cast_announcement().SerializeAsString(),
               announcement->SerializeAsString());
     EXPECT_TRUE(proposal.has_begin_spell_cast());
     announcement->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
-    EXPECT_TRUE(RuledPendingCast::submissionCommand(proposal).has_begin_spell_cast());
+    ASSERT_TRUE(RuledPendingCast::submissionCommand(proposal, &spell, state).has_value());
+    EXPECT_TRUE(RuledPendingCast::submissionCommand(proposal, &spell, state)->has_begin_spell_cast());
+}
+
+TEST_F(RuledClientTest, PermissionCastConversionRequiresTheCapturedExactSpecialCastOffer)
+{
+    const auto makeOffer = [this](quint64 promptId) {
+        ruled::v1::RuledEventBatch batch;
+        auto *snapshot = batch.mutable_resolution_prompt_state();
+        snapshot->set_active(true);
+        snapshot->set_deciding_player_id(kLocalPlayer);
+        snapshot->set_resolution_prompt_id(promptId);
+        auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+        rcr->set_deciding_player_id(kLocalPlayer);
+        rcr->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+        rcr->set_resolution_prompt_id(promptId);
+        rcr->add_candidate_object_ids(70);
+        rcr->add_candidate_selectable(true);
+        auto *zoneOffer = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
+        zoneOffer->set_object_id(70);
+        zoneOffer->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+        zoneOffer->set_zone_change_generation(6);
+        zoneOffer->set_cast_method(ruled::v1::CAST_METHOD_PERMISSION);
+        zoneOffer->set_casting_permission_id(123456);
+        zoneOffer->set_cost("{R}");
+        applyRaw(batch);
+    };
+    makeOffer(9001);
+
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    spell.handIndex = 70;
+    spell.source = RuledCastSource::Exile;
+    spell.castMethod = ruled::v1::CAST_METHOD_PERMISSION;
+    spell.castingPermissionId = 123456;
+    spell.sourceZoneChangeGeneration = 6;
+    spell.resolutionPromptId = 9001;
+
+    ruled::v1::RuledCommand proposal;
+    auto *announcement = proposal.mutable_begin_spell_cast()->mutable_announcement();
+    announcement->set_cast_method(ruled::v1::CAST_METHOD_PERMISSION);
+    announcement->set_casting_permission_id(123456);
+    announcement->mutable_source()->set_exile_object_id(70);
+    announcement->mutable_source()->set_expected_zone_change_generation(6);
+    auto submitted = RuledPendingCast::submissionCommand(proposal, &spell, state);
+    ASSERT_TRUE(submitted.has_value());
+    ASSERT_TRUE(submitted->has_submit_resolution_choice());
+    EXPECT_EQ(submitted->submit_resolution_choice().resolution_prompt_id(), 9001u);
+
+    // Reissue the same source, permission and generation under a new prompt ID. The captured
+    // offer no longer matches, so the old pending cast cannot answer the replacement.
+    makeOffer(9002);
+    EXPECT_FALSE(RuledPendingCast::submissionCommand(proposal, &spell, state).has_value());
+
+    spell.resolutionPromptId = 0;
+    EXPECT_FALSE(RuledPendingCast::submissionCommand(proposal, &spell, state).has_value());
+}
+
+TEST_F(RuledClientTest, PermissionDoesNotDowngradeWhileAnActivePromptHasNoValidatedOffer)
+{
+    ruled::v1::RuledEventBatch active;
+    active.mutable_resolution_prompt_state()->set_active(true);
+    active.mutable_resolution_prompt_state()->set_deciding_player_id(kLocalPlayer);
+    active.mutable_resolution_prompt_state()->set_resolution_prompt_id(9305);
+    applyRaw(active);
+
+    ASSERT_TRUE(state->resolutionPromptSnapshotValid);
+    ASSERT_TRUE(state->resolutionPromptActive);
+    ASSERT_EQ(state->resolutionPromptId, 0u);
+
+    const auto applyPermissionOffer = [this](quint32 candidateOid) {
+        constexpr quint64 promptId = 9305;
+        ruled::v1::RuledEventBatch batch;
+        auto *snapshot = batch.mutable_resolution_prompt_state();
+        snapshot->set_active(true);
+        snapshot->set_deciding_player_id(kLocalPlayer);
+        snapshot->set_resolution_prompt_id(promptId);
+        auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+        rcr->set_deciding_player_id(kLocalPlayer);
+        rcr->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+        rcr->set_resolution_prompt_id(promptId);
+        rcr->add_candidate_object_ids(candidateOid);
+        rcr->add_candidate_selectable(true);
+        auto *offer = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
+        offer->set_object_id(70);
+        offer->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+        offer->set_zone_change_generation(6);
+        offer->set_cast_method(ruled::v1::CAST_METHOD_PERMISSION);
+        offer->set_casting_permission_id(123457);
+        offer->set_cost("{R}");
+        applyRaw(batch);
+    };
+    applyPermissionOffer(70);
+    ASSERT_TRUE(state->isCurrentResolutionPrompt(9305));
+    applyPermissionOffer(71);
+    EXPECT_TRUE(state->resolutionPromptSnapshotValid);
+    EXPECT_TRUE(state->resolutionPromptActive);
+    EXPECT_EQ(state->resolutionPromptDeciderPlayerId, kLocalPlayer);
+    EXPECT_EQ(state->resolutionPromptId, 0u);
+    EXPECT_TRUE(state->hasActiveLocalResolutionPrompt());
+
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    spell.handIndex = 70;
+    spell.source = RuledCastSource::Exile;
+    spell.castMethod = ruled::v1::CAST_METHOD_PERMISSION;
+    spell.castingPermissionId = 123457;
+    spell.sourceZoneChangeGeneration = 6;
+
+    ruled::v1::RuledCommand proposal;
+    auto *announcement = proposal.mutable_begin_spell_cast()->mutable_announcement();
+    announcement->set_cast_method(ruled::v1::CAST_METHOD_PERMISSION);
+    announcement->set_casting_permission_id(123457);
+    announcement->mutable_source()->set_exile_object_id(70);
+    announcement->mutable_source()->set_expected_zone_change_generation(6);
+    EXPECT_FALSE(RuledPendingCast::submissionCommand(proposal, &spell, state).has_value());
+    EXPECT_TRUE(pending.resolutionChoiceBlocksSpell(*state));
+
+    // The same conversion gate must preserve the engine-owned child activation exception.
+    spell.engineTransactionId = 93;
+    state->pendingSpellCast.emplace().set_transaction_id(93);
+    EXPECT_FALSE(pending.resolutionChoiceBlocksSpell(*state));
+    state->pendingSpellCast.reset();
+    spell.engineTransactionId = 0;
+
+    ruled::v1::RuledEventBatch inactive;
+    inactive.mutable_resolution_prompt_state()->set_active(false);
+    inactive.mutable_resolution_prompt_state()->set_deciding_player_id(0);
+    applyRaw(inactive);
+    ASSERT_FALSE(state->resolutionPromptActive);
+    const auto ordinary = RuledPendingCast::submissionCommand(proposal, &spell, state);
+    ASSERT_TRUE(ordinary.has_value());
+    EXPECT_TRUE(ordinary->has_begin_spell_cast());
+    EXPECT_FALSE(pending.resolutionChoiceBlocksSpell(*state));
 }
 
 TEST_F(RuledClientTest, PaymentReconciliationRebindsHandCostsAndRejectsMissingCards)
@@ -11310,7 +12183,7 @@ TEST_F(RuledClientTest, FranticLandClicksToggleUniqueBoundedSelectionUntilConfir
     choice.min = 0;
     choice.max = 3;
     choice.candidateOids = {100, 101, 102, 103};
-    state->setPendingChoice(choice);
+    stageChoiceForTest(choice);
     QSignalSpy repaint(state, &RuledClientState::combatStateChanged);
     state->submitPendingChoiceObject(999);
     EXPECT_TRUE(state->pendingChoice->selectedObjectOids.isEmpty());
@@ -11347,7 +12220,7 @@ TEST_F(RuledClientTest, FranticZeroOneThreeRejectedChoicesRetainSelectionForRetr
         choice.min = 0;
         choice.max = 3;
         choice.candidateOids = {100, 101, 102};
-        state->setPendingChoice(choice);
+        stageChoiceForTest(choice);
         for (int index = 0; index < count; ++index)
             state->submitPendingChoiceObject(100 + index);
         const auto selected = state->pendingChoice->selectedObjectOids;
@@ -11374,7 +12247,7 @@ TEST_F(RuledClientTest, FranticAcknowledgementCannotReplaceANewerEngineChoice)
         old.kind = RuledClientState::ChoiceKind::PermanentChoice;
         old.max = 3;
         old.candidateOids = {100};
-        state->setPendingChoice(old);
+        stageChoiceForTest(old);
         state->submitPermanentChoiceObjects();
         RuledClientState::RuledPendingChoice next;
         next.kind = RuledClientState::ChoiceKind::PermanentChoice;
@@ -11382,7 +12255,7 @@ TEST_F(RuledClientTest, FranticAcknowledgementCannotReplaceANewerEngineChoice)
         next.max = 2;
         next.promptText = "A newer engine choice";
         next.candidateOids = {200, 201};
-        state->setPendingChoice(next);
+        stageChoiceForTest(next);
         state->submitPendingChoiceObject(200);
         const quint64 revision = state->pendingChoiceRevision;
         host.answerPendingAck(accepted);
@@ -11401,7 +12274,7 @@ TEST_F(RuledClientTest, PermanentCohortConfirmationHonorsMandatoryMinimum)
     choice.min = 2;
     choice.max = 3;
     choice.candidateOids = {100, 101};
-    state->setPendingChoice(choice);
+    stageChoiceForTest(choice);
     state->submitPermanentChoiceObjects();
     state->submitPendingChoiceObject(100);
     state->submitPermanentChoiceObjects();

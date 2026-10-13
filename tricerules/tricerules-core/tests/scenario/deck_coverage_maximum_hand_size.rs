@@ -1,8 +1,9 @@
 //! Exact-card scenarios for the Kami maximum-hand-size cohort.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::CounterKind;
-use tricerules_core::{GameEngine, TurnStep};
+use tricerules_core::TurnStep;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ExecutePermanentAction, PermanentActionKind, RuledCommand,
 };
@@ -33,13 +34,13 @@ fn folio_pays_double_x_draws_every_player_and_mills_each_opponents_own_hand() {
     };
     ability.x_value = 2;
     engine
-        .apply_command(0, &draw)
+        .apply_scenario_command(0, &draw)
         .expect("pay X twice and tap Folio");
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     for _ in 0..3 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("resolve shared draw");
     }
     for (player, old_hand_size) in before.iter().enumerate() {
@@ -47,7 +48,7 @@ fn folio_pays_double_x_draws_every_player_and_mills_each_opponents_own_hand() {
     }
     assert!(
         engine
-            .apply_command(0, &activate_ability_for(&engine, folio, 1, vec![]))
+            .apply_scenario_command(0, &activate_ability_for(&engine, folio, 1, vec![]))
             .is_err(),
         "the second tap ability needs an intervening untap"
     );
@@ -62,7 +63,7 @@ fn folio_pays_double_x_draws_every_player_and_mills_each_opponents_own_hand() {
     for _ in 0..3 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("resolve Folio mill");
     }
     assert_eq!(engine.state.players[0].library.len(), libraries[0]);
@@ -103,12 +104,12 @@ fn folio_draws_full_x_then_an_opponent_with_too_few_library_cards_loses() {
     };
     ability.x_value = 2;
     engine
-        .apply_command(0, &draw)
+        .apply_scenario_command(0, &draw)
         .expect("activate Folio at X = 2");
     for _ in 0..3 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("resolve Folio draw");
     }
     assert!(engine.state.players[1].has_lost);
@@ -147,10 +148,10 @@ fn folio_and_toad_apply_the_later_hand_limit_only_during_cleanup() {
         assert_eq!(engine.state.players[0].hand.len(), 21);
         engine.state.turn_step = TurnStep::EndStep;
         engine
-            .apply_command(0, &pass())
+            .apply_scenario_command(0, &pass())
             .expect("active player passes end step");
         engine
-            .apply_command(1, &pass())
+            .apply_scenario_command(1, &pass())
             .expect("opponent passes end step");
         if folio_enters_last {
             assert_eq!(engine.state.cleanup_discard_player, None);
@@ -158,7 +159,7 @@ fn folio_and_toad_apply_the_later_hand_limit_only_during_cleanup() {
         } else {
             assert_eq!(engine.state.cleanup_discard_player, Some(0));
             engine
-                .apply_command(0, &discard_cleanup_batch(vec![0]))
+                .apply_scenario_command(0, &discard_cleanup_batch(vec![0]))
                 .expect("discard one card to the later twenty-card limit");
             assert_eq!(engine.state.players[0].hand.len(), 20);
         }
@@ -211,10 +212,10 @@ fn turning_toad_face_up_gives_its_hand_limit_a_new_timestamp() {
     assert!(!engine.state.objects[&toad].face_down);
     engine.state.turn_step = TurnStep::EndStep;
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes end step");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes end step");
     assert_eq!(engine.state.cleanup_discard_player, Some(0));
 }
@@ -241,9 +242,11 @@ fn triskaidekaphile_checks_thirteen_at_upkeep_start_and_again_on_resolution() {
         engine.state.priority_idx = 1;
         engine.state.turn_step = TurnStep::EndStep;
         engine
-            .apply_command(1, &pass())
+            .apply_scenario_command(1, &pass())
             .expect("opponent ends turn");
-        engine.apply_command(0, &pass()).expect("controller passes");
+        engine
+            .apply_scenario_command(0, &pass())
+            .expect("controller passes");
         assert_eq!(engine.state.turn_step, TurnStep::Upkeep);
         assert_eq!(engine.state.stack.len(), usize::from(starting_hand == 13));
         if starting_hand == 13 {
@@ -298,7 +301,7 @@ fn toad_two_attacker_trigger_adds_counter_and_draws_without_winning() {
     let toad = inject_permanent_on_battlefield(&mut engine, 0, "twenty-toed_toad");
     let before = engine.state.players[0].hand.len();
     engine
-        .apply_command(0, &declare_attackers(vec![toad, bear]))
+        .apply_scenario_command(0, &declare_attackers(vec![toad, bear]))
         .expect("attack with Toad and companion");
     answer_trigger_order_in_engine_order(&mut engine);
     assert_eq!(engine.state.stack.len(), 2);
@@ -336,7 +339,7 @@ fn toad_self_attack_win_uses_all_counter_kinds_or_resolution_time_hand_count() {
             object.add_counters(CounterKind::Charge, 8, engine.state.command_index);
         }
         engine
-            .apply_command(0, &declare_attackers(vec![toad]))
+            .apply_scenario_command(0, &declare_attackers(vec![toad]))
             .expect("attack with Toad alone");
         assert_eq!(
             engine.state.stack.len(),

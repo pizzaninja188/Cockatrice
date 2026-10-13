@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use prost::Message;
 use tricerules_cards::{ContinuousEffectKind, ControllerReference, CounterKind, EffectDuration};
 use tricerules_core::{AffectedScope, ContinuousEffect, EngineError, TurnStep, Zone};
@@ -25,7 +26,7 @@ fn resolve_one(engine: &mut GameEngine) {
     assert!(before > 0);
     for _ in 0..8 {
         let actor = engine.state.priority_player_id();
-        engine.apply_command(actor, &pass()).unwrap();
+        engine.apply_scenario_command(actor, &pass()).unwrap();
         if engine.state.stack.len() < before {
             return;
         }
@@ -48,7 +49,9 @@ fn add_effect(engine: &mut GameEngine, oid: u32, kind: ContinuousEffectKind) {
 
 fn begin_combat(engine: &mut GameEngine) {
     let actor = engine.state.active_player_id();
-    engine.apply_command(actor, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(actor, &primitive_yield())
+        .unwrap();
     assert_eq!(engine.state.turn_step, TurnStep::BeginCombat);
     answer_trigger_order_in_engine_order(engine);
 }
@@ -74,7 +77,7 @@ fn cast_instant(engine: &mut GameEngine, card: &str, target: u32) {
         .position(|id| *id == oid)
         .unwrap();
     engine
-        .apply_command(actor, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(actor, &cast_spell(slot, target_object(target)))
         .unwrap();
     resolve_one(engine);
 }
@@ -100,7 +103,9 @@ fn paid_growth(engine: &mut GameEngine) -> u32 {
         .iter()
         .position(|id| *id == oid)
         .unwrap();
-    engine.apply_command(4, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(4, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert_eq!(engine.state.players[0].mana_pool.green, 0);
     resolve_one(engine);
@@ -122,11 +127,11 @@ fn growth_paid_card_doubles_unequal_creatures_on_every_players_combat() {
         engine.state.priority_idx = active;
         let before = engine.diagnostic_snapshot().unwrap();
         assert!(engine
-            .apply_command(engine.state.players[(active + 1) % 3].id, &pass())
+            .apply_scenario_command(engine.state.players[(active + 1) % 3].id, &pass())
             .is_err());
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
         engine
-            .apply_command(engine.state.players[active].id, &primitive_yield())
+            .apply_scenario_command(engine.state.players[active].id, &primitive_yield())
             .unwrap();
         assert_eq!(engine.state.turn_step, TurnStep::BeginCombat);
         assert_eq!(engine.state.stack.len(), 1);
@@ -226,7 +231,9 @@ fn growth_composes_with_setters_counters_later_pumps_and_cleanup() {
             break;
         }
         let active = engine.state.active_player_id();
-        engine.apply_command(active, &primitive_yield()).unwrap();
+        engine
+            .apply_scenario_command(active, &primitive_yield())
+            .unwrap();
     }
     assert_eq!(engine.state.turn_instance, old_turn + 1);
     // Setter, pre-pump, doubling and Giant Growth all expired; the physical counter remains.
@@ -265,7 +272,9 @@ fn growth_leaving_and_returning_same_physical_card_loses_old_incarnation_modifie
         .iter()
         .position(|id| *id == own)
         .unwrap();
-    engine.apply_command(4, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(4, &cast_spell(slot, vec![]))
+        .unwrap();
     resolve_one(&mut engine);
     assert_eq!(engine.state.objects[&own].zone, Zone::Battlefield);
     assert_eq!(pt(&engine, own), (1, 3));
@@ -282,7 +291,7 @@ fn growth_out_of_range_resolution_and_canonical_commands_restore_whole_command()
         begin_combat(&mut engine);
         for _ in 0..2 {
             let actor = engine.state.priority_player_id();
-            engine.apply_command(actor, &pass()).unwrap();
+            engine.apply_scenario_command(actor, &pass()).unwrap();
         }
         let actor = engine.state.priority_player_id();
         let command = if canonical {
@@ -306,7 +315,7 @@ fn growth_out_of_range_resolution_and_canonical_commands_restore_whole_command()
         };
         let before = engine.diagnostic_snapshot().unwrap();
         assert!(matches!(
-            engine.apply_command(actor, &command),
+            engine.apply_scenario_command(actor, &command),
             Err(EngineError::PowerToughnessNumericRange(_))
         ));
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
@@ -353,13 +362,13 @@ fn growth_replays_serialized_accepted_commands_from_identical_fixture() {
         pass(),
     ] {
         let actor = live.state.priority_player_id();
-        live.apply_command(actor, &command).unwrap();
+        live.apply_scenario_command(actor, &command).unwrap();
         log.push((actor, command.encode_to_vec()));
     }
     assert_eq!(pt(&live, creature), (2, 6));
     for (actor, bytes) in log {
         replay
-            .apply_command(actor, &RuledCommand::decode(bytes.as_slice()).unwrap())
+            .apply_scenario_command(actor, &RuledCommand::decode(bytes.as_slice()).unwrap())
             .unwrap();
     }
     assert_eq!(

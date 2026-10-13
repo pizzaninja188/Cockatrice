@@ -1,6 +1,7 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{ContinuousEffectKind, ControllerReference, EffectDuration};
-use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine, TurnStep, Zone};
+use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
 use tricerules_proto::ruled::v1::dev_command::Dev;
 use tricerules_proto::ruled::v1::{
     self as rv1, DevCommand, DevMoveCard, DevPutCardInZone, DevZone,
@@ -32,7 +33,7 @@ fn issue_engine() -> GameEngine {
     engine.enable_dev_commands();
     advance_to_main1_from_game_start(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &dev(
                 0,
@@ -49,7 +50,7 @@ fn issue_engine() -> GameEngine {
 
 fn move_forest_to_graveyard(engine: &mut GameEngine, player: i32) -> u32 {
     engine
-        .apply_command(
+        .apply_scenario_command(
             player,
             &dev(
                 player,
@@ -74,6 +75,7 @@ fn icetill_object(engine: &GameEngine) -> u32 {
 fn play_from_graveyard(object_id: u32, generation: u64) -> rv1::RuledCommand {
     rv1::RuledCommand {
         cmd: Some(Cmd::PlayLand(rv1::PlayLand {
+            resolution_prompt_id: 0,
             source: Some(rv1::LandSource {
                 location: Some(rv1::land_source::Location::GraveyardObjectId(object_id)),
                 expected_zone_change_generation: Some(generation),
@@ -100,7 +102,7 @@ fn icetill_publishes_and_accepts_a_generation_bound_graveyard_land_action() {
     }));
 
     engine
-        .apply_command(0, &play_from_graveyard(forest, generation))
+        .apply_scenario_command(0, &play_from_graveyard(forest, generation))
         .expect("play Forest from graveyard");
     assert_eq!(engine.state.objects[&forest].zone, Zone::Battlefield);
     assert_eq!(engine.state.lands_played_this_turn, 1);
@@ -122,7 +124,7 @@ fn graveyard_land_permission_revalidates_player_timing_and_source() {
         .iter()
         .any(|action| action.object_id == opponent_forest));
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &play_from_graveyard(opponent_forest, opponent_generation),
         )
@@ -133,7 +135,7 @@ fn graveyard_land_permission_revalidates_player_timing_and_source() {
         .zone_land_actions
         .is_empty());
     assert!(engine
-        .apply_command(0, &play_from_graveyard(own_forest, own_generation))
+        .apply_scenario_command(0, &play_from_graveyard(own_forest, own_generation))
         .is_err());
     engine.state.turn_step = TurnStep::Main1;
 
@@ -142,12 +144,12 @@ fn graveyard_land_permission_revalidates_player_timing_and_source() {
         .zone_land_actions
         .is_empty());
     assert!(engine
-        .apply_command(0, &play_from_graveyard(own_forest, own_generation))
+        .apply_scenario_command(0, &play_from_graveyard(own_forest, own_generation))
         .is_err());
     engine.state.lands_played_this_turn = 0;
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &dev(
                 0,
@@ -163,7 +165,7 @@ fn graveyard_land_permission_revalidates_player_timing_and_source() {
         .zone_land_actions
         .is_empty());
     assert!(engine
-        .apply_command(0, &play_from_graveyard(own_forest, own_generation))
+        .apply_scenario_command(0, &play_from_graveyard(own_forest, own_generation))
         .is_err());
 }
 
@@ -196,7 +198,7 @@ fn stale_graveyard_land_action_is_rejected_without_state_change() {
     assert!(engine.state.zone_change_generation[&forest] > old_generation);
     let lands_before = engine.state.lands_played_this_turn;
 
-    assert!(engine.apply_command(0, &stale_command).is_err());
+    assert!(engine.apply_scenario_command(0, &stale_command).is_err());
     assert_eq!(engine.state.objects[&forest].zone, Zone::Graveyard);
     assert_eq!(engine.state.lands_played_this_turn, lands_before);
 }
@@ -264,7 +266,7 @@ fn control_change_transfers_the_graveyard_permission() {
 fn graveyard_permission_offers_both_pathway_land_faces() {
     let mut engine = issue_engine();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &dev(
                 0,
@@ -277,7 +279,7 @@ fn graveyard_permission_offers_both_pathway_land_faces() {
         )
         .expect("put Pathway into hand");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &dev(
                 0,

@@ -1,6 +1,7 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{ContinuousEffectKind, EffectDuration, Keyword};
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn setup(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
@@ -32,7 +33,7 @@ fn setup(seed: u64) -> GameEngine {
 fn cast_thrall(engine: &mut GameEngine, target: u32) {
     let slot = hand_index_for_card(engine, 0, "evils_thrall");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Evil's Thrall");
     resolve_entire_stack_two_player(engine);
 }
@@ -204,7 +205,7 @@ fn issue_243_later_control_effect_wins_then_expiring_it_reveals_the_extended_eff
     );
     let slot = hand_index_for_card(&engine, 1, "act_of_treason");
     engine
-        .apply_command(1, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(1, &cast_spell(slot, target_object(target)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&target].controller, 1);
@@ -225,7 +226,7 @@ fn issue_243_reentered_target_is_not_controlled() {
     engine.state.objects.get_mut(&target).unwrap().tapped = true;
     let slot = hand_index_for_card(&engine, 0, "evils_thrall");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Evil's Thrall");
 
     engine.state.players[1]
@@ -257,7 +258,9 @@ fn issue_243_extended_control_ends_if_its_controller_loses() {
     inject_creature_on_battlefield(&mut engine, 0, "grendel,_spawn_of_knull");
     let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     cast_thrall(&mut engine, target);
-    engine.apply_command(0, &concede()).expect("concede");
+    engine
+        .apply_scenario_command(0, &concede())
+        .expect("concede");
 
     assert_eq!(engine.state.objects[&target].controller, 1);
     assert!(!engine

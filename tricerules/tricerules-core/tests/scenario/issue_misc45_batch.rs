@@ -1,5 +1,6 @@
 //! Actual-card semantics for five pinned Standard spells.
 //! Oracle and rulings checked 2026-09-22; CR 601.2f, 608.2b-c, 701.16, 701.23.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -86,8 +87,10 @@ fn search_two(card: &str, subtype_card: &str, seed: u64) {
     let typed = inject_library_card(&mut e, 0, subtype_card);
     let illegal = inject_library_card(&mut e, 0, "grizzly_bears");
     cast_regular(&mut e, card, vec![]);
-    e.apply_command(0, &pass()).expect("caster pass");
-    let batch = e.apply_command(1, &pass()).expect("resolve to search");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("resolve to search");
     let choice = find_resolution_choice(&batch).expect("library search choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
     assert_eq!((choice.min, choice.max), (0, 2));
@@ -95,7 +98,7 @@ fn search_two(card: &str, subtype_card: &str, seed: u64) {
     assert!(choice.candidate_object_ids.contains(&typed));
     assert!(!choice.candidate_object_ids.contains(&illegal));
     let mut completion = e
-        .apply_command(0, &submit_resolution_choice(vec![basic, typed]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![basic, typed]))
         .expect("choose two lands");
     assert_eq!(
         e.state

@@ -8,6 +8,7 @@
 //! The last group drives the whole thing through Reanimate, the card that motivated it: those
 //! cases go through the real ETB path rather than injecting a board, which is the only way to
 //! exercise static abilities (`emit_static_abilities_on_enter`) under a changed controller.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_core::Zone;
@@ -43,11 +44,12 @@ fn foreign_controlled_creature_attacks_for_its_controller_not_its_owner() {
 
     // The owner cannot declare it — it is not their creature to attack with.
     assert!(
-        e.apply_command(1, &declare_attackers(vec![bear])).is_err(),
+        e.apply_scenario_command(1, &declare_attackers(vec![bear]))
+            .is_err(),
         "the owner must not be able to attack with a creature they do not control"
     );
     // The controller can.
-    e.apply_command(0, &declare_attackers(vec![bear]))
+    e.apply_scenario_command(0, &declare_attackers(vec![bear]))
         .expect("the controller attacks with it");
     assert!(e
         .state
@@ -77,13 +79,15 @@ fn foreign_controlled_creature_blocks_for_its_controller() {
     let blocker = inject_creature_under_foreign_control(&mut e, 0, 1, "grizzly_bears");
 
     advance_to_declare_attackers(&mut e);
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attackers");
     // Both players pass priority in the declare-attackers step to reach declare blockers.
-    e.apply_command(0, &pass()).expect("attacker passes");
-    e.apply_command(1, &pass()).expect("defender passes");
+    e.apply_scenario_command(0, &pass())
+        .expect("attacker passes");
+    e.apply_scenario_command(1, &pass())
+        .expect("defender passes");
 
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![tricerules_proto::ruled::v1::BlockPair {
             blocker_id: blocker,
@@ -130,7 +134,8 @@ fn foreign_controlled_permanent_untaps_on_its_controllers_turn() {
         if e.state.active_player_id() == 0 {
             break;
         }
-        e.apply_command(1, &primitive_yield()).expect("p1 yields");
+        e.apply_scenario_command(1, &primitive_yield())
+            .expect("p1 yields");
         resolve_cleanup_discards_if_any(&mut e);
     }
     assert_eq!(
@@ -179,7 +184,7 @@ fn foreign_controlled_creature_dies_to_its_owners_graveyard() {
         },
     );
     let bolt = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt,
@@ -193,8 +198,8 @@ fn foreign_controlled_creature_dies_to_its_owners_graveyard() {
         ),
     )
     .expect("cast bolt at the borrowed creature");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
         .expect("p1 pass — bolt resolves");
 
     assert!(
@@ -252,7 +257,7 @@ fn reanimate_takes_an_opponents_creature_under_your_control() {
     let life_before = e.state.players[0].life;
 
     let idx = hand_index_for_card(&e, 0, "reanimate");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -266,8 +271,8 @@ fn reanimate_takes_an_opponents_creature_under_your_control() {
         ),
     )
     .expect("cast reanimate on the opponent's creature");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
         .expect("p1 pass — reanimate resolves");
 
     // Under YOUR control...
@@ -327,7 +332,7 @@ fn reanimated_creature_dies_back_to_its_owners_graveyard() {
     );
 
     let idx = hand_index_for_card(&e, 0, "reanimate");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -346,7 +351,7 @@ fn reanimated_creature_dies_back_to_its_owners_graveyard() {
 
     // Burn it down.
     let bolt = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt,
@@ -424,7 +429,7 @@ fn reanimated_static_ability_serves_its_new_controller() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "reanimate");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -488,7 +493,7 @@ fn reanimate_cannot_target_a_noncreature_card() {
     );
     let idx = hand_index_for_card(&e, 0, "reanimate");
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &cast_spell(
                 idx,
@@ -533,7 +538,7 @@ fn mind_control_tracks_its_auras_controller_and_restores_control_when_bounced() 
         },
     );
     let mind_control = hand_index_for_card(&e, 0, "mind_control");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             mind_control,
@@ -568,9 +573,10 @@ fn mind_control_tracks_its_auras_controller_and_restores_control_when_bounced() 
             ..Default::default()
         },
     );
-    e.apply_command(0, &pass()).expect("active player passes");
+    e.apply_scenario_command(0, &pass())
+        .expect("active player passes");
     let boomerang = hand_index_for_card(&e, 1, "boomerang");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             boomerang,
@@ -619,7 +625,7 @@ fn act_of_treason_untaps_grants_haste_and_returns_control_at_cleanup() {
         },
     );
     let act = hand_index_for_card(&e, 0, "act_of_treason");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             act,
@@ -684,7 +690,7 @@ fn stolen_static_ability_serves_the_current_controller() {
         },
     );
     let captain_index = hand_index_for_card(&e, 0, "captain_of_the_watch");
-    e.apply_command(0, &cast_spell(captain_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(captain_index, vec![]))
         .expect("cast Captain of the Watch");
     resolve_entire_stack_two_player(&mut e);
     let captain = battlefield_object_for_card(&e, 0, "captain_of_the_watch");
@@ -704,7 +710,7 @@ fn stolen_static_ability_serves_the_current_controller() {
         },
     );
     let act = hand_index_for_card(&e, 1, "act_of_treason");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             act,
@@ -752,7 +758,7 @@ fn controller_restricted_aura_goes_to_graveyard_when_creature_is_stolen() {
         },
     );
     let cartouche = hand_index_for_card(&e, 0, "cartouche_of_knowledge");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             cartouche,
@@ -787,7 +793,7 @@ fn controller_restricted_aura_goes_to_graveyard_when_creature_is_stolen() {
         },
     );
     let act = hand_index_for_card(&e, 1, "act_of_treason");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             act,
@@ -835,7 +841,7 @@ fn unrestricted_aura_stays_attached_when_creature_is_stolen() {
         },
     );
     let flight = hand_index_for_card(&e, 0, "flight");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             flight,
@@ -865,7 +871,7 @@ fn unrestricted_aura_stays_attached_when_creature_is_stolen() {
         },
     );
     let act = hand_index_for_card(&e, 1, "act_of_treason");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             act,
@@ -916,7 +922,7 @@ fn equipment_stays_attached_when_equipped_creature_is_stolen() {
         },
     );
     let hand_index = hand_index_for_card(&e, 0, "bonesplitter");
-    e.apply_command(0, &cast_spell(hand_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(hand_index, vec![]))
         .expect("cast Bonesplitter");
     resolve_entire_stack_two_player(&mut e);
     let equipment = battlefield_object_for_card(&e, 0, "bonesplitter");
@@ -961,7 +967,7 @@ fn equipment_stays_attached_when_equipped_creature_is_stolen() {
         },
     );
     let act = hand_index_for_card(&e, 1, "act_of_treason");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             act,

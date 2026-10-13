@@ -1,7 +1,8 @@
 //! Actual-card coverage for Prosperity's X-based draw for every player.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, TurnStep};
+use tricerules_core::TurnStep;
 
 fn pass_all_active_players(engine: &mut GameEngine) {
     let active_players = engine
@@ -14,7 +15,7 @@ fn pass_all_active_players(engine: &mut GameEngine) {
         answer_trigger_order_in_engine_order(engine);
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("active player passes priority");
     }
 }
@@ -32,7 +33,7 @@ fn resolve_three_player_stack(engine: &mut GameEngine) -> Vec<String> {
         answer_trigger_order_in_engine_order(engine);
         let player = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("active player passes priority");
         logs.extend(batch.events.into_iter().filter_map(|event| match event.ev {
             Some(tricerules_proto::ruled::v1::ruled_event::Ev::Log(log)) => Some(log.text),
@@ -65,7 +66,7 @@ fn resolve_two_player_stack_and_capture_logs(engine: &mut GameEngine) -> Vec<Str
         answer_trigger_order_in_engine_order(engine);
         let player = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("active player passes priority");
         logs.extend(batch.events.into_iter().filter_map(|event| match event.ev {
             Some(tricerules_proto::ruled::v1::ruled_event::Ev::Log(log)) => Some(log.text),
@@ -105,7 +106,7 @@ fn prosperity_pays_x_plus_blue_and_each_player_draws_x_in_apnap_order() {
 
     let hand_index = hand_index_for_card(&engine, 0, "prosperity");
     let spell = engine
-        .apply_command(0, &cast_spell_x(hand_index, Vec::new(), 2))
+        .apply_scenario_command(0, &cast_spell_x(hand_index, Vec::new(), 2))
         .expect("cast Prosperity with X=2");
     let stack_item = engine.state.stack.last().expect("Prosperity on stack");
     assert_eq!(stack_item.chosen_x, 2);
@@ -187,7 +188,7 @@ fn prosperity_with_x_zero_draws_no_cards_but_still_pays_blue() {
 
     let hand_index = hand_index_for_card(&engine, 0, "prosperity");
     engine
-        .apply_command(0, &cast_spell_x(hand_index, Vec::new(), 0))
+        .apply_scenario_command(0, &cast_spell_x(hand_index, Vec::new(), 0))
         .expect("cast Prosperity with X=0");
     assert_eq!(engine.state.stack.last().unwrap().chosen_x, 0);
     resolve_entire_stack_two_player(&mut engine);
@@ -232,7 +233,7 @@ fn prosperity_can_make_all_remaining_players_lose_simultaneously() {
 
     let hand_index = hand_index_for_card(&engine, 0, "prosperity");
     engine
-        .apply_command(0, &cast_spell_x(hand_index, Vec::new(), 2))
+        .apply_scenario_command(0, &cast_spell_x(hand_index, Vec::new(), 2))
         .expect("cast Prosperity with X=2");
     let logs = resolve_two_player_stack_and_capture_logs(&mut engine);
 

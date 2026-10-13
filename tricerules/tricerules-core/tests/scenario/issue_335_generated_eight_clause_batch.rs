@@ -8,6 +8,7 @@
 //! layer 6 the live counter-filtered trample anthem; CR 603.6a/611.2a/514.2 the Landfall self pump
 //! and its cleanup expiry; and CR 602.2/701.9 the {1}{U}, {T} draw-then-discard loot activation
 //! with a private discard.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -48,7 +49,7 @@ fn resolve_entire_stack_three_player(engine: &mut GameEngine) {
             }
             let player = engine.state.priority_player_id();
             engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("three-player priority pass");
         }
     }
@@ -91,7 +92,7 @@ fn issue_335_pulse_tracker_drains_every_opponent_not_the_controller() {
         ..Default::default()
     });
     engine
-        .apply_command(0, &attack)
+        .apply_scenario_command(0, &attack)
         .expect("attack player 1 with Pulse Tracker");
     assert_eq!(
         engine.state.stack.len(),
@@ -116,7 +117,7 @@ fn issue_335_grasping_longneck_gains_two_life_when_it_dies() {
 
     engine.state.objects.get_mut(&neck).expect("neck").damage = 2;
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("lethal state-based action");
     assert_eq!(engine.state.objects[&neck].zone, Zone::Graveyard);
     assert_eq!(engine.state.stack.len(), 1, "one dies trigger");
@@ -169,7 +170,7 @@ fn issue_335_angelic_edict_exiles_a_creature_or_enchantment_but_not_a_land() {
     );
     let spell = relocate_spell_to_hand(&mut engine, "angelic_edict");
     engine
-        .apply_command(0, &cast_spell(spell, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(spell, target_object(bear)))
         .expect("cast Angelic Edict at a creature");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&bear].zone, Zone::Exile);
@@ -187,7 +188,7 @@ fn issue_335_angelic_edict_exiles_a_creature_or_enchantment_but_not_a_land() {
     );
     let spell = relocate_spell_to_hand(&mut engine, "angelic_edict");
     engine
-        .apply_command(0, &cast_spell(spell, target_object(enchantment)))
+        .apply_scenario_command(0, &cast_spell(spell, target_object(enchantment)))
         .expect("cast Angelic Edict at an enchantment");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&enchantment].zone, Zone::Exile);
@@ -206,7 +207,7 @@ fn issue_335_angelic_edict_exiles_a_creature_or_enchantment_but_not_a_land() {
     let spell = relocate_spell_to_hand(&mut engine, "angelic_edict");
     assert!(
         engine
-            .apply_command(0, &cast_spell(spell, target_object(land)))
+            .apply_scenario_command(0, &cast_spell(spell, target_object(land)))
             .is_err(),
         "CR 601.2c: a land is not a legal creature-or-enchantment target"
     );
@@ -228,7 +229,7 @@ fn issue_335_angelic_edict_fizzles_when_its_only_target_leaves() {
     );
     let spell = relocate_spell_to_hand(&mut engine, "angelic_edict");
     engine
-        .apply_command(0, &cast_spell(spell, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(spell, target_object(bear)))
         .expect("cast Angelic Edict");
 
     engine.state.players[1].battlefield.retain(|id| *id != bear);
@@ -269,7 +270,7 @@ fn issue_335_adventurers_inn_gains_two_life_only_for_its_own_entry() {
 
     let inn = battlefield_object_for_card(&engine, 0, "adventurers_inn");
     engine
-        .apply_command(0, &activate_ability_for(&engine, inn, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, inn, 0, vec![]))
         .expect("tap Adventurer's Inn for colorless mana");
     assert!(engine.state.objects[&inn].tapped);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
@@ -379,15 +380,15 @@ fn issue_335_strix_lookout_loots_with_a_private_discard() {
     );
 
     engine
-        .apply_command(0, &activate_ability(source, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(source, 0, vec![]))
         .expect("activate {1}{U}, {T}: loot");
     assert!(engine.state.objects[&source].tapped);
     assert_eq!(engine.state.stack.len(), 1);
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     let parked = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("ability resolves to the discard choice");
 
     let choice = find_resolution_choice(&parked).expect("mandatory discard choice");
@@ -413,7 +414,7 @@ fn issue_335_strix_lookout_loots_with_a_private_discard() {
     assert!(choice.candidate_object_ids.contains(&drawn));
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![known]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![known]))
         .expect("discard the known card");
     assert!(engine.state.players[0].graveyard.contains(&known));
     assert!(engine.state.stack.is_empty());

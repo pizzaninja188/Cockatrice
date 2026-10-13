@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::Keyword;
 
 fn modal_decks(card_id: &str) -> Option<Vec<Vec<String>>> {
@@ -43,7 +44,7 @@ fn boros_charm_damage_mode_is_atomic_and_public() {
     fund_boros(&mut e);
     let index = hand_index_for_card(&e, 0, "boros_charm");
     let batch = e
-        .apply_command(0, &cast_modal_spell(index, vec![(0, target_player(1))]))
+        .apply_scenario_command(0, &cast_modal_spell(index, vec![(0, target_player(1))]))
         .unwrap();
 
     let pushed = batch.events.iter().find_map(|event| match &event.ev {
@@ -89,7 +90,7 @@ fn healing_salve_life_mode_completes_the_card() {
         },
     );
     let index = hand_index_for_card(&e, 0, "healing_salve");
-    e.apply_command(0, &cast_modal_spell(index, vec![(0, target_player(1))]))
+    e.apply_scenario_command(0, &cast_modal_spell(index, vec![(0, target_player(1))]))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[1].life, 23);
@@ -112,7 +113,7 @@ fn boros_charm_keyword_modes_apply_to_the_correct_snapshot() {
 
     fund_boros(&mut e);
     let first = hand_index_for_card(&e, 0, "boros_charm");
-    e.apply_command(0, &cast_modal_spell(first, vec![(1, vec![])]))
+    e.apply_scenario_command(0, &cast_modal_spell(first, vec![(1, vec![])]))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert!(e.effective_has_keyword(own, Keyword::Indestructible));
@@ -121,7 +122,7 @@ fn boros_charm_keyword_modes_apply_to_the_correct_snapshot() {
     // Cast the second copy and prove the targeted mode uses its own mode target group.
     fund_boros(&mut e);
     let second = hand_index_for_card(&e, 0, "boros_charm");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_modal_spell(
             second,
@@ -180,7 +181,7 @@ fn boros_charm_double_strike_mode_rejects_targets_outside_the_battlefield() {
     assert!(!targets.groups[0].can_target_self && !targets.groups[0].can_target_opponent);
 
     for (label, object_id) in [("a graveyard card", buried), ("a player", 1u32)] {
-        let result = e.apply_command(
+        let result = e.apply_scenario_command(
             0,
             &cast_modal_spell(
                 index,
@@ -199,7 +200,7 @@ fn boros_charm_double_strike_mode_rejects_targets_outside_the_battlefield() {
         assert!(result.is_err(), "{label} must not be a legal mode-2 target");
     }
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_modal_spell(
             index,
@@ -246,7 +247,7 @@ fn modal_cast_rejects_bad_counts_duplicates_and_legacy_targets() {
         if let Some(Cmd::CastSpell(cast)) = command.cmd.as_mut() {
             cast.source = Some(hand_cast_source(index));
         }
-        assert!(e.apply_command(0, &command).is_err());
+        assert!(e.apply_scenario_command(0, &command).is_err());
     }
 }
 
@@ -284,11 +285,11 @@ fn copied_modal_spell_retains_modes_and_mode_targets() {
     advance_to_main1_from_game_start(&mut e);
     fund_boros(&mut e);
     let charm = hand_index_for_card(&e, 0, "boros_charm");
-    e.apply_command(0, &cast_modal_spell(charm, vec![(0, target_player(1))]))
+    e.apply_scenario_command(0, &cast_modal_spell(charm, vec![(0, target_player(1))]))
         .unwrap();
     let charm_stack_id = e.state.stack.last().unwrap().id;
 
-    e.apply_command(0, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
     give_mana(
         &mut e,
         1,
@@ -298,7 +299,7 @@ fn copied_modal_spell_retains_modes_and_mode_targets() {
         },
     );
     let twincast = hand_index_for_card(&e, 1, "twincast");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             twincast,
@@ -315,7 +316,7 @@ fn copied_modal_spell_retains_modes_and_mode_targets() {
     while !e.state.stack.is_empty() {
         if e.state.pending_resolution.is_some() {
             let deciding_player = e.state.pending_resolution.as_ref().unwrap().deciding_player;
-            e.apply_command(deciding_player, &submit_resolution_choice(vec![1]))
+            e.apply_scenario_command(deciding_player, &submit_resolution_choice(vec![1]))
                 .unwrap();
         } else {
             pass_both_players(&mut e);
@@ -370,7 +371,7 @@ fn cryptic_command_bounce_then_tap_uses_printed_order_and_relative_controller() 
     fund_cryptic(&mut e, 0);
 
     let index = hand_index_for_card(&e, 0, "cryptic_command");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_modal_spell(
             index,
@@ -413,7 +414,7 @@ fn cryptic_command_does_not_mass_tap_when_its_only_target_left_the_battlefield()
     let other = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     fund_cryptic(&mut e, 0);
     let index = hand_index_for_card(&e, 0, "cryptic_command");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_modal_spell(index, vec![(1, target_object(target)), (2, vec![])]),
     )
@@ -474,14 +475,15 @@ fn cryptic_command_counter_and_draw_resolve_together() {
     );
     let bear_index = hand_index_for_card(&e, 0, "grizzly_bears");
     let bear_oid = e.state.players[0].hand[bear_index];
-    e.apply_command(0, &cast_spell(bear_index, vec![])).unwrap();
+    e.apply_scenario_command(0, &cast_spell(bear_index, vec![]))
+        .unwrap();
     let bear_stack_id = e.state.stack.last().unwrap().id;
-    e.apply_command(0, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
 
     fund_cryptic(&mut e, 1);
     let hand_before = e.state.players[1].hand.len();
     let cryptic_index = hand_index_for_card(&e, 1, "cryptic_command");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_modal_spell(
             cryptic_index,
@@ -527,10 +529,10 @@ fn cryptic_command_requires_exactly_two_distinct_modes() {
     let index = hand_index_for_card(&e, 0, "cryptic_command");
 
     assert!(e
-        .apply_command(0, &cast_modal_spell(index, vec![(3, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(index, vec![(3, vec![])]))
         .is_err());
     assert!(e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(
                 index,

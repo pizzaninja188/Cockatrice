@@ -3,6 +3,7 @@
 //! Both cards are `[Scry, Draw]`: the scry suspends resolution for the player's decision and the
 //! draw runs when it resumes, so these also exercise the effect-tail resume that `docs/issues.md`
 //! #36 tracked (its own regression test lives in `spell_effects.rs`).
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_core::Zone;
@@ -106,7 +107,7 @@ fn opt_bottoming_the_scried_card_draws_the_next_one() {
         "scrying does not move the card out of the library"
     );
 
-    e.apply_command(0, &submit_resolution_choice(vec![scried]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![scried]))
         .expect("bottom the scried card");
 
     assert!(e.state.pending_resolution.is_none(), "scry 1 has no step 2");
@@ -143,7 +144,7 @@ fn opt_keeping_the_scried_card_on_top_draws_it() {
 
     cast_instant_and_resolve(&mut e, 0, "opt", blue_mana());
     // Keeping everything on top is submitting nothing (min is 0).
-    e.apply_command(0, &submit_resolution_choice(vec![]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("keep the scried card on top");
 
     assert!(e.state.pending_resolution.is_none());
@@ -177,7 +178,7 @@ fn preordain_bottoming_both_skips_the_ordering_step() {
     assert_eq!((req.min, req.max), (0, 2));
     assert_eq!(req.candidate_object_ids, vec![a, b]);
 
-    e.apply_command(0, &submit_resolution_choice(vec![b, a]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![b, a]))
         .expect("bottom both");
 
     assert!(
@@ -214,7 +215,7 @@ fn preordain_keeping_both_asks_for_an_order_then_draws_the_new_top() {
 
     cast_instant_and_resolve(&mut e, 0, "preordain", blue_mana());
     let order_batch = e
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("keep both on top");
 
     // Both stayed on top, so CR 701.18a's "in any order" is a real decision: step 2.
@@ -243,7 +244,7 @@ fn preordain_keeping_both_asks_for_an_order_then_draws_the_new_top() {
 
     // Swap them. The submitted list is bottom-first, so the *last* entry ends up on top —
     // the same convention as Brainstorm's put-back.
-    e.apply_command(0, &submit_resolution_choice(vec![b, a]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![b, a]))
         .expect("submit the order");
 
     assert!(e.state.pending_resolution.is_none());
@@ -274,7 +275,7 @@ fn preordain_bottoming_one_of_two_skips_the_ordering_step() {
     let (a, b) = (top[0], top[1]);
 
     cast_instant_and_resolve(&mut e, 0, "preordain", blue_mana());
-    e.apply_command(0, &submit_resolution_choice(vec![a]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![a]))
         .expect("bottom the first");
 
     assert!(
@@ -308,9 +309,12 @@ fn scry_with_an_empty_library_does_not_park_and_the_draw_still_runs() {
 
     give_mana(&mut e, 0, blue_mana());
     let idx = hand_index_for_card(&e, 0, "opt");
-    e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    let batch = e.apply_command(1, &pass()).expect("p1 pass — resolves");
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
+        .expect("cast");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("p1 pass — resolves");
 
     assert!(
         find_resolution_choice(&batch).is_none(),
@@ -351,7 +355,7 @@ fn scry_rejects_illegal_submissions_without_mutating_the_library() {
         ("the same card twice", 0, vec![a, a]),
     ] {
         assert!(
-            e.apply_command(player, &submit_resolution_choice(choice))
+            e.apply_scenario_command(player, &submit_resolution_choice(choice))
                 .is_err(),
             "{label} must be rejected"
         );
@@ -371,7 +375,7 @@ fn scry_rejects_illegal_submissions_without_mutating_the_library() {
     }
 
     // A legal answer still goes through afterwards.
-    e.apply_command(0, &submit_resolution_choice(vec![a, b]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![a, b]))
         .expect("valid submission after the rejections");
     assert!(e.state.pending_resolution.is_none());
 }
@@ -400,7 +404,7 @@ fn scry_rejects_a_stale_choose_destination_without_consuming_the_choice() {
     move_library_to_graveyard(&mut e, 0, scried);
     move_graveyard_to_library(&mut e, 0, scried);
     let err = e
-        .apply_command(0, &submit_resolution_choice(vec![scried]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![scried]))
         .expect_err("a stale Scry candidate must be rejected");
 
     assert!(err.to_string().contains("stale library-partition cohort"));
@@ -436,7 +440,7 @@ fn preordain_rejects_a_stale_order_top_without_consuming_the_choice() {
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);
 
     cast_instant_and_resolve(&mut e, 0, "preordain", blue_mana());
-    e.apply_command(0, &submit_resolution_choice(vec![]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("keep both cards on top");
     assert!(matches!(
         &e.state
@@ -458,7 +462,7 @@ fn preordain_rejects_a_stale_order_top_without_consuming_the_choice() {
     move_library_to_graveyard(&mut e, 0, top[0]);
     move_graveyard_to_library(&mut e, 0, top[0]);
     let err = e
-        .apply_command(0, &submit_resolution_choice(vec![top[1], top[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[1], top[0]]))
         .expect_err("a stale retained Scry candidate must be rejected");
 
     assert!(err.to_string().contains("stale library-partition cohort"));
@@ -494,7 +498,7 @@ fn scry_is_deterministic_for_the_same_seed_and_choices() {
         ensure_in_hand(&mut e, 0, "preordain");
         let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);
         cast_instant_and_resolve(&mut e, 0, "preordain", blue_mana());
-        e.apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        e.apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
             .expect("bottom one");
         e.state.players[0].library.iter().copied().collect()
     }

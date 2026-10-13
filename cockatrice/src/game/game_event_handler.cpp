@@ -326,6 +326,7 @@ void GameEventHandler::sendRuledCommandExpectingAck(const ruled::v1::RuledComman
 }
 
 void GameEventHandler::requestResolutionChoiceDialog(const QString &prompt,
+                                                     quint64 resolutionPromptId,
                                                      const QVector<quint32> &candidateOids,
                                                      const QStringList &candidateNames,
                                                      int minCount,
@@ -333,14 +334,16 @@ void GameEventHandler::requestResolutionChoiceDialog(const QString &prompt,
                                                      bool ordered,
                                                      bool uniqueNames)
 {
-    if (RuledDiagnosticViewer::isPlayback(game))
+    if (resolutionPromptId == 0 || RuledDiagnosticViewer::isPlayback(game))
         return;
     // Defer the modal dialog until after this batch finishes processing (avoid re-entering event
     // handling while a modal loop is open).
     QPointer<GameEventHandler> self(this);
     QTimer::singleShot(0, this,
-                       [self, prompt, candidateOids, candidateNames, minCount, maxCount, ordered, uniqueNames]() {
-                           if (!self) {
+                       [self, prompt, resolutionPromptId, candidateOids, candidateNames, minCount, maxCount, ordered,
+                        uniqueNames]() {
+                           if (!self || !self->ruled() ||
+                               !self->ruled()->isCurrentResolutionPrompt(resolutionPromptId)) {
                                return;
                            }
                            const QVector<quint32> chosen = askRuledResolutionChoice(
@@ -348,8 +351,11 @@ void GameEventHandler::requestResolutionChoiceDialog(const QString &prompt,
                            if (chosen.size() < minCount) {
                                return; // dialog closed without a legal selection
                            }
+                           if (!self->ruled() || !self->ruled()->isCurrentResolutionPrompt(resolutionPromptId))
+                               return; // a different engine prompt replaced this dialog while it was open
                            ruled::v1::RuledCommand cmd;
                            auto *sub = cmd.mutable_submit_resolution_choice();
+                           sub->set_resolution_prompt_id(resolutionPromptId);
                            for (quint32 o : chosen) {
                                sub->add_chosen_object_ids(o);
                            }

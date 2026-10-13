@@ -189,9 +189,16 @@ TEST_F(RuledE2ESmokeTest, RalStormCopiesResumeTargetQueueAndPublishStableStackId
     ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
     ASSERT_EQ(p1.pendingChoice->min(), 1u);
     ASSERT_EQ(p1.pendingChoice->max(), 1u);
+    ASSERT_NE(p1.pendingChoice->resolution_prompt_id(), 0u);
     ASSERT_TRUE(p2.lastResolutionChoice.has_value());
     EXPECT_FALSE(p2.pendingChoice.has_value());
-    EXPECT_EQ(p2.lastResolutionChoice->SerializeAsString(), p1.pendingChoice->SerializeAsString())
+    EXPECT_EQ(p2.lastResolutionChoice->resolution_prompt_id(), 0u)
+        << "only the deciding participant receives the usable prompt ID";
+    const auto withoutPromptId = [](ruled::v1::ResolutionChoiceRequired choice) {
+        choice.set_resolution_prompt_id(0);
+        return choice.SerializeAsString();
+    };
+    EXPECT_EQ(withoutPromptId(*p2.lastResolutionChoice), withoutPromptId(*p1.pendingChoice))
         << "public battlefield target candidates stay observable while only the decider can answer";
 
     const quint32 firstPendingCopy = p1.pendingChoice->source_object_id();
@@ -218,7 +225,7 @@ TEST_F(RuledE2ESmokeTest, RalStormCopiesResumeTargetQueueAndPublishStableStackId
     EXPECT_EQ(firstCopy->SerializeAsString(), observerCopy->SerializeAsString());
 
     const quint32 secondPendingCopy = p1.pendingChoice->source_object_id();
-    const auto expectedChoice = p1.pendingChoice->SerializeAsString();
+    const auto expectedChoice = withoutPromptId(*p1.pendingChoice);
     const quint64 expectedVersion1 = p1.stateVersion;
     const quint64 expectedVersion2 = p2.stateVersion;
 
@@ -268,11 +275,13 @@ TEST_F(RuledE2ESmokeTest, RalStormCopiesResumeTargetQueueAndPublishStableStackId
     ASSERT_TRUE(resumed2.pumpUntil([&] { return resumed2.stateVersion == expectedVersion2; }, 20000,
                                       "resumed storm observer state"));
     ASSERT_TRUE(resumed1.pendingChoice.has_value());
-    EXPECT_EQ(resumed1.pendingChoice->SerializeAsString(), expectedChoice);
+    EXPECT_NE(resumed1.pendingChoice->resolution_prompt_id(), 0u);
+    EXPECT_EQ(withoutPromptId(*resumed1.pendingChoice), expectedChoice);
     EXPECT_EQ(resumed1.pendingChoice->source_object_id(), secondPendingCopy);
     ASSERT_TRUE(resumed2.lastResolutionChoice.has_value());
     EXPECT_FALSE(resumed2.pendingChoice.has_value());
-    EXPECT_EQ(resumed2.lastResolutionChoice->SerializeAsString(), expectedChoice);
+    EXPECT_EQ(resumed2.lastResolutionChoice->resolution_prompt_id(), 0u);
+    EXPECT_EQ(withoutPromptId(*resumed2.lastResolutionChoice), expectedChoice);
 
     auto sendResumed = [&](StormDriver &sender, const ruled::v1::RuledCommand &command) {
         const quint64 before1 = resumed1.stateVersion;

@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{ContinuousEffectKind, CounterKind, EffectDuration, Keyword};
 use tricerules_core::{
     state::{AffectedScope, ContinuousEffect},
@@ -13,13 +14,13 @@ fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
         .sole_defending_player_id()
         .expect("sole defending player");
     engine
-        .apply_command(active_player, &primitive_yield())
+        .apply_scenario_command(active_player, &primitive_yield())
         .expect("main phase to beginning of combat");
     engine
-        .apply_command(active_player, &pass())
+        .apply_scenario_command(active_player, &pass())
         .expect("active player passes in beginning of combat");
     engine
-        .apply_command(defending_player, &pass())
+        .apply_scenario_command(defending_player, &pass())
         .expect("defender passes in beginning of combat");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 }
@@ -31,10 +32,10 @@ fn pass_to_declare_blockers(engine: &mut GameEngine) -> RuledEventBatch {
         .sole_defending_player_id()
         .expect("sole defending player");
     engine
-        .apply_command(active_player, &pass())
+        .apply_scenario_command(active_player, &pass())
         .expect("active player passes after declaring attackers");
     engine
-        .apply_command(defending_player, &pass())
+        .apply_scenario_command(defending_player, &pass())
         .expect("defender passes after attackers are declared")
 }
 
@@ -60,11 +61,11 @@ fn dark_endurance_reduces_only_for_a_blocking_target() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     pass_to_declare_blockers(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -73,7 +74,7 @@ fn dark_endurance_reduces_only_for_a_blocking_target() {
         )
         .expect("declare blocker");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player pass");
 
     let slot = hand_index_for_card(&engine, 1, "dark_endurance");
@@ -103,13 +104,13 @@ fn dark_endurance_reduces_only_for_a_blocking_target() {
     );
     let command_before = engine.state.command_index;
     assert!(engine
-        .apply_command(1, &cast_spell(slot, target_object(attacker)))
+        .apply_scenario_command(1, &cast_spell(slot, target_object(attacker)))
         .is_err());
     assert_eq!(engine.state.command_index, command_before);
     assert_eq!(engine.state.players[1].mana_pool.black, 1);
 
     engine
-        .apply_command(1, &cast_spell(slot, target_object(blocker)))
+        .apply_scenario_command(1, &cast_spell(slot, target_object(blocker)))
         .expect("blocking target reduces Dark Endurance to {B}");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.characteristics(blocker).unwrap().power, Some(4));
@@ -158,7 +159,7 @@ fn blocker_power_evasion_uses_derived_power_and_composes_with_flying() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![vinebender]))
+        .apply_scenario_command(0, &declare_attackers(vec![vinebender]))
         .expect("declare Vinebender");
     pass_to_declare_blockers(&mut engine);
 
@@ -170,7 +171,7 @@ fn blocker_power_evasion_uses_derived_power_and_composes_with_flying() {
         .collect::<Vec<_>>();
     assert_eq!(legal_blockers, vec![boosted_reach, high_reach]);
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: vinebender,
@@ -179,7 +180,7 @@ fn blocker_power_evasion_uses_derived_power_and_composes_with_flying() {
         )
         .is_err());
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: vinebender,
@@ -210,13 +211,13 @@ fn maximum_blocker_count_rejects_two_without_mutating_combat() {
     let second = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![cavalry]))
+        .apply_scenario_command(0, &declare_attackers(vec![cavalry]))
         .expect("declare Cavalry");
     pass_to_declare_blockers(&mut engine);
 
     let command_before = engine.state.command_index;
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![
                 BlockPair {
@@ -239,7 +240,7 @@ fn maximum_blocker_count_rejects_two_without_mutating_combat() {
         .blockers
         .is_empty());
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: cavalry,
@@ -288,7 +289,7 @@ fn maximum_one_plus_menace_makes_blocking_impossible_even_with_requirements() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![cavalry]))
+        .apply_scenario_command(0, &declare_attackers(vec![cavalry]))
         .expect("declare Cavalry");
     let batch = pass_to_declare_blockers(&mut engine);
     assert!(
@@ -328,14 +329,14 @@ fn blocker_caps_are_per_attacker_and_player_ids_are_not_seat_indices() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &declare_attackers(vec![first_attacker, second_attacker]),
         )
         .expect("declare both attackers");
     pass_to_declare_blockers(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             20,
             &declare_blockers(vec![
                 BlockPair {
@@ -382,11 +383,11 @@ fn removing_safewright_cavalrys_abilities_removes_its_blocker_cap() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![cavalry]))
+        .apply_scenario_command(0, &declare_attackers(vec![cavalry]))
         .expect("declare Cavalry");
     pass_to_declare_blockers(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![
                 BlockPair {
@@ -435,7 +436,7 @@ fn safewright_cavalry_targets_only_an_elf_with_its_pump_ability() {
 
     let command_before = engine.state.command_index;
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&engine, cavalry, 0, target_object(bear))
         )
@@ -443,7 +444,7 @@ fn safewright_cavalry_targets_only_an_elf_with_its_pump_ability() {
     assert_eq!(engine.state.command_index, command_before);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 5);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&engine, cavalry, 0, target_object(elf)),
         )

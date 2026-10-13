@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_core::TurnStep;
 use tricerules_proto::ruled::v1::{
@@ -14,7 +15,9 @@ fn take_priority_action(engine: &mut GameEngine) {
         !engine.state.players[engine.state.player_idx(actor).unwrap()].has_lost,
         "lost player must never receive priority"
     );
-    engine.apply_command(actor, &pass()).expect("priority pass");
+    engine
+        .apply_scenario_command(actor, &pass())
+        .expect("priority pass");
 }
 
 fn advance_until(engine: &mut GameEngine, active: i32, step: TurnStep) {
@@ -41,7 +44,7 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
     .expect("three seats");
     let chooser = engine.state.opening.as_ref().unwrap().chooser;
     engine
-        .apply_command(
+        .apply_scenario_command(
             chooser,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
@@ -51,7 +54,7 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
         )
         .expect("choose P0 first");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
@@ -64,7 +67,7 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
             Some(seat)
         );
         engine
-            .apply_command(
+            .apply_scenario_command(
                 seat,
                 &RuledCommand {
                     cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
@@ -91,7 +94,7 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
     let blocker_one = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let blocker_two = inject_creature_on_battlefield(&mut engine, 2, "grizzly_bears");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("begin combat");
     advance_until(&mut engine, 0, TurnStep::DeclareAttackers);
     let legal = engine.initial_response_batch().legal_by_player[&0]
@@ -106,7 +109,7 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
         .find(|a| a.attacker_object_id == attacker_two && a.defending_player_id == 2)
         .unwrap();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -117,7 +120,7 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
         .expect("split attacks");
     advance_until(&mut engine, 0, TurnStep::DeclareBlockers);
     assert_eq!(engine.state.priority_player_id(), 1);
-    let wrong = engine.apply_command(
+    let wrong = engine.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: attacker_two,
@@ -126,7 +129,7 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
     );
     assert!(wrong.is_err(), "P1 cannot block an attacker aimed at P2");
     let first_blocks = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker_one,
@@ -147,7 +150,7 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
         .legal_block_pairs
         .is_empty());
     let final_blocks = engine
-        .apply_command(2, &declare_blockers(vec![]))
+        .apply_scenario_command(2, &declare_blockers(vec![]))
         .expect("P2 declines block");
     assert_eq!(
         blockers_declared_in(&final_blocks)[0].block_pairs,
@@ -166,7 +169,7 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
     assert!(engine.state.objects.contains_key(&blocker_two));
 
     let departure = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &RuledCommand {
                 cmd: Some(Cmd::Concede(Concede {})),
@@ -180,7 +183,7 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
         "departed player's objects leave the game"
     );
     assert!(
-        engine.apply_command(1, &pass()).is_err(),
+        engine.apply_scenario_command(1, &pass()).is_err(),
         "departed player cannot act"
     );
     advance_until(&mut engine, 2, TurnStep::Main1);
@@ -188,7 +191,7 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
     advance_until(&mut engine, 0, TurnStep::Main1);
     assert_eq!(engine.state.turn_instance, 3, "P2 completed a full turn");
     engine
-        .apply_command(
+        .apply_scenario_command(
             2,
             &RuledCommand {
                 cmd: Some(Cmd::Concede(Concede {})),
@@ -212,7 +215,7 @@ fn four_player_opening_priority_split_combat_and_departure() {
     .expect("four seats");
     let chooser = engine.state.opening.as_ref().unwrap().chooser;
     engine
-        .apply_command(
+        .apply_scenario_command(
             chooser,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
@@ -227,7 +230,7 @@ fn four_player_opening_priority_split_combat_and_departure() {
             Some(seat)
         );
         engine
-            .apply_command(
+            .apply_scenario_command(
                 seat,
                 &RuledCommand {
                     cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
@@ -246,7 +249,7 @@ fn four_player_opening_priority_split_combat_and_departure() {
         .collect();
     let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("begin combat");
     advance_until(&mut engine, 0, TurnStep::DeclareAttackers);
     let legal = engine.initial_response_batch().legal_by_player[&0]
@@ -264,7 +267,7 @@ fn four_player_opening_priority_split_combat_and_departure() {
         })
         .collect();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers { assignments })),
@@ -274,11 +277,13 @@ fn four_player_opening_priority_split_combat_and_departure() {
     advance_until(&mut engine, 0, TurnStep::DeclareBlockers);
     assert_eq!(engine.state.priority_player_id(), 1);
     assert!(
-        engine.apply_command(2, &declare_blockers(vec![])).is_err(),
+        engine
+            .apply_scenario_command(2, &declare_blockers(vec![]))
+            .is_err(),
         "later defender cannot declare early"
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attackers[0],
@@ -291,8 +296,12 @@ fn four_player_opening_priority_split_combat_and_departure() {
         0,
         "defenders with no legal block pairs are skipped individually"
     );
-    assert!(engine.apply_command(2, &declare_blockers(vec![])).is_err());
-    assert!(engine.apply_command(3, &declare_blockers(vec![])).is_err());
+    assert!(engine
+        .apply_scenario_command(2, &declare_blockers(vec![]))
+        .is_err());
+    assert!(engine
+        .apply_scenario_command(3, &declare_blockers(vec![]))
+        .is_err());
     advance_until(&mut engine, 0, TurnStep::EndCombat);
     assert_eq!(
         engine
@@ -305,18 +314,18 @@ fn four_player_opening_priority_split_combat_and_departure() {
     );
 
     engine
-        .apply_command(1, &concede())
+        .apply_scenario_command(1, &concede())
         .expect("first defender departs");
     assert!(engine.state.winner().is_none());
-    assert!(engine.apply_command(1, &pass()).is_err());
+    assert!(engine.apply_scenario_command(1, &pass()).is_err());
     advance_until(&mut engine, 2, TurnStep::Main1);
     advance_until(&mut engine, 3, TurnStep::Main1);
     engine
-        .apply_command(2, &concede())
+        .apply_scenario_command(2, &concede())
         .expect("second defender departs");
     assert!(engine.state.winner().is_none());
     engine
-        .apply_command(3, &concede())
+        .apply_scenario_command(3, &concede())
         .expect("third defender departs");
     assert_eq!(engine.state.winner(), Some(0));
 }
@@ -339,7 +348,7 @@ fn four_player_blocking_skips_empty_middle_defender() {
     let first_blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let last_blocker = inject_creature_on_battlefield(&mut engine, 3, "grizzly_bears");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("begin combat");
     advance_until(&mut engine, 0, TurnStep::DeclareAttackers);
     let legal = engine.initial_response_batch().legal_by_player[&0]
@@ -355,7 +364,7 @@ fn four_player_blocking_skips_empty_middle_defender() {
         })
         .collect();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers { assignments })),
@@ -365,7 +374,7 @@ fn four_player_blocking_skips_empty_middle_defender() {
     advance_until(&mut engine, 0, TurnStep::DeclareBlockers);
     assert_eq!(engine.state.priority_player_id(), 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: first_attack,
@@ -378,9 +387,11 @@ fn four_player_blocking_skips_empty_middle_defender() {
         3,
         "empty middle seat is skipped"
     );
-    assert!(engine.apply_command(2, &declare_blockers(vec![])).is_err());
+    assert!(engine
+        .apply_scenario_command(2, &declare_blockers(vec![]))
+        .is_err());
     engine
-        .apply_command(
+        .apply_scenario_command(
             3,
             &declare_blockers(vec![BlockPair {
                 attacker_id: last_attack,
@@ -404,7 +415,7 @@ fn opening_continues_when_chooser_or_mulligan_actor_leaves() {
     )
     .unwrap();
     let chooser = engine.state.opening.as_ref().unwrap().chooser;
-    engine.apply_command(chooser, &concede()).unwrap();
+    engine.apply_scenario_command(chooser, &concede()).unwrap();
     let next = engine.state.opening.as_ref().unwrap().chooser;
     assert_ne!(next, chooser);
     for participant in engine.state.players.iter().filter(|p| !p.has_lost) {
@@ -416,7 +427,7 @@ fn opening_continues_when_chooser_or_mulligan_actor_leaves() {
         );
     }
     engine
-        .apply_command(
+        .apply_scenario_command(
             next,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
@@ -434,7 +445,7 @@ fn opening_continues_when_chooser_or_mulligan_actor_leaves() {
             .mulligan_actor
             .unwrap();
         engine
-            .apply_command(
+            .apply_scenario_command(
                 actor,
                 &RuledCommand {
                     cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
@@ -456,7 +467,7 @@ fn opening_continues_when_chooser_or_mulligan_actor_leaves() {
     .unwrap();
     let chooser = engine.state.opening.as_ref().unwrap().chooser;
     engine
-        .apply_command(
+        .apply_scenario_command(
             chooser,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
@@ -472,7 +483,7 @@ fn opening_continues_when_chooser_or_mulligan_actor_leaves() {
         .unwrap()
         .mulligan_actor
         .unwrap();
-    engine.apply_command(actor, &concede()).unwrap();
+    engine.apply_scenario_command(actor, &concede()).unwrap();
     assert!(engine.state.opening.is_some());
     for _ in 0..2 {
         let actor = engine
@@ -484,7 +495,7 @@ fn opening_continues_when_chooser_or_mulligan_actor_leaves() {
             .unwrap();
         assert_ne!(actor, 0);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 actor,
                 &RuledCommand {
                     cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
@@ -510,7 +521,7 @@ fn departed_active_players_turn_completes_and_next_player_acts() {
     .unwrap();
     let active = engine.state.active_player_id();
     let next = (active + 1) % 3;
-    engine.apply_command(active, &concede()).unwrap();
+    engine.apply_scenario_command(active, &concede()).unwrap();
     assert_eq!(engine.state.active_player_id(), active);
     advance_until(&mut engine, next, TurnStep::Main1);
     assert_eq!(engine.state.active_player_id(), next);
@@ -545,9 +556,11 @@ fn unrelated_concession_does_not_erase_parked_resolution() {
         },
     );
     let index = hand_index_for_card(&engine, 0, "brainstorm");
-    engine.apply_command(0, &cast_spell(index, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(index, vec![]))
+        .unwrap();
     for player in [0, 1, 2] {
-        engine.apply_command(player, &pass()).unwrap();
+        engine.apply_scenario_command(player, &pass()).unwrap();
     }
     assert_eq!(
         engine
@@ -558,7 +571,7 @@ fn unrelated_concession_does_not_erase_parked_resolution() {
             .deciding_player,
         0
     );
-    engine.apply_command(2, &concede()).unwrap();
+    engine.apply_scenario_command(2, &concede()).unwrap();
     assert_eq!(
         engine
             .state
@@ -575,7 +588,7 @@ fn unrelated_concession_does_not_erase_parked_resolution() {
         .copied()
         .collect();
     engine
-        .apply_command(0, &submit_resolution_choice(chosen))
+        .apply_scenario_command(0, &submit_resolution_choice(chosen))
         .unwrap();
     assert!(engine.state.pending_resolution.is_none());
 }
@@ -609,12 +622,14 @@ fn departing_spell_owner_clears_its_parked_resolution() {
         },
     );
     let index = hand_index_for_card(&engine, 0, "brainstorm");
-    engine.apply_command(0, &cast_spell(index, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(index, vec![]))
+        .unwrap();
     for player in [0, 1, 2] {
-        engine.apply_command(player, &pass()).unwrap();
+        engine.apply_scenario_command(player, &pass()).unwrap();
     }
     assert!(engine.state.pending_resolution.is_some());
-    engine.apply_command(0, &concede()).unwrap();
+    engine.apply_scenario_command(0, &concede()).unwrap();
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.winner().is_none());
     advance_until(&mut engine, 1, TurnStep::Main1);
@@ -647,7 +662,7 @@ fn departure_returns_stolen_permanents_and_exiles_unowned_objects_with_no_contro
         duration: EffectDuration::UntilEndOfTurn,
         timestamp: engine.state.command_index,
     });
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     assert_eq!(engine.state.objects[&stolen].controller, 1);
 
     let exiled = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -663,7 +678,7 @@ fn departure_returns_stolen_permanents_and_exiles_unowned_objects_with_no_contro
         .retain(|id| *id != exiled);
     engine.state.players[1].battlefield.push(exiled);
 
-    engine.apply_command(1, &concede()).unwrap();
+    engine.apply_scenario_command(1, &concede()).unwrap();
     assert_eq!(engine.state.objects[&stolen].controller, 0);
     assert!(engine.state.players[0].battlefield.contains(&stolen));
     assert_eq!(engine.state.objects[&exiled].zone, Zone::Exile);
@@ -687,7 +702,9 @@ fn departing_defender_does_not_strand_block_declarations() {
     let attacker_two = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     inject_creature_on_battlefield(&mut engine, 2, "grizzly_bears");
-    engine.apply_command(0, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(0, &primitive_yield())
+        .unwrap();
     advance_until(&mut engine, 0, TurnStep::DeclareAttackers);
     let legal = engine.initial_response_batch().legal_by_player[&0]
         .legal_attack_assignments
@@ -701,7 +718,7 @@ fn departing_defender_does_not_strand_block_declarations() {
         .find(|a| a.attacker_object_id == attacker_two && a.defending_player_id == 2)
         .unwrap();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -712,9 +729,11 @@ fn departing_defender_does_not_strand_block_declarations() {
         .unwrap();
     advance_until(&mut engine, 0, TurnStep::DeclareBlockers);
     assert_eq!(engine.state.priority_player_id(), 1);
-    engine.apply_command(1, &concede()).unwrap();
+    engine.apply_scenario_command(1, &concede()).unwrap();
     assert_eq!(engine.state.priority_player_id(), 2);
-    engine.apply_command(2, &declare_blockers(vec![])).unwrap();
+    engine
+        .apply_scenario_command(2, &declare_blockers(vec![]))
+        .unwrap();
     assert!(engine.state.combat.as_ref().unwrap().blockers_declared);
     assert_eq!(engine.state.priority_player_id(), 0);
     advance_until(&mut engine, 0, TurnStep::EndCombat);
@@ -735,7 +754,9 @@ fn sole_attacked_defender_departure_finishes_block_declaration() {
     advance_until(&mut engine, 0, TurnStep::Main1);
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
-    engine.apply_command(0, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(0, &primitive_yield())
+        .unwrap();
     advance_until(&mut engine, 0, TurnStep::DeclareAttackers);
     let assignment = *engine.initial_response_batch().legal_by_player[&0]
         .legal_attack_assignments
@@ -743,7 +764,7 @@ fn sole_attacked_defender_departure_finishes_block_declaration() {
         .find(|a| a.attacker_object_id == attacker && a.defending_player_id == 1)
         .unwrap();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -754,7 +775,7 @@ fn sole_attacked_defender_departure_finishes_block_declaration() {
         .unwrap();
     advance_until(&mut engine, 0, TurnStep::DeclareBlockers);
     assert_eq!(engine.state.priority_player_id(), 1);
-    engine.apply_command(1, &concede()).unwrap();
+    engine.apply_scenario_command(1, &concede()).unwrap();
     assert!(engine.state.combat.as_ref().unwrap().blockers_declared);
     advance_until(&mut engine, 0, TurnStep::EndCombat);
 }
@@ -789,10 +810,12 @@ fn departing_stack_controller_exiles_survivor_owned_card() {
         },
     );
     let index = hand_index_for_card(&engine, 0, "brainstorm");
-    engine.apply_command(0, &cast_spell(index, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(index, vec![]))
+        .unwrap();
     let id = engine.state.stack.last().unwrap().id;
     engine.state.stack.last_mut().unwrap().controller = 1;
-    engine.apply_command(1, &concede()).unwrap();
+    engine.apply_scenario_command(1, &concede()).unwrap();
     assert!(engine.state.stack.iter().all(|item| item.id != id));
     assert_eq!(engine.state.objects[&id].zone, Zone::Exile);
     assert!(engine.state.players[0].exile.contains(&id));

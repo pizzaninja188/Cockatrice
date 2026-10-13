@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{ContinuousEffectKind, CounterKind, EffectDuration, Keyword};
 use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
 
@@ -66,7 +67,7 @@ fn issue_174_sprite_uses_animated_types_and_counters_and_loses_static_restrictio
     );
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![sprite, ordinary]))
+        .apply_scenario_command(0, &declare_attackers(vec![sprite, ordinary]))
         .unwrap();
     pass_to_declare_blockers(&mut engine);
     assert!(!engine.initial_response_batch().legal_by_player[&1]
@@ -83,7 +84,7 @@ fn issue_174_sprite_uses_animated_types_and_counters_and_loses_static_restrictio
         .iter()
         .any(|pair| pair.attacker_id == sprite && pair.blocker_id == animated));
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: sprite,
@@ -108,10 +109,12 @@ fn issue_174_synthetic_defenders_have_separate_blocking_graphs() {
     let first = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let second = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
-    engine.apply_command(10, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(10, &primitive_yield())
+        .unwrap();
     pass_both_players(&mut engine);
     engine
-        .apply_command(10, &declare_attackers(vec![first, second]))
+        .apply_scenario_command(10, &declare_attackers(vec![first, second]))
         .unwrap();
     pass_both_players(&mut engine);
     // Exercise the seat-generic blocking graph with a synthetic third defender.
@@ -183,7 +186,7 @@ fn issue_174_accepted_commands_replay_after_an_illegal_declaration() {
         player: i32,
         command: RuledCommand,
     ) {
-        let batch = engine.apply_command(player, &command).unwrap();
+        let batch = engine.apply_scenario_command(player, &command).unwrap();
         log.push((player, command, batch));
     }
     let dev = |target, payload| RuledCommand {
@@ -250,7 +253,7 @@ fn issue_174_accepted_commands_replay_after_an_illegal_declaration() {
     let before = engine.initial_response_batch();
     let index = engine.state.command_index;
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: ceratops,
@@ -276,7 +279,10 @@ fn issue_174_accepted_commands_replay_after_an_illegal_declaration() {
     );
     let mut replay = fresh();
     for (player, command, expected) in log {
-        assert_eq!(replay.apply_command(player, &command).unwrap(), expected);
+        assert_eq!(
+            replay.apply_scenario_command(player, &command).unwrap(),
+            expected
+        );
     }
     assert_eq!(
         replay.initial_response_batch(),
@@ -309,7 +315,7 @@ fn issue_174_outrider_checks_live_power_but_does_not_undo_blocks() {
     resolve_entire_stack_two_player(&mut engine);
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![outrider, ordinary]))
+        .apply_scenario_command(0, &declare_attackers(vec![outrider, ordinary]))
         .unwrap();
     pass_to_declare_blockers(&mut engine);
     let blocks = declare_blockers(vec![BlockPair {
@@ -317,7 +323,7 @@ fn issue_174_outrider_checks_live_power_but_does_not_undo_blocks() {
         blocker_id: blocker,
     }]);
     let command_index = engine.state.command_index;
-    assert!(engine.apply_command(1, &blocks).is_err());
+    assert!(engine.apply_scenario_command(1, &blocks).is_err());
     assert_eq!(engine.state.command_index, command_index);
     engine
         .state
@@ -330,7 +336,7 @@ fn issue_174_outrider_checks_live_power_but_does_not_undo_blocks() {
         .legal_block_pairs
         .iter()
         .any(|p| p.attacker_id == outrider));
-    engine.apply_command(1, &blocks).unwrap();
+    engine.apply_scenario_command(1, &blocks).unwrap();
     engine
         .state
         .objects
@@ -374,11 +380,11 @@ fn issue_174_outrider_generation_expiry_and_ability_removal() {
     assert_eq!(engine.state.command_index, command_index);
     grant_pool(&mut engine, 0);
     let stale_activation = activate_ability_for(&engine, outrider, 0, vec![]);
-    engine.apply_command(0, &stale_activation).unwrap();
+    engine.apply_scenario_command(0, &stale_activation).unwrap();
     ensure_in_hand(&mut engine, 0, "unsummon");
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(outrider)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(outrider)))
         .unwrap();
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&outrider].zone, Zone::Hand);
@@ -391,7 +397,7 @@ fn issue_174_outrider_generation_expiry_and_ability_removal() {
         zone_view_rules_annotation_labels(&mut engine, 0, outrider).is_empty(),
         "old activation must not bind to the new generation"
     );
-    assert!(engine.apply_command(0, &stale_activation).is_err());
+    assert!(engine.apply_scenario_command(0, &stale_activation).is_err());
     grant_pool(&mut engine, 0);
     apply_ability(&mut engine, 0, outrider, 0, vec![]).unwrap();
     resolve_entire_stack_two_player(&mut engine);
@@ -436,7 +442,7 @@ fn issue_174_hermit_threshold_is_live_and_does_not_change_established_blocks() {
     }
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![hermit, ordinary]))
+        .apply_scenario_command(0, &declare_attackers(vec![hermit, ordinary]))
         .unwrap();
     assert!(!engine.state.objects[&hermit].tapped, "vigilance");
     pass_to_declare_blockers(&mut engine);
@@ -457,7 +463,7 @@ fn issue_174_hermit_threshold_is_live_and_does_not_change_established_blocks() {
         .iter()
         .any(|p| p.attacker_id == hermit));
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: hermit,
@@ -565,10 +571,12 @@ fn issue_174_ceratops_requires_three_and_sprite_excludes_artifacts() {
         .map(|_| inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears"))
         .collect();
     let artifact = inject_creature_on_battlefield(&mut engine, 1, "ornithopter");
-    engine.apply_command(10, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(10, &primitive_yield())
+        .unwrap();
     pass_both_players(&mut engine);
     engine
-        .apply_command(10, &declare_attackers(vec![ceratops, sprite]))
+        .apply_scenario_command(10, &declare_attackers(vec![ceratops, sprite]))
         .unwrap();
     pass_both_players(&mut engine);
     let legal = &engine.initial_response_batch().legal_by_player[&20];
@@ -579,7 +587,7 @@ fn issue_174_ceratops_requires_three_and_sprite_excludes_artifacts() {
     for count in [1, 2] {
         let command_index = engine.state.command_index;
         assert!(engine
-            .apply_command(
+            .apply_scenario_command(
                 20,
                 &declare_blockers(
                     blockers[..count]
@@ -595,7 +603,7 @@ fn issue_174_ceratops_requires_three_and_sprite_excludes_artifacts() {
         assert_eq!(engine.state.command_index, command_index);
     }
     engine
-        .apply_command(
+        .apply_scenario_command(
             20,
             &declare_blockers(
                 blockers
@@ -639,7 +647,7 @@ fn issue_174_competing_must_block_creatures_allow_a_maximal_declaration() {
     }
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .unwrap();
     pass_to_declare_blockers(&mut engine);
     let legal = &engine.initial_response_batch().legal_by_player[&1];
@@ -649,10 +657,12 @@ fn issue_174_competing_must_block_creatures_allow_a_maximal_declaration() {
     );
     assert_eq!(legal.legal_block_pairs.len(), 2);
     let command_index = engine.state.command_index;
-    assert!(engine.apply_command(1, &declare_blockers(vec![])).is_err());
+    assert!(engine
+        .apply_scenario_command(1, &declare_blockers(vec![]))
+        .is_err());
     assert_eq!(engine.state.command_index, command_index);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -664,23 +674,23 @@ fn issue_174_competing_must_block_creatures_allow_a_maximal_declaration() {
 
 fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes in beginning of combat");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes in beginning of combat");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 }
 
 fn pass_to_declare_blockers(engine: &mut GameEngine) -> RuledEventBatch {
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes after declaring attackers");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes after attackers are declared")
 }
 
@@ -709,7 +719,7 @@ fn frilled_sea_serpent_rejects_blocks_and_drives_automatic_empty_blocks() {
     );
 
     engine
-        .apply_command(0, &activate_ability(serpent, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(serpent, 0, vec![]))
         .expect("activate Frilled Sea Serpent");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -719,12 +729,12 @@ fn frilled_sea_serpent_rejects_blocks_and_drives_automatic_empty_blocks() {
     );
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![serpent, ordinary_attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![serpent, ordinary_attacker]))
         .expect("declare attackers");
     pass_to_declare_blockers(&mut engine);
 
     let err = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: serpent,
@@ -734,7 +744,7 @@ fn frilled_sea_serpent_rejects_blocks_and_drives_automatic_empty_blocks() {
         .expect_err("the Serpent cannot be blocked this turn");
     assert!(matches!(err, tricerules_core::EngineError::Illegal(_)));
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: ordinary_attacker,
@@ -763,11 +773,11 @@ fn frilled_sea_serpent_rejects_blocks_and_drives_automatic_empty_blocks() {
             ..Default::default()
         },
     );
-    auto.apply_command(0, &activate_ability(serpent, 0, vec![]))
+    auto.apply_scenario_command(0, &activate_ability(serpent, 0, vec![]))
         .expect("activate Frilled Sea Serpent");
     resolve_entire_stack_two_player(&mut auto);
     advance_main1_to_declare_attackers(&mut auto);
-    auto.apply_command(0, &declare_attackers(vec![serpent]))
+    auto.apply_scenario_command(0, &declare_attackers(vec![serpent]))
         .expect("declare Serpent");
     let batch = pass_to_declare_blockers(&mut auto);
     assert!(
@@ -796,11 +806,11 @@ fn frilled_sea_serpent_does_not_undo_a_block_declared_before_activation() {
     let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![serpent]))
+        .apply_scenario_command(0, &declare_attackers(vec![serpent]))
         .expect("declare Serpent");
     pass_to_declare_blockers(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: serpent,
@@ -818,7 +828,7 @@ fn frilled_sea_serpent_does_not_undo_a_block_declared_before_activation() {
         },
     );
     engine
-        .apply_command(0, &activate_ability(serpent, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(serpent, 0, vec![]))
         .expect("activate after blockers");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -851,13 +861,13 @@ fn goblin_smuggler_uses_derived_power_and_revalidates_its_target() {
     assert_eq!(targets, &[small]);
 
     let err = engine
-        .apply_command(0, &activate_ability(smuggler, 0, target_object(large)))
+        .apply_scenario_command(0, &activate_ability(smuggler, 0, target_object(large)))
         .expect_err("power 3 is not a legal target");
     assert!(matches!(err, tricerules_core::EngineError::Illegal(_)));
     assert!(!engine.state.objects[&smuggler].tapped);
 
     engine
-        .apply_command(0, &activate_ability(smuggler, 0, target_object(small)))
+        .apply_scenario_command(0, &activate_ability(smuggler, 0, target_object(small)))
         .expect("activate targeting a power-2 creature");
     engine
         .state
@@ -871,11 +881,11 @@ fn goblin_smuggler_uses_derived_power_and_revalidates_its_target() {
     let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![small]))
+        .apply_scenario_command(0, &declare_attackers(vec![small]))
         .expect("declare the now-power-3 creature");
     pass_to_declare_blockers(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: small,
@@ -902,7 +912,7 @@ fn goblin_smuggler_effect_persists_if_power_increases_after_resolution() {
     let ordinary_attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     engine
-        .apply_command(0, &activate_ability(smuggler, 0, target_object(target)))
+        .apply_scenario_command(0, &activate_ability(smuggler, 0, target_object(target)))
         .expect("activate Goblin Smuggler");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -920,11 +930,11 @@ fn goblin_smuggler_effect_persists_if_power_increases_after_resolution() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![target, ordinary_attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![target, ordinary_attacker]))
         .expect("declare attackers");
     pass_to_declare_blockers(&mut engine);
     let err = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: target,
@@ -963,7 +973,7 @@ fn destructive_tampering_tracks_current_flying_status_and_later_creatures() {
     );
     let slot = hand_index_for_card(&engine, 0, "destructive_tampering");
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, vec![])]))
         .expect("cast the blocking-restriction mode");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -982,7 +992,9 @@ fn destructive_tampering_tracks_current_flying_status_and_later_creatures() {
     );
     assert!(zone_view_rules_annotation_labels(&mut engine, 1, flyer).is_empty());
 
-    engine.apply_command(0, &pass()).expect("pass priority");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass priority");
     give_mana(
         &mut engine,
         1,
@@ -992,7 +1004,7 @@ fn destructive_tampering_tracks_current_flying_status_and_later_creatures() {
         },
     );
     engine
-        .apply_command(1, &activate_ability(bird_grabber, 0, vec![]))
+        .apply_scenario_command(1, &activate_ability(bird_grabber, 0, vec![]))
         .expect("grant Flying after Destructive Tampering resolves");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.effective_has_keyword(bird_grabber, Keyword::Flying));
@@ -1004,7 +1016,7 @@ fn destructive_tampering_tracks_current_flying_status_and_later_creatures() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     pass_to_declare_blockers(&mut engine);
 
@@ -1016,7 +1028,7 @@ fn destructive_tampering_tracks_current_flying_status_and_later_creatures() {
         .collect();
     assert_eq!(legal_pairs, [(bird_grabber, attacker), (flyer, attacker)]);
     let err = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -1026,7 +1038,7 @@ fn destructive_tampering_tracks_current_flying_status_and_later_creatures() {
         .expect_err("a later-entering nonflyer cannot block");
     assert!(matches!(err, tricerules_core::EngineError::Illegal(_)));
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -1060,12 +1072,12 @@ fn cant_be_blocked_coexists_with_menace_and_must_block_requirements() {
         .must_block_if_able = true;
 
     engine
-        .apply_command(0, &activate_ability(smuggler, 0, target_object(menace)))
+        .apply_scenario_command(0, &activate_ability(smuggler, 0, target_object(menace)))
         .expect("activate Goblin Smuggler on a creature with menace");
     resolve_entire_stack_two_player(&mut engine);
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![menace, ordinary]))
+        .apply_scenario_command(0, &declare_attackers(vec![menace, ordinary]))
         .expect("declare attackers");
     pass_to_declare_blockers(&mut engine);
 
@@ -1078,7 +1090,7 @@ fn cant_be_blocked_coexists_with_menace_and_must_block_requirements() {
         .collect();
     assert_eq!(legal_pairs, [(blocker, ordinary)]);
     let err = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: menace,
@@ -1088,7 +1100,7 @@ fn cant_be_blocked_coexists_with_menace_and_must_block_requirements() {
         .expect_err("cant-be-blocked rejects the assignment before menace can matter");
     assert!(matches!(err, tricerules_core::EngineError::Illegal(_)));
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: ordinary,
@@ -1116,7 +1128,7 @@ fn legal_block_pairs_exclude_pair_specific_flying_restrictions() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &declare_attackers(vec![ground_attacker, flying_attacker]),
         )
@@ -1147,7 +1159,7 @@ fn chosen_combat_restriction_expires_at_cleanup() {
     let smuggler = inject_creature_on_battlefield(&mut engine, 0, "goblin_smuggler");
     let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &activate_ability(smuggler, 0, target_object(target)))
+        .apply_scenario_command(0, &activate_ability(smuggler, 0, target_object(target)))
         .expect("activate Goblin Smuggler");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -1159,11 +1171,11 @@ fn chosen_combat_restriction_expires_at_cleanup() {
     let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![target]))
+        .apply_scenario_command(0, &declare_attackers(vec![target]))
         .expect("declare the formerly restricted creature");
     pass_to_declare_blockers(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: target,
@@ -1192,7 +1204,7 @@ fn chosen_combat_restriction_does_not_follow_a_zone_change() {
     let smuggler = inject_creature_on_battlefield(&mut engine, 0, "goblin_smuggler");
     let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &activate_ability(smuggler, 0, target_object(target)))
+        .apply_scenario_command(0, &activate_ability(smuggler, 0, target_object(target)))
         .expect("activate Goblin Smuggler");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -1207,7 +1219,7 @@ fn chosen_combat_restriction_does_not_follow_a_zone_change() {
     );
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Unsummon");
     resolve_entire_stack_two_player(&mut engine);
     let returned = put_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -1219,11 +1231,11 @@ fn chosen_combat_restriction_does_not_follow_a_zone_change() {
     let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![returned]))
+        .apply_scenario_command(0, &declare_attackers(vec![returned]))
         .expect("declare the new object represented by the reused id");
     pass_to_declare_blockers(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: returned,

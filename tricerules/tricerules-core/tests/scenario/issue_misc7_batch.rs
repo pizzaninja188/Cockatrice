@@ -6,6 +6,7 @@
 //! Every expectation is the reviewed printed Oracle behavior. Governance: CR 115 (targets),
 //! CR 119 (life loss), CR 120.3 (damage), CR 122.1 (counters), CR 400.7 (zone changes),
 //! CR 508 (attack triggers), CR 603.2c (one trigger per simultaneous event), and CR 611.2c.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::CounterKind;
@@ -63,11 +64,12 @@ fn issue_misc7_malamet_brawler_grants_trample_to_an_attacker() {
     let brawler = inject_creature_on_battlefield(&mut e, 0, "malamet_brawler");
     let fellow = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let bench = inject_creature_on_battlefield(&mut e, 0, "storm_crow");
-    e.apply_command(0, &declare_attackers(vec![brawler, fellow]))
+    e.apply_scenario_command(0, &declare_attackers(vec![brawler, fellow]))
         .expect("declare two attackers");
     assert_eq!(e.state.pending_triggers.len(), 1);
     assert!(
-        e.apply_command(0, &choose_trigger_target(bench)).is_err(),
+        e.apply_scenario_command(0, &choose_trigger_target(bench))
+            .is_err(),
         "a nonattacking creature is not a legal target"
     );
     semantic::accepted(&mut e, 0, &choose_trigger_target(fellow));
@@ -90,7 +92,7 @@ fn issue_misc7_nori_grants_first_strike_to_an_attacker() {
     advance_to_declare_attackers(&mut e);
     let nori = inject_creature_on_battlefield(&mut e, 0, "nori,_teller_of_tales");
     let fellow = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![nori, fellow]))
+    e.apply_scenario_command(0, &declare_attackers(vec![nori, fellow]))
         .expect("declare two attackers");
     semantic::accepted(&mut e, 0, &choose_trigger_target(fellow));
     resolve_entire_stack_two_player(&mut e);
@@ -113,7 +115,7 @@ fn issue_misc7_moonglove_extractor_draws_and_loses_life_on_attack() {
     let extractor = inject_creature_on_battlefield(&mut e, 0, "moonglove_extractor");
     let life_before = e.state.players[0].life;
     let hand_before = e.state.players[0].hand.len();
-    e.apply_command(0, &declare_attackers(vec![extractor]))
+    e.apply_scenario_command(0, &declare_attackers(vec![extractor]))
         .expect("declare the Extractor as an attacker");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[0].hand.len(), hand_before + 1);

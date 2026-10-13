@@ -3,6 +3,7 @@
 //! Oracle text and rulings checked 2026-09-25. CR 121.2 governs each individual draw, CR 701.9
 //! governs discarding, and CR 702.34 governs casting Faithless Looting from the graveyard and
 //! exiling that physical card after it leaves the stack.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -47,10 +48,10 @@ fn resolve_top_stack(engine: &mut GameEngine) -> tricerules_proto::ruled::v1::Ru
         engine.state.players[0].id
     };
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first player passes");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second player passes and the spell resolves")
 }
 
@@ -81,7 +82,7 @@ fn resolve_two_card_discard(
         .all(|object_id| choice.candidate_object_ids.contains(object_id)));
     assert!(choice.candidate_object_ids.contains(&known_discard));
     assert!(
-        engine.apply_command(1, &pass()).is_err(),
+        engine.apply_scenario_command(1, &pass()).is_err(),
         "no player can act between the draw and discard during resolution"
     );
     let answer = submit_resolution_choice(vec![known_discard, drawn[0]]);
@@ -89,7 +90,7 @@ fn resolve_two_card_discard(
         .diagnostic_snapshot()
         .expect("diagnostic snapshot before wrong-player choice");
     assert!(
-        engine.apply_command(1, &answer).is_err(),
+        engine.apply_scenario_command(1, &answer).is_err(),
         "only the private hand's deciding player can answer"
     );
     assert_eq!(
@@ -100,7 +101,7 @@ fn resolve_two_card_discard(
         "a rejected wrong-player choice leaves the pending discard untouched"
     );
     engine
-        .apply_command(choice.deciding_player_id, &answer)
+        .apply_scenario_command(choice.deciding_player_id, &answer)
         .expect("discard the known card and one newly drawn card");
     assert_eq!(engine.state.objects[&known_discard].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&drawn[0]].zone, Zone::Graveyard);
@@ -177,7 +178,7 @@ fn faithless_looting_uses_its_flashback_cost_and_exiles_after_resolution() {
     resolve_two_card_discard(&mut engine, spell, second_discard, &flashback_draws);
     assert_eq!(engine.state.objects[&spell].zone, Zone::Exile);
     assert!(
-        engine.apply_command(0, &flashback).is_err(),
+        engine.apply_scenario_command(0, &flashback).is_err(),
         "the exiled physical spell cannot be flashback-cast a second time"
     );
 }

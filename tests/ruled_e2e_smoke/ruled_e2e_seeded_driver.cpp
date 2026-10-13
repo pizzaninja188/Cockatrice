@@ -195,8 +195,13 @@ void SeededGameDriver::onPaymentPreview(const ruled::v1::RuledEventBatch &batch)
         softCounterPaymentPreviewPending = false;
         EXPECT_TRUE(paymentPreview.valid()) << paymentPreview.error();
         EXPECT_TRUE(paymentPreview.complete());
+        EXPECT_TRUE(resolutionPromptSnapshotValid);
+        EXPECT_TRUE(resolutionPromptActive);
+        EXPECT_EQ(resolutionPromptDeciderPlayerId, myId);
+        EXPECT_NE(currentResolutionPromptId, 0u);
         ruled::v1::RuledCommand cmd;
         auto *choice = cmd.mutable_submit_resolution_choice();
+        choice->set_resolution_prompt_id(currentResolutionPromptId);
         choice->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
         *choice->mutable_payment() = paymentPreview.selection();
         pendingChoice.reset();
@@ -1073,6 +1078,11 @@ void SeededGameDriver::act()
             preview->set_transaction_id(8801);
             preview->set_revision(1);
             auto *choice = preview->mutable_resolution_choice();
+            EXPECT_TRUE(resolutionPromptSnapshotValid);
+            EXPECT_TRUE(resolutionPromptActive);
+            EXPECT_EQ(resolutionPromptDeciderPlayerId, myId);
+            ASSERT_NE(currentResolutionPromptId, 0u);
+            choice->set_resolution_prompt_id(currentResolutionPromptId);
             choice->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
             choice->mutable_payment()->mutable_mana()->set_u(4);
             softCounterPaymentPreviewPending = true;

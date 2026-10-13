@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
 #[test]
@@ -12,8 +13,8 @@ fn two_player_passes_empty_stack_advances_toward_combat() {
     )
     .expect("new");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
-    e.apply_command(0, &pass()).expect("p0");
-    e.apply_command(1, &pass()).expect("p1");
+    e.apply_scenario_command(0, &pass()).expect("p0");
+    e.apply_scenario_command(1, &pass()).expect("p1");
     // After two passes, should leave upkeep to draw.
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
 }
@@ -75,10 +76,12 @@ fn declare_attackers_handoff_emits_defender_priority() {
         }
     }
 
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
-    e.apply_command(0, &pass()).expect("ap pass begin combat");
-    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin combat");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::DeclareAttackers
@@ -86,7 +89,7 @@ fn declare_attackers_handoff_emits_defender_priority() {
 
     let bears_oid = battlefield_object_for_card(&e, 0, "grizzly_bears");
     let b = e
-        .apply_command(0, &declare_attackers(vec![bears_oid]))
+        .apply_scenario_command(0, &declare_attackers(vec![bears_oid]))
         .expect("declare attackers");
     assert_eq!(
         e.state.turn_step,
@@ -97,14 +100,14 @@ fn declare_attackers_handoff_emits_defender_priority() {
         "after declaring attackers, active player keeps priority in declare attackers"
     );
     let to_defender = e
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
     assert!(
         priority_changes_in(&to_defender).contains(&1),
         "defender should receive priority in declare attackers"
     );
     let to_blockers = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
     assert_eq!(
         e.state.turn_step,
@@ -129,10 +132,13 @@ fn no_attackers_skip_to_end_combat_emits_active_priority() {
     )
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
-    e.apply_command(0, &pass()).expect("ap pass begin combat");
-    let b = e.apply_command(1, &pass()).expect("nap pass begin combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin combat");
+    let b = e
+        .apply_scenario_command(1, &pass())
+        .expect("nap pass begin combat");
     // Engine must skip directly to EndCombat (no DeclareAttackers needed).
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndCombat);
     assert!(
@@ -141,12 +147,15 @@ fn no_attackers_skip_to_end_combat_emits_active_priority() {
     );
 
     // EndCombat still has a full priority pass cycle before postcombat main.
-    let to_nap = e.apply_command(0, &pass()).expect("ap pass end combat");
+    let to_nap = e
+        .apply_scenario_command(0, &pass())
+        .expect("ap pass end combat");
     assert!(
         priority_changes_in(&to_nap).contains(&1),
         "non-active player should receive priority in end combat"
     );
-    e.apply_command(1, &pass()).expect("nap pass end combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass end combat");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main2);
 }
 
@@ -191,16 +200,18 @@ fn blockers_to_combat_damage_emits_priority_stop() {
             obj.summoning_sick = false;
         }
     }
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
-    e.apply_command(0, &pass()).expect("ap pass begin combat");
-    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin combat");
     let bears_oid = battlefield_object_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![bears_oid]))
+    e.apply_scenario_command(0, &declare_attackers(vec![bears_oid]))
         .expect("declare attackers");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
     // No eligible blockers for defender: engine auto-declares empty blockers,
     // active player gets priority in DeclareBlockers.
@@ -213,10 +224,10 @@ fn blockers_to_combat_damage_emits_priority_stop() {
         e.state.combat.as_ref().is_some_and(|c| c.blockers_declared),
         "blockers_declared must be true after auto-skip"
     );
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
     let b = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass declare blockers -> combat damage");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::CombatDamage);
     assert!(
@@ -267,14 +278,16 @@ fn duplicate_attacker_ids_are_rejected() {
             obj.tapped = false;
         }
     }
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
-    e.apply_command(0, &pass()).expect("ap pass begin combat");
-    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin combat");
     let bears_oid = battlefield_object_for_card(&e, 0, "grizzly_bears");
 
     let err = e
-        .apply_command(0, &declare_attackers(vec![bears_oid, bears_oid]))
+        .apply_scenario_command(0, &declare_attackers(vec![bears_oid, bears_oid]))
         .expect_err("duplicate attackers should fail");
     assert_eq!(err.to_string(), "illegal command: duplicate attacker");
 }
@@ -332,10 +345,12 @@ fn same_blocker_cannot_block_two_attackers() {
             obj.tapped = false;
         }
     }
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
-    e.apply_command(0, &pass()).expect("ap pass begin combat");
-    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin combat");
 
     let attacker_a = battlefield_object_for_card(&e, 0, "grizzly_bears");
     let attacker_b = e.state.players[0]
@@ -351,16 +366,16 @@ fn same_blocker_cannot_block_two_attackers() {
                     .unwrap_or(false)
         })
         .expect("second attacker");
-    e.apply_command(0, &declare_attackers(vec![attacker_a, attacker_b]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker_a, attacker_b]))
         .expect("declare two attackers");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
     let blocker = battlefield_object_for_card(&e, 1, "grizzly_bears");
 
     let err = e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![
                 BlockPair {
@@ -394,7 +409,7 @@ fn declare_attackers_emits_attackers_declared_event() {
     advance_to_declare_attackers(&mut e);
     let bears = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let b = e
-        .apply_command(0, &declare_attackers(vec![bears]))
+        .apply_scenario_command(0, &declare_attackers(vec![bears]))
         .expect("declare attackers");
     let evs = attackers_declared_in(&b);
     assert_eq!(evs.len(), 1, "exactly one AttackersDeclared event");
@@ -428,7 +443,7 @@ fn preview_declare_attackers_is_rejected_by_engine() {
         })),
     };
     let err = e
-        .apply_command(0, &cmd)
+        .apply_scenario_command(0, &cmd)
         .expect_err("preview must not apply");
     assert!(err.to_string().contains("preview"), "unexpected err: {err}");
     assert_eq!(e.state.command_index, idx_before);
@@ -453,7 +468,7 @@ fn preview_declare_blockers_is_rejected_by_engine() {
         })),
     };
     let err = e
-        .apply_command(0, &cmd)
+        .apply_scenario_command(0, &cmd)
         .expect_err("preview must not apply");
     assert!(err.to_string().contains("preview"), "unexpected err: {err}");
     assert_eq!(
@@ -496,14 +511,14 @@ fn declare_blockers_emits_blockers_declared_event() {
     advance_to_declare_attackers(&mut e);
     let atk = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let blk = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![atk]))
+    e.apply_scenario_command(0, &declare_attackers(vec![atk]))
         .expect("declare attackers");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
     let b = e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: atk,
@@ -532,17 +547,17 @@ fn unblocked_combat_damage_emits_life_changed() {
     advance_to_declare_attackers(&mut e);
     let bears_a = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let bears_b = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![bears_a, bears_b]))
+    e.apply_scenario_command(0, &declare_attackers(vec![bears_a, bears_b]))
         .expect("two attackers");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
     // No eligible blockers: engine auto-declares empty blockers, active player has priority.
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
     let b = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass declare blockers -> combat damage");
     let life = life_changes_in(&b);
     assert_eq!(life.len(), 1, "single LifeChanged event for defender");
@@ -587,14 +602,14 @@ fn blocked_combat_kills_blocker_and_emits_permanent_moved() {
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     // Defender needs a creature on the battlefield to block. Put a 2/2 too -> mutual destruction.
     let blocker = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
     let declared = e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -606,10 +621,10 @@ fn blocked_combat_kills_blocker_and_emits_permanent_moved() {
         permanents_moved_in(&declared).is_empty(),
         "creatures should not die until combat damage step"
     );
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
     let b = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass declare blockers -> combat damage");
     let dead = permanents_moved_in(&b);
     let dead_ids: Vec<u32> = dead.iter().map(|p| p.object_id).collect();
@@ -692,7 +707,7 @@ fn full_combat_2v1_trade_and_life_loss() {
 
     // Declare attackers.
     let attack_batch = e
-        .apply_command(0, &declare_attackers(vec![attacker_a, attacker_b]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker_a, attacker_b]))
         .expect("declare two attackers");
     let ad = attackers_declared_in(&attack_batch);
     assert_eq!(ad.len(), 1);
@@ -729,14 +744,14 @@ fn full_combat_2v1_trade_and_life_loss() {
             .unwrap_or(false),
         "attacker_b tapped on attack"
     );
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
 
     // Declare blockers: only attacker_a is blocked.
     let declared_blockers_batch = e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker_a,
@@ -752,10 +767,10 @@ fn full_combat_2v1_trade_and_life_loss() {
         life_changes_in(&declared_blockers_batch).is_empty(),
         "no life loss during blocker declaration itself"
     );
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
     let block_batch = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass declare blockers -> combat damage");
 
     // Mutual destruction on the blocked pair -> both go to graveyard.
@@ -841,7 +856,7 @@ fn giant_growth_changes_combat_outcome() {
     );
     let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
     let growth_batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 growth_idx,
@@ -865,20 +880,24 @@ fn giant_growth_changes_combat_outcome() {
         .expect("growth stack pushed");
     assert_eq!(growth_push.targets.len(), 1);
     assert_eq!(growth_push.targets[0].object_id, p0_bear);
-    e.apply_command(0, &pass()).expect("p0 pass growth");
-    e.apply_command(1, &pass()).expect("p1 pass growth");
+    e.apply_scenario_command(0, &pass())
+        .expect("p0 pass growth");
+    e.apply_scenario_command(1, &pass())
+        .expect("p1 pass growth");
 
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
-    e.apply_command(0, &pass()).expect("ap pass begin combat");
-    e.apply_command(1, &pass()).expect("nap pass begin combat");
-    e.apply_command(0, &declare_attackers(vec![p0_bear]))
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin combat");
+    e.apply_scenario_command(0, &declare_attackers(vec![p0_bear]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("ap pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("nap pass declare attackers");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: p0_bear,
@@ -886,10 +905,10 @@ fn giant_growth_changes_combat_outcome() {
         }]),
     )
     .expect("declare blocker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("ap pass declare blockers");
     let damage_batch = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("nap pass declare blockers");
 
     let moved_ids: Vec<u32> = permanents_moved_in(&damage_batch)
@@ -925,7 +944,7 @@ fn cannot_cast_spell_until_attackers_declared() {
     }
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     let err = e
-        .apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect_err("cast before attackers illegal");
     assert!(
         err.to_string()
@@ -934,7 +953,7 @@ fn cannot_cast_spell_until_attackers_declared() {
     );
 
     let bear_oid = battlefield_object_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![bear_oid]))
+    e.apply_scenario_command(0, &declare_attackers(vec![bear_oid]))
         .expect("declare attackers");
 
     while !e.state.players[0]
@@ -961,7 +980,7 @@ fn cannot_cast_spell_until_attackers_declared() {
         },
     );
     let bolt_idx2 = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx2, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx2, target_player(1)))
         .expect("instant legal after attackers committed");
     assert_eq!(e.state.stack.len(), 1);
 }
@@ -981,11 +1000,11 @@ fn cannot_cast_spell_until_blockers_declared() {
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     // Inject an eligible blocker for the defender so the engine prompts them in DeclareBlockers.
     inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("ap pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers -> declare blockers");
 
     while !e.state.players[1]
@@ -1012,7 +1031,7 @@ fn cannot_cast_spell_until_blockers_declared() {
 
     let growth_idx = hand_index_for_card(&e, 1, "giant_growth");
     let err = e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_spell(
                 growth_idx,
@@ -1032,9 +1051,9 @@ fn cannot_cast_spell_until_blockers_declared() {
         "unexpected: {err}"
     );
 
-    e.apply_command(1, &declare_blockers(vec![]))
+    e.apply_scenario_command(1, &declare_blockers(vec![]))
         .expect("declare no blockers");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("ap pass declare blockers");
     give_mana(
         &mut e,
@@ -1045,7 +1064,7 @@ fn cannot_cast_spell_until_blockers_declared() {
         },
     );
     let growth_idx2 = hand_index_for_card(&e, 1, "giant_growth");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             growth_idx2,
@@ -1095,16 +1114,16 @@ fn two_blockers_damage_order_required_and_resolves() {
     let blocker_lions = put_creature_on_battlefield(&mut e, 1, "savannah_lions");
     let blocker_bears = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
 
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
 
     // Defender sends both blockers to the same attacker.
     let b = e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![
                 BlockPair {
@@ -1130,7 +1149,7 @@ fn two_blockers_damage_order_required_and_resolves() {
     assert!(life_changes_in(&b).is_empty(), "no damage dealt yet");
 
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &assign_combat_damage_cmd(attacker, vec![(blocker_lions, 1), (blocker_bears, 1)]),
         )
@@ -1138,9 +1157,9 @@ fn two_blockers_damage_order_required_and_resolves() {
         "cannot assign combat damage before declare-blockers priority round"
     );
 
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass → assign combat damage step");
     assert!(
         e.state.combat.as_ref().unwrap().assign_combat_damage_phase,
@@ -1148,7 +1167,7 @@ fn two_blockers_damage_order_required_and_resolves() {
     );
 
     let b3 = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &assign_combat_damage_cmd(attacker, vec![(blocker_lions, 1), (blocker_bears, 1)]),
         )
@@ -1210,12 +1229,12 @@ fn two_blockers_insufficient_power_kills_only_first_in_order() {
     let blocker_merfolk = put_creature_on_battlefield(&mut e, 1, "coral_merfolk");
     let blocker_bears = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
 
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("active pass");
-    e.apply_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(0, &pass()).expect("active pass");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
 
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![
             BlockPair {
@@ -1229,12 +1248,12 @@ fn two_blockers_insufficient_power_kills_only_first_in_order() {
         ]),
     )
     .expect("two blockers");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass → assign combat damage");
     let b = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &assign_combat_damage_cmd(attacker, vec![(blocker_merfolk, 1), (blocker_bears, 1)]),
         )
@@ -1284,12 +1303,12 @@ fn single_blocker_no_damage_order_needed() {
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let blocker = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
 
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("active pass");
-    e.apply_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(0, &pass()).expect("active pass");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
 
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: attacker,
@@ -1304,9 +1323,9 @@ fn single_blocker_no_damage_order_needed() {
     );
 
     // Combat resolves normally without any AssignCombatDamage step: both 2/2s die.
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
-    let b = e.apply_command(1, &pass()).expect("combat damage");
+    let b = e.apply_scenario_command(1, &pass()).expect("combat damage");
     let dead = permanents_moved_in(&b);
     let dead_ids: Vec<u32> = dead.iter().map(|p| p.object_id).collect();
     assert!(
@@ -1324,7 +1343,7 @@ fn single_blocker_no_damage_order_needed() {
 fn assign_combat_damage_rejects_sum_mismatch() {
     let (mut e, attacker, a, b) = setup_two_blockers_assign_phase(910);
     assert!(e
-        .apply_command(0, &assign_combat_damage_cmd(attacker, vec![(a, 1), (b, 0)]),)
+        .apply_scenario_command(0, &assign_combat_damage_cmd(attacker, vec![(a, 1), (b, 0)]),)
         .is_err());
     assert!(!e
         .state
@@ -1357,11 +1376,11 @@ fn assign_combat_damage_accepts_split_with_two_nonlethal_hits() {
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let b1 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let b2 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("active pass");
-    e.apply_command(1, &pass()).expect("defender pass");
-    e.apply_command(
+    e.apply_scenario_command(0, &pass()).expect("active pass");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![
             BlockPair {
@@ -1375,11 +1394,11 @@ fn assign_combat_damage_accepts_split_with_two_nonlethal_hits() {
         ]),
     )
     .expect("declare two blockers");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
-    e.apply_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
     let b = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &assign_combat_damage_cmd(attacker, vec![(b1, 1), (b2, 1)]),
         )
@@ -1403,7 +1422,7 @@ fn assign_combat_damage_rejects_wrong_blocker_set() {
     let (mut e, attacker, a, _b) = setup_two_blockers_assign_phase(912);
     let other = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     assert!(e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &assign_combat_damage_cmd(attacker, vec![(a, 1), (other, 1)]),
         )
@@ -1414,7 +1433,7 @@ fn assign_combat_damage_rejects_wrong_blocker_set() {
 fn assign_combat_damage_rejects_defender_player() {
     let (mut e, attacker, a, b) = setup_two_blockers_assign_phase(913);
     assert!(e
-        .apply_command(1, &assign_combat_damage_cmd(attacker, vec![(a, 1), (b, 1)]),)
+        .apply_scenario_command(1, &assign_combat_damage_cmd(attacker, vec![(a, 1), (b, 1)]),)
         .is_err());
 }
 
@@ -1423,7 +1442,7 @@ fn assign_combat_damage_rejects_sum_exceeds_power() {
     // 2-power attacker, two blockers: 1+2 sums to 3 > power. Must reject.
     let (mut e, attacker, a, b) = setup_two_blockers_assign_phase(914);
     assert!(e
-        .apply_command(0, &assign_combat_damage_cmd(attacker, vec![(a, 1), (b, 2)]))
+        .apply_scenario_command(0, &assign_combat_damage_cmd(attacker, vec![(a, 1), (b, 2)]))
         .is_err());
     assert!(!e
         .state
@@ -1460,11 +1479,11 @@ fn assign_combat_damage_three_blockers_split_one_each() {
     let b1 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let b2 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let b3 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("active pass");
-    e.apply_command(1, &pass()).expect("defender pass");
-    e.apply_command(
+    e.apply_scenario_command(0, &pass()).expect("active pass");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![
             BlockPair {
@@ -1482,27 +1501,27 @@ fn assign_combat_damage_three_blockers_split_one_each() {
         ]),
     )
     .expect("declare three blockers");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
-    e.apply_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
 
     // Sum != power must still be rejected with N=3.
     assert!(e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &assign_combat_damage_cmd(attacker, vec![(b1, 1), (b2, 1), (b3, 0)]),
         )
         .is_err());
     // Wrong blocker set (missing one) must be rejected.
     assert!(e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &assign_combat_damage_cmd(attacker, vec![(b1, 2), (b2, 1)])
         )
         .is_err());
 
     let b = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &assign_combat_damage_cmd(attacker, vec![(b1, 1), (b2, 1), (b3, 1)]),
         )
@@ -1565,11 +1584,11 @@ fn assign_combat_damage_two_multi_blocked_attackers_requires_both() {
     let b1b = put_creature_on_battlefield(&mut e, 1, "coral_merfolk");
     let b2a = put_creature_on_battlefield(&mut e, 1, "coral_merfolk");
     let b2b = put_creature_on_battlefield(&mut e, 1, "coral_merfolk");
-    e.apply_command(0, &declare_attackers(vec![atk1, atk2]))
+    e.apply_scenario_command(0, &declare_attackers(vec![atk1, atk2]))
         .expect("declare two attackers");
-    e.apply_command(0, &pass()).expect("active pass");
-    e.apply_command(1, &pass()).expect("defender pass");
-    e.apply_command(
+    e.apply_scenario_command(0, &pass()).expect("active pass");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![
             BlockPair {
@@ -1591,14 +1610,14 @@ fn assign_combat_damage_two_multi_blocked_attackers_requires_both() {
         ]),
     )
     .expect("declare blockers");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
-    e.apply_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
     assert!(e.state.combat.as_ref().unwrap().assign_combat_damage_phase);
 
     // First assignment: combat must NOT yet resolve.
     let b_first = e
-        .apply_command(0, &assign_combat_damage_cmd(atk1, vec![(b1a, 1), (b1b, 1)]))
+        .apply_scenario_command(0, &assign_combat_damage_cmd(atk1, vec![(b1a, 1), (b1b, 1)]))
         .expect("assign for atk1");
     assert!(
         permanents_moved_in(&b_first).is_empty(),
@@ -1615,7 +1634,7 @@ fn assign_combat_damage_two_multi_blocked_attackers_requires_both() {
 
     // Second assignment: combat resolves now.
     let b_second = e
-        .apply_command(0, &assign_combat_damage_cmd(atk2, vec![(b2a, 1), (b2b, 1)]))
+        .apply_scenario_command(0, &assign_combat_damage_cmd(atk2, vec![(b2a, 1), (b2b, 1)]))
         .expect("assign for atk2");
     let dead: Vec<u32> = permanents_moved_in(&b_second)
         .iter()
@@ -1658,10 +1677,13 @@ fn begin_combat_skips_when_no_eligible_attackers() {
     )
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin_combat");
-    e.apply_command(0, &pass()).expect("ap pass begin_combat");
-    let b = e.apply_command(1, &pass()).expect("nap pass begin_combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin_combat");
+    let b = e
+        .apply_scenario_command(1, &pass())
+        .expect("nap pass begin_combat");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::EndCombat,
@@ -1685,15 +1707,17 @@ fn begin_combat_skips_when_all_creatures_summoning_sick() {
     )
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin_combat");
     // Inject a summoning-sick creature (cannot attack).
     let oid = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     if let Some(obj) = e.state.objects.get_mut(&oid) {
         obj.summoning_sick = true;
     }
-    e.apply_command(0, &pass()).expect("ap pass begin_combat");
-    e.apply_command(1, &pass()).expect("nap pass begin_combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin_combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin_combat");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::EndCombat,
@@ -1713,15 +1737,17 @@ fn begin_combat_skips_when_all_creatures_tapped() {
     )
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin_combat");
     // Inject a tapped creature (cannot attack).
     let oid = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     if let Some(obj) = e.state.objects.get_mut(&oid) {
         obj.tapped = true;
     }
-    e.apply_command(0, &pass()).expect("ap pass begin_combat");
-    e.apply_command(1, &pass()).expect("nap pass begin_combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin_combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin_combat");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::EndCombat,
@@ -1741,11 +1767,13 @@ fn begin_combat_enters_declare_attackers_when_eligible_attacker_exists() {
     )
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin_combat");
     inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-    e.apply_command(0, &pass()).expect("ap pass begin_combat");
-    e.apply_command(1, &pass()).expect("nap pass begin_combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin_combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin_combat");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::DeclareAttackers,
@@ -1767,23 +1795,25 @@ fn declare_attackers_skips_blockers_when_no_eligible_blockers() {
     )
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin_combat");
     let bears = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-    e.apply_command(0, &pass()).expect("ap pass begin_combat");
-    e.apply_command(1, &pass()).expect("nap pass begin_combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin_combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin_combat");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::DeclareAttackers
     );
 
-    e.apply_command(0, &declare_attackers(vec![bears]))
+    e.apply_scenario_command(0, &declare_attackers(vec![bears]))
         .expect("declare attacker");
     // Both pass in DeclareAttackers.
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("ap pass declare_attackers");
     let b = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("nap pass declare_attackers");
     // Engine lands in DeclareBlockers with blockers_declared = true and active player holding priority.
     assert_eq!(
@@ -1825,7 +1855,7 @@ fn issue_464_combat_damage_records_the_source_incarnation() {
     *generation += 1; // the fixture moves this real card from hand to the battlefield
     let generation = *generation;
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("enter begin combat");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -1834,7 +1864,7 @@ fn issue_464_combat_damage_records_the_source_incarnation() {
     );
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     pass_both_players(&mut engine); // no eligible blockers; blockers are declared empty
     pass_both_players(&mut engine); // combat damage resolves
@@ -1865,7 +1895,7 @@ fn cannot_add_mana_while_declaring_attackers() {
     // tapped land) cannot be activated yet (CR 605.3a; the engine rejects it).
     let land = inject_permanent_on_battlefield(&mut e, 0, "mountain");
     let err = e
-        .apply_command(0, &activate_ability(land, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(land, 0, vec![]))
         .expect_err("mana ability must be illegal during declare attackers");
     assert!(
         format!("{err:?}").contains("attack or block declaration"),
@@ -1894,7 +1924,7 @@ fn declared_attackers_keep_mana_until_declare_attackers_step_ends() {
     // Model mana produced inside a legal declaration-payment window. Declare attackers does not
     // end the step; any unspent mana survives until the active player later passes the step.
     e.state.players[0].mana_pool.colorless = 1;
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attackers");
 
     assert_eq!(
@@ -1902,9 +1932,9 @@ fn declared_attackers_keep_mana_until_declare_attackers_step_ends() {
         "unused mana must remain through post-declaration priority"
     );
 
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass attackers step");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass attackers step");
     assert_eq!(
         e.state.players[0].mana_pool.colorless, 0,
@@ -1930,7 +1960,7 @@ fn propaganda_tax_is_cumulative_for_each_creature_attacking_a_player() {
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
 
     let batch = e
-        .apply_command(0, &declare_attackers(vec![first_attacker, second_attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![first_attacker, second_attacker]))
         .expect("both creatures can be selected before the combined tax is paid");
     let pending = batch.legal_by_player[&0]
         .pending_attack_declaration
@@ -1980,7 +2010,7 @@ fn propaganda_does_not_tax_a_creature_attacking_its_controllers_planeswalker() {
     };
 
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(
@@ -2011,14 +2041,14 @@ fn propaganda_tax_uses_each_directly_attacked_player_in_multiplayer() {
     )
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main phase to begin combat");
     let taxed_edge_attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let free_edge_attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
     for _ in 0..3 {
         let player = e.state.priority_player_id();
-        e.apply_command(player, &pass())
+        e.apply_scenario_command(player, &pass())
             .expect("pass beginning-of-combat priority");
     }
     assert_eq!(
@@ -2046,7 +2076,7 @@ fn propaganda_tax_uses_each_directly_attacked_player_in_multiplayer() {
             ..Default::default()
         };
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(
@@ -2086,7 +2116,7 @@ fn propaganda_attack_declaration_waits_for_attack_tax_payment() {
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
 
     let batch = e
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("begin declaration payment");
 
     assert!(
@@ -2147,7 +2177,7 @@ fn propaganda_attack_declaration_waits_for_attack_tax_payment() {
         .expect("pending attack transaction")
         .clone();
     e.state.players[0].mana_pool.colorless = 1;
-    let underpaid = e.apply_command(
+    let underpaid = e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::CommitAttackDeclaration(
@@ -2174,7 +2204,7 @@ fn propaganda_attack_declaration_waits_for_attack_tax_payment() {
 
     e.state.players[0].mana_pool.colorless = 2;
     let committed = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitAttackDeclaration(
@@ -2219,7 +2249,7 @@ fn propaganda_rejects_stale_or_wrong_payer_commits_without_spending_mana() {
     let attacker = e.state.players[0].battlefield[0];
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
     e.state.players[0].mana_pool.colorless = 2;
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("begin attack tax payment");
     let pending = e
         .state
@@ -2248,7 +2278,7 @@ fn propaganda_rejects_stale_or_wrong_payer_commits_without_spending_mana() {
     };
 
     assert!(e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &commit(
                 pending.transaction_id,
@@ -2258,7 +2288,7 @@ fn propaganda_rejects_stale_or_wrong_payer_commits_without_spending_mana() {
         )
         .is_err());
     assert!(e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &commit(
                 pending.transaction_id,
@@ -2268,7 +2298,7 @@ fn propaganda_rejects_stale_or_wrong_payer_commits_without_spending_mana() {
         )
         .is_err());
     assert!(e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &commit(
                 pending.transaction_id + 1,
@@ -2278,7 +2308,7 @@ fn propaganda_rejects_stale_or_wrong_payer_commits_without_spending_mana() {
         )
         .is_err());
     assert!(e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &commit(
                 pending.transaction_id,
@@ -2293,7 +2323,7 @@ fn propaganda_rejects_stale_or_wrong_payer_commits_without_spending_mana() {
     assert_eq!(e.state.pending_attack_declaration.as_ref(), Some(&pending));
     assert!(!e.state.combat.as_ref().expect("combat").attackers_declared);
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &commit(
             pending.transaction_id,
@@ -2320,7 +2350,7 @@ fn propaganda_commit_omits_an_attacker_that_left_and_returned_during_payment() {
     advance_to_declare_attackers(&mut e);
     let attacker = e.state.players[0].battlefield[0];
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("begin attack tax payment");
     let pending = e
         .state
@@ -2359,7 +2389,7 @@ fn propaganda_commit_omits_an_attacker_that_left_and_returned_during_payment() {
     }
     e.state.players[0].mana_pool.colorless = 2;
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::CommitAttackDeclaration(
@@ -2419,9 +2449,11 @@ fn propaganda_attack_payment_commands_replay_identically() {
     assert_eq!((attacker, forests), (replay_attacker, replay_forests));
 
     let declare = declare_attackers(vec![attacker]);
-    let pending = original.apply_command(0, &declare).expect("begin payment");
+    let pending = original
+        .apply_scenario_command(0, &declare)
+        .expect("begin payment");
     let replay_pending = replay
-        .apply_command(0, &declare)
+        .apply_scenario_command(0, &declare)
         .expect("replay begin payment");
     assert_eq!(pending, replay_pending);
 
@@ -2429,11 +2461,11 @@ fn propaganda_attack_payment_commands_replay_identically() {
     for forest in forests {
         let activation = activate_ability_for(&original, forest, 0, vec![]);
         let expected = original
-            .apply_command(0, &activation)
+            .apply_scenario_command(0, &activation)
             .expect("accepted mana ability");
         assert_eq!(
             replay
-                .apply_command(0, &activation)
+                .apply_scenario_command(0, &activation)
                 .expect("replay mana ability"),
             expected
         );
@@ -2468,11 +2500,11 @@ fn propaganda_attack_payment_commands_replay_identically() {
         )),
     };
     let undo_batch = original
-        .apply_command(0, &undo_first)
+        .apply_scenario_command(0, &undo_first)
         .expect("undo one mana activation while retaining two others");
     assert_eq!(
         replay
-            .apply_command(0, &undo_first)
+            .apply_scenario_command(0, &undo_first)
             .expect("replay selective mana undo"),
         undo_batch
     );
@@ -2501,11 +2533,11 @@ fn propaganda_attack_payment_commands_replay_identically() {
         )),
     };
     let expected = original
-        .apply_command(0, &commit)
+        .apply_scenario_command(0, &commit)
         .expect("commit the locked attack tax");
     assert_eq!(
         replay
-            .apply_command(0, &commit)
+            .apply_scenario_command(0, &commit)
             .expect("replay attack commit"),
         expected
     );
@@ -2653,12 +2685,12 @@ fn propaganda_reapply_does_not_collect_a_newly_restored_death_observer() {
     grant_sacrificing_fixture_mana(&mut e, observer, true);
     grant_sacrificing_fixture_mana(&mut e, later_source, false);
 
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("begin declaration payment");
-    e.apply_command(0, &activate_ability_for(&e, observer, 1, vec![]))
+    e.apply_scenario_command(0, &activate_ability_for(&e, observer, 1, vec![]))
         .expect("the observer sacrifices itself and sees its own death");
     let later_batch = e
-        .apply_command(0, &activate_ability_for(&e, later_source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&e, later_source, 1, vec![]))
         .expect("the later source sacrifices after the observer has left");
     assert_eq!(e.state.staged_trigger_groups.len(), 1);
 
@@ -2673,7 +2705,7 @@ fn propaganda_reapply_does_not_collect_a_newly_restored_death_observer() {
         .expect("observer activation receipt");
     assert!(receipt.reversible);
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::UndoManaAbility(
@@ -2711,7 +2743,7 @@ fn propaganda_reapply_preserves_event_time_lifelink_triggers() {
     grant_life_gain_observer(&mut e, petal);
     grant_lifelink(&mut e, talisman);
 
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("begin declaration payment");
     let transaction_id = e
         .state
@@ -2724,7 +2756,7 @@ fn propaganda_reapply_preserves_event_time_lifelink_triggers() {
         unreachable!()
     };
     activation.mana_option_index = 4;
-    e.apply_command(0, &petal_activation)
+    e.apply_scenario_command(0, &petal_activation)
         .expect("Lotus Petal sacrifices itself for one mana");
 
     let mut talisman_activation = activate_ability_for(&e, talisman, 1, vec![]);
@@ -2733,7 +2765,7 @@ fn propaganda_reapply_preserves_event_time_lifelink_triggers() {
     };
     activation.mana_option_index = 0;
     let talisman_batch = e
-        .apply_command(0, &talisman_activation)
+        .apply_scenario_command(0, &talisman_activation)
         .expect("Talisman damage and lifelink resolve during payment");
     assert_eq!(e.state.players[0].life, 20);
     assert!(e.state.staged_trigger_groups.is_empty());
@@ -2746,7 +2778,7 @@ fn propaganda_reapply_preserves_event_time_lifelink_triggers() {
         .iter()
         .find(|receipt| receipt.source_object_id == petal)
         .expect("reversible Lotus Petal receipt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::UndoManaAbility(
@@ -2770,7 +2802,7 @@ fn propaganda_reapply_preserves_event_time_lifelink_triggers() {
         .as_ref()
         .expect("attack payment remains pending")
         .clone();
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::CancelAttackDeclaration(
@@ -2805,7 +2837,7 @@ fn propaganda_attack_tap_reserves_once_per_turn_trigger_before_payment_mana_abil
     let observer = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     grant_once_per_turn_tap_observer(&mut e, observer);
 
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("the attack tap is reserved while the attack payment waits");
 
     assert_eq!(
@@ -2818,7 +2850,7 @@ fn propaganda_attack_tap_reserves_once_per_turn_trigger_before_payment_mana_abil
         "Sharae's once-per-turn trigger belongs to the earlier attack-tap event"
     );
 
-    e.apply_command(0, &activate_ability_for(&e, mana_creature, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability_for(&e, mana_creature, 0, vec![]))
         .expect("a later mana ability remains legal during the payment window");
     assert_eq!(
         e.state
@@ -2845,11 +2877,11 @@ fn propaganda_payer_concession_clears_pending_attack_for_survivors() {
     advance_to_main1_from_game_start(&mut e);
     let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main phase to begin combat");
     for _ in 0..3 {
         let player = e.state.priority_player_id();
-        e.apply_command(player, &pass())
+        e.apply_scenario_command(player, &pass())
             .expect("pass beginning-of-combat priority");
     }
     assert_eq!(
@@ -2865,7 +2897,7 @@ fn propaganda_payer_concession_clears_pending_attack_for_survivors() {
         })
         .copied()
         .expect("legal attack against the taxing player");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::DeclareAttackers(
@@ -2879,14 +2911,14 @@ fn propaganda_payer_concession_clears_pending_attack_for_survivors() {
     assert!(e.state.pending_attack_declaration.is_some());
 
     let departure = e
-        .apply_command(0, &concede())
+        .apply_scenario_command(0, &concede())
         .expect("the payer may concede during attack payment");
     assert!(e.state.pending_attack_declaration.is_none());
     assert!(e.state.players[1..].iter().all(|player| !player.has_lost));
     assert_ne!(e.state.priority_player_id(), 0);
     assert!(!departure.legal_by_player.contains_key(&0));
     assert!(e
-        .apply_command(e.state.priority_player_id(), &pass())
+        .apply_scenario_command(e.state.priority_player_id(), &pass())
         .is_ok());
 }
 
@@ -2906,7 +2938,7 @@ fn propaganda_mana_receipt_reports_later_spend_dependency() {
     let forest = inject_permanent_on_battlefield(&mut e, 0, "forest");
     let capital_city = inject_permanent_on_battlefield(&mut e, 0, "capital_city");
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("begin declaration payment");
     let transaction_id = e
         .state
@@ -2915,10 +2947,10 @@ fn propaganda_mana_receipt_reports_later_spend_dependency() {
         .expect("pending attack transaction")
         .transaction_id;
 
-    e.apply_command(0, &activate_ability_for(&e, forest, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability_for(&e, forest, 0, vec![]))
         .expect("Forest produces the green mana spent by Capital City");
     let city_batch = e
-        .apply_command(0, &activate_ability_for(&e, capital_city, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&e, capital_city, 1, vec![]))
         .expect("Capital City spends green and produces white mana");
     let pending = city_batch.legal_by_player[&0]
         .pending_attack_declaration
@@ -2941,7 +2973,7 @@ fn propaganda_mana_receipt_reports_later_spend_dependency() {
         .expect("Capital City receipt")
         .activation_command_index;
     let after_city_undo = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::UndoManaAbility(
@@ -2983,7 +3015,7 @@ fn propaganda_background_mana_is_attributed_before_receipt_mana() {
     let capital_city = inject_permanent_on_battlefield(&mut e, 0, "capital_city");
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
     e.state.players[0].mana_pool.green = 1;
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("begin declaration payment");
     let transaction_id = e
         .state
@@ -2992,10 +3024,10 @@ fn propaganda_background_mana_is_attributed_before_receipt_mana() {
         .expect("pending attack transaction")
         .transaction_id;
 
-    e.apply_command(0, &activate_ability_for(&e, forest, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability_for(&e, forest, 0, vec![]))
         .expect("Forest produces another green mana");
     let city_batch = e
-        .apply_command(0, &activate_ability_for(&e, capital_city, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&e, capital_city, 1, vec![]))
         .expect("Capital City spends one of the two green mana");
     let pending = city_batch.legal_by_player[&0]
         .pending_attack_declaration
@@ -3015,7 +3047,7 @@ fn propaganda_background_mana_is_attributed_before_receipt_mana() {
     assert!(forest_receipt.reversible);
     assert!(forest_receipt.unavailable_reason.is_empty());
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::UndoManaAbility(
@@ -3058,7 +3090,7 @@ fn propaganda_rebases_mana_lineage_after_undoing_an_intermediate_receipt() {
     let second_city = inject_permanent_on_battlefield(&mut e, 0, "capital_city");
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
     e.state.players[0].mana_pool.green = 1;
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("begin declaration payment");
     let transaction_id = e
         .state
@@ -3067,7 +3099,7 @@ fn propaganda_rebases_mana_lineage_after_undoing_an_intermediate_receipt() {
         .expect("pending attack transaction")
         .transaction_id;
 
-    e.apply_command(0, &activate_ability_for(&e, forest, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability_for(&e, forest, 0, vec![]))
         .expect("Forest A adds green to the payment pool");
     let mut first_city_activation = activate_ability_for(&e, first_city, 1, vec![]);
     let Some(Cmd::ActivateAbility(activation)) = first_city_activation.cmd.as_mut() else {
@@ -3091,7 +3123,7 @@ fn propaganda_rebases_mana_lineage_after_undoing_an_intermediate_receipt() {
         }),
         ..Default::default()
     });
-    e.apply_command(0, &first_city_activation)
+    e.apply_scenario_command(0, &first_city_activation)
         .expect("Capital City B spends the pre-window green mana");
     assert_eq!(e.state.players[0].mana_pool.green, 1);
     assert_eq!(e.state.players[0].mana_pool.white, 1);
@@ -3118,7 +3150,7 @@ fn propaganda_rebases_mana_lineage_after_undoing_an_intermediate_receipt() {
         ..Default::default()
     });
     let third_activation = e
-        .apply_command(0, &second_city_activation)
+        .apply_scenario_command(0, &second_city_activation)
         .expect("Capital City C spends Forest A's green mana");
     assert_eq!(e.state.players[0].mana_pool.green, 0);
     assert_eq!(e.state.players[0].mana_pool.white, 2);
@@ -3144,7 +3176,7 @@ fn propaganda_rebases_mana_lineage_after_undoing_an_intermediate_receipt() {
         .activation_command_index;
 
     let city_undo = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::UndoManaAbility(
@@ -3171,7 +3203,7 @@ fn propaganda_rebases_mana_lineage_after_undoing_an_intermediate_receipt() {
         "rebased Capital City C now spends background green, not Forest A's output"
     );
     let forest_index = forest_option.activation_command_index;
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::UndoManaAbility(
@@ -3205,7 +3237,7 @@ fn propaganda_attack_payment_allows_and_undoes_mana_ability() {
     let attacker = e.state.players[0].battlefield[0];
     let forest = inject_permanent_on_battlefield(&mut e, 0, "forest");
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("begin declaration payment");
     let transaction_id = e
         .state
@@ -3215,7 +3247,7 @@ fn propaganda_attack_payment_allows_and_undoes_mana_ability() {
         .transaction_id;
 
     let activation_batch = e
-        .apply_command(0, &activate_ability_for(&e, forest, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&e, forest, 0, vec![]))
         .expect("mana ability is allowed for the locked attack tax");
     assert_eq!(e.state.players[0].mana_pool.green, 1);
     assert!(e.state.objects.get(&forest).expect("forest").tapped);
@@ -3236,7 +3268,7 @@ fn propaganda_attack_payment_allows_and_undoes_mana_ability() {
         vec![activation_command_index]
     );
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::UndoManaAbility(
@@ -3270,7 +3302,7 @@ fn propaganda_undoes_earlier_cost_triggering_mana_ability_and_keeps_later_float(
     let forest = inject_permanent_on_battlefield(&mut e, 0, "forest");
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
     let initial_hand_size = e.state.players[0].hand.len();
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("begin declaration payment");
     let transaction_id = e
         .state
@@ -3284,10 +3316,10 @@ fn propaganda_undoes_earlier_cost_triggering_mana_ability_and_keeps_later_float(
         unreachable!()
     };
     activation.mana_option_index = 4;
-    e.apply_command(0, &petal_activation)
+    e.apply_scenario_command(0, &petal_activation)
         .expect("Lotus Petal produces green mana and its death trigger is parked");
     let forest_batch = e
-        .apply_command(0, &activate_ability_for(&e, forest, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&e, forest, 0, vec![]))
         .expect("later Forest activation remains independent");
     let pending = forest_batch.legal_by_player[&0]
         .pending_attack_declaration
@@ -3304,7 +3336,7 @@ fn propaganda_undoes_earlier_cost_triggering_mana_ability_and_keeps_later_float(
     );
 
     let undone = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::UndoManaAbility(
@@ -3352,7 +3384,7 @@ fn propaganda_undoes_earlier_sacrifice_mana_ability_and_keeps_later_sacrifice_ac
     let first_petal = inject_permanent_on_battlefield(&mut e, 0, "lotus_petal");
     let later_petal = inject_permanent_on_battlefield(&mut e, 0, "lotus_petal");
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("begin declaration payment");
     let transaction_id = e
         .state
@@ -3366,7 +3398,7 @@ fn propaganda_undoes_earlier_sacrifice_mana_ability_and_keeps_later_sacrifice_ac
         unreachable!()
     };
     activation.mana_option_index = 4;
-    e.apply_command(0, &first_activation)
+    e.apply_scenario_command(0, &first_activation)
         .expect("first Lotus Petal activation");
     let mut later_activation = activate_ability_for(&e, later_petal, 0, vec![]);
     let Some(Cmd::ActivateAbility(activation)) = later_activation.cmd.as_mut() else {
@@ -3374,7 +3406,7 @@ fn propaganda_undoes_earlier_sacrifice_mana_ability_and_keeps_later_sacrifice_ac
     };
     activation.mana_option_index = 4;
     let later_batch = e
-        .apply_command(0, &later_activation)
+        .apply_scenario_command(0, &later_activation)
         .expect("later independent Lotus Petal activation");
 
     let pending = later_batch.legal_by_player[&0]
@@ -3392,7 +3424,7 @@ fn propaganda_undoes_earlier_sacrifice_mana_ability_and_keeps_later_sacrifice_ac
     );
     let first_command_index = first_receipt.activation_command_index;
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::UndoManaAbility(
@@ -3440,7 +3472,7 @@ fn propaganda_undo_preserves_later_mana_ability_damage_prevention_result() {
     let first_coast = inject_permanent_on_battlefield(&mut e, 0, "yavimaya_coast");
     let later_coast = inject_permanent_on_battlefield(&mut e, 0, "yavimaya_coast");
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("begin declaration payment");
     let transaction_id = e
         .state
@@ -3455,7 +3487,7 @@ fn propaganda_undo_preserves_later_mana_ability_damage_prevention_result() {
         unreachable!()
     };
     activation.mana_option_index = 0;
-    e.apply_command(0, &first_activation)
+    e.apply_scenario_command(0, &first_activation)
         .expect("first Coast ability is prevented");
     assert_eq!(e.state.players[0].life, 20);
     assert_eq!(e.state.remaining_damage_prevention(0), 0);
@@ -3466,7 +3498,7 @@ fn propaganda_undo_preserves_later_mana_ability_damage_prevention_result() {
     };
     activation.mana_option_index = 0;
     let later_batch = e
-        .apply_command(0, &later_activation)
+        .apply_scenario_command(0, &later_activation)
         .expect("later Coast ability resolves against the exhausted shield");
     assert_eq!(e.state.players[0].life, 19);
 
@@ -3479,7 +3511,7 @@ fn propaganda_undo_preserves_later_mana_ability_damage_prevention_result() {
         .find(|option| option.source_object_id == first_coast)
         .expect("first Coast receipt")
         .activation_command_index;
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::UndoManaAbility(
@@ -3531,7 +3563,7 @@ fn propaganda_undo_reuses_later_prevention_choice_and_finite_shield_receipt() {
     let first_coast = inject_permanent_on_battlefield(&mut e, 0, "yavimaya_coast");
     let later_coast = inject_permanent_on_battlefield(&mut e, 0, "yavimaya_coast");
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("begin declaration payment");
     let transaction_id = e
         .state
@@ -3554,7 +3586,7 @@ fn propaganda_undo_reuses_later_prevention_choice_and_finite_shield_receipt() {
         unreachable!()
     };
     activation.mana_option_index = 0;
-    e.apply_command(0, &first_activation)
+    e.apply_scenario_command(0, &first_activation)
         .expect("first Coast damage asks for prevention ordering");
     let first_choice = e
         .state
@@ -3563,11 +3595,12 @@ fn propaganda_undo_reuses_later_prevention_choice_and_finite_shield_receipt() {
         .expect("first prevention choice")
         .presentation
         .candidates[0];
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::SubmitResolutionChoice(
                 tricerules_proto::ruled::v1::SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     chosen_object_ids: vec![first_choice],
                     ..Default::default()
                 },
@@ -3587,7 +3620,7 @@ fn propaganda_undo_reuses_later_prevention_choice_and_finite_shield_receipt() {
         unreachable!()
     };
     activation.mana_option_index = 0;
-    e.apply_command(0, &later_activation)
+    e.apply_scenario_command(0, &later_activation)
         .expect("later Coast damage asks for its own prevention ordering");
     let later_choice = e
         .state
@@ -3597,11 +3630,12 @@ fn propaganda_undo_reuses_later_prevention_choice_and_finite_shield_receipt() {
         .presentation
         .candidates[0];
     let later_resolved = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(
                     tricerules_proto::ruled::v1::SubmitResolutionChoice {
+                        resolution_prompt_id: 0,
                         chosen_object_ids: vec![later_choice],
                         ..Default::default()
                     },
@@ -3629,7 +3663,7 @@ fn propaganda_undo_reuses_later_prevention_choice_and_finite_shield_receipt() {
         .find(|option| option.source_object_id == first_coast)
         .expect("first Coast receipt")
         .activation_command_index;
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::UndoManaAbility(
@@ -3694,7 +3728,7 @@ fn propaganda_cancellation_reverses_attack_tap_but_keeps_mana_ability() {
     let observer = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     grant_once_per_turn_tap_observer(&mut e, observer);
     let begin = e
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("begin declaration payment");
     let pending = e
         .state
@@ -3702,11 +3736,11 @@ fn propaganda_cancellation_reverses_attack_tap_but_keeps_mana_ability() {
         .as_ref()
         .expect("pending attack declaration")
         .clone();
-    e.apply_command(0, &activate_ability_for(&e, mana_creature, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability_for(&e, mana_creature, 0, vec![]))
         .expect("mana ability resolves");
 
     let canceled = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CancelAttackDeclaration(
@@ -3764,12 +3798,12 @@ fn cannot_add_mana_while_declaring_blockers() {
     advance_to_declare_attackers(&mut e);
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attackers");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("ap pass declare attackers");
     let b = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
     assert_eq!(
         e.state.turn_step,
@@ -3784,7 +3818,7 @@ fn cannot_add_mana_while_declaring_blockers() {
     // cannot activate a mana ability (tap a land) yet (CR 605.3a).
     let land = inject_permanent_on_battlefield(&mut e, 1, "forest");
     let err = e
-        .apply_command(1, &activate_ability(land, 0, vec![]))
+        .apply_scenario_command(1, &activate_ability(land, 0, vec![]))
         .expect_err("mana ability must be illegal during declare blockers");
     assert!(
         format!("{err:?}").contains("attack or block declaration"),
@@ -3814,7 +3848,7 @@ fn zone_view_signals_first_strike_step_pending() {
     let goblin = inject_creature_with_stats(&mut e, 0, "goblin_striker", 1, 1);
 
     let b = e
-        .apply_command(0, &declare_attackers(vec![goblin]))
+        .apply_scenario_command(0, &declare_attackers(vec![goblin]))
         .expect("declare attacker");
     let zv = b
         .events
@@ -3848,12 +3882,14 @@ fn zone_view_signals_pending_after_blockers_declared() {
     let goblin = inject_creature_with_stats(&mut e, 0, "goblin_striker", 1, 1);
     let corpse = inject_creature_with_stats(&mut e, 1, "walking_corpse", 2, 2);
 
-    e.apply_command(0, &declare_attackers(vec![goblin]))
+    e.apply_scenario_command(0, &declare_attackers(vec![goblin]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("ap pass dec atk");
-    e.apply_command(1, &pass()).expect("def pass dec atk");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass dec atk");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass dec atk");
     let b = e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: goblin,
@@ -3875,8 +3911,11 @@ fn zone_view_signals_pending_after_blockers_declared() {
     );
 
     // And it must flip to false once the FS substep resolves.
-    e.apply_command(0, &pass()).expect("ap pass dec blk");
-    let b2 = e.apply_command(1, &pass()).expect("def pass dec blk");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass dec blk");
+    let b2 = e
+        .apply_scenario_command(1, &pass())
+        .expect("def pass dec blk");
     let zv2 = b2
         .events
         .iter()
@@ -3906,7 +3945,7 @@ fn zone_view_does_not_signal_pending_for_vanilla_combat() {
     advance_to_declare_attackers(&mut e);
     let bears = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 2, 2);
     let b = e
-        .apply_command(0, &declare_attackers(vec![bears]))
+        .apply_scenario_command(0, &declare_attackers(vec![bears]))
         .expect("declare attacker");
     let zv = b
         .events
@@ -3956,18 +3995,20 @@ fn divine_verdict_targets_only_combatants() {
     )
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
     let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let bystander = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &pass()).expect("ap pass begin combat");
-    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin combat");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::DeclareAttackers
     );
 
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     // The active player holds priority in DeclareAttackers after declaring; it casts the instant.
     assert_eq!(
@@ -3987,7 +4028,7 @@ fn divine_verdict_targets_only_combatants() {
     let idx = hand_index_for_card(&e, 0, "divine_verdict");
     // A creature not in combat is an illegal target.
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &cast_spell(
                 idx,
@@ -4004,7 +4045,7 @@ fn divine_verdict_targets_only_combatants() {
         "Divine Verdict cannot target a creature that is not attacking or blocking"
     );
     let idx = hand_index_for_card(&e, 0, "divine_verdict");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -4048,7 +4089,7 @@ fn must_attack_creature_declared_as_attacker_is_legal() {
         .unwrap()
         .must_attack_if_able = true;
     // Declaring it as an attacker must succeed.
-    e.apply_command(0, &declare_attackers(vec![goblin]))
+    e.apply_scenario_command(0, &declare_attackers(vec![goblin]))
         .expect("must-attack creature can be declared as attacker");
     assert!(
         e.state.combat.as_ref().unwrap().attacking.contains(&goblin),
@@ -4079,7 +4120,7 @@ fn must_attack_creature_omitted_from_attackers_is_illegal() {
     // Tap the grizzly_bears that advance_to_declare_attackers injected so it can't cause noise,
     // but since bears doesn't have must_attack, it doesn't matter — the goblin is the only
     // must-attack creature. Declaring empty attackers must fail.
-    let result = e.apply_command(0, &declare_attackers(vec![]));
+    let result = e.apply_scenario_command(0, &declare_attackers(vec![]));
     assert!(
         result.is_err(),
         "omitting must-attack creature from attackers should be illegal"
@@ -4108,7 +4149,7 @@ fn must_attack_creature_with_only_taxed_attack_edge_may_skip() {
         .must_attack_if_able = true;
     inject_permanent_on_battlefield(&mut e, 1, "propaganda");
 
-    e.apply_command(0, &declare_attackers(vec![]))
+    e.apply_scenario_command(0, &declare_attackers(vec![]))
         .expect("a costed attack is optional even for a must-attack creature");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndCombat);
 }
@@ -4135,7 +4176,7 @@ fn must_attack_creature_summoning_sick_may_skip() {
     }
     // The grizzly_bears from advance_to_declare_attackers doesn't have must_attack, so
     // declaring no attackers is legal (no eligible must-attack creature exists).
-    e.apply_command(0, &declare_attackers(vec![]))
+    e.apply_scenario_command(0, &declare_attackers(vec![]))
         .expect("summoning-sick must-attack creature does not force an attack");
 }
 
@@ -4159,7 +4200,7 @@ fn must_attack_creature_tapped_may_skip() {
         obj.must_attack_if_able = true;
         obj.tapped = true;
     }
-    e.apply_command(0, &declare_attackers(vec![]))
+    e.apply_scenario_command(0, &declare_attackers(vec![]))
         .expect("tapped must-attack creature does not force an attack");
 }
 
@@ -4185,17 +4226,18 @@ fn must_block_creature_omitted_from_blockers_is_illegal() {
         .get_mut(&blocker)
         .unwrap()
         .must_block_if_able = true;
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("active pass attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(0, &pass())
+        .expect("active pass attackers");
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass attackers");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::DeclareBlockers
     );
     // Declaring no blockers while must-block creature can block must be illegal.
-    let result = e.apply_command(1, &declare_blockers(vec![]));
+    let result = e.apply_scenario_command(1, &declare_blockers(vec![]));
     assert!(
         result.is_err(),
         "omitting must-block creature while it can legally block should be illegal"
@@ -4216,7 +4258,7 @@ fn legal_actions_surface_required_attacker_to_active_player() {
     )
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
     // An eligible ordinary attacker so BeginCombat enters DeclareAttackers.
     inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -4227,8 +4269,11 @@ fn legal_actions_surface_required_attacker_to_active_player() {
         .get_mut(&goblin)
         .unwrap()
         .must_attack_if_able = true;
-    e.apply_command(0, &pass()).expect("ap pass begin combat");
-    let batch = e.apply_command(1, &pass()).expect("nap pass begin combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin combat");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("nap pass begin combat");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::DeclareAttackers
@@ -4267,11 +4312,12 @@ fn legal_actions_surface_required_blocker_to_defender() {
         .get_mut(&blocker)
         .unwrap()
         .must_block_if_able = true;
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("active pass attackers");
+    e.apply_scenario_command(0, &pass())
+        .expect("active pass attackers");
     let batch = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass attackers");
     assert_eq!(
         e.state.turn_step,
@@ -4329,11 +4375,11 @@ fn prevented_lifelink_blocker_damage_gains_no_life() {
     // damage and 1 of the other blocker's.
     e.state.add_damage_prevention_shield(attacker, 3);
 
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("active pass");
-    e.apply_command(1, &pass()).expect("defender pass");
-    e.apply_command(
+    e.apply_scenario_command(0, &pass()).expect("active pass");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![
             BlockPair {
@@ -4347,12 +4393,12 @@ fn prevented_lifelink_blocker_damage_gains_no_life() {
         ]),
     )
     .expect("declare two blockers");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
-    e.apply_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
 
     let p1_life = e.state.players[1].life;
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &assign_combat_damage_cmd(attacker, vec![(lifelinker, 1), (plain_blocker, 1)]),
     )
@@ -4364,7 +4410,7 @@ fn prevented_lifelink_blocker_damage_gains_no_life() {
         .expect("finite shield allocation choice")
         .presentation
         .candidates[0];
-    e.apply_command(0, &submit_resolution_choice(vec![lifelinker_application]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![lifelinker_application]))
         .expect("allocate the shield to Child of Night first");
 
     assert_eq!(

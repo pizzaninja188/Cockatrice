@@ -1,5 +1,6 @@
 //! Actual-card semantics for five pinned Standard modal spells.
 //! Oracle and rulings checked 2026-09-22; CR 115.6, 608.2b, 611.2c, 614.1, 700.2c.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -75,7 +76,7 @@ fn issue_misc42_rydias_return() {
     inject_card_into_hand(&mut invalid, 0, "rydias_return");
     let slot = hand_index_for_card(&invalid, 0, "rydias_return");
     assert!(invalid
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(1, target_object(sorcery))])
         )
@@ -139,7 +140,7 @@ fn issue_misc42_damage_then_exile_modes() {
         let slot = hand_index_for_card(&illegal, 0, card);
         assert!(
             illegal
-                .apply_command(0, &cast_modal_spell(slot, vec![(1, target_object(land))]))
+                .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, target_object(land))]))
                 .is_err(),
             "{card}"
         );
@@ -174,7 +175,7 @@ fn issue_misc42_school_daze() {
     inject_card_into_hand(&mut invalid, 0, "school_daze");
     let slot = hand_index_for_card(&invalid, 0, "school_daze");
     assert!(invalid
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, vec![])]))
         .is_err());
 
     let mut fizzled = engine(842_033);

@@ -1,10 +1,11 @@
 # Composable card execution and authoring contract
 
-Status (2026-10-12): target design with a bounded targetless Instant/Sorcery implementation pilot.
+Status (2026-10-13): target design with a bounded targetless Instant/Sorcery implementation pilot
+and a cross-component resolution-prompt identity implementation.
 The [active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-targetless-spell-programs)
-owns currently accepted syntax and restrictions. The broader operations, contexts, custom-effect
-integration and prompt-ID protocol below remain migration targets. In particular, this pilot does
-not promise correlation of stale or duplicate answers across successive identical prompts.
+owns currently accepted syntax and restrictions. The broader operations, contexts and custom-effect
+integration below remain migration targets. Prompt identity applies to legacy resolution choices
+as well as program choices; its implementation does not widen accepted program syntax.
 The initial design was reviewed against `41e4ccf463930d8384ac00eb60ac21f931646b38` (2026-10-12).
 The former deck campaign remains outside scope. Cards require complete-card evidence and the
 applicable verification and visible acceptance gates independently of this design.
@@ -206,9 +207,10 @@ temporary reveal permissions and deferred stack exit. No new two-player assumpti
 
 ## Prompt identity and component contract
 
-Add mandatory logical `resolution_prompt_id` correlation to `PendingResolution`, `ResolutionChoiceRequired` and
-`SubmitResolutionChoice`. The current wire format cannot distinguish successive identical-candidate
-prompts. Candidate generation checks remain necessary and solve a different identity problem.
+Mandatory logical `resolution_prompt_id` correlation connects `PendingResolution`,
+`ResolutionChoiceRequired` and `SubmitResolutionChoice`. It distinguishes successive prompts even
+when their candidates are identical. Candidate generation checks remain necessary and solve a
+different identity problem.
 
 - Allocate deterministic, nonzero IDs monotonically per deciding player within a game. The correlation
   key is `(game, deciding_player, resolution_prompt_id)`. A globally increasing visible number would leak other
@@ -230,6 +232,31 @@ prompts. Candidate generation checks remain necessary and solve a different iden
 - Update every Rust/C++ constructor, pending/reconnect snapshot, choice UI submission and replay path
   that carries this contract. Updated clients and server must deploy together; missing/zero IDs reject.
   Existing captures require their original compatible binaries/data; no speculative legacy adapter.
+
+Every accepted gameplay batch, including initial state, reconnect and terminal state, carries an
+authoritative `resolution_prompt_state` after automatic work settles. An inactive state retires any
+staged resolution answer. An active state identifies the deciding player publicly and carries a
+nonzero optional ID only for that player. Other recipients receive no ID field. A pure standalone
+payment-preview response preserves the current state; a response with gameplay events or legal
+actions is not exempt from the snapshot contract. Server-synthesized, non-authoritative combat
+previews also preserve the current state when they omit a snapshot and contain only preview,
+log or identity-map events with no legal-action map. They never replace an engine gameplay batch.
+
+Only a `ResolutionChoiceRequired` matching the final active player and ID can install an answerable
+offer. Informational or superseded choice events may still publish their authorized reveal effects,
+but cannot stage answers. The same active ID without another matching choice event retains an existing
+exact offer, including its pending submission callback. A new ID without its offer, a missing gameplay
+snapshot, or a changed answer contract under the same ID fails closed. Relay reconnect caches follow
+the same final-state rule and preserve only the
+exact active offer. Generic per-player redaction must restore the ID only for its deciding recipient.
+
+All resolution answer paths capture the offered ID before a menu, dialog or cast draft and revalidate
+it before sending. Resolution-time land play also echoes that ID in `PlayLand`; ordinary land play
+uses zero. A stale resolution answer cannot become an ordinary cast or land play. Child work retires
+the parent offer; returning to the parent revalidates its candidates and issues a fresh ID without
+repeating completed instructions or reevaluating an already-entered conditional block.
+Retiring an offer expires its pending callbacks even when submitting the answer already emptied the
+local choice holder. Leaving a game clears its prompt state; numeric IDs are scoped to that game.
 
 Use an engine-owned `ResolutionPromptId(u64)` newtype. It is distinct from the existing model's authored
 `ChoiceId`, which identifies a branch/choice definition and remains stable across executions. Neither

@@ -6,6 +6,7 @@
 //! including Council of Echoes' source exclusion and the up-to-one bounds; CR 400.7 gives a card
 //! moved between zones new-object identity; and CR 508.4 / 702.181 keep mobilize tokens tapped
 //! and attacking while a dynamic graveyard count sets their number.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -28,7 +29,7 @@ fn engine_with(seed: u64, own: &[&str]) -> GameEngine {
 
 fn choose_graveyard_trigger_target(engine: &mut GameEngine, object_id: u32) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -49,7 +50,7 @@ fn choose_graveyard_trigger_target(engine: &mut GameEngine, object_id: u32) {
 
 fn choose_permanent_trigger_target(engine: &mut GameEngine, object_id: u32) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -64,7 +65,7 @@ fn choose_permanent_trigger_target(engine: &mut GameEngine, object_id: u32) {
 
 fn choose_no_trigger_targets(engine: &mut GameEngine) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -152,7 +153,7 @@ fn issue_375_coati_descend_4_needs_four_permanent_cards_and_targets_only_permane
 
     // The illegal choice is rejected without consuming the pending trigger.
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -233,7 +234,7 @@ fn issue_375_council_descend_4_bounce_can_choose_no_target_and_excludes_its_sour
     assert_eq!(engine.state.pending_triggers.len(), 1);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -316,7 +317,7 @@ fn issue_375_avenger_mobilize_counts_only_creature_cards_and_enters_attacking() 
         .cloned()
         .expect("Avenger may attack the opponent");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -376,7 +377,7 @@ fn issue_375_avenger_mobilize_counts_only_creature_cards_and_enters_attacking() 
         .cloned()
         .expect("Avenger may attack the opponent");
     empty
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {

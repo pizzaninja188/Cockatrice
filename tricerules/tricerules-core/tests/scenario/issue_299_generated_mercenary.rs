@@ -3,6 +3,7 @@
 //! CR 603.6c/603.10 and 700.4 cover dies/LKI; CR 111.2-111.4 cover token
 //! ownership and characteristics; CR 602.5d and 514.2 cover the token's
 //! sorcery-speed activation and end-of-turn pump cleanup.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -24,7 +25,7 @@ fn three_player_main1(seed: u64) -> GameEngine {
     while engine.state.turn_step != tricerules_core::TurnStep::Main1 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("advance three-player turn");
     }
     engine
@@ -42,7 +43,7 @@ fn resolve_entire_stack_three_player(engine: &mut GameEngine) {
             }
             let player = engine.state.priority_player_id();
             engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("three-player priority pass");
         }
     }
@@ -65,7 +66,9 @@ fn issue_299_nezumi_death_creates_one_untapped_controller_owned_mercenary_after_
     // the last-known controller, then resolve after the source is in its graveyard.
     let source = inject_creature_under_foreign_control(&mut engine, 1, 0, "nezumi_linkbreaker");
     engine.state.objects.get_mut(&source).unwrap().damage = 1;
-    engine.apply_command(0, &pass()).expect("state-based death");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("state-based death");
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     assert_eq!(engine.state.stack.len(), 1, "one pending dies trigger");
     assert!(battlefield_token_oids(&engine, 0, "mercenary_r_1_1").is_empty());
@@ -104,7 +107,7 @@ fn issue_299_sacrifice_death_creates_exactly_one_mercenary() {
     let rites = hand_index_for_card(&engine, 0, "village_rites");
     engine.state.players[0].mana_pool.black = 1;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_costs(rites, vec![], vec![permanent_cost_selection(0, source)]),
         )
@@ -162,7 +165,7 @@ fn issue_299_bounce_and_exile_are_not_dies() {
     );
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(first)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(first)))
         .expect("bounce Nezumi");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&first].zone, Zone::Hand);
@@ -181,7 +184,7 @@ fn issue_299_bounce_and_exile_are_not_dies() {
     );
     let wander_off = hand_index_for_card(&engine, 0, "wander_off");
     engine
-        .apply_command(0, &cast_spell(wander_off, target_object(second)))
+        .apply_scenario_command(0, &cast_spell(wander_off, target_object(second)))
         .expect("exile Nezumi");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&second].zone, Zone::Exile);
@@ -220,7 +223,7 @@ fn issue_299_hand_to_graveyard_discard_is_not_dies() {
     engine.state.players[0].mana_pool.red = 1;
     engine.state.players[0].mana_pool.colorless = 1;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_costs(
                 spell_slot,
@@ -253,7 +256,7 @@ fn issue_299_simultaneous_deaths_create_one_token_per_trigger_controller() {
     engine.state.objects.get_mut(&second).unwrap().damage = 1;
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("simultaneous death SBA");
     assert_eq!(engine.state.objects[&first].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&second].zone, Zone::Graveyard);
@@ -276,7 +279,7 @@ fn issue_299_three_player_foreign_owner_token_stays_with_last_controller() {
     engine.state.objects.get_mut(&source).unwrap().damage = 1;
     let priority = engine.state.priority_player_id();
     engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("three-player death SBA");
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     resolve_entire_stack_three_player(&mut engine);
@@ -308,7 +311,9 @@ fn issue_299_mercenary_activation_is_controller_only_sorcery_speed_and_eot_limit
     let friendly = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let opposing = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     engine.state.objects.get_mut(&source).unwrap().damage = 1;
-    engine.apply_command(0, &pass()).expect("death SBA");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("death SBA");
     resolve_entire_stack_two_player(&mut engine);
     let mercenaries = battlefield_token_oids(&engine, 0, "mercenary_r_1_1");
     let [mercenary] = mercenaries.as_slice() else {
@@ -326,7 +331,7 @@ fn issue_299_mercenary_activation_is_controller_only_sorcery_speed_and_eot_limit
         }
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &primitive_yield())
+            .apply_scenario_command(player, &primitive_yield())
             .expect("opponent yields back to controller");
         resolve_cleanup_discards_if_any(&mut engine);
     }
@@ -371,7 +376,9 @@ fn issue_299_mercenary_cannot_activate_outside_controller_sorcery_window() {
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_under_foreign_control(&mut engine, 1, 0, "nezumi_linkbreaker");
     engine.state.objects.get_mut(&source).unwrap().damage = 1;
-    engine.apply_command(0, &pass()).expect("death SBA");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("death SBA");
     resolve_entire_stack_two_player(&mut engine);
     let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let mercenaries = battlefield_token_oids(&engine, 0, "mercenary_r_1_1");
@@ -390,7 +397,7 @@ fn issue_299_mercenary_cannot_activate_outside_controller_sorcery_window() {
         }
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &primitive_yield())
+            .apply_scenario_command(player, &primitive_yield())
             .expect("advance to controller main phase");
         resolve_cleanup_discards_if_any(&mut engine);
     }
@@ -401,15 +408,15 @@ fn issue_299_mercenary_cannot_activate_outside_controller_sorcery_window() {
     inject_card_into_hand(&mut engine, 1, "lightning_bolt");
     grant_pool(&mut engine, 1);
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass priority to P1");
     let bolt = hand_index_for_card(&engine, 1, "lightning_bolt");
     engine
-        .apply_command(1, &cast_spell(bolt, target_player(0)))
+        .apply_scenario_command(1, &cast_spell(bolt, target_player(0)))
         .expect("P1 casts an instant while P0's turn is active");
     assert_eq!(engine.state.stack.len(), 1);
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("P1 passes priority");
     assert_eq!(engine.state.priority_player_id(), 0);
 

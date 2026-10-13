@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::Keyword;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
@@ -19,6 +20,7 @@ fn choose_trigger_target(object_id: u32) -> RuledCommand {
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -99,7 +101,7 @@ fn environmental_scientist_search_is_optional_private_and_basic_only() {
     );
     let slot = hand_index_for_card(&engine, 0, "environmental_scientist");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Environmental Scientist");
     pass_both_players(&mut engine);
     pass_both_players(&mut engine);
@@ -110,7 +112,7 @@ fn environmental_scientist_search_is_optional_private_and_basic_only() {
         .expect("optional search branch");
     assert!(branch.presentation.candidates.is_empty());
     engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("choose to search");
     let choice = engine
         .state
@@ -125,7 +127,7 @@ fn environmental_scientist_search_is_optional_private_and_basic_only() {
         .all(|oid| engine.state.objects[oid].card_id == "forest"));
     let forest = choice.presentation.candidates[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .expect("choose basic land");
     assert_eq!(engine.state.objects[&forest].zone, Zone::Hand);
 }
@@ -160,7 +162,7 @@ fn hire_a_crew_pumps_its_token_and_only_controlled_creatures() {
     );
     let slot = hand_index_for_card(&engine, 0, "hire_a_crew");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Hire a Crew");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -208,16 +210,20 @@ fn front_porch_sentries_rejects_friendly_target_and_uses_death_lki() {
     );
     let slot = hand_index_for_card(&engine, 0, "murder");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(sentries)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(sentries)))
         .expect("cast Murder");
-    engine.apply_command(0, &pass()).expect("caster passes");
-    engine.apply_command(1, &pass()).expect("Murder resolves");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("Murder resolves");
     assert_eq!(engine.state.objects[&sentries].zone, Zone::Graveyard);
     assert!(engine
-        .apply_command(0, &choose_trigger_target(friendly))
+        .apply_scenario_command(0, &choose_trigger_target(friendly))
         .is_err());
     engine
-        .apply_command(0, &choose_trigger_target(opposing))
+        .apply_scenario_command(0, &choose_trigger_target(opposing))
         .expect("choose opposing creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.effective_power(opposing), Some(1));
@@ -257,7 +263,7 @@ fn mountain_kings_return_recruit_creates_a_token_only_for_a_nonland_discard() {
             .expect("Recruit discard choice");
         assert!(choice.presentation.candidates.contains(&discard_oid));
         engine
-            .apply_command(0, &submit_resolution_choice(vec![discard_oid]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![discard_oid]))
             .expect("discard for Recruit");
         assert_eq!(engine.state.objects[&discard_oid].zone, Zone::Graveyard);
         engine

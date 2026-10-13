@@ -265,6 +265,8 @@ message SubmitResolutionChoice {
   // Player recipients for a mixed-domain resolution choice such as Proliferate. Kept distinct
   // from chosen_object_ids because PlayerId and ObjectId are separate engine identities.
   repeated int32 chosen_player_ids = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Required, nonzero identity of the exact active ResolutionChoiceRequired being answered.
+  uint64 resolution_prompt_id = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A player's answer to a TriggerOrderRequired (CR 603.3b): put THIS trigger on the stack next.
@@ -577,6 +579,9 @@ message PlayLand {
   // CR 712: for MDFC land cards, which face to enter the battlefield as (0 = front face,
   // 1 = back face). 0 for single-face lands (field absent or default is always front).
   uint32 face_index = 2;
+  // Required only when this land answers a parked resolution-time PlayCard offer.
+  // Ordinary land plays leave it zero.
+  uint64 resolution_prompt_id = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message MulliganDecision {
@@ -630,6 +635,18 @@ message RuledEventBatch {
   map<int32, LegalActions> legal_by_player = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Standalone requester-only query reply: never merged into a gameplay batch.
   PaymentPreview payment_preview = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Final actionable custom-resolution status after this batch. Present on accepted gameplay,
+  // initial, reconnect, and terminal batches; standalone payment-preview replies omit it.
+  ResolutionPromptState resolution_prompt_state = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+// Authoritative final status of the engine's single parked resolution choice. The public active
+// marker clears stale observer waiting/cache state even when the batch contains only a transient
+// offer or no ResolutionChoiceRequired event. Only the decider receives the exact answer ID.
+message ResolutionPromptState {
+  bool active = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  int32 deciding_player_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  optional uint64 resolution_prompt_id = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Stable authored presentation identity. Positional command coordinates such as face_index,
@@ -1765,6 +1782,10 @@ message ResolutionChoiceRequired {
   // identity metadata remains per-player; this list carries only chooser, ObjectId, and generation.
   repeated AcceptedPermanentSelection accepted_permanent_selections = 30
       [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Opaque identity of the final actionable offer, private to the deciding player. It is
+  // nonzero only when this event matches the batch's active ResolutionPromptState; transient
+  // informational offers carry zero and can never be answered.
+  uint64 resolution_prompt_id = 31 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no

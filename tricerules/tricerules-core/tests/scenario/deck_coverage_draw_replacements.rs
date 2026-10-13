@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use prost::Message;
 use tricerules_cards::primitives::{BasicLandType, ConditionObjectRef, ControllerReference};
 use tricerules_cards::{ContinuousEffectKind, CounterKind, EffectDuration, GameCondition};
@@ -9,7 +10,7 @@ use tricerules_proto::ruled::v1 as rv1;
 fn resolve_until_choice(engine: &mut GameEngine) -> rv1::ResolutionChoiceRequired {
     for _ in 0..20 {
         let actor = engine.state.priority_player_id();
-        let batch = engine.apply_command(actor, &pass()).unwrap();
+        let batch = engine.apply_scenario_command(actor, &pass()).unwrap();
         if let Some(choice) = find_resolution_choice(&batch) {
             return choice.clone();
         }
@@ -34,7 +35,7 @@ fn answer_replacements(
             .unwrap_or(&choice.replacement_options[0])
             .application_id;
         let batch = engine
-            .apply_command(
+            .apply_scenario_command(
                 choice.deciding_player_id,
                 &submit_resolution_choice(vec![selected]),
             )
@@ -79,7 +80,7 @@ fn paid_spell(engine: &mut GameEngine, card: &str) -> u32 {
     );
     let slot = hand_index_for_card(engine, 0, card);
     engine
-        .apply_command(caster, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(caster, &cast_spell(slot, Vec::new()))
         .unwrap();
     oid
 }
@@ -94,7 +95,7 @@ fn resolve(engine: &mut GameEngine, oid: u32) {
             "unexpected replacement choice"
         );
         let actor = engine.state.priority_player_id();
-        engine.apply_command(actor, &pass()).unwrap();
+        engine.apply_scenario_command(actor, &pass()).unwrap();
     }
     panic!("spell did not finish");
 }
@@ -109,7 +110,7 @@ fn brainstorm_stays_physically_on_stack_until_put_back_completes() {
     assert_eq!(engine.state.objects[&spell].zone, Zone::Stack);
     assert_eq!(engine.state.zone_change_generation[&spell], generation);
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             4,
             &submit_resolution_choice(choice.candidate_object_ids[..2].to_vec()),
         )
@@ -191,13 +192,13 @@ fn insight_actual_paid_cast_upkeep_does_not_consume_first_own_draw_step_exceptio
     assert_eq!(engine.state.players[0].hand.len(), before + 6);
     let ids = choice.candidate_object_ids[..2].to_vec();
     engine
-        .apply_command(4, &submit_resolution_choice(ids))
+        .apply_scenario_command(4, &submit_resolution_choice(ids))
         .unwrap();
     assert_eq!(engine.state.objects[&brainstorm].zone, Zone::Graveyard);
     let before_step = engine.state.players[0].hand.len();
     for _ in 0..3 {
         let actor = engine.state.priority_player_id();
-        engine.apply_command(actor, &pass()).unwrap();
+        engine.apply_scenario_command(actor, &pass()).unwrap();
     }
     assert_eq!(engine.state.turn_step, TurnStep::Draw);
     assert_eq!(engine.state.players[0].hand.len(), before_step + 1);
@@ -222,7 +223,7 @@ fn reflection_insight_first_own_step_is_three_in_both_initial_source_orders() {
         let before = engine.state.players[0].hand.len();
         for _ in 0..3 {
             let actor = engine.state.priority_player_id();
-            engine.apply_command(actor, &pass()).unwrap();
+            engine.apply_scenario_command(actor, &pass()).unwrap();
         }
         assert_eq!(engine.state.turn_step, TurnStep::Draw);
         assert_eq!(engine.state.players[0].hand.len(), before + 3);
@@ -252,18 +253,18 @@ fn draw_order_choices_reject_foreign_duplicate_unknown_and_prior_prompt_handles_
     ] {
         let before = serde_json::to_vec(&engine.state).unwrap();
         assert!(engine
-            .apply_command(actor, &submit_resolution_choice(ids))
+            .apply_scenario_command(actor, &submit_resolution_choice(ids))
             .is_err());
         assert_eq!(serde_json::to_vec(&engine.state).unwrap(), before);
     }
     let batch = engine
-        .apply_command(4, &submit_resolution_choice(vec![handle]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![handle]))
         .unwrap();
     let next = find_resolution_choice(&batch).unwrap();
     assert!(!next.candidate_object_ids.contains(&handle));
     let before = serde_json::to_vec(&engine.state).unwrap();
     assert!(engine
-        .apply_command(4, &submit_resolution_choice(vec![handle]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![handle]))
         .is_err());
     assert_eq!(serde_json::to_vec(&engine.state).unwrap(), before);
 }
@@ -288,7 +289,7 @@ fn concession_of_foreign_replacement_source_rebuilds_parked_draw_and_finishes_on
     let before = engine.state.players[0].hand.len();
     let choice = resolve_until_choice(&mut engine);
     assert_eq!(choice.replacement_options.len(), 2);
-    engine.apply_command(9, &concede()).unwrap();
+    engine.apply_scenario_command(9, &concede()).unwrap();
     assert!(
         engine.state.pending_resolution.is_none(),
         "departed source must not strand the remaining drawer"
@@ -326,7 +327,7 @@ fn brainstorm_expanded_draw_and_private_ordered_putback_each_change_generation_o
     assert_eq!(choice.deciding_player_id, 4);
     assert_eq!(engine.state.players[0].hand.len(), before + 6);
     engine
-        .apply_command(4, &submit_resolution_choice(drawn[..2].to_vec()))
+        .apply_scenario_command(4, &submit_resolution_choice(drawn[..2].to_vec()))
         .unwrap();
     assert_eq!(*engine.state.players[0].library.front().unwrap(), drawn[1]);
     assert_eq!(engine.state.players[0].hand.len(), before + 4);
@@ -353,7 +354,7 @@ fn draw_then_discard_replacements_finish_before_frantic_search_private_hand_and_
     assert_eq!(discard.choice_kind(), rv1::ChoiceKind::HandCards);
     assert_eq!(engine.state.players[0].hand.len(), before + 8);
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             4,
             &submit_resolution_choice(discard.candidate_object_ids[..2].to_vec()),
         )
@@ -363,7 +364,7 @@ fn draw_then_discard_replacements_finish_before_frantic_search_private_hand_and_
     assert!(lands.candidate_object_ids.contains(&land));
     assert_eq!(engine.state.players[0].hand.len(), before + 6);
     engine
-        .apply_command(4, &submit_resolution_choice(vec![land]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![land]))
         .unwrap();
     assert!(!engine.state.objects[&land].tapped);
     assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
@@ -439,7 +440,7 @@ fn apnap_fanout_parks_at_nonconsecutive_drawer_after_prior_partial_draws_and_tri
         .map(|player| player.hand.len())
         .collect::<Vec<_>>();
     engine
-        .apply_command(4, &activate_ability(jace, 0, Vec::new()))
+        .apply_scenario_command(4, &activate_ability(jace, 0, Vec::new()))
         .unwrap();
     let choice = resolve_until_choice(&mut engine);
     assert_eq!(choice.deciding_player_id, 9);
@@ -465,7 +466,7 @@ fn apnap_fanout_parks_at_nonconsecutive_drawer_after_prior_partial_draws_and_tri
         }
         answer_trigger_order_in_engine_order(&mut engine);
         let actor = engine.state.priority_player_id();
-        engine.apply_command(actor, &pass()).unwrap();
+        engine.apply_scenario_command(actor, &pass()).unwrap();
     }
     assert_eq!(
         engine.state.objects[&ominous].counter_count(CounterKind::Foreshadow),
@@ -481,6 +482,7 @@ fn mandatory_draw_replacement_rejects_decline_and_unrelated_answer_fields_atomic
     paid_spell(&mut engine, "divination");
     let choice = resolve_until_choice(&mut engine);
     let valid = rv1::SubmitResolutionChoice {
+        resolution_prompt_id: 0,
         chosen_object_ids: vec![choice.candidate_object_ids[0]],
         ..Default::default()
     };
@@ -511,7 +513,7 @@ fn mandatory_draw_replacement_rejects_decline_and_unrelated_answer_fields_atomic
         let command = rv1::RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(answer)),
         };
-        assert!(engine.apply_command(4, &command).is_err());
+        assert!(engine.apply_scenario_command(4, &command).is_err());
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     }
 }
@@ -537,7 +539,11 @@ fn serialized_draw_order_and_brainstorm_completion_replay_partial_hands_identica
     let mut commands = Vec::new();
     let slot = hand_index_for_card(&engine, 0, "brainstorm");
     let cast = cast_spell(slot, Vec::new());
-    commands.push((4, cast.clone(), engine.apply_command(4, &cast).unwrap()));
+    commands.push((
+        4,
+        cast.clone(),
+        engine.apply_scenario_command(4, &cast).unwrap(),
+    ));
     for _ in 0..30 {
         let (actor, command) = if let Some(pending) = engine.state.pending_resolution.as_ref() {
             let ids = if pending.presentation.choice_kind == rv1::ChoiceKind::ReplacementEffect {
@@ -551,7 +557,7 @@ fn serialized_draw_order_and_brainstorm_completion_replay_partial_hands_identica
         } else {
             break;
         };
-        let batch = engine.apply_command(actor, &command).unwrap();
+        let batch = engine.apply_scenario_command(actor, &command).unwrap();
         commands.push((actor, command, batch));
     }
     assert!(engine.state.stack.is_empty());
@@ -564,7 +570,10 @@ fn serialized_draw_order_and_brainstorm_completion_replay_partial_hands_identica
     for (actor, command, batch) in commands {
         let encoded = command.encode_to_vec();
         let decoded = rv1::RuledCommand::decode(encoded.as_slice()).unwrap();
-        assert_eq!(replay.apply_command(actor, &decoded).unwrap(), batch);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &decoded).unwrap(),
+            batch
+        );
     }
     assert_eq!(
         replay.diagnostic_snapshot().unwrap(),
@@ -593,7 +602,7 @@ fn departed_draw_step_decider_and_departed_spell_caster_never_strand_replacement
             .iter()
             .map(|player| player.hand.len())
             .collect::<Vec<_>>();
-        engine.apply_command(4, &concede()).unwrap();
+        engine.apply_scenario_command(4, &concede()).unwrap();
         assert!(engine.state.pending_resolution.is_none());
         assert_eq!(engine.state.players[1].hand.len(), before[1]);
         assert_eq!(engine.state.players[2].hand.len(), before[2]);
@@ -602,7 +611,7 @@ fn departed_draw_step_decider_and_departed_spell_caster_never_strand_replacement
         }
         assert!(!engine.state.players[engine.state.priority_idx].has_lost);
         let actor = engine.state.priority_player_id();
-        engine.apply_command(actor, &pass()).unwrap();
+        engine.apply_scenario_command(actor, &pass()).unwrap();
     }
 }
 
@@ -630,7 +639,7 @@ fn discard_then_draw_preserves_mandatory_empty_hand_and_optional_accept_decline_
         grant_pool(&mut engine, 0);
         let slot = hand_index_for_card(&engine, 0, card);
         engine
-            .apply_command(4, &cast_spell(slot, Vec::new()))
+            .apply_scenario_command(4, &cast_spell(slot, Vec::new()))
             .unwrap();
         let before = engine.state.players[0].hand.len();
         let library = engine.state.players[0].library.len();
@@ -647,7 +656,7 @@ fn discard_then_draw_preserves_mandatory_empty_hand_and_optional_accept_decline_
                     Vec::new()
                 };
                 let batch = engine
-                    .apply_command(4, &submit_resolution_choice(ids))
+                    .apply_scenario_command(4, &submit_resolution_choice(ids))
                     .unwrap();
                 if accept {
                     choice = find_resolution_choice(&batch).unwrap().clone();
@@ -689,12 +698,12 @@ fn library_of_leng_destination_finishes_before_discard_tail_replacements_and_dra
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "abandon_attachments");
     engine
-        .apply_command(4, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(4, &cast_spell(slot, Vec::new()))
         .unwrap();
     let choice = resolve_until_choice(&mut engine);
     assert_eq!(choice.choice_kind(), rv1::ChoiceKind::HandCards);
     let batch = engine
-        .apply_command(4, &submit_resolution_choice(vec![returned]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![returned]))
         .unwrap();
     let destination = find_resolution_choice(&batch).unwrap();
     assert_eq!(
@@ -703,7 +712,7 @@ fn library_of_leng_destination_finishes_before_discard_tail_replacements_and_dra
     );
     assert_eq!(engine.state.objects[&returned].zone, Zone::Hand);
     let batch = engine
-        .apply_command(4, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![1]))
         .unwrap();
     assert_eq!(engine.state.objects[&returned].zone, Zone::Library);
     assert_eq!(
@@ -754,7 +763,7 @@ fn failed_replacement_leaves_count_only_success_and_finish_discard_and_authored_
         "failed replacement leaves cannot manufacture draw triggers"
     );
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             4,
             &submit_resolution_choice(discard.candidate_object_ids[..2].to_vec()),
         )
@@ -763,7 +772,7 @@ fn failed_replacement_leaves_count_only_success_and_finish_discard_and_authored_
     assert!(lands.candidate_object_ids.contains(&land));
     assert!(!engine.state.players[0].has_lost);
     engine
-        .apply_command(4, &submit_resolution_choice(vec![land]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![land]))
         .unwrap();
     assert!(!engine.state.objects[&land].tapped);
     assert!(engine.state.players[0].has_lost);
@@ -778,7 +787,7 @@ fn caster_departure_finishes_foreign_drawer_fanout_without_replaying_prior_draws
     inject_permanent_on_battlefield(&mut engine, 1, "thought_reflection");
     inject_permanent_on_battlefield(&mut engine, 1, "thought_reflection");
     engine
-        .apply_command(4, &activate_ability(jace, 0, Vec::new()))
+        .apply_scenario_command(4, &activate_ability(jace, 0, Vec::new()))
         .unwrap();
     let before = engine
         .state
@@ -796,7 +805,7 @@ fn caster_departure_finishes_foreign_drawer_fanout_without_replaying_prior_draws
     let choice = resolve_until_choice(&mut engine);
     assert_eq!(choice.deciding_player_id, 9);
     assert_eq!(engine.state.players[0].hand.len(), before[0] + 1);
-    let departure = engine.apply_command(4, &concede()).unwrap();
+    let departure = engine.apply_scenario_command(4, &concede()).unwrap();
     // CR 608.2m/800.4j: a legally started instruction finishes for surviving players.
     assert!(engine.state.pending_resolution.is_some());
     assert!(engine.state.stack.is_empty());
@@ -804,7 +813,7 @@ fn caster_departure_finishes_foreign_drawer_fanout_without_replaying_prior_draws
     assert_eq!(engine.state.players[2].hand.len(), before[2]);
     let snapshot = engine.diagnostic_snapshot().unwrap();
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             27,
             &submit_resolution_choice(vec![choice.candidate_object_ids[0]])
         )
@@ -812,7 +821,7 @@ fn caster_departure_finishes_foreign_drawer_fanout_without_replaying_prior_draws
     assert_eq!(engine.diagnostic_snapshot().unwrap(), snapshot);
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 9,
                 &submit_resolution_choice(vec![choice.candidate_object_ids[0]])
             )
@@ -853,7 +862,7 @@ fn caster_departure_finishes_foreign_drawer_fanout_without_replaying_prior_draws
     );
     let complete = engine.diagnostic_snapshot().unwrap();
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             9,
             &submit_resolution_choice(vec![resumed.candidate_object_ids[0]])
         )
@@ -879,7 +888,7 @@ fn stale_source_incarnation_rejects_then_new_incarnation_can_apply_to_child_even
         .unwrap()
         .application_id;
     let batch = engine
-        .apply_command(4, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![chosen]))
         .unwrap();
     let child = find_resolution_choice(&batch).unwrap().clone();
     let stale = child.replacement_options[0].clone();
@@ -890,7 +899,7 @@ fn stale_source_incarnation_rejects_then_new_incarnation_can_apply_to_child_even
         .or_default() += 2;
     let before = engine.diagnostic_snapshot().unwrap();
     assert!(engine
-        .apply_command(4, &submit_resolution_choice(vec![stale.application_id]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![stale.application_id]))
         .is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     *engine
@@ -900,7 +909,7 @@ fn stale_source_incarnation_rejects_then_new_incarnation_can_apply_to_child_even
         .unwrap() -= 2;
     *engine.state.zone_change_generation.entry(a).or_default() += 2;
     let batch = engine
-        .apply_command(4, &submit_resolution_choice(vec![stale.application_id]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![stale.application_id]))
         .unwrap();
     let next = find_resolution_choice(&batch).unwrap();
     assert!(next
@@ -974,7 +983,7 @@ fn whole_hand_discard_library_top_order_completes_before_expanded_draw_and_adven
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "hearth_elemental_stoke_genius");
     engine
-        .apply_command(4, &cast_spell_face(slot, Vec::new(), 1))
+        .apply_scenario_command(4, &cast_spell_face(slot, Vec::new(), 1))
         .unwrap();
     let destination = resolve_until_choice(&mut engine);
     assert_eq!(
@@ -983,20 +992,20 @@ fn whole_hand_discard_library_top_order_completes_before_expanded_draw_and_adven
     );
     for selected in [1, 1, 0] {
         engine
-            .apply_command(4, &submit_resolution_choice(vec![selected]))
+            .apply_scenario_command(4, &submit_resolution_choice(vec![selected]))
             .unwrap();
     }
     assert_eq!(engine.state.objects[&adventure].zone, Zone::Stack);
     let before = engine.diagnostic_snapshot().unwrap();
     assert!(engine
-        .apply_command(9, &submit_resolution_choice(vec![second, first]))
+        .apply_scenario_command(9, &submit_resolution_choice(vec![second, first]))
         .is_err());
     assert!(engine
-        .apply_command(4, &submit_resolution_choice(vec![first, first]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![first, first]))
         .is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     let batch = engine
-        .apply_command(4, &submit_resolution_choice(vec![second, first]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![second, first]))
         .unwrap();
     assert_eq!(
         engine.state.players[0]
@@ -1036,13 +1045,13 @@ fn foreign_source_departure_finishes_scheduled_draw_without_repeating_step_actio
     engine.state.priority_idx = 0;
     let before = engine.state.players[0].hand.len();
     resolve_until_choice(&mut engine);
-    engine.apply_command(9, &concede()).unwrap();
+    engine.apply_scenario_command(9, &concede()).unwrap();
     assert_eq!(engine.state.turn_step, TurnStep::Draw);
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.players[0].hand.len(), before + 2);
     for _ in 0..2 {
         let actor = engine.state.priority_player_id();
-        engine.apply_command(actor, &pass()).unwrap();
+        engine.apply_scenario_command(actor, &pass()).unwrap();
     }
     assert_eq!(engine.state.turn_step, TurnStep::Main1);
     assert_eq!(engine.state.players[0].hand.len(), before + 2);

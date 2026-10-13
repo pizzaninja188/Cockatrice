@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, CounterKind, EffectDuration, PermanentTypeFilter, TypeLineAddition,
 };
@@ -27,7 +28,7 @@ fn put_flunkies_trigger_on_stack(engine: &mut GameEngine) {
     grant_pool(engine, 0);
     let slot = hand_index_for_card(engine, 0, "goblin-town_flunkies");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Goblin-town Flunkies");
     pass_both_players(engine);
     assert!(engine
@@ -133,7 +134,7 @@ fn amass_stages_counter_replacement_choices_before_mutation() {
     );
     let selected = pending.presentation.candidates[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![selected]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
         .expect("choose a counter replacement order");
 
     assert!(engine.state.pending_resolution.is_none());
@@ -162,7 +163,7 @@ fn added_army_subtype_is_generation_bound_and_clears_on_departure() {
     inject_card_into_hand(&mut engine, 0, "unsummon");
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(army)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(army)))
         .expect("cast Unsummon");
     pass_both_players(&mut engine);
 
@@ -195,7 +196,7 @@ fn multiple_armies_use_a_public_generation_bound_choice() {
     assert_eq!(pending.presentation.candidates, vec![goblin, zombie]);
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![zombie]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![zombie]))
         .expect("choose Zombie Army");
     assert_eq!(
         engine.state.objects[&goblin].counter_count(CounterKind::PlusOnePlusOne),
@@ -227,11 +228,11 @@ fn stale_army_choice_is_rejected_without_losing_the_pending_choice() {
         .entry(first)
         .or_insert(0) += 1;
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![first]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![first]))
         .is_err());
     assert!(engine.state.pending_resolution.is_some());
     engine
-        .apply_command(0, &submit_resolution_choice(vec![second]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![second]))
         .expect("other Army remains a valid choice");
 }
 
@@ -299,7 +300,7 @@ fn token_entry_replacement_choice_resumes_amass_before_finishing() {
         pending.presentation.candidates[0]
     };
     engine
-        .apply_command(0, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![application]))
         .expect("choose an entry replacement");
 
     assert!(engine.state.pending_resolution.is_none());
@@ -323,7 +324,7 @@ fn misty_mountains_raider_amasses_two_when_its_controller_attacks() {
     let raider = inject_creature_on_battlefield(&mut engine, 0, "misty_mountains_raider");
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("advance to beginning of combat");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -331,7 +332,7 @@ fn misty_mountains_raider_amasses_two_when_its_controller_attacks() {
         tricerules_core::TurnStep::DeclareAttackers
     );
     engine
-        .apply_command(0, &declare_attackers(vec![raider]))
+        .apply_scenario_command(0, &declare_attackers(vec![raider]))
         .expect("attack with Misty Mountains Raider");
     pass_both_players(&mut engine);
 

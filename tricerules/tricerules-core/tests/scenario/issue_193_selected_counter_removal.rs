@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
 use tricerules_proto::ruled::v1::{
     cost_selection::Selection, ruled_command::Cmd, ruled_event::Ev, CostChoiceKind, CostObjectRef,
@@ -80,7 +81,7 @@ fn issue_193_ray_fillet_publishes_and_pays_from_a_selected_controlled_creature()
 
     let before = engine.state.players[0].hand.len();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 ray,
@@ -159,7 +160,7 @@ fn issue_193_illegal_or_stale_counter_sources_reject_without_partial_payment() {
         counter_selection(1, opponent, generation(&engine, opponent)),
     ] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_ability_with_costs(ray, 0, vec![], vec![selected]),
             )
@@ -183,7 +184,7 @@ fn issue_193_illegal_or_stale_counter_sources_reject_without_partial_payment() {
     engine.state.players[1].battlefield.push(funded);
     engine.state.objects.get_mut(&funded).unwrap().controller = 1;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 ray,
@@ -250,7 +251,7 @@ fn issue_193_sage_of_fables_supplies_a_counter_then_spends_it_from_the_other_wiz
     );
     let slot = hand_index_for_card(&engine, 0, "fugitive_wizard");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast the other Wizard");
     pass_both_players(&mut engine);
     let wizard = engine.state.players[0]
@@ -280,7 +281,7 @@ fn issue_193_sage_of_fables_supplies_a_counter_then_spends_it_from_the_other_wiz
     let generation = engine.state.zone_change_generation[&wizard];
     let before = engine.state.players[0].hand.len();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 sage,
@@ -338,7 +339,7 @@ fn issue_193_ability_payment_preview_does_not_offer_spell_only_convoke() {
         unreachable!();
     };
 
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             transaction_id: 193,
@@ -369,7 +370,7 @@ fn issue_193_ability_payment_preview_does_not_offer_spell_only_convoke() {
             }),
             kind: tricerules_proto::ruled::v1::ObjectPaymentKind::Generic as i32,
         });
-    let stale_selection_preview = engine.preview_payment(
+    let stale_selection_preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             transaction_id: 193,

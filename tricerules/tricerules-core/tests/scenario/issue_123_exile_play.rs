@@ -1,6 +1,7 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::state::ExilePlayPermissionScope;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::dev_command::Dev;
 use tricerules_proto::ruled::v1::{self as rv1, DevCommand, DevMoveCard, DevZone};
 
@@ -11,7 +12,7 @@ fn grant_from_percussionist(e: &mut GameEngine, exiled_card: &str) -> u32 {
     e.state.players[0].library.push_front(top);
     e.state.objects.get_mut(&source).expect("source").damage = 2;
     let priority_player = e.state.priority_player_id();
-    e.apply_command(priority_player, &pass())
+    e.apply_scenario_command(priority_player, &pass())
         .expect("run state-based actions");
     resolve_entire_stack_two_player(e);
     top
@@ -20,6 +21,7 @@ fn grant_from_percussionist(e: &mut GameEngine, exiled_card: &str) -> u32 {
 fn play_land_from_exile(object_id: u32, generation: u64, face_index: u32) -> rv1::RuledCommand {
     rv1::RuledCommand {
         cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+            resolution_prompt_id: 0,
             source: Some(rv1::LandSource {
                 location: Some(rv1::land_source::Location::ExileObjectId(object_id)),
                 expected_zone_change_generation: Some(generation),
@@ -35,7 +37,7 @@ fn advance_to_turn_instance(engine: &mut GameEngine, target: u64) {
         resolve_cleanup_discards_if_any(engine);
         let priority = engine.state.priority_player_id();
         engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("advance turn");
         commands += 1;
         assert!(commands < 200, "turn advancement stalled");
@@ -92,7 +94,7 @@ fn percussionist_grants_a_generation_bound_group_and_land_actions() {
         .is_empty());
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &play_land_from_exile(exiled, engine.state.zone_change_generation[&exiled], 1),
         )
@@ -123,7 +125,7 @@ fn leaving_exile_invalidates_the_old_generation_permission() {
     let generation = engine.state.zone_change_generation[&exiled];
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &rv1::RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::DevCommand(DevCommand {
@@ -198,9 +200,11 @@ fn exile_land_actions_obey_timing_count_player_and_face_validation() {
         .as_mut()
         .expect("land source")
         .expected_zone_change_generation = None;
-    assert!(engine.apply_command(0, &missing_generation).is_err());
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(0, &missing_generation)
+        .is_err());
+    assert!(engine
+        .apply_scenario_command(
             0,
             &play_land_from_exile(exiled, generation.saturating_sub(1), 0),
         )
@@ -217,14 +221,14 @@ fn exile_land_actions_obey_timing_count_player_and_face_validation() {
         .zone_land_actions
         .is_empty());
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &play_land_from_exile(exiled, engine.state.zone_change_generation[&exiled], 0,),
         )
         .is_err());
     engine.state.lands_played_this_turn = 0;
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &play_land_from_exile(exiled, engine.state.zone_change_generation[&exiled], 2,),
         )
@@ -358,7 +362,7 @@ fn impossible_inferno_checks_delirium_during_resolution_and_grants_permission() 
     );
 
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Impossible Inferno");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -410,7 +414,7 @@ fn impossible_inferno_without_delirium_deals_damage_but_does_not_exile() {
     );
 
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Impossible Inferno");
     resolve_entire_stack_two_player(&mut engine);
 

@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
@@ -59,7 +60,7 @@ fn publishes_one_required_choice_with_private_discard_candidates() {
     let fodder_slot = hand_index_for_card(&engine, 0, "grizzly_bears");
     let swamp = relocate_to_battlefield(&mut engine, 0, "swamp", false);
     let batch = engine
-        .apply_command(0, &activate_ability(swamp, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(swamp, 0, vec![]))
         .expect("mana ability republishes cast legality");
     let action = batch.legal_by_player[&0]
         .hand_actions
@@ -100,7 +101,7 @@ fn discard_option_is_atomic_and_destroys_the_target() {
     let fodder_slot = hand_index_for_card(&engine, 0, "grizzly_bears");
     let fodder = engine.state.players[0].hand[fodder_slot];
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 source_slot,
@@ -135,7 +136,7 @@ fn life_option_emits_one_life_change_and_destroys_the_target() {
     let source_slot = hand_index_for_card(&engine, 0, "bitter_triumph");
     let hand_before = engine.state.players[0].hand.len();
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 source_slot,
@@ -165,7 +166,7 @@ fn life_option_is_legal_at_three_and_unselectable_below_three() {
     let target = relocate_to_battlefield(&mut exact, 1, "grizzly_bears", false);
     let slot = hand_index_for_card(&exact, 0, "bitter_triumph");
     exact
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(slot, target_object(target), vec![pay_life_option()]),
         )
@@ -176,7 +177,7 @@ fn life_option_is_legal_at_three_and_unselectable_below_three() {
     low.state.players[0].life = 2;
     let swamp = relocate_to_battlefield(&mut low, 0, "swamp", false);
     let batch = low
-        .apply_command(0, &activate_ability(swamp, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(swamp, 0, vec![]))
         .expect("mana ability republishes cast legality");
     let action = batch.legal_by_player[&0]
         .hand_actions
@@ -206,7 +207,7 @@ fn spell_is_not_offered_when_neither_additional_cost_can_be_paid() {
         engine.state.players[0].library.push_back(oid);
     }
     let batch = engine
-        .apply_command(0, &activate_ability(swamp, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(swamp, 0, vec![]))
         .expect("mana ability republishes cast legality");
     assert!(!batch.legal_by_player[&0]
         .hand_actions
@@ -250,7 +251,7 @@ fn rejects_invalid_cost_announcements_without_partial_payment() {
         let before_stack = engine.state.stack.len();
         let before_command_index = engine.state.command_index;
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell_with_cast_cost_groups(source_slot, target_object(target), selections),
             )

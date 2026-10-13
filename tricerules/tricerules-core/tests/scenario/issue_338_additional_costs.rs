@@ -8,6 +8,7 @@
 //! cannot be chosen without a creature; Laughing Mad still pays additional costs on a flashback
 //! cast). Governing CR concepts: CR 601.2b (announced additional costs), 601.2f (total cost),
 //! 701.4 (behold), 701.30 (blight), 701.16 (discard), and 602.5 (announced cost receipts).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -107,13 +108,15 @@ fn corrupted_conviction_requires_a_creature_sacrifice_and_draws_two() {
     );
     let slot = hand_index_for_card(&engine, 0, "corrupted_conviction");
     assert!(
-        engine.apply_command(0, &cast_spell(slot, vec![])).is_err(),
+        engine
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .is_err(),
         "the mandatory sacrifice cannot be skipped"
     );
     let slot = hand_index_for_card(&engine, 0, "corrupted_conviction");
     let hand_before = engine.state.players[0].hand.len();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -171,7 +174,7 @@ fn pumpkin_bombardment_supports_the_mana_and_discard_options() {
     );
     let slot = hand_index_for_card(&engine, 0, "pumpkin_bombardment");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(slot, target_object(target), vec![option(1)]),
         )
@@ -219,7 +222,7 @@ fn pumpkin_bombardment_supports_the_mana_and_discard_options() {
     let fodder_slot = hand_index_for_card(&engine, 0, "grizzly_bears");
     let fodder = engine.state.players[0].hand[fodder_slot];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -267,7 +270,7 @@ fn guardian_of_the_great_door_taps_exactly_four_permanents() {
     let slot = hand_index_for_card(&engine, 0, "guardian_of_the_great_door");
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell_with_cast_cost_groups(
                     slot,
@@ -280,7 +283,7 @@ fn guardian_of_the_great_door_taps_exactly_four_permanents() {
     );
     let slot = hand_index_for_card(&engine, 0, "guardian_of_the_great_door");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(slot, vec![], vec![object_cost(&engine, 0, &tapped)]),
         )
@@ -326,7 +329,7 @@ fn bogslithers_embrace_blights_a_creature_instead_of_paying_mana() {
     );
     let slot = hand_index_for_card(&engine, 0, "bogslithers_embrace");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -384,7 +387,7 @@ fn deadly_precision_pays_four_mana_or_sacrifices() {
     );
     let slot = hand_index_for_card(&engine, 0, "deadly_precision");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(slot, target_object(target), vec![option(0)]),
         )
@@ -430,7 +433,7 @@ fn deadly_precision_pays_four_mana_or_sacrifices() {
     );
     let slot = hand_index_for_card(&engine, 0, "deadly_precision");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -474,7 +477,7 @@ fn kinsbaile_aspirant_beholds_a_kithkin_permanent() {
     let slot = hand_index_for_card(&engine, 0, "kinsbaile_aspirant");
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell_with_cast_cost_groups(
                     slot,
@@ -487,7 +490,7 @@ fn kinsbaile_aspirant_beholds_a_kithkin_permanent() {
     );
     let slot = hand_index_for_card(&engine, 0, "kinsbaile_aspirant");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -554,7 +557,7 @@ fn demand_answers_sacrifices_an_artifact_or_discards_a_card() {
     let slot = hand_index_for_card(&engine, 0, "demand_answers");
     let hand_before = engine.state.players[0].hand.len();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -597,7 +600,7 @@ fn demand_answers_sacrifices_an_artifact_or_discards_a_card() {
     let fodder_slot = hand_index_for_card(&engine, 0, "grizzly_bears");
     let fodder = engine.state.players[0].hand[fodder_slot];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(slot, vec![], vec![hand_option(1, fodder_slot)]),
         )
@@ -636,7 +639,7 @@ fn fear_of_exposure_taps_exactly_two_creatures_or_lands() {
     let slot = hand_index_for_card(&engine, 0, "fear_of_exposure");
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell_with_cast_cost_groups(
                     slot,
@@ -649,7 +652,7 @@ fn fear_of_exposure_taps_exactly_two_creatures_or_lands() {
     );
     let slot = hand_index_for_card(&engine, 0, "fear_of_exposure");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -691,7 +694,7 @@ fn final_vengeance_sacrifices_a_creature_and_exiles_the_target() {
     );
     let slot = hand_index_for_card(&engine, 0, "final_vengeance");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -737,7 +740,7 @@ fn laughing_mad_discards_a_card_and_draws_two() {
     let fodder = engine.state.players[0].hand[fodder_slot];
     let hand_before = engine.state.players[0].hand.len();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(slot, vec![], vec![discard_option(fodder_slot)]),
         )

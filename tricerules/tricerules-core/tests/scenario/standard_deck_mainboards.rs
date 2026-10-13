@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
 use tricerules_proto::ruled::v1::{
     cast_cost_group_selection::SelectedObject, CastCostGroupSelection,
@@ -31,7 +32,7 @@ fn dream_beavers_resolves_its_entire_etb_sequence() {
         "scry choice is pending"
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("put the looked-at card on the bottom");
     assert!(engine.state.pending_resolution.is_none());
 }
@@ -56,7 +57,7 @@ fn sazhs_chocobo_gets_a_counter_for_its_controllers_landfall() {
     let forest = hand_index_for_card(&engine, 0, "forest");
 
     engine
-        .apply_command(0, &play_land(forest))
+        .apply_scenario_command(0, &play_land(forest))
         .expect("play a Forest");
     assert_eq!(
         engine.state.stack.len(),
@@ -99,7 +100,7 @@ fn requiting_hex_rewards_the_optional_blight_payment() {
     let slot = hand_index_for_card(&engine, 0, "requiting_hex");
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,

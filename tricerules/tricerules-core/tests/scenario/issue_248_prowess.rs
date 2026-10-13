@@ -2,6 +2,7 @@
 //!
 //! Oracle checked 2026-09-10. CR 702.108a-b defines Prowess as one controller-relative trigger
 //! for each noncreature spell cast; CR 514.2 ends its until-end-of-turn pump at cleanup.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 
@@ -32,7 +33,7 @@ fn generated_prowess_triggers_independently_for_noncreature_spells_and_expires()
         ensure_in_hand(&mut engine, 0, spell);
         let slot = hand_index_for_card(&engine, 0, spell);
         engine
-            .apply_command(0, &cast_spell(slot, vec![]))
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
             .unwrap_or_else(|error| panic!("cast {spell}: {error}"));
         assert_eq!(
             engine.state.stack.len(),
@@ -48,7 +49,7 @@ fn generated_prowess_triggers_independently_for_noncreature_spells_and_expires()
     ensure_in_hand(&mut engine, 0, "grizzly_bears");
     let creature = hand_index_for_card(&engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &cast_spell(creature, vec![]))
+        .apply_scenario_command(0, &cast_spell(creature, vec![]))
         .expect("cast creature spell");
     assert_eq!(
         engine.state.stack.len(),
@@ -71,7 +72,7 @@ fn generated_prowess_trigger_does_not_follow_a_new_source_generation() {
 
     let spell = hand_index_for_card(&engine, 0, "bonesplitter");
     engine
-        .apply_command(0, &cast_spell(spell, vec![]))
+        .apply_scenario_command(0, &cast_spell(spell, vec![]))
         .expect("cast noncreature spell");
     *engine
         .state

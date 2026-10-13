@@ -1,5 +1,6 @@
 //! Actual-card semantics for five pinned Standard spells.
 //! Oracle and rulings checked 2026-09-22; CR 115.6, 608.2b-c, 700.2c, 701.6a.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -76,7 +77,7 @@ fn issue_misc43_deadly_plot() {
     inject_card_into_hand(&mut invalid, 0, "deadly_plot");
     let slot = hand_index_for_card(&invalid, 0, "deadly_plot");
     assert!(invalid
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(1, target_object(ordinary))])
         )
@@ -98,7 +99,7 @@ fn issue_misc43_break_down_the_door() {
     inject_card_into_hand(&mut invalid, 0, "break_down_the_door");
     let slot = hand_index_for_card(&invalid, 0, "break_down_the_door");
     assert!(invalid
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(0, target_object(creature))])
         )
@@ -170,7 +171,7 @@ fn issue_misc43_spectral_interference() {
     inject_card_into_hand(&mut invalid, 0, "spectral_interference");
     let slot = hand_index_for_card(&invalid, 0, "spectral_interference");
     assert!(invalid
-        .apply_command(0, &cast_spell(slot, stack_target(sorcery_spell)))
+        .apply_scenario_command(0, &cast_spell(slot, stack_target(sorcery_spell)))
         .is_err());
 }
 

@@ -2,9 +2,10 @@
 //!
 //! CR 402.2 sets the default maximum hand size, CR 504.2 puts the normal draw before draw-step
 //! triggers, and CR 514.1 applies maximum hand size during cleanup.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 
 fn two_player_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("plains", &[]), deck_with("island", &[])]);
@@ -26,7 +27,7 @@ fn cast_anvil(engine: &mut GameEngine) -> u32 {
     let slot = hand_index_for_card(engine, 0, "anvil_of_bogardan");
     engine.state.players[0].mana_pool.colorless = 2;
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Anvil of Bogardan");
     resolve_entire_stack_two_player(engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
@@ -46,10 +47,10 @@ fn anvil_of_bogardan_removes_both_players_hand_limits_at_cleanup() {
 
     engine.state.turn_step = TurnStep::EndStep;
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("P0 passes end step");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("P1 passes end step");
     assert_eq!(engine.state.cleanup_discard_player, None);
     assert_eq!(engine.state.players[0].hand.len(), 9);
@@ -57,10 +58,10 @@ fn anvil_of_bogardan_removes_both_players_hand_limits_at_cleanup() {
 
     engine.state.turn_step = TurnStep::EndStep;
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("P1 passes end step");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("P0 passes end step");
     assert_eq!(engine.state.cleanup_discard_player, None);
     assert_eq!(engine.state.players[1].hand.len(), 9);
@@ -109,7 +110,7 @@ fn anvil_of_bogardan_draws_then_each_triggered_player_discards() {
         .candidates
         .contains(&first_discard));
     engine
-        .apply_command(1, &submit_resolution_choice(vec![first_discard]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![first_discard]))
         .expect("P1 chooses the first discard");
     assert_eq!(engine.state.objects[&first_discard].zone, Zone::Graveyard);
     assert_eq!(engine.state.players[1].hand.len(), initial_hand + 1);
@@ -125,7 +126,7 @@ fn anvil_of_bogardan_draws_then_each_triggered_player_discards() {
         1
     );
     engine
-        .apply_command(1, &submit_resolution_choice(vec![second_discard]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![second_discard]))
         .expect("P1 chooses the second discard");
     assert_eq!(engine.state.objects[&second_discard].zone, Zone::Graveyard);
     assert_eq!(engine.state.players[1].hand.len(), initial_hand + 1);

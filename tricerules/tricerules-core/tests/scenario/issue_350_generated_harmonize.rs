@@ -6,6 +6,7 @@
 //! govern the printed-cost normal cast. The shared engine semantics (owner-only candidates,
 //! atomic forged-payment rejection, current-priority timing, and command replay) are already
 //! covered by `issue_105_harmonize`; these cases only prove the generated definitions reach them.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::state::SpellCastMethod;
@@ -83,7 +84,7 @@ fn issue_350_roamers_routine_harmonize_reduces_and_searches_then_exiles() {
     // A mana-ability activation returns a legal batch containing the owner's Harmonize action.
     let untapped_forest = relocate_to_battlefield(&mut engine, 0, "forest", false);
     let batch = engine
-        .apply_command(0, &activate_ability(untapped_forest, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(untapped_forest, 0, vec![]))
         .expect("activate Forest for green");
     let action = batch.legal_by_player[&0]
         .zone_cast_actions
@@ -110,7 +111,7 @@ fn issue_350_roamers_routine_harmonize_reduces_and_searches_then_exiles() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &harmonize_cast(&engine, routine, vec![], Some((tap_bear, tap_generation))),
         )
@@ -121,15 +122,17 @@ fn issue_350_roamers_routine_harmonize_reduces_and_searches_then_exiles() {
         SpellCastMethod::Harmonize
     );
 
-    engine.apply_command(0, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
     let search_batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes into resolution");
     let choice = find_resolution_choice(&search_batch).expect("basic-land search");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
     assert!(choice.candidate_object_ids.contains(&basic));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![basic]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![basic]))
         .expect("choose the basic land");
     assert_eq!(engine.state.objects[&basic].zone, Zone::Battlefield);
     assert!(
@@ -174,7 +177,7 @@ fn issue_350_urenis_rebuff_harmonize_returns_a_creature_then_exiles() {
 
     let untapped_island = relocate_to_battlefield(&mut engine, 0, "island", false);
     engine
-        .apply_command(0, &activate_ability(untapped_island, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(untapped_island, 0, vec![]))
         .expect("activate Island for blue");
     give_mana(
         &mut engine,
@@ -185,7 +188,7 @@ fn issue_350_urenis_rebuff_harmonize_returns_a_creature_then_exiles() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &harmonize_cast(
                 &engine,
@@ -233,7 +236,7 @@ fn issue_350_urenis_rebuff_normal_cast_uses_the_printed_cost_and_buries_the_spel
     );
     let slot = hand_index_for_card(&engine, 0, "urenis_rebuff");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target_bear)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target_bear)))
         .expect("normal cast at {1}{U}");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&target_bear].zone, Zone::Hand);

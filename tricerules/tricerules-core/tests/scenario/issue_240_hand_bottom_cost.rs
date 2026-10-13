@@ -1,5 +1,6 @@
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use crate::helpers::ScenarioCommandExt;
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     permanent_moved::Destination, ruled_command::Cmd, ruled_event::Ev, ChoiceKind,
     ResolutionChoiceDecision, RuledCommand, RuledEventBatch, SubmitResolutionChoice,
@@ -8,6 +9,7 @@ use tricerules_proto::ruled::v1::{
 fn select_branch() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: 0,
             ..Default::default()
@@ -20,7 +22,7 @@ fn resolve_top(engine: &mut GameEngine) -> RuledEventBatch {
     for _ in 0..engine.state.players.len() {
         batch = Some(
             engine
-                .apply_command(engine.state.priority_player_id(), &pass())
+                .apply_scenario_command(engine.state.priority_player_id(), &pass())
                 .expect("priority pass"),
         );
     }
@@ -58,7 +60,7 @@ fn setup(seed: u64) -> (GameEngine, u32) {
 fn cast_and_choose_branch(engine: &mut GameEngine, target: u32) -> RuledEventBatch {
     let slot = hand_index_for_card(engine, 0, "manhole_missile");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Manhole Missile");
     resolve_top(engine);
     assert_eq!(engine.state.objects[&target].damage, 3);
@@ -72,7 +74,7 @@ fn cast_and_choose_branch(engine: &mut GameEngine, target: u32) -> RuledEventBat
             .choice_kind,
         ChoiceKind::ResolutionBranch
     );
-    engine.apply_command(0, &select_branch()).unwrap()
+    engine.apply_scenario_command(0, &select_branch()).unwrap()
 }
 
 #[test]
@@ -106,7 +108,7 @@ fn issue_240_payment_moves_exact_private_card_to_bottom_then_draws() {
         .copied()
         .unwrap_or(0);
     let paid = engine
-        .apply_command(0, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))
         .expect("pay by putting the chosen card on the bottom");
 
     assert_eq!(engine.state.objects[&chosen].zone, Zone::Library);
@@ -133,7 +135,7 @@ fn issue_240_decline_and_illegal_target_skip_bottoming_and_draw() {
     let hand_before = declined.state.players[0].hand.clone();
     let library_before = declined.state.players[0].library.clone();
     declined
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .unwrap();
     assert_eq!(declined.state.players[0].hand, hand_before);
     assert_eq!(declined.state.players[0].library, library_before);
@@ -141,7 +143,7 @@ fn issue_240_decline_and_illegal_target_skip_bottoming_and_draw() {
     let (mut fizzled, target) = setup(240_003);
     let slot = hand_index_for_card(&fizzled, 0, "manhole_missile");
     fizzled
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap();
     fizzled.state.players[1]
         .battlefield
@@ -175,7 +177,7 @@ fn issue_240_stale_wrong_player_and_replayed_payments_are_atomic() {
 
     let before_wrong_player = serde_json::to_value(&engine.state).unwrap();
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![chosen]))
         .is_err());
     assert_eq!(
         serde_json::to_value(&engine.state).unwrap(),
@@ -189,7 +191,7 @@ fn issue_240_stale_wrong_player_and_replayed_payments_are_atomic() {
         .or_default() += 1;
     let before_stale = serde_json::to_value(&engine.state).unwrap();
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))
         .is_err());
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before_stale);
 
@@ -199,9 +201,9 @@ fn issue_240_stale_wrong_player_and_replayed_payments_are_atomic() {
         .get_mut(&chosen)
         .unwrap() -= 1;
     let command = submit_resolution_choice(vec![chosen]);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     let after_payment = serde_json::to_value(&engine.state).unwrap();
-    assert!(engine.apply_command(0, &command).is_err());
+    assert!(engine.apply_scenario_command(0, &command).is_err());
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), after_payment);
 }
 
@@ -223,7 +225,7 @@ fn issue_240_empty_hand_skips_the_branch_and_empty_library_draws_the_paid_card()
         *no_hand.state.zone_change_generation.entry(oid).or_default() += 1;
     }
     no_hand
-        .apply_command(0, &cast_spell(0, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(0, target_object(target)))
         .unwrap();
     resolve_top(&mut no_hand);
     assert_eq!(no_hand.state.objects[&target].damage, 3);
@@ -253,7 +255,7 @@ fn issue_240_empty_hand_skips_the_branch_and_empty_library_draws_the_paid_card()
             .or_default() += 1;
     }
     empty_library
-        .apply_command(0, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))
         .unwrap();
     assert_eq!(empty_library.state.objects[&chosen].zone, Zone::Hand);
     assert!(empty_library.state.players[0].hand.contains(&chosen));
@@ -267,10 +269,10 @@ fn issue_240_accepted_commands_replay_identically() {
         let (mut engine, target) = setup(240_007);
         let slot = hand_index_for_card(&engine, 0, "manhole_missile");
         let cast = engine
-            .apply_command(0, &cast_spell(slot, target_object(target)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
             .unwrap();
         let resolve = resolve_top(&mut engine);
-        let branch = engine.apply_command(0, &select_branch()).unwrap();
+        let branch = engine.apply_scenario_command(0, &select_branch()).unwrap();
         let chosen = engine
             .state
             .pending_resolution
@@ -279,7 +281,7 @@ fn issue_240_accepted_commands_replay_identically() {
             .presentation
             .candidates[0];
         let payment = engine
-            .apply_command(0, &submit_resolution_choice(vec![chosen]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))
             .unwrap();
         (
             vec![cast, resolve, branch, payment],

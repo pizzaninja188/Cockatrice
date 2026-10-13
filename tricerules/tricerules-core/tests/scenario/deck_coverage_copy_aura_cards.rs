@@ -1,5 +1,6 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
-use tricerules_core::{state::AttachmentRecipient, GameEngine, Zone};
+use tricerules_core::{state::AttachmentRecipient, Zone};
 use tricerules_proto::ruled::v1::{ruled_event::Ev, ChoiceKind};
 
 fn copy_card_engine(seed: u64, copy_card: &str) -> GameEngine {
@@ -54,7 +55,7 @@ fn cast_and_open_copy_choice(engine: &mut GameEngine, card: &str, blue: u32, gen
     engine.state.players[0].mana_pool.colorless = generic;
     let copy = engine.state.players[0].hand[hand_index_for_card(engine, 0, card)];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(hand_index_for_card(engine, 0, card), Vec::new()),
         )
@@ -88,7 +89,7 @@ fn clever_impersonator_copies_nonland_permanents_and_attaches_when_copying_an_au
         .contains("nonland permanent"));
     assert!(!copy_sources.presentation.candidates.contains(&land));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![aura]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![aura]))
         .expect("choose Aura as copy source");
     let aura_recipients = engine
         .state
@@ -104,7 +105,7 @@ fn clever_impersonator_copies_nonland_permanents_and_attaches_when_copying_an_au
         vec![source_host, recipient]
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![recipient]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![recipient]))
         .expect("choose legal enchanted permanent");
 
     assert_eq!(engine.state.objects[&copy].zone, Zone::Battlefield);
@@ -142,7 +143,7 @@ fn mirrormade_limits_copy_sources_to_artifacts_or_enchantments() {
     assert!(!copy_sources.presentation.candidates.contains(&creature));
     assert!(!copy_sources.presentation.candidates.contains(&land));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![aura]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![aura]))
         .expect("choose Aura as copy source");
     let aura_recipients = engine
         .state
@@ -158,7 +159,7 @@ fn mirrormade_limits_copy_sources_to_artifacts_or_enchantments() {
         vec![source_host, creature, recipient]
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![recipient]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![recipient]))
         .expect("choose legal enchanted permanent");
 
     assert_eq!(engine.state.objects[&copy].zone, Zone::Battlefield);
@@ -189,7 +190,7 @@ fn sculpting_steel_copies_only_artifacts() {
     assert!(!copy_sources.presentation.candidates.contains(&creature));
     assert!(!copy_sources.presentation.candidates.contains(&land));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![artifact]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![artifact]))
         .expect("choose artifact as copy source");
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&copy].zone, Zone::Battlefield);
@@ -244,7 +245,7 @@ fn sculpting_steel_can_copy_an_aura_that_is_an_artifact() {
     assert!(copy_sources.presentation.candidates.contains(&artifact));
     assert!(copy_sources.presentation.candidates.contains(&creature));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![aura]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![aura]))
         .expect("choose artifact Aura as copy source");
     let aura_recipients = engine
         .state
@@ -260,7 +261,7 @@ fn sculpting_steel_can_copy_an_aura_that_is_an_artifact() {
         vec![source_host, creature, recipient]
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![recipient]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![recipient]))
         .expect("choose legal enchanted permanent");
 
     assert_eq!(engine.state.objects[&copy].zone, Zone::Battlefield);
@@ -290,7 +291,9 @@ fn reanimated_clever_impersonator_stays_in_its_graveyard_when_its_copied_aura_ha
             kind: 0,
         }],
     );
-    engine.apply_command(0, &cast).expect("cast Reanimate");
+    engine
+        .apply_scenario_command(0, &cast)
+        .expect("cast Reanimate");
     pass_both_players(&mut engine);
 
     let copy_sources = engine
@@ -300,7 +303,7 @@ fn reanimated_clever_impersonator_stays_in_its_graveyard_when_its_copied_aura_ha
         .expect("copy-source choice");
     assert!(copy_sources.presentation.candidates.contains(&aura));
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![aura]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![aura]))
         .expect("choose the enchant-you-control Aura");
 
     assert_eq!(engine.state.objects[&clever].zone, Zone::Graveyard);

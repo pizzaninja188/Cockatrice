@@ -6,6 +6,7 @@
 //! targets), CR 120.3 (the damage the source deals to its controller), CR 400.7/608.2b (a returned
 //! card is a new object), CR 701.8 (the graveyard return), CR 701.44 (Explore), and CR 702.73
 //! (Changeling). Rulings confirm the Clue token is not an investigate and the explore counter.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -60,8 +61,9 @@ fn kill_with_murder(e: &mut GameEngine, source: u32) {
     inject_card_into_hand(e, 0, "murder");
     let slot = hand_index_for_card(e, 0, "murder");
     semantic::accepted(e, 0, &cast_spell(slot, target_object(source)));
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("murder resolves");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("murder resolves");
 }
 
 fn inject_library_top(e: &mut GameEngine, player: usize, card_id: &str) -> u32 {
@@ -90,7 +92,7 @@ fn issue_misc22_driver_of_the_dead_reanimates_a_small_creature() {
     kill_with_murder(&mut other, died);
     assert!(
         other
-            .apply_command(0, &choose_graveyard_trigger_target(too_big))
+            .apply_scenario_command(0, &choose_graveyard_trigger_target(too_big))
             .is_err(),
         "a mana-value-4 creature card is not a legal target"
     );
@@ -164,7 +166,7 @@ fn issue_misc22_miners_guidewing_makes_a_creature_explore() {
     kill_with_murder(&mut other, died);
     assert!(
         other
-            .apply_command(0, &choose_trigger_target(theirs))
+            .apply_scenario_command(0, &choose_trigger_target(theirs))
             .is_err(),
         "an opponent's creature is not a legal target"
     );

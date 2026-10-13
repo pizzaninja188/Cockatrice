@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use prost::Message;
 use tricerules_proto::ruled::v1::{AutoPassPolicy, CanonicalGameplayCommand, PhaseId};
@@ -35,7 +36,7 @@ fn canonical_settlement_does_not_infer_a_stop_from_a_legal_land_play() {
     )
     .expect("new");
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &canonical_with_policies(
                 pass(),
@@ -106,7 +107,7 @@ fn canonical_turn_roll_publishes_untap_and_draw_after_coalescing() {
     let _ = e.initial_response_batch();
 
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &canonical_with_policies(
                 pass(),
@@ -181,7 +182,7 @@ fn skip_next_untap_keeps_the_authoritative_zone_view_tapped_without_an_untap_edg
     let _ = e.initial_response_batch();
 
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &canonical_with_policies(
                 pass(),
@@ -233,7 +234,7 @@ fn canonical_settlement_stops_at_configured_phase() {
     )
     .expect("new");
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &canonical_with_policies(
                 pass(),
@@ -274,7 +275,7 @@ fn missing_auto_pass_policy_stops_conservatively() {
         true,
     )
     .expect("new");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &canonical_with_policies(pass(), vec![auto_pass_everywhere(0)]),
     )
@@ -318,7 +319,7 @@ fn canonical_settlement_stops_with_a_spell_on_the_stack() {
     );
     let bolt = hand_index_for_card(&e, 0, "lightning_bolt");
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &canonical_with_policies(
                 cast_spell(bolt, target_player(1)),
@@ -372,12 +373,12 @@ fn canonical_resolution_publishes_new_creature_battlefield_snapshot() {
         },
     );
     let bears = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(bears, vec![]))
+    e.apply_scenario_command(0, &cast_spell(bears, vec![]))
         .expect("cast creature");
-    e.apply_command(0, &pass()).expect("caster pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
 
     let resolved = e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &canonical_with_policies(
                 pass(),
@@ -445,7 +446,7 @@ fn canonical_stack_resolution_exposes_active_player_priority_before_auto_pass() 
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active player passes to opponent");
     give_mana(
         &mut e,
@@ -464,16 +465,16 @@ fn canonical_stack_resolution_exposes_active_player_priority_before_auto_pass() 
             stop_on_opponent_turn: vec![PhaseId::Main1 as i32],
         },
     ];
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &canonical_with_policies(cast_spell(bolt, target_player(0)), policies.clone()),
     )
     .expect("opponent casts an instant and keeps priority");
-    e.apply_command(1, &canonical_with_policies(pass(), policies.clone()))
+    e.apply_scenario_command(1, &canonical_with_policies(pass(), policies.clone()))
         .expect("caster passes priority back");
 
     let resolved = e
-        .apply_command(0, &canonical_with_policies(pass(), policies))
+        .apply_scenario_command(0, &canonical_with_policies(pass(), policies))
         .expect("active player passes and the instant resolves");
     assert!(e.state.stack.is_empty());
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
@@ -487,9 +488,9 @@ fn canonical_stack_resolution_exposes_active_player_priority_before_auto_pass() 
         "the resolved batch publishes the active player's priority"
     );
 
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active player passes after resolution");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("opponent also passes on the empty stack");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::BeginCombat);
 }
@@ -507,7 +508,7 @@ fn automatic_settlement_stops_when_a_step_trigger_reaches_the_stack() {
     .expect("new");
     inject_permanent_on_battlefield(&mut e, 0, "howling_mine");
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &canonical_with_policies(
                 pass(),
@@ -540,7 +541,7 @@ fn regular_combat_damage_stop_also_stops_at_first_strike_damage() {
     )
     .expect("new");
     e.state.turn_step = tricerules_core::TurnStep::FirstStrikeDamage;
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &canonical_with_policies(
             pass(),
@@ -577,7 +578,7 @@ fn automatic_settlement_publishes_terminal_draw_loss() {
     e.state.turn = 2; // the starting player's turn-one draw is intentionally skipped (CR 103.8)
     e.state.players[0].library.clear();
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &canonical_with_policies(
                 pass(),
@@ -611,7 +612,7 @@ fn automatic_settlement_stops_at_the_safety_limit() {
     e.state.players[0].hand.clear();
     e.state.players[1].hand.clear();
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &canonical_with_policies(
                 pass(),
@@ -669,15 +670,15 @@ fn add_cards_to_hand_from_library(e: &mut GameEngine, player: i32, count: usize)
 }
 
 fn advance_from_main1_through_end_step(e: &mut GameEngine, active_player: i32) {
-    e.apply_command(active_player, &primitive_yield())
+    e.apply_scenario_command(active_player, &primitive_yield())
         .expect("main1->begin combat");
-    e.apply_command(active_player, &primitive_yield())
+    e.apply_scenario_command(active_player, &primitive_yield())
         .expect("begin combat->end combat");
-    e.apply_command(active_player, &primitive_yield())
+    e.apply_scenario_command(active_player, &primitive_yield())
         .expect("end combat->main2");
-    e.apply_command(active_player, &primitive_yield())
+    e.apply_scenario_command(active_player, &primitive_yield())
         .expect("main2->end step");
-    e.apply_command(active_player, &primitive_yield())
+    e.apply_scenario_command(active_player, &primitive_yield())
         .expect("end step->cleanup");
 }
 
@@ -711,7 +712,7 @@ fn primitive_yield_active_skips_double_pass_main1() {
     )
     .expect("new");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("active primitive");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
 }
@@ -727,8 +728,8 @@ fn empty_stack_double_pass_emits_ap_priority_in_new_phase() {
         true,
     )
     .expect("new");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    let b = e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    let b = e.apply_scenario_command(1, &pass()).expect("p1 pass");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
     assert!(
         priority_changes_in(&b).contains(&0),
@@ -750,7 +751,7 @@ fn mana_pools_empty_on_step_change() {
     e.state.players[0].mana_pool.red = 2;
     e.state.players[1].mana_pool.green = 1;
 
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("active primitive");
 
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
@@ -797,7 +798,7 @@ fn stack_resolution_emits_priority_to_active_player() {
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("play mountain");
     give_mana(
         &mut e,
@@ -808,10 +809,10 @@ fn stack_resolution_emits_priority_to_active_player() {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt");
-    e.apply_command(0, &pass()).expect("caster pass");
-    let resolved = e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    let resolved = e.apply_scenario_command(1, &pass()).expect("opponent pass");
     assert!(
         priority_changes_in(&resolved).contains(&0),
         "active player should regain priority after stack resolves"
@@ -824,7 +825,7 @@ fn cleanup_batch_discard_three_at_once() {
     let ap_idx = e.state.player_idx(0).unwrap();
     assert_eq!(e.state.players[ap_idx].hand.len(), 10);
 
-    e.apply_command(0, &discard_cleanup_batch(vec![9, 8, 7]))
+    e.apply_scenario_command(0, &discard_cleanup_batch(vec![9, 8, 7]))
         .expect("batch discard top three");
     assert_eq!(e.state.players[ap_idx].hand.len(), 7);
     assert_eq!(e.state.active_player_id(), 1);
@@ -894,7 +895,7 @@ fn cleanup_does_not_chain_from_active_to_nonactive_player() {
     advance_from_main1_through_end_step(&mut e, 0);
     assert_eq!(e.state.cleanup_discard_player, Some(0));
 
-    e.apply_command(0, &discard_cleanup(0))
+    e.apply_scenario_command(0, &discard_cleanup(0))
         .expect("active player discards to maximum hand size");
 
     assert_eq!(e.state.cleanup_discard_player, None);
@@ -918,7 +919,7 @@ fn cleanup_discard_rejects_invalid_index_lists_without_mutating_state() {
         let command_index_before = e.state.command_index;
 
         let err = e
-            .apply_command(0, &discard_cleanup_batch(indices))
+            .apply_scenario_command(0, &discard_cleanup_batch(indices))
             .expect_err("invalid cleanup selection");
         assert_eq!(err.to_string(), expected_error);
         assert_eq!(e.state.players[0].hand, hand_before);
@@ -941,16 +942,18 @@ fn main2_double_pass_advances_to_end_step_stop() {
     )
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
     // No eligible attackers: BeginCombat auto-skips to EndCombat in one yield.
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("begin combat to end combat");
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("end combat to main2");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main2);
-    e.apply_command(0, &pass()).expect("ap pass main2");
-    let b = e.apply_command(1, &pass()).expect("nap pass main2");
+    e.apply_scenario_command(0, &pass()).expect("ap pass main2");
+    let b = e
+        .apply_scenario_command(1, &pass())
+        .expect("nap pass main2");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndStep);
     assert!(
         priority_changes_in(&b).contains(&0),
@@ -973,15 +976,18 @@ fn new_turn_stops_at_upkeep_then_draw_then_main1() {
     end_active_turn(&mut e, 0);
     assert_eq!(e.state.active_player_id(), 1);
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
-    e.apply_command(1, &pass()).expect("ap pass upkeep");
-    let to_draw = e.apply_command(0, &pass()).expect("nap pass upkeep");
+    e.apply_scenario_command(1, &pass())
+        .expect("ap pass upkeep");
+    let to_draw = e
+        .apply_scenario_command(0, &pass())
+        .expect("nap pass upkeep");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
     assert!(
         priority_changes_in(&to_draw).contains(&1),
         "draw step should open priority for the active player"
     );
-    e.apply_command(1, &pass()).expect("ap pass draw");
-    let to_main = e.apply_command(0, &pass()).expect("nap pass draw");
+    e.apply_scenario_command(1, &pass()).expect("ap pass draw");
+    let to_main = e.apply_scenario_command(0, &pass()).expect("nap pass draw");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
     assert!(
         priority_changes_in(&to_main).contains(&1),
@@ -1013,8 +1019,10 @@ fn second_seat_first_draw_draws_when_seat_zero_started() {
     end_active_turn(&mut e, 0);
     assert_eq!(e.state.active_player_id(), 1);
     assert_eq!(e.state.turn, 1);
-    e.apply_command(1, &pass()).expect("ap pass upkeep");
-    e.apply_command(0, &pass()).expect("nap pass upkeep");
+    e.apply_scenario_command(1, &pass())
+        .expect("ap pass upkeep");
+    e.apply_scenario_command(0, &pass())
+        .expect("nap pass upkeep");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
     assert_eq!(
         e.state.players[1].hand.len(),
@@ -1062,7 +1070,7 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
 
     let hand_before_turn = e.state.players[0].hand.len();
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("play mountain");
 
     let mountain_oid = battlefield_object_for_card(&e, 0, "mountain");
@@ -1081,10 +1089,10 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast lightning bolt");
-    e.apply_command(0, &pass()).expect("caster pass");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    e.apply_scenario_command(1, &pass())
         .expect("opponent pass to resolve");
 
     assert!(
@@ -1099,7 +1107,7 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
     end_active_turn(&mut e, 0); // now active player 1, upkeep
     pass_both_players(&mut e); // upkeep -> draw
     pass_both_players(&mut e); // draw -> main1
-    e.apply_command(1, &primitive_yield())
+    e.apply_scenario_command(1, &primitive_yield())
         .expect("p1 main1 to begin combat");
     // No eligible attackers: BeginCombat auto-skips to EndCombat on both-player pass.
     pass_both_players(&mut e); // begin combat -> end combat
@@ -1163,7 +1171,7 @@ fn zone_view_includes_battlefield_object_ids() {
     // The fixture was published at insertion. A reconnect snapshot contains full objects;
     // an unchanged priority-pass publication correctly uses the compact battlefield flag.
     let b = e.initial_response_batch();
-    let passed = e.apply_command(0, &pass()).expect("ap pass main1");
+    let passed = e.apply_scenario_command(0, &pass()).expect("ap pass main1");
     assert!(passed.events.iter().any(|event| matches!(&event.ev,
         Some(Ev::ZoneView(view)) if view.battlefields_unchanged)));
     let zone_view = b
@@ -1227,7 +1235,7 @@ fn second_sorcery_rejected_while_spell_on_stack_even_with_priority() {
         },
     );
     let div0 = hand_index_for_card(&e, 0, "divination");
-    e.apply_command(0, &cast_spell(div0, vec![]))
+    e.apply_scenario_command(0, &cast_spell(div0, vec![]))
         .expect("first divination");
     assert_eq!(
         e.state.stack.len(),
@@ -1237,7 +1245,7 @@ fn second_sorcery_rejected_while_spell_on_stack_even_with_priority() {
 
     let div1 = hand_index_for_card(&e, 0, "divination");
     let err = e
-        .apply_command(0, &cast_spell(div1, vec![]))
+        .apply_scenario_command(0, &cast_spell(div1, vec![]))
         .expect_err("second sorcery with stack nonempty");
     assert!(
         err.to_string().contains("sorcery speed"),
@@ -1260,13 +1268,13 @@ fn ground_creature_still_blockable_by_ground_blocker_regression() {
     advance_to_declare_attackers(&mut e);
     let merfolk = inject_creature_on_battlefield(&mut e, 0, "coral_merfolk");
     let bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![merfolk]))
+    e.apply_scenario_command(0, &declare_attackers(vec![merfolk]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: merfolk,
@@ -1295,7 +1303,7 @@ fn doom_blade_targets_only_nonblack_creatures() {
     let idx = hand_index_for_card(&e, 0, "doom_blade");
     // Black creature is an illegal target (nonblack restriction).
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &cast_spell(
                 idx,
@@ -1313,7 +1321,7 @@ fn doom_blade_targets_only_nonblack_creatures() {
     );
     // Nonblack creature is legal; it resolves and dies.
     let idx = hand_index_for_card(&e, 0, "doom_blade");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -1379,10 +1387,10 @@ fn essence_scatter_and_negate_respect_spell_type() {
         },
     );
     let gb_idx = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(gb_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(gb_idx, vec![]))
         .expect("cast bears");
     let bears_spell = e.state.stack.last().expect("bears on stack").id;
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("p0 pass to give p1 priority");
 
     // Negate (noncreature only) cannot target a creature spell (illegal cast — card not consumed).
@@ -1396,7 +1404,7 @@ fn essence_scatter_and_negate_respect_spell_type() {
     );
     let neg_idx = hand_index_for_card(&e, 1, "negate");
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             1,
             &cast_spell(
                 neg_idx,
@@ -1414,7 +1422,7 @@ fn essence_scatter_and_negate_respect_spell_type() {
     );
     // Essence Scatter (creature only) can.
     let es_idx = hand_index_for_card(&e, 1, "essence_scatter");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             es_idx,
@@ -1444,15 +1452,15 @@ fn essence_scatter_and_negate_respect_spell_type() {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt");
     let bolt_spell = e.state.stack.last().expect("bolt on stack").id;
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("p0 pass to give p1 priority");
 
     let es2 = hand_index_for_card(&e, 1, "essence_scatter");
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             1,
             &cast_spell(
                 es2,
@@ -1469,7 +1477,7 @@ fn essence_scatter_and_negate_respect_spell_type() {
         "Essence Scatter cannot counter a noncreature spell"
     );
     let neg2 = hand_index_for_card(&e, 1, "negate");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             neg2,

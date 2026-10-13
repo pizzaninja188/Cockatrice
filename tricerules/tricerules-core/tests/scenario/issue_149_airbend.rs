@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::ManaCost;
 use tricerules_core::state::{
     ActiveExilePlayPermission, ExilePermissionCastCost, ExilePlayPermissionOrigin,
@@ -33,7 +34,7 @@ fn airbending_lesson_token_ceases_to_exist_without_cast_permission() {
         },
     );
     engine
-        .apply_command(0, &cast_spell(slot, target_object(token)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(token)))
         .expect("airbend token");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -72,7 +73,7 @@ fn airbending_lesson_four_players_only_owner_can_recast_with_normal_timing() {
     for _ in 0..8 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("advance to main phase");
     }
     assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Main1);
@@ -107,12 +108,12 @@ fn airbending_lesson_four_players_only_owner_can_recast_with_normal_timing() {
         },
     );
     engine
-        .apply_command(seats[0], &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(seats[0], &cast_spell(slot, target_object(target)))
         .expect("airbend stolen creature");
     for _ in 0..4 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("resolve lesson");
     }
     assert!(engine.state.stack.is_empty());
@@ -160,7 +161,7 @@ fn airbending_lesson_four_players_only_owner_can_recast_with_normal_timing() {
         let command_index = engine.state.command_index;
         let pool = engine.state.players[index].mana_pool;
         assert!(
-            engine.apply_command(player, &command).is_err(),
+            engine.apply_scenario_command(player, &command).is_err(),
             "nonowners lack permission; owner must wait for their turn"
         );
         assert_eq!(engine.state.command_index, command_index);
@@ -179,14 +180,14 @@ fn airbending_lesson_four_players_only_owner_can_recast_with_normal_timing() {
     assert_eq!(action.cost, "{2}");
     assert_eq!(action.casting_permission_id, Some(permission.group_id));
     engine
-        .apply_command(seats[2], &command)
+        .apply_scenario_command(seats[2], &command)
         .expect("owner pays two generic mana");
     assert_eq!(engine.state.objects[&target].zone, Zone::Stack);
     assert!(engine.state.active_exile_play_permissions.is_empty());
     for _ in 0..4 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("resolve creature");
     }
     assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
@@ -290,14 +291,14 @@ fn issue_149_permission_cost_and_identity_are_engine_authoritative() {
             ..Default::default()
         })),
     };
-    assert!(engine.apply_command(0, &cast(Some(151))).is_err());
+    assert!(engine.apply_scenario_command(0, &cast(Some(151))).is_err());
     assert_eq!(engine.state.command_index, before_command_index);
     assert_eq!(engine.state.players[0].mana_pool, before_pool);
     assert_eq!(engine.state.stack.len(), before_stack_len);
     assert_eq!(engine.state.objects[&object_id].zone, Zone::Exile);
 
     engine
-        .apply_command(0, &cast(Some(149)))
+        .apply_scenario_command(0, &cast(Some(149)))
         .expect("cast for the permission cost");
     assert_eq!(engine.state.objects[&object_id].zone, Zone::Stack);
     assert!(engine.state.active_exile_play_permissions.is_empty());
@@ -339,7 +340,7 @@ fn airbending_lesson_grants_the_exiled_cards_owner_and_draws() {
         },
     );
     engine
-        .apply_command(0, &cast_spell(hand_index, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(hand_index, target_object(target)))
         .expect("cast lesson");
     resolve_entire_stack_two_player(&mut engine);
 

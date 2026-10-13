@@ -5,6 +5,7 @@
 //! 603.6a/119.3/701.25 the Corroding drain plus surveil; CR 603.6a/701.23/614.1d the Encroaching
 //! up-to-two basic-land search onto the battlefield tapped; CR 603.6a/121.1/701.9 the Roiling
 //! draw-two-then-discard; and CR 603.6a/111.1 the Teeming two 2/2 white Soldier tokens.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -46,9 +47,9 @@ fn resolve_top_stack(e: &mut GameEngine) -> RuledEventBatch {
     answer_trigger_order_in_engine_order(e);
     let first = e.state.priority_player_id();
     let second = 1 - first;
-    e.apply_command(first, &pass())
+    e.apply_scenario_command(first, &pass())
         .expect("first pass on stack item");
-    e.apply_command(second, &pass())
+    e.apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }
 
@@ -112,7 +113,7 @@ fn issue_363_corroding_dragonstorm_drains_and_surveils() {
     assert_eq!(choice.candidate_object_ids, top);
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .expect("put one surveilled card into the graveyard");
     assert_eq!(
         (engine.state.players[0].life, engine.state.players[1].life),
@@ -146,7 +147,7 @@ fn issue_363_encroaching_dragonstorm_searches_two_basic_lands_tapped() {
         choice.candidate_object_ids[1],
     ];
     engine
-        .apply_command(0, &submit_resolution_choice(chosen.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(chosen.clone()))
         .expect("find two basic lands");
     assert!(chosen
         .iter()
@@ -193,7 +194,7 @@ fn issue_363_roiling_dragonstorm_draws_two_then_discards_one() {
         .copied()
         .expect("a discardable card");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![discard]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
         .expect("discard one card");
     assert_eq!(
         engine.state.players[0].hand.len(),

@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 
 fn setup_surrak_and_counterspell(seed: u64) -> GameEngine {
@@ -42,15 +43,17 @@ fn opponent_counterspell_targeting_a_controlled_creature_spell_triggers_surrak()
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(hand_index_for_card(&engine, 0, "grizzly_bears"), vec![]),
         )
         .expect("cast creature spell");
     let creature_spell = engine.state.stack.last().expect("creature spell").id;
-    engine.apply_command(0, &pass()).expect("pass to opponent");
     engine
-        .apply_command(
+        .apply_scenario_command(0, &pass())
+        .expect("pass to opponent");
+    engine
+        .apply_scenario_command(
             1,
             &cast_spell(
                 hand_index_for_card(&engine, 1, "counterspell"),
@@ -95,11 +98,13 @@ fn counterspell_targets_but_cannot_counter_surrak() {
     let slot = hand_index_for_card(&engine, 0, "surrak,_elusive_hunter");
     let surrak = engine.state.players[0].hand[slot];
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Surrak");
-    engine.apply_command(0, &pass()).expect("pass to opponent");
     engine
-        .apply_command(
+        .apply_scenario_command(0, &pass())
+        .expect("pass to opponent");
+    engine
+        .apply_scenario_command(
             1,
             &cast_spell(
                 hand_index_for_card(&engine, 1, "counterspell"),
@@ -113,10 +118,10 @@ fn counterspell_targets_but_cannot_counter_surrak() {
         "Surrak's trigger is not active while Surrak is only a spell"
     );
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("counter caster passes");
     let batch = engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("Counterspell resolves without countering Surrak");
 
     assert!(!batch.events.iter().any(|event| matches!(
@@ -177,11 +182,13 @@ fn soft_counter_still_offers_payment_before_failing_to_counter_surrak() {
     let slot = hand_index_for_card(&engine, 0, "surrak,_elusive_hunter");
     let surrak = engine.state.players[0].hand[slot];
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Surrak");
-    engine.apply_command(0, &pass()).expect("pass to opponent");
     engine
-        .apply_command(
+        .apply_scenario_command(0, &pass())
+        .expect("pass to opponent");
+    engine
+        .apply_scenario_command(
             1,
             &cast_spell(
                 hand_index_for_card(&engine, 1, "convolute"),
@@ -190,17 +197,17 @@ fn soft_counter_still_offers_payment_before_failing_to_counter_surrak() {
         )
         .expect("cast Convolute");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("Convolute caster passes");
     let parked = engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("offer soft-counter payment");
     let choice = find_resolution_choice(&parked).expect("Convolute payment choice");
     assert_eq!(choice.deciding_player_id, 0);
     assert_eq!(choice.generic_mana_cost, 4);
 
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(
                 tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,
@@ -253,13 +260,13 @@ fn surrak_spell_watcher_rejects_own_targeting_and_noncreature_spells() {
             ..Default::default()
         },
     );
-    own.apply_command(
+    own.apply_scenario_command(
         0,
         &cast_spell(hand_index_for_card(&own, 0, "grizzly_bears"), vec![]),
     )
     .expect("cast Bear");
     let bear = own.state.stack.last().expect("Bear spell").id;
-    own.apply_command(
+    own.apply_scenario_command(
         0,
         &cast_spell(
             hand_index_for_card(&own, 0, "counterspell"),
@@ -307,7 +314,7 @@ fn surrak_spell_watcher_rejects_own_targeting_and_noncreature_spells() {
         },
     );
     noncreature
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 hand_index_for_card(&noncreature, 0, "lightning_bolt"),
@@ -317,10 +324,10 @@ fn surrak_spell_watcher_rejects_own_targeting_and_noncreature_spells() {
         .expect("cast Bolt");
     let bolt = noncreature.state.stack.last().expect("Bolt spell").id;
     noncreature
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass to opponent");
     noncreature
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_spell(
                 hand_index_for_card(&noncreature, 1, "counterspell"),
@@ -364,16 +371,18 @@ fn surrak_spell_watcher_rejects_an_opponents_creature_spell() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &pass()).expect("offer priority");
     engine
-        .apply_command(
+        .apply_scenario_command(0, &pass())
+        .expect("offer priority");
+    engine
+        .apply_scenario_command(
             1,
             &cast_spell(hand_index_for_card(&engine, 1, "ambush_viper"), vec![]),
         )
         .expect("cast flash creature");
     let viper = engine.state.stack.last().expect("Viper spell").id;
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_spell(
                 hand_index_for_card(&engine, 1, "counterspell"),

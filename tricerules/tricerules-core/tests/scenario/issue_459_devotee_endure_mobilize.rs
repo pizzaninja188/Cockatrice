@@ -12,10 +12,11 @@
 //! (Endure), CR 702.181 (Mobilize), CR 508.4 (attacking without being declared as attacking),
 //! CR 111.1 (tokens), CR 122.1 (+1/+1 counters), and CR 603.7 / 514.2 (the delayed
 //! next-end-step sacrifice).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::CounterKind;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, AbilitySourceZone, ResolutionChoiceDecision, RuledCommand,
 };
@@ -23,6 +24,7 @@ use tricerules_proto::ruled::v1::{
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
@@ -106,7 +108,7 @@ fn issue_459_abzan_devotee_produces_each_color_once_per_turn() {
         let before = pool(&engine);
         let stale = activate_ability_for(&engine, source, 0, vec![]);
         engine
-            .apply_command(0, &stale)
+            .apply_scenario_command(0, &stale)
             .expect_err("the second activation in the same turn is illegal");
         assert_eq!(pool(&engine), before, "rejected activation");
     }

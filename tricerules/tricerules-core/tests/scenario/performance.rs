@@ -1,4 +1,5 @@
 //! Deterministic board-complexity guard for the characteristics hot path.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::{
     advance_to_main1_from_game_start, declare_attackers, declare_blockers,
@@ -62,13 +63,13 @@ fn big_board_characteristics_full_turn_stays_bounded() {
     let started = Instant::now();
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 
     engine
-        .apply_command(0, &declare_attackers(attackers.clone()))
+        .apply_scenario_command(0, &declare_attackers(attackers.clone()))
         .expect("declare big attacker set");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.turn_step, TurnStep::DeclareBlockers);
@@ -82,7 +83,7 @@ fn big_board_characteristics_full_turn_stays_bounded() {
         })
         .collect();
     engine
-        .apply_command(1, &declare_blockers(block_pairs))
+        .apply_scenario_command(1, &declare_blockers(block_pairs))
         .expect("declare big blocker set");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.turn_step, TurnStep::CombatDamage);
@@ -93,10 +94,10 @@ fn big_board_characteristics_full_turn_stays_bounded() {
     assert_eq!(engine.state.turn_step, TurnStep::Main2);
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main2 to end step");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("end step through cleanup");
     assert_eq!(engine.state.turn_step, TurnStep::Upkeep);
     assert_eq!(engine.state.active_player_id(), 1);

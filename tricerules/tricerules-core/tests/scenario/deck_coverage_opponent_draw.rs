@@ -3,10 +3,11 @@
 //! The Oracle text and Scryfall rulings for these printings were checked in the batch preflight.
 //! Separate draws create separate triggers; Consecrated Sphinx offers its full two-card draw on
 //! each resolution, while Mind's Eye independently offers one generic mana for each draw.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{Color, CounterKind, Keyword, Layout};
-use tricerules_core::{GameEngine, TurnStep};
+use tricerules_core::TurnStep;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
 };
@@ -14,6 +15,7 @@ use tricerules_proto::ruled::v1::{
 fn select_branch_with_index(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
@@ -39,7 +41,7 @@ fn assert_rejected_choice_preserves_state(
     let library_before = engine.state.players[0].library.clone();
 
     assert!(
-        engine.apply_command(player, command).is_err(),
+        engine.apply_scenario_command(player, command).is_err(),
         "invalid resolution choice must be rejected"
     );
 
@@ -86,7 +88,7 @@ fn advance_to_player_main1(engine: &mut GameEngine, player: i32) {
             None => (engine.state.priority_player_id(), pass()),
         };
         engine
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("pass priority toward the requested player's main phase");
     }
     panic!("game did not reach player {player}'s main phase");
@@ -126,7 +128,7 @@ fn opponent_divination_engine(seed: u64, permanent: &str) -> (GameEngine, usize,
     );
     let divination = hand_index_for_card(&engine, 1, "divination");
     engine
-        .apply_command(1, &cast_spell(divination, Vec::new()))
+        .apply_scenario_command(1, &cast_spell(divination, Vec::new()))
         .expect("opponent casts Divination");
     pass_both_players(&mut engine);
     answer_trigger_order_in_engine_order(&mut engine);
@@ -514,7 +516,7 @@ fn narset_allows_one_brainstorm_draw_then_skips_prohibited_draws_before_empty_li
     let library_before = engine.state.players[1].library.len();
     let brainstorm = hand_index_for_card(&engine, 1, "brainstorm");
     engine
-        .apply_command(1, &cast_spell(brainstorm, Vec::new()))
+        .apply_scenario_command(1, &cast_spell(brainstorm, Vec::new()))
         .expect("cast Brainstorm during upkeep");
     pass_both_players(&mut engine);
 
@@ -544,7 +546,7 @@ fn narset_allows_one_brainstorm_draw_then_skips_prohibited_draws_before_empty_li
         .copied()
         .collect::<Vec<_>>();
     engine
-        .apply_command(1, &submit_resolution_choice(cards_to_return))
+        .apply_scenario_command(1, &submit_resolution_choice(cards_to_return))
         .expect("finish Brainstorm's hand choice");
     assert!(engine.state.pending_resolution.is_none());
     assert!(!engine.state.players[1].has_lost);
@@ -578,7 +580,7 @@ fn narset_does_not_hide_keldon_raiders_optional_discard_choice() {
     for _ in 0..4 {
         let actor = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass toward Keldon Raider's discard choice");
         if let Some(required) = batch.events.iter().find_map(|event| match &event.ev {
             Some(tricerules_proto::ruled::v1::ruled_event::Ev::ResolutionChoiceRequired(
@@ -595,7 +597,7 @@ fn narset_does_not_hide_keldon_raiders_optional_discard_choice() {
     assert_eq!((choice.min, choice.max), (0, 1));
     let discarded = choice.candidate_object_ids[0];
     engine
-        .apply_command(1, &submit_resolution_choice(vec![discarded]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![discarded]))
         .expect("discard a card even though its following draw is prohibited");
 
     assert_eq!(engine.state.players[1].hand.len(), hand_before - 1);
@@ -641,7 +643,7 @@ fn narset_does_not_skip_decode_transmissions_first_applicable_tail() {
     let life_before = engine.state.players[1].life;
     let card = hand_index_for_card(&engine, 1, "decode_transmissions");
     engine
-        .apply_command(1, &cast_spell(card, Vec::new()))
+        .apply_scenario_command(1, &cast_spell(card, Vec::new()))
         .expect("cast Decode Transmissions");
     pass_both_players(&mut engine);
 
@@ -684,7 +686,7 @@ fn narset_minus_two_finds_only_noncreature_nonland_cards_among_the_top_four() {
 
     let minus_two = activate_ability_for(&engine, narset, 0, Vec::new());
     engine
-        .apply_command(0, &minus_two)
+        .apply_scenario_command(0, &minus_two)
         .expect("activate Narset's minus-two");
     assert_eq!(
         engine.state.objects[&narset]
@@ -704,7 +706,7 @@ fn narset_minus_two_finds_only_noncreature_nonland_cards_among_the_top_four() {
     assert_eq!(pending.presentation.max, 1);
     assert_eq!(pending.presentation.candidates, [looked[0], looked[3]]);
     let result = engine
-        .apply_command(0, &submit_resolution_choice(vec![looked[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![looked[0]]))
         .expect("put the revealed instant into hand");
     assert!(result.events.iter().any(|event| matches!(
         event.ev.as_ref(),
@@ -734,7 +736,7 @@ fn consecrated_sphinx_gets_two_triggers_and_each_choice_is_draw_two_or_decline()
     );
     assert_rejected_choice_preserves_state(&mut engine, 0, &select_branch_with_index(99));
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -749,7 +751,7 @@ fn consecrated_sphinx_gets_two_triggers_and_each_choice_is_draw_two_or_decline()
 
     pass_both_players(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -783,7 +785,7 @@ fn minds_eye_pays_once_for_two_opponent_draw_triggers() {
     );
     assert_rejected_choice_preserves_state(&mut engine, 0, &select_branch_with_index(99));
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -801,7 +803,7 @@ fn minds_eye_pays_once_for_two_opponent_draw_triggers() {
 
     pass_both_players(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -863,7 +865,7 @@ fn minds_eye_keeps_its_payment_choice_when_narset_would_prevent_the_draw() {
     assert_eq!(pending.presentation.min, 0);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )

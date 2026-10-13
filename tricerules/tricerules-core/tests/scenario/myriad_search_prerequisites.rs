@@ -1,5 +1,6 @@
 //! Myriad's necessary library-to-battlefield batch contract, using an actual shipped search.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{CastCostGroupSelection, ChoiceKind};
 
@@ -36,11 +37,11 @@ fn myriad_search(
         },
     );
     engine
-        .apply_command(0, &activate_ability(source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(source, 1, vec![]))
         .expect("pay two, tap and sacrifice actual Myriad");
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
-    engine.apply_command(0, &pass()).unwrap();
-    let batch = engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let batch = engine.apply_scenario_command(1, &pass()).unwrap();
     let choice = find_resolution_choice(&batch).unwrap().clone();
     assert_eq!((choice.min, choice.max), (0, 2));
     assert!(
@@ -68,7 +69,7 @@ fn actual_myriad_rejects_incompatible_pair_atomically_and_publishes_relations() 
     let before = engine.diagnostic_snapshot().unwrap();
     assert!(
         engine
-            .apply_command(0, &submit_resolution_choice(vec![forest, island]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![forest, island]))
             .is_err(),
         "two basics without a shared land type must be rejected"
     );
@@ -107,7 +108,7 @@ fn actual_myriad_zero_singleton_wastes_and_same_name_pair_complete() {
         };
         assert_eq!(selected.len(), count as usize);
         engine
-            .apply_command(0, &submit_resolution_choice(selected.clone()))
+            .apply_scenario_command(0, &submit_resolution_choice(selected.clone()))
             .expect("legal zero/single/pair");
         answer_simultaneous_entry_order_in_engine_order(&mut engine);
         assert!(selected
@@ -185,7 +186,7 @@ fn actual_myriad_every_invalid_answer_preserves_the_pending_search() {
         let before = engine.diagnostic_snapshot().unwrap();
         assert!(
             engine
-                .apply_command(actor, &submit_resolution_choice(selected))
+                .apply_scenario_command(actor, &submit_resolution_choice(selected))
                 .is_err(),
             "illegal case {case}"
         );
@@ -196,7 +197,7 @@ fn actual_myriad_every_invalid_answer_preserves_the_pending_search() {
         );
         assert_eq!(engine.state.objects[&second_wastes].zone, Zone::Library);
         engine
-            .apply_command(0, &submit_resolution_choice(vec![]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![]))
             .expect("pending search remains usable");
         assert!(engine.state.pending_resolution.is_none());
     }
@@ -226,7 +227,7 @@ fn actual_myriad_survives_source_owner_departure_at_search_and_timestamp_choice(
             },
         );
         engine
-            .apply_command(0, &activate_ability(source, 1, vec![]))
+            .apply_scenario_command(0, &activate_ability(source, 1, vec![]))
             .unwrap();
         pass_priority_round(&mut engine);
         let candidates = engine
@@ -240,7 +241,7 @@ fn actual_myriad_survives_source_owner_departure_at_search_and_timestamp_choice(
         let selected = candidates.into_iter().take(2).collect::<Vec<_>>();
         if stage > 0 {
             engine
-                .apply_command(0, &submit_resolution_choice(selected.clone()))
+                .apply_scenario_command(0, &submit_resolution_choice(selected.clone()))
                 .unwrap();
             assert_eq!(
                 engine
@@ -253,12 +254,12 @@ fn actual_myriad_survives_source_owner_departure_at_search_and_timestamp_choice(
                 ChoiceKind::SimultaneousEntryOrder
             );
         }
-        engine.apply_command(1, &concede()).unwrap();
+        engine.apply_scenario_command(1, &concede()).unwrap();
         assert!(!engine.state.objects.contains_key(&source));
         assert!(engine.state.pending_resolution.is_some(), "surviving controller's ability at stage {stage} is independent of departed source owner");
         if stage == 0 {
             engine
-                .apply_command(0, &submit_resolution_choice(selected.clone()))
+                .apply_scenario_command(0, &submit_resolution_choice(selected.clone()))
                 .unwrap();
         }
         for _ in 0..6 {
@@ -299,7 +300,7 @@ fn actual_myriad_enters_tapped_makes_colorless_and_requires_each_source_cost() {
     ensure_card_in_hand(&mut engine, 0, "myriad_landscape");
     let slot = hand_index_for_card(&engine, 0, "myriad_landscape");
     let source = engine.state.players[0].hand[slot];
-    engine.apply_command(0, &play_land(slot)).unwrap();
+    engine.apply_scenario_command(0, &play_land(slot)).unwrap();
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     assert!(
         engine.state.objects[&source].tapped,
@@ -309,7 +310,7 @@ fn actual_myriad_enters_tapped_makes_colorless_and_requires_each_source_cost() {
         let before = engine.diagnostic_snapshot().unwrap();
         let command = activate_ability_for(&engine, source, index, vec![]);
         assert!(
-            engine.apply_command(0, &command).is_err(),
+            engine.apply_scenario_command(0, &command).is_err(),
             "tapped source cannot pay tap"
         );
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
@@ -319,7 +320,7 @@ fn actual_myriad_enters_tapped_makes_colorless_and_requires_each_source_cost() {
         let before = engine.diagnostic_snapshot().unwrap();
         let command = activate_ability_for(&engine, source, 1, vec![]);
         assert!(
-            engine.apply_command(actor, &command).is_err(),
+            engine.apply_scenario_command(actor, &command).is_err(),
             "no two mana or foreign actor"
         );
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
@@ -359,7 +360,7 @@ fn actual_myriad_enters_tapped_makes_colorless_and_requires_each_source_cost() {
         let before = engine.diagnostic_snapshot().unwrap();
         let command = activate_ability_for(&engine, source, index, vec![]);
         assert!(
-            engine.apply_command(0, &command).is_err(),
+            engine.apply_scenario_command(0, &command).is_err(),
             "animated sick land cannot pay tap"
         );
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
@@ -408,8 +409,8 @@ fn actual_myriad_paid_search_choices_replay_deterministically_with_physical_gene
         submit_resolution_choice(selected.iter().rev().copied().collect()),
     ];
     for command in commands {
-        let original = first.apply_command(0, &command).unwrap();
-        let repeated = replay.apply_command(0, &command).unwrap();
+        let original = first.apply_scenario_command(0, &command).unwrap();
+        let repeated = replay.apply_scenario_command(0, &command).unwrap();
         assert_eq!(original, repeated);
         assert_eq!(
             first.diagnostic_snapshot().unwrap(),
@@ -441,7 +442,7 @@ fn actual_myriad_timestamp_choice_rejects_a_stale_cohort_before_any_entry() {
         .take(2)
         .collect::<Vec<_>>();
     engine
-        .apply_command(0, &submit_resolution_choice(selected.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(selected.clone()))
         .unwrap();
     *engine
         .state
@@ -450,7 +451,7 @@ fn actual_myriad_timestamp_choice_rejects_a_stale_cohort_before_any_entry() {
         .or_default() += 1;
     let before = engine.diagnostic_snapshot().unwrap();
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(selected.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(selected.clone()))
         .is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     assert!(selected
@@ -487,7 +488,7 @@ fn grow_searched_cohort_cancels_when_searcher_leaves_during_entry_replacement() 
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 hand_index_for_card(&engine, 0, "grow_from_the_ashes"),
@@ -513,7 +514,7 @@ fn grow_searched_cohort_cancels_when_searcher_leaves_during_entry_replacement() 
         .take(2)
         .collect::<Vec<_>>();
     engine
-        .apply_command(0, &submit_resolution_choice(selected))
+        .apply_scenario_command(0, &submit_resolution_choice(selected))
         .unwrap();
     assert_eq!(
         engine
@@ -525,7 +526,7 @@ fn grow_searched_cohort_cancels_when_searcher_leaves_during_entry_replacement() 
             .choice_kind,
         ChoiceKind::ReplacementEffect
     );
-    let departed = engine.apply_command(0, &concede()).unwrap();
+    let departed = engine.apply_scenario_command(0, &concede()).unwrap();
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.diagnostic_snapshot().unwrap()["state"]["pending_replacement_event"].is_null());
     assert!(engine.state.stack.is_empty());
@@ -562,7 +563,7 @@ fn actual_myriad_searching_player_departure_cancels_search_and_entry_order_witho
             },
         );
         engine
-            .apply_command(0, &activate_ability(source, 1, vec![]))
+            .apply_scenario_command(0, &activate_ability(source, 1, vec![]))
             .unwrap();
         pass_priority_round(&mut engine);
         if selected_already {
@@ -578,7 +579,7 @@ fn actual_myriad_searching_player_departure_cancels_search_and_entry_order_witho
                 .take(2)
                 .collect();
             engine
-                .apply_command(0, &submit_resolution_choice(selected))
+                .apply_scenario_command(0, &submit_resolution_choice(selected))
                 .unwrap();
             assert_eq!(
                 engine
@@ -591,7 +592,7 @@ fn actual_myriad_searching_player_departure_cancels_search_and_entry_order_witho
                 ChoiceKind::SimultaneousEntryOrder
             );
         }
-        let departed = engine.apply_command(0, &concede()).unwrap();
+        let departed = engine.apply_scenario_command(0, &concede()).unwrap();
         assert!(engine.state.pending_resolution.is_none());
         assert!(
             engine.diagnostic_snapshot().unwrap()["state"]["pending_replacement_event"].is_null()
@@ -645,9 +646,11 @@ fn grow_from_the_ashes_kicked_search_enters_one_simultaneous_cohort() {
             ..Default::default()
         }],
     );
-    engine.apply_command(0, &cast).expect("actual kicked Grow");
-    engine.apply_command(0, &pass()).unwrap();
-    let search = engine.apply_command(1, &pass()).unwrap();
+    engine
+        .apply_scenario_command(0, &cast)
+        .expect("actual kicked Grow");
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let search = engine.apply_scenario_command(1, &pass()).unwrap();
     let choice = find_resolution_choice(&search).expect("actual two-basic search");
     assert_eq!((choice.min, choice.max), (0, 2));
     let selected = choice
@@ -658,7 +661,7 @@ fn grow_from_the_ashes_kicked_search_enters_one_simultaneous_cohort() {
         .collect::<Vec<_>>();
     assert_eq!(selected.len(), 2);
     let replacement = engine
-        .apply_command(0, &submit_resolution_choice(selected.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(selected.clone()))
         .unwrap();
     let choice = find_resolution_choice(&replacement).expect("first entry's Orb replacement order");
     assert_eq!(choice.replacement_options.len(), 2);
@@ -666,7 +669,7 @@ fn grow_from_the_ashes_kicked_search_enters_one_simultaneous_cohort() {
         .iter()
         .all(|id| engine.state.objects[id].zone == Zone::Library));
     let later = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(vec![choice.candidate_object_ids[0]]),
         )
@@ -680,7 +683,7 @@ fn grow_from_the_ashes_kicked_search_enters_one_simultaneous_cohort() {
         "preflight every selected entry before committing any member of one search action"
     );
     let ordering = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(vec![later_choice.candidate_object_ids[0]]),
         )
@@ -694,7 +697,7 @@ fn grow_from_the_ashes_kicked_search_enters_one_simultaneous_cohort() {
         |event| matches!(&event.ev, Some(Ev::Log(log)) if log.text == "P0 shuffles their library.")
     ));
     let committed = engine
-        .apply_command(0, &submit_resolution_choice(vec![selected[1], selected[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected[1], selected[0]]))
         .unwrap();
     assert!(selected
         .iter()

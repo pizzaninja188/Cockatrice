@@ -2,12 +2,13 @@
 //!
 //! The pinned Oracle line and five Wizards-origin rulings were checked 2026-10-06. CR 106.1a-b,
 //! 106.5, 106.7 and 605.2 govern color filtering, current output, ignored costs and zero output.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, Layout, ManaAmount, SpellEffectKind,
 };
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn orchard_engine(seed: u64, player_ids: &[i32]) -> GameEngine {
     let decks = Some(
@@ -159,7 +160,7 @@ fn exotic_orchard_cycles_require_a_seed_and_follow_later_land_changes() {
     inject_permanent_on_battlefield(&mut engine, 2, "forest");
     let info = orchard_ability_info(&mut engine, orchard);
     assert_eq!(info.mana_produced, "G");
-    let invalid = engine.apply_command(0, &activate_mana_option(&engine, orchard, 1));
+    let invalid = engine.apply_scenario_command(0, &activate_mana_option(&engine, orchard, 1));
     assert!(invalid.is_err(), "a one-option Orchard rejects index 1");
     assert!(!engine.state.objects[&orchard].tapped);
     assert_eq!(mana_pool(&engine, 0), (0, 0, 0, 0, 0, 0));

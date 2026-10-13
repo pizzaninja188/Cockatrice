@@ -1,5 +1,6 @@
 //! Actual-card semantics for five pinned Standard token cards.
 //! Scryfall Oracle and rulings checked 2026-09-22. CR 111.10, 308, 603.6a, 608.2b/c, 700.14.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{Color, Keyword};
@@ -41,6 +42,7 @@ fn cast_permanent(e: &mut GameEngine, card_id: &str) -> u32 {
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -55,8 +57,9 @@ fn resolve_top_stack(e: &mut GameEngine) -> RuledEventBatch {
     } else {
         e.state.players[0].id
     };
-    e.apply_command(first, &pass()).expect("first pass");
-    e.apply_command(second, &pass())
+    e.apply_scenario_command(first, &pass())
+        .expect("first pass");
+    e.apply_scenario_command(second, &pass())
         .expect("second pass resolves top stack")
 }
 
@@ -138,8 +141,8 @@ fn issue_misc30_ant_mans_choice_is_exactly_one_token() {
             assert_eq!(presentation.path.last().unwrap().id, id);
             assert_ne!(presentation.fallback_text, "Choice");
         }
-        assert!(e.apply_command(0, &select_branch(2)).is_err());
-        assert!(e.apply_command(1, &select_branch(choice)).is_err());
+        assert!(e.apply_scenario_command(0, &select_branch(2)).is_err());
+        assert!(e.apply_scenario_command(1, &select_branch(choice)).is_err());
         semantic::accepted(&mut e, 0, &select_branch(choice));
         resolve_entire_stack_two_player(&mut e);
         assert_eq!(battlefield_token_oids(&e, 0, expected_token).len(), 1);

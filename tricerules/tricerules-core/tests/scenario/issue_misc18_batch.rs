@@ -7,6 +7,7 @@
 //! CR 508.1/603.2b (beginning-of-combat timing), CR 603.6a (entry trigger), CR 603.6c (dies
 //! trigger), CR 613.4c (attached +2/+1 and vigilance), CR 702.9 (flying), CR 702.17 (reach),
 //! CR 702.20 (vigilance), CR 702.8 (flash), CR 702.51 (convoke), and CR 702.122 (crew).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -96,8 +97,9 @@ fn kill_with_murder(e: &mut GameEngine, source: u32) {
     inject_card_into_hand(e, 0, "murder");
     let slot = hand_index_for_card(e, 0, "murder");
     semantic::accepted(e, 0, &cast_spell(slot, target_object(source)));
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("murder resolves");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("murder resolves");
 }
 
 #[test]
@@ -178,7 +180,7 @@ fn issue_misc18_disruptor_of_currents_bounces_an_other_nonland_permanent() {
     let forest = inject_permanent_on_battlefield(&mut land, 1, "forest");
     cast(&mut land, 0, "disruptor_of_currents", vec![]);
     assert!(
-        land.apply_command(0, &choose_trigger_target(forest))
+        land.apply_scenario_command(0, &choose_trigger_target(forest))
             .is_err(),
         "a land is not a legal target"
     );
@@ -188,7 +190,7 @@ fn issue_misc18_disruptor_of_currents_bounces_an_other_nonland_permanent() {
     let source = battlefield_object(&self_target, 0, "disruptor_of_currents");
     assert!(
         self_target
-            .apply_command(0, &choose_trigger_target(source))
+            .apply_scenario_command(0, &choose_trigger_target(source))
             .is_err(),
         "the source cannot target itself"
     );
@@ -199,7 +201,7 @@ fn issue_misc18_battle_rattle_shaman_pumps_at_beginning_of_combat() {
     let mut e = engine(818_006);
     inject_permanent_on_battlefield(&mut e, 0, "battle-rattle_shaman");
     let bear = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 2, 2);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     assert_eq!(
         e.state.pending_triggers.len(),
@@ -218,7 +220,7 @@ fn issue_misc18_targeted_optional_trigger_cannot_be_declined_before_targeting() 
     let mut e = engine(818_016);
     inject_permanent_on_battlefield(&mut e, 0, "battle-rattle_shaman");
     let bear = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 2, 2);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     assert_eq!(e.state.pending_triggers.len(), 1);
 
@@ -229,7 +231,7 @@ fn issue_misc18_targeted_optional_trigger_cannot_be_declined_before_targeting() 
         })),
     };
     assert!(
-        e.apply_command(0, &decline).is_err(),
+        e.apply_scenario_command(0, &decline).is_err(),
         "a targeted may trigger requires its target before the resolution-time may choice"
     );
     assert_eq!(
@@ -246,7 +248,7 @@ fn issue_misc18_targeted_optional_trigger_offers_resolution_choice() {
     let mut e = engine(818_017);
     inject_permanent_on_battlefield(&mut e, 0, "battle-rattle_shaman");
     let bear = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 2, 2);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     semantic::accepted(&mut e, 0, &choose_trigger_target(bear));
 
@@ -271,13 +273,14 @@ fn issue_misc18_targeted_optional_trigger_acceptance_and_decline_are_distinct() 
         let mut e = engine(seed);
         inject_permanent_on_battlefield(&mut e, 0, "battle-rattle_shaman");
         let bear = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 2, 2);
-        e.apply_command(0, &primitive_yield())
+        e.apply_scenario_command(0, &primitive_yield())
             .expect("main phase to beginning of combat");
         semantic::accepted(&mut e, 0, &choose_trigger_target(bear));
         pass_priority_round(&mut e);
 
         let answer = RuledCommand {
             cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                resolution_prompt_id: 0,
                 decision: decision as i32,
                 selected_branch_index: 0,
                 ..Default::default()

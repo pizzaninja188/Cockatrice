@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
 /// Demonic Tutor: successful search — the chosen library card arrives in hand and the library
@@ -65,7 +66,7 @@ fn demonic_tutor_puts_chosen_card_in_hand() {
 
     // Submit the search choice: pick the mountain.
     let completion = e
-        .apply_command(0, &submit_resolution_choice(vec![mountain_oid]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![mountain_oid]))
         .expect("submit search choice");
     assert!(
         !completion.events.iter().any(|event| matches!(
@@ -170,7 +171,7 @@ fn mystical_tutor_filters_to_instant_or_sorcery() {
     // Choose the counterspell — it should go on top of the library.
     let lib_top_before = e.state.players[0].library.front().copied();
     let completion = e
-        .apply_command(0, &submit_resolution_choice(vec![counter_oid]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![counter_oid]))
         .expect("submit");
     let reveal = completion
         .events
@@ -247,7 +248,7 @@ fn mystical_tutor_rejects_non_instant_sorcery() {
     // Submitting the bear (not an instant/sorcery) must fail.
     let lib_snapshot: Vec<u32> = e.state.players[0].library.iter().copied().collect();
     let hand_snapshot = e.state.players[0].hand.clone();
-    let res = e.apply_command(0, &submit_resolution_choice(vec![bear_oid]));
+    let res = e.apply_scenario_command(0, &submit_resolution_choice(vec![bear_oid]));
     assert!(
         res.is_err(),
         "choosing a non-instant/sorcery card should be illegal"
@@ -312,7 +313,7 @@ fn demonic_tutor_empty_library_allows_empty_choice() {
     assert_eq!(req.candidate_object_ids.len(), 0, "no candidates");
 
     // Submit empty choice — must succeed.
-    e.apply_command(0, &submit_resolution_choice(vec![]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("empty search resolves without error");
     assert!(e.state.pending_resolution.is_none(), "resolution completed");
 }
@@ -408,7 +409,7 @@ fn mystical_tutor_finds_a_split_card_by_face_type() {
         "Fire // Ice is an instant card in the library"
     );
 
-    e.apply_command(0, &submit_resolution_choice(vec![fire_ice_oid]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![fire_ice_oid]))
         .expect("submit");
     assert_eq!(
         e.state.players[0].library.front().copied(),
@@ -454,6 +455,6 @@ fn mystical_tutor_excludes_an_adventure_spell_face_in_library() {
         !req.candidate_object_ids.contains(&bonecrusher_oid),
         "Stomp's instant type does not exist while Bonecrusher Giant is in the library"
     );
-    e.apply_command(0, &submit_resolution_choice(vec![]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("fail to find");
 }

@@ -3,6 +3,7 @@
 //! Oracle and rulings were verified 2026-09-03 for Restless Reef and Soulstone Sanctuary, and
 //! 2026-09-23 for Firdoch Core.
 //! Governing rules: CR 205.1b, 205.3m, 302.6, 611.2a, 613.1d-f, 613.4b-c, and 613.7.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{
@@ -109,11 +110,11 @@ fn move_same_object_through_hand(engine: &mut GameEngine, player: usize, oid: u3
     };
     engine.enable_dev_commands();
     engine
-        .apply_command(player_id, &move_to(DevZone::Hand, false))
+        .apply_scenario_command(player_id, &move_to(DevZone::Hand, false))
         .expect("move animated land to hand");
     assert_eq!(engine.state.objects[&oid].zone, Zone::Hand);
     engine
-        .apply_command(player_id, &move_to(DevZone::Battlefield, true))
+        .apply_scenario_command(player_id, &move_to(DevZone::Battlefield, true))
         .expect("return the same land to the battlefield");
     assert!(engine.state.players[player].battlefield.contains(&oid));
 }
@@ -246,7 +247,7 @@ fn restless_reef_publishes_land_creature_land_creature_row_contract() {
 
     let command_index = engine.state.command_index;
     let unfunded = activate_ability_for(&engine, reef, 1, vec![]);
-    assert!(engine.apply_command(0, &unfunded).is_err());
+    assert!(engine.apply_scenario_command(0, &unfunded).is_err());
     assert_eq!(engine.state.command_index, command_index);
 
     give_mana(
@@ -290,7 +291,7 @@ fn restless_reef_publishes_land_creature_land_creature_row_contract() {
 
     advance_to_main1_from_game_start(&mut engine);
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("active opponent passes priority");
     give_mana(
         &mut engine,
@@ -319,17 +320,17 @@ fn restless_reef_attack_trigger_works_after_external_animation() {
     add_external_creature_form(&mut engine, reef);
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
     let library_before = engine.state.players[1].library.len();
     engine
-        .apply_command(0, &declare_attackers(vec![reef]))
+        .apply_scenario_command(0, &declare_attackers(vec![reef]))
         .expect("declare externally animated Reef");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {

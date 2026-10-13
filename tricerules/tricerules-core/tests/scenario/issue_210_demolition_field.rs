@@ -1,5 +1,6 @@
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use crate::helpers::ScenarioCommandExt;
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ruled_event::Ev, ChoiceKind, ResolutionChoiceDecision, RuledCommand,
     SubmitResolutionChoice,
@@ -8,6 +9,7 @@ use tricerules_proto::ruled::v1::{
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -60,9 +62,11 @@ fn activate_and_resolve_to_first_prompt(
 ) -> RuledEventBatch {
     apply_ability(engine, 0, field, 1, target_object(target)).expect("activate Demolition Field");
     assert_eq!(engine.state.objects[&field].zone, Zone::Graveyard);
-    engine.apply_command(0, &pass()).expect("controller passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and ability begins resolving")
 }
 
@@ -91,14 +95,14 @@ fn issue_210_uses_destroyed_targets_last_controller_then_resumes_for_activator()
 
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
             )
             .is_err(),
         "the activator cannot answer the target controller's search"
     );
-    assert!(engine.apply_command(1, &select_branch(1)).is_err());
+    assert!(engine.apply_scenario_command(1, &select_branch(1)).is_err());
     assert_eq!(
         engine
             .state
@@ -109,7 +113,7 @@ fn issue_210_uses_destroyed_targets_last_controller_then_resumes_for_activator()
         1
     );
     let search = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -121,7 +125,7 @@ fn issue_210_uses_destroyed_targets_last_controller_then_resumes_for_activator()
     assert!(!choice.candidate_object_ids.contains(&forest));
 
     let second = engine
-        .apply_command(1, &submit_resolution_choice(vec![island]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![island]))
         .expect("target controller finds Island");
     assert_eq!(engine.state.objects[&island].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&island].controller, 1);
@@ -131,7 +135,7 @@ fn issue_210_uses_destroyed_targets_last_controller_then_resumes_for_activator()
     assert_eq!(choice.choice_kind(), ChoiceKind::ResolutionBranch);
 
     let completion = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -148,7 +152,7 @@ fn issue_210_decline_does_not_shuffle_or_skip_the_second_search() {
     activate_and_resolve_to_first_prompt(&mut engine, field, target);
 
     let second = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -159,13 +163,13 @@ fn issue_210_decline_does_not_shuffle_or_skip_the_second_search() {
     assert_eq!(choice.deciding_player_id, 0);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
         .expect("activator elects to search");
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(Vec::new()))
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
         .expect("qualified hidden search may fail to find");
     assert!(engine.state.players[0].library.contains(&forest));
     assert_eq!(shuffle_logs(&completion, 0), 1);
@@ -195,8 +199,12 @@ fn issue_210_illegal_target_fizzles_before_either_search() {
     object.base_controller = controller;
     object.controller = controller;
 
-    engine.apply_command(0, &pass()).expect("controller passes");
-    let completion = engine.apply_command(1, &pass()).expect("ability fizzles");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
+    let completion = engine
+        .apply_scenario_command(1, &pass())
+        .expect("ability fizzles");
     assert!(find_resolution_choice(&completion).is_none());
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
@@ -243,7 +251,7 @@ fn issue_210_rejects_a_stale_private_candidate_without_losing_the_search() {
     let (mut engine, field, target, _, island) = setup(210_006);
     activate_and_resolve_to_first_prompt(&mut engine, field, target);
     engine
-        .apply_command(1, &select_branch(0))
+        .apply_scenario_command(1, &select_branch(0))
         .expect("elect to search");
     *engine
         .state
@@ -253,7 +261,7 @@ fn issue_210_rejects_a_stale_private_candidate_without_losing_the_search() {
 
     assert!(
         engine
-            .apply_command(1, &submit_resolution_choice(vec![island]))
+            .apply_scenario_command(1, &submit_resolution_choice(vec![island]))
             .is_err(),
         "the published incarnation is stale"
     );
@@ -267,6 +275,6 @@ fn issue_210_rejects_a_stale_private_candidate_without_losing_the_search() {
         1
     );
     engine
-        .apply_command(1, &submit_resolution_choice(Vec::new()))
+        .apply_scenario_command(1, &submit_resolution_choice(Vec::new()))
         .expect("search can recover by failing to find");
 }

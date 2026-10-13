@@ -1,5 +1,6 @@
 //! Actual-card semantics for five pinned Standard artifact-token cards.
 //! Scryfall Oracle and rulings checked 2026-09-22. CR 111.10, 602, 603.6a, 608.2b/c, 702.3b.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -79,7 +80,7 @@ fn issue_misc29_witch_food_sacrifice_and_target() {
     let nontoken_food = inject_permanent_on_battlefield(&mut e, 0, "tough_cookie");
     let nonfood = inject_permanent_on_battlefield(&mut e, 0, "forest");
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &activate(
                 &e,
@@ -106,7 +107,7 @@ fn issue_misc29_witch_food_sacrifice_and_target() {
         "life loss resolves later"
     );
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &activate(
                 &e,
@@ -141,7 +142,7 @@ fn issue_misc29_sentinel_land_cost() {
     assert_eq!(e.state.players[0].hand.len(), hand_before + 1);
     assert_eq!(battlefield_token_oids(&e, 0, "treasure").len(), 1);
     assert!(e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate(&e, source, vec![], vec![permanent_cost_selection(2, land)])
         )

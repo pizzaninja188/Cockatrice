@@ -40,6 +40,9 @@ private:
     bool hasLastBroadcastHandSlotMap = false;
     QSet<int> lastBroadcastHandSlotParticipants;
     std::optional<ruled::v1::ResolutionChoiceRequired> pendingResolutionChoice;
+    // Authoritative prompt generation travels independently of the legacy RCR event. Retain its
+    // final state for reconnects, including the inactive snapshot that retires a prior prompt.
+    std::optional<ruled::v1::ResolutionPromptState> currentResolutionPromptState;
     // State accompanying a parked choice: replayable views and legality, never one-shot actions.
     ruled::v1::RuledEventBatch pendingResolutionState;
     std::optional<ruled::v1::ActivePublicRevealSnapshot> activePublicRevealSnapshot;

@@ -1,6 +1,7 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{ContinuousEffectKind, EffectDuration};
-use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine, TurnStep};
+use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep};
 
 #[track_caller]
 fn hand_action_reduction(
@@ -87,7 +88,7 @@ fn issue_341_ballyrush_matches_subtype_or_once_per_source_and_casts_at_zero_gene
     engine.state.players[0].mana_pool.green = 1;
     let watcher = hand_index_for_card(&engine, 0, "crossroads_watcher");
     engine
-        .apply_command(0, &cast_spell(watcher, vec![]))
+        .apply_scenario_command(0, &cast_spell(watcher, vec![]))
         .expect("three reductions floor the generic component of Crossroads Watcher to zero");
     assert_eq!(engine.state.players[0].mana_pool.green, 0);
 }
@@ -140,7 +141,7 @@ fn issue_341_dragonlords_servant_matches_dragon_types_and_changeling_in_hand() {
     engine.state.players[0].mana_pool.colorless = 2;
     let dragon = hand_index_for_card(&engine, 0, "adult_gold_dragon");
     engine
-        .apply_command(0, &cast_spell(dragon, vec![]))
+        .apply_scenario_command(0, &cast_spell(dragon, vec![]))
         .expect("Dragonlord's Servant removes one generic mana and preserves {R}{W}");
     assert_eq!(engine.state.players[0].mana_pool.red, 0);
     assert_eq!(engine.state.players[0].mana_pool.white, 0);
@@ -216,7 +217,7 @@ fn issue_341_voyager_quickwelder_reduces_artifact_spells_only() {
     engine.state.players[0].mana_pool.colorless = 2;
     let core = hand_index_for_card(&engine, 0, "firdoch_core");
     engine
-        .apply_command(0, &cast_spell(core, vec![]))
+        .apply_scenario_command(0, &cast_spell(core, vec![]))
         .expect("Voyager Quickwelder reduces Firdoch Core's artifact spell cost to {2}");
 }
 
@@ -256,7 +257,7 @@ fn issue_341_static_reduction_applies_to_a_flashback_alternative_cost() {
     engine.state.players[0].mana_pool.blue = 2;
     engine.state.players[0].mana_pool.colorless = 4;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CastSpell(CastSpell {
@@ -306,17 +307,17 @@ fn issue_341_uncle_iroh_reduces_lessons_and_firebending_adds_combat_mana() {
     );
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("active player advances from main one to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes combat");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("nonactive player passes combat");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
     engine
-        .apply_command(0, &declare_attackers(vec![iroh]))
+        .apply_scenario_command(0, &declare_attackers(vec![iroh]))
         .expect("Uncle Iroh can attack after entering the battlefield before the combat turn");
     assert_eq!(
         engine.state.stack.len(),

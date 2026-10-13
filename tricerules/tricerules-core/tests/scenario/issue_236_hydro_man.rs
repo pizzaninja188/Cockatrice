@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{
     Color, ContinuousEffectKind, EffectDuration, PermanentTypeFilter, TypeLineReplacement,
 };
@@ -29,7 +30,7 @@ fn cast_from_injected_hand(engine: &mut GameEngine, player: usize, card_id: &str
     inject_card_into_hand(engine, player, card_id);
     let slot = hand_index_for_card(engine, player, card_id);
     engine
-        .apply_command(player as i32, &cast_spell(slot, vec![]))
+        .apply_scenario_command(player as i32, &cast_spell(slot, vec![]))
         .expect("cast spell");
 }
 
@@ -42,7 +43,7 @@ fn cast_from_injected_hand_with_targets(
     inject_card_into_hand(engine, player, card_id);
     let slot = hand_index_for_card(engine, player, card_id);
     engine
-        .apply_command(player as i32, &cast_spell(slot, targets))
+        .apply_scenario_command(player as i32, &cast_spell(slot, targets))
         .expect("cast spell");
 }
 
@@ -51,24 +52,36 @@ fn resolve_stack(engine: &mut GameEngine) {
         answer_trigger_order_in_engine_order(engine);
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("priority pass");
     }
 }
 
 fn advance_to_end_step(engine: &mut GameEngine, active: i32) {
-    engine.apply_command(active, &primitive_yield()).unwrap();
-    engine.apply_command(active, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(active, &primitive_yield())
+        .unwrap();
+    engine
+        .apply_scenario_command(active, &primitive_yield())
+        .unwrap();
     if engine.state.turn_step == TurnStep::DeclareAttackers {
-        engine.apply_command(active, &primitive_yield()).unwrap();
+        engine
+            .apply_scenario_command(active, &primitive_yield())
+            .unwrap();
     }
-    engine.apply_command(active, &primitive_yield()).unwrap();
-    engine.apply_command(active, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(active, &primitive_yield())
+        .unwrap();
+    engine
+        .apply_scenario_command(active, &primitive_yield())
+        .unwrap();
     assert_eq!(engine.state.turn_step, TurnStep::EndStep);
 }
 
 fn roll_from_end_step(engine: &mut GameEngine, active: i32) {
-    engine.apply_command(active, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(active, &primitive_yield())
+        .unwrap();
     resolve_cleanup_discards_if_any(engine);
     assert_eq!(engine.state.turn_step, TurnStep::Upkeep);
 }
@@ -142,7 +155,7 @@ fn issue_236_blue_and_multicolor_spells_pump_only_the_casters_creature() {
             cast_from_injected_hand(&mut engine, 0, spell);
         } else {
             engine
-                .apply_command(0, &pass())
+                .apply_scenario_command(0, &pass())
                 .expect("pass priority to opponent");
             cast_from_injected_hand_with_targets(&mut engine, 1, spell, vec![]);
         }
@@ -283,7 +296,7 @@ fn issue_236_end_step_form_is_public_activatable_and_expires_before_next_untap()
 
     let activate = activate_ability_for(&engine, hydro, 1, vec![]);
     engine
-        .apply_command(0, &activate)
+        .apply_scenario_command(0, &activate)
         .expect("a summoning-sick noncreature land may activate its tap ability");
     assert_eq!(engine.state.players[0].mana_pool.blue, 1);
 
@@ -324,7 +337,7 @@ fn issue_236_expiry_controller_is_fixed_while_activation_follows_current_control
     );
     let activate = activate_ability_for(&engine, hydro, 1, vec![]);
     engine
-        .apply_command(1, &activate)
+        .apply_scenario_command(1, &activate)
         .expect("the current controller activates the granted mana ability");
     assert_eq!(engine.state.players[1].mana_pool.blue, 1);
 
@@ -358,10 +371,12 @@ fn issue_236_land_form_does_not_survive_a_zone_change_or_reentry() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &pass()).expect("pass to opponent");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass to opponent");
     let slot = hand_index_for_card(&engine, 1, "boomerang");
     engine
-        .apply_command(1, &cast_spell(slot, target_object(hydro)))
+        .apply_scenario_command(1, &cast_spell(slot, target_object(hydro)))
         .expect("cast Boomerang");
     resolve_stack(&mut engine);
     assert_eq!(engine.state.objects[&hydro].zone, Zone::Hand);
@@ -383,7 +398,7 @@ fn issue_236_land_form_does_not_survive_a_zone_change_or_reentry() {
     );
     let slot = hand_index_for_card(&engine, 0, HYDRO);
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("recast Hydro-Man");
     resolve_stack(&mut engine);
 

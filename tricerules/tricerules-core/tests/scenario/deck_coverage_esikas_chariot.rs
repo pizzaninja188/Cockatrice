@@ -4,6 +4,7 @@
 //! Vehicle power/toughness (208.3, 301.7), Crew (702.122a), ETB triggers (603.6a), target
 //! announcement and legality (115.1d, 608.2b), and copiable values (707.2). Chariot's WotC
 //! ruling confirms copied tokens do not copy counters or tapped status.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{Color, CounterKind};
@@ -128,7 +129,7 @@ fn chariot_enters_crews_with_aggregate_power_then_copies_a_legal_token_on_attack
     let chariot = inject_card_into_hand(&mut engine, 0, CHARIOT);
     let slot = hand_index_for_card(&engine, 0, CHARIOT);
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Esika's Chariot");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&chariot].zone, Zone::Battlefield);
@@ -157,14 +158,14 @@ fn chariot_enters_crews_with_aggregate_power_then_copies_a_legal_token_on_attack
     let before_short_crew = format!("{:?}", engine.state);
     assert!(
         engine
-            .apply_command(0, &crew_command(&engine, chariot, &original_cats[..1]))
+            .apply_scenario_command(0, &crew_command(&engine, chariot, &original_cats[..1]))
             .is_err(),
         "one 2/2 Cat is below Crew 4"
     );
     assert_eq!(format!("{:?}", engine.state), before_short_crew);
 
     engine
-        .apply_command(0, &crew_command(&engine, chariot, &original_cats))
+        .apply_scenario_command(0, &crew_command(&engine, chariot, &original_cats))
         .expect("two Cats pay Crew 4 together, despite summoning sickness");
     assert!(original_cats
         .iter()
@@ -199,7 +200,7 @@ fn chariot_enters_crews_with_aggregate_power_then_copies_a_legal_token_on_attack
         .all(|cat| !engine.state.objects[cat].tapped));
 
     engine
-        .apply_command(0, &crew_command(&engine, chariot, &refreshed_cats))
+        .apply_scenario_command(0, &crew_command(&engine, chariot, &refreshed_cats))
         .expect("crew Chariot for the next turn's attack");
     resolve_entire_stack_two_player(&mut engine);
     let target_cat = refreshed_cats[0];
@@ -212,11 +213,11 @@ fn chariot_enters_crews_with_aggregate_power_then_copies_a_legal_token_on_attack
     assert_eq!(engine.effective_power(target_cat), Some(3));
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("advance to beginning of combat");
     pass_both_players(&mut engine);
     let attack_batch = engine
-        .apply_command(0, &declare_attackers(vec![chariot]))
+        .apply_scenario_command(0, &declare_attackers(vec![chariot]))
         .expect("attack with the crewed Vehicle");
     let prompt = attack_batch
         .events
@@ -233,7 +234,7 @@ fn chariot_enters_crews_with_aggregate_power_then_copies_a_legal_token_on_attack
         let before_illegal_target = format!("{:?}", engine.state);
         assert!(
             engine
-                .apply_command(0, &choose_trigger_target(illegal_target))
+                .apply_scenario_command(0, &choose_trigger_target(illegal_target))
                 .is_err(),
             "only a token you control is legal"
         );
@@ -241,7 +242,7 @@ fn chariot_enters_crews_with_aggregate_power_then_copies_a_legal_token_on_attack
     }
 
     engine
-        .apply_command(0, &choose_trigger_target(target_cat))
+        .apply_scenario_command(0, &choose_trigger_target(target_cat))
         .expect("target the tapped Cat token you control");
     resolve_entire_stack_two_player(&mut engine);
     let cats_after_copy = battlefield_token_oids(&engine, 0, CAT_TOKEN);

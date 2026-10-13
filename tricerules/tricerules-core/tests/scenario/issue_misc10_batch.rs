@@ -8,6 +8,7 @@
 //! CR 602 (activated abilities), CR 603.4 (intervening-if), CR 603.6 (entry triggers),
 //! CR 611.2c (until end of turn), CR 701.25 (surveil), CR 701.68 (blight), and CR 702.177
 //! (power-up/exhaust activation limit).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::CounterKind;
@@ -79,7 +80,7 @@ fn advance_to_main2(engine: &mut GameEngine, active: i32) {
         }
         let priority = engine.state.priority_player_id();
         engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("advance to main 2");
     }
     panic!("stalled before main 2");
@@ -95,8 +96,10 @@ fn issue_misc10_umbral_collar_zealot_sacrifices_for_surveil() {
         0,
         &activate_ability_with_costs(zealot, 0, vec![], vec![permanent_cost_selection(0, fodder)]),
     );
-    e.apply_command(0, &pass()).expect("caster passes");
-    let batch = e.apply_command(1, &pass()).expect("the ability resolves");
+    e.apply_scenario_command(0, &pass()).expect("caster passes");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("the ability resolves");
     assert_eq!(e.state.objects[&fodder].zone, Zone::Graveyard);
     let choice = find_resolution_choice(&batch).expect("surveil choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibraryLook);
@@ -108,7 +111,7 @@ fn issue_misc10_umbral_collar_zealot_sacrifices_for_surveil() {
     let zealot = inject_creature_on_battlefield(&mut alone, 0, "umbral_collar_zealot");
     assert!(
         alone
-            .apply_command(0, &activate_ability(zealot, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability(zealot, 0, vec![]))
             .is_err(),
         "the source is excluded from its own sacrifice cost"
     );
@@ -129,7 +132,7 @@ fn issue_misc10_bold_biochemist_power_up_is_once_per_object() {
 
     // Power-up: activate each power-up ability only once.
     assert!(
-        e.apply_command(0, &activate_ability(biochemist, 0, vec![]))
+        e.apply_scenario_command(0, &activate_ability(biochemist, 0, vec![]))
             .is_err(),
         "the power-up ability cannot be activated a second time"
     );
@@ -163,7 +166,7 @@ fn issue_misc10_hardened_tactician_sacrifices_a_token() {
     let tactician = inject_creature_on_battlefield(&mut bad, 0, "hardened_tactician");
     let bear = inject_creature_on_battlefield(&mut bad, 0, "grizzly_bears");
     assert!(
-        bad.apply_command(
+        bad.apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 tactician,
@@ -247,7 +250,7 @@ fn issue_misc10_fire_nation_raider_raid_creates_a_clue_only_after_attacking() {
     .expect("engine");
     advance_to_declare_attackers(&mut e);
     let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare an attacker");
     advance_to_main2(&mut e, 0);
     grant_pool(&mut e, 0);

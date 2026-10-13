@@ -4,10 +4,11 @@
 //! both a creature and a planeswalker gets both counter types. CR 122.1, 306.5, 513.1-513.2,
 //! 603.2b-c, and 608.2h govern counters, planeswalker state-based actions, the end step, and
 //! resolution-time battlefield characteristics.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
-use tricerules_core::{state::CopiableValues, GameEngine, TurnStep, Zone};
+use tricerules_core::{state::CopiableValues, TurnStep, Zone};
 
 const BROKERS_ASCENDANCY: &str = "brokers_ascendancy";
 
@@ -50,21 +51,21 @@ fn planeswalker_with_loyalty(
 fn advance_to_end_step(engine: &mut GameEngine, active_player: i32) {
     assert_eq!(engine.state.turn_step, TurnStep::Main1);
     engine
-        .apply_command(active_player, &primitive_yield())
+        .apply_scenario_command(active_player, &primitive_yield())
         .expect("main 1 to beginning of combat");
     engine
-        .apply_command(active_player, &primitive_yield())
+        .apply_scenario_command(active_player, &primitive_yield())
         .expect("beginning of combat advance");
     if engine.state.turn_step == TurnStep::DeclareAttackers {
         engine
-            .apply_command(active_player, &primitive_yield())
+            .apply_scenario_command(active_player, &primitive_yield())
             .expect("declare no attackers");
     }
     engine
-        .apply_command(active_player, &primitive_yield())
+        .apply_scenario_command(active_player, &primitive_yield())
         .expect("end combat to main 2");
     engine
-        .apply_command(active_player, &primitive_yield())
+        .apply_scenario_command(active_player, &primitive_yield())
         .expect("main 2 to end step");
     assert_eq!(engine.state.turn_step, TurnStep::EndStep);
 }
@@ -81,7 +82,7 @@ fn advance_to_main1_for(engine: &mut GameEngine, player: i32) {
                 .expect("cleanup player");
             let excess = engine.state.players[player_index].hand.len() - 7;
             engine
-                .apply_command(
+                .apply_scenario_command(
                     cleanup_player,
                     &discard_cleanup_batch((0..excess as u32).collect()),
                 )
@@ -89,7 +90,7 @@ fn advance_to_main1_for(engine: &mut GameEngine, player: i32) {
         } else {
             let priority_player = engine.state.priority_player_id();
             engine
-                .apply_command(priority_player, &pass())
+                .apply_scenario_command(priority_player, &pass())
                 .expect("pass toward the requested main phase");
         }
     }

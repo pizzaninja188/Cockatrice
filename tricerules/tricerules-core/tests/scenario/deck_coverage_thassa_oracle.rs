@@ -1,9 +1,10 @@
 //! Exact Thassa's Oracle identity and rules behavior.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::ManaCost;
 use tricerules_core::state::GameOutcome;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ruled_command::Cmd, ChoiceKind, SubmitResolutionChoice};
 
 const THASSAS_ORACLE: &str = "thassas_oracle";
@@ -53,7 +54,7 @@ fn cast_oracle(engine: &mut GameEngine) -> u32 {
     let object_id = engine.state.players[0].hand[slot];
     engine.state.players[0].mana_pool.blue = 2;
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Thassa's Oracle");
     object_id
 }
@@ -76,6 +77,7 @@ fn pass_until_library_choice(engine: &mut GameEngine) {
 fn choose_cards(cards: Vec<u32>) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: cards,
             ..Default::default()
         })),
@@ -118,13 +120,15 @@ fn resolve_nonwinning_library_choice(seed: u64, choose_one: bool) -> Vec<u32> {
     let untouched = *engine.state.players[0].library.get(4).unwrap();
 
     // Rejected actor, candidate, and stale-top answers must leave the pending choice intact.
-    assert!(engine.apply_command(1, &choose_cards(Vec::new())).is_err());
     assert!(engine
-        .apply_command(0, &choose_cards(vec![u32::MAX]))
+        .apply_scenario_command(1, &choose_cards(Vec::new()))
+        .is_err());
+    assert!(engine
+        .apply_scenario_command(0, &choose_cards(vec![u32::MAX]))
         .is_err());
     engine.state.players[0].library.swap(0, 1);
     assert!(engine
-        .apply_command(0, &choose_cards(vec![looked[0]]))
+        .apply_scenario_command(0, &choose_cards(vec![looked[0]]))
         .is_err());
     assert!(engine.state.pending_resolution.is_some());
     engine.state.players[0].library.swap(0, 1);
@@ -135,7 +139,7 @@ fn resolve_nonwinning_library_choice(seed: u64, choose_one: bool) -> Vec<u32> {
         Vec::new()
     };
     engine
-        .apply_command(0, &choose_cards(chosen.clone()))
+        .apply_scenario_command(0, &choose_cards(chosen.clone()))
         .expect("accept a choice of up to one card");
     assert_eq!(engine.state.outcome, None);
     assert_eq!(engine.state.players[0].library.len(), 5);
@@ -207,7 +211,7 @@ fn captured_devotion_at_least_library_size_wins_after_the_private_choice() {
         .presentation
         .candidates[0];
     engine
-        .apply_command(0, &choose_cards(vec![selected]))
+        .apply_scenario_command(0, &choose_cards(vec![selected]))
         .expect("complete Oracle's look");
     assert_eq!(engine.state.outcome, Some(GameOutcome::Winner(0)));
 }
@@ -230,7 +234,7 @@ fn library_shorter_than_devotion_looks_at_all_remaining_cards_then_wins() {
         2
     );
     engine
-        .apply_command(0, &choose_cards(Vec::new()))
+        .apply_scenario_command(0, &choose_cards(Vec::new()))
         .expect("complete Oracle's look at the remaining library");
     assert_eq!(engine.state.players[0].library.len(), 2);
     assert_eq!(engine.state.outcome, Some(GameOutcome::Winner(0)));
@@ -249,7 +253,7 @@ fn remove_oracle_before_trigger_resolves(seed: u64, library_size: usize) -> Opti
     engine.state.players[0].mana_pool.blue = 1;
     let bounce = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(bounce, target_object(oracle)))
+        .apply_scenario_command(0, &cast_spell(bounce, target_object(oracle)))
         .expect("bounce the source while its trigger is on the stack");
     pass_priority_round(&mut engine); // Unsummon resolves; the ETB trigger still exists.
     assert_eq!(engine.state.objects[&oracle].zone, Zone::Hand);
@@ -321,7 +325,7 @@ fn trigger_controller_keeps_its_library_after_source_changes_controller() {
         .all(|object_id| engine.state.players[0].library.contains(object_id)));
 
     engine
-        .apply_command(0, &choose_cards(Vec::new()))
+        .apply_scenario_command(0, &choose_cards(Vec::new()))
         .expect("original trigger controller completes the optional choice");
     assert_eq!(engine.state.outcome, None);
     assert_eq!(engine.state.players[0].library.len(), 5);

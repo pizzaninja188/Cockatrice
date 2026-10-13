@@ -3,6 +3,7 @@
 //! Oracle text and its one-card ruling were checked against the pinned Scryfall source and
 //! Wizards' Strixhaven release notes. CR 701.23 governs the library search, CR 701.24a the
 //! shuffle, and CR 611.2a / 614.1 govern the tapped battlefield entry and its replacements.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -130,7 +131,7 @@ fn cultivate_uses_selection_order_for_the_two_revealed_destinations() {
         .expect("island candidate");
     assert!(forest_candidate_index < island_candidate_index);
 
-    let rejected = engine.apply_command(0, &submit_resolution_choice(vec![taiga, forest]));
+    let rejected = engine.apply_scenario_command(0, &submit_resolution_choice(vec![taiga, forest]));
     assert!(rejected.is_err(), "a forged nonbasic choice is rejected");
     assert!(engine.state.pending_resolution.is_some());
     assert_eq!(engine.state.objects[&taiga].zone, Zone::Library);

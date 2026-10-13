@@ -1,5 +1,6 @@
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use crate::helpers::ScenarioCommandExt;
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::permanent_moved::Destination;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 
@@ -20,7 +21,7 @@ fn sakura_tribe_elder_can_be_sacrificed_while_summoning_sick_to_find_a_tapped_ba
     grant_pool(&mut engine, 0);
     let hand_index = hand_index_for_card(&engine, 0, "sakura-tribe_elder");
     engine
-        .apply_command(0, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(hand_index, vec![]))
         .expect("cast Sakura-Tribe Elder");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&elder].zone, Zone::Battlefield);
@@ -33,7 +34,7 @@ fn sakura_tribe_elder_can_be_sacrificed_while_summoning_sick_to_find_a_tapped_ba
     let taiga = inject_library_card(&mut engine, 0, "taiga");
     let generation_before = engine.state.zone_change_generation[&elder];
     engine
-        .apply_command(0, &activate_ability_for(&engine, elder, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, elder, 0, vec![]))
         .expect("the sacrifice-only ability can be activated while summoning sick");
 
     assert_eq!(engine.state.objects[&elder].zone, Zone::Graveyard);
@@ -43,9 +44,11 @@ fn sakura_tribe_elder_can_be_sacrificed_while_summoning_sick_to_find_a_tapped_ba
     );
     assert_eq!(engine.state.stack.len(), 1);
 
-    engine.apply_command(0, &pass()).expect("controller passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
     let search_batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and the ability resolves");
     let choice = find_resolution_choice(&search_batch).expect("basic-land search choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
@@ -57,7 +60,7 @@ fn sakura_tribe_elder_can_be_sacrificed_while_summoning_sick_to_find_a_tapped_ba
     );
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .expect("choose Forest");
     let object = engine.state.objects.get(&forest).expect("Forest object");
     assert_eq!(object.zone, Zone::Battlefield);

@@ -10,11 +10,12 @@
 //! mana-producing fixture. Generator Servant's tap-and-sacrifice mana ability qualifies under
 //! CR 106.12 because its cost includes {T}; its increased mana must retain its spending rules
 //! and Haste rider. Chandra's Embercat separately checks a tap-only mana ability's restriction.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::StaticAbilityDef;
 use tricerules_cards::{AbilityPresentation, Color, Keyword, Layout};
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 
 type ManaPool = (u32, u32, u32, u32, u32, u32);
@@ -245,7 +246,7 @@ fn mana_reflection_preserves_the_restriction_on_both_chandras_embercat_mana_unit
         ..Default::default()
     });
     let command_index = engine.state.command_index;
-    assert!(engine.apply_command(0, &disallowed).is_err());
+    assert!(engine.apply_scenario_command(0, &disallowed).is_err());
     assert_eq!(engine.state.command_index, command_index);
     assert_eq!(engine.state.players[0].restricted_mana[0].amount.r, 2);
     assert!(engine.state.stack.is_empty());

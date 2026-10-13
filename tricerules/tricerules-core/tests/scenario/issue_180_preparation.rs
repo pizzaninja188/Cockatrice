@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1 as rv1;
 
@@ -24,7 +25,7 @@ fn prepared_healer() -> (GameEngine, u32) {
     );
     let index = hand_index_for_card(&engine, 0, "infirmary_healer_stream_of_life");
     engine
-        .apply_command(0, &cast_spell_face(index, vec![], 0))
+        .apply_scenario_command(0, &cast_spell_face(index, vec![], 0))
         .unwrap();
     let permanent = engine.state.stack.last().unwrap().id;
     resolve_entire_stack_two_player(&mut engine);
@@ -89,19 +90,19 @@ fn preparation_logged_instructions_reprepare_once_and_invalidate_old_copy() {
     engine.initial_response_batch();
     // The already published incarnation reserved intrinsic slot 0 before these new definitions.
     let unprepare = activate_ability_for(&engine, permanent, 1, vec![]);
-    engine.apply_command(0, &unprepare).unwrap();
+    engine.apply_scenario_command(0, &unprepare).unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert!(!engine.state.prepared_permanents.contains_key(&permanent));
     assert!(!engine.state.objects.contains_key(&old_copy));
     let prepare = activate_ability_for(&engine, permanent, 2, vec![]);
-    engine.apply_command(0, &prepare).unwrap();
+    engine.apply_scenario_command(0, &prepare).unwrap();
     resolve_entire_stack_two_player(&mut engine);
     let new_copy = engine.state.prepared_permanents[&permanent];
     assert_ne!(new_copy, old_copy);
-    engine.apply_command(0, &prepare).unwrap();
+    engine.apply_scenario_command(0, &prepare).unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.prepared_permanents[&permanent], new_copy);
-    assert!(engine.apply_command(0, &stale_cast).is_err());
+    assert!(engine.apply_scenario_command(0, &stale_cast).is_err());
 }
 
 #[test]
@@ -110,7 +111,7 @@ fn preparation_x_cast_consumes_designation_and_resolves_without_moving_source() 
     let copy = engine.state.prepared_permanents[&permanent];
     let command = inset_cast(&mut engine, copy, 3);
     assert!(
-        engine.apply_command(0, &command).is_err(),
+        engine.apply_scenario_command(0, &command).is_err(),
         "unpaid cast must fail"
     );
     assert_eq!(engine.state.prepared_permanents[&permanent], copy);
@@ -122,7 +123,7 @@ fn preparation_x_cast_consumes_designation_and_resolves_without_moving_source() 
             ..Default::default()
         },
     );
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert!(!engine.state.prepared_permanents.contains_key(&permanent));
     let spell = engine.state.stack.last().unwrap();
     assert!(spell.is_copy);
@@ -150,7 +151,7 @@ fn preparation_x_cast_consumes_designation_and_resolves_without_moving_source() 
             .is_empty(),
         "a spell copy is not a permanent card entering a graveyard"
     );
-    assert!(engine.apply_command(0, &command).is_err());
+    assert!(engine.apply_scenario_command(0, &command).is_err());
 }
 
 #[test]
@@ -167,7 +168,7 @@ fn preparation_palette_copies_the_next_cast_even_after_original_is_countered() {
     );
     let index = hand_index_for_card(&engine, 0, "pigment_wrangler_striking_palette");
     engine
-        .apply_command(0, &cast_spell_face(index, vec![], 0))
+        .apply_scenario_command(0, &cast_spell_face(index, vec![], 0))
         .unwrap();
     let source = engine.state.stack.last().unwrap().id;
     resolve_entire_stack_two_player(&mut engine);
@@ -176,16 +177,16 @@ fn preparation_palette_copies_the_next_cast_even_after_original_is_countered() {
     if let Some(Cmd::CastSpell(cast)) = &mut palette.cmd {
         cast.targets.clear();
     }
-    engine.apply_command(0, &palette).unwrap();
+    engine.apply_scenario_command(0, &palette).unwrap();
     resolve_entire_stack_two_player(&mut engine);
     inject_card_into_hand(&mut engine, 0, "lightning_bolt");
     let index = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(index, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(index, target_player(1)))
         .unwrap();
     assert_eq!(engine.state.stack.len(), 2, "copy trigger above Bolt");
     let bolt = engine.state.stack[0].id;
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     inject_card_into_hand(&mut engine, 1, "counterspell");
     give_mana(
         &mut engine,
@@ -197,7 +198,7 @@ fn preparation_palette_copies_the_next_cast_even_after_original_is_countered() {
     );
     let index = hand_index_for_card(&engine, 1, "counterspell");
     engine
-        .apply_command(1, &cast_spell(index, target_object(bolt)))
+        .apply_scenario_command(1, &cast_spell(index, target_object(bolt)))
         .unwrap();
     pass_both_players(&mut engine);
     assert!(!engine.state.stack.iter().any(|item| item.id == bolt));
@@ -207,7 +208,7 @@ fn preparation_palette_copies_the_next_cast_even_after_original_is_countered() {
         "retarget the copied Bolt"
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![1]))
         .unwrap();
     assert!(engine.state.stack.last().unwrap().is_copy);
     resolve_entire_stack_two_player(&mut engine);
@@ -232,7 +233,7 @@ fn preparation_rejoinder_decline_still_draws_and_twofold_intent_pumps() {
         );
         let index = hand_index_for_card(&engine, 0, card_id);
         engine
-            .apply_command(0, &cast_spell_face(index, vec![], 0))
+            .apply_scenario_command(0, &cast_spell_face(index, vec![], 0))
             .unwrap();
         let permanent = engine.state.stack.last().unwrap().id;
         resolve_entire_stack_two_player(&mut engine);
@@ -242,12 +243,12 @@ fn preparation_rejoinder_decline_still_draws_and_twofold_intent_pumps() {
             cast.targets = target_object(healer);
         }
         let hand_size = engine.state.players[0].hand.len();
-        engine.apply_command(0, &cast).unwrap();
+        engine.apply_scenario_command(0, &cast).unwrap();
         pass_both_players(&mut engine);
         if card_id == "elite_interceptor_rejoinder" {
             assert!(engine.state.pending_resolution.is_some());
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &submit_resolution_decision(rv1::ResolutionChoiceDecision::Decline),
                 )
@@ -284,7 +285,7 @@ fn preparation_entry_creates_a_distinct_castable_exile_copy() {
     );
     let index = hand_index_for_card(&engine, 0, "infirmary_healer_stream_of_life");
     engine
-        .apply_command(0, &cast_spell_face(index, vec![], 0))
+        .apply_scenario_command(0, &cast_spell_face(index, vec![], 0))
         .unwrap();
     let permanent = engine.state.stack.last().unwrap().id;
     resolve_entire_stack_two_player(&mut engine);
@@ -315,12 +316,14 @@ fn preparation_clone_applies_enters_prepared_and_copies_have_separate_lifetimes(
         },
     );
     let index = hand_index_for_card(&engine, 0, "clone");
-    engine.apply_command(0, &cast_spell(index, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(index, vec![]))
+        .unwrap();
     let clone = engine.state.stack.last().unwrap().id;
     pass_both_players(&mut engine);
     assert!(engine.state.pending_resolution.is_some());
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .unwrap();
     let cloned_copy = engine.state.prepared_permanents[&clone];
     assert_ne!(cloned_copy, original_copy);
@@ -337,7 +340,7 @@ fn preparation_clone_applies_enters_prepared_and_copies_have_separate_lifetimes(
         },
     );
     let command = inset_cast(&mut engine, cloned_copy, 0);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.players[1].life, 20);
     assert_eq!(engine.state.prepared_permanents[&source], original_copy);
@@ -358,7 +361,7 @@ fn preparation_copied_spell_preserves_x_and_classification_without_a_second_cast
         },
     );
     let command = inset_cast(&mut engine, copy, 3);
-    let batch = engine.apply_command(0, &command).unwrap();
+    let batch = engine.apply_scenario_command(0, &command).unwrap();
     assert!(batch.events.iter().any(|e| matches!(&e.ev, Some(rv1::ruled_event::Ev::StackPushed(p)) if p.object_id == copy && p.is_prepare_spell && p.is_copy)));
     assert!(batch.events.iter().any(|e| matches!(&e.ev, Some(rv1::ruled_event::Ev::StackPushed(p)) if p.object_id == copy && p.card_display_name == "Infirmary Healer // Stream of Life" && p.description == "Stream of Life")));
     give_mana(
@@ -372,11 +375,11 @@ fn preparation_copied_spell_preserves_x_and_classification_without_a_second_cast
     inject_card_into_hand(&mut engine, 0, "twincast");
     let index = hand_index_for_card(&engine, 0, "twincast");
     engine
-        .apply_command(0, &cast_spell(index, target_object(copy)))
+        .apply_scenario_command(0, &cast_spell(index, target_object(copy)))
         .unwrap();
     pass_both_players(&mut engine);
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![0]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![0]))
         .unwrap();
     assert!(batch.events.iter().any(|e| matches!(&e.ev, Some(rv1::ruled_event::Ev::StackPushed(p)) if p.is_prepare_spell && p.is_copy && p.copy_source_object_id == copy)));
     assert!(batch.events.iter().any(|e| matches!(&e.ev, Some(rv1::ruled_event::Ev::StackPushed(p)) if p.is_prepare_spell && p.card_display_name == "Infirmary Healer // Stream of Life" && p.description == "Stream of Life")));
@@ -410,14 +413,14 @@ fn preparation_rejoinder_tap_and_untap_choices_preserve_target_and_draw() {
         if let Some(Cmd::CastSpell(cast)) = &mut command.cmd {
             cast.targets = target_object(healer);
         }
-        engine.apply_command(0, &command).unwrap();
+        engine.apply_scenario_command(0, &command).unwrap();
         let hand_before = engine.state.players[0].hand.len();
         pass_both_players(&mut engine);
         let mut choice = submit_resolution_decision(rv1::ResolutionChoiceDecision::SelectBranch);
         if let Some(Cmd::SubmitResolutionChoice(choice)) = &mut choice.cmd {
             choice.selected_branch_index = branch;
         }
-        engine.apply_command(0, &choice).unwrap();
+        engine.apply_scenario_command(0, &choice).unwrap();
         assert_eq!(engine.state.objects[&healer].tapped, expected_tapped);
         assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
     }
@@ -441,9 +444,9 @@ fn preparation_rejoinder_illegal_target_fizzles_without_choice_or_draw() {
     if let Some(Cmd::CastSpell(cast)) = &mut command.cmd {
         cast.targets = target_object(healer);
     }
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     let hand_before = engine.state.players[0].hand.len();
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     inject_card_into_hand(&mut engine, 1, "lightning_bolt");
     give_mana(
         &mut engine,
@@ -455,7 +458,7 @@ fn preparation_rejoinder_illegal_target_fizzles_without_choice_or_draw() {
     );
     let index = hand_index_for_card(&engine, 1, "lightning_bolt");
     engine
-        .apply_command(1, &cast_spell(index, target_object(healer)))
+        .apply_scenario_command(1, &cast_spell(index, target_object(healer)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.state.pending_resolution.is_none());
@@ -477,8 +480,8 @@ fn preparation_countered_copy_never_moves_or_reprepares_the_source() {
         },
     );
     let command = inset_cast(&mut engine, copy, 0);
-    engine.apply_command(0, &command).unwrap();
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     inject_card_into_hand(&mut engine, 1, "counterspell");
     give_mana(
         &mut engine,
@@ -490,7 +493,7 @@ fn preparation_countered_copy_never_moves_or_reprepares_the_source() {
     );
     let index = hand_index_for_card(&engine, 1, "counterspell");
     engine
-        .apply_command(1, &cast_spell(index, target_object(copy)))
+        .apply_scenario_command(1, &cast_spell(index, target_object(copy)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert!(!engine.state.objects.contains_key(&copy));
@@ -515,7 +518,7 @@ fn cast_palette(engine: &mut GameEngine) {
     if let Some(Cmd::CastSpell(cast)) = &mut command.cmd {
         cast.targets.clear();
     }
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
 }
 
 #[test]
@@ -534,7 +537,7 @@ fn preparation_palette_multiple_one_shot_triggers_use_shared_order_and_retargeti
     );
     let index = hand_index_for_card(&engine, 0, "twincast");
     engine
-        .apply_command(0, &cast_spell(index, target_object(palette)))
+        .apply_scenario_command(0, &cast_spell(index, target_object(palette)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.active_event_observers.len(), 2);
@@ -549,7 +552,7 @@ fn preparation_palette_multiple_one_shot_triggers_use_shared_order_and_retargeti
     );
     let index = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(index, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(index, target_player(1)))
         .unwrap();
     answer_trigger_order_in_engine_order(&mut engine);
     assert_eq!(engine.state.stack.len(), 3);
@@ -557,7 +560,7 @@ fn preparation_palette_multiple_one_shot_triggers_use_shared_order_and_retargeti
         pass_both_players(&mut engine);
         assert!(engine.state.pending_resolution.is_some());
         engine
-            .apply_command(0, &submit_resolution_choice(vec![1]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![1]))
             .unwrap();
         pass_both_players(&mut engine);
     }
@@ -579,13 +582,13 @@ fn preparation_palette_expires_at_cleanup_and_does_not_copy_next_turn() {
             break;
         }
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     assert_ne!(engine.state.turn_instance, turn);
     assert!(engine.state.active_event_observers.is_empty());
     if engine.state.priority_player_id() != 0 {
-        engine.apply_command(1, &pass()).unwrap();
+        engine.apply_scenario_command(1, &pass()).unwrap();
     }
     inject_card_into_hand(&mut engine, 0, "lightning_bolt");
     give_mana(
@@ -598,7 +601,7 @@ fn preparation_palette_expires_at_cleanup_and_does_not_copy_next_turn() {
     );
     let index = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(index, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(index, target_player(1)))
         .unwrap();
     assert_eq!(engine.state.stack.len(), 1);
 }
@@ -609,7 +612,7 @@ fn preparation_restricted_mana_and_bad_target_rejections_preserve_the_copy() {
     let copy = engine.state.prepared_permanents[&source];
     let peeper = inject_permanent_on_battlefield(&mut engine, 0, "creeping_peeper");
     engine
-        .apply_command(0, &activate_ability_for(&engine, peeper, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, peeper, 0, vec![]))
         .unwrap();
     let group = engine.state.players[0].restricted_mana[0].restriction_group_id;
     give_mana(
@@ -629,7 +632,7 @@ fn preparation_restricted_mana_and_bad_target_rejections_preserve_the_copy() {
         });
     }
     let before = serde_json::to_string(&engine.state.players[0]).unwrap();
-    assert!(engine.apply_command(0, &command).is_err());
+    assert!(engine.apply_scenario_command(0, &command).is_err());
     assert_eq!(
         serde_json::to_string(&engine.state.players[0]).unwrap(),
         before
@@ -640,7 +643,7 @@ fn preparation_restricted_mana_and_bad_target_rejections_preserve_the_copy() {
         cast.targets = target_object(source);
         cast.x_value = 0;
     }
-    assert!(engine.apply_command(0, &command).is_err());
+    assert!(engine.apply_scenario_command(0, &command).is_err());
     assert_eq!(
         serde_json::to_string(&engine.state.players[0]).unwrap(),
         before

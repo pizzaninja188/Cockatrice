@@ -8,10 +8,11 @@
 //! threshold trigger collection follows CR 603, the optional sacrifice/search follows CR 701.23,
 //! the bounce follows CR 400.7 hidden-information-safe return, the mill follows CR 701.13, and
 //! the defending-player trigger follows CR 506.2/508.1.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     cost_selection::Selection, ChoiceKind, CostObjectRef, CostObjectRefs, CostSelection,
     ResolutionChoiceDecision, SubmitResolutionChoice, TargetRef, TargetRefKind,
@@ -86,6 +87,7 @@ fn trigger_target(object_id: u32) -> TargetRef {
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -125,13 +127,13 @@ fn settle_entry(engine: &mut GameEngine) {
 
 fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes in beginning of combat");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes in beginning of combat");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 }
@@ -160,7 +162,7 @@ fn issue_423_station_crews_with_the_tapped_creatures_power_at_sorcery_speed() {
     assert_eq!((initial.power, initial.toughness), (None, None));
 
     engine
-        .apply_command(0, &activate_station(&engine, greenhouse, crew))
+        .apply_scenario_command(0, &activate_station(&engine, greenhouse, crew))
         .expect("a summoning-sick creature may pay the Station tap cost");
     assert!(engine.state.objects[&crew].tapped);
     assert!(!engine.state.objects[&greenhouse].tapped);
@@ -196,7 +198,7 @@ fn issue_423_station_crews_with_the_tapped_creatures_power_at_sorcery_speed() {
     let before = engine.state.objects[&greenhouse].counter_count(CounterKind::Charge);
     assert!(
         engine
-            .apply_command(0, &activate_station(&engine, greenhouse, crew))
+            .apply_scenario_command(0, &activate_station(&engine, greenhouse, crew))
             .is_err(),
         "Station is sorcery-speed only (CR 702.184a)"
     );
@@ -281,7 +283,7 @@ fn issue_423_dawnsire_attack_trigger_needs_ten_charge_counters() {
     let prey = inject_creature_on_battlefield(&mut below, 1, "grizzly_bears");
     advance_main1_to_declare_attackers(&mut below);
     below
-        .apply_command(0, &declare_attackers(vec![own]))
+        .apply_scenario_command(0, &declare_attackers(vec![own]))
         .expect("declare the only attacker");
     resolve_entire_stack_two_player(&mut below);
     assert_eq!(below.state.objects[&prey].damage, 0);
@@ -294,10 +296,10 @@ fn issue_423_dawnsire_attack_trigger_needs_ten_charge_counters() {
     let prey = inject_creature_on_battlefield(&mut above, 1, "grizzly_bears");
     advance_main1_to_declare_attackers(&mut above);
     above
-        .apply_command(0, &declare_attackers(vec![own]))
+        .apply_scenario_command(0, &declare_attackers(vec![own]))
         .expect("declare the only attacker");
     above
-        .apply_command(0, &choose_trigger_targets(vec![trigger_target(prey)]))
+        .apply_scenario_command(0, &choose_trigger_targets(vec![trigger_target(prey)]))
         .expect("choose the creature or planeswalker target");
     resolve_entire_stack_two_player(&mut above);
     assert!(
@@ -314,10 +316,10 @@ fn issue_423_synthesizer_animates_one_other_artifact_at_beginning_of_combat() {
     let sword = inject_permanent_on_battlefield(&mut engine, 0, "short_sword");
     set_charge(&mut engine, labs, 2);
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     engine
-        .apply_command(0, &choose_trigger_targets(vec![trigger_target(sword)]))
+        .apply_scenario_command(0, &choose_trigger_targets(vec![trigger_target(sword)]))
         .expect("choose up to one other target artifact you control");
     for _ in 0..4 {
         if engine.state.turn_step == TurnStep::DeclareAttackers {
@@ -325,7 +327,7 @@ fn issue_423_synthesizer_animates_one_other_artifact_at_beginning_of_combat() {
         }
         let priority = engine.state.priority_player_id();
         engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("pass through the beginning of combat");
     }
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
@@ -372,7 +374,7 @@ fn issue_423_companion_entry_and_attack_abilities_resolve() {
     let second = inject_creature_on_battlefield(&mut engine, 1, "storm_crow");
     let freighter = deploy(&mut engine, "specimen_freighter");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_targets(vec![trigger_target(first), trigger_target(second)]),
         )
@@ -392,7 +394,7 @@ fn issue_423_companion_entry_and_attack_abilities_resolve() {
     let library_before = engine.state.players[1].library.len();
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![freighter]))
+        .apply_scenario_command(0, &declare_attackers(vec![freighter]))
         .expect("the animated Freighter attacks");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.players[1].library.len(), library_before - 4);
@@ -410,14 +412,18 @@ fn issue_423_companion_entry_and_attack_abilities_resolve() {
     let hand_creature = inject_card_into_hand(&mut engine, 0, "grizzly_bears");
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![sledge]))
+        .apply_scenario_command(0, &declare_attackers(vec![sledge]))
         .expect("the animated Seedship attacks");
-    engine.apply_command(0, &pass()).expect("controller pass");
-    let branch_batch = engine.apply_command(1, &pass()).expect("trigger resolves");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller pass");
+    let branch_batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("trigger resolves");
     let branch = find_resolution_choice(&branch_batch).expect("optional search branch");
     assert_eq!(branch.choice_kind(), ChoiceKind::ResolutionBranch);
     let search_batch = engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("take the search branch");
     let search = find_resolution_choice(&search_batch).expect("private hand choice");
     assert_eq!(
@@ -428,7 +434,7 @@ fn issue_423_companion_entry_and_attack_abilities_resolve() {
     );
     assert!(search.candidate_object_ids.contains(&hand_creature));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![hand_creature]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![hand_creature]))
         .expect("put the creature card onto the battlefield");
     assert_eq!(engine.state.objects[&hand_creature].zone, Zone::Battlefield);
 }
@@ -442,19 +448,23 @@ fn issue_423_larval_scoutlander_may_sacrifice_a_land_to_search_two_basics_tapped
     let nonbasic = inject_library_card(&mut engine, 0, "grizzly_bears");
     let larval = deploy(&mut engine, "larval_scoutlander");
     answer_trigger_order_in_engine_order(&mut engine);
-    engine.apply_command(0, &pass()).expect("controller pass");
-    let branch_batch = engine.apply_command(1, &pass()).expect("trigger resolves");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller pass");
+    let branch_batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("trigger resolves");
     let branch = find_resolution_choice(&branch_batch).expect("optional ETB branch");
     assert_eq!(branch.choice_kind(), ChoiceKind::ResolutionBranch);
     assert_eq!((branch.min, branch.max), (0, 1));
     let payment_batch = engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("select the sacrifice branch");
     let payment = find_resolution_choice(&payment_batch).expect("sacrifice payment choice");
     assert!(payment.candidate_object_ids.contains(&land));
     assert!(!payment.candidate_object_ids.contains(&larval));
     let search_batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![land]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
         .expect("sacrifice the Forest");
     assert_eq!(engine.state.objects[&land].zone, Zone::Graveyard);
     let search = find_resolution_choice(&search_batch).expect("private basic-land search");
@@ -464,7 +474,7 @@ fn issue_423_larval_scoutlander_may_sacrifice_a_land_to_search_two_basics_tapped
     assert!(search.candidate_object_ids.contains(&basic_b));
     assert!(!search.candidate_object_ids.contains(&nonbasic));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![basic_a, basic_b]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![basic_a, basic_b]))
         .expect("put two basic lands onto the battlefield tapped");
     assert_eq!(
         engine
@@ -516,7 +526,7 @@ fn issue_423_planet_threshold_activations_require_twelve_charge_counters() {
     // The 12+ activation is not legal below the threshold.
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_with_generation(
                     &engine,
@@ -532,7 +542,7 @@ fn issue_423_planet_threshold_activations_require_twelve_charge_counters() {
     set_charge(&mut engine, world, 12);
     let bears = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_generation(
                 &engine,
@@ -589,7 +599,7 @@ fn issue_423_susur_secundi_draws_equal_to_the_sacrificed_creatures_power() {
     let life_before = engine.state.players[0].life;
     let hand_before = engine.state.players[0].hand.len();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_generation(&engine, altar, 3, vec![permanent_cost_selection(3, victim)]),
         )

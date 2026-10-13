@@ -21,6 +21,12 @@ public:
     int gameId = -1;
     int notifyCustomCount = 0;
     QString lastNotifyContent;
+    // The E2E adapter remembers only the latest engine-authored final prompt snapshot. Legacy
+    // scenario scripts can omit the new wire ID and still send the exact currently offered ID.
+    bool resolutionPromptSnapshotValid = false;
+    bool resolutionPromptActive = false;
+    int resolutionPromptDeciderPlayerId = -1;
+    quint64 currentResolutionPromptId = 0;
     std::map<quint64, Response> responses;
     std::set<quint64> ruledCmdIds;
     std::vector<ServerInfo_Game> announcedGames;

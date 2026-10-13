@@ -1,9 +1,10 @@
 //! The Millennium Calendar's actual-card scenario coverage.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::registry;
 use tricerules_cards::{ContinuousEffectKind, CounterKind, EffectDuration};
-use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine, TurnStep, Zone};
+use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     dev_command, ruled_command::Cmd, ChooseTriggerTarget, DevCommand, DevMoveCard, DevZone,
     RuledCommand, TargetRef, TargetRefKind,
@@ -25,10 +26,10 @@ fn start_upkeep(engine: &mut GameEngine, player: i32) {
     engine.state.turn_step = TurnStep::EndStep;
     engine.state.passes_since_stack_change = 0;
     engine
-        .apply_command(previous, &pass())
+        .apply_scenario_command(previous, &pass())
         .expect("previous player passes their end step");
     engine
-        .apply_command(player, &pass())
+        .apply_scenario_command(player, &pass())
         .expect("next player advances through cleanup and untaps");
     assert_eq!(engine.state.active_player_id(), player);
     assert_eq!(engine.state.turn_step, TurnStep::Upkeep);
@@ -94,7 +95,7 @@ fn choose_stack_trigger_target(object_id: u32) -> RuledCommand {
 
 fn counter_threshold_with_tidebinder(engine: &mut GameEngine, threshold: u32) {
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes priority to the opponent");
     inject_card_into_hand(engine, 1, "tishanas_tidebinder");
     give_mana(
@@ -108,12 +109,12 @@ fn counter_threshold_with_tidebinder(engine: &mut GameEngine, threshold: u32) {
     );
     let tidebinder_slot = hand_index_for_card(engine, 1, "tishanas_tidebinder");
     engine
-        .apply_command(1, &cast_spell(tidebinder_slot, Vec::new()))
+        .apply_scenario_command(1, &cast_spell(tidebinder_slot, Vec::new()))
         .expect("opponent casts Tishana's Tidebinder in response");
     pass_both_players(engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(1, &choose_stack_trigger_target(threshold))
+        .apply_scenario_command(1, &choose_stack_trigger_target(threshold))
         .expect("Tidebinder targets the Calendar state-trigger ability");
     pass_both_players(engine);
 }
@@ -121,7 +122,7 @@ fn counter_threshold_with_tidebinder(engine: &mut GameEngine, threshold: u32) {
 fn dev_move_calendar(engine: &mut GameEngine, zone: DevZone) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             engine.state.priority_player_id(),
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -160,7 +161,7 @@ fn pass_priority_round_recorded(
         let actor = engine.state.priority_player_id();
         let command = pass();
         let batch = engine
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("record priority pass");
         commands.push((actor, command, batch));
     }
@@ -475,7 +476,7 @@ fn calendar_control_change_keeps_the_original_trigger_controller_and_retriggers_
     );
     inject_card_into_hand(&mut engine, 1, "blue_suns_zenith");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("P0 passes priority with the Calendar state trigger waiting");
     let cast = cast_spell_x(
         hand_index_for_card(&engine, 1, "blue_suns_zenith"),
@@ -483,7 +484,7 @@ fn calendar_control_change_keeps_the_original_trigger_controller_and_retriggers_
         3,
     );
     engine
-        .apply_command(1, &cast)
+        .apply_scenario_command(1, &cast)
         .expect("cast Blue Sun's Zenith at instant speed to trigger Pyreswipe Hawk");
     assert_eq!(
         engine
@@ -501,7 +502,7 @@ fn calendar_control_change_keeps_the_original_trigger_controller_and_retriggers_
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -833,14 +834,14 @@ fn untap_count_activation_threshold_and_life_loss_replay_identically() {
     for forest in forests {
         let mana_ability = activate_ability_for(&engine, forest, 0, Vec::new());
         let batch = engine
-            .apply_command(0, &mana_ability)
+            .apply_scenario_command(0, &mana_ability)
             .expect("tap an untapped Forest for green mana");
         commands.push((0, mana_ability, batch));
     }
 
     let activation = activate_ability_for(&engine, calendar, 0, Vec::new());
     let batch = engine
-        .apply_command(0, &activation)
+        .apply_scenario_command(0, &activation)
         .expect("record Calendar activation");
     commands.push((0, activation, batch));
     while !engine.state.stack.is_empty() {
@@ -856,7 +857,7 @@ fn untap_count_activation_threshold_and_life_loss_replay_identically() {
         let decoded = RuledCommand::decode(encoded.as_slice()).expect("decode command log");
         assert_eq!(
             replay
-                .apply_command(actor, &decoded)
+                .apply_scenario_command(actor, &decoded)
                 .expect("replay command"),
             expected_batch
         );

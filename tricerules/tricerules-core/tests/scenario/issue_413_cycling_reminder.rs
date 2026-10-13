@@ -4,6 +4,7 @@
 //! card, followed by a draw. The reminder printing appends the fixed explanation as part of the
 //! same Oracle line. CR 115.1 / 701.8 govern the union destruction, CR 120 the mass damage,
 //! CR 208 / 608.2b the toughness recheck, and CR 122.1d / 701.26 the tap plus stun counters.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::CounterKind;
@@ -67,7 +68,7 @@ fn issue_413_reminder_cycling_discards_and_draws_at_the_printed_cost() {
 
         let command = issue_413_hand_ability(&engine, source);
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect_err("the printed {2} cost must be payable");
         assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
 
@@ -80,7 +81,7 @@ fn issue_413_reminder_cycling_discards_and_draws_at_the_printed_cost() {
             },
         );
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect("activate reminder-form cycling");
         assert_eq!(
             engine.state.objects[&source].zone,
@@ -125,7 +126,7 @@ fn issue_413_airship_crash_destroys_artifact_enchantment_or_flying_creature() {
         );
         let slot = hand_index_for_card(&engine, 0, "airship_crash");
         engine
-            .apply_command(0, &cast_spell(slot, target_object(target)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
             .unwrap_or_else(|error| panic!("{card_id} is a legal union target: {error}"));
         resolve_entire_stack_two_player(&mut engine);
         assert_eq!(
@@ -150,7 +151,7 @@ fn issue_413_airship_crash_destroys_artifact_enchantment_or_flying_creature() {
     );
     let slot = hand_index_for_card(&engine, 0, "airship_crash");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(grounded)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(grounded)))
         .expect_err("a grounded creature is not a legal union target");
     assert_eq!(engine.state.objects[&grounded].zone, Zone::Battlefield);
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
@@ -173,7 +174,7 @@ fn issue_413_fuel_the_flames_deals_two_to_every_creature() {
     );
     let slot = hand_index_for_card(&engine, 0, "fuel_the_flames");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast the untargeted sweep");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -206,14 +207,14 @@ fn issue_413_gallant_strike_destroys_only_toughness_four_or_greater() {
     );
     let slot = hand_index_for_card(&engine, 0, "gallant_strike");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(small)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(small)))
         .expect_err("toughness 3 is not a legal target");
     assert_eq!(engine.state.objects[&small].zone, Zone::Battlefield);
     assert_eq!(engine.state.players[0].mana_pool.white, 1);
 
     let big = inject_creature_with_stats(&mut engine, 1, "grizzly_bears", 1, 6);
     engine
-        .apply_command(0, &cast_spell(slot, target_object(big)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(big)))
         .expect("toughness 6 is a legal target");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&big].zone, Zone::Graveyard);
@@ -238,10 +239,10 @@ fn issue_413_stall_out_taps_and_stuns_one_creature_or_vehicle_target() {
     let slot = hand_index_for_card(&engine, 0, "stall_out");
 
     engine
-        .apply_command(0, &cast_spell(slot, target_object(sword)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(sword)))
         .expect_err("a plain artifact is not a creature or Vehicle");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(creature)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(creature)))
         .expect("target the creature");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.state.objects[&creature].tapped);
@@ -263,7 +264,7 @@ fn issue_413_stall_out_taps_and_stuns_one_creature_or_vehicle_target() {
     );
     let slot = hand_index_for_card(&engine, 0, "stall_out");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(vehicle)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(vehicle)))
         .expect("target the Vehicle");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.state.objects[&vehicle].tapped);
@@ -279,7 +280,7 @@ fn issue_413_stall_out_taps_and_stuns_one_creature_or_vehicle_target() {
     engine.state.passes_since_stack_change = 0;
     let _ = engine.initial_response_batch();
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("roll into the opponent's untap step");
     for target in [creature, vehicle] {
         assert!(

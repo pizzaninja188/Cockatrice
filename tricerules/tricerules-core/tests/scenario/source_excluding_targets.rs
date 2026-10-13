@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::Keyword;
 
@@ -47,7 +48,7 @@ fn pegasus_courser_excludes_itself_and_grants_flying_to_the_other_attacker() {
     let courser = inject_creature_on_battlefield(&mut engine, 0, "pegasus_courser");
 
     let batch = engine
-        .apply_command(0, &declare_attackers(vec![courser, other_attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![courser, other_attacker]))
         .expect("declare Pegasus Courser and Grizzly Bears as attackers");
     let key = (courser as u64) << 32;
     let targets = batch
@@ -64,7 +65,7 @@ fn pegasus_courser_excludes_itself_and_grants_flying_to_the_other_attacker() {
     );
 
     let err = engine
-        .apply_command(0, &choose_trigger_target(courser))
+        .apply_scenario_command(0, &choose_trigger_target(courser))
         .expect_err("Pegasus Courser cannot target itself");
     assert!(matches!(err, tricerules_core::EngineError::Illegal(_)));
     assert_eq!(
@@ -74,7 +75,7 @@ fn pegasus_courser_excludes_itself_and_grants_flying_to_the_other_attacker() {
     );
 
     engine
-        .apply_command(0, &choose_trigger_target(other_attacker))
+        .apply_scenario_command(0, &choose_trigger_target(other_attacker))
         .expect("choose the other attacker");
     pass_both_players(&mut engine);
     assert!(engine.effective_has_keyword(other_attacker, Keyword::Flying));
@@ -109,7 +110,7 @@ fn legion_guildmage_rejects_itself_before_costs_and_taps_another_creature() {
     );
 
     let err = engine
-        .apply_command(0, &activate_ability(guildmage, 1, target(guildmage)))
+        .apply_scenario_command(0, &activate_ability(guildmage, 1, target(guildmage)))
         .expect_err("Legion Guildmage cannot target itself");
     assert!(matches!(err, tricerules_core::EngineError::Illegal(_)));
     assert!(
@@ -125,7 +126,7 @@ fn legion_guildmage_rejects_itself_before_costs_and_taps_another_creature() {
     assert!(engine.state.stack.is_empty());
 
     engine
-        .apply_command(0, &activate_ability(guildmage, 1, target(other_creature)))
+        .apply_scenario_command(0, &activate_ability(guildmage, 1, target(other_creature)))
         .expect("target another creature");
     assert!(
         engine
@@ -177,7 +178,7 @@ fn legion_guildmage_damages_the_opponent_not_its_controller() {
     );
 
     engine
-        .apply_command(0, &activate_ability(guildmage, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(guildmage, 0, vec![]))
         .expect("activate each-opponent damage ability");
     pass_both_players(&mut engine);
 

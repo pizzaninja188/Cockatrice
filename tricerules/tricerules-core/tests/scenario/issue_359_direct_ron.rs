@@ -12,6 +12,7 @@
 //! identity) govern. The 2024-04-12 rulings confirm mode-local targeting, printed resolution
 //! order, at-least-one-mode, and that a spell whose chosen-mode targets are all illegal does not
 //! resolve (no effects at all).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -170,14 +171,14 @@ fn issue_359_spree_rejects_no_mode_unfunded_and_mismatched_cost_atomically() {
     let creature = inject_creature_with_stats(&mut none, 1, "grizzly_bears", 2, 5);
     let (slot, source) = prepare(&mut none, card);
     let before = none.state.command_index;
-    none.apply_command(0, &cast_spree(slot, vec![], vec![]))
+    none.apply_scenario_command(0, &cast_spree(slot, vec![], vec![]))
         .expect_err("spree needs at least one mode");
     assert_eq!(none.state.command_index, before);
     assert_eq!(none.state.objects[&source].zone, Zone::Hand);
 
     // An announced mode without its linked additional cost is illegal.
     let before = none.state.command_index;
-    none.apply_command(
+    none.apply_scenario_command(
         0,
         &cast_spree(slot, vec![(0, target_object(creature))], vec![]),
     )
@@ -186,7 +187,7 @@ fn issue_359_spree_rejects_no_mode_unfunded_and_mismatched_cost_atomically() {
 
     // A selected mode paired with the other mode's cost is illegal.
     let before = none.state.command_index;
-    none.apply_command(
+    none.apply_scenario_command(
         0,
         &cast_spree(slot, vec![(0, target_object(creature))], vec![1]),
     )
@@ -209,7 +210,7 @@ fn issue_359_spree_rejects_no_mode_unfunded_and_mismatched_cost_atomically() {
         pool.colorless = 1;
     }
     let before = poor.state.command_index;
-    poor.apply_command(
+    poor.apply_scenario_command(
         0,
         &cast_spree(slot, vec![(0, target_object(creature))], vec![0]),
     )
@@ -240,7 +241,7 @@ fn issue_359_spree_mode_local_illegal_targets_are_rejected() {
 
     let before = derailment.state.command_index;
     derailment
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spree(slot, vec![(0, target_object(land))], vec![0]),
         )
@@ -249,7 +250,7 @@ fn issue_359_spree_mode_local_illegal_targets_are_rejected() {
 
     let before = derailment.state.command_index;
     derailment
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spree(slot, vec![(1, target_object(creature))], vec![1]),
         )
@@ -263,7 +264,7 @@ fn issue_359_spree_mode_local_illegal_targets_are_rejected() {
     let (slot, _) = prepare(&mut accident, "unfortunate_accident");
     let before = accident.state.command_index;
     accident
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spree(slot, vec![(0, target_object(land))], vec![0]),
         )

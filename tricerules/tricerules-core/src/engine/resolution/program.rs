@@ -600,7 +600,7 @@ mod invariant_rollback_tests {
         engine.state.stack.push(item);
 
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -651,7 +651,7 @@ mod invariant_rollback_tests {
 
             let failure = {
                 let _guard = ProgramFailpointGuard::arm(point);
-                engine.apply_command(1, &pass_priority())
+                engine.apply_scenario_command(1, &pass_priority())
             };
             assert!(
                 matches!(failure, Err(EngineError::ProgramInvariant(_))),
@@ -663,10 +663,10 @@ mod invariant_rollback_tests {
             );
 
             let retried = engine
-                .apply_command(1, &pass_priority())
+                .apply_scenario_command(1, &pass_priority())
                 .expect("failed command can be retried");
             let accepted = control
-                .apply_command(1, &pass_priority())
+                .apply_scenario_command(1, &pass_priority())
                 .expect("control command succeeds");
             assert_eq!(
                 retried, accepted,
@@ -684,7 +684,7 @@ mod invariant_rollback_tests {
         ] {
             let mut engine = program_resolution_fixture();
             engine
-                .apply_command(1, &pass_priority())
+                .apply_scenario_command(1, &pass_priority())
                 .expect("Brainstorm draws three and parks on hand choice");
             let mut control = engine.clone();
             let answer = choose_first_two_offered_hand_cards(&engine);
@@ -692,7 +692,7 @@ mod invariant_rollback_tests {
 
             let failure = {
                 let _guard = ProgramFailpointGuard::arm(point);
-                engine.apply_command(0, &answer)
+                engine.apply_scenario_command(0, &answer)
             };
             assert!(
                 matches!(failure, Err(EngineError::ProgramInvariant(_))),
@@ -704,10 +704,10 @@ mod invariant_rollback_tests {
             );
 
             let retried = engine
-                .apply_command(0, &answer)
+                .apply_scenario_command(0, &answer)
                 .expect("the same hand-choice answer can be retried");
             let accepted = control
-                .apply_command(0, &answer)
+                .apply_scenario_command(0, &answer)
                 .expect("control hand-choice answer succeeds");
             assert_eq!(
                 retried, accepted,

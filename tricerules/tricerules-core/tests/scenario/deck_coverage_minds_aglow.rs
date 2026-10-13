@@ -3,6 +3,7 @@
 //! The contribution prompt must accept the exact selected mana, including zero, and resume the
 //! same resolving spell until every player has contributed. The existing EachPlayer draw
 //! instruction owns the final draw order and replacement handling.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use prost::Message;
@@ -46,7 +47,7 @@ fn resolution_payment(engine: &GameEngine, mana: PaymentMana) -> SubmitResolutio
 fn contribute(engine: &mut GameEngine, player: i32, mana: PaymentMana) {
     let answer = resolution_payment(engine, mana);
     engine
-        .apply_command(
+        .apply_scenario_command(
             player,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(answer)),
@@ -97,7 +98,7 @@ fn minds_aglow_collects_sequential_contributions_and_each_player_draws_the_total
 
     let hand_index = hand_index_for_card(&engine, 0, MINDS_AGLOW);
     engine
-        .apply_command(PLAYERS[0], &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(PLAYERS[0], &cast_spell(hand_index, vec![]))
         .expect("cast Minds Aglow");
     pass_priority_round(&mut engine);
 
@@ -119,7 +120,7 @@ fn minds_aglow_collects_sequential_contributions_and_each_player_draws_the_total
         },
     );
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             PLAYERS[1],
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(wrong_payer)),
@@ -147,7 +148,7 @@ fn minds_aglow_collects_sequential_contributions_and_each_player_draws_the_total
         },
     );
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             PLAYERS[0],
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(excessive_payment)),
@@ -201,7 +202,7 @@ fn minds_aglow_collects_sequential_contributions_and_each_player_draws_the_total
     );
     let tap_mountain = activate_ability_for(&engine, third_player_mountain, 0, vec![]);
     engine
-        .apply_command(PLAYERS[2], &tap_mountain)
+        .apply_scenario_command(PLAYERS[2], &tap_mountain)
         .expect("the current payer may activate a mana ability during resolution");
     assert_eq!(engine.state.players[2].mana_pool.red, 1);
     assert!(engine.state.objects[&third_player_mountain].tapped);
@@ -271,7 +272,7 @@ fn minds_aglow_contribution_command_log_replays_the_same_batches_and_state() {
         command: RuledCommand,
     ) {
         let batch = engine
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("recorded Minds Aglow command is accepted");
         log.push((actor, command, batch.encode_to_vec()));
     }
@@ -318,7 +319,7 @@ fn minds_aglow_contribution_command_log_replays_the_same_batches_and_state() {
 
     for (actor, command, expected_batch) in command_log {
         let actual_batch = replay
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("accepted command replays from the matching seed and pre-state");
         assert_eq!(actual_batch.encode_to_vec(), expected_batch);
     }
@@ -377,7 +378,7 @@ fn minds_aglow_resumes_when_its_controller_concedes_during_join_forces() {
 
     let hand_index = hand_index_for_card(&engine, 0, MINDS_AGLOW);
     engine
-        .apply_command(FOUR_PLAYERS[0], &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(FOUR_PLAYERS[0], &cast_spell(hand_index, vec![]))
         .expect("cast Minds Aglow");
     pass_priority_round(&mut engine);
     assert_eq!(
@@ -391,7 +392,7 @@ fn minds_aglow_resumes_when_its_controller_concedes_during_join_forces() {
     );
 
     engine
-        .apply_command(FOUR_PLAYERS[0], &concede())
+        .apply_scenario_command(FOUR_PLAYERS[0], &concede())
         .expect("the spell controller may concede during the first contribution prompt");
     assert!(engine.state.players[0].has_lost);
     assert_eq!(
@@ -486,7 +487,7 @@ fn minds_aglow_accepts_only_restricted_mana_eligible_for_resolution_payments() {
         .collect::<Vec<_>>();
     let hand_index = hand_index_for_card(&engine, 0, MINDS_AGLOW);
     engine
-        .apply_command(PLAYERS[0], &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(PLAYERS[0], &cast_spell(hand_index, vec![]))
         .expect("cast Minds Aglow");
     pass_priority_round(&mut engine);
 
@@ -498,7 +499,7 @@ fn minds_aglow_accepts_only_restricted_mana_eligible_for_resolution_payments() {
     });
     let command_index_before_rejection = engine.state.command_index;
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             PLAYERS[0],
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(unavailable)),
@@ -524,7 +525,7 @@ fn minds_aglow_accepts_only_restricted_mana_eligible_for_resolution_payments() {
         ..Default::default()
     });
     engine
-        .apply_command(
+        .apply_scenario_command(
             PLAYERS[0],
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(eligible)),

@@ -1,4 +1,5 @@
 //! Issue #96 — CR 701.25 surveil and bounded top-library partitions.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{
@@ -76,7 +77,7 @@ fn grant_surveil_trigger(e: &mut GameEngine, observer: u32) {
 fn advance_to_main2(e: &mut GameEngine) {
     for _ in 0..20 {
         let actor = e.state.priority_player_id();
-        e.apply_command(actor, &pass())
+        e.apply_scenario_command(actor, &pass())
             .expect("pass through combat");
         if e.state.turn_step == TurnStep::Main2 {
             return;
@@ -89,7 +90,7 @@ fn cast_creature_and_resolve(e: &mut GameEngine, card_id: &str, mana: ManaGift) 
     ensure_in_hand(e, 0, card_id);
     give_mana(e, 0, mana);
     let index = hand_index_for_card(e, 0, card_id);
-    e.apply_command(0, &cast_spell(index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(index, vec![]))
         .expect("cast creature");
     pass_both_players(e);
 }
@@ -97,9 +98,9 @@ fn cast_creature_and_resolve(e: &mut GameEngine, card_id: &str, mana: ManaGift) 
 fn resolve_top_stack(e: &mut GameEngine) -> RuledEventBatch {
     let first = e.state.priority_player_id();
     let second = 1 - first;
-    e.apply_command(first, &pass())
+    e.apply_scenario_command(first, &pass())
         .expect("first pass on stack item");
-    e.apply_command(second, &pass())
+    e.apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }
 
@@ -140,7 +141,7 @@ fn issue_96_cruel_truths_moves_the_chosen_card_then_resumes_its_tail() {
     assert_eq!(choice.candidate_object_ids, vec![to_graveyard, kept]);
 
     let completion = e
-        .apply_command(0, &submit_resolution_choice(vec![to_graveyard]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![to_graveyard]))
         .expect("put one surveilled card into the graveyard");
 
     assert!(e.state.pending_resolution.is_none());
@@ -194,7 +195,7 @@ fn issue_96_surveillance_waits_for_top_order_before_later_effects() {
 
     cast_instant_and_resolve(&mut e, 0, "cruel_truths", black_mana(4));
     let ordering = e
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("keep both cards on top");
     let order_choice = find_resolution_choice(&ordering).expect("top ordering choice");
     assert_eq!(order_choice.choice_kind(), ChoiceKind::LibraryLook);
@@ -207,7 +208,7 @@ fn issue_96_surveillance_waits_for_top_order_before_later_effects() {
     );
     assert_eq!(e.state.players[0].life, 20);
 
-    e.apply_command(0, &submit_resolution_choice(vec![top[1], top[0]]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![top[1], top[0]]))
         .expect("order the retained cards");
 
     assert!(e.state.pending_resolution.is_none());
@@ -246,7 +247,7 @@ fn issue_96_surveil_rejects_illegal_submissions_atomically() {
         ("the same card twice", 0, vec![a, a]),
     ] {
         assert!(
-            e.apply_command(player, &submit_resolution_choice(choice))
+            e.apply_scenario_command(player, &submit_resolution_choice(choice))
                 .is_err(),
             "{label} must be rejected"
         );
@@ -267,7 +268,7 @@ fn issue_96_surveil_rejects_illegal_submissions_atomically() {
     }
 
     let completion = e
-        .apply_command(0, &submit_resolution_choice(vec![a, b]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![a, b]))
         .expect("valid submission after rejected attempts");
     assert!(e.state.pending_resolution.is_none());
     assert!(e.state.players[0].graveyard.contains(&a));
@@ -309,7 +310,7 @@ fn issue_96_surveillance_rejects_a_stale_choose_destination_without_consuming_th
     move_library_to_graveyard(&mut e, 0, stale);
     move_graveyard_to_library(&mut e, 0, stale);
     let err = e
-        .apply_command(0, &submit_resolution_choice(vec![stale]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![stale]))
         .expect_err("a stale Surveil candidate must be rejected");
 
     assert!(err.to_string().contains("stale library-partition cohort"));
@@ -349,7 +350,7 @@ fn issue_96_surveil_trigger_fires_only_after_the_complete_action() {
 
     cast_instant_and_resolve(&mut e, 0, "cruel_truths", black_mana(4));
     let ordering = e
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("keep both surveilled cards on top");
     assert!(find_resolution_choice(&ordering).is_some());
     assert!(
@@ -362,7 +363,7 @@ fn issue_96_surveil_trigger_fires_only_after_the_complete_action() {
     assert!(e.state.pending_triggers.is_empty());
     assert!(e.state.staged_trigger_groups.is_empty());
 
-    e.apply_command(0, &submit_resolution_choice(vec![top[1], top[0]]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![top[1], top[0]]))
         .expect("finish the surveil action");
     assert!(e
         .state
@@ -389,7 +390,7 @@ fn issue_96_surveillance_rejects_stale_order_top_before_trigger_and_valid_flow_c
         let observer = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
         grant_surveil_trigger(&mut e, observer);
         cast_instant_and_resolve(&mut e, 0, "cruel_truths", black_mana(4));
-        e.apply_command(0, &submit_resolution_choice(vec![]))
+        e.apply_scenario_command(0, &submit_resolution_choice(vec![]))
             .expect("keep both surveilled cards on top");
         assert!(matches!(
             &e.state
@@ -413,7 +414,7 @@ fn issue_96_surveillance_rejects_stale_order_top_before_trigger_and_valid_flow_c
     move_graveyard_to_library(&mut stale, 0, top[0]);
 
     let err = stale
-        .apply_command(0, &submit_resolution_choice(vec![top[1], top[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[1], top[0]]))
         .expect_err("a stale retained Surveil candidate must be rejected");
     assert!(err.to_string().contains("stale library-partition cohort"));
     assert_eq!(
@@ -441,7 +442,7 @@ fn issue_96_surveillance_rejects_stale_order_top_before_trigger_and_valid_flow_c
     // A fresh, unchanged continuation still completes and fires the existing Surveil trigger.
     let (mut valid, valid_top, valid_observer) = prepared(96_009);
     valid
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(vec![valid_top[1], valid_top[0]]),
         )
@@ -484,7 +485,7 @@ fn issue_96_gutless_plunderer_requires_raid_and_handles_a_short_library() {
     .expect("new engine");
     advance_to_declare_attackers(&mut raid);
     let attacker = battlefield_object_for_card(&raid, 0, "grizzly_bears");
-    raid.apply_command(0, &declare_attackers(vec![attacker]))
+    raid.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare an attacker for raid");
     advance_to_main2(&mut raid);
     ensure_in_hand(&mut raid, 0, "gutless_plunderer");
@@ -500,7 +501,7 @@ fn issue_96_gutless_plunderer_requires_raid_and_handles_a_short_library() {
     assert_eq!((pending.min, pending.max), (1, 2));
     assert_eq!(pending.candidate_object_ids, top);
 
-    raid.apply_command(0, &submit_resolution_choice(vec![top[0]]))
+    raid.apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .expect("put one card in the graveyard and retain one on top");
     assert!(raid.state.players[0].graveyard.contains(&top[0]));
     assert_eq!(raid.state.players[0].library.front(), Some(&top[1]));
@@ -534,7 +535,7 @@ fn issue_96_wary_creatures_surveil_on_entry() {
         let choice = find_resolution_choice(&resolution).expect("entry surveil choice");
         assert_eq!(choice.choice_kind(), ChoiceKind::LibraryLook);
         assert_eq!(choice.candidate_object_ids, vec![top]);
-        e.apply_command(0, &submit_resolution_choice(vec![top]))
+        e.apply_scenario_command(0, &submit_resolution_choice(vec![top]))
             .expect("put the surveilled card into the graveyard");
         assert!(e.state.players[0].graveyard.contains(&top));
     }
@@ -558,7 +559,7 @@ fn issue_96_surveillance_creatures_surveil_when_they_attack() {
         advance_to_declare_attackers(&mut e);
         let source = inject_creature_on_battlefield(&mut e, 0, card_id);
         let top = seat_on_top(&mut e, 0, &["storm_crow"])[0];
-        e.apply_command(0, &declare_attackers(vec![source]))
+        e.apply_scenario_command(0, &declare_attackers(vec![source]))
             .expect("declare the surveil creature as an attacker");
         assert!(e
             .state
@@ -568,7 +569,7 @@ fn issue_96_surveillance_creatures_surveil_when_they_attack() {
         let resolution = resolve_top_stack(&mut e);
         let choice = find_resolution_choice(&resolution).expect("attack surveil choice");
         assert_eq!(choice.candidate_object_ids, vec![top]);
-        e.apply_command(0, &submit_resolution_choice(vec![]))
+        e.apply_scenario_command(0, &submit_resolution_choice(vec![]))
             .expect("keep the surveilled card on top");
         assert_eq!(e.state.players[0].library.front(), Some(&top));
     }

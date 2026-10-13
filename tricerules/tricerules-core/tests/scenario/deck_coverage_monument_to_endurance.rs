@@ -3,6 +3,7 @@
 //! Exact Scryfall Oracle text and ruling were checked 2026-10-08. CR 603.2c, 603.3b/c, 700.2b,
 //! 514.2, and 400.7 govern one trigger per discarded card, ordering and mode announcement,
 //! per-turn history, and a new source after a zone change.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -52,7 +53,7 @@ fn prompt_for_next_trigger(
             .expect("the requested Monument source has an unplaced trigger");
         let trigger_object_id = candidate.object_id;
         let batch = engine
-            .apply_command(player, &submit_trigger_order(trigger_object_id))
+            .apply_scenario_command(player, &submit_trigger_order(trigger_object_id))
             .expect("choose the next Monument trigger");
         if let Some(prompt) = prompt_in_batch(&batch) {
             if let Some(source) = source_permanent_id {
@@ -117,15 +118,15 @@ fn cast_windfall_with_one_discard(
     );
     let spell_slot = hand_index_for_card(engine, player, "windfall");
     engine
-        .apply_command(player_id, &cast_spell(spell_slot, Vec::new()))
+        .apply_scenario_command(player_id, &cast_spell(spell_slot, Vec::new()))
         .expect("cast Windfall with one card left to discard");
     let first = engine.state.priority_player_id();
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first player passes");
     let second = engine.state.priority_player_id();
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("Windfall resolves and causes one discard")
 }
 
@@ -137,7 +138,7 @@ fn move_card(
 ) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             owner,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(tricerules_proto::ruled::v1::DevCommand {
@@ -199,11 +200,11 @@ fn monument_each_discard_trigger_excludes_modes_chosen_by_earlier_trigger() {
     );
     let slot = hand_index_for_card(&engine, 0, "faithless_looting");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Faithless Looting");
     pass_priority_round(&mut engine);
     let discarded = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(vec![first_discard, second_discard]),
         )
@@ -220,14 +221,14 @@ fn monument_each_discard_trigger_excludes_modes_chosen_by_earlier_trigger() {
     let stack_before = stack_ids(&engine);
     let command_index_before = engine.state.command_index;
     engine
-        .apply_command(1, &choose_mode(0))
+        .apply_scenario_command(1, &choose_mode(0))
         .expect_err("an opponent cannot choose Monument's mode");
     assert_eq!(pending_trigger_ids(&engine), pending_before);
     assert_eq!(engine.state.trigger_modes_used_this_turn, history_before);
     assert_eq!(stack_ids(&engine), stack_before);
     assert_eq!(engine.state.command_index, command_index_before);
     let first_choice = engine
-        .apply_command(0, &choose_mode(0))
+        .apply_scenario_command(0, &choose_mode(0))
         .expect("choose the draw mode for the first discard trigger");
     assert!(!engine
         .diagnostic_snapshot()
@@ -250,14 +251,14 @@ fn monument_each_discard_trigger_excludes_modes_chosen_by_earlier_trigger() {
     let stack_before = stack_ids(&engine);
     let command_index_before = engine.state.command_index;
     engine
-        .apply_command(0, &choose_mode(0))
+        .apply_scenario_command(0, &choose_mode(0))
         .expect_err("an earlier mode cannot be selected again this turn");
     assert_eq!(pending_trigger_ids(&engine), pending_before);
     assert_eq!(engine.state.trigger_modes_used_this_turn, history_before);
     assert_eq!(stack_ids(&engine), stack_before);
     assert_eq!(engine.state.command_index, command_index_before);
     engine
-        .apply_command(0, &choose_mode(1))
+        .apply_scenario_command(0, &choose_mode(1))
         .expect("a different mode remains legal");
     assert_eq!(
         engine.state.objects[&looting].zone,
@@ -294,11 +295,11 @@ fn monument_instances_keep_independent_mode_histories() {
     );
     let slot = hand_index_for_card(&engine, 0, "faithless_looting");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Faithless Looting");
     pass_priority_round(&mut engine);
     let discarded = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(vec![first_discard, second_discard]),
         )
@@ -309,7 +310,7 @@ fn monument_instances_keep_independent_mode_histories() {
         first.source_permanent_id == first_source || first.source_permanent_id == second_source
     );
     engine
-        .apply_command(0, &choose_mode(0))
+        .apply_scenario_command(0, &choose_mode(0))
         .expect("select the draw mode for one Monument");
 
     let other_source = if first.source_permanent_id == first_source {
@@ -326,7 +327,7 @@ fn monument_instances_keep_independent_mode_histories() {
     assert!(second.modes[1].selectable);
     assert!(second.modes[2].selectable);
     engine
-        .apply_command(0, &choose_mode(0))
+        .apply_scenario_command(0, &choose_mode(0))
         .expect("the other Monument may also choose draw this turn");
     assert_eq!(engine.state.objects[&looting].zone, Zone::Graveyard);
 }
@@ -350,7 +351,7 @@ fn monument_mode_history_starts_fresh_after_source_changes_zone_generation() {
     let first_batch = cast_windfall_with_one_discard(&mut engine, 0);
     prompt_for_next_trigger(&mut engine, Some(first_batch), Some(source));
     engine
-        .apply_command(0, &choose_mode(0))
+        .apply_scenario_command(0, &choose_mode(0))
         .expect("choose draw for this source generation");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.trigger_modes_used_this_turn.len(), 1);
@@ -368,7 +369,7 @@ fn monument_mode_history_starts_fresh_after_source_changes_zone_generation() {
     let returned = prompt_for_next_trigger(&mut engine, Some(second_batch), Some(source));
     assert!(returned.modes.iter().all(|mode| mode.selectable));
     engine
-        .apply_command(0, &choose_mode(0))
+        .apply_scenario_command(0, &choose_mode(0))
         .expect("returned Monument has no memory of the prior object");
 }
 
@@ -390,7 +391,7 @@ fn monument_mode_history_resets_at_the_next_turn_boundary() {
     let first_batch = cast_windfall_with_one_discard(&mut engine, 0);
     prompt_for_next_trigger(&mut engine, Some(first_batch), Some(source));
     engine
-        .apply_command(0, &choose_mode(0))
+        .apply_scenario_command(0, &choose_mode(0))
         .expect("choose draw during the first turn");
     resolve_entire_stack_two_player(&mut engine);
     assert!(!engine.state.trigger_modes_used_this_turn.is_empty());
@@ -441,7 +442,7 @@ fn monument_mode_history_resets_at_the_next_turn_boundary() {
     let next_turn = prompt_for_next_trigger(&mut engine, Some(next_turn_batch), Some(source));
     assert!(next_turn.modes.iter().all(|mode| mode.selectable));
     engine
-        .apply_command(0, &choose_mode(0))
+        .apply_scenario_command(0, &choose_mode(0))
         .expect("the controller may choose the same mode during the next turn");
 }
 
@@ -473,7 +474,7 @@ fn monument_mode_remains_used_after_its_trigger_is_countered() {
         },
     );
     engine
-        .apply_command(0, &choose_mode(0))
+        .apply_scenario_command(0, &choose_mode(0))
         .expect("choose draw as the trigger is put on the stack");
     let selected_trigger = engine
         .state
@@ -485,21 +486,21 @@ fn monument_mode_remains_used_after_its_trigger_is_countered() {
         .id;
     if engine.state.priority_player_id() == 0 {
         engine
-            .apply_command(0, &pass())
+            .apply_scenario_command(0, &pass())
             .expect("pass to the opponent");
     }
     assert_eq!(engine.state.priority_player_id(), 1);
     let tidebinder_slot = hand_index_for_card(&engine, 1, "tishanas_tidebinder");
     let tidebinder = engine.state.players[1].hand[tidebinder_slot];
     engine
-        .apply_command(1, &cast_spell(tidebinder_slot, Vec::new()))
+        .apply_scenario_command(1, &cast_spell(tidebinder_slot, Vec::new()))
         .expect("cast Tishana's Tidebinder with flash");
     pass_priority_round(&mut engine);
     assert!(engine.state.players[1].battlefield.contains(&tidebinder));
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine.initial_response_batch();
     engine
-        .apply_command(1, &choose_stack_target(selected_trigger))
+        .apply_scenario_command(1, &choose_stack_target(selected_trigger))
         .expect("Tidebinder targets the Monument triggered ability");
     pass_priority_round(&mut engine);
     assert!(!engine
@@ -550,7 +551,7 @@ fn monument_mode_history_snapshot_after_three_choices() -> serde_json::Value {
         let batch = cast_windfall_with_one_discard(&mut engine, 0);
         prompt_for_next_trigger(&mut engine, Some(batch), Some(source));
         engine
-            .apply_command(0, &choose_mode(mode_index))
+            .apply_scenario_command(0, &choose_mode(mode_index))
             .expect("choose a different unchosen mode");
         if mode_index < 2 {
             resolve_entire_stack_two_player(&mut engine);
@@ -616,7 +617,7 @@ fn monument_exhausts_three_modes_without_a_fourth_stack_item_and_resolves_each_m
     );
     let windfall_slot = hand_index_for_card(&engine, 0, "windfall");
     engine
-        .apply_command(players[0], &cast_spell(windfall_slot, Vec::new()))
+        .apply_scenario_command(players[0], &cast_spell(windfall_slot, Vec::new()))
         .expect("cast Windfall");
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.objects[&windfall].zone, Zone::Graveyard);
@@ -642,7 +643,7 @@ fn monument_exhausts_three_modes_without_a_fourth_stack_item_and_resolves_each_m
         assert!(prompt.modes[mode_index as usize].selectable);
         previous_batch = Some(
             engine
-                .apply_command(players[0], &choose_mode(mode_index))
+                .apply_scenario_command(players[0], &choose_mode(mode_index))
                 .expect("choose one previously unused mode"),
         );
     }

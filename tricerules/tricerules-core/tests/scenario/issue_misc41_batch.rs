@@ -1,5 +1,6 @@
 //! Actual-card modal semantics for six pinned Standard spells.
 //! Exact Oracle and rulings reviewed 2026-09-22; see direct-RON maps.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -153,7 +154,7 @@ fn issue_misc41_battle_menu() {
     inject_card_into_hand(&mut destroy, 0, "battle_menu");
     let slot = hand_index_for_card(&destroy, 0, "battle_menu");
     assert!(destroy
-        .apply_command(0, &cast_modal_spell(slot, vec![(2, target_object(weak))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(2, target_object(weak))]))
         .is_err());
     semantic::accepted(
         &mut destroy,
@@ -191,7 +192,7 @@ fn issue_misc41_silverquill_charm() {
     inject_card_into_hand(&mut exile, 0, "silverquill_charm");
     let slot = hand_index_for_card(&exile, 0, "silverquill_charm");
     assert!(exile
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, target_object(strong))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, target_object(strong))]))
         .is_err());
     semantic::accepted(
         &mut exile,
@@ -221,7 +222,7 @@ fn issue_misc41_glorious_decay() {
     inject_card_into_hand(&mut flying, 0, "glorious_decay");
     let slot = hand_index_for_card(&flying, 0, "glorious_decay");
     assert!(flying
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, target_object(bear))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, target_object(bear))]))
         .is_err());
     semantic::accepted(
         &mut flying,

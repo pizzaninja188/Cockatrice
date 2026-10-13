@@ -1,4 +1,5 @@
 //! Exact Kodama of the East Tree identity and entry-trigger behavior.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{
@@ -6,7 +7,7 @@ use tricerules_cards::primitives::{
     SpellEffectKind, ZoneCardFilter,
 };
 use tricerules_cards::{Keyword, Layout};
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1;
 
 fn kodama_engine(seed: u64, p0_basic: &str, p0_specials: &[&str]) -> GameEngine {
@@ -38,10 +39,10 @@ fn resolve_kodama_to_hand_choice(engine: &mut GameEngine) -> v1::ResolutionChoic
         .find(|player| *player != first)
         .expect("opponent");
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first player passes for Kodama trigger");
     let batch = engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second player passes for Kodama trigger");
     find_resolution_choice(&batch).expect("Kodama private hand choice")
 }
@@ -165,7 +166,7 @@ fn kodama_bounds_its_private_choice_by_the_entering_permanents_mana_value() {
 
     let revision = engine.state.command_index;
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![higher]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![higher]))
         .is_err());
     assert_eq!(engine.state.command_index, revision);
     assert!(engine.state.pending_resolution.is_some());
@@ -173,7 +174,7 @@ fn kodama_bounds_its_private_choice_by_the_entering_permanents_mana_value() {
 
     let lands_played = engine.state.lands_played_this_turn;
     engine
-        .apply_command(0, &submit_resolution_choice(vec![equal]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![equal]))
         .expect("select the equal-MV permanent");
     assert_eq!(engine.state.objects[&equal].zone, Zone::Battlefield);
     assert_eq!(
@@ -251,7 +252,7 @@ fn kodama_x_cost_trigger_object_has_zero_mana_value_and_may_decline() {
         "X on the entering permanent is zero"
     );
     engine
-        .apply_command(0, &submit_resolution_choice(Vec::new()))
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
         .expect("decline Kodama's optional choice");
     assert_eq!(engine.state.objects[&zero].zone, Zone::Hand);
     assert_eq!(engine.state.objects[&positive].zone, Zone::Hand);
@@ -276,7 +277,7 @@ fn kodama_keeps_fixed_optional_bounds_when_no_permanent_qualifies() {
         .iter()
         .all(|selectable| !selectable));
     engine
-        .apply_command(0, &submit_resolution_choice(Vec::new()))
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
         .expect("decline when no permanent in hand qualifies");
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.stack.is_empty());
@@ -317,7 +318,7 @@ fn kodama_reentry_generation_does_not_confuse_an_older_ability_use() {
         .find(|object_id| selectable(&choice, *object_id))
         .expect("a permanent remains eligible");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![land]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
         .expect("resolve the older Kodama trigger");
     assert_eq!(engine.state.objects[&land].zone, Zone::Battlefield);
     assert!(
@@ -337,7 +338,7 @@ fn move_kodama_with_dev(engine: &mut GameEngine, zone: v1::DevZone) {
     let player = engine.state.players[0].id;
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             player,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {

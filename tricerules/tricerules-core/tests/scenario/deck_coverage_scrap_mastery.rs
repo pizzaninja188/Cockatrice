@@ -1,5 +1,6 @@
 //! Exact paid Scrap Mastery: three simultaneous phases and retained post-exile incarnations.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{ContinuousEffectKind, EffectDuration};
 use tricerules_core::Zone;
 use tricerules_core::{AffectedScope, ContinuousEffect};
@@ -26,12 +27,14 @@ fn cast(engine: &mut GameEngine) -> u32 {
     engine.state.players[0].mana_pool.red = 2;
     let slot = hand_index_for_card(engine, 0, "scrap_mastery");
     let spell = engine.state.players[0].hand[slot];
-    engine.apply_command(4, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(4, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert_eq!(engine.state.players[0].mana_pool.red, 0);
     for _ in 0..engine.state.players.len() {
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     spell
@@ -50,7 +53,7 @@ fn order_all(engine: &mut GameEngine) {
         let mut choices = pending.presentation.candidates.clone();
         choices.reverse();
         engine
-            .apply_command(actor, &submit_resolution_choice(choices))
+            .apply_scenario_command(actor, &submit_resolution_choice(choices))
             .unwrap();
     }
     panic!("resolution did not complete");
@@ -113,14 +116,14 @@ fn scrap_mastery_retains_exiled_cohort_across_each_owners_sacrifice_order() {
         ids.reverse();
         let before = format!("{:?}", engine.state);
         assert!(engine
-            .apply_command(
+            .apply_scenario_command(
                 if actor == 4 { 9 } else { 4 },
                 &submit_resolution_choice(ids.clone())
             )
             .is_err());
         assert_eq!(format!("{:?}", engine.state), before);
         engine
-            .apply_command(actor, &submit_resolution_choice(ids))
+            .apply_scenario_command(actor, &submit_resolution_choice(ids))
             .unwrap();
     }
     order_all(&mut engine);
@@ -146,7 +149,7 @@ fn scrap_mastery_last_sacrifice_chooser_concession_resumes_surviving_cohort() {
             .deciding_player,
         9
     );
-    engine.apply_command(9, &concede()).unwrap();
+    engine.apply_scenario_command(9, &concede()).unwrap();
     assert!(
         engine.state.pending_resolution.is_none(),
         "departed ordering group must not retain the paused resolution"
@@ -172,7 +175,7 @@ fn scrap_mastery_future_sacrifice_owner_departure_keeps_current_choice_usable() 
         .presentation
         .candidates
         .clone();
-    engine.apply_command(9, &concede()).unwrap();
+    engine.apply_scenario_command(9, &concede()).unwrap();
     assert_eq!(
         engine
             .state
@@ -183,7 +186,7 @@ fn scrap_mastery_future_sacrifice_owner_departure_keeps_current_choice_usable() 
         4
     );
     engine
-        .apply_command(4, &submit_resolution_choice(ids))
+        .apply_scenario_command(4, &submit_resolution_choice(ids))
         .expect("surviving committed arrivals remain orderable");
     order_all(&mut engine);
     assert_eq!(engine.state.objects[&original].zone, Zone::Battlefield);
@@ -197,7 +200,7 @@ fn scrap_mastery_caster_departure_preserves_committed_survivor_graveyard_order()
     let a = inject_permanent_on_battlefield(&mut engine, 1, "short_sword");
     let b = inject_permanent_on_battlefield(&mut engine, 1, "mind_stone");
     let spell = cast(&mut engine);
-    let batch = engine.apply_command(4, &concede()).unwrap();
+    let batch = engine.apply_scenario_command(4, &concede()).unwrap();
     assert!(
         !batch
             .events
@@ -212,7 +215,7 @@ fn scrap_mastery_caster_departure_preserves_committed_survivor_graveyard_order()
         .expect("already committed surviving arrivals still require owner ordering");
     assert_eq!(pending.deciding_player, 9);
     engine
-        .apply_command(9, &submit_resolution_choice(vec![b, a]))
+        .apply_scenario_command(9, &submit_resolution_choice(vec![b, a]))
         .unwrap();
     assert_eq!(engine.state.players[1].graveyard, vec![b, a]);
     assert_eq!(
@@ -241,7 +244,7 @@ fn scrap_mastery_copy_entrant_owner_departure_skips_only_that_entrant() {
             .deciding_player,
         9
     );
-    engine.apply_command(9, &concede()).unwrap();
+    engine.apply_scenario_command(9, &concede()).unwrap();
     assert!(!engine.state.objects.contains_key(&departed));
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&original].zone, Zone::Battlefield);
@@ -266,7 +269,7 @@ fn scrap_mastery_timestamp_owner_departure_retains_surviving_order() {
             .choice_kind,
         ChoiceKind::SimultaneousEntryOrder
     );
-    engine.apply_command(9, &concede()).unwrap();
+    engine.apply_scenario_command(9, &concede()).unwrap();
     assert_eq!(
         engine
             .state
@@ -295,7 +298,7 @@ fn scrap_mastery_copy_source_departure_refreshes_without_removing_entrant() {
         .presentation
         .candidates
         .contains(&source));
-    engine.apply_command(9, &concede()).unwrap();
+    engine.apply_scenario_command(9, &concede()).unwrap();
     assert!(engine
         .state
         .pending_resolution
@@ -303,7 +306,7 @@ fn scrap_mastery_copy_source_departure_refreshes_without_removing_entrant() {
         .is_none_or(|pending| !pending.presentation.candidates.contains(&source)));
     if engine.state.pending_resolution.is_some() {
         engine
-            .apply_command(27, &submit_resolution_choice(vec![]))
+            .apply_scenario_command(27, &submit_resolution_choice(vec![]))
             .unwrap();
     }
     assert_eq!(
@@ -379,7 +382,7 @@ fn scrap_mastery_caster_departure_detaches_owed_aura_and_queued_returns() {
             .choice_kind,
         ChoiceKind::AuraPermanent
     );
-    engine.apply_command(4, &concede()).unwrap();
+    engine.apply_scenario_command(4, &concede()).unwrap();
     assert_eq!(
         engine
             .state
@@ -390,7 +393,7 @@ fn scrap_mastery_caster_departure_detaches_owed_aura_and_queued_returns() {
         9
     );
     engine
-        .apply_command(9, &submit_resolution_choice(vec![recipient]))
+        .apply_scenario_command(9, &submit_resolution_choice(vec![recipient]))
         .unwrap();
     order_all(&mut engine);
     assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
@@ -434,7 +437,7 @@ fn scrap_mastery_last_order_departure_flushes_surviving_committed_departure_trig
     inject_permanent_on_battlefield(&mut engine, 1, "mind_stone");
     cast(&mut engine);
     assert!(engine.state.stack.is_empty());
-    engine.apply_command(9, &concede()).unwrap();
+    engine.apply_scenario_command(9, &concede()).unwrap();
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&original].zone, Zone::Battlefield);
     assert_eq!(
@@ -467,7 +470,7 @@ fn scrap_mastery_unrelated_concession_does_not_check_life_during_entry_choice() 
     // Model the life value left by an earlier payment in the still-incomplete resolution.
     // The pause and concession are actual commands; no SBA is permitted at this boundary.
     engine.state.players[0].life = 0;
-    engine.apply_command(27, &concede()).unwrap();
+    engine.apply_scenario_command(27, &concede()).unwrap();
     assert!(
         !engine.state.players[0].has_lost,
         "life-based loss waits until the entry transaction completes"
@@ -506,7 +509,7 @@ fn scrap_mastery_caster_departure_detaches_owed_copy_entry_and_queued_returns() 
             .choice_kind,
         ChoiceKind::CopySource
     );
-    engine.apply_command(4, &concede()).unwrap();
+    engine.apply_scenario_command(4, &concede()).unwrap();
     assert_eq!(
         engine
             .state
@@ -517,7 +520,7 @@ fn scrap_mastery_caster_departure_detaches_owed_copy_entry_and_queued_returns() 
         9
     );
     engine
-        .apply_command(9, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(9, &submit_resolution_choice(vec![source]))
         .unwrap();
     order_all(&mut engine);
     assert_eq!(engine.state.objects[&copy].zone, Zone::Battlefield);
@@ -538,7 +541,7 @@ fn scrap_mastery_owed_aura_owner_departure_skips_it_and_resumes_survivors() {
     watch_return(&mut engine, watched, aura);
     watch_return(&mut engine, watched, queued);
     let spell = cast(&mut engine);
-    engine.apply_command(9, &concede()).unwrap();
+    engine.apply_scenario_command(9, &concede()).unwrap();
     assert!(!engine.state.objects.contains_key(&aura));
     order_all(&mut engine);
     assert_eq!(
@@ -582,8 +585,8 @@ fn scrap_mastery_detached_synthetic_entry_owner_departure_preserves_independent_
             .choice_kind,
         ChoiceKind::CopySource
     );
-    engine.apply_command(4, &concede()).unwrap();
-    engine.apply_command(9, &concede()).unwrap();
+    engine.apply_scenario_command(4, &concede()).unwrap();
+    engine.apply_scenario_command(9, &concede()).unwrap();
     assert!(!engine.state.is_terminal());
     assert!(engine.state.pending_resolution.is_none());
     assert!(!engine.state.objects.contains_key(&copy));
@@ -609,7 +612,7 @@ fn scrap_mastery_concession_accepts_but_abandons_stale_surviving_sacrifice_arriv
         .get_mut(&survivor)
         .unwrap() += 1;
     let generation = engine.state.zone_change_generation[&survivor];
-    let batch = engine.apply_command(9, &concede()).unwrap();
+    let batch = engine.apply_scenario_command(9, &concede()).unwrap();
     assert_eq!(engine.state.objects[&survivor].zone, Zone::Graveyard);
     assert_eq!(engine.state.zone_change_generation[&survivor], generation);
     assert!(engine.state.pending_resolution.is_none());
@@ -636,7 +639,7 @@ fn scrap_mastery_concession_accepts_but_abandons_stale_surviving_timestamp_entry
         .get_mut(&survivor)
         .unwrap() += 1;
     let generation = engine.state.zone_change_generation[&survivor];
-    let batch = engine.apply_command(9, &concede()).unwrap();
+    let batch = engine.apply_scenario_command(9, &concede()).unwrap();
     assert_eq!(engine.state.objects[&survivor].zone, Zone::Exile);
     assert_eq!(engine.state.zone_change_generation[&survivor], generation);
     assert!(engine.state.pending_resolution.is_none());
@@ -766,28 +769,31 @@ fn scrap_mastery_paid_cast_choices_and_concession_replay_encoded_commands() {
     let mut engine = fresh();
     let slot = hand_index_for_card(&engine, 0, "scrap_mastery");
     let mut commands = vec![(4, cast_spell(slot, vec![]))];
-    let mut batches = vec![engine.apply_command(4, &commands[0].1).unwrap()];
+    let mut batches = vec![engine.apply_scenario_command(4, &commands[0].1).unwrap()];
     for _ in 0..3 {
         let actor = engine.state.priority_player_id();
         let command = pass();
-        batches.push(engine.apply_command(actor, &command).unwrap());
+        batches.push(engine.apply_scenario_command(actor, &command).unwrap());
         commands.push((actor, command));
     }
     let command = concede();
-    batches.push(engine.apply_command(9, &command).unwrap());
+    batches.push(engine.apply_scenario_command(9, &command).unwrap());
     commands.push((9, command));
     while let Some(pending) = engine.state.pending_resolution.as_ref() {
         let actor = pending.deciding_player;
         let mut ids = pending.presentation.candidates.clone();
         ids.reverse();
         let command = submit_resolution_choice(ids);
-        batches.push(engine.apply_command(actor, &command).unwrap());
+        batches.push(engine.apply_scenario_command(actor, &command).unwrap());
         commands.push((actor, command));
     }
     let mut replay = fresh();
     for ((actor, command), expected) in commands.into_iter().zip(batches) {
         let decoded = RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
-        assert_eq!(replay.apply_command(actor, &decoded).unwrap(), expected);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &decoded).unwrap(),
+            expected
+        );
     }
     assert_eq!(
         engine.diagnostic_snapshot().unwrap(),
@@ -805,17 +811,19 @@ fn scrap_mastery_actual_twincast_resolves_a_fresh_cohort_in_each_spell() {
     engine.state.players[0].mana_pool.red = 2;
     let slot = hand_index_for_card(&engine, 0, "scrap_mastery");
     let spell = engine.state.players[0].hand[slot];
-    engine.apply_command(4, &cast_spell(slot, vec![])).unwrap();
-    engine.apply_command(4, &pass()).unwrap();
+    engine
+        .apply_scenario_command(4, &cast_spell(slot, vec![]))
+        .unwrap();
+    engine.apply_scenario_command(4, &pass()).unwrap();
     inject_card_into_hand(&mut engine, 1, "twincast");
     engine.state.players[1].mana_pool.blue = 2;
     let twin_slot = hand_index_for_card(&engine, 1, "twincast");
     engine
-        .apply_command(9, &cast_spell(twin_slot, target_object(spell)))
+        .apply_scenario_command(9, &cast_spell(twin_slot, target_object(spell)))
         .unwrap();
     for _ in 0..3 {
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     assert!(
@@ -825,7 +833,7 @@ fn scrap_mastery_actual_twincast_resolves_a_fresh_cohort_in_each_spell() {
     assert!(engine.state.stack.last().unwrap().is_copy);
     for _ in 0..3 {
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     order_all(&mut engine);
@@ -833,7 +841,7 @@ fn scrap_mastery_actual_twincast_resolves_a_fresh_cohort_in_each_spell() {
     assert_eq!(engine.state.objects[&sacrificed].zone, Zone::Graveyard);
     for _ in 0..3 {
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     order_all(&mut engine);
@@ -858,7 +866,7 @@ fn scrap_mastery_unexpected_missing_survivor_abandons_the_entire_proposed_return
     // Distinguish an unexpected missing surviving-owner object from CR800.4 owner removal.
     engine.state.objects.remove(&missing);
     engine.state.players[2].exile.retain(|oid| *oid != missing);
-    engine.apply_command(9, &concede()).unwrap();
+    engine.apply_scenario_command(9, &concede()).unwrap();
     assert_eq!(
         engine.state.objects[&retained].zone,
         Zone::Exile,
@@ -896,7 +904,7 @@ fn scrap_mastery_stale_observer_entry_preserves_valid_owed_returns_and_cancels_t
         .entry(stale)
         .or_default() += 1;
     let generation = engine.state.zone_change_generation[&stale];
-    let batch = engine.apply_command(27, &concede()).unwrap();
+    let batch = engine.apply_scenario_command(27, &concede()).unwrap();
     assert!(!batch
         .events
         .iter()
@@ -923,12 +931,12 @@ fn scrap_mastery_future_timestamp_departure_preserves_already_chosen_order() {
     }
     cast(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             4,
             &submit_resolution_choice(vec![originals[0][1], originals[0][0]]),
         )
         .unwrap();
-    engine.apply_command(27, &concede()).unwrap();
+    engine.apply_scenario_command(27, &concede()).unwrap();
     assert_eq!(
         engine
             .state
@@ -945,12 +953,12 @@ fn scrap_mastery_future_timestamp_departure_preserves_already_chosen_order() {
         vec![originals[1][0]],
     ] {
         assert!(engine
-            .apply_command(9, &submit_resolution_choice(ids))
+            .apply_scenario_command(9, &submit_resolution_choice(ids))
             .is_err());
         assert_eq!(format!("{:?}", engine.state), before);
     }
     engine
-        .apply_command(
+        .apply_scenario_command(
             9,
             &submit_resolution_choice(vec![originals[1][1], originals[1][0]]),
         )

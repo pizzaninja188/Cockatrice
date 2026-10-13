@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{BasicLandType, ContinuousEffectKind, EffectDuration};
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{self as rv1, ResolutionChoiceDecision};
@@ -6,6 +7,7 @@ use tricerules_proto::ruled::v1::{self as rv1, ResolutionChoiceDecision};
 fn branch(index: u32, decision: ResolutionChoiceDecision) -> rv1::RuledCommand {
     rv1::RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(rv1::SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: decision as i32,
             selected_branch_index: index,
@@ -74,7 +76,7 @@ fn each_basic_land_type_is_chosen_before_payment_and_publishes_its_intrinsic_abi
         let hand_index = hand_index_for_card(&engine, 0, "multiversal_passage");
         let object_id = engine.state.players[0].hand[hand_index];
         let played = engine
-            .apply_command(0, &play_land(hand_index))
+            .apply_scenario_command(0, &play_land(hand_index))
             .expect("play Passage");
         let type_choice = find_resolution_choice(&played).expect("type choice");
         assert_eq!(type_choice.choice_kind(), rv1::ChoiceKind::ResolutionBranch);
@@ -91,7 +93,7 @@ fn each_basic_land_type_is_chosen_before_payment_and_publishes_its_intrinsic_abi
         assert_eq!(engine.state.objects[&object_id].zone, Zone::Hand);
 
         let offered = engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &branch(index as u32, ResolutionChoiceDecision::SelectBranch),
             )
@@ -103,7 +105,7 @@ fn each_basic_land_type_is_chosen_before_payment_and_publishes_its_intrinsic_abi
         assert_eq!(engine.state.objects[&object_id].zone, Zone::Hand);
 
         engine
-            .apply_command(0, &branch(0, ResolutionChoiceDecision::Decline))
+            .apply_scenario_command(0, &branch(0, ResolutionChoiceDecision::Decline))
             .expect("decline payment");
         assert_eq!(engine.state.players[0].life, 20);
         assert!(engine.state.objects[&object_id].tapped);
@@ -129,23 +131,23 @@ fn paying_two_life_enters_untapped_and_revalidates_the_type_reply() {
     let hand_index = hand_index_for_card(&engine, 0, "multiversal_passage");
     let object_id = engine.state.players[0].hand[hand_index];
     engine
-        .apply_command(0, &play_land(hand_index))
+        .apply_scenario_command(0, &play_land(hand_index))
         .expect("offer type choice");
 
     assert!(engine
-        .apply_command(1, &branch(0, ResolutionChoiceDecision::SelectBranch))
+        .apply_scenario_command(1, &branch(0, ResolutionChoiceDecision::SelectBranch))
         .is_err());
     assert!(engine
-        .apply_command(0, &branch(5, ResolutionChoiceDecision::SelectBranch))
+        .apply_scenario_command(0, &branch(5, ResolutionChoiceDecision::SelectBranch))
         .is_err());
     assert!(engine.state.pending_resolution.is_some());
     assert_eq!(engine.state.objects[&object_id].zone, Zone::Hand);
 
     engine
-        .apply_command(0, &branch(1, ResolutionChoiceDecision::SelectBranch))
+        .apply_scenario_command(0, &branch(1, ResolutionChoiceDecision::SelectBranch))
         .expect("choose Island");
     engine
-        .apply_command(0, &branch(0, ResolutionChoiceDecision::SelectBranch))
+        .apply_scenario_command(0, &branch(0, ResolutionChoiceDecision::SelectBranch))
         .expect("pay life");
     assert_eq!(engine.state.players[0].life, 18);
     assert!(!engine.state.objects[&object_id].tapped);
@@ -163,7 +165,7 @@ fn orb_of_dreams_can_be_ordered_on_either_side_of_the_combined_passage_replaceme
         let hand_index = hand_index_for_card(&engine, 0, "multiversal_passage");
         let object_id = engine.state.players[0].hand[hand_index];
         let played = engine
-            .apply_command(0, &play_land(hand_index))
+            .apply_scenario_command(0, &play_land(hand_index))
             .expect("play land");
         let ordering = find_resolution_choice(&played).expect("replacement ordering");
         assert_eq!(ordering.choice_kind(), rv1::ChoiceKind::ReplacementEffect);
@@ -178,7 +180,7 @@ fn orb_of_dreams_can_be_ordered_on_either_side_of_the_combined_passage_replaceme
             .position(|name| name.starts_with(wanted))
             .expect("replacement label");
         let next = engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &submit_resolution_choice(vec![ordering.candidate_object_ids[chosen]]),
             )
@@ -186,10 +188,10 @@ fn orb_of_dreams_can_be_ordered_on_either_side_of_the_combined_passage_replaceme
         let type_choice = find_resolution_choice(&next).expect("Passage type choice");
         assert_eq!(type_choice.resolution_branches.len(), 5);
         engine
-            .apply_command(0, &branch(4, ResolutionChoiceDecision::SelectBranch))
+            .apply_scenario_command(0, &branch(4, ResolutionChoiceDecision::SelectBranch))
             .expect("choose Forest");
         engine
-            .apply_command(0, &branch(0, ResolutionChoiceDecision::SelectBranch))
+            .apply_scenario_command(0, &branch(0, ResolutionChoiceDecision::SelectBranch))
             .expect("pay life");
         assert_eq!(engine.state.players[0].life, 18);
         assert!(engine.state.objects[&object_id].tapped);
@@ -253,7 +255,7 @@ fn basic_land_setting_replaces_old_land_subtypes_and_copiable_abilities_but_not_
     );
     let gift = hand_index_for_card(&engine, 0, "gift_of_paradise");
     engine
-        .apply_command(0, &cast_spell(gift, target_object(watery_grave)))
+        .apply_scenario_command(0, &cast_spell(gift, target_object(watery_grave)))
         .expect("cast Gift of Paradise");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(

@@ -2,6 +2,7 @@
 //! Oracle: Fireball deals X damage divided evenly, rounded down, among any number of targets.
 //!   It costs {1} more to cast for each target beyond the first. (CR 601.2d/f)
 //! Oracle: Fire deals 2 damage divided as you choose among one or two targets.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 
@@ -28,7 +29,7 @@ fn per_target_prismari_charm_damages_both_players_without_allocation() {
         },
     );
     let slot = hand_index_for_card(&e, 0, "prismari_charm");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_modal_spell(slot, vec![(1, targets_with_damage(vec![(0, 0), (1, 0)]))]),
     )
@@ -60,7 +61,8 @@ fn per_target_dual_shot_allows_zero_targets() {
         },
     );
     let slot = hand_index_for_card(&e, 0, "dual_shot");
-    e.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    e.apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert!(e.state.stack.is_empty());
 }
@@ -104,7 +106,7 @@ fn fireball_single_target_all_damage() {
 
     let idx = hand_index_for_card(&e, 0, "fireball");
     // {X}{R} with X=5: pay 5 generic + 1 red = 6 mana; single target → no surcharge.
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::CastSpell(CastSpell {
@@ -124,8 +126,8 @@ fn fireball_single_target_all_damage() {
     )
     .expect("cast Fireball X=5 single target");
 
-    e.apply_command(0, &pass()).expect("pass");
-    e.apply_command(1, &pass()).expect("pass");
+    e.apply_scenario_command(0, &pass()).expect("pass");
+    e.apply_scenario_command(1, &pass()).expect("pass");
 
     assert_eq!(e.state.players[1].life, 15, "5 damage to opponent");
 }
@@ -155,7 +157,7 @@ fn fireball_split_between_two_targets() {
 
     let idx = hand_index_for_card(&e, 0, "fireball");
     // X=5, 2 targets: cost = 5 + 1 (R) + 1 (surcharge) = 7 total.
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::CastSpell(CastSpell {
@@ -184,8 +186,8 @@ fn fireball_split_between_two_targets() {
     )
     .expect("cast Fireball split");
 
-    e.apply_command(0, &pass()).expect("pass");
-    e.apply_command(1, &pass()).expect("pass");
+    e.apply_scenario_command(0, &pass()).expect("pass");
+    e.apply_scenario_command(1, &pass()).expect("pass");
 
     assert_eq!(e.state.players[1].life, 18, "2 damage to opponent");
     assert_eq!(e.state.players[0].life, 18, "2 damage to self");
@@ -215,7 +217,7 @@ fn fireball_does_not_accept_cast_time_allocation() {
 
     let idx = hand_index_for_card(&e, 0, "fireball");
     // X=3; the stale client-side allocation is ignored and the spell still casts.
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::CastSpell(CastSpell {
@@ -268,7 +270,7 @@ fn fireball_allows_zero_targets() {
     );
 
     let idx = hand_index_for_card(&e, 0, "fireball");
-    e.apply_command(0, &cast_spell_x(idx, vec![], 3))
+    e.apply_scenario_command(0, &cast_spell_x(idx, vec![], 3))
         .expect("zero-target Fireball is legal");
 }
 
@@ -308,11 +310,11 @@ fn fire_single_target_deals_two() {
 
     let idx = hand_index_for_card(&e, 0, "fire_ice");
     // Fire face (index 0): all 2 damage to opponent.
-    e.apply_command(0, &cast_spell_face(idx, target_player_damage(1, 2), 0))
+    e.apply_scenario_command(0, &cast_spell_face(idx, target_player_damage(1, 2), 0))
         .expect("cast Fire");
 
-    e.apply_command(0, &pass()).expect("pass");
-    e.apply_command(1, &pass()).expect("pass");
+    e.apply_scenario_command(0, &pass()).expect("pass");
+    e.apply_scenario_command(1, &pass()).expect("pass");
 
     assert_eq!(e.state.players[1].life, 18, "Fire deals 2");
 }
@@ -353,14 +355,14 @@ fn fire_split_between_two_targets() {
 
     let idx = hand_index_for_card(&e, 0, "fire_ice");
     // Fire face (index 0): split 1 to opponent, 1 to self; no surcharge.
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_face(idx, targets_with_damage(vec![(1, 1), (0, 1)]), 0),
     )
     .expect("cast Fire split");
 
-    e.apply_command(0, &pass()).expect("pass");
-    e.apply_command(1, &pass()).expect("pass");
+    e.apply_scenario_command(0, &pass()).expect("pass");
+    e.apply_scenario_command(1, &pass()).expect("pass");
 
     assert_eq!(e.state.players[1].life, 19, "1 damage to opponent");
     assert_eq!(e.state.players[0].life, 19, "1 damage to self");
@@ -392,7 +394,7 @@ fn fireball_insufficient_mana_for_surcharge_rejected() {
     );
 
     let idx = hand_index_for_card(&e, 0, "fireball");
-    let err = e.apply_command(
+    let err = e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::CastSpell(CastSpell {
@@ -460,7 +462,7 @@ fn fireball_divides_evenly_among_targets_still_legal_at_resolution() {
 
     // Fireball X=4 targeting P1 and the Bears (surcharge {1} for the second target).
     let fireball_idx = hand_index_for_card(&e, 0, "fireball");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_x(
             fireball_idx,
@@ -472,7 +474,7 @@ fn fireball_divides_evenly_among_targets_still_legal_at_resolution() {
 
     // In response, kill the Bears so only P1 is a legal target when Fireball resolves.
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt_idx,
@@ -532,7 +534,7 @@ fn fireball_with_more_targets_than_damage_deals_nothing() {
     let p0_life = e.state.players[0].life;
     let p1_life = e.state.players[1].life;
     let idx = hand_index_for_card(&e, 0, "fireball");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_x(idx, targets_with_damage(vec![(1, 0), (0, 0)]), 1),
     )
@@ -577,7 +579,7 @@ fn per_target_engine(card: &str) -> GameEngine {
 fn per_target_single_target_ignores_submitted_amount() {
     let mut e = per_target_engine("prismari_charm");
     let slot = hand_index_for_card(&e, 0, "prismari_charm");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_modal_spell(slot, vec![(1, target_player_damage(1, 99))]),
     )
@@ -610,7 +612,7 @@ fn per_target_cardinality_and_types_reject_invalid_casts() {
             let mana = e.state.players[0].mana_pool;
             let hand = e.state.players[0].hand.clone();
             let command_index = e.state.command_index;
-            assert!(e.apply_command(0, &cmd).is_err());
+            assert!(e.apply_scenario_command(0, &cmd).is_err());
             assert!(e.state.stack.is_empty());
             assert_eq!(e.state.command_index, command_index);
             assert_eq!(e.state.players[0].hand, hand);
@@ -627,7 +629,7 @@ fn per_target_dual_shot_damages_one_or_two_creatures() {
         let b = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
         let slot = hand_index_for_card(&e, 0, "dual_shot");
         let ids = [a, b];
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &cast_spell(
                 slot,
@@ -647,13 +649,13 @@ fn per_target_partial_illegality_does_not_redistribute() {
     let a = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     inject_card_into_hand(&mut e, 0, "lightning_bolt");
     let slot = hand_index_for_card(&e, 0, "prismari_charm");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_modal_spell(slot, vec![(1, targets_with_damage(vec![(a, 0), (1, 0)]))]),
     )
     .unwrap();
     let bolt = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt, target_object(a)))
+    e.apply_scenario_command(0, &cast_spell(bolt, target_object(a)))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.objects[&a].zone, tricerules_core::Zone::Graveyard);
@@ -666,10 +668,10 @@ fn per_target_all_illegal_targets_do_not_deal_damage() {
     let a = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     inject_card_into_hand(&mut e, 0, "unsummon");
     let slot = hand_index_for_card(&e, 0, "dual_shot");
-    e.apply_command(0, &cast_spell(slot, target_object(a)))
+    e.apply_scenario_command(0, &cast_spell(slot, target_object(a)))
         .unwrap();
     let bounce = hand_index_for_card(&e, 0, "unsummon");
-    e.apply_command(0, &cast_spell(bounce, target_object(a)))
+    e.apply_scenario_command(0, &cast_spell(bounce, target_object(a)))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.objects[&a].zone, tricerules_core::Zone::Hand);
@@ -681,7 +683,7 @@ fn per_target_all_illegal_targets_do_not_deal_damage() {
 fn per_target_charm_surveils_before_drawing() {
     let mut e = per_target_engine("prismari_charm");
     let slot = hand_index_for_card(&e, 0, "prismari_charm");
-    e.apply_command(0, &cast_modal_spell(slot, vec![(0, vec![])]))
+    e.apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, vec![])]))
         .unwrap();
     let hand = e.state.players[0].hand.len();
     pass_both_players(&mut e);
@@ -691,9 +693,9 @@ fn per_target_charm_surveils_before_drawing() {
     assert_eq!(candidates.len(), 2);
     assert_eq!(e.state.players[0].hand.len(), hand);
     assert!(e
-        .apply_command(1, &submit_resolution_choice(candidates.clone()))
+        .apply_scenario_command(1, &submit_resolution_choice(candidates.clone()))
         .is_err());
-    e.apply_command(0, &submit_resolution_choice(candidates.clone()))
+    e.apply_scenario_command(0, &submit_resolution_choice(candidates.clone()))
         .unwrap();
     assert!(candidates
         .iter()
@@ -709,9 +711,9 @@ fn per_target_charm_return_mode_excludes_lands() {
     let land = inject_permanent_on_battlefield(&mut e, 0, "forest");
     let slot = hand_index_for_card(&e, 0, "prismari_charm");
     assert!(e
-        .apply_command(0, &cast_modal_spell(slot, vec![(2, target_object(land))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(2, target_object(land))]))
         .is_err());
-    e.apply_command(0, &cast_modal_spell(slot, vec![(2, target_object(a))]))
+    e.apply_scenario_command(0, &cast_modal_spell(slot, vec![(2, target_object(a))]))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert!(e.state.players[1].hand.contains(&a));
@@ -725,7 +727,7 @@ fn per_target_prevention_choice_resumes_the_whole_batch_once() {
     e.state.add_damage_prevention_shield(a, 1);
     e.state.add_damage_prevention_shield(a, 1);
     let slot = hand_index_for_card(&e, 0, "dual_shot");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(slot, targets_with_damage(vec![(a, 0), (b, 0)])),
     )
@@ -743,16 +745,16 @@ fn per_target_prevention_choice_resumes_the_whole_batch_once() {
         "batch not committed before choice"
     );
     assert!(e
-        .apply_command(0, &submit_resolution_choice(vec![choice]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![choice]))
         .is_err());
-    e.apply_command(1, &submit_resolution_choice(vec![choice]))
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![choice]))
         .unwrap();
     assert_eq!(e.state.objects[&a].damage, 0);
     assert_eq!(e.state.objects[&b].damage, 1);
     assert_eq!(e.state.remaining_damage_prevention(a), 1);
     assert!(e.state.pending_resolution.is_none());
     assert!(e
-        .apply_command(1, &submit_resolution_choice(vec![choice]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![choice]))
         .is_err());
     assert_eq!(e.state.objects[&b].damage, 1);
 }
@@ -763,11 +765,11 @@ fn per_target_returned_object_is_not_the_original_target() {
     let mut e = per_target_engine("dual_shot");
     let a = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let slot = hand_index_for_card(&e, 0, "dual_shot");
-    e.apply_command(0, &cast_spell(slot, target_object(a)))
+    e.apply_scenario_command(0, &cast_spell(slot, target_object(a)))
         .unwrap();
     e.enable_dev_commands();
     for zone in [DevZone::Hand, DevZone::Battlefield] {
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -794,11 +796,11 @@ fn per_target_damage_triggers_wait_until_both_recipients_are_damaged() {
     let b = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     inject_card_into_hand(&mut e, 0, "cryoshatter");
     let aura = hand_index_for_card(&e, 0, "cryoshatter");
-    e.apply_command(0, &cast_spell(aura, target_object(a)))
+    e.apply_scenario_command(0, &cast_spell(aura, target_object(a)))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     let slot = hand_index_for_card(&e, 0, "dual_shot");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(slot, targets_with_damage(vec![(a, 0), (b, 0)])),
     )

@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, EffectDuration, TriggerCondition, TriggeredAbilityDef,
@@ -55,7 +56,7 @@ fn issue_139_refresh_publishes_targets_for_granted_trigger_beyond_printed_abilit
 
     advance_to_declare_attackers(&mut engine);
     let trigger_batch = engine
-        .apply_command(0, &declare_attackers(vec![source]))
+        .apply_scenario_command(0, &declare_attackers(vec![source]))
         .expect("declare the granted-trigger source as an attacker");
     let pending = engine
         .state
@@ -93,7 +94,7 @@ fn issue_139_refresh_publishes_targets_for_granted_trigger_beyond_printed_abilit
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -165,7 +166,7 @@ fn issue_139_refresh_publishes_targets_from_stored_non_primary_face_ability() {
         "a reconnect snapshot must not substitute the primary face's ability at index zero"
     );
 
-    let rejected = engine.apply_command(
+    let rejected = engine.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -186,7 +187,7 @@ fn issue_139_refresh_publishes_targets_from_stored_non_primary_face_ability() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {

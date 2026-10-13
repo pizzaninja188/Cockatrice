@@ -954,6 +954,7 @@ mod timestamp_order_tests {
                 .is_none(),
             "the simultaneous cohort must park for a logged timestamp-order choice"
         );
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
         let pending = engine
             .state
             .pending_resolution
@@ -965,16 +966,18 @@ mod timestamp_order_tests {
         assert!(engine.state.players[0].battlefield.is_empty());
 
         for choice in [vec![], vec![ids[0], ids[0]], vec![ids[0], 999_999]] {
-            assert!(engine.apply_command(0, &order_choice(choice)).is_err());
+            assert!(engine
+                .apply_scenario_command(0, &order_choice(choice))
+                .is_err());
             assert!(engine.state.pending_resolution.is_some());
             assert!(engine.state.players[0].battlefield.is_empty());
         }
         assert!(engine
-            .apply_command(1, &order_choice(vec![ids[1], ids[0]]))
+            .apply_scenario_command(1, &order_choice(vec![ids[1], ids[0]]))
             .is_err());
         assert!(engine.state.pending_resolution.is_some());
         engine
-            .apply_command(0, &order_choice(vec![ids[1], ids[0]]))
+            .apply_scenario_command(0, &order_choice(vec![ids[1], ids[0]]))
             .expect("controller chooses reverse entry timestamp order");
         assert!(engine.state.pending_resolution.is_none());
         assert_eq!(engine.maximum_hand_size(0), usize::MAX);
@@ -1023,6 +1026,7 @@ mod timestamp_order_tests {
             .chain(p0.iter().map(|&oid| entry_for(&engine, oid, 0)))
             .collect();
         let stack = engine.observer_return_item(p0[0], 0);
+        let mut events = Vec::new();
         assert!(engine
             .begin_zone_entry_batch(
                 ParkedStackResolution::new(stack),
@@ -1030,10 +1034,11 @@ mod timestamp_order_tests {
                 Zone::Graveyard,
                 "return",
                 None,
-                &mut Vec::new()
+                &mut events
             )
             .unwrap()
             .is_none());
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
         assert_eq!(
             engine
                 .state
@@ -1044,7 +1049,7 @@ mod timestamp_order_tests {
             0
         );
         engine
-            .apply_command(0, &order_choice(vec![p0[1], p0[0]]))
+            .apply_scenario_command(0, &order_choice(vec![p0[1], p0[0]]))
             .expect("active controller chooses order first");
         assert_eq!(
             engine
@@ -1058,7 +1063,7 @@ mod timestamp_order_tests {
         assert!(engine.state.players[0].battlefield.is_empty());
         assert!(engine.state.players[1].battlefield.is_empty());
         engine
-            .apply_command(1, &order_choice(vec![p1[1], p1[0]]))
+            .apply_scenario_command(1, &order_choice(vec![p1[1], p1[0]]))
             .expect("next controller chooses order second");
         let stamps = &engine.state.battlefield_entry_timestamps;
         assert!(stamps[&p0[1]] < stamps[&p0[0]]);
@@ -1122,7 +1127,9 @@ mod timestamp_order_tests {
             None,
         )
         .unwrap();
-        assert!(engine.apply_command(0, &order_choice(ids.clone())).is_err());
+        assert!(engine
+            .apply_scenario_command(0, &order_choice(ids.clone()))
+            .is_err());
         assert!(engine.state.pending_resolution.is_some());
         assert!(engine.state.players[0].battlefield.is_empty());
     }

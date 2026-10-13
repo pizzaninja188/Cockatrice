@@ -1,4 +1,5 @@
 //! Issue #113: CR 612 / 613 characteristic setting and visible ability-removal state.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::{Color, Keyword};
@@ -16,7 +17,7 @@ fn cast_aura(engine: &mut GameEngine, card_id: &str, target: u32) -> u32 {
     );
     let slot = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast characteristic-setting Aura");
     resolve_entire_stack_two_player(engine);
     battlefield_object_for_card(engine, 0, card_id)
@@ -182,7 +183,7 @@ fn witness_protection_rejects_a_noncreature_target_without_partial_changes() {
     );
     let slot = hand_index_for_card(&engine, 0, "witness_protection");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(land)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(land)))
         .expect_err("a noncreature is not a legal Aura target");
 
     assert_eq!(engine.state.objects[&land].zone, Zone::Battlefield);
@@ -224,11 +225,11 @@ fn clone_excludes_witness_protections_later_layer_changes() {
     );
     let clone_slot = hand_index_for_card(&engine, 0, "clone");
     engine
-        .apply_command(0, &cast_spell(clone_slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(clone_slot, vec![]))
         .expect("cast Clone");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("copy the protected creature");
 
     let clone = battlefield_object_for_card(&engine, 0, "clone");
@@ -281,10 +282,14 @@ fn witness_protection_names_drive_the_legend_rule() {
     );
     let slot = hand_index_for_card(&engine, 0, "witness_protection");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(second)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(second)))
         .expect("cast second Witness Protection");
-    engine.apply_command(0, &pass()).expect("caster pass");
-    let batch = engine.apply_command(1, &pass()).expect("opponent pass");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
+    let batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("opponent pass");
 
     let choice = find_resolution_choice(&batch).expect("renamed legends require a keep choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LegendKeep);

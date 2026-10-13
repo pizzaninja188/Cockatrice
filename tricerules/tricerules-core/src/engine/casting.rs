@@ -227,6 +227,7 @@ pub(in crate::engine) struct PreparedSpellCast {
 pub(in crate::engine) struct PendingSpellCastInternal {
     pub(in crate::engine) prepared: PreparedSpellCast,
     original_object: GameObject,
+    face_down_exile_reveal_events: Vec<rv1::RuledEvent>,
     restored_permissions: Vec<(usize, ActiveExilePlayPermission)>,
     restored_discard_successors: Vec<((ObjectId, u64), u64)>,
     proposal_triggers: Vec<super::triggers::CollectedTrigger>,
@@ -447,6 +448,16 @@ impl GameEngine {
             .map(|(key, value)| (*key, *value))
             .collect();
         let locked_total_cost = prepared.payment.total_cost_label()?;
+        // Capture the original Exile identity before reserving the card on the Stack. Publication
+        // waits for a successful payment commit so CancelSpellCast restores both the hidden card
+        // and its privacy.
+        let face_down_exile_reveal_events = super::reveals::face_down_exile_reveal_events(
+            &self.state,
+            self.registry,
+            oid,
+            "casting a card from exile",
+        )
+        .unwrap_or_default();
 
         // Everything fallible above is validation. This is the CR 601.2a reservation edge.
         super::resolution::move_object_to_zone(
@@ -478,6 +489,7 @@ impl GameEngine {
         self.pending_spell_cast_internal = Some(PendingSpellCastInternal {
             prepared,
             original_object: object,
+            face_down_exile_reveal_events,
             restored_permissions,
             restored_discard_successors,
             proposal_triggers,
@@ -1591,6 +1603,18 @@ impl GameEngine {
         let prepare_source = self.state.prepare_spell_sources.get(&oid).cloned();
         let payment_plan = self.prepare_cost_transaction_commit(payment_plan)?;
         let payment = self.commit_prevalidated_cost_transaction(payment_plan, None)?;
+        if !pending.face_down_exile_reveal_events.is_empty() {
+            let object = self
+                .state
+                .objects
+                .get_mut(&oid)
+                .expect("a committed spell retains its reserved physical object");
+            debug_assert_eq!(object.zone, Zone::Stack);
+            // The successful cast's stack event and triggers must see the printed face. A
+            // face-down Morph/Disguise permanent entered by another effect never uses this path.
+            object.face_down = false;
+            object.face_up_index = face_index;
+        }
         let returned_attacker_assignment = payment.returned_attacker_assignment;
         let life_paid = payment.life_paid;
         let mana_spent = payment.mana_spent;
@@ -1706,6 +1730,9 @@ impl GameEngine {
 
         let cast_card_id = card_id.clone();
         let mut batch = RuledEventBatch::default();
+        batch
+            .events
+            .extend(pending.face_down_exile_reveal_events.iter().cloned());
         let x_line = if has_x {
             format!(" (X={chosen_x})")
         } else {
@@ -3873,8 +3900,33 @@ impl GameEngine {
         } else {
             def.name.clone()
         };
+        let face_down_exile_reveal_events = super::reveals::face_down_exile_reveal_events(
+            &self.state,
+            self.registry,
+            oid,
+            "playing a card from exile",
+        )
+        .unwrap_or_default();
+        let revealed_face_down_exile = !face_down_exile_reveal_events.is_empty();
+        let face_down_exile_original_face_up_index = revealed_face_down_exile.then(|| {
+            self.state
+                .objects
+                .get(&oid)
+                .expect("validated exile land remains in the game")
+                .face_up_index
+        });
+        if revealed_face_down_exile {
+            let object = self
+                .state
+                .objects
+                .get_mut(&oid)
+                .expect("validated exile land remains in the game");
+            object.face_down = false;
+            object.face_up_index = face_index;
+        }
         self.state.lands_played_this_turn += 1;
         let mut batch = RuledEventBatch::default();
+        batch.events.extend(face_down_exile_reveal_events);
         let item = StackItem {
             mana_colors_spent_to_cast: Default::default(),
             id: oid,
@@ -3918,7 +3970,7 @@ impl GameEngine {
         if special {
             self.state.pending_resolution = None;
         }
-        match self.begin_battlefield_entry(
+        let entry_progress = match self.begin_battlefield_entry(
             item,
             BattlefieldEntryEvent {
                 entry_reveal_receipts: Vec::new(),
@@ -3956,7 +4008,31 @@ impl GameEngine {
                 resume_stack: special_resume_stack.clone().map(Box::new),
             },
             &mut batch.events,
-        )? {
+        ) {
+            Ok(progress) => progress,
+            Err(error) => {
+                // A refused entry cannot publish the queued reveal receipt. Restore the hidden
+                // incarnation as well, guarded by the generation validated above.
+                if revealed_face_down_exile
+                    && self.state.zone_change_generation.get(&oid).copied()
+                        == Some(source.expected_zone_change_generation.unwrap_or_default())
+                {
+                    if let Some(object) = self
+                        .state
+                        .objects
+                        .get_mut(&oid)
+                        .filter(|object| object.zone == Zone::Exile)
+                    {
+                        object.face_down = true;
+                        if let Some(face_up_index) = face_down_exile_original_face_up_index {
+                            object.face_up_index = face_up_index;
+                        }
+                    }
+                }
+                return Err(error);
+            }
+        };
+        match entry_progress {
             super::replacement::BattlefieldEntryProgress::Parked => {
                 if let Some(stack) = special_resume_stack.as_ref() {
                     self.transfer_entry_choice_resume(stack);
@@ -4045,7 +4121,7 @@ mod cast_snapshot_tests {
             unreachable!()
         };
         cast_spell.prototyped = true;
-        e.apply_command(0, &cast)
+        e.apply_scenario_command(0, &cast)
             .expect("the inset cost casts the Prototype mode");
         let stack_item = e.state.stack.last().expect("spell on stack");
         assert!(stack_item.prototyped);
@@ -4140,7 +4216,7 @@ mod cast_snapshot_tests {
         let mut initial_offer = None;
         while e.state.pending_resolution.is_none() {
             let batch = e
-                .apply_command(
+                .apply_scenario_command(
                     e.state.priority_player_id(),
                     &RuledCommand {
                         cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -4178,7 +4254,7 @@ mod cast_snapshot_tests {
             ..Default::default()
         };
         let before = e.diagnostic_snapshot().unwrap();
-        let result = e.apply_command(
+        let result = e.apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -4210,7 +4286,7 @@ mod cast_snapshot_tests {
             special_choice(e.resolution_payment_choice_event().unwrap()).candidate_selectable,
             vec![false]
         );
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -4255,7 +4331,7 @@ mod cast_snapshot_tests {
             let opponent = add(&mut e, 1, "return_overlap", Zone::Graveyard);
             let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
             e.state.players[0].mana_pool.black = 1;
-            e.apply_command(0, &command(&e, spell)).unwrap();
+            e.apply_scenario_command(0, &command(&e, spell)).unwrap();
             resolve(&mut e);
             for _ in 0..4 {
                 let Some(pending) = e.state.pending_resolution.clone() else {
@@ -4268,7 +4344,7 @@ mod cast_snapshot_tests {
                 assert!(ids
                     .iter()
                     .all(|oid| e.state.objects[oid].zone == Zone::Graveyard));
-                e.apply_command(
+                e.apply_scenario_command(
                     0,
                     &RuledCommand {
                         cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -4350,7 +4426,7 @@ mod cast_snapshot_tests {
                     },
                 )),
             };
-            e.apply_command(0, &begin)
+            e.apply_scenario_command(0, &begin)
                 .expect("controlled legendary qualifier allows Begin");
             let transaction_id = e.state.pending_spell_cast.as_ref().unwrap().transaction_id;
             // Model its loss while paying costs after the lawful announcement.
@@ -4366,7 +4442,7 @@ mod cast_snapshot_tests {
                 0,
                 e.registry.get("legendary_spell").unwrap().primary_face()
             ));
-            e.apply_command(
+            e.apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::CommitSpellCast(
@@ -4413,7 +4489,10 @@ mod cast_snapshot_tests {
                 let before_hand = e.state.players[0].hand.clone();
                 let cast = command(&e, spell);
                 assert!(
-                    matches!(e.apply_command(0, &cast), Err(EngineError::Illegal(_))),
+                    matches!(
+                        e.apply_scenario_command(0, &cast),
+                        Err(EngineError::Illegal(_))
+                    ),
                     "{spell_type} with {qualifier:?} must be rejected"
                 );
                 assert_eq!(e.state.command_index, before_index);
@@ -4437,10 +4516,10 @@ mod cast_snapshot_tests {
     fn issue_166_only_successful_casts_record_generation_bound_facts() {
         let mut e = engine("spell_effect: [GainLife(amount: 1)]");
         let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
-        assert!(e.apply_command(0, &command(&e, spell)).is_err());
+        assert!(e.apply_scenario_command(0, &command(&e, spell)).is_err());
         assert!(e.state.turn_history.current.spell_casts.is_empty());
         e.state.players[0].mana_pool.black = 1;
-        e.apply_command(0, &command(&e, spell)).unwrap();
+        e.apply_scenario_command(0, &command(&e, spell)).unwrap();
         assert_eq!(e.state.turn_history.current.spell_casts.len(), 1);
         let first = e.state.turn_history.current.spell_casts[0].clone();
         assert_eq!(first.origin, Zone::Hand);
@@ -4466,7 +4545,7 @@ mod cast_snapshot_tests {
         )
         .unwrap();
         e.state.players[0].mana_pool.black = 1;
-        e.apply_command(0, &command(&e, spell)).unwrap();
+        e.apply_scenario_command(0, &command(&e, spell)).unwrap();
         let second = &e.state.turn_history.current.spell_casts[1];
         assert_eq!(second.ordinal, 2);
         assert_ne!(first.occurrence, second.occurrence);
@@ -4493,13 +4572,15 @@ mod cast_snapshot_tests {
 
         let first = add(&mut e, 0, "snapshot_spell", Zone::Hand);
         e.state.players[0].mana_pool.black = 1;
-        e.apply_command(0, &command(&e, first)).expect("first cast");
+        e.apply_scenario_command(0, &command(&e, first))
+            .expect("first cast");
         resolve(&mut e);
 
         let storm = add(&mut e, 0, "storm_spell", Zone::Hand);
         e.state.players[0].mana_pool.blue = 1;
         e.state.priority_idx = 0;
-        e.apply_command(0, &command(&e, storm)).expect("storm cast");
+        e.apply_scenario_command(0, &command(&e, storm))
+            .expect("storm cast");
 
         assert_eq!(e.state.turn_history.current.spells_cast, 2);
         assert_eq!(
@@ -4535,7 +4616,8 @@ mod cast_snapshot_tests {
         for _ in 0..2 {
             let prior = add(&mut e, 0, "snapshot_spell", Zone::Hand);
             e.state.players[0].mana_pool.black = 1;
-            e.apply_command(0, &command(&e, prior)).expect("prior cast");
+            e.apply_scenario_command(0, &command(&e, prior))
+                .expect("prior cast");
             resolve(&mut e);
         }
 
@@ -4549,11 +4631,11 @@ mod cast_snapshot_tests {
             object_id: 1,
             ..Default::default()
         }];
-        e.apply_command(0, &cast).expect("storm cast");
+        e.apply_scenario_command(0, &cast).expect("storm cast");
         resolve(&mut e);
         assert!(e.state.pending_resolution.is_some(), "first copy choice");
 
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -4579,7 +4661,7 @@ mod cast_snapshot_tests {
             .presentation
             .source_object_id;
         assert!(e
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -4601,7 +4683,7 @@ mod cast_snapshot_tests {
             second_copy_id
         );
 
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -4634,7 +4716,7 @@ mod cast_snapshot_tests {
             let prior = add(&mut e, player_index, "snapshot_spell", Zone::Hand);
             e.state.players[player_index].mana_pool.black = 1;
             e.state.priority_idx = player_index;
-            e.apply_command(player_id, &command_for(&e, player_index, prior))
+            e.apply_scenario_command(player_id, &command_for(&e, player_index, prior))
                 .expect("opponent cast");
             resolve(&mut e);
         }
@@ -4642,7 +4724,8 @@ mod cast_snapshot_tests {
         let storm = add(&mut e, 0, "storm_spell", Zone::Hand);
         e.state.players[0].mana_pool.blue = 1;
         e.state.priority_idx = 0;
-        e.apply_command(0, &command(&e, storm)).expect("storm cast");
+        e.apply_scenario_command(0, &command(&e, storm))
+            .expect("storm cast");
         let original_id = e
             .state
             .stack
@@ -4692,7 +4775,8 @@ mod cast_snapshot_tests {
         }
         let storm = add(&mut e, 0, "storm_spell", Zone::Hand);
         e.state.players[0].mana_pool.blue = 1;
-        e.apply_command(0, &command(&e, storm)).expect("storm cast");
+        e.apply_scenario_command(0, &command(&e, storm))
+            .expect("storm cast");
 
         let order = e
             .state
@@ -4735,14 +4819,14 @@ mod cast_snapshot_tests {
         spell.cast_method = 5; // CAST_METHOD_WARP, introduced with the coordinated protocol change.
         let before = e.state.command_index;
         assert!(matches!(
-            e.apply_command(0, &cast),
+            e.apply_scenario_command(0, &cast),
             Err(EngineError::Illegal(_))
         ));
         assert_eq!(e.state.command_index, before);
         assert_eq!(e.state.objects[&oid].zone, Zone::Hand);
         e.state.players[0].mana_pool.white = 1;
         e.state.players[0].mana_pool.colorless = 1;
-        e.apply_command(0, &cast)
+        e.apply_scenario_command(0, &cast)
             .expect("pay the Warp cost rather than the printed cost");
         assert_eq!(e.state.objects[&oid].zone, Zone::Stack);
         assert_eq!(e.state.players[0].mana_pool.white, 0);
@@ -4801,7 +4885,7 @@ mod cast_snapshot_tests {
         for card in ["snapshot_faerie", "snapshot_spell", "history_otter"] {
             let oid = add(&mut e, 0, card, Zone::Hand);
             e.state.players[0].mana_pool.black = 1;
-            e.apply_command(0, &command(&e, oid)).unwrap();
+            e.apply_scenario_command(0, &command(&e, oid)).unwrap();
             resolve(&mut e);
         }
         let watcher = add(&mut e, 1, "history_watcher", Zone::Battlefield);
@@ -4888,7 +4972,8 @@ mod cast_snapshot_tests {
             kind: rv1::TargetRefKind::Permanent as i32,
             ..Default::default()
         }];
-        e.apply_command(0, &cast).expect("cast at a creature");
+        e.apply_scenario_command(0, &cast)
+            .expect("cast at a creature");
         assert_eq!(
             e.state.stack.len(),
             2,
@@ -4945,7 +5030,7 @@ mod cast_snapshot_tests {
                     ..Default::default()
                 },
             ];
-            e.apply_command(0, &cast)
+            e.apply_scenario_command(0, &cast)
                 .expect("cast with two target roles");
             assert_eq!(e.state.stack.len(), 2, "one trigger per cast event");
             let fact = e
@@ -5014,7 +5099,7 @@ mod cast_snapshot_tests {
             kind: rv1::TargetRefKind::Player as i32,
             ..Default::default()
         }];
-        player_target.apply_command(0, &cast).unwrap();
+        player_target.apply_scenario_command(0, &cast).unwrap();
         assert_eq!(player_target.state.stack.len(), 1);
         assert!(player_target.state.turn_history.current.spell_casts[0]
             .targeted_permanent_types
@@ -5048,7 +5133,7 @@ mod cast_snapshot_tests {
             kind: rv1::TargetRefKind::Permanent as i32,
             ..Default::default()
         }];
-        permanent_spell.apply_command(0, &cast).unwrap();
+        permanent_spell.apply_scenario_command(0, &cast).unwrap();
         assert_eq!(permanent_spell.state.stack.len(), 1);
         assert_eq!(
             permanent_spell.state.turn_history.current.spell_casts[0].targeted_permanent_types,
@@ -5080,7 +5165,7 @@ mod cast_snapshot_tests {
             cost_index: 0,
             selection: Some(rv1::cost_selection::Selection::PermanentId(target)),
         }];
-        e.apply_command(0, &cast)
+        e.apply_scenario_command(0, &cast)
             .expect("sacrifice the chosen target while casting");
         assert_eq!(e.state.objects[&target].zone, Zone::Graveyard);
         assert_eq!(e.state.stack.len(), 1, "Repartee does not trigger");
@@ -5168,7 +5253,7 @@ mod cast_snapshot_tests {
                 )),
             }];
             assert!(matches!(
-                e.apply_command(0, &rejected),
+                e.apply_scenario_command(0, &rejected),
                 Err(EngineError::Illegal(_))
             ));
             assert_eq!(e.state.objects[&spell].zone, Zone::Hand);
@@ -5182,7 +5267,7 @@ mod cast_snapshot_tests {
             cost_index: 0,
             selection: Some(rv1::cost_selection::Selection::PermanentId(dealt_damage)),
         }];
-        e.apply_command(0, &accepted)
+        e.apply_scenario_command(0, &accepted)
             .expect("the generation recorded as a damage source is a legal sacrifice");
         assert_eq!(e.state.objects[&dealt_damage].zone, Zone::Graveyard);
         assert_eq!(e.state.objects[&no_damage].zone, Zone::Battlefield);
@@ -5215,7 +5300,7 @@ mod cast_snapshot_tests {
         );
         let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
         e.state.players[0].mana_pool.black = 2;
-        e.apply_command(0, &command(&e, spell)).unwrap();
+        e.apply_scenario_command(0, &command(&e, spell)).unwrap();
         assert_eq!(
             e.state.stack.last().unwrap().cast_condition_results,
             [false]
@@ -5238,12 +5323,12 @@ mod cast_snapshot_tests {
                 ..Default::default()
             })),
         };
-        e.apply_command(0, &flashback).unwrap();
+        e.apply_scenario_command(0, &flashback).unwrap();
         assert_eq!(e.state.stack.last().unwrap().cast_condition_results, [true]);
         resolve(&mut e);
         assert_eq!(e.effective_power(permanent), Some(3));
         let before = e.state.turn_history.clone();
-        assert!(e.apply_command(0, &flashback).is_err());
+        assert!(e.apply_scenario_command(0, &flashback).is_err());
         assert_eq!(
             e.state.turn_history, before,
             "stale source contributes nothing"
@@ -5261,7 +5346,7 @@ mod cast_snapshot_tests {
             ..Default::default()
         }];
         e.state.players[0].mana_pool.red = 5;
-        e.apply_command(0, &cast).unwrap();
+        e.apply_scenario_command(0, &cast).unwrap();
         resolve(&mut e);
         let permission_id = e
             .state
@@ -5287,10 +5372,10 @@ mod cast_snapshot_tests {
                 ..Default::default()
             })),
         };
-        e.apply_command(0, &creature_cast).unwrap();
+        e.apply_scenario_command(0, &creature_cast).unwrap();
         resolve(&mut e);
         let shifter = add(&mut e, 0, "history_shifter", Zone::Hand);
-        e.apply_command(0, &command(&e, shifter)).unwrap();
+        e.apply_scenario_command(0, &command(&e, shifter)).unwrap();
         resolve(&mut e);
         let facts = &e.state.turn_history.current.spell_casts;
         assert_eq!(
@@ -5374,7 +5459,7 @@ mod cast_snapshot_tests {
         e.state.players.push(PlayerState::new(7, 20));
         let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
         e.state.players[0].mana_pool.black = 1;
-        e.apply_command(0, &command(&e, spell)).unwrap();
+        e.apply_scenario_command(0, &command(&e, spell)).unwrap();
         let mut copy = e.state.stack.last().unwrap().clone();
         copy.id = e.state.next_object_id;
         e.state.next_object_id += 1;
@@ -5450,7 +5535,7 @@ mod cast_snapshot_tests {
     fn resolve(e: &mut GameEngine) {
         while !e.state.stack.is_empty() && e.state.pending_resolution.is_none() {
             let player = e.state.priority_player_id();
-            e.apply_command(
+            e.apply_scenario_command(
                 player,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -5486,7 +5571,7 @@ mod cast_snapshot_tests {
             let cast = RuledCommand::decode(cast.encode_to_vec().as_slice()).unwrap();
             if reject_first {
                 let index = e.state.command_index;
-                assert!(e.apply_command(0, &cast).is_err());
+                assert!(e.apply_scenario_command(0, &cast).is_err());
                 assert_eq!(e.state.command_index, index);
                 assert_eq!(e.state.objects[&faerie].zone, Zone::Battlefield);
                 assert_eq!(e.state.objects[&spell].zone, Zone::Hand);
@@ -5506,14 +5591,14 @@ mod cast_snapshot_tests {
                     .is_empty());
             }
             e.state.players[0].mana_pool.black = 1;
-            let mut batches = vec![e.apply_command(0, &cast).unwrap()];
+            let mut batches = vec![e.apply_scenario_command(0, &cast).unwrap()];
             let snapshots = e.state.stack.last().unwrap().cast_condition_results.clone();
             assert_eq!(snapshots, vec![false, true, true, true, true]);
             assert_eq!(e.state.objects[&faerie].zone, Zone::Graveyard);
             while !e.state.stack.is_empty() {
                 let player = e.state.priority_player_id();
                 batches.push(
-                    e.apply_command(
+                    e.apply_scenario_command(
                         player,
                         &RuledCommand {
                             cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -5559,7 +5644,7 @@ mod cast_snapshot_tests {
             targets: vec![],
         }];
         e.state.players[0].mana_pool.black = 1;
-        e.apply_command(0, &cast).unwrap();
+        e.apply_scenario_command(0, &cast).unwrap();
         resolve(&mut e);
         assert!(e.state.pending_resolution.is_some());
         super::super::resolution::move_object_to_zone(
@@ -5578,8 +5663,8 @@ mod cast_snapshot_tests {
                 },
             )),
         };
-        assert!(e.apply_command(1, &answer).is_err());
-        e.apply_command(0, &answer).unwrap();
+        assert!(e.apply_scenario_command(1, &answer).is_err());
+        e.apply_scenario_command(0, &answer).unwrap();
         resolve(&mut e);
         assert!(e.state.pending_resolution.is_none());
         assert_eq!(
@@ -5587,7 +5672,7 @@ mod cast_snapshot_tests {
             "frozen bonus + live fallback, exactly once"
         );
         assert!(
-            e.apply_command(0, &answer).is_err(),
+            e.apply_scenario_command(0, &answer).is_err(),
             "completed continuation cannot be replayed"
         );
     }
@@ -5610,7 +5695,7 @@ mod cast_snapshot_tests {
             mode_index: 0,
             targets: vec![],
         }];
-        e.apply_command(0, &cast).unwrap();
+        e.apply_scenario_command(0, &cast).unwrap();
         assert_eq!(
             e.state.stack.last().unwrap().chosen_modes[0]
                 .mode_id
@@ -5655,7 +5740,7 @@ mod cast_snapshot_tests {
         e.state.objects.get_mut(&kindred).unwrap().controller = 0;
         let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
         e.state.players[0].mana_pool.black = 1;
-        e.apply_command(0, &command(&e, spell)).unwrap();
+        e.apply_scenario_command(0, &command(&e, spell)).unwrap();
         assert_eq!(
             e.state.stack.last().unwrap().cast_condition_results,
             vec![true]
@@ -5687,7 +5772,7 @@ mod cast_snapshot_tests {
             ..Default::default()
         }];
         e.state.players[0].mana_pool.black = 1;
-        e.apply_command(0, &cast).unwrap();
+        e.apply_scenario_command(0, &cast).unwrap();
         assert_eq!(
             e.state.stack.last().unwrap().cast_condition_results,
             vec![true]
@@ -5826,7 +5911,7 @@ mod mana_payment_tests {
         };
 
         let error = e
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect_err("an ability without {X} rejects an X declaration");
         assert!(error
             .to_string()

@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
@@ -23,6 +24,7 @@ fn disappear_engine(seed: u64, cards: &[&str]) -> GameEngine {
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -33,21 +35,21 @@ fn select_branch(index: u32) -> RuledCommand {
 fn advance_to_end_step(engine: &mut GameEngine) {
     let active = engine.state.active_player_id();
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("main 1 to beginning of combat");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("beginning of combat advance");
     if engine.state.turn_step == TurnStep::DeclareAttackers {
         engine
-            .apply_command(active, &primitive_yield())
+            .apply_scenario_command(active, &primitive_yield())
             .expect("declare no attackers");
     }
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("end combat to main 2");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("main 2 to end step");
     assert_eq!(engine.state.turn_step, TurnStep::EndStep);
 }
@@ -58,7 +60,7 @@ fn bounce_own_bear(engine: &mut GameEngine) {
     grant_pool(engine, 0);
     let unsummon = hand_index_for_card(engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(bear)))
         .expect("cast Unsummon");
     resolve_entire_stack_two_player(engine);
     assert_eq!(engine.state.objects[&bear].zone, Zone::Hand);
@@ -84,7 +86,7 @@ fn insectoid_exterminator_uses_history_from_before_entry_and_parks_scry() {
     assert_eq!(pending.deciding_player, 0);
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::LibraryTop);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("keep the scried card on top");
     assert!(engine.state.pending_resolution.is_none());
 
@@ -126,7 +128,7 @@ fn west_wind_entry_sacrifices_a_token_and_enables_its_disappear_draw() {
     grant_pool(&mut engine, 0);
     let alarm = hand_index_for_card(&engine, 0, "raise_the_alarm");
     engine
-        .apply_command(0, &cast_spell(alarm, vec![]))
+        .apply_scenario_command(0, &cast_spell(alarm, vec![]))
         .expect("cast Raise the Alarm");
     resolve_entire_stack_two_player(&mut engine);
     let token = battlefield_token_oids(&engine, 0, "soldier_w_1_1")[0];
@@ -136,7 +138,7 @@ fn west_wind_entry_sacrifices_a_token_and_enables_its_disappear_draw() {
     grant_pool(&mut engine, 0);
     let avatar = hand_index_for_card(&engine, 0, "west_wind_avatar");
     engine
-        .apply_command(0, &cast_spell(avatar, vec![]))
+        .apply_scenario_command(0, &cast_spell(avatar, vec![]))
         .expect("cast West Wind Avatar");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.stack.len(), 1, "entry trigger on the stack");
@@ -152,7 +154,7 @@ fn west_wind_entry_sacrifices_a_token_and_enables_its_disappear_draw() {
         ChoiceKind::ResolutionBranch
     );
     engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("choose the sacrifice branch");
     let candidates = &engine
         .state
@@ -164,7 +166,7 @@ fn west_wind_entry_sacrifices_a_token_and_enables_its_disappear_draw() {
     assert!(candidates.contains(&token));
     assert!(candidates.contains(&land));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![token]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![token]))
         .expect("sacrifice the token");
     assert_eq!(engine.state.players[0].life, 23);
     assert!(!engine.state.players[0].battlefield.contains(&token));
@@ -194,10 +196,12 @@ fn west_wind_attack_accepts_a_land_rejects_a_creature_and_can_be_declined() {
         let avatar = relocate_to_battlefield(&mut engine, 0, "west_wind_avatar", false);
         let land = relocate_to_battlefield(&mut engine, 0, "forest", false);
         let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
-        engine.apply_command(0, &primitive_yield()).unwrap();
+        engine
+            .apply_scenario_command(0, &primitive_yield())
+            .unwrap();
         pass_both_players(&mut engine);
         engine
-            .apply_command(0, &declare_attackers(vec![avatar]))
+            .apply_scenario_command(0, &declare_attackers(vec![avatar]))
             .expect("attack with West Wind Avatar");
         answer_trigger_order_in_engine_order(&mut engine);
         assert_eq!(engine.state.stack.len(), 1, "attack trigger");
@@ -213,7 +217,7 @@ fn west_wind_attack_accepts_a_land_rejects_a_creature_and_can_be_declined() {
             ChoiceKind::ResolutionBranch
         );
         if pay {
-            engine.apply_command(0, &select_branch(0)).unwrap();
+            engine.apply_scenario_command(0, &select_branch(0)).unwrap();
             let candidates = &engine
                 .state
                 .pending_resolution
@@ -224,7 +228,7 @@ fn west_wind_attack_accepts_a_land_rejects_a_creature_and_can_be_declined() {
             assert!(candidates.contains(&land));
             assert!(!candidates.contains(&bear));
             engine
-                .apply_command(0, &submit_resolution_choice(vec![land]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
                 .expect("sacrifice the land");
             assert_eq!(engine.state.players[0].life, 23);
             assert!(
@@ -237,7 +241,7 @@ fn west_wind_attack_accepts_a_land_rejects_a_creature_and_can_be_declined() {
             );
         } else {
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &submit_resolution_decision(ResolutionChoiceDecision::Decline),
                 )

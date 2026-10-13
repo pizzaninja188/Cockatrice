@@ -3,6 +3,7 @@
 //!
 //! Oracle and rulings checked 2026-09-11. CR 111.10a-b defines Treasure and Food,
 //! CR 603.6c/603.10 and 700.4 govern dies/LKI, and CR 701.22/701.25 define Scry/Surveil.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -29,9 +30,11 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }
 
@@ -74,7 +77,7 @@ fn generated_plundering_pirate_creates_a_functional_canonical_treasure() {
     };
     ability.mana_option_index = 3;
     engine
-        .apply_command(0, &activate)
+        .apply_scenario_command(0, &activate)
         .expect("canonical Treasure mana ability");
     assert_eq!(engine.state.players[0].mana_pool.red, 1);
     assert!(
@@ -103,7 +106,9 @@ fn generated_gleaming_barrier_death_lki_gives_treasure_to_its_last_controller() 
         .expect("barrier")
         .damage = 4;
 
-    engine.apply_command(0, &pass()).expect("death SBA");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("death SBA");
     assert_eq!(engine.state.objects[&barrier].zone, Zone::Graveyard);
     assert_eq!(
         engine.state.stack.len(),
@@ -147,11 +152,11 @@ fn generated_wakandan_drone_flock_scries_two_with_an_atomic_private_choice() {
 
     let library_before = engine.state.players[0].library.clone();
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![top[0]]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![top[0]]))
         .is_err());
     assert_eq!(engine.state.players[0].library, library_before);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
         .expect("put both cards on bottom");
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(
@@ -192,7 +197,7 @@ fn generated_shore_lurker_surveillance_moves_the_exact_top_card() {
     assert_eq!(choice.candidate_object_ids, top);
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(top.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(top.clone()))
         .expect("put top card into graveyard");
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&top[0]].zone, Zone::Graveyard);

@@ -5,6 +5,7 @@
 //! Every expectation is the reviewed printed Oracle behavior. Governance: CR 603.6c (dies
 //! triggers), 111.1 (tokens), 701.18 (scry), 508.1/603.2c (attack triggers and entity-scoped
 //! targets), 611.2c and 613 layer 7c (until-end-of-turn pumps), and 601.2/603.2 (cast triggers).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -75,10 +76,11 @@ fn inject_library_top(e: &mut GameEngine, card_id: &str) -> u32 {
 fn kill_with_murder_to_open_trigger(e: &mut GameEngine, source: u32) {
     inject_card_into_hand(e, 0, "murder");
     let slot = hand_index_for_card(e, 0, "murder");
-    e.apply_command(0, &cast_spell(slot, target_object(source)))
+    e.apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .expect("cast Murder");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("murder resolves");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("murder resolves");
 }
 
 #[test]
@@ -120,8 +122,10 @@ fn issue_dies_greedy_freebooter() {
     assert_eq!(e.state.objects[&source].zone, Zone::Graveyard);
 
     // The trigger resolves scry first and parks on the top-card decision before making the token.
-    e.apply_command(0, &pass()).expect("p0 pass");
-    let batch = e.apply_command(1, &pass()).expect("trigger parks on scry");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("trigger parks on scry");
     let choice = find_resolution_choice(&batch).expect("scry choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibraryTop);
     assert!(choice.candidate_object_ids.contains(&top));
@@ -161,19 +165,20 @@ fn issue_dies_spring_splasher() {
     let own = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let opposing = inject_creature_with_stats(&mut e, 1, "grizzly_bears", 5, 5);
 
-    e.apply_command(0, &declare_attackers(vec![splasher]))
+    e.apply_scenario_command(0, &declare_attackers(vec![splasher]))
         .expect("declare Spring Splasher as an attacker");
     assert_eq!(e.state.pending_triggers.len(), 1);
     assert!(
-        e.apply_command(0, &choose_trigger_target(own)).is_err(),
+        e.apply_scenario_command(0, &choose_trigger_target(own))
+            .is_err(),
         "a creature the controller controls is not controlled by the defending player"
     );
     assert!(
-        e.apply_command(0, &choose_trigger_target(splasher))
+        e.apply_scenario_command(0, &choose_trigger_target(splasher))
             .is_err(),
         "the attacking source is not controlled by the defending player"
     );
-    e.apply_command(0, &choose_trigger_target(opposing))
+    e.apply_scenario_command(0, &choose_trigger_target(opposing))
         .expect("choose a creature the defending player controls");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.effective_power(opposing), Some(2), "5 - 3");
@@ -219,7 +224,7 @@ fn issue_dies_crackling_cyclops() {
     );
 
     // An opponent's noncreature spell does not trigger the controller-scoped cast trigger.
-    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
     inject_card_into_hand(&mut e, 1, "lightning_bolt");
     let opp_slot = hand_index_for_card(&e, 1, "lightning_bolt");
     semantic::accepted(&mut e, 1, &cast_spell(opp_slot, target_player_damage(0, 3)));

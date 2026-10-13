@@ -4,6 +4,7 @@
 //! Scryfall snapshot. CR 603.3c/700.2b (mode announcement), CR 122 (counters), CR 400.7/701.13
 //! (graveyard return and exile), CR 701.7 (destroy), CR 118.12/701.17 (mandatory sacrifice),
 //! CR 701.26 (tap/untap), and CR 701.18 (scry) govern the exercised behavior.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -54,7 +55,7 @@ fn cast_and_announce(engine: &mut GameEngine, card_id: &str) {
     prepare_creature(engine, card_id);
     let slot = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast the modal creature");
     pass_both_players(engine);
 }
@@ -79,9 +80,11 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves the triggered ability")
 }
 
@@ -96,6 +99,7 @@ fn graveyard_target(object_id: u32) -> TargetRef {
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -131,7 +135,7 @@ fn issue_424_daily_bugle_reporters_counts_two_creatures_or_returns_a_small_creat
     let mut targets = target_object(ours);
     targets.extend(target_object(theirs));
     counters_engine
-        .apply_command(0, &choose_trigger_mode(0, targets))
+        .apply_scenario_command(0, &choose_trigger_mode(0, targets))
         .expect("target both creatures");
     pass_both_players(&mut counters_engine);
     assert_eq!(counters(&counters_engine, ours), 1);
@@ -143,12 +147,12 @@ fn issue_424_daily_bugle_reporters_counts_two_creatures_or_returns_a_small_creat
     cast_and_announce(&mut return_engine, "daily_bugle_reporters");
     assert!(
         return_engine
-            .apply_command(0, &choose_trigger_mode(1, vec![graveyard_target(large)]),)
+            .apply_scenario_command(0, &choose_trigger_mode(1, vec![graveyard_target(large)]),)
             .is_err(),
         "mana value 4 is not legal for the two-or-less return"
     );
     return_engine
-        .apply_command(0, &choose_trigger_mode(1, vec![graveyard_target(small)]))
+        .apply_scenario_command(0, &choose_trigger_mode(1, vec![graveyard_target(small)]))
         .expect("return the small creature card");
     pass_both_players(&mut return_engine);
     assert_eq!(return_engine.state.objects[&small].zone, Zone::Hand);
@@ -163,12 +167,12 @@ fn issue_424_damage_control_crew_returns_a_large_card_or_exiles_an_artifact_or_e
     cast_and_announce(&mut repair_engine, "damage_control_crew");
     assert!(
         repair_engine
-            .apply_command(0, &choose_trigger_mode(0, vec![graveyard_target(small)]),)
+            .apply_scenario_command(0, &choose_trigger_mode(0, vec![graveyard_target(small)]),)
             .is_err(),
         "mana value 2 is not legal for the four-or-greater return"
     );
     repair_engine
-        .apply_command(0, &choose_trigger_mode(0, vec![graveyard_target(large)]))
+        .apply_scenario_command(0, &choose_trigger_mode(0, vec![graveyard_target(large)]))
         .expect("return the large card");
     pass_both_players(&mut repair_engine);
     assert_eq!(repair_engine.state.objects[&large].zone, Zone::Hand);
@@ -181,18 +185,18 @@ fn issue_424_damage_control_crew_returns_a_large_card_or_exiles_an_artifact_or_e
     cast_and_announce(&mut impound_engine, "damage_control_crew");
     assert!(
         impound_engine
-            .apply_command(0, &choose_trigger_mode(1, target_object(bear)))
+            .apply_scenario_command(0, &choose_trigger_mode(1, target_object(bear)))
             .is_err(),
         "a creature is neither an artifact nor an enchantment"
     );
     impound_engine
-        .apply_command(0, &choose_trigger_mode(1, target_object(sword)))
+        .apply_scenario_command(0, &choose_trigger_mode(1, target_object(sword)))
         .expect("exile the artifact");
     pass_both_players(&mut impound_engine);
     // A second copy of the same identity may exile the enchantment during the same turn.
     cast_and_announce(&mut impound_engine, "damage_control_crew");
     impound_engine
-        .apply_command(0, &choose_trigger_mode(1, target_object(anthem)))
+        .apply_scenario_command(0, &choose_trigger_mode(1, target_object(anthem)))
         .expect("exile the enchantment");
     pass_both_players(&mut impound_engine);
     assert_eq!(impound_engine.state.objects[&sword].zone, Zone::Exile);
@@ -206,7 +210,7 @@ fn issue_424_gearbane_orangutan_destroys_an_artifact_or_mandatorily_sacrifices_o
     let sword = inject_permanent_on_battlefield(&mut destroy_engine, 1, "short_sword");
     cast_and_announce(&mut destroy_engine, "gearbane_orangutan");
     destroy_engine
-        .apply_command(0, &choose_trigger_mode(0, target_object(sword)))
+        .apply_scenario_command(0, &choose_trigger_mode(0, target_object(sword)))
         .expect("destroy the artifact");
     pass_both_players(&mut destroy_engine);
     assert_eq!(destroy_engine.state.objects[&sword].zone, Zone::Graveyard);
@@ -216,14 +220,14 @@ fn issue_424_gearbane_orangutan_destroys_an_artifact_or_mandatorily_sacrifices_o
     cast_and_announce(&mut sacrifice_engine, "gearbane_orangutan");
     let source = battlefield_object_for_card(&sacrifice_engine, 0, "gearbane_orangutan");
     sacrifice_engine
-        .apply_command(0, &choose_trigger_mode(1, Vec::new()))
+        .apply_scenario_command(0, &choose_trigger_mode(1, Vec::new()))
         .expect("announce the sacrifice mode");
     let branch_batch = resolve_top_stack(&mut sacrifice_engine);
     let branch = find_resolution_choice(&branch_batch).expect("mandatory branch selection");
     assert_eq!(branch.choice_kind(), ChoiceKind::ResolutionBranch);
     assert_eq!((branch.min, branch.max), (1, 1));
     let payment_batch = sacrifice_engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("select the mandatory sacrifice branch");
     let payment = find_resolution_choice(&payment_batch).expect("mandatory sacrifice payment");
     assert!(payment.candidate_object_ids.contains(&artifact));
@@ -232,7 +236,7 @@ fn issue_424_gearbane_orangutan_destroys_an_artifact_or_mandatorily_sacrifices_o
         "the Ape is not an artifact"
     );
     sacrifice_engine
-        .apply_command(0, &submit_resolution_choice(vec![artifact]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![artifact]))
         .expect("sacrifice the artifact");
     assert_eq!(
         sacrifice_engine.state.objects[&artifact].zone,
@@ -249,7 +253,7 @@ fn issue_424_gearbane_orangutan_destroys_an_artifact_or_mandatorily_sacrifices_o
     cast_and_announce(&mut empty_engine, "gearbane_orangutan");
     let source = battlefield_object_for_card(&empty_engine, 0, "gearbane_orangutan");
     empty_engine
-        .apply_command(0, &choose_trigger_mode(1, Vec::new()))
+        .apply_scenario_command(0, &choose_trigger_mode(1, Vec::new()))
         .expect("announce the sacrifice mode with nothing to sacrifice");
     pass_both_players(&mut empty_engine);
     assert_eq!(counters(&empty_engine, source), 0);
@@ -263,12 +267,12 @@ fn issue_424_tap_and_untap_pairs_reject_lands_and_toggle_their_targets() {
     cast_and_announce(&mut ant_engine, "giant-sized_flying_ant");
     assert!(
         ant_engine
-            .apply_command(0, &choose_trigger_mode(0, target_object(mountain)))
+            .apply_scenario_command(0, &choose_trigger_mode(0, target_object(mountain)))
             .is_err(),
         "a land is not a nonland permanent"
     );
     ant_engine
-        .apply_command(0, &choose_trigger_mode(0, target_object(bear)))
+        .apply_scenario_command(0, &choose_trigger_mode(0, target_object(bear)))
         .expect("tap the nonland permanent");
     pass_both_players(&mut ant_engine);
     assert!(ant_engine.state.objects[&bear].tapped);
@@ -278,7 +282,7 @@ fn issue_424_tap_and_untap_pairs_reject_lands_and_toggle_their_targets() {
     untap_engine.state.objects.get_mut(&own).unwrap().tapped = true;
     cast_and_announce(&mut untap_engine, "giant-sized_flying_ant");
     untap_engine
-        .apply_command(0, &choose_trigger_mode(1, target_object(own)))
+        .apply_scenario_command(0, &choose_trigger_mode(1, target_object(own)))
         .expect("untap the nonland permanent");
     pass_both_players(&mut untap_engine);
     assert!(!untap_engine.state.objects[&own].tapped);
@@ -289,12 +293,12 @@ fn issue_424_tap_and_untap_pairs_reject_lands_and_toggle_their_targets() {
     cast_and_announce(&mut mite_engine, "glamermite");
     assert!(
         mite_engine
-            .apply_command(0, &choose_trigger_mode(0, target_object(sword)))
+            .apply_scenario_command(0, &choose_trigger_mode(0, target_object(sword)))
             .is_err(),
         "the creature-only tap mode rejects an artifact"
     );
     mite_engine
-        .apply_command(0, &choose_trigger_mode(0, target_object(victim)))
+        .apply_scenario_command(0, &choose_trigger_mode(0, target_object(victim)))
         .expect("tap the creature");
     pass_both_players(&mut mite_engine);
     assert!(mite_engine.state.objects[&victim].tapped);
@@ -307,7 +311,7 @@ fn issue_424_glamermite_untaps_a_creature_and_oltec_scries_three() {
     mite_engine.state.objects.get_mut(&own).unwrap().tapped = true;
     cast_and_announce(&mut mite_engine, "glamermite");
     mite_engine
-        .apply_command(0, &choose_trigger_mode(1, target_object(own)))
+        .apply_scenario_command(0, &choose_trigger_mode(1, target_object(own)))
         .expect("untap the creature");
     pass_both_players(&mut mite_engine);
     assert!(!mite_engine.state.objects[&own].tapped);
@@ -320,7 +324,7 @@ fn issue_424_glamermite_untaps_a_creature_and_oltec_scries_three() {
     );
     cast_and_announce(&mut oltec_engine, "oltec_archaeologists");
     oltec_engine
-        .apply_command(0, &choose_trigger_mode(1, Vec::new()))
+        .apply_scenario_command(0, &choose_trigger_mode(1, Vec::new()))
         .expect("announce scry 3");
     let batch = resolve_top_stack(&mut oltec_engine);
     let choice = find_resolution_choice(&batch).expect("scry choice");
@@ -328,7 +332,7 @@ fn issue_424_glamermite_untaps_a_creature_and_oltec_scries_three() {
     assert_eq!((choice.min, choice.max), (0, 3));
     assert_eq!(choice.candidate_object_ids, top);
     oltec_engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
         .expect("bottom two and keep one on top");
     assert!(oltec_engine.state.pending_resolution.is_none());
     for object_id in [top[0], top[1], top[2]] {
@@ -374,12 +378,12 @@ fn issue_424_oltec_returns_an_artifact_card_and_qutrub_exiles_two_from_one_grave
     cast_and_announce(&mut oltec_engine, "oltec_archaeologists");
     assert!(
         oltec_engine
-            .apply_command(0, &choose_trigger_mode(0, vec![graveyard_target(bear)]))
+            .apply_scenario_command(0, &choose_trigger_mode(0, vec![graveyard_target(bear)]))
             .is_err(),
         "a creature card is not an artifact card"
     );
     oltec_engine
-        .apply_command(0, &choose_trigger_mode(0, vec![graveyard_target(sword)]))
+        .apply_scenario_command(0, &choose_trigger_mode(0, vec![graveyard_target(sword)]))
         .expect("return the artifact card");
     pass_both_players(&mut oltec_engine);
     assert_eq!(oltec_engine.state.objects[&sword].zone, Zone::Hand);
@@ -392,7 +396,7 @@ fn issue_424_oltec_returns_an_artifact_card_and_qutrub_exiles_two_from_one_grave
     cast_and_announce(&mut qutrub_engine, "qutrub_forayer");
     assert!(
         qutrub_engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &choose_trigger_mode(1, vec![graveyard_target(ours), graveyard_target(theirs)]),
             )
@@ -400,7 +404,7 @@ fn issue_424_oltec_returns_an_artifact_card_and_qutrub_exiles_two_from_one_grave
         "the two chosen cards must share one graveyard"
     );
     qutrub_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_mode(
                 1,
@@ -425,13 +429,13 @@ fn issue_424_qutrub_destroys_only_a_creature_damaged_this_turn() {
     for illegal in [undamaged, own] {
         assert!(
             engine
-                .apply_command(0, &choose_trigger_mode(0, target_object(illegal)))
+                .apply_scenario_command(0, &choose_trigger_mode(0, target_object(illegal)))
                 .is_err(),
             "an undamaged or own creature is not a legal target"
         );
     }
     engine
-        .apply_command(0, &choose_trigger_mode(0, target_object(marked)))
+        .apply_scenario_command(0, &choose_trigger_mode(0, target_object(marked)))
         .expect("destroy the damage-marked creature");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&marked].zone, Zone::Graveyard);
@@ -446,14 +450,14 @@ fn issue_424_butcher_offers_only_another_creature_and_receipts_scry_and_draw() {
     cast_and_announce(&mut engine, "lord_skitters_butcher");
     let source = battlefield_object_for_card(&engine, 0, "lord_skitters_butcher");
     engine
-        .apply_command(0, &choose_trigger_mode(1, Vec::new()))
+        .apply_scenario_command(0, &choose_trigger_mode(1, Vec::new()))
         .expect("announce the sacrifice mode");
     let branch_batch = resolve_top_stack(&mut engine);
     let branch = find_resolution_choice(&branch_batch).expect("optional branch selection");
     assert_eq!(branch.choice_kind(), ChoiceKind::ResolutionBranch);
     assert_eq!((branch.min, branch.max), (0, 1));
     let payment_batch = engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("select the optional sacrifice branch");
     let payment = find_resolution_choice(&payment_batch).expect("optional sacrifice payment");
     assert!(payment.candidate_object_ids.contains(&other));
@@ -464,7 +468,7 @@ fn issue_424_butcher_offers_only_another_creature_and_receipts_scry_and_draw() {
     let library_before = engine.state.players[0].library.len();
     let hand_before = engine.state.players[0].hand.len();
     let scry_batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![other]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![other]))
         .expect("sacrifice the other creature");
     assert_eq!(engine.state.objects[&other].zone, Zone::Graveyard);
     let scry = find_resolution_choice(&scry_batch).expect("scry 2 after the sacrifice");
@@ -477,7 +481,7 @@ fn issue_424_butcher_offers_only_another_creature_and_receipts_scry_and_draw() {
     );
     let bottom = scry.candidate_object_ids[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![bottom]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![bottom]))
         .expect("bottom one of the two scried cards");
     assert_eq!(
         engine.state.players[0].library.len(),
@@ -491,16 +495,17 @@ fn issue_424_butcher_offers_only_another_creature_and_receipts_scry_and_draw() {
     let bystander = inject_creature_on_battlefield(&mut decline_engine, 0, "grizzly_bears");
     cast_and_announce(&mut decline_engine, "lord_skitters_butcher");
     decline_engine
-        .apply_command(0, &choose_trigger_mode(1, Vec::new()))
+        .apply_scenario_command(0, &choose_trigger_mode(1, Vec::new()))
         .expect("announce the sacrifice mode");
     let branch_batch = resolve_top_stack(&mut decline_engine);
     find_resolution_choice(&branch_batch).expect("optional branch selection");
     let hand_before = decline_engine.state.players[0].hand.len();
     decline_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: ResolutionChoiceDecision::Decline as i32,
                     ..Default::default()
                 })),
@@ -520,7 +525,7 @@ fn issue_424_butcher_rat_token_and_team_menace_resolve() {
     let mut rat_engine = modal_engine(424_082);
     cast_and_announce(&mut rat_engine, "lord_skitters_butcher");
     rat_engine
-        .apply_command(0, &choose_trigger_mode(0, Vec::new()))
+        .apply_scenario_command(0, &choose_trigger_mode(0, Vec::new()))
         .expect("announce the Rat token mode");
     pass_both_players(&mut rat_engine);
     let token = rat_engine.state.players[0]
@@ -535,7 +540,7 @@ fn issue_424_butcher_rat_token_and_team_menace_resolve() {
     let bear = inject_creature_on_battlefield(&mut menace_engine, 0, "grizzly_bears");
     cast_and_announce(&mut menace_engine, "lord_skitters_butcher");
     menace_engine
-        .apply_command(0, &choose_trigger_mode(2, Vec::new()))
+        .apply_scenario_command(0, &choose_trigger_mode(2, Vec::new()))
         .expect("announce the team menace mode");
     pass_both_players(&mut menace_engine);
     let keywords = menace_engine
@@ -558,7 +563,7 @@ fn issue_424_modes_resolve_in_combination_across_the_cohort() {
     // Gearbane Orangutan destroys the artifact while Night's chosen mode resolves.
     cast_and_announce(&mut engine, "gearbane_orangutan");
     engine
-        .apply_command(0, &choose_trigger_mode(0, target_object(sword)))
+        .apply_scenario_command(0, &choose_trigger_mode(0, target_object(sword)))
         .expect("destroy the artifact");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&sword].zone, Zone::Graveyard);
@@ -566,7 +571,7 @@ fn issue_424_modes_resolve_in_combination_across_the_cohort() {
     // Glamermite then taps the opposing creature in the same turn.
     cast_and_announce(&mut engine, "glamermite");
     engine
-        .apply_command(0, &choose_trigger_mode(0, target_object(victim)))
+        .apply_scenario_command(0, &choose_trigger_mode(0, target_object(victim)))
         .expect("tap the creature");
     pass_both_players(&mut engine);
     assert!(engine.state.objects[&victim].tapped);

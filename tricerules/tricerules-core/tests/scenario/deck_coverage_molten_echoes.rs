@@ -1,7 +1,8 @@
 //! Actual-card coverage for Molten Echoes' linked creature-type choice and token copy.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     dev_command, ChoiceKind, DevCommand, DevMoveCard, DevZone, ResolutionChoiceDecision,
 };
@@ -9,6 +10,7 @@ use tricerules_proto::ruled::v1::{
 fn choose_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -20,7 +22,7 @@ fn pass_until_resolution_choice(engine: &mut GameEngine) -> RuledEventBatch {
     for _ in 0..8 {
         let actor = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("the current priority holder can pass");
         if find_resolution_choice(&batch).is_some() {
             return batch;
@@ -37,7 +39,7 @@ fn move_card_to_zone(
 ) -> RuledEventBatch {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             player_id,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -106,7 +108,7 @@ fn molten_echoes_reissues_entry_choice_after_unrelated_player_concedes() {
     );
     let hand_index = hand_index_for_card(&engine, 0, "molten_echoes");
     engine
-        .apply_command(4, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(hand_index, vec![]))
         .expect("cast Molten Echoes");
     pass_priority_round(&mut engine);
 
@@ -127,7 +129,7 @@ fn molten_echoes_reissues_entry_choice_after_unrelated_player_concedes() {
     };
 
     let concession = engine
-        .apply_command(9, &concede())
+        .apply_scenario_command(9, &concede())
         .expect("an unrelated opponent can concede while the choice is pending");
     let restored_choice = find_resolution_choice(&concession)
         .expect("the concession batch reprojects the surviving mandatory choice");
@@ -184,7 +186,7 @@ fn molten_echoes_entry_choice_cleans_up_when_its_chooser_concedes() {
     );
     let molten_index = hand_index_for_card(&engine, 0, "molten_echoes");
     engine
-        .apply_command(4, &cast_spell(molten_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(molten_index, vec![]))
         .expect("cast Molten Echoes");
     let choice_batch = pass_until_resolution_choice(&mut engine);
     let choice = find_resolution_choice(&choice_batch).expect("the chooser receives the prompt");
@@ -192,7 +194,7 @@ fn molten_echoes_entry_choice_cleans_up_when_its_chooser_concedes() {
     assert_eq!(choice.source_object_id, molten_echoes);
 
     let concession = engine
-        .apply_command(4, &concede())
+        .apply_scenario_command(4, &concede())
         .expect("the pending chooser can concede");
     assert!(find_resolution_choice(&concession).is_none());
     assert!(engine.state.players[0].has_lost);
@@ -229,7 +231,7 @@ fn owner_departure_cancels_a_molten_entry_choice_and_rejects_its_stale_response(
     );
     let molten_index = hand_index_for_card(&engine, 0, "molten_echoes");
     engine
-        .apply_command(4, &cast_spell(molten_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(molten_index, vec![]))
         .expect("cast Molten Echoes");
     let type_choice = pass_until_resolution_choice(&mut engine);
     let bear = find_resolution_choice(&type_choice)
@@ -239,7 +241,7 @@ fn owner_departure_cancels_a_molten_entry_choice_and_rejects_its_stale_response(
         .find(|branch| branch.label == "Bear")
         .expect("Bear is a canonical creature type");
     engine
-        .apply_command(4, &choose_branch(bear.branch_index))
+        .apply_scenario_command(4, &choose_branch(bear.branch_index))
         .expect("choose Bear");
 
     let clever = inject_graveyard_card(&mut engine, 1, "clever_impersonator");
@@ -258,7 +260,7 @@ fn owner_departure_cancels_a_molten_entry_choice_and_rejects_its_stale_response(
         .position(|object_id| *object_id == reanimate)
         .expect("Reanimate is in hand");
     engine
-        .apply_command(4, &cast_spell(reanimate_index, target_object(clever)))
+        .apply_scenario_command(4, &cast_spell(reanimate_index, target_object(clever)))
         .expect("cast Reanimate on the opponent-owned Clever Impersonator");
     let copy_source_choice = pass_until_resolution_choice(&mut engine);
     let pending_copy_source = engine
@@ -279,7 +281,7 @@ fn owner_departure_cancels_a_molten_entry_choice_and_rejects_its_stale_response(
         .candidates
         .contains(&molten_echoes));
     let copied_echoes_entry = engine
-        .apply_command(4, &submit_resolution_choice(vec![molten_echoes]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![molten_echoes]))
         .expect("copy the controller's Molten Echoes");
     let type_choice = find_resolution_choice(&copied_echoes_entry)
         .expect("the copied Molten Echoes ability asks the surviving controller for a type");
@@ -288,7 +290,7 @@ fn owner_departure_cancels_a_molten_entry_choice_and_rejects_its_stale_response(
     assert_eq!(type_choice.choice_kind(), ChoiceKind::ResolutionBranch);
 
     let owner_concession = engine
-        .apply_command(9, &concede())
+        .apply_scenario_command(9, &concede())
         .expect("the owner can leave while the controller's type choice is pending");
     assert!(find_resolution_choice(&owner_concession).is_none());
     assert!(engine.state.players[1].has_lost);
@@ -298,7 +300,7 @@ fn owner_departure_cancels_a_molten_entry_choice_and_rejects_its_stale_response(
     assert_eq!(engine.state.players[0].life, 16);
     assert!(engine.state.stack.is_empty());
     assert!(
-        engine.apply_command(4, &choose_branch(0)).is_err(),
+        engine.apply_scenario_command(4, &choose_branch(0)).is_err(),
         "the departed entrant's old type response is stale"
     );
     assert!(engine.state.pending_resolution.is_none());
@@ -336,7 +338,7 @@ fn reanimated_copy_choice_log_names_the_would_be_controller() {
     );
     let molten_index = hand_index_for_card(&engine, 0, "molten_echoes");
     engine
-        .apply_command(4, &cast_spell(molten_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(molten_index, vec![]))
         .expect("cast Molten Echoes");
     let type_choice = pass_until_resolution_choice(&mut engine);
     let bear = find_resolution_choice(&type_choice)
@@ -346,7 +348,7 @@ fn reanimated_copy_choice_log_names_the_would_be_controller() {
         .find(|branch| branch.label == "Bear")
         .expect("Bear is a canonical creature type");
     engine
-        .apply_command(4, &choose_branch(bear.branch_index))
+        .apply_scenario_command(4, &choose_branch(bear.branch_index))
         .expect("choose Bear");
 
     let clever = inject_graveyard_card(&mut engine, 1, "clever_impersonator");
@@ -365,11 +367,11 @@ fn reanimated_copy_choice_log_names_the_would_be_controller() {
         .position(|object_id| *object_id == reanimate)
         .expect("Reanimate is in hand");
     engine
-        .apply_command(4, &cast_spell(reanimate_index, target_object(clever)))
+        .apply_scenario_command(4, &cast_spell(reanimate_index, target_object(clever)))
         .expect("reanimate the opponent-owned Clever Impersonator");
     let _copy_source_choice = pass_until_resolution_choice(&mut engine);
     let copied_echoes_entry = engine
-        .apply_command(4, &submit_resolution_choice(vec![molten_echoes]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![molten_echoes]))
         .expect("copy the controller's Molten Echoes");
     let type_choice = find_resolution_choice(&copied_echoes_entry)
         .expect("the copied as-enters ability asks for a creature type");
@@ -380,7 +382,7 @@ fn reanimated_copy_choice_log_names_the_would_be_controller() {
         .find(|branch| branch.label == "Bear")
         .expect("Bear remains a legal type");
     let chosen = engine
-        .apply_command(4, &choose_branch(bear.branch_index))
+        .apply_scenario_command(4, &choose_branch(bear.branch_index))
         .expect("the would-be controller chooses the copied ability's type");
     let choice_logs = chosen
         .events
@@ -422,7 +424,7 @@ fn copied_molten_echoes_gets_an_independent_creature_type_choice() {
     );
     let molten_index = hand_index_for_card(&engine, 0, "molten_echoes");
     engine
-        .apply_command(4, &cast_spell(molten_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(molten_index, vec![]))
         .expect("cast Molten Echoes");
     let original_choice = pass_until_resolution_choice(&mut engine);
     let original_type_choice = find_resolution_choice(&original_choice).unwrap();
@@ -432,7 +434,7 @@ fn copied_molten_echoes_gets_an_independent_creature_type_choice() {
         .find(|branch| branch.label == "Bear")
         .expect("Bear is a canonical creature type");
     engine
-        .apply_command(4, &choose_branch(bear.branch_index))
+        .apply_scenario_command(4, &choose_branch(bear.branch_index))
         .expect("the original Molten Echoes chooses Bear");
 
     let mirror = inject_card_into_hand(&mut engine, 0, "mirrormade");
@@ -446,7 +448,7 @@ fn copied_molten_echoes_gets_an_independent_creature_type_choice() {
     );
     let mirror_index = hand_index_for_card(&engine, 0, "mirrormade");
     engine
-        .apply_command(4, &cast_spell(mirror_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(mirror_index, vec![]))
         .expect("cast Mirrormade");
     pass_priority_round(&mut engine);
     assert_eq!(
@@ -460,7 +462,7 @@ fn copied_molten_echoes_gets_an_independent_creature_type_choice() {
         ChoiceKind::CopySource
     );
     let copy_source = engine
-        .apply_command(4, &submit_resolution_choice(vec![molten_echoes]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![molten_echoes]))
         .expect("choose the original Molten Echoes as the copy source");
     let copied_type_choice = find_resolution_choice(&copy_source)
         .expect("the copied as-enters ability asks for its own type");
@@ -473,7 +475,7 @@ fn copied_molten_echoes_gets_an_independent_creature_type_choice() {
         .find(|branch| branch.label == "Elf")
         .expect("Elf is a canonical creature type");
     engine
-        .apply_command(4, &choose_branch(elf.branch_index))
+        .apply_scenario_command(4, &choose_branch(elf.branch_index))
         .expect("the copied Molten Echoes chooses Elf independently");
     assert!(
         zone_view_rules_annotation_labels(&mut engine, 0, molten_echoes)
@@ -500,7 +502,7 @@ fn copied_molten_echoes_gets_an_independent_creature_type_choice() {
         .position(|object_id| *object_id == bear_creature)
         .expect("the physical Bear is in hand");
     engine
-        .apply_command(4, &cast_spell(bear_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(bear_index, vec![]))
         .expect("cast Grizzly Bears");
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.stack.len(), 1);
@@ -529,7 +531,7 @@ fn copied_molten_echoes_gets_an_independent_creature_type_choice() {
         .position(|object_id| *object_id == elf_creature)
         .expect("the Elf is in hand");
     engine
-        .apply_command(4, &cast_spell(elf_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(elf_index, vec![]))
         .expect("cast Elvish Mystic");
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.stack.len(), 1);
@@ -569,7 +571,7 @@ fn molten_echoes_trigger_keeps_event_choice_and_entrant_lki_across_source_reentr
     );
     let molten_index = hand_index_for_card(&engine, 0, "molten_echoes");
     engine
-        .apply_command(4, &cast_spell(molten_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(molten_index, vec![]))
         .expect("cast Molten Echoes");
     let type_choice = pass_until_resolution_choice(&mut engine);
     let bear = find_resolution_choice(&type_choice)
@@ -579,7 +581,7 @@ fn molten_echoes_trigger_keeps_event_choice_and_entrant_lki_across_source_reentr
         .find(|branch| branch.label == "Bear")
         .expect("Bear is a canonical creature type");
     engine
-        .apply_command(4, &choose_branch(bear.branch_index))
+        .apply_scenario_command(4, &choose_branch(bear.branch_index))
         .expect("choose Bear for the original source incarnation");
     let original_source_generation = engine.state.zone_change_generation[&molten_echoes];
 
@@ -599,7 +601,7 @@ fn molten_echoes_trigger_keeps_event_choice_and_entrant_lki_across_source_reentr
         .position(|object_id| *object_id == entrant)
         .expect("the physical Grizzly Bears is in hand");
     engine
-        .apply_command(4, &cast_spell(entrant_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(entrant_index, vec![]))
         .expect("cast Grizzly Bears");
     pass_priority_round(&mut engine);
     assert_eq!(
@@ -628,7 +630,7 @@ fn molten_echoes_trigger_keeps_event_choice_and_entrant_lki_across_source_reentr
         .find(|branch| branch.label == "Elf")
         .expect("Elf is a canonical creature type");
     engine
-        .apply_command(4, &choose_branch(elf.branch_index))
+        .apply_scenario_command(4, &choose_branch(elf.branch_index))
         .expect("choose Elf for the new source incarnation");
     assert!(engine.state.zone_change_generation[&molten_echoes] > original_source_generation);
     assert!(
@@ -691,7 +693,7 @@ fn molten_echoes_observes_each_matching_simultaneous_entry() {
     );
     let molten_index = hand_index_for_card(&engine, 0, "molten_echoes");
     engine
-        .apply_command(4, &cast_spell(molten_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(molten_index, vec![]))
         .expect("cast Molten Echoes");
     let type_choice = pass_until_resolution_choice(&mut engine);
     let myr = find_resolution_choice(&type_choice)
@@ -701,7 +703,7 @@ fn molten_echoes_observes_each_matching_simultaneous_entry() {
         .find(|branch| branch.label == "Myr")
         .expect("Myr is a canonical creature type");
     engine
-        .apply_command(4, &choose_branch(myr.branch_index))
+        .apply_scenario_command(4, &choose_branch(myr.branch_index))
         .expect("choose Myr");
 
     let entrants = [
@@ -724,7 +726,7 @@ fn molten_echoes_observes_each_matching_simultaneous_entry() {
         .position(|object_id| *object_id == scrap_mastery)
         .expect("Scrap Mastery is in hand");
     engine
-        .apply_command(4, &cast_spell(spell_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(spell_index, vec![]))
         .expect("cast Scrap Mastery");
     pass_priority_round(&mut engine);
     answer_simultaneous_entry_order_in_engine_order(&mut engine);
@@ -790,7 +792,7 @@ fn molten_echoes_copy_token_runs_its_own_as_enters_copy_choice() {
     );
     let molten_index = hand_index_for_card(&engine, 0, "molten_echoes");
     engine
-        .apply_command(4, &cast_spell(molten_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(molten_index, vec![]))
         .expect("cast Molten Echoes");
     let type_choice = pass_until_resolution_choice(&mut engine);
     let bear = find_resolution_choice(&type_choice)
@@ -800,7 +802,7 @@ fn molten_echoes_copy_token_runs_its_own_as_enters_copy_choice() {
         .find(|branch| branch.label == "Bear")
         .expect("Bear is a canonical creature type");
     engine
-        .apply_command(4, &choose_branch(bear.branch_index))
+        .apply_scenario_command(4, &choose_branch(bear.branch_index))
         .expect("choose Bear");
 
     let sorcerer = inject_permanent_on_battlefield(&mut engine, 0, "prodigal_sorcerer");
@@ -820,7 +822,7 @@ fn molten_echoes_copy_token_runs_its_own_as_enters_copy_choice() {
         .position(|object_id| *object_id == entrant)
         .expect("the physical Grizzly Bears is in hand");
     engine
-        .apply_command(4, &cast_spell(entrant_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(entrant_index, vec![]))
         .expect("cast Grizzly Bears");
     pass_priority_round(&mut engine);
     assert_eq!(
@@ -848,7 +850,7 @@ fn molten_echoes_copy_token_runs_its_own_as_enters_copy_choice() {
         entrant_generation
     );
     engine
-        .apply_command(4, &submit_resolution_choice(vec![sorcerer]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![sorcerer]))
         .expect("choose Prodigal Sorcerer for the copy token's own as-enters ability");
 
     let token = engine.state.players[0]
@@ -920,7 +922,7 @@ fn molten_echoes_filters_noncreatures_and_other_types_but_accepts_changeling() {
     );
     let molten_index = hand_index_for_card(&engine, 0, "molten_echoes");
     engine
-        .apply_command(4, &cast_spell(molten_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(molten_index, vec![]))
         .expect("cast Molten Echoes");
     let type_choice = pass_until_resolution_choice(&mut engine);
     let bear = find_resolution_choice(&type_choice)
@@ -930,7 +932,7 @@ fn molten_echoes_filters_noncreatures_and_other_types_but_accepts_changeling() {
         .find(|branch| branch.label == "Bear")
         .expect("Bear is a canonical creature type");
     engine
-        .apply_command(4, &choose_branch(bear.branch_index))
+        .apply_scenario_command(4, &choose_branch(bear.branch_index))
         .expect("choose Bear");
 
     let sol_ring = inject_card_into_hand(&mut engine, 0, "sol_ring");
@@ -948,7 +950,7 @@ fn molten_echoes_filters_noncreatures_and_other_types_but_accepts_changeling() {
         .position(|object_id| *object_id == sol_ring)
         .expect("Sol Ring is in hand");
     engine
-        .apply_command(4, &cast_spell(sol_ring_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(sol_ring_index, vec![]))
         .expect("cast a noncreature artifact");
     pass_priority_round(&mut engine);
     assert!(
@@ -971,7 +973,7 @@ fn molten_echoes_filters_noncreatures_and_other_types_but_accepts_changeling() {
         .position(|object_id| *object_id == elf)
         .expect("Elvish Mystic is in hand");
     engine
-        .apply_command(4, &cast_spell(elf_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(elf_index, vec![]))
         .expect("cast an Elf that does not have the chosen subtype");
     pass_priority_round(&mut engine);
     assert!(engine.state.stack.is_empty(), "an Elf does not match Bear");
@@ -992,7 +994,7 @@ fn molten_echoes_filters_noncreatures_and_other_types_but_accepts_changeling() {
         .position(|object_id| *object_id == changeling)
         .expect("Sizzling Changeling is in hand");
     engine
-        .apply_command(4, &cast_spell(changeling_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(changeling_index, vec![]))
         .expect("cast a creature with Changeling");
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.stack.len(), 1);
@@ -1032,10 +1034,10 @@ fn molten_echoes_chooses_a_creature_type_and_copies_a_matching_entry() {
     );
     let hand_index = hand_index_for_card(&engine, 0, "molten_echoes");
     engine
-        .apply_command(4, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(hand_index, vec![]))
         .expect("cast Molten Echoes");
-    engine.apply_command(4, &pass()).unwrap();
-    let entry_choice = engine.apply_command(9, &pass()).unwrap();
+    engine.apply_scenario_command(4, &pass()).unwrap();
+    let entry_choice = engine.apply_scenario_command(9, &pass()).unwrap();
     let choice = find_resolution_choice(&entry_choice).expect("choose a type as Molten enters");
 
     assert_eq!(choice.choice_kind(), ChoiceKind::ResolutionBranch);
@@ -1046,12 +1048,14 @@ fn molten_echoes_chooses_a_creature_type_and_copies_a_matching_entry() {
         .find(|option| option.label == "Bear")
         .expect("Bear is a legal creature type");
     assert!(
-        engine.apply_command(4, &choose_branch(324)).is_err(),
+        engine
+            .apply_scenario_command(4, &choose_branch(324))
+            .is_err(),
         "an out-of-range creature-type index is rejected"
     );
     assert!(engine.state.pending_resolution.is_some());
     engine
-        .apply_command(4, &choose_branch(bear.branch_index))
+        .apply_scenario_command(4, &choose_branch(bear.branch_index))
         .expect("choose Bear");
     assert_eq!(engine.state.objects[&molten_echoes].zone, Zone::Battlefield);
     assert!(
@@ -1076,7 +1080,7 @@ fn molten_echoes_chooses_a_creature_type_and_copies_a_matching_entry() {
         .position(|object_id| *object_id == bears)
         .expect("the injected physical Bear is in hand");
     engine
-        .apply_command(4, &cast_spell(bears_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(bears_index, vec![]))
         .expect("cast Grizzly Bears");
     pass_priority_round(&mut engine);
 
@@ -1134,21 +1138,21 @@ fn molten_echoes_chooses_a_creature_type_and_copies_a_matching_entry() {
     }));
 
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("main one to combat");
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("begin combat");
     if engine.state.turn_step == tricerules_core::TurnStep::DeclareAttackers {
         engine
-            .apply_command(4, &primitive_yield())
+            .apply_scenario_command(4, &primitive_yield())
             .expect("skip attackers");
     }
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("end combat to main two");
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("main two to end step");
     assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::EndStep);
     assert_eq!(engine.state.stack.len(), 1);
@@ -1185,13 +1189,13 @@ fn molten_echoes_doubling_season_gives_each_token_haste_and_one_cohort_exile() {
     );
     let molten_index = hand_index_for_card(&engine, 0, "molten_echoes");
     engine
-        .apply_command(4, &cast_spell(molten_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(molten_index, vec![]))
         .expect("cast Molten Echoes");
     engine
-        .apply_command(4, &pass())
+        .apply_scenario_command(4, &pass())
         .expect("active player passes");
     let entry_choice = engine
-        .apply_command(9, &pass())
+        .apply_scenario_command(9, &pass())
         .expect("Molten Echoes enters and asks for a creature type");
     let choice = find_resolution_choice(&entry_choice).expect("choose a creature type");
     let bear_type = choice
@@ -1200,7 +1204,7 @@ fn molten_echoes_doubling_season_gives_each_token_haste_and_one_cohort_exile() {
         .find(|option| option.label == "Bear")
         .expect("Bear is a supported creature type");
     engine
-        .apply_command(4, &choose_branch(bear_type.branch_index))
+        .apply_scenario_command(4, &choose_branch(bear_type.branch_index))
         .expect("choose Bear");
 
     let _bear = inject_card_into_hand(&mut engine, 0, "grizzly_bears");
@@ -1215,7 +1219,7 @@ fn molten_echoes_doubling_season_gives_each_token_haste_and_one_cohort_exile() {
     );
     let bear_index = hand_index_for_card(&engine, 0, "grizzly_bears");
     engine
-        .apply_command(4, &cast_spell(bear_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(bear_index, vec![]))
         .expect("cast Grizzly Bears");
     pass_priority_round(&mut engine);
 
@@ -1262,21 +1266,21 @@ fn molten_echoes_doubling_season_gives_each_token_haste_and_one_cohort_exile() {
     );
 
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("main one to combat");
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("begin combat");
     if engine.state.turn_step == TurnStep::DeclareAttackers {
         engine
-            .apply_command(4, &primitive_yield())
+            .apply_scenario_command(4, &primitive_yield())
             .expect("skip attackers");
     }
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("end combat to main two");
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("main two to end step");
     assert_eq!(engine.state.turn_step, TurnStep::EndStep);
     assert_eq!(engine.state.stack.len(), 1);

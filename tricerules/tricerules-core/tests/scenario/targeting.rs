@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
 #[test]
@@ -33,12 +34,12 @@ fn lightning_bolt_rejects_basic_land_target() {
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("play mountain");
     let land_oid = battlefield_object_for_card(&e, 0, "mountain");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     let err = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 bolt_idx,
@@ -88,11 +89,11 @@ fn lightning_bolt_rejects_missing_target() {
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("play mountain");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     let err = e
-        .apply_command(0, &cast_spell(bolt_idx, vec![]))
+        .apply_scenario_command(0, &cast_spell(bolt_idx, vec![]))
         .expect_err("bolt needs a target");
     assert!(
         err.to_string().contains("exactly one target"),
@@ -133,12 +134,12 @@ fn giant_growth_rejects_land_target() {
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let forest_idx = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(forest_idx))
+    e.apply_scenario_command(0, &play_land(forest_idx))
         .expect("play forest");
     let land_oid = battlefield_object_for_card(&e, 0, "forest");
     let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
     let err = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 growth_idx,
@@ -206,7 +207,7 @@ fn giant_growth_fizzles_if_creature_target_dies_before_resolution() {
         },
     );
     let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             growth_idx,
@@ -230,7 +231,7 @@ fn giant_growth_fizzles_if_creature_target_dies_before_resolution() {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt_idx,
@@ -256,8 +257,10 @@ fn giant_growth_fizzles_if_creature_target_dies_before_resolution() {
         } else {
             e.state.players[0].id
         };
-        e.apply_command(first, &pass()).expect("pass");
-        let batch = e.apply_command(second, &pass()).expect("pass resolves");
+        e.apply_scenario_command(first, &pass()).expect("pass");
+        let batch = e
+            .apply_scenario_command(second, &pass())
+            .expect("pass resolves");
         for ev in &batch.events {
             if let Some(Ev::Log(lm)) = &ev.ev {
                 if lm.text.contains("Giant Growth") && lm.text.contains("fizzles") {
@@ -322,7 +325,7 @@ fn lightning_bolt_fizzles_when_creature_target_left_battlefield() {
         },
     );
     let bolt_a = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt_a,
@@ -345,7 +348,7 @@ fn lightning_bolt_fizzles_when_creature_target_left_battlefield() {
         },
     );
     let bolt_b = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt_b,
@@ -428,7 +431,7 @@ fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
         },
     );
     let gfth_idx = hand_index_for_card(&e, 0, "go_for_the_throat");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             gfth_idx,
@@ -452,7 +455,7 @@ fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt_idx,
@@ -476,8 +479,8 @@ fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
         } else {
             e.state.players[0].id
         };
-        e.apply_command(first, &pass()).expect("pass");
-        let batch = e.apply_command(second, &pass()).expect("resolve");
+        e.apply_scenario_command(first, &pass()).expect("pass");
+        let batch = e.apply_scenario_command(second, &pass()).expect("resolve");
         for ev in &batch.events {
             if let Some(Ev::Log(lm)) = &ev.ev {
                 if lm.text.contains("destroys") && lm.text.contains("Grizzly Bears") {
@@ -544,7 +547,7 @@ fn go_for_the_throat_rejects_artifact_creature_target() {
         .expect("seeded swamp")
         .zone = tricerules_core::Zone::Battlefield;
     let swamp_to_play_idx = hand_index_for_card(&e, 0, "swamp");
-    e.apply_command(0, &play_land(swamp_to_play_idx))
+    e.apply_scenario_command(0, &play_land(swamp_to_play_idx))
         .expect("play swamp");
 
     give_mana(
@@ -558,7 +561,7 @@ fn go_for_the_throat_rejects_artifact_creature_target() {
     );
     let gftt_idx = hand_index_for_card(&e, 0, "go_for_the_throat");
     let err = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 gftt_idx,
@@ -615,7 +618,7 @@ fn bump_in_the_night_rejects_creature_target() {
     );
     let bump_idx = hand_index_for_card(&e, 0, "bump_in_the_night");
     let err = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 bump_idx,
@@ -666,7 +669,7 @@ fn bump_in_the_night_rejects_self_target() {
     );
     let bump_idx = hand_index_for_card(&e, 0, "bump_in_the_night");
     let err = e
-        .apply_command(0, &cast_spell(bump_idx, target_player(0)))
+        .apply_scenario_command(0, &cast_spell(bump_idx, target_player(0)))
         .expect_err("bump cannot target self (target opponent)");
     assert!(
         format!("{err:?}").contains("opponent"),
@@ -728,7 +731,7 @@ fn bump_in_the_night_can_be_cast_from_graveyard_with_flashback() {
     );
     let target = target_player(1);
     let cast = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CastSpell(CastSpell {
@@ -767,8 +770,8 @@ fn bump_in_the_night_can_be_cast_from_graveyard_with_flashback() {
         })
         .expect("spell pushed to the stack");
     assert_eq!(annotation, "Flashback");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    let batch = e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    let batch = e.apply_scenario_command(1, &pass()).expect("p1 pass");
 
     assert_eq!(e.state.players[1].life, 17);
     assert!(e.state.players[0].exile.contains(&bump_oid));
@@ -819,7 +822,7 @@ fn swords_to_plowshares_fizzles_if_target_dies_before_resolution() {
     );
 
     let swords_idx = hand_index_for_card(&e, 0, "swords_to_plowshares");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             swords_idx,
@@ -834,7 +837,7 @@ fn swords_to_plowshares_fizzles_if_target_dies_before_resolution() {
     )
     .expect("cast swords");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt_idx,
@@ -898,7 +901,7 @@ fn unsummon_rejects_land_target() {
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let island_idx = hand_index_for_card(&e, 0, "island");
-    e.apply_command(0, &play_land(island_idx))
+    e.apply_scenario_command(0, &play_land(island_idx))
         .expect("play island");
     let island_oid = battlefield_object_for_card(&e, 0, "island");
     give_mana(
@@ -911,7 +914,7 @@ fn unsummon_rejects_land_target() {
     );
     let idx = hand_index_for_card(&e, 0, "unsummon");
     let err = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 idx,
@@ -997,7 +1000,7 @@ fn mind_sculpt_rejects_self_target() {
         .position(|&oid| oid == sculpt_id)
         .expect("sculpt in hand");
     let lib_before = e.state.players[0].library.len();
-    let err = e.apply_command(0, &cast_spell(sculpt_idx, target_player(0)));
+    let err = e.apply_scenario_command(0, &cast_spell(sculpt_idx, target_player(0)));
     assert!(
         err.is_err(),
         "mind sculpt targeting its controller must be rejected"
@@ -1036,7 +1039,7 @@ fn hexproof_opponent_cannot_target_with_spell() {
 
     // Give P0 one red mana (Lightning Bolt costs R) by tapping a Mountain.
     let mtn_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mtn_idx))
+    e.apply_scenario_command(0, &play_land(mtn_idx))
         .expect("play mountain");
     give_mana(
         &mut e,
@@ -1057,7 +1060,7 @@ fn hexproof_opponent_cannot_target_with_spell() {
     }
 
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    let result = e.apply_command(
+    let result = e.apply_scenario_command(
         0,
         &cast_spell(
             bolt_idx,
@@ -1100,7 +1103,7 @@ fn hexproof_controller_can_target_own_permanent() {
     let scout = inject_creature_with_stats(&mut e, 0, "gladecover_scout", 1, 1);
 
     let forest_idx = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(forest_idx))
+    e.apply_scenario_command(0, &play_land(forest_idx))
         .expect("play forest");
     give_mana(
         &mut e,
@@ -1121,7 +1124,7 @@ fn hexproof_controller_can_target_own_permanent() {
     }
 
     let gg_idx = hand_index_for_card(&e, 0, "giant_growth");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             gg_idx,
@@ -1170,7 +1173,7 @@ fn shroud_controller_cannot_target_own_permanent() {
     let enchantress = inject_creature_with_stats(&mut e, 0, "argothian_enchantress", 0, 1);
 
     let forest_idx = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(forest_idx))
+    e.apply_scenario_command(0, &play_land(forest_idx))
         .expect("play forest");
     give_mana(
         &mut e,
@@ -1191,7 +1194,7 @@ fn shroud_controller_cannot_target_own_permanent() {
     }
 
     let gg_idx = hand_index_for_card(&e, 0, "giant_growth");
-    let result = e.apply_command(
+    let result = e.apply_scenario_command(
         0,
         &cast_spell(
             gg_idx,
@@ -1233,7 +1236,7 @@ fn royal_assassin_destroys_tapped_creature() {
     let assassin = deploy_to_battlefield(&mut e, 0, "royal_assassin", false);
     let bears = deploy_to_battlefield(&mut e, 1, "grizzly_bears", /* tapped */ true);
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &activate_ability(
             assassin,
@@ -1284,7 +1287,7 @@ fn royal_assassin_cannot_target_untapped_creature() {
     let assassin = deploy_to_battlefield(&mut e, 0, "royal_assassin", false);
     let bears = deploy_to_battlefield(&mut e, 1, "grizzly_bears", /* tapped */ false);
 
-    let err = e.apply_command(
+    let err = e.apply_scenario_command(
         0,
         &activate_ability(
             assassin,
@@ -1339,7 +1342,7 @@ fn icy_manipulator_cannot_target_an_enchantment() {
             ..Default::default()
         },
     );
-    let err = e.apply_command(
+    let err = e.apply_scenario_command(
         0,
         &activate_ability(
             icy,
@@ -1356,7 +1359,7 @@ fn icy_manipulator_cannot_target_an_enchantment() {
     assert!(err.is_err(), "an enchantment is not artifact/creature/land");
 
     // The same ability still accepts a creature.
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &activate_ability(
             icy,
@@ -1406,7 +1409,7 @@ fn eyeblights_ending_cannot_target_an_elf() {
     );
 
     let idx = hand_index_for_card(&e, 0, "eyeblights_ending");
-    let err = e.apply_command(
+    let err = e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -1421,7 +1424,7 @@ fn eyeblights_ending_cannot_target_an_elf() {
     );
     assert!(err.is_err(), "an Elf is not a legal target");
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -1466,7 +1469,7 @@ fn avacynian_priest_taps_only_non_humans() {
     );
 
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &activate_ability(
                 priest,
@@ -1489,7 +1492,7 @@ fn avacynian_priest_taps_only_non_humans() {
         "an illegal activation does not pay the tap cost"
     );
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &activate_ability(
             priest,
@@ -1626,7 +1629,7 @@ fn bladebrand_target_tables_exclude_objects_outside_the_battlefield() {
 
     // A spell on the stack, so `valid_stack_ids` has something it could wrongly offer.
     let bolt_slot = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt_slot,
@@ -1715,7 +1718,7 @@ fn bladebrand_rejects_cast_targets_outside_the_battlefield() {
     );
 
     let bolt_slot = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt_slot,
@@ -1737,7 +1740,7 @@ fn bladebrand_rejects_cast_targets_outside_the_battlefield() {
         ("a spell on the stack", bolt_on_stack),
     ] {
         let idx = hand_index_for_card(&e, 0, "bladebrand");
-        let result = e.apply_command(
+        let result = e.apply_scenario_command(
             0,
             &cast_spell(
                 idx,
@@ -1764,7 +1767,7 @@ fn bladebrand_rejects_cast_targets_outside_the_battlefield() {
     }
 
     let idx = hand_index_for_card(&e, 0, "bladebrand");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -1808,7 +1811,7 @@ fn published_stack_targets_include_copies_in_bottom_to_top_order() {
         },
     );
     let bolt_slot = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt_slot,

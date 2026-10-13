@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_core::Zone;
 
@@ -28,7 +29,7 @@ fn cast_glaring_aegis(e: &mut GameEngine, enchanted_creature: u32) {
         },
     );
     let index = hand_index_for_card(e, 0, "glaring_aegis");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             index,
@@ -57,7 +58,7 @@ fn cast_rambunctious_mutt(e: &mut GameEngine) {
         },
     );
     let index = hand_index_for_card(e, 0, "rambunctious_mutt");
-    e.apply_command(0, &cast_spell(index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(index, vec![]))
         .expect("cast Rambunctious Mutt");
     pass_both_players(e);
 }
@@ -95,12 +96,12 @@ fn glaring_aegis_rejects_own_trigger_target_and_taps_opponents_creature() {
     assert_eq!(e.state.pending_triggers.len(), 1);
 
     let err = e
-        .apply_command(0, &choose_trigger_target(own_bear))
+        .apply_scenario_command(0, &choose_trigger_target(own_bear))
         .expect_err("the trigger cannot target its controller's creature");
     assert!(err.to_string().contains("target"), "unexpected: {err}");
     assert_eq!(e.state.pending_triggers.len(), 1);
 
-    e.apply_command(0, &choose_trigger_target(opponent_bear))
+    e.apply_scenario_command(0, &choose_trigger_target(opponent_bear))
         .expect("choose opponent's creature");
     pass_both_players(&mut e);
     assert!(
@@ -125,18 +126,18 @@ fn rambunctious_mutt_combines_opponent_and_permanent_type_filters() {
         assert_eq!(e.state.pending_triggers.len(), 1);
 
         assert!(
-            e.apply_command(0, &choose_trigger_target(own_artifact))
+            e.apply_scenario_command(0, &choose_trigger_target(own_artifact))
                 .is_err(),
             "an artifact controlled by the trigger controller is illegal"
         );
         assert!(
-            e.apply_command(0, &choose_trigger_target(opponent_creature))
+            e.apply_scenario_command(0, &choose_trigger_target(opponent_creature))
                 .is_err(),
             "an opponent-controlled creature is still the wrong permanent type"
         );
         assert_eq!(e.state.pending_triggers.len(), 1);
 
-        e.apply_command(0, &choose_trigger_target(legal_target))
+        e.apply_scenario_command(0, &choose_trigger_target(legal_target))
             .expect("choose opponent-controlled artifact or enchantment");
         pass_both_players(&mut e);
         assert_eq!(
@@ -170,7 +171,7 @@ fn opponent_controlled_target_becomes_illegal_after_control_changes() {
     let artifact = inject_permanent_on_battlefield(&mut e, 1, "icy_manipulator");
 
     cast_rambunctious_mutt(&mut e);
-    e.apply_command(0, &choose_trigger_target(artifact))
+    e.apply_scenario_command(0, &choose_trigger_target(artifact))
         .expect("choose opponent-controlled artifact");
 
     e.state.players[1]

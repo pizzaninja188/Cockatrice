@@ -3,6 +3,7 @@
 //! Oracle and rulings checked 2026-09-11. CR 701.44 governs Explore; CR 603 governs the
 //! source-bound ETB trigger. The established action retains the source's last-known controller
 //! if it leaves before resolution and cannot put a counter on a departed permanent.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -30,7 +31,7 @@ fn resolve_cenote_scout(engine: &mut GameEngine) -> u32 {
     );
     let slot = hand_index_for_card(engine, 0, "cenote_scout");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Cenote Scout");
     pass_both_players(engine);
     let scout = battlefield_object_for_card(engine, 0, "cenote_scout");
@@ -62,9 +63,11 @@ fn generated_etb_explore_reveals_and_moves_a_land_to_hand() {
     let land = put_on_top(&mut engine, 0, "forest");
 
     let first = engine.state.priority_player_id();
-    engine.apply_command(first, &pass()).expect("first pass");
+    engine
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
     let batch = engine
-        .apply_command(1 - first, &pass())
+        .apply_scenario_command(1 - first, &pass())
         .expect("resolve generated Explore trigger");
     let reveal = batch
         .events
@@ -106,7 +109,7 @@ fn generated_etb_explore_uses_source_lki_after_the_scout_dies() {
     ensure_in_hand(&mut engine, 1, "murder");
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("yield to responder");
     give_mana(
         &mut engine,
@@ -119,15 +122,17 @@ fn generated_etb_explore_uses_source_lki_after_the_scout_dies() {
     );
     let murder = hand_index_for_card(&engine, 1, "murder");
     engine
-        .apply_command(1, &cast_spell(murder, target_object(scout)))
+        .apply_scenario_command(1, &cast_spell(murder, target_object(scout)))
         .expect("destroy Scout before its trigger resolves");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&scout].zone, Zone::Graveyard);
 
     let first = engine.state.priority_player_id();
-    engine.apply_command(first, &pass()).expect("first pass");
+    engine
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
     let batch = engine
-        .apply_command(1 - first, &pass())
+        .apply_scenario_command(1 - first, &pass())
         .expect("resolve Explore with departed source");
     let choice = find_resolution_choice(&batch).expect("nonland Explore choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibraryLook);
@@ -140,7 +145,7 @@ fn generated_etb_explore_uses_source_lki_after_the_scout_dies() {
     );
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![nonland]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![nonland]))
         .expect("put the revealed nonland into the graveyard");
     assert_eq!(engine.state.objects[&nonland].zone, Zone::Graveyard);
 }

@@ -1,5 +1,6 @@
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use crate::helpers::ScenarioCommandExt;
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::permanent_moved::Destination;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 
@@ -31,14 +32,16 @@ fn evolving_wilds_finds_only_a_basic_land_and_puts_it_onto_the_battlefield_tappe
         .unwrap_or(0);
 
     engine
-        .apply_command(0, &activate_ability(wilds, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(wilds, 0, vec![]))
         .expect("tap and sacrifice Evolving Wilds");
     assert_eq!(engine.state.objects[&wilds].zone, Zone::Graveyard);
     assert_eq!(engine.state.stack.len(), 1);
 
-    engine.apply_command(0, &pass()).expect("controller passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
     let search_batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and the ability resolves");
     let choice = find_resolution_choice(&search_batch).expect("basic-land search choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
@@ -50,7 +53,7 @@ fn evolving_wilds_finds_only_a_basic_land_and_puts_it_onto_the_battlefield_tappe
     );
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .expect("choose Forest");
 
     let object = engine.state.objects.get(&forest).expect("Forest object");
@@ -100,22 +103,26 @@ fn evolving_wilds_rejects_a_forged_nonbasic_choice_but_allows_fail_to_find() {
     let forest = inject_library_card(&mut engine, 0, "forest");
     let taiga = inject_library_card(&mut engine, 0, "taiga");
     engine
-        .apply_command(0, &activate_ability(wilds, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(wilds, 0, vec![]))
         .expect("activate");
-    engine.apply_command(0, &pass()).expect("controller passes");
-    let search_batch = engine.apply_command(1, &pass()).expect("resolve ability");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
+    let search_batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolve ability");
     let choice = find_resolution_choice(&search_batch).expect("search choice");
     assert_eq!(choice.min, 0);
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![taiga]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![taiga]))
         .expect_err("a nonbasic land is not an engine-published candidate");
     assert!(engine.state.pending_resolution.is_some());
     assert!(engine.state.players[0].library.contains(&forest));
     assert!(engine.state.players[0].library.contains(&taiga));
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("a filtered hidden-zone search may fail to find");
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.players[0].library.contains(&forest));
@@ -160,10 +167,14 @@ fn evolving_wilds_waits_for_entry_replacements_before_shuffling_and_resuming() {
     let forest = inject_library_card(&mut engine, 0, "forest");
 
     engine
-        .apply_command(0, &activate_ability(wilds, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(wilds, 0, vec![]))
         .expect("activate");
-    engine.apply_command(0, &pass()).expect("controller passes");
-    engine.apply_command(1, &pass()).expect("resolve ability");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolve ability");
     // Exercise the generic untapped battlefield destination rather than Evolving Wilds' own
     // tapped instruction. Two Orbs then force a CR 616 ordering choice, proving the search uses
     // the shared battlefield-entry pipeline and keeps its shuffle/tail completion parked.
@@ -179,7 +190,7 @@ fn evolving_wilds_waits_for_entry_replacements_before_shuffling_and_resuming() {
     };
     *destination = tricerules_cards::primitives::SearchDestination::Battlefield { tapped: false };
     let replacement_batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .expect("choose Forest");
 
     let pending = engine
@@ -205,7 +216,7 @@ fn evolving_wilds_waits_for_entry_replacements_before_shuffling_and_resuming() {
 
     let application = pending.presentation.candidates[0];
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![application]))
         .expect("order the entry replacements");
     assert_eq!(engine.state.objects[&forest].zone, Zone::Battlefield);
     assert!(engine.state.objects[&forest].tapped);

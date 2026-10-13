@@ -1,6 +1,7 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{CounterKind, Keyword};
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, AbilitySourceZone, ActivateAbility, RuledCommand, TargetRef,
 };
@@ -63,7 +64,7 @@ fn zone_actions_are_stable_owner_only_and_generation_bound() {
     };
     command.expected_zone_change_generation = 99;
     engine
-        .apply_command(0, &stale)
+        .apply_scenario_command(0, &stale)
         .expect_err("a stale published action is rejected");
     assert_eq!(engine.state.objects[&spirits].zone, Zone::Hand);
 }
@@ -85,27 +86,27 @@ fn typecycling_discards_then_privately_searches_for_the_land_subtype() {
     let command = zone_ability(&engine, spirits, AbilitySourceZone::Hand, 0, vec![]);
 
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("activate Plainscycling");
     assert_eq!(engine.state.objects[&spirits].zone, Zone::Graveyard);
     assert_eq!(engine.state.stack.len(), 1);
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("controller passes priority");
     let search = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and typecycling resolves");
     let choice = find_resolution_choice(&search).expect("private library search");
     assert_eq!(choice.candidate_object_ids, [plains]);
     assert!(!choice.candidate_object_ids.contains(&forest));
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![plains]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![plains]))
         .expect("choose and reveal Plains");
     assert_eq!(engine.state.objects[&plains].zone, Zone::Hand);
     assert!(engine.state.players[0].hand.contains(&plains));
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect_err("the old hand generation cannot be replayed");
 }
 
@@ -123,14 +124,16 @@ fn typecycling_with_no_matching_subtype_parks_for_an_explicit_fail_to_find() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &zone_ability(&engine, spirits, AbilitySourceZone::Hand, 0, vec![]),
         )
         .expect("activate Plainscycling");
-    engine.apply_command(0, &pass()).expect("controller passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
     let search = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and opens the empty search");
     let choice = find_resolution_choice(&search).expect("empty library search still published");
     assert!(choice.candidate_object_ids.is_empty());
@@ -140,7 +143,7 @@ fn typecycling_with_no_matching_subtype_parks_for_an_explicit_fail_to_find() {
     assert!(engine.state.stack.is_empty());
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("submit fail to find");
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.stack.is_empty());
@@ -169,7 +172,7 @@ fn renew_exiles_atomically_and_applies_all_counters_to_one_target() {
         target_object(999_999),
     );
     engine
-        .apply_command(0, &invalid)
+        .apply_scenario_command(0, &invalid)
         .expect_err("invalid target rejects before costs");
     assert_eq!(engine.state.objects[&pummeler].zone, Zone::Graveyard);
     assert_eq!(engine.state.players[0].mana_pool.green, 5);
@@ -181,7 +184,9 @@ fn renew_exiles_atomically_and_applies_all_counters_to_one_target() {
         0,
         target_object(target),
     );
-    engine.apply_command(0, &activate).expect("activate renew");
+    engine
+        .apply_scenario_command(0, &activate)
+        .expect("activate renew");
     assert_eq!(engine.state.objects[&pummeler].zone, Zone::Exile);
     pass_both_players(&mut engine);
     let object = &engine.state.objects[&target];

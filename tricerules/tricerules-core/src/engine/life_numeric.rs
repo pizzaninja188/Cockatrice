@@ -236,7 +236,7 @@ mod tests {
                     )),
                 }
             };
-            engine.apply_command(0, &begin).unwrap();
+            engine.apply_scenario_command(0, &begin).unwrap();
             if ability_payment {
                 let pending = engine.state.pending_ability_activation.as_ref().unwrap();
                 let choice = RuledCommand {
@@ -254,7 +254,7 @@ mod tests {
                         },
                     )),
                 };
-                engine.apply_command(1, &choice).unwrap();
+                engine.apply_scenario_command(1, &choice).unwrap();
             }
             assert_eq!(
                 engine.pending_ability_activation_internal.is_some(),
@@ -279,7 +279,7 @@ mod tests {
                 )),
             };
             assert!(matches!(
-                engine.apply_command(0, &command),
+                engine.apply_scenario_command(0, &command),
                 Err(EngineError::LifeNumericRange(_))
             ));
             assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
@@ -296,7 +296,7 @@ mod tests {
             assert!(!engine.state.objects[&bosk].tapped);
             // The retained transaction must still function after the rejected mana activation.
             engine.state.players[0].life = 20;
-            engine.apply_command(0, &command).unwrap();
+            engine.apply_scenario_command(0, &command).unwrap();
             assert_eq!(engine.state.players[0].life, 21);
             let cancel = if ability_payment {
                 RuledCommand {
@@ -331,7 +331,7 @@ mod tests {
                     )),
                 }
             };
-            engine.apply_command(0, &cancel).unwrap();
+            engine.apply_scenario_command(0, &cancel).unwrap();
             assert!(engine.pending_spell_cast_internal.is_none());
             assert!(engine.pending_ability_activation_internal.is_none());
             assert_eq!(engine.state.objects[&spell].zone, Zone::Hand);
@@ -380,7 +380,7 @@ mod tests {
                 cloning.push(started.elapsed().as_nanos());
                 drop(checkpoint);
                 let started = Instant::now();
-                engine.apply_command(0, &pass).unwrap();
+                engine.apply_scenario_command(0, &pass).unwrap();
                 command.push(started.elapsed().as_nanos());
                 // A fresh fixture clone/reset is intentionally excluded from both timings.
                 engine.state = fixture.state.clone();

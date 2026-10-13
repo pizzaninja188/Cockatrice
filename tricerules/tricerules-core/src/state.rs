@@ -16,10 +16,31 @@ use tricerules_card_model::{
     is_creature_type, AbilityLinkId, CardFace, ChoiceId, ExiledCohortId, ManaCost, ManaSymbol,
     ModeId, SearchResultId,
 };
-use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
+use tricerules_proto::ruled::v1::{ChoiceKind, ResolutionChoiceRequired, RuledEvent, TokenCreated};
 
 pub type PlayerId = i32;
 pub type ObjectId = u32;
+
+/// Opaque identity for one engine-published resolution offer. Only nonzero values identify
+/// actionable offers; zero marks unpublished, retired, or informational state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ResolutionPromptId(u64);
+
+impl ResolutionPromptId {
+    pub(crate) const UNASSIGNED: Self = Self(0);
+
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    pub(crate) const fn assigned(value: u64) -> Option<Self> {
+        if value == 0 {
+            None
+        } else {
+            Some(Self(value))
+        }
+    }
+}
 
 /// CR 607.5a: an acquired linked pair cannot borrow a choice made by an earlier occurrence.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -1927,6 +1948,23 @@ pub struct PendingResolution {
     pub deciding_player: PlayerId,
     pub presentation: PendingResolutionPresentation,
     pub continuation: ResolutionContinuation,
+    /// Assigned when this logical offer is published. A freshly constructed pending resolution
+    /// is always a new offer even when its answer semantics match the previous prompt.
+    #[serde(skip_serializing)]
+    pub resolution_prompt_id: ResolutionPromptId,
+    /// Snapshot of answer-affecting wire and private continuation semantics for same-offer
+    /// republication, plus the exact latest wire offer so an observer-return can republish an
+    /// unchanged parent without rebuilding or losing protocol fields. This is engine-private and
+    /// deliberately excluded from state diagnostics.
+    #[serde(skip_serializing)]
+    pub(crate) resolution_prompt_semantics: Option<ResolutionPromptSemanticSnapshot>,
+}
+
+/// Private validation data and exact owner-private offer projection for an assigned prompt.
+#[derive(Debug, Clone)]
+pub(crate) struct ResolutionPromptSemanticSnapshot {
+    pub(crate) answer_semantics: Vec<u8>,
+    pub(crate) published_choice: ResolutionChoiceRequired,
 }
 
 /// A player decision needed to perform one frozen CR 704.3 state-based-action set.
@@ -2105,6 +2143,7 @@ pub(crate) enum EntryCounterSource {
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct EntryCounterPlacement {
     pub(crate) actor: PlayerId,
+    #[serde(serialize_with = "serialize_entry_counter_map_as_ordered_pairs")]
     pub(crate) counters: BTreeMap<CounterKind, u32>,
     pub(crate) source: EntryCounterSource,
     pub(crate) read_ahead_entry: bool,
@@ -2129,6 +2168,56 @@ impl ManaColorsSpent {
 
     pub fn count(self) -> u32 {
         self.0.into_iter().filter(|present| *present).count() as u32
+    }
+}
+
+fn serialize_entry_counter_map_as_ordered_pairs<S>(
+    counters: &BTreeMap<CounterKind, u32>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    // CounterKind is a tagged value, not a JSON object key. Preserve the BTreeMap's stable order
+    // while keeping each counter kind as its full typed value in continuation fingerprints.
+    serializer.collect_seq(counters.iter())
+}
+
+#[cfg(test)]
+mod entry_counter_serialization_tests {
+    use super::*;
+
+    #[derive(serde::Serialize)]
+    struct Probe {
+        #[serde(serialize_with = "serialize_entry_counter_map_as_ordered_pairs")]
+        counters: BTreeMap<CounterKind, u32>,
+    }
+
+    #[test]
+    fn keyword_counter_map_keeps_typed_keys_in_deterministic_ordered_pairs() {
+        let counters = BTreeMap::from([
+            (CounterKind::Keyword(Keyword::Flying), 1),
+            (CounterKind::PlusOnePlusOne, 3),
+        ]);
+        let probe = Probe { counters };
+        let encoded = serde_json::to_value(&probe).expect("counter map serializes as pairs");
+        let actual = encoded["counters"].as_array().expect("pair sequence");
+        let expected = probe
+            .counters
+            .iter()
+            .map(|(counter, count)| {
+                serde_json::Value::Array(vec![
+                    serde_json::to_value(counter).expect("typed counter key"),
+                    serde_json::to_value(count).expect("counter count"),
+                ])
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, &expected);
+        assert_eq!(
+            encoded,
+            serde_json::to_value(&probe).expect("stable encoding")
+        );
     }
 }
 
@@ -2169,6 +2258,7 @@ pub struct BattlefieldEntryEvent {
     /// CR 607 linked creature-type choices, installed only with the committed incarnation.
     pub(crate) chosen_creature_types: Vec<ChosenCreatureTypeRecord>,
     /// Counter state accumulated by entry replacement effects before zone commitment.
+    #[serde(serialize_with = "serialize_entry_counter_map_as_ordered_pairs")]
     pub entry_counters: BTreeMap<CounterKind, u32>,
     /// Independent entry-counter instructions in application order. `entry_counters` remains the
     /// aggregate projection used by early characteristic evaluation until commit.
@@ -3260,6 +3350,9 @@ pub struct GameState {
     /// At most one at a time; while set it blocks priority (like a [`PendingTrigger`]) until the
     /// deciding player submits their choice. See [`PendingResolution`] and the `custom` module.
     pub pending_resolution: Option<PendingResolution>,
+    /// Next nonzero prompt ID for each chooser. Monotonic and per player for deterministic replay.
+    #[serde(skip_serializing)]
+    pub(crate) next_resolution_prompt_id: BTreeMap<PlayerId, u64>,
     /// Damage or battlefield-entry processing parked behind a public CR 616 ordering choice. The
     /// parallel `pending_resolution` owns the generic prompt/continuation metadata.
     pub(crate) pending_replacement_event:

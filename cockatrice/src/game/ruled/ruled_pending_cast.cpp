@@ -275,22 +275,48 @@ std::optional<QVector<int>> RuledPendingCast::chooseModes(QWidget *parent,
     return selectedModes;
 }
 
-ruled::v1::RuledCommand RuledPendingCast::submissionCommand(const ruled::v1::RuledCommand &command)
+std::optional<ruled::v1::RuledCommand>
+RuledPendingCast::submissionCommand(const ruled::v1::RuledCommand &command,
+                                    const PendingRuledSpellCast *pendingSpell,
+                                    const RuledClientState *state)
 {
-    if (!command.has_begin_spell_cast() || !command.begin_spell_cast().has_announcement() ||
-        (command.begin_spell_cast().announcement().cast_method() != ruled::v1::CAST_METHOD_MADNESS &&
-         command.begin_spell_cast().announcement().cast_method() != ruled::v1::CAST_METHOD_SIEGE_DEFEAT))
+    if (!command.has_begin_spell_cast() || !command.begin_spell_cast().has_announcement())
         return command;
+    const auto method = command.begin_spell_cast().announcement().cast_method();
+    const bool specialMethod = method == ruled::v1::CAST_METHOD_MADNESS ||
+                               method == ruled::v1::CAST_METHOD_SIEGE_DEFEAT;
+    const bool permissionMethod = method == ruled::v1::CAST_METHOD_PERMISSION;
+    if (!specialMethod && !permissionMethod)
+        return command;
+
+    const bool permissionTargetsCurrentSpecialCast =
+        permissionMethod && pendingSpell && state && pendingSpell->source == RuledCastSource::Exile &&
+        state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast) &&
+        state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast,
+                                        static_cast<quint32>(pendingSpell->handIndex));
+    if (permissionMethod && state && state->hasActiveLocalResolutionPrompt() &&
+        !permissionTargetsCurrentSpecialCast)
+        return std::nullopt;
+    if (permissionMethod && (!pendingSpell || pendingSpell->resolutionPromptId == 0) &&
+        !permissionTargetsCurrentSpecialCast)
+        return command; // Ordinary Permission casts still announce with BeginSpellCast.
+
+    if (!pendingSpell || !state || !matchesSpecialCastOffer(*pendingSpell, *state))
+        return std::nullopt;
     ruled::v1::RuledCommand result;
     auto *choice = result.mutable_submit_resolution_choice();
     choice->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_SPELL);
+    choice->set_resolution_prompt_id(pendingSpell->resolutionPromptId);
     *choice->mutable_spell_cast_announcement() = command.begin_spell_cast().announcement();
     return result;
 }
 
 bool RuledPendingCast::matchesSpecialCastOffer(const PendingRuledSpellCast &spell, const RuledClientState &state)
 {
-    return spell.valid && spell.source == RuledCastSource::Exile &&
+    return spell.valid && spell.resolutionPromptId != 0 && state.isCurrentResolutionPrompt(spell.resolutionPromptId) &&
+           state.pendingChoice.has_value() &&
+           state.pendingChoice->resolutionPromptId == spell.resolutionPromptId &&
+           spell.source == RuledCastSource::Exile &&
            (spell.castMethod == ruled::v1::CAST_METHOD_MADNESS ||
             spell.castMethod == ruled::v1::CAST_METHOD_SIEGE_DEFEAT ||
             spell.castMethod == ruled::v1::CAST_METHOD_PERMISSION) &&
@@ -306,5 +332,7 @@ bool RuledPendingCast::resolutionChoiceBlocksSpell(const RuledClientState &state
     if (spell.engineTransactionId != 0 && state.pendingSpellCast &&
         state.pendingSpellCast->transaction_id() == spell.engineTransactionId)
         return false;
-    return state.choiceWaitingPlayerId >= 0 || (state.pendingChoice && !matchesSpecialCastOffer(spell, state));
+    if (matchesSpecialCastOffer(spell, state))
+        return false;
+    return state.hasActiveLocalResolutionPrompt() || state.choiceWaitingPlayerId >= 0 || state.pendingChoice.has_value();
 }

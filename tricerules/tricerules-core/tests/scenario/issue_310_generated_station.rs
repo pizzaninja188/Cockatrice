@@ -10,11 +10,12 @@
 //! 702.184a), the threshold is checked continuously (CR 721.2a-b), and the
 //! entry trigger is governed by CR 603.1-2.  Physical-object generations and
 //! source-bound resolution remain covered by the shared #309 Station tests.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
 use tricerules_cards::Keyword;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 
 fn generation(engine: &GameEngine, object_id: u32) -> u64 {
     engine
@@ -96,7 +97,7 @@ fn resolve_entire_stack_all_players(engine: &mut GameEngine) {
             }
             let player = engine.state.priority_player_id();
             engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("player passes priority");
         }
     }
@@ -113,7 +114,7 @@ fn move_named_card_to_hand_via_engine(engine: &mut GameEngine, player: usize, ca
         .clone();
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             player_id,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -201,7 +202,7 @@ fn issue_310_galvanizing_station_has_exact_three_threshold_and_remains_usable_ab
     // Station remains an activated ability once the threshold is met.  The
     // injected 2-power creature adds exactly two charge counters on resolution.
     engine
-        .apply_command(0, &activate_station(&engine, station, crew))
+        .apply_scenario_command(0, &activate_station(&engine, station, crew))
         .expect("Station is activatable at its threshold");
     assert!(engine.state.objects[&crew].tapped);
     resolve_entire_stack_two_player(&mut engine);
@@ -230,7 +231,7 @@ fn issue_310_galvanizing_station_has_exact_three_threshold_and_remains_usable_ab
     engine.state.turn_step = TurnStep::Upkeep;
     let before = engine.state.objects[&station].counter_count(CounterKind::Charge);
     engine
-        .apply_command(0, &activate_station(&engine, station, crew))
+        .apply_scenario_command(0, &activate_station(&engine, station, crew))
         .expect_err("Station is sorcery-speed outside a main phase");
     assert_eq!(
         engine.state.objects[&station].counter_count(CounterKind::Charge),
@@ -300,7 +301,7 @@ fn issue_310_wedgelight_entry_creates_one_untapped_robot_and_unlocks_first_strik
     assert!(at.has_keyword(Keyword::FirstStrike));
 
     engine
-        .apply_command(0, &activate_station(&engine, station, crew))
+        .apply_scenario_command(0, &activate_station(&engine, station, crew))
         .expect("Station remains activatable at nine counters");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(

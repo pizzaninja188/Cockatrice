@@ -1,7 +1,8 @@
 //! Reviewed actual-card reuse of cast/upkeep triggers and resolving amounts.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{AbilityPresentation, Color, Layout};
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 
 fn pass_all_players(engine: &mut GameEngine) {
     let count = engine.state.players.iter().filter(|p| !p.has_lost).count();
@@ -9,7 +10,7 @@ fn pass_all_players(engine: &mut GameEngine) {
         answer_trigger_order_in_engine_order(engine);
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("pass priority");
     }
 }
@@ -183,7 +184,7 @@ fn forced_fruition_draws_seven_for_each_opponent_before_their_spell_resolves() {
         );
         let hand = hand_index_for_card(&engine, caster as usize, "grizzly_bears");
         engine
-            .apply_command(caster, &cast_spell(hand, vec![]))
+            .apply_scenario_command(caster, &cast_spell(hand, vec![]))
             .unwrap();
         let spell = engine.state.stack[0].id;
         let before_hands: Vec<_> = engine

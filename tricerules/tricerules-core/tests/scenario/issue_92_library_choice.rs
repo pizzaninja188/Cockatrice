@@ -1,5 +1,6 @@
 //! Issue #92: look at a bounded library window, optionally choose a matching card for hand, and
 //! put the rest on the bottom in either a deterministic random order or a player-chosen order.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_core::Zone;
@@ -60,10 +61,10 @@ fn issue_228_sleight_requires_one_private_card() {
     let choice = find_resolution_choice(&batch).unwrap();
     assert_eq!((choice.min, choice.max), (1, 1));
     assert!(e
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .is_err());
     let batch = e
-        .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .unwrap();
     assert!(!batch.events.iter().any(|event| matches!(
         &event.ev,
@@ -143,7 +144,7 @@ fn issue_228_flow_state_checks_each_graveyard_type_and_orders_the_remaining_card
         assert_no_public_library_names(&batch);
         let selected = top[..count as usize].to_vec();
         let batch = e
-            .apply_command(0, &submit_resolution_choice(selected.clone()))
+            .apply_scenario_command(0, &submit_resolution_choice(selected.clone()))
             .unwrap();
         assert_no_public_library_names(&batch);
         let remainder: Vec<_> = top[count as usize..3].iter().rev().copied().collect();
@@ -152,7 +153,7 @@ fn issue_228_flow_state_checks_each_graveyard_type_and_orders_the_remaining_card
             assert!(order.ordered);
             assert_eq!((order.min, order.max), (2, 2));
             let batch = e
-                .apply_command(0, &submit_resolution_choice(remainder.clone()))
+                .apply_scenario_command(0, &submit_resolution_choice(remainder.clone()))
                 .unwrap();
             assert_no_public_library_names(&batch);
         }
@@ -197,7 +198,7 @@ fn issue_228_short_libraries_do_as_much_as_possible_without_drawing() {
                 let required = desired.min(size) as u32;
                 assert_eq!((choice.min, choice.max), (required, required));
                 let batch = e
-                    .apply_command(
+                    .apply_scenario_command(
                         0,
                         &submit_resolution_choice(top[..required as usize].to_vec()),
                     )
@@ -232,15 +233,16 @@ fn issue_228_flow_state_condition_is_evaluated_at_resolution_and_then_locked() {
         },
     );
     let index = hand_index_for_card(&e, 0, "flow_state");
-    e.apply_command(0, &cast_spell(index, vec![])).unwrap();
+    e.apply_scenario_command(0, &cast_spell(index, vec![]))
+        .unwrap();
     inject_graveyard_card(&mut e, 0, "lightning_bolt");
     inject_graveyard_card(&mut e, 0, "divination");
-    e.apply_command(0, &pass()).unwrap();
-    let batch = e.apply_command(1, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
+    let batch = e.apply_scenario_command(1, &pass()).unwrap();
     assert_eq!(find_resolution_choice(&batch).unwrap().min, 2);
     // Simulate changing information after the resolution instruction was already applied.
     e.state.players[0].graveyard.clear();
-    e.apply_command(0, &submit_resolution_choice(top[..2].to_vec()))
+    e.apply_scenario_command(0, &submit_resolution_choice(top[..2].to_vec()))
         .unwrap();
     assert!(e.state.pending_resolution.is_none());
     assert!(top[..2]
@@ -259,12 +261,12 @@ fn issue_228_illegal_and_stale_choices_are_atomic_in_both_stages() {
     };
     answer.decision = tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline as i32;
     let before = serde_json::to_string(&e.state).unwrap();
-    assert!(e.apply_command(0, &decline).is_err());
+    assert!(e.apply_scenario_command(0, &decline).is_err());
     assert_eq!(serde_json::to_string(&e.state).unwrap(), before);
     for chosen in [vec![], vec![top[0], top[1]], vec![u32::MAX]] {
         let before = serde_json::to_string(&e.state).unwrap();
         assert!(e
-            .apply_command(0, &submit_resolution_choice(chosen))
+            .apply_scenario_command(0, &submit_resolution_choice(chosen))
             .is_err());
         assert_eq!(serde_json::to_string(&e.state).unwrap(), before);
     }
@@ -272,23 +274,23 @@ fn issue_228_illegal_and_stale_choices_are_atomic_in_both_stages() {
     *e.state.zone_change_generation.entry(top[2]).or_default() += 1;
     let before = serde_json::to_string(&e.state).unwrap();
     assert!(e
-        .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .is_err());
     assert_eq!(serde_json::to_string(&e.state).unwrap(), before);
     *e.state.zone_change_generation.get_mut(&top[2]).unwrap() -= 1;
-    e.apply_command(0, &submit_resolution_choice(vec![top[0]]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .unwrap();
     for chosen in [vec![top[1]], vec![top[1], top[1]], vec![top[0], top[2]]] {
         let before = serde_json::to_string(&e.state).unwrap();
         assert!(e
-            .apply_command(0, &submit_resolution_choice(chosen))
+            .apply_scenario_command(0, &submit_resolution_choice(chosen))
             .is_err());
         assert_eq!(serde_json::to_string(&e.state).unwrap(), before);
     }
     *e.state.zone_change_generation.entry(top[2]).or_default() += 1;
     let before = serde_json::to_string(&e.state).unwrap();
     assert!(e
-        .apply_command(0, &submit_resolution_choice(vec![top[1], top[2]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[1], top[2]]))
         .is_err());
     assert_eq!(serde_json::to_string(&e.state).unwrap(), before);
 }
@@ -303,10 +305,10 @@ fn issue_228_two_card_selection_rejects_duplicates_and_replays_deterministically
         issue_228_resolve(&mut e, "flow_state");
         let before = serde_json::to_value(&e.state).unwrap();
         assert!(e
-            .apply_command(0, &submit_resolution_choice(vec![top[0], top[0]]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![top[0], top[0]]))
             .is_err());
         assert_eq!(serde_json::to_value(&e.state).unwrap(), before);
-        e.apply_command(0, &submit_resolution_choice(vec![top[2], top[0]]))
+        e.apply_scenario_command(0, &submit_resolution_choice(vec![top[2], top[0]]))
             .unwrap();
         assert!(e.state.players[0].hand.contains(&top[2]));
         assert!(e.state.players[0].hand.contains(&top[0]));
@@ -370,7 +372,7 @@ fn commune_uses_images_for_all_looked_cards_then_orders_the_remainder() {
     ));
 
     let order_batch = e
-        .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .expect("choose Grizzly Bears");
     let reveal = order_batch
         .events
@@ -412,7 +414,7 @@ fn commune_uses_images_for_all_looked_cards_then_orders_the_remainder() {
     ));
 
     let submitted = vec![top[4], top[3], top[2], top[1]];
-    e.apply_command(0, &submit_resolution_choice(submitted.clone()))
+    e.apply_scenario_command(0, &submit_resolution_choice(submitted.clone()))
         .expect("submit bottom order");
     assert!(e.state.pending_resolution.is_none());
     let library: Vec<u32> = e.state.players[0].library.iter().copied().collect();
@@ -459,18 +461,19 @@ fn brightwood_rejects_noncreatures_and_random_order_is_replay_deterministic() {
             },
         );
 
-        e.apply_command(0, &activate_ability(tracker, 0, vec![]))
+        e.apply_scenario_command(0, &activate_ability(tracker, 0, vec![]))
             .expect("activate Tracker");
         assert!(e.state.objects[&tracker].tapped, "the tap cost is paid");
-        e.apply_command(0, &pass()).expect("controller pass");
-        let batch = e.apply_command(1, &pass()).expect("opponent pass");
+        e.apply_scenario_command(0, &pass())
+            .expect("controller pass");
+        let batch = e.apply_scenario_command(1, &pass()).expect("opponent pass");
         let choose = find_resolution_choice(&batch).expect("look choice");
         assert_eq!(choose.candidate_object_ids, top[..4]);
         assert_eq!(choose.candidate_selectable, [false, true, false, true]);
 
         let before: Vec<u32> = e.state.players[0].library.iter().copied().collect();
         assert!(
-            e.apply_command(0, &submit_resolution_choice(vec![top[0]]))
+            e.apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
                 .is_err(),
             "a noncreature image is not a legal submission"
         );
@@ -485,7 +488,7 @@ fn brightwood_rejects_noncreatures_and_random_order_is_replay_deterministic() {
             "rejection preserves the pending choice and library"
         );
 
-        e.apply_command(0, &submit_resolution_choice(vec![top[1]]))
+        e.apply_scenario_command(0, &submit_resolution_choice(vec![top[1]]))
             .expect("choose creature");
         assert!(e.state.pending_resolution.is_none());
         assert!(e.state.players[0].hand.contains(&top[1]));

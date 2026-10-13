@@ -128,6 +128,9 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
     let mut stack = ParkedStackResolution::new(cx.top.clone());
     stack.resume_effect_index = Some(cx.effect_index + 1);
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: controller,
         presentation: PendingResolutionPresentation {
             source_object_id: source_id,
@@ -192,6 +195,9 @@ pub(super) fn madness_cast(
     let mut stack = ParkedStackResolution::new(cx.top.clone());
     stack.resume_effect_index = Some(cx.effect_index + 1);
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: cx.top.controller,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
@@ -661,6 +667,7 @@ pub(in crate::engine) fn park_player_set_discard_choice(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -694,6 +701,9 @@ pub(in crate::engine) fn park_player_set_discard_choice(
     });
     events.push(ev_log(prompt.clone()));
     engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: choice.player,
         presentation: PendingResolutionPresentation {
             source_object_id: stack.item.id,
@@ -1298,6 +1308,7 @@ pub(super) fn put_in_owners_library(
             cx.events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        resolution_prompt_id: 0,
                         accepted_permanent_selections: Vec::new(),
                         variable_mana_contribution: false,
                         candidate_token_identities: Vec::new(),
@@ -1357,6 +1368,9 @@ pub(super) fn put_in_owners_library(
             });
             cx.events.push(ev_log(prompt.clone()));
             cx.engine.state.pending_resolution = Some(PendingResolution {
+                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                resolution_prompt_semantics: None,
+
                 deciding_player: owner,
                 presentation: PendingResolutionPresentation {
                     source_object_id: cx.top.id,
@@ -2086,6 +2100,7 @@ fn choose_hand_cards_for_player(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -2129,6 +2144,8 @@ fn choose_hand_cards_for_player(
     });
     events.push(ev_log(prompt.clone()));
     engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
         deciding_player,
         presentation: PendingResolutionPresentation {
             source_object_id: top.id,
@@ -2216,6 +2233,7 @@ pub(super) fn select_hand_cards_for_program(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 deciding_player_id: top.controller,
                 source_object_id: top.id,
                 prompt_text: prompt.clone(),
@@ -2234,6 +2252,9 @@ pub(super) fn select_hand_cards_for_program(
     });
     events.push(ev_log(prompt.clone()));
     engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: top.controller,
         presentation: PendingResolutionPresentation {
             source_object_id: top.id,
@@ -2531,6 +2552,7 @@ pub(super) fn target_player_sacrifices(
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            resolution_prompt_id: 0,
                             accepted_permanent_selections: Vec::new(),
                             variable_mana_contribution: false,
                             candidate_token_identities: Vec::new(),
@@ -2566,6 +2588,9 @@ pub(super) fn target_player_sacrifices(
                 });
                 events.push(ev_log(prompt.clone()));
                 engine.state.pending_resolution = Some(PendingResolution {
+                    resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                    resolution_prompt_semantics: None,
+
                     deciding_player: pid,
                     presentation: PendingResolutionPresentation {
                         source_object_id: top.id,
@@ -2667,6 +2692,7 @@ pub(super) fn choose_graveyard_card(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -2703,6 +2729,9 @@ pub(super) fn choose_graveyard_card(
     });
     cx.events.push(ev_log(prompt.clone()));
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: controller,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
@@ -2904,6 +2933,7 @@ fn choose_linked_exiled_card_action(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -2940,6 +2970,9 @@ fn choose_linked_exiled_card_action(
     });
     cx.events.push(ev_log(prompt.clone()));
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: controller,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
@@ -3183,6 +3216,7 @@ impl GameEngine {
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        resolution_prompt_id: 0,
                         accepted_permanent_selections: Vec::new(),
                         variable_mana_contribution: false,
                         candidate_token_identities: Vec::new(),
@@ -3219,6 +3253,9 @@ impl GameEngine {
             });
             events.push(ev_log(prompt.clone()));
             self.state.pending_resolution = Some(PendingResolution {
+                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                resolution_prompt_semantics: None,
+
                 deciding_player: chooser,
                 presentation: PendingResolutionPresentation {
                     source_object_id: cohort.stack.item.id,
@@ -3472,6 +3509,7 @@ pub(super) fn return_different_named_permanents_from_graveyard(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -3508,6 +3546,9 @@ pub(super) fn return_different_named_permanents_from_graveyard(
     });
     cx.events.push(ev_log(prompt.clone()));
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: controller,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
@@ -5012,6 +5053,9 @@ fn resolve_library_cast_offer(
     let completion_for_no_cast = completion.clone();
     let stack_for_no_cast = stack.clone();
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: controller,
         presentation: PendingResolutionPresentation {
             source_object_id: stack.item.id,
@@ -5314,6 +5358,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
@@ -5352,6 +5397,9 @@ impl GameEngine {
             )),
         });
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+
             deciding_player: controller,
             presentation: PendingResolutionPresentation {
                 source_object_id: stack.item.id,
@@ -5445,6 +5493,7 @@ pub(super) fn thassa_oracle(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engi
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -5477,6 +5526,9 @@ pub(super) fn thassa_oracle(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engi
         )),
     });
     engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: controller,
         presentation: PendingResolutionPresentation {
             source_object_id: top.id,
@@ -5589,6 +5641,7 @@ fn begin_library_partition(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -5632,6 +5685,9 @@ fn begin_library_partition(
         controller,
     ));
     engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: controller,
         presentation: PendingResolutionPresentation {
             source_object_id: top.id,
@@ -5767,6 +5823,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -5807,6 +5864,9 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
         controller,
     ));
     engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: controller,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
@@ -5897,6 +5957,7 @@ fn look_choose_battlefield(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -5937,6 +5998,9 @@ fn look_choose_battlefield(
         controller,
     ));
     engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: controller,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
@@ -6030,6 +6094,7 @@ pub(super) fn look_choose_to_hand(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -6070,6 +6135,9 @@ pub(super) fn look_choose_to_hand(
         controller,
     ));
     engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: controller,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
@@ -6156,6 +6224,7 @@ pub(super) fn hideaway(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -6196,6 +6265,9 @@ pub(super) fn hideaway(
         controller,
     ));
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: controller,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
@@ -6496,6 +6568,7 @@ pub(in crate::engine) fn park_zone_search_choice(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -6533,6 +6606,9 @@ pub(in crate::engine) fn park_zone_search_choice(
     });
     events.push(ev_log(prompt.clone()));
     engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: searcher,
         presentation: PendingResolutionPresentation {
             source_object_id: top.id,
@@ -6628,6 +6704,7 @@ pub(in crate::engine) fn begin_search_request(
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        resolution_prompt_id: 0,
                         accepted_permanent_selections: Vec::new(),
                         variable_mana_contribution: false,
                         candidate_token_identities: Vec::new(),
@@ -6661,6 +6738,9 @@ pub(in crate::engine) fn begin_search_request(
             });
             events.push(ev_log(prompt.clone()));
             engine.state.pending_resolution = Some(PendingResolution {
+                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                resolution_prompt_semantics: None,
+
                 deciding_player: searcher,
                 presentation: PendingResolutionPresentation {
                     source_object_id: top.id,
@@ -6739,6 +6819,7 @@ pub(super) fn search_library(
         cx.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
@@ -6780,6 +6861,9 @@ pub(super) fn search_library(
         });
         cx.events.push(ev_log(prompt.clone()));
         cx.engine.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+
             deciding_player: searcher,
             presentation: PendingResolutionPresentation {
                 source_object_id: cx.top.id,

@@ -870,8 +870,11 @@ impl GameEngine {
                         format!("P{controller}: play {card_label} without paying its mana cost?")
                     }
                 };
-                self.state.pending_resolution = Some(PendingResolution {
-                    deciding_player: controller,
+self.state.pending_resolution = Some(PendingResolution {
+                    resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                    resolution_prompt_semantics: None,
+
+            deciding_player: controller,
                     presentation: PendingResolutionPresentation {
                         source_object_id: stack.item.id,
                         candidates: vec![object_id],

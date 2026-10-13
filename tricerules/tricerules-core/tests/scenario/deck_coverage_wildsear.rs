@@ -1,9 +1,10 @@
 //! Wildsear's hand-enchantment grant and the captured Cascade resolution.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use std::collections::HashSet;
 use tricerules_cards::primitives::{SpellEffectKind, SpellKeyword};
-use tricerules_core::{EngineDeck, GameEngine, Zone};
+use tricerules_core::{EngineDeck, Zone};
 use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::dev_command::Dev;
 use tricerules_proto::ruled::v1::{
@@ -197,7 +198,7 @@ fn move_wildsear_to_graveyard(engine: &mut GameEngine, player: i32) {
         )),
     };
     engine
-        .apply_command(player, &command)
+        .apply_scenario_command(player, &command)
         .expect("remove Wildsear after the enchantment cast commits");
 }
 
@@ -261,7 +262,7 @@ fn wildsear_grants_cascade_to_hand_enchantments_and_decline_random_bottoms_the_e
     );
     let hand_index = hand_index_for_card(&engine, caster_index, "garruks_uprising");
     engine
-        .apply_command(caster, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(caster, &cast_spell(hand_index, Vec::new()))
         .expect("cast Garruk's Uprising from hand");
 
     let cascade = engine
@@ -287,11 +288,11 @@ fn wildsear_grants_cascade_to_hand_enchantments_and_decline_random_bottoms_the_e
 
     let first = engine.state.priority_player_id();
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first priority pass");
     let second = engine.state.priority_player_id();
     let cascade_batch = engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("resolve the captured Cascade trigger");
     let reveal = cascade_batch
         .events
@@ -344,7 +345,7 @@ fn wildsear_grants_cascade_to_hand_enchantments_and_decline_random_bottoms_the_e
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             caster,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -395,7 +396,7 @@ fn wildsear_does_not_grant_cascade_to_hand_cast_instants() {
     );
     let hand_index = hand_index_for_card(&engine, caster_index, "opt");
     engine
-        .apply_command(caster, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(caster, &cast_spell(hand_index, Vec::new()))
         .expect("cast Opt from hand");
 
     assert_eq!(engine.state.stack.len(), 1);
@@ -439,15 +440,15 @@ fn wildsear_cascade_without_a_qualifying_card_bottoms_the_entire_revealed_prefix
     );
     let hand_index = hand_index_for_card(&engine, caster_index, "garruks_uprising");
     engine
-        .apply_command(caster, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(caster, &cast_spell(hand_index, Vec::new()))
         .expect("cast Garruk's Uprising from hand");
     let first = engine.state.priority_player_id();
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first priority pass");
     let second = engine.state.priority_player_id();
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("resolve Cascade without a qualifying nonland card");
 
     assert!(engine.state.pending_resolution.is_none());
@@ -493,24 +494,25 @@ fn wildsear_cascade_casts_the_hit_for_free_and_bottoms_only_the_uncast_prefix() 
     );
     let hand_index = hand_index_for_card(&engine, caster_index, "garruks_uprising");
     engine
-        .apply_command(caster, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(caster, &cast_spell(hand_index, Vec::new()))
         .expect("cast Garruk's Uprising from hand");
     let first = engine.state.priority_player_id();
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first priority pass");
     let second = engine.state.priority_player_id();
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("resolve the Cascade trigger");
 
     let announcement = cascade_cast_announcement(&mut engine, caster, found);
     engine
-        .apply_command(
+        .apply_scenario_command(
             caster,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
                     rv1::SubmitResolutionChoice {
+                        resolution_prompt_id: 0,
                         decision: ResolutionChoiceDecision::CastSpell as i32,
                         spell_cast_announcement: Some(announcement),
                         ..Default::default()
@@ -527,7 +529,7 @@ fn wildsear_cascade_casts_the_hit_for_free_and_bottoms_only_the_uncast_prefix() 
         .expect("Cascade cast begins a payment transaction")
         .transaction_id;
     engine
-        .apply_command(
+        .apply_scenario_command(
             caster,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CancelSpellCast(
@@ -551,11 +553,12 @@ fn wildsear_cascade_casts_the_hit_for_free_and_bottoms_only_the_uncast_prefix() 
 
     let retry_announcement = cascade_cast_announcement(&mut engine, caster, found);
     engine
-        .apply_command(
+        .apply_scenario_command(
             caster,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
                     rv1::SubmitResolutionChoice {
+                        resolution_prompt_id: 0,
                         decision: ResolutionChoiceDecision::CastSpell as i32,
                         spell_cast_announcement: Some(retry_announcement),
                         ..Default::default()
@@ -572,7 +575,7 @@ fn wildsear_cascade_casts_the_hit_for_free_and_bottoms_only_the_uncast_prefix() 
         .expect("retry begins a fresh payment transaction")
         .transaction_id;
     engine
-        .apply_command(
+        .apply_scenario_command(
             caster,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CommitSpellCast(
@@ -632,7 +635,7 @@ fn wildsear_cascade_instances_keep_printed_and_exact_grant_provenance_after_addi
 
     let slot = hand_index_for_card(&engine, caster_index, "wildsear_cascade_cost_fixture");
     engine
-        .apply_command(
+        .apply_scenario_command(
             caster,
             &cast_spell_with_costs(slot, vec![], vec![permanent_cost_selection(0, sacrifice)]),
         )
@@ -733,7 +736,7 @@ fn wildsear_cascade_grant_ends_when_its_source_is_paid_as_an_additional_cost() {
 
     let slot = hand_index_for_card(&engine, caster_index, "wildsear_cascade_cost_fixture");
     engine
-        .apply_command(
+        .apply_scenario_command(
             caster,
             &cast_spell_with_costs(
                 slot,
@@ -799,7 +802,7 @@ fn wildsear_does_not_grant_cascade_to_an_enchantment_cast_from_the_graveyard() {
         })),
     };
     engine
-        .apply_command(caster, &command)
+        .apply_scenario_command(caster, &command)
         .expect("cast the enchantment from its graveyard by flashback");
 
     let cascade_triggers = engine
@@ -845,7 +848,7 @@ fn wildsear_trigger_resolves_after_its_source_enchantment_is_countered() {
     );
     let source_slot = hand_index_for_card(&engine, caster_index, "garruks_uprising");
     engine
-        .apply_command(caster, &cast_spell(source_slot, vec![]))
+        .apply_scenario_command(caster, &cast_spell(source_slot, vec![]))
         .expect("cast the enchantment that receives Cascade");
     assert!(engine
         .state
@@ -859,7 +862,7 @@ fn wildsear_trigger_resolves_after_its_source_enchantment_is_countered() {
         .any(|item| item.ability_text.as_deref() == Some("Cascade")));
 
     engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .expect("pass priority to the opponent");
     let counterspell = inject_card_into_hand(&mut engine, 1, "counterspell");
     give_mana(
@@ -872,7 +875,7 @@ fn wildsear_trigger_resolves_after_its_source_enchantment_is_countered() {
     );
     let counter_slot = hand_index_for_card(&engine, 1, "counterspell");
     engine
-        .apply_command(1, &cast_spell(counter_slot, stack_target(source)))
+        .apply_scenario_command(1, &cast_spell(counter_slot, stack_target(source)))
         .expect("counter the source spell while its Cascade trigger waits on the stack");
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
@@ -919,7 +922,7 @@ fn wildsear_cascade_restricts_adventure_faces_by_the_committed_spells_mana_value
     inject_card_into_hand(&mut engine, caster_index, "garruks_uprising");
     let source_slot = hand_index_for_card(&engine, caster_index, "garruks_uprising");
     engine
-        .apply_command(caster, &cast_spell(source_slot, vec![]))
+        .apply_scenario_command(caster, &cast_spell(source_slot, vec![]))
         .expect("cast the three-mana enchantment source");
     pass_priority_round(&mut engine);
 
@@ -965,16 +968,16 @@ fn wildsear_cascade_bottoms_a_hit_when_its_mandatory_additional_cost_cannot_be_p
     let source_slot =
         hand_index_for_card(&engine, caster_index, "high_cascade_enchantment_fixture");
     engine
-        .apply_command(caster, &cast_spell(source_slot, vec![]))
+        .apply_scenario_command(caster, &cast_spell(source_slot, vec![]))
         .expect("cast the high-value enchantment from hand");
     move_wildsear_to_graveyard(&mut engine, caster);
     let first = engine.state.priority_player_id();
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first priority pass");
     let second = engine.state.priority_player_id();
     let batch = engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("resolve Cascade with no payable additional cost");
 
     assert!(engine.state.pending_resolution.is_none());
@@ -1020,7 +1023,7 @@ fn wildsear_cascade_free_cast_still_pays_a_mandatory_additional_cost() {
     let source_slot =
         hand_index_for_card(&engine, caster_index, "high_cascade_enchantment_fixture");
     engine
-        .apply_command(caster, &cast_spell(source_slot, vec![]))
+        .apply_scenario_command(caster, &cast_spell(source_slot, vec![]))
         .expect("cast the six-mana enchantment that Wildsear grants Cascade to");
     assert_eq!(
         engine.state.players[caster_index].mana_pool,
@@ -1032,11 +1035,12 @@ fn wildsear_cascade_free_cast_still_pays_a_mandatory_additional_cost() {
     let mut announcement = cascade_cast_announcement(&mut engine, caster, hit);
     announcement.cost_selections = vec![permanent_cost_selection(0, sacrifice)];
     engine
-        .apply_command(
+        .apply_scenario_command(
             caster,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
                     rv1::SubmitResolutionChoice {
+                        resolution_prompt_id: 0,
                         decision: ResolutionChoiceDecision::CastSpell as i32,
                         spell_cast_announcement: Some(announcement),
                         ..Default::default()
@@ -1052,7 +1056,7 @@ fn wildsear_cascade_free_cast_still_pays_a_mandatory_additional_cost() {
         .expect("the free cast opens the normal two-phase payment transaction")
         .transaction_id;
     engine
-        .apply_command(
+        .apply_scenario_command(
             caster,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CommitSpellCast(
@@ -1114,7 +1118,7 @@ fn wildsear_cascade_on_a_cascade_hit_resolves_as_a_nested_trigger() {
     let source_slot =
         hand_index_for_card(&engine, caster_index, "high_cascade_enchantment_fixture");
     engine
-        .apply_command(caster, &cast_spell(source_slot, vec![]))
+        .apply_scenario_command(caster, &cast_spell(source_slot, vec![]))
         .expect("cast the hand enchantment and trigger granted Cascade");
     pass_priority_round(&mut engine);
     assert_eq!(
@@ -1129,11 +1133,12 @@ fn wildsear_cascade_on_a_cascade_hit_resolves_as_a_nested_trigger() {
     );
     let announcement = cascade_cast_announcement(&mut engine, caster, nested_hit);
     engine
-        .apply_command(
+        .apply_scenario_command(
             caster,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
                     rv1::SubmitResolutionChoice {
+                        resolution_prompt_id: 0,
                         decision: ResolutionChoiceDecision::CastSpell as i32,
                         spell_cast_announcement: Some(announcement),
                         ..Default::default()
@@ -1149,7 +1154,7 @@ fn wildsear_cascade_on_a_cascade_hit_resolves_as_a_nested_trigger() {
         .unwrap()
         .transaction_id;
     engine
-        .apply_command(
+        .apply_scenario_command(
             caster,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CommitSpellCast(
@@ -1256,7 +1261,7 @@ fn wildsear_cascade_declined_commander_hit_offers_the_command_zone_replacement()
     let source_slot =
         hand_index_for_card(&engine, caster_index, "high_cascade_enchantment_fixture");
     engine
-        .apply_command(caster, &cast_spell(source_slot, vec![]))
+        .apply_scenario_command(caster, &cast_spell(source_slot, vec![]))
         .expect("cast the hand enchantment and receive Cascade");
     pass_priority_round(&mut engine);
     assert_eq!(
@@ -1270,7 +1275,7 @@ fn wildsear_cascade_declined_commander_hit_offers_the_command_zone_replacement()
         [commander]
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             caster,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -1284,11 +1289,12 @@ fn wildsear_cascade_declined_commander_hit_offers_the_command_zone_replacement()
         Some(tricerules_core::state::ResolutionContinuation::SpecialCastCommanderCleanup { .. })
     ));
     engine
-        .apply_command(
+        .apply_scenario_command(
             caster,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
                     rv1::SubmitResolutionChoice {
+                        resolution_prompt_id: 0,
                         decision: ResolutionChoiceDecision::SelectBranch as i32,
                         selected_branch_index: 0,
                         ..Default::default()

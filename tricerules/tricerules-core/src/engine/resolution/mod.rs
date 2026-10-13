@@ -1447,6 +1447,9 @@ impl GameEngine {
             let prompt = format!("{spell_label}: apply the optional effect?");
             let apply_label = "Apply the optional effect".to_string();
             self.state.pending_resolution = Some(PendingResolution {
+                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                resolution_prompt_semantics: None,
+
                 deciding_player: top.controller,
                 presentation: PendingResolutionPresentation {
                     source_object_id: top.id,
@@ -1465,6 +1468,7 @@ impl GameEngine {
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        resolution_prompt_id: 0,
                         deciding_player_id: self
                             .state
                             .pending_resolution
@@ -2276,6 +2280,7 @@ impl GameEngine {
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            resolution_prompt_id: 0,
                             accepted_permanent_selections: Vec::new(),
                             variable_mana_contribution: false,
                             candidate_token_identities: Vec::new(),
@@ -2333,6 +2338,9 @@ impl GameEngine {
                 });
                 events.push(ev_log(prompt.clone()));
                 self.state.pending_resolution = Some(PendingResolution {
+                    resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                    resolution_prompt_semantics: None,
+
                     deciding_player: owner,
                     presentation: PendingResolutionPresentation {
                         source_object_id: exiled.object_id,
@@ -2470,9 +2478,14 @@ impl GameEngine {
         suspended_replacement_event: Option<crate::engine::replacement::PendingReplacementEvent>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
-        let Some(suspended_resolution) = suspended_resolution else {
+        let Some(mut suspended_resolution) = suspended_resolution else {
             return Ok(false);
         };
+        // Returning from a nested observer choice restores the saved operation, but creates a
+        // new externally answerable offer. Keep the exact private projection only as a source for
+        // re-publication after its current continuation and generation bindings are revalidated.
+        // The fresh zero ID forces the normal publisher to allocate a new correlation ID.
+        suspended_resolution.resolution_prompt_id = crate::state::ResolutionPromptId::UNASSIGNED;
         self.state.pending_resolution = Some(suspended_resolution);
         self.state.pending_replacement_event = suspended_replacement_event;
         if matches!(
@@ -2497,6 +2510,7 @@ impl GameEngine {
         if self.refresh_suspended_program_draw_replacement(events)?
             || self.refresh_suspended_program_discard_replacement(events)?
             || self.refresh_suspended_program_choice(events)?
+            || self.refresh_suspended_nonprogram_choice(events)?
         {
             return Ok(true);
         }
@@ -2509,6 +2523,7 @@ impl GameEngine {
                 }
             }
         }
+        self.republish_cached_resolution_choice(events)?;
         Ok(true)
     }
 
@@ -2624,6 +2639,121 @@ impl GameEngine {
         self.state.pending_replacement_event = None;
         let resumed =
             self.complete_parked_stack_with_previous(retry, EffectResult::default(), Vec::new())?;
+        events.extend(resumed.events);
+        Ok(true)
+    }
+
+    /// Re-evaluate a restored non-program choice leaf whose candidate cohort depends on current
+    /// battlefield state. Generation equality alone cannot make a cached offer safe after an
+    /// object left or lost eligibility. Rewind exactly the current effect in the parked standard
+    /// list and keep its already-completed prefix and previous-effect result.
+    fn refresh_suspended_nonprogram_choice(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        #[derive(Clone, Copy)]
+        enum ChooserLeaf {
+            ChoosePermanents,
+            MayBehold,
+            Proliferate,
+            Populate,
+            Amass,
+            Blight,
+            TargetPlayerSacrifices,
+        }
+
+        let Some(pending) = self.state.pending_resolution.as_ref() else {
+            return Ok(false);
+        };
+        let (stack, expected_leaf) = match &pending.continuation {
+            ResolutionContinuation::PermanentChoice { stack, .. } if stack.program.is_none() => {
+                (stack.clone(), ChooserLeaf::ChoosePermanents)
+            }
+            ResolutionContinuation::BeholdChoice { stack, .. } if stack.program.is_none() => {
+                (stack.clone(), ChooserLeaf::MayBehold)
+            }
+            ResolutionContinuation::Proliferate { stack, .. } if stack.program.is_none() => {
+                (stack.clone(), ChooserLeaf::Proliferate)
+            }
+            ResolutionContinuation::Populate { stack, .. } if stack.program.is_none() => {
+                (stack.clone(), ChooserLeaf::Populate)
+            }
+            ResolutionContinuation::AmassChoice { stack, .. } if stack.program.is_none() => {
+                (stack.clone(), ChooserLeaf::Amass)
+            }
+            ResolutionContinuation::Blight { stack, .. } if stack.program.is_none() => {
+                (stack.clone(), ChooserLeaf::Blight)
+            }
+            ResolutionContinuation::Sacrifice { stack } if stack.program.is_none() => {
+                (stack.clone(), ChooserLeaf::TargetPlayerSacrifices)
+            }
+            _ => return Ok(false),
+        };
+        if !self.resolution_prompt_should_be_active(pending) {
+            return Ok(false);
+        }
+        if self
+            .state
+            .player_idx(stack.item.controller)
+            .is_none_or(|index| self.state.players[index].has_lost)
+        {
+            return Err(EngineError::ProgramInvariant(
+                "restored choice belongs to a departed resolution controller",
+            ));
+        }
+        let leaf_index = stack
+            .resume_effect_index
+            .and_then(|next| next.checked_sub(1))
+            .ok_or(EngineError::ProgramInvariant(
+                "restored choice has no current effect index",
+            ))?;
+        let (mut effects, spell_label) = self.build_resolution_effects(&stack.item);
+        let expected_leaf_matches = |effect: &SpellEffectKind| match expected_leaf {
+            ChooserLeaf::ChoosePermanents => {
+                matches!(effect, SpellEffectKind::ChoosePermanents { .. })
+            }
+            ChooserLeaf::MayBehold => matches!(effect, SpellEffectKind::MayBehold { .. }),
+            ChooserLeaf::Proliferate => matches!(effect, SpellEffectKind::Proliferate),
+            ChooserLeaf::Populate => matches!(effect, SpellEffectKind::Populate),
+            ChooserLeaf::Amass => matches!(effect, SpellEffectKind::Amass { .. }),
+            ChooserLeaf::Blight => matches!(effect, SpellEffectKind::Blight { .. }),
+            ChooserLeaf::TargetPlayerSacrifices => {
+                matches!(effect, SpellEffectKind::TargetPlayerSacrifices { .. })
+            }
+        };
+        let Some(current_effect) = effects.get(leaf_index as usize) else {
+            return Err(EngineError::ProgramInvariant(
+                "restored non-program choice does not point to its current chooser leaf",
+            ));
+        };
+        let mut entered_effect = &current_effect.effect;
+        while let SpellEffectKind::Conditional { effect, .. }
+        | SpellEffectKind::ConditionalCastCost { effect, .. } = entered_effect
+        {
+            entered_effect = effect;
+        }
+        if !expected_leaf_matches(entered_effect) {
+            return Err(EngineError::ProgramInvariant(
+                "restored non-program choice does not point to its current chooser leaf",
+            ));
+        }
+        let entered_effect = entered_effect.clone();
+        effects[leaf_index as usize].effect = entered_effect;
+
+        let previous_result = stack.previous_result.clone();
+        let mut retry = stack;
+        retry.resume_effect_index = Some(leaf_index);
+        self.state.pending_resolution = None;
+        self.state.pending_replacement_event = None;
+        let resume_effect_index = retry.resume_effect_index;
+        let resumed = self.complete_parked_resolution_with_effects_and_previous(
+            retry.item,
+            resume_effect_index,
+            effects,
+            spell_label,
+            previous_result,
+            Vec::new(),
+        )?;
         events.extend(resumed.events);
         Ok(true)
     }
@@ -4281,6 +4411,21 @@ mod anthem_scope_tests {
 mod attached_subject_tests {
     use super::*;
 
+    fn publish_current_special_cast_prompt_id(engine: &mut GameEngine) -> u64 {
+        let mut events = vec![engine
+            .resolution_payment_choice_event()
+            .expect("special-cast offer is publishable")];
+        engine
+            .publish_resolution_prompt_ids(&mut events)
+            .expect("special-cast prompt ID is allocated");
+        match events[0].ev.as_ref() {
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => {
+                choice.resolution_prompt_id
+            }
+            _ => unreachable!("special-cast offer emits a resolution choice"),
+        }
+    }
+
     fn add_battlefield_object(
         engine: &mut GameEngine,
         controller: PlayerId,
@@ -4433,9 +4578,11 @@ mod attached_subject_tests {
         );
 
         let (effects, label) = engine.build_resolution_effects(&item);
+        let mut events = Vec::new();
         engine
-            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .run_effect_list(&item, &label, effects, 0, &mut events)
             .unwrap();
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
         (source, item)
     }
 
@@ -4496,11 +4643,15 @@ mod attached_subject_tests {
 
     fn reserve_linked_spell_for_test(engine: &mut GameEngine, object_id: ObjectId) -> u64 {
         engine
-            .submit_resolution_choice(
+            .apply_scenario_command(
                 0,
-                &rv1::SubmitResolutionChoice {
-                    chosen_object_ids: vec![object_id],
-                    ..Default::default()
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![object_id],
+                            ..Default::default()
+                        },
+                    )),
                 },
             )
             .unwrap();
@@ -4516,7 +4667,7 @@ mod attached_subject_tests {
             ..Default::default()
         };
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -4643,7 +4794,7 @@ mod attached_subject_tests {
         engine.state.players[0].life = 0;
         let player = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(
+            .apply_scenario_command(
                 player,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -4672,7 +4823,7 @@ mod attached_subject_tests {
         );
         let index = engine.state.command_index;
         assert!(engine
-            .apply_command(
+            .apply_scenario_command(
                 player,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -4754,6 +4905,137 @@ mod attached_subject_tests {
         ability.effect = effects;
         item.triggered_ability = Some(ability);
         item
+    }
+
+    #[test]
+    fn restored_vow_chooser_does_not_reevaluate_its_entered_condition() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            507_117,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("two-player engine");
+        let creature = add_battlefield_object(&mut engine, 0, "dwarven_priest");
+        let first_equipment = add_battlefield_object(&mut engine, 0, "bonesplitter");
+        let second_equipment = add_battlefield_object(&mut engine, 0, "vulshok_morningstar");
+        let mut item = triggered_item(80_117, 0);
+        item.card_id = "vow_to_erebor".to_string();
+        item.ability_text = None;
+        item.source_permanent_id = None;
+        item.is_triggered = false;
+        item.triggered_ability = None;
+        item.ability_index = None;
+        item.targets = vec![StackTarget {
+            object_id: creature,
+            required_controller: None,
+            group_index: 0,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            zone_change_generation: Some(0),
+        }];
+
+        let (effects, spell_label) = engine.build_resolution_effects(&item);
+        let mut initial_events = Vec::new();
+        engine
+            .run_effect_list(&item, &spell_label, effects, 0, &mut initial_events)
+            .expect("Vow reaches its Dwarf-gated Equipment chooser");
+        engine
+            .publish_resolution_prompt_ids(&mut initial_events)
+            .expect("initial Vow prompt receives an ID");
+        let original_prompt_id = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the entered chooser is pending")
+            .resolution_prompt_id
+            .get();
+        assert_ne!(original_prompt_id, 0);
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .candidates,
+            [first_equipment, second_equipment]
+        );
+        assert!(!engine.state.objects[&creature].tapped);
+        assert_eq!(engine.effective_power(creature), Some(4));
+
+        engine.state.objects.get_mut(&creature).unwrap().card_id = "grizzly_bears".to_string();
+        assert!(engine
+            .characteristics(creature)
+            .is_some_and(|characteristics| !characteristics.has_type("Dwarf")));
+
+        let mut refreshed_events = Vec::new();
+        assert!(engine
+            .refresh_suspended_nonprogram_choice(&mut refreshed_events)
+            .expect("the already-entered chooser refreshes without reevaluating its condition"));
+        engine
+            .publish_resolution_prompt_ids(&mut refreshed_events)
+            .expect("refreshed Vow prompt receives a fresh ID");
+        let refreshed = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the chooser remains active after its condition becomes false");
+        let refreshed_prompt_id = refreshed.resolution_prompt_id.get();
+        assert_ne!(refreshed_prompt_id, original_prompt_id);
+        assert_eq!(
+            refreshed.presentation.candidates,
+            [first_equipment, second_equipment]
+        );
+        assert_eq!(engine.effective_power(creature), Some(4));
+
+        assert!(engine
+            .apply_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            resolution_prompt_id: original_prompt_id,
+                            chosen_object_ids: vec![first_equipment],
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .is_err());
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .resolution_prompt_id
+                .get(),
+            refreshed_prompt_id,
+            "a stale answer leaves the current chooser intact"
+        );
+        engine
+            .apply_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            resolution_prompt_id: refreshed_prompt_id,
+                            chosen_object_ids: vec![first_equipment],
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect("the refreshed offer resolves the selected Equipment and tail");
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(
+            engine.state.objects[&first_equipment].attached_to,
+            Some(crate::state::AttachmentRecipient::Object(creature))
+        );
+        assert_eq!(engine.state.objects[&second_equipment].attached_to, None);
     }
 
     #[test]
@@ -5300,6 +5582,7 @@ mod attached_subject_tests {
                 },
             )
             .unwrap();
+        let prompt_id = publish_current_special_cast_prompt_id(&mut engine);
         assert_eq!(
             engine.special_cast_permission(0).unwrap().scope,
             ExilePlayPermissionScope::PlayCard
@@ -5307,6 +5590,7 @@ mod attached_subject_tests {
 
         let play_land = rv1::RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                resolution_prompt_id: prompt_id,
                 source: Some(rv1::LandSource {
                     location: Some(rv1::land_source::Location::ExileObjectId(land)),
                     expected_zone_change_generation: Some(land_generation),
@@ -5318,7 +5602,7 @@ mod attached_subject_tests {
         assert!(engine.initial_response_batch().legal_by_player[&0]
             .zone_land_actions
             .is_empty());
-        assert!(engine.apply_command(0, &play_land).is_err());
+        assert!(engine.apply_scenario_command(0, &play_land).is_err());
         assert!(engine.state.pending_resolution.is_some());
 
         engine.state.active_player_idx = 0;
@@ -5326,7 +5610,7 @@ mod attached_subject_tests {
         assert!(engine.initial_response_batch().legal_by_player[&0]
             .zone_land_actions
             .is_empty());
-        assert!(engine.apply_command(0, &play_land).is_err());
+        assert!(engine.apply_scenario_command(0, &play_land).is_err());
         assert!(engine.state.pending_resolution.is_some());
 
         engine.state.lands_played_this_turn = 0;
@@ -5334,7 +5618,7 @@ mod attached_subject_tests {
             .zone_land_actions
             .iter()
             .any(|action| action.object_id == land));
-        engine.apply_command(0, &play_land).unwrap();
+        engine.apply_scenario_command(0, &play_land).unwrap();
         assert_eq!(engine.state.objects[&land].zone, Zone::Battlefield);
         assert_eq!(engine.state.lands_played_this_turn, 1);
         assert_eq!(engine.state.players[0].life, 22);
@@ -5469,9 +5753,11 @@ mod attached_subject_tests {
                 },
             )
             .unwrap();
+        let prompt_id = publish_current_special_cast_prompt_id(&mut engine);
 
         let hand_play = rv1::RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                resolution_prompt_id: prompt_id,
                 source: Some(rv1::LandSource {
                     location: Some(rv1::land_source::Location::HandIndex(0)),
                     expected_zone_change_generation: None,
@@ -5479,7 +5765,7 @@ mod attached_subject_tests {
                 face_index: 0,
             })),
         };
-        assert!(engine.apply_command(0, &hand_play).is_err());
+        assert!(engine.apply_scenario_command(0, &hand_play).is_err());
         assert_eq!(engine.state.objects[&hand_land].zone, Zone::Hand);
         assert!(engine.state.pending_resolution.is_some());
 
@@ -5497,6 +5783,7 @@ mod attached_subject_tests {
         ] {
             let play = rv1::RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                    resolution_prompt_id: prompt_id,
                     source: Some(rv1::LandSource {
                         location: Some(location),
                         expected_zone_change_generation: Some(generation),
@@ -5505,7 +5792,7 @@ mod attached_subject_tests {
                 })),
             };
             assert!(
-                engine.apply_command(0, &play).is_err(),
+                engine.apply_scenario_command(0, &play).is_err(),
                 "object {object_id}"
             );
             assert!(engine.state.pending_resolution.is_some());
@@ -5629,8 +5916,10 @@ mod attached_subject_tests {
                     },
                 )
                 .unwrap();
+            let prompt_id = publish_current_special_cast_prompt_id(&mut engine);
             let play = rv1::RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                    resolution_prompt_id: prompt_id,
                     source: Some(rv1::LandSource {
                         location: Some(rv1::land_source::Location::ExileObjectId(land)),
                         expected_zone_change_generation: Some(generations[index]),
@@ -5638,7 +5927,7 @@ mod attached_subject_tests {
                     face_index: 0,
                 })),
             };
-            engine.apply_command(0, &play).unwrap();
+            engine.apply_scenario_command(0, &play).unwrap();
             if index == 0 {
                 let next_choice = engine
                     .state
@@ -5863,11 +6152,13 @@ mod attached_subject_tests {
                 },
             )
             .unwrap();
+        let prompt_id = publish_current_special_cast_prompt_id(&mut engine);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        resolution_prompt_id: prompt_id,
                         source: Some(rv1::LandSource {
                             location: Some(rv1::land_source::Location::ExileObjectId(
                                 replaced_land,
@@ -5974,11 +6265,13 @@ mod attached_subject_tests {
                 },
             )
             .unwrap();
+        let prompt_id = publish_current_special_cast_prompt_id(&mut engine);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        resolution_prompt_id: prompt_id,
                         source: Some(rv1::LandSource {
                             location: Some(rv1::land_source::Location::ExileObjectId(passage)),
                             expected_zone_change_generation: Some(passage_generation),
@@ -6162,11 +6455,13 @@ mod attached_subject_tests {
                 },
             )
             .unwrap();
+        let prompt_id = publish_current_special_cast_prompt_id(&mut engine);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        resolution_prompt_id: prompt_id,
                         source: Some(rv1::LandSource {
                             location: Some(rv1::land_source::Location::ExileObjectId(passage)),
                             expected_zone_change_generation: Some(passage_generation),
@@ -6297,11 +6592,13 @@ mod attached_subject_tests {
                 },
             )
             .unwrap();
+        let prompt_id = publish_current_special_cast_prompt_id(&mut engine);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        resolution_prompt_id: prompt_id,
                         source: Some(rv1::LandSource {
                             location: Some(rv1::land_source::Location::ExileObjectId(passage)),
                             expected_zone_change_generation: Some(passage_generation),
@@ -6402,11 +6699,13 @@ mod attached_subject_tests {
                 },
             )
             .unwrap();
+        let prompt_id = publish_current_special_cast_prompt_id(&mut engine);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        resolution_prompt_id: prompt_id,
                         source: Some(rv1::LandSource {
                             location: Some(rv1::land_source::Location::ExileObjectId(passage)),
                             expected_zone_change_generation: Some(passage_generation),
@@ -6530,11 +6829,13 @@ mod attached_subject_tests {
                 },
             )
             .unwrap();
+        let prompt_id = publish_current_special_cast_prompt_id(&mut engine);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        resolution_prompt_id: prompt_id,
                         source: Some(rv1::LandSource {
                             location: Some(rv1::land_source::Location::ExileObjectId(passage)),
                             expected_zone_change_generation: Some(passage_generation),
@@ -6607,11 +6908,13 @@ mod attached_subject_tests {
                 },
             )
             .unwrap();
+        let prompt_id = publish_current_special_cast_prompt_id(&mut engine);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        resolution_prompt_id: prompt_id,
                         source: Some(rv1::LandSource {
                             location: Some(rv1::land_source::Location::ExileObjectId(passage)),
                             expected_zone_change_generation: Some(passage_generation),
@@ -6741,7 +7044,7 @@ mod attached_subject_tests {
         );
         assert_eq!(pending.presentation.candidates, [remaining_spell]);
         assert!(engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::CancelSpellCast(
@@ -6881,15 +7184,21 @@ mod attached_subject_tests {
         );
 
         let (effects, label) = engine.build_resolution_effects(&item);
+        let mut events = Vec::new();
         engine
-            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .run_effect_list(&item, &label, effects, 0, &mut events)
             .unwrap();
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
         engine
-            .submit_resolution_choice(
+            .apply_scenario_command(
                 0,
-                &rv1::SubmitResolutionChoice {
-                    chosen_object_ids: vec![linked_cards[0]],
-                    ..Default::default()
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![linked_cards[0]],
+                            ..Default::default()
+                        },
+                    )),
                 },
             )
             .unwrap();
@@ -6904,7 +7213,7 @@ mod attached_subject_tests {
             ..Default::default()
         };
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -6924,7 +7233,7 @@ mod attached_subject_tests {
             .unwrap()
             .transaction_id;
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::CancelSpellCast(
@@ -7114,7 +7423,7 @@ mod attached_subject_tests {
             [departed_owner_land, remaining_land]
         );
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
@@ -8152,14 +8461,14 @@ mod attached_subject_tests {
         let pass = RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
         };
-        engine.apply_command(0, &pass).unwrap();
+        engine.apply_scenario_command(0, &pass).unwrap();
         engine.state.untapped_this_command.push(archive);
         let before = engine.diagnostic_snapshot().unwrap();
         let zones = engine.private_zone_cache.clone();
         let battlefield = engine.battlefield_view_cache.clone();
         let strike = engine.first_strike_step_pending_cache;
         assert!(matches!(
-            engine.apply_command(1, &pass),
+            engine.apply_scenario_command(1, &pass),
             Err(EngineError::LifeNumericRange(_))
         ));
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
@@ -8181,7 +8490,7 @@ mod attached_subject_tests {
             amount: Amount::Fixed(1),
         };
         let hand = engine.state.players[0].hand.len();
-        engine.apply_command(1, &pass).unwrap();
+        engine.apply_scenario_command(1, &pass).unwrap();
         assert_eq!(engine.state.players[0].hand.len(), hand + 2);
         assert_eq!(engine.state.players[0].life, 22);
     }
@@ -8212,11 +8521,11 @@ mod attached_subject_tests {
             cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
         };
         for player in [0, 1, 2] {
-            engine.apply_command(player, &pass).unwrap();
+            engine.apply_scenario_command(player, &pass).unwrap();
         }
         let before = engine.diagnostic_snapshot().unwrap();
         assert!(matches!(
-            engine.apply_command(3, &pass),
+            engine.apply_scenario_command(3, &pass),
             Err(EngineError::LifeNumericRange("opponent drain sum"))
         ));
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
@@ -9152,6 +9461,7 @@ mod attached_subject_tests {
             engine.state.stack.push(item);
             let mut events = Vec::new();
             engine.resolve_top_of_stack(&mut events).unwrap();
+            engine.publish_resolution_prompt_ids(&mut events).unwrap();
             assert!(engine.state.pending_resolution.is_some());
             assert_eq!(
                 engine.state.objects[&oid].zone,
@@ -9196,10 +9506,10 @@ mod attached_subject_tests {
             };
             let history = engine.state.turn_history.clone();
             let command_index = engine.state.command_index;
-            assert!(engine.apply_command(1, &command).is_err());
+            assert!(engine.apply_scenario_command(1, &command).is_err());
             assert_eq!(engine.state.turn_history, history);
             assert_eq!(engine.state.command_index, command_index);
-            engine.apply_command(0, &command).unwrap();
+            engine.apply_scenario_command(0, &command).unwrap();
             assert!(engine.state.pending_resolution.is_none());
             assert!(engine.state.deferred_graveyard_entry.is_none());
             assert_eq!(
@@ -9211,7 +9521,7 @@ mod attached_subject_tests {
                     .len(),
                 1
             );
-            assert!(engine.apply_command(0, &command).is_err());
+            assert!(engine.apply_scenario_command(0, &command).is_err());
             assert_eq!(
                 engine
                     .state
@@ -9445,6 +9755,7 @@ mod attached_subject_tests {
             engine
                 .run_effect_list(&item, &label, effects, 0, &mut events)
                 .unwrap();
+            engine.publish_resolution_prompt_ids(&mut events).unwrap();
             if power > 0 {
                 let candidates = engine
                     .state
@@ -9602,6 +9913,7 @@ mod attached_subject_tests {
             engine
                 .run_effect_list(&item, &label, effects, 0, &mut events)
                 .unwrap();
+            engine.publish_resolution_prompt_ids(&mut events).unwrap();
             assert_eq!(
                 engine
                     .state
@@ -9623,6 +9935,13 @@ mod attached_subject_tests {
                 } as i32,
                 ..Default::default()
             };
+            answer.resolution_prompt_id = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("the soft-counter offer is active")
+                .resolution_prompt_id
+                .get();
             if power > 0 {
                 assert!(engine.submit_resolution_choice(1, &answer).is_err());
                 assert!(engine
@@ -9637,7 +9956,7 @@ mod attached_subject_tests {
                 engine.reconcile_activated_ability_slots();
                 for (index, treasure) in treasures.iter().enumerate() {
                     engine
-                        .apply_command(
+                        .apply_scenario_command(
                             1,
                             &RuledCommand {
                                 cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
@@ -9672,6 +9991,13 @@ mod attached_subject_tests {
             } else {
                 engine.state.players[1].mana_pool.colorless = power;
             }
+            answer.resolution_prompt_id = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("the soft-counter offer remains active")
+                .resolution_prompt_id
+                .get();
             if !decline {
                 let preview = engine.preview_payment(
                     1,

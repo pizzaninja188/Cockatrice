@@ -5,6 +5,7 @@
 //! Oracle and rulings checked 2026-09-14. CR 115.1c/115.2, 400.3/400.5/400.7, 401, 602.1, and
 //! 608.2b govern the targeted activated ability, owned zones, library order, zone-change identity,
 //! activation, and resolution revalidation.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::{EngineError, Zone};
@@ -105,7 +106,7 @@ fn issue_283_targets_only_controller_graveyard_and_bottoms_owned_library() {
             },
         );
         let error = engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_ability_for(&engine, source, 0, graveyard_target(illegal)),
             )
@@ -123,7 +124,7 @@ fn issue_283_targets_only_controller_graveyard_and_bottoms_owned_library() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&engine, source, 0, graveyard_target(own_first)),
         )
@@ -155,7 +156,7 @@ fn issue_283_revalidates_current_graveyard_generation_before_resolution() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&engine, source, 0, graveyard_target(target)),
         )
@@ -185,7 +186,7 @@ fn issue_283_sole_target_removal_fizzles_without_moving_card() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&engine, source, 0, graveyard_target(target)),
         )

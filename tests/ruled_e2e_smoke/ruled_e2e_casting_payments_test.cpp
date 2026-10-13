@@ -1866,6 +1866,8 @@ TEST_F(RuledE2ESmokeTest, ConvokeAndWaterbendPreviewsArePrivateReadOnlyAndCommit
     waterbendPreview->set_transaction_id(147);
     waterbendPreview->set_revision(1);
     auto *resolution = waterbendPreview->mutable_resolution_choice();
+    ASSERT_NE(p1.pendingChoice->resolution_prompt_id(), 0u);
+    resolution->set_resolution_prompt_id(p1.pendingChoice->resolution_prompt_id());
     resolution->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
     resolution->mutable_payment()->mutable_mana()->set_u(1);
     auto *object = resolution->mutable_payment()->add_waterbend();

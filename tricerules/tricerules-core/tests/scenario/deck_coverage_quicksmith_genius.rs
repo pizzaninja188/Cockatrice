@@ -3,9 +3,10 @@
 //! Oracle text and the Scryfall rulings endpoint were checked on 2026-09-26; no rulings were
 //! returned. CR 603.2/603.3 governs artifact-entry triggers. CR 118.12 makes the optional discard
 //! the resolving action, and CR 701.9/121.1 govern the discard and subsequent draw.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ChoiceKind;
 
 const QUICKSMITH_GENIUS: &str = "quicksmith_genius";
@@ -34,10 +35,10 @@ fn resolve_top_stack_item(engine: &mut GameEngine) -> tricerules_proto::ruled::v
         engine.state.players[0].id
     };
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first player passes priority");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second player passes priority and the top item resolves")
 }
 
@@ -55,7 +56,7 @@ fn cast_sol_ring_and_resolve_quicksmith_trigger(
     );
     let slot = hand_index_for_card(engine, 0, "sol_ring");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Sol Ring");
 
     let _ = resolve_top_stack_item(engine);
@@ -92,7 +93,7 @@ fn quicksmith_genius_loots_once_for_each_controlled_artifact_entry() {
     assert_eq!(engine.state.players[0].library.len(), library_before);
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![discarded]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discarded]))
         .expect("discard the selected card");
     assert_eq!(engine.state.objects[&discarded].zone, Zone::Graveyard);
     assert_eq!(engine.state.players[0].library.len(), library_before - 1);
@@ -116,7 +117,7 @@ fn quicksmith_genius_may_decline_the_optional_discard() {
     let choice = find_resolution_choice(&choice_batch).expect("optional discard choice");
     assert_eq!((choice.min, choice.max), (0, 1));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("decline the optional discard");
 
     assert_eq!(engine.state.objects[&discarded].zone, Zone::Hand);

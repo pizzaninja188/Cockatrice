@@ -1,4 +1,5 @@
 //! Spine of Ish Sah: mandatory ETB destruction and incarnation-bound owner-hand return.
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
 use tricerules_core::state::{ActiveDeathReplacement, CopiableValues};
@@ -38,7 +39,9 @@ fn cast_spine(engine: &mut GameEngine) -> u32 {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(engine);
     source
 }
@@ -46,7 +49,9 @@ fn cast_spine(engine: &mut GameEngine) -> u32 {
 fn enter_spine(engine: &mut GameEngine) -> u32 {
     let ring = move_ready_to_battlefield(engine, 0, "sol_ring");
     let source = cast_spine(engine);
-    engine.apply_command(0, &choose_target(ring)).unwrap();
+    engine
+        .apply_scenario_command(0, &choose_target(ring))
+        .unwrap();
     resolve_entire_stack_two_player(engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     source
@@ -55,7 +60,7 @@ fn enter_spine(engine: &mut GameEngine) -> u32 {
 fn move_named(engine: &mut GameEngine, name: &str, zone: DevZone) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -121,7 +126,9 @@ fn spine_actual_cast_can_destroy_itself_and_returns_the_same_card_to_owners_hand
         },
     );
     let before = serde_json::to_value(&engine.state).unwrap();
-    assert!(engine.apply_command(0, &cast_spell(slot, vec![])).is_err());
+    assert!(engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .is_err());
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     engine.state.players[0].mana_pool.colorless = 0;
     give_mana(
@@ -132,7 +139,9 @@ fn spine_actual_cast_can_destroy_itself_and_returns_the_same_card_to_owners_hand
             ..Default::default()
         },
     );
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     let entered_generation = engine.state.zone_change_generation[&source];
@@ -157,10 +166,12 @@ fn spine_actual_cast_can_destroy_itself_and_returns_the_same_card_to_owners_hand
         (0, choose_target(999999)),
     ] {
         let before = serde_json::to_value(&engine.state).unwrap();
-        assert!(engine.apply_command(actor, &choice).is_err());
+        assert!(engine.apply_scenario_command(actor, &choice).is_err());
         assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     }
-    engine.apply_command(0, &choose_target(source)).unwrap();
+    engine
+        .apply_scenario_command(0, &choose_target(source))
+        .unwrap();
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     assert_eq!(
@@ -189,7 +200,9 @@ fn spine_actual_cast_can_destroy_itself_and_returns_the_same_card_to_owners_hand
             ..Default::default()
         },
     );
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     assert_eq!(
@@ -221,7 +234,9 @@ fn spine_etb_can_destroy_a_noncreature_or_land_and_indestructible_is_a_legal_tar
                 .valid_permanent_ids
                 .contains(&target)
         );
-        engine.apply_command(0, &choose_target(target)).unwrap();
+        engine
+            .apply_scenario_command(0, &choose_target(target))
+            .unwrap();
         resolve_entire_stack_two_player(&mut engine);
         assert_eq!(engine.state.objects[&target].zone, expected_zone);
         assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
@@ -245,19 +260,19 @@ fn spine_return_uses_captured_controller_but_owner_hand_and_exact_identity() {
     inject_card_into_hand(&mut engine, 1, "krark-clan_ironworks");
     let ironworks = move_ready_to_battlefield(&mut engine, 1, "krark-clan_ironworks");
     if engine.state.priority_player_id() != 1 {
-        engine.apply_command(0, &pass()).unwrap();
+        engine.apply_scenario_command(0, &pass()).unwrap();
     }
     let sacrifice = sacrifice_to_ironworks(&engine, ironworks, source);
-    engine.apply_command(1, &sacrifice).unwrap();
+    engine.apply_scenario_command(1, &sacrifice).unwrap();
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     assert_eq!(engine.state.stack.len(), 1);
     assert_eq!(engine.state.stack.last().unwrap().controller, 1);
     assert_eq!(engine.state.players[1].mana_pool.colorless, 2);
     engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .unwrap();
     let batch = engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .unwrap();
     assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
     assert_eq!(engine.state.objects[&source].owner, 0);
@@ -321,7 +336,7 @@ fn spine_only_triggers_for_battlefield_to_graveyard_and_has_no_invented_sacrific
         let source = enter_spine(&mut engine);
         let before = format!("{:?}", engine.state);
         assert!(engine
-            .apply_command(0, &activate_ability(source, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability(source, 0, vec![]))
             .is_err());
         assert_eq!(format!("{:?}", engine.state), before);
         move_named(&mut engine, "Spine of Ish Sah", destination);
@@ -377,7 +392,7 @@ fn spine_sacrifice_replaced_by_exile_does_not_capture_a_graveyard_return() {
             zone_change_generation: engine.state.zone_change_generation[&source],
         });
     let sacrifice = sacrifice_to_ironworks(&engine, ironworks, source);
-    engine.apply_command(0, &sacrifice).unwrap();
+    engine.apply_scenario_command(0, &sacrifice).unwrap();
     assert_eq!(engine.state.objects[&source].zone, Zone::Exile);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 2);
     assert!(engine.state.stack.is_empty());
@@ -427,13 +442,17 @@ fn spine_token_copy_cannot_return_but_real_sculpting_steel_copy_returns_its_unde
             ..Default::default()
         },
     );
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .unwrap();
     assert_eq!(engine.state.pending_triggers.len(), 1);
-    engine.apply_command(0, &choose_target(ring)).unwrap();
+    engine
+        .apply_scenario_command(0, &choose_target(ring))
+        .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&copy].card_id, "sculpting_steel");
     assert_eq!(
@@ -494,7 +513,9 @@ fn spine_etb_with_no_legal_target_discards_the_trigger_without_an_unusable_promp
             ..Default::default()
         },
     );
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     assert!(engine.state.pending_triggers.is_empty());
@@ -507,7 +528,9 @@ fn spine_etb_rechecks_a_departed_target_without_destroying_another_card() {
     let mut engine = spine_engine(2026093110);
     let ring = move_ready_to_battlefield(&mut engine, 0, "sol_ring");
     let source = cast_spine(&mut engine);
-    engine.apply_command(0, &choose_target(ring)).unwrap();
+    engine
+        .apply_scenario_command(0, &choose_target(ring))
+        .unwrap();
     move_named(&mut engine, "Sol Ring", DevZone::Hand);
     let returned = move_ready_to_battlefield(&mut engine, 0, "sol_ring");
     assert_eq!(

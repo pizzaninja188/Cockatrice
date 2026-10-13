@@ -1,5 +1,6 @@
 //! Lae'zel's counter-placement replacement behavior.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use prost::Message;
 use tricerules_cards::primitives::StaticAbilityDef;
 use tricerules_cards::{AbilityPresentation, CounterKind, Keyword, Layout};
@@ -26,6 +27,7 @@ fn choose_resolution_branch(index: u32) -> rv1::RuledCommand {
     rv1::RuledCommand {
         cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
             rv1::SubmitResolutionChoice {
+                resolution_prompt_id: 0,
                 decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
                 selected_branch_index: index,
                 ..Default::default()
@@ -112,7 +114,7 @@ fn laezel_and_doubling_season_order_replacements_for_entry_counters_before_commi
 
         let endless_one = hand_index_for_card(&engine, 0, "endless_one");
         engine
-            .apply_command(0, &cast_spell_x(endless_one, vec![], 2))
+            .apply_scenario_command(0, &cast_spell_x(endless_one, vec![], 2))
             .expect("cast Endless One with X=2");
         pass_both_players(&mut engine);
 
@@ -145,7 +147,7 @@ fn laezel_and_doubling_season_order_replacements_for_entry_counters_before_commi
 
         let selected = choice.presentation.candidates[replacement_choice];
         engine
-            .apply_command(0, &submit_resolution_choice(vec![selected]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
             .expect("choose the first entry-counter replacement");
 
         assert!(engine.state.pending_resolution.is_none());
@@ -175,7 +177,7 @@ fn laezel_adds_one_counter_to_a_positive_loyalty_cost() {
         .insert(CounterKind::Loyalty, 5);
 
     engine
-        .apply_command(0, &activate_ability(chandra, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(chandra, 0, vec![]))
         .expect("activate Chandra's +1 loyalty ability");
 
     assert_eq!(
@@ -204,7 +206,7 @@ fn laezel_stages_positive_loyalty_cost_until_counter_replacements_finish() {
     let next_object_id = engine.state.next_object_id;
 
     engine
-        .apply_command(0, &activate_ability(chandra, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(chandra, 0, vec![]))
         .expect("begin Chandra's +1 loyalty activation");
 
     for expected_choices in [3, 2] {
@@ -227,7 +229,7 @@ fn laezel_stages_positive_loyalty_cost_until_counter_replacements_finish() {
         assert_eq!(engine.state.next_object_id, next_object_id);
         let selected = choice.presentation.candidates[0];
         engine
-            .apply_command(0, &submit_resolution_choice(vec![selected]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
             .expect("choose the next counter replacement");
     }
 
@@ -259,7 +261,7 @@ fn laezel_and_doubling_season_order_effect_counter_replacements_before_commit() 
 
     let slot = hand_index_for_card(&engine, 0, "battlegrowth");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
         .expect("cast Battlegrowth");
     pass_both_players(&mut engine);
 
@@ -280,7 +282,7 @@ fn laezel_and_doubling_season_order_effect_counter_replacements_before_commit() 
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(vec![choice.presentation.candidates[0]]),
         )
@@ -312,7 +314,7 @@ fn laezel_and_doubling_season_order_prevention_counters_before_damage_commit() {
 
     let anti_venom_slot = hand_index_for_card(&engine, 0, "anti-venom,_horrifying_healer");
     engine
-        .apply_command(0, &cast_spell(anti_venom_slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(anti_venom_slot, vec![]))
         .expect("cast Anti-Venom");
     pass_both_players(&mut engine);
     let anti_venom = engine
@@ -333,7 +335,7 @@ fn laezel_and_doubling_season_order_prevention_counters_before_damage_commit() {
 
     let shock = hand_index_for_card(&engine, 0, "shock");
     engine
-        .apply_command(0, &cast_spell(shock, target_object(anti_venom)))
+        .apply_scenario_command(0, &cast_spell(shock, target_object(anti_venom)))
         .expect("cast Shock at Anti-Venom");
     pass_both_players(&mut engine);
 
@@ -357,7 +359,7 @@ fn laezel_and_doubling_season_order_prevention_counters_before_damage_commit() {
         replacement_choices += 1;
         let selected = pending.presentation.candidates[0];
         engine
-            .apply_command(0, &submit_resolution_choice(vec![selected]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
             .expect("choose the next prevention-counter replacement");
     }
     assert!(replacement_choices > 0);
@@ -392,11 +394,11 @@ fn laezel_and_doubling_season_order_earthbend_counters_before_commit() {
 
         let badgermole = hand_index_for_card(&engine, 0, "badgermole");
         engine
-            .apply_command(0, &cast_spell(badgermole, vec![]))
+            .apply_scenario_command(0, &cast_spell(badgermole, vec![]))
             .expect("cast Badgermole");
         pass_both_players(&mut engine);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::ChooseTriggerTarget(
@@ -432,7 +434,7 @@ fn laezel_and_doubling_season_order_earthbend_counters_before_commit() {
         assert!(characteristics.is_creature());
 
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &submit_resolution_choice(vec![
                     counter_choice.presentation.candidates[replacement_choice],
@@ -479,7 +481,7 @@ fn laezel_and_doubling_season_order_explore_counters_before_the_library_choice()
     let scout_slot = hand_index_for_card(&engine, 0, "cenote_scout");
 
     engine
-        .apply_command(0, &cast_spell(scout_slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(scout_slot, vec![]))
         .expect("cast Cenote Scout");
     pass_both_players(&mut engine);
     let scout = engine
@@ -508,7 +510,7 @@ fn laezel_and_doubling_season_order_explore_counters_before_the_library_choice()
     );
     let selected = choice.presentation.candidates[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![selected]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
         .expect("choose the first Explore counter replacement");
 
     assert_eq!(
@@ -529,7 +531,7 @@ fn laezel_and_doubling_season_order_explore_counters_before_the_library_choice()
         "ordering Doubling Season and Lae'zel on one Explore counter yields three or four"
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("leave the revealed nonland on top");
     assert!(engine.state.pending_resolution.is_none());
 }
@@ -552,15 +554,15 @@ fn laezel_and_doubling_season_order_blight_effect_counters_before_commit() {
     );
     let slot = hand_index_for_card(&engine, 0, "chaos_spewer");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Chaos Spewer");
     pass_both_players(&mut engine);
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &choose_resolution_branch(1))
+        .apply_scenario_command(0, &choose_resolution_branch(1))
         .expect("choose the Blight branch");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![bear]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![bear]))
         .expect("choose a creature to blight");
 
     let choice = engine
@@ -579,7 +581,7 @@ fn laezel_and_doubling_season_order_blight_effect_counters_before_commit() {
     );
     let selected = choice.presentation.candidates[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![selected]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
         .expect("choose the first Blight counter replacement");
     assert!(engine.state.pending_resolution.is_none());
     assert!(matches!(
@@ -605,7 +607,7 @@ fn laezel_stages_blight_activation_cost_until_replacement_order_finishes() {
         .unwrap_or(0);
     let stack_len = engine.state.stack.len();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 glutton,
@@ -632,7 +634,7 @@ fn laezel_stages_blight_activation_cost_until_replacement_order_finishes() {
         replacement_choices += 1;
         let selected = pending.presentation.candidates[0];
         engine
-            .apply_command(0, &submit_resolution_choice(vec![selected]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
             .expect("finish the next Blight counter replacement choice");
     }
     assert!(replacement_choices > 0);
@@ -665,7 +667,7 @@ fn laezel_and_doubling_season_apply_each_order_to_two_counter_effect() {
 
         let slot = hand_index_for_card(&engine, 0, "efflorescence");
         engine
-            .apply_command(0, &cast_spell(slot, target_object(bear)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
             .expect("cast Efflorescence");
         pass_both_players(&mut engine);
 
@@ -682,7 +684,7 @@ fn laezel_and_doubling_season_apply_each_order_to_two_counter_effect() {
         );
         let selected = choice.presentation.candidates[replacement_choice];
         let resolution = engine
-            .apply_command(0, &submit_resolution_choice(vec![selected]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
             .expect("choose a counter replacement order");
 
         assert!(engine.state.pending_resolution.is_none());
@@ -726,7 +728,7 @@ fn laezel_and_doubling_season_mass_counter_choices_commit_as_one_batch() {
 
     let slot = hand_index_for_card(&engine, 0, "the_crystals_chosen");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast The Crystal's Chosen");
     pass_both_players(&mut engine);
 
@@ -762,7 +764,7 @@ fn laezel_and_doubling_season_mass_counter_choices_commit_as_one_batch() {
         );
         let selected = choice.presentation.candidates[0];
         engine
-            .apply_command(0, &submit_resolution_choice(vec![selected]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
             .expect("choose the next replacement order");
         choices += 1;
         if engine.state.pending_resolution.is_some() {
@@ -809,7 +811,7 @@ fn laezel_and_proliferate_use_the_putting_player_for_permanent_and_player_counte
     grant_pool(&mut engine, 0);
 
     engine
-        .apply_command(0, &activate_ability(bastion, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(bastion, 1, vec![]))
         .expect("activate Karn's Bastion");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -823,10 +825,11 @@ fn laezel_and_proliferate_use_the_putting_player_for_permanent_and_player_counte
         rv1::ChoiceKind::Proliferate
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     chosen_object_ids: vec![bear],
                     chosen_player_ids: vec![0, 1],
                     decision: rv1::ResolutionChoiceDecision::Unspecified as i32,
@@ -868,15 +871,16 @@ fn laezel_proliferate_batch_hides_face_down_recipient_identity_on_wire() {
     grant_pool(&mut engine, 0);
 
     engine
-        .apply_command(0, &activate_ability(bastion, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(bastion, 1, vec![]))
         .expect("activate Karn's Bastion");
     pass_both_players(&mut engine);
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &rv1::RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
                     rv1::SubmitResolutionChoice {
+                        resolution_prompt_id: 0,
                         chosen_object_ids: vec![hidden_creature],
                         ..Default::default()
                     },
@@ -924,15 +928,16 @@ fn prepare_mixed_proliferate_counter_replacement(seed: u64) -> (GameEngine, u32,
     grant_pool(&mut engine, 0);
 
     engine
-        .apply_command(0, &activate_ability(bastion, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(bastion, 1, vec![]))
         .expect("activate Karn's Bastion");
     pass_both_players(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &rv1::RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
                     rv1::SubmitResolutionChoice {
+                        resolution_prompt_id: 0,
                         chosen_object_ids: vec![bear],
                         chosen_player_ids: vec![0],
                         ..Default::default()
@@ -981,7 +986,7 @@ fn laezel_and_doubling_season_stage_mixed_proliferate_recipients_together() {
         .expect("order choice");
     let selected = pending.presentation.candidates[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![selected]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
         .expect("choose Lae'zel before Doubling Season");
     assert_eq!(
         engine.state.objects[&bear].counter_count(CounterKind::PlusOnePlusOne),
@@ -1019,7 +1024,7 @@ fn stale_mixed_proliferate_counter_choice_commits_no_sibling_recipient() {
     *engine.state.zone_change_generation.entry(bear).or_default() += 1;
 
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![selected]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
         .is_err());
     assert_eq!(
         engine.state.players[self_index].counters[&CounterKind::Poison],

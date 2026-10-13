@@ -95,9 +95,10 @@ public:
                                               std::function<void(bool accepted)> onFinished) = 0;
 
     /// Modal fallback picker for resolution choice kinds that have no bespoke click UI.
-    /// The host is expected to defer the dialog past the current batch and then send a
-    /// `SubmitResolutionChoice` itself.
+    /// The host is expected to defer the dialog past the current batch, revalidate this captured
+    /// identity after the modal loop, then stamp it on its `SubmitResolutionChoice`.
     virtual void requestResolutionChoiceDialog(const QString &prompt,
+                                               quint64 resolutionPromptId,
                                                const QVector<quint32> &candidateOids,
                                                const QStringList &candidateNames,
                                                int minCount,

@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, CounterKind, EffectDuration, Keyword};
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
@@ -61,13 +62,15 @@ fn prey_upon_publishes_two_targets_and_fights_with_current_power_simultaneously(
         fight_targets(second, first),
         vec![fight_targets(first, second)[0]],
     ] {
-        assert!(engine.apply_command(0, &cast_spell(slot, invalid)).is_err());
+        assert!(engine
+            .apply_scenario_command(0, &cast_spell(slot, invalid))
+            .is_err());
         assert_eq!(engine.state.players[0].hand, hand_before);
         assert_eq!(engine.state.players[0].mana_pool.green, mana_before);
     }
 
     engine
-        .apply_command(0, &cast_spell(slot, fight_targets(first, second)))
+        .apply_scenario_command(0, &cast_spell(slot, fight_targets(first, second)))
         .expect("cast Prey Upon");
     engine
         .state
@@ -111,7 +114,7 @@ fn prey_upon_deals_no_damage_when_either_target_is_illegal_at_resolution() {
 
     let slot = hand_index_for_card(&engine, 0, "prey_upon");
     engine
-        .apply_command(0, &cast_spell(slot, fight_targets(first, second)))
+        .apply_scenario_command(0, &cast_spell(slot, fight_targets(first, second)))
         .expect("cast Prey Upon");
     engine.state.players[1]
         .battlefield
@@ -159,7 +162,7 @@ fn prey_upon_deals_no_damage_when_a_target_is_no_longer_a_creature() {
 
     let slot = hand_index_for_card(&engine, 0, "prey_upon");
     engine
-        .apply_command(0, &cast_spell(slot, fight_targets(first, second)))
+        .apply_scenario_command(0, &cast_spell(slot, fight_targets(first, second)))
         .expect("cast Prey Upon");
     // Model a copy/type-changing effect making the same physical target a land before resolution.
     engine
@@ -217,7 +220,7 @@ fn fight_reuses_prevention_deathtouch_lifelink_and_state_based_actions() {
 
     let slot = hand_index_for_card(&engine, 0, "prey_upon");
     engine
-        .apply_command(0, &cast_spell(slot, fight_targets(first, second)))
+        .apply_scenario_command(0, &cast_spell(slot, fight_targets(first, second)))
         .expect("cast Prey Upon");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -255,15 +258,19 @@ fn bushwhack_search_mode_reveals_a_basic_land_to_hand() {
 
     let slot = hand_index_for_card(&engine, 0, "bushwhack");
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, vec![])]))
         .expect("cast Bushwhack search mode");
-    engine.apply_command(0, &pass()).expect("caster pass");
-    let batch = engine.apply_command(1, &pass()).expect("opponent pass");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
+    let batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("opponent pass");
     let choice = find_resolution_choice(&batch).expect("library search choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
     assert!(choice.candidate_object_ids.contains(&land));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![land]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
         .expect("choose basic land");
 
     assert!(engine.state.players[0].hand.contains(&land));
@@ -300,7 +307,7 @@ fn bushwhack_fight_mode_uses_both_target_groups() {
 
     let slot = hand_index_for_card(&engine, 0, "bushwhack");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(1, fight_targets(first, second))]),
         )

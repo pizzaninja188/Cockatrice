@@ -4,9 +4,10 @@
 //! rulings for this Oracle identity. CR 602.2a-b and 701.21a cover activation and sacrifice costs;
 //! CR 115.1c and 608.2b cover the graveyard target; CR 118.3b and 119.4 cover paying life, while
 //! CR 119.3 and 701.7a cover life gain and token creation.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ruled_command::Cmd, TargetRef, TargetRefKind};
 
 const TRADING_POST: &str = "trading_post";
@@ -155,7 +156,7 @@ fn trading_post_rejects_invalid_recovery_targets_and_sacrifice_costs_atomically(
             vec![permanent_cost_selection(2, creature)],
         );
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect_err("the target must be an artifact card in the activator's graveyard");
         assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
         assert!(!engine.state.objects[&post].tapped);
@@ -172,7 +173,7 @@ fn trading_post_rejects_invalid_recovery_targets_and_sacrifice_costs_atomically(
         vec![permanent_cost_selection(2, creature)],
     );
     engine
-        .apply_command(0, &nonartifact_cost)
+        .apply_scenario_command(0, &nonartifact_cost)
         .expect_err("the draw ability requires sacrificing an artifact");
     assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
     assert!(!engine.state.objects[&post].tapped);

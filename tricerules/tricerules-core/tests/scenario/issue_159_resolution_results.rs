@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::Keyword;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ruled_event::Ev, ResolutionChoiceDecision};
@@ -18,6 +19,7 @@ fn put_on_top(engine: &mut GameEngine, player: usize, card_ids: &[&str]) -> Vec<
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -61,16 +63,16 @@ fn setup_divert(seed: u64, payable: bool) -> (GameEngine, u32) {
     );
     let bolt = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(bolt, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(bolt, target_player(1)))
         .unwrap();
     let bolt_oid = engine.state.stack.last().unwrap().id;
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     let divert = hand_index_for_card(&engine, 1, "divert_disaster");
     engine
-        .apply_command(1, &cast_spell(divert, target_object(bolt_oid)))
+        .apply_scenario_command(1, &cast_spell(divert, target_object(bolt_oid)))
         .unwrap();
-    engine.apply_command(1, &pass()).unwrap();
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     (engine, bolt_oid)
 }
 
@@ -99,7 +101,7 @@ fn issue_159_divert_disaster_uses_the_committed_payment_receipt() {
 
     let (mut declined, bolt) = setup_divert(159_002, false);
     declined
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -120,7 +122,7 @@ fn issue_159_lander_ability_stack_preserves_its_token_display_identity() {
         .next()
         .expect("paid Divert Disaster creates a Lander token");
 
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     give_mana(
         &mut engine,
         1,
@@ -163,7 +165,7 @@ fn issue_159_divert_rejects_unpayable_and_stale_payment_submissions_without_doub
     assert!(engine.state.stack.iter().any(|item| item.id == bolt));
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -171,7 +173,7 @@ fn issue_159_divert_rejects_unpayable_and_stale_payment_submissions_without_doub
     assert_eq!(engine.state.objects[&bolt].zone, Zone::Graveyard);
     let stack_len = engine.state.stack.len();
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -187,7 +189,7 @@ fn resolve_targeted_spell(engine: &mut GameEngine, caster: i32, card_id: &str, t
     ensure_in_hand(engine, caster as usize, card_id);
     let slot = hand_index_for_card(engine, caster as usize, card_id);
     engine
-        .apply_command(caster, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(caster, &cast_spell(slot, target_object(target)))
         .unwrap();
     pass_both_players(engine);
 }
@@ -318,9 +320,11 @@ fn issue_159_midnight_tilling_offers_only_surviving_cards_milled_this_way() {
         },
     );
     let spell = hand_index_for_card(&engine, 0, "midnight_tilling");
-    engine.apply_command(0, &cast_spell(spell, vec![])).unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(spell, vec![]))
+        .unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     let pending = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::GraveyardCards);
     assert_eq!(
@@ -332,7 +336,7 @@ fn issue_159_midnight_tilling_offers_only_surviving_cards_milled_this_way() {
 
     let chosen = milled[2];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))
         .unwrap();
     assert_eq!(engine.state.objects[&chosen].zone, Zone::Hand);
 }
@@ -396,7 +400,7 @@ fn issue_159_burning_curiosity_uses_one_group_for_the_exact_two_or_three_cards()
             Vec::new()
         };
         engine
-            .apply_command(0, &cast_spell_with_cast_cost_groups(spell, vec![], groups))
+            .apply_scenario_command(0, &cast_spell_with_cast_cost_groups(spell, vec![], groups))
             .unwrap();
         resolve_entire_stack_two_player(&mut engine);
 
@@ -448,10 +452,10 @@ fn issue_159_lost_days_owner_places_the_exact_target_second_from_top() {
     );
     let spell = hand_index_for_card(&engine, 0, "lost_days");
     engine
-        .apply_command(0, &cast_spell(spell, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(spell, target_object(target)))
         .unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     assert_eq!(
         engine
             .state
@@ -461,7 +465,7 @@ fn issue_159_lost_days_owner_places_the_exact_target_second_from_top() {
             .deciding_player,
         1
     );
-    let resolved = engine.apply_command(1, &select_branch(0)).unwrap();
+    let resolved = engine.apply_scenario_command(1, &select_branch(0)).unwrap();
 
     assert_eq!(engine.state.players[1].library[0], previous_top);
     assert_eq!(engine.state.players[1].library[1], target);
@@ -519,7 +523,7 @@ fn issue_159_aangs_journey_enables_only_the_receipt_backed_search_slots() {
         let basic = engine.state.players[0].library.front().copied().unwrap();
         let spell = hand_index_for_card(&engine, 0, "aangs_journey");
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell_with_cast_cost_groups(
                     spell,
@@ -528,8 +532,8 @@ fn issue_159_aangs_journey_enables_only_the_receipt_backed_search_slots() {
                 ),
             )
             .unwrap();
-        engine.apply_command(0, &pass()).unwrap();
-        engine.apply_command(1, &pass()).unwrap();
+        engine.apply_scenario_command(0, &pass()).unwrap();
+        engine.apply_scenario_command(1, &pass()).unwrap();
 
         let pending = engine.state.pending_resolution.as_ref().unwrap();
         assert_eq!(pending.presentation.min, 0);
@@ -548,7 +552,7 @@ fn issue_159_aangs_journey_enables_only_the_receipt_backed_search_slots() {
         }
 
         engine
-            .apply_command(0, &submit_resolution_choice(vec![basic]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![basic]))
             .unwrap();
         assert_eq!(engine.state.objects[&basic].zone, Zone::Hand);
         assert_eq!(engine.state.players[0].life, 22);
@@ -581,9 +585,11 @@ fn issue_159_library_search_rejects_a_stale_slot_candidate_atomically() {
     );
     let basic = engine.state.players[0].library.front().copied().unwrap();
     let spell = hand_index_for_card(&engine, 0, "aangs_journey");
-    engine.apply_command(0, &cast_spell(spell, vec![])).unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(spell, vec![]))
+        .unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
 
     *engine
         .state
@@ -592,7 +598,7 @@ fn issue_159_library_search_rejects_a_stale_slot_candidate_atomically() {
         .or_default() += 1;
     let library_before = engine.state.players[0].library.clone();
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![basic]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![basic]))
         .is_err());
     assert!(engine.state.pending_resolution.is_some());
     assert_eq!(engine.state.players[0].library, library_before);

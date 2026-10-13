@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration, StaticAbilityDef};
 use tricerules_cards::{CounterKind, Keyword};
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
@@ -62,14 +63,14 @@ fn station_engine(seed: u64) -> (GameEngine, u32, u32) {
         .map(|player| player.id)
         .find(|player| *player != first)
         .unwrap();
-    engine.apply_command(first, &pass()).unwrap();
-    let surveil = engine.apply_command(second, &pass()).unwrap();
+    engine.apply_scenario_command(first, &pass()).unwrap();
+    let surveil = engine.apply_scenario_command(second, &pass()).unwrap();
     let candidates = find_resolution_choice(&surveil)
         .expect("Wurmwall entry surveil choice")
         .candidate_object_ids
         .clone();
     engine
-        .apply_command(0, &submit_resolution_choice(candidates))
+        .apply_scenario_command(0, &submit_resolution_choice(candidates))
         .expect("put both surveilled cards into the graveyard");
     assert!(engine.state.pending_resolution.is_none());
     let crew = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
@@ -128,7 +129,7 @@ fn station_publishes_generation_bound_costs_and_uses_power_on_resolution() {
     assert_eq!(published.zone_change_generation, generation(&engine, crew));
 
     engine
-        .apply_command(0, &activate_station(&engine, station, crew))
+        .apply_scenario_command(0, &activate_station(&engine, station, crew))
         .expect("a summoning-sick creature can pay the separate Station tap cost");
     assert!(engine.state.objects[&crew].tapped);
     assert!(!engine.state.objects[&station].tapped);
@@ -184,10 +185,10 @@ fn station_uses_generation_lki_and_clamps_negative_final_amounts() {
         timestamp,
     );
     engine
-        .apply_command(0, &activate_station(&engine, station, crew))
+        .apply_scenario_command(0, &activate_station(&engine, station, crew))
         .unwrap();
     engine
-        .apply_command(
+        .apply_scenario_command(
             engine.state.priority_player_id(),
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -224,7 +225,7 @@ fn station_uses_generation_lki_and_clamps_negative_final_amounts() {
     });
     assert_eq!(engine.effective_power(crew), Some(0));
     engine
-        .apply_command(0, &activate_station(&engine, station, crew))
+        .apply_scenario_command(0, &activate_station(&engine, station, crew))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -260,10 +261,10 @@ fn copied_station_keeps_printed_abilities_but_not_charge_counters_or_threshold_s
     );
     let slot = hand_index_for_card(&engine, 0, "cackling_counterpart");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(station)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(station)))
         .expect("copy the currently animated Spacecraft");
-    engine.apply_command(0, &pass()).unwrap();
-    let copied = engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let copied = engine.apply_scenario_command(1, &pass()).unwrap();
     let token = token_created_events(&copied)[0].object_id;
 
     assert!(engine.state.objects[&token].is_token());
@@ -320,7 +321,7 @@ fn drill_too_deep_executes_each_mode_with_its_own_target_filter() {
     );
     let slot = hand_index_for_card(&engine, 0, "drill_too_deep");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(0, target_object(spacecraft))]),
         )
@@ -344,7 +345,7 @@ fn drill_too_deep_executes_each_mode_with_its_own_target_filter() {
     );
     let slot = hand_index_for_card(&engine, 0, "drill_too_deep");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(1, target_object(artifact))]),
         )

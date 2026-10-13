@@ -1,5 +1,6 @@
 //! Exact scoped basic lands: printed characteristics and immediate colored mana.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::GameEngine;
 
 #[test]
@@ -32,18 +33,20 @@ fn scoped_basic_lands_tap_for_only_their_printed_color_and_reject_invalid_actors
         .unwrap();
         advance_to_main1_from_game_start(&mut engine);
         let hand_index = hand_index_for_card(&engine, 0, card_id);
-        engine.apply_command(0, &play_land(hand_index)).unwrap();
+        engine
+            .apply_scenario_command(0, &play_land(hand_index))
+            .unwrap();
         let land = battlefield_object_for_card(&engine, 0, card_id);
         let activation = activate_ability_for(&engine, land, 0, vec![]);
         let command_index = engine.state.command_index;
         engine
-            .apply_command(1, &activation)
+            .apply_scenario_command(1, &activation)
             .expect_err("another player cannot tap this land");
         assert_eq!(engine.state.command_index, command_index);
         assert!(!engine.state.objects[&land].tapped);
         assert_eq!(engine.state.players[0].mana_pool, Default::default());
         let priority = engine.state.priority_player_id();
-        let batch = engine.apply_command(0, &activation).unwrap();
+        let batch = engine.apply_scenario_command(0, &activation).unwrap();
         let pool = &engine.state.players[0].mana_pool;
         assert_eq!(
             (
@@ -74,7 +77,7 @@ fn scoped_basic_lands_tap_for_only_their_printed_color_and_reject_invalid_actors
         );
         let command_index = engine.state.command_index;
         engine
-            .apply_command(0, &activate_ability_for(&engine, land, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability_for(&engine, land, 0, vec![]))
             .expect_err("tapped land cannot pay tap again");
         assert_eq!(engine.state.command_index, command_index);
         let pool = &engine.state.players[0].mana_pool;

@@ -1020,6 +1020,7 @@ impl GameEngine {
                 let event = rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            resolution_prompt_id: 0,
                             deciding_player_id: *owner,
                             source_object_id: *object_id,
                             prompt_text: prompt.clone(),
@@ -1066,6 +1067,7 @@ impl GameEngine {
                 let event = rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            resolution_prompt_id: 0,
                             accepted_permanent_selections: Vec::new(),
                             variable_mana_contribution: false,
                             candidate_token_identities: Vec::new(),
@@ -1114,6 +1116,8 @@ impl GameEngine {
         out.push(event);
         out.push(ev_log(prompt));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
             deciding_player,
             presentation,
             continuation: ResolutionContinuation::StateBasedActions { choices },
@@ -1431,6 +1435,7 @@ mod sba_tests {
         engine
             .apply_sbas(&mut events)
             .expect("state-based actions are checked");
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
 
         let commander_choice = events.iter().find_map(|event| match &event.ev {
             Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
@@ -1474,7 +1479,7 @@ mod sba_tests {
         let pending_public_state = public_zone_state(&pending_view);
 
         let first_choice = engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -1541,7 +1546,7 @@ mod sba_tests {
         assert_eq!(frozen_generation, 1);
 
         let final_choice = engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -1605,9 +1610,12 @@ mod sba_tests {
         engine
             .apply_sbas(&mut initial_events)
             .expect("the graveyard commander receives its CR 903.9a choice");
+        engine
+            .publish_resolution_prompt_ids(&mut initial_events)
+            .unwrap();
         assert!(engine.state.pending_resolution.is_some());
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -1652,7 +1660,10 @@ mod sba_tests {
             .apply_sbas(&mut initial_events)
             .expect("the graveyard commander receives its CR 903.9a choice");
         engine
-            .apply_command(
+            .publish_resolution_prompt_ids(&mut initial_events)
+            .unwrap();
+        engine
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -1935,6 +1946,9 @@ mod sba_tests {
         engine
             .apply_sbas(&mut initial_events)
             .expect("state-based actions are checked");
+        engine
+            .publish_resolution_prompt_ids(&mut initial_events)
+            .unwrap();
         let first_generation = engine
             .state
             .zone_change_generation
@@ -1948,7 +1962,7 @@ mod sba_tests {
         )));
 
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -1999,6 +2013,9 @@ mod sba_tests {
         engine
             .apply_sbas(&mut reentry_events)
             .expect("a new zone-change generation is offered again");
+        engine
+            .publish_resolution_prompt_ids(&mut reentry_events)
+            .unwrap();
         assert!(reentry_events.iter().any(|event| matches!(
             event.ev.as_ref(),
             Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))

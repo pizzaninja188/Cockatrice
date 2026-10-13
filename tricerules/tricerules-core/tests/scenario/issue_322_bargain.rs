@@ -3,6 +3,7 @@
 //! Oracle text is pinned in the matching card definitions. CR 601.2b/f and 118.8 govern the
 //! optional additional cost, CR 607.2i links that choice to the resolution instructions, CR
 //! 702.166 defines Bargain, and CR 707.2 preserves announced spell-copy choices.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{Keyword, ObjectCastCostKind};
@@ -65,7 +66,7 @@ fn archons_glory_applies_its_conditional_keywords_only_after_bargain() {
             vec![]
         };
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell_with_cast_cost_groups(
                     hand_index_for_card(&engine, 0, "archons_glory"),
@@ -141,7 +142,7 @@ fn bargain_cost_rejects_ineligible_opponent_and_stale_objects_atomically() {
 
     for selection in invalid_costs {
         assert!(engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell_with_cast_cost_groups(
                     hand_index_for_card(&engine, 0, "archons_glory"),
@@ -202,7 +203,7 @@ fn candy_grapple_uses_three_or_five_minus_five_from_the_committed_choice() {
             vec![]
         };
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell_with_cast_cost_groups(
                     hand_index_for_card(&engine, 0, "candy_grapple"),
@@ -241,16 +242,16 @@ fn copied_bargained_kellans_lightblades_keeps_the_choice_and_destroys_its_attack
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let treasure = inject_permanent_on_battlefield(&mut engine, 0, "treasure");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defending player passes");
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("bear attacks");
 
     inject_card_into_hand(&mut engine, 0, "kellans_lightblades");
@@ -260,7 +261,7 @@ fn copied_bargained_kellans_lightblades_keeps_the_choice_and_destroys_its_attack
     engine.state.players[1].mana_pool.blue = 2;
     let spell_slot = hand_index_for_card(&engine, 0, "kellans_lightblades");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 spell_slot,
@@ -275,9 +276,11 @@ fn copied_bargained_kellans_lightblades_keeps_the_choice_and_destroys_its_attack
         Some(ObjectCastCostKind::Bargain)
     );
 
-    engine.apply_command(0, &pass()).expect("pass to Twincast");
     engine
-        .apply_command(
+        .apply_scenario_command(0, &pass())
+        .expect("pass to Twincast");
+    engine
+        .apply_scenario_command(
             1,
             &cast_spell(
                 hand_index_for_card(&engine, 1, "twincast"),
@@ -287,7 +290,7 @@ fn copied_bargained_kellans_lightblades_keeps_the_choice_and_destroys_its_attack
         .expect("Twincast copies the Bargained spell");
     pass_both_players(&mut engine);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![attacker]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![attacker]))
         .expect("retarget the spell copy to the same attacker");
 
     let copy = engine.state.stack.iter().find(|item| item.is_copy).unwrap();
@@ -319,26 +322,26 @@ fn nonbargained_kellans_lightblades_deals_three_damage() {
     advance_to_main1_from_game_start(&mut engine);
     let attacker = relocate_to_battlefield(&mut engine, 0, "colossal_dreadmaw", false);
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defending player passes");
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("Dreadmaw attacks");
 
     inject_card_into_hand(&mut engine, 1, "kellans_lightblades");
     engine.state.players[1].mana_pool.white = 1;
     engine.state.players[1].mana_pool.colorless = 1;
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass priority to the defender");
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_spell(
                 hand_index_for_card(&engine, 1, "kellans_lightblades"),
@@ -369,7 +372,7 @@ fn bargained_ouphe_exiles_a_targeted_opponent_artifact() {
     engine.state.players[0].mana_pool.green = 1;
     engine.state.players[0].mana_pool.colorless = 1;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 hand_index_for_card(&engine, 0, "troublemaker_ouphe"),
@@ -385,7 +388,7 @@ fn bargained_ouphe_exiles_a_targeted_opponent_artifact() {
     pass_both_players(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(0, &choose_trigger_target(target))
+        .apply_scenario_command(0, &choose_trigger_target(target))
         .expect("choose an opponent's artifact");
     pass_both_players(&mut engine);
     assert!(!engine.state.players[1].battlefield.contains(&target));
@@ -409,7 +412,7 @@ fn unbargained_ouphe_and_a_permanent_copy_have_no_bargain_trigger() {
     unbargained.state.players[0].mana_pool.green = 1;
     unbargained.state.players[0].mana_pool.colorless = 1;
     unbargained
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 hand_index_for_card(&unbargained, 0, "troublemaker_ouphe"),
@@ -436,7 +439,7 @@ fn unbargained_ouphe_and_a_permanent_copy_have_no_bargain_trigger() {
     copy_game.state.players[0].mana_pool.green = 1;
     copy_game.state.players[0].mana_pool.colorless = 1;
     copy_game
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 hand_index_for_card(&copy_game, 0, "troublemaker_ouphe"),
@@ -453,7 +456,7 @@ fn unbargained_ouphe_and_a_permanent_copy_have_no_bargain_trigger() {
     copy_game.state.players[0].mana_pool.blue = 1;
     copy_game.state.players[0].mana_pool.colorless = 3;
     copy_game
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(hand_index_for_card(&copy_game, 0, "clone"), Vec::new()),
         )
@@ -461,7 +464,7 @@ fn unbargained_ouphe_and_a_permanent_copy_have_no_bargain_trigger() {
     pass_both_players(&mut copy_game);
     let source = battlefield_object_for_card(&copy_game, 0, "troublemaker_ouphe");
     copy_game
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("Clone enters as a copy of the Bargained Ouphe");
     assert_eq!(copy_game.state.players[0].battlefield.len(), 2);
     assert!(copy_game.state.pending_triggers.is_empty());
@@ -488,7 +491,7 @@ fn copied_bargained_ouphe_spell_keeps_bargain_for_its_battlefield_entry() {
     engine.state.players[0].mana_pool.green = 1;
     engine.state.players[0].mana_pool.colorless = 1;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 hand_index_for_card(&engine, 0, "troublemaker_ouphe"),
@@ -516,7 +519,7 @@ fn copied_bargained_ouphe_spell_keeps_bargain_for_its_battlefield_entry() {
     pass_both_players(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(0, &choose_trigger_target(opponent_artifact))
+        .apply_scenario_command(0, &choose_trigger_target(opponent_artifact))
         .expect("copied Bargain choice enables the Ouphe trigger");
     pass_both_players(&mut engine);
     assert!(!engine.state.players[1]

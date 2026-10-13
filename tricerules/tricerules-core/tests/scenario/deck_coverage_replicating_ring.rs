@@ -1,5 +1,6 @@
 //! Exact Replicating Ring: source-backed resolution sequencing and named Snow tokens.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::*;
 use tricerules_cards::{AbilityPresentation, ControllerReference, Layout};
 use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
@@ -33,7 +34,9 @@ fn setup() -> (GameEngine, u32) {
         },
     );
     let slot = hand_index_for_card(&engine, 0, RING);
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert_eq!(engine.state.objects[&source].zone, Zone::Stack);
     resolve_entire_stack_two_player(&mut engine);
@@ -58,8 +61,10 @@ fn start_upkeep(engine: &mut GameEngine, player: i32) {
     engine.state.priority_idx = previous;
     engine.state.turn_step = TurnStep::EndStep;
     engine.state.passes_since_stack_change = 0;
-    engine.apply_command(previous as i32, &pass()).unwrap();
-    engine.apply_command(player, &pass()).unwrap();
+    engine
+        .apply_scenario_command(previous as i32, &pass())
+        .unwrap();
+    engine.apply_scenario_command(player, &pass()).unwrap();
     assert_eq!(engine.state.active_player_id(), player);
     assert_eq!(engine.state.turn_step, TurnStep::Upkeep);
 }
@@ -98,7 +103,7 @@ fn assert_tokens(engine: &GameEngine, count: usize, controller: i32) {
 
 fn reject(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = engine.diagnostic_snapshot().unwrap();
-    assert!(engine.apply_command(actor, command).is_err());
+    assert!(engine.apply_scenario_command(actor, command).is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
 }
 
@@ -256,7 +261,7 @@ fn ring_prevented_placement_still_checks_existing_eight_counters() {
 fn dev_move(engine: &mut GameEngine, zone: DevZone) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             engine.state.priority_player_id(),
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -341,7 +346,7 @@ fn ring_token_entry_parks_after_removal_rejects_bad_answers_and_commits_once() {
     // Avoid helpers that automatically answer the actual ordering choice being tested.
     for _ in 0..2 {
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     let pending = engine
@@ -376,7 +381,7 @@ fn ring_token_entry_parks_after_removal_rejects_bad_answers_and_commits_once() {
         0,
         &submit_resolution_choice(candidates[..7].to_vec()),
     );
-    engine.apply_command(0, &valid).unwrap();
+    engine.apply_scenario_command(0, &valid).unwrap();
     assert_tokens(&engine, 8, 0);
     assert!(engine.state.pending_resolution.is_none() && engine.state.stack.is_empty());
     reject(&mut engine, 0, &valid);
@@ -409,7 +414,7 @@ fn ring_and_tokens_produce_all_five_colors_immediately_and_reject_invalid_activa
             ability.mana_option_index = 5;
             reject(&mut engine, 0, &invalid);
             reject(&mut engine, 1, &command);
-            engine.apply_command(0, &command).unwrap();
+            engine.apply_scenario_command(0, &command).unwrap();
             assert!(engine.state.stack.is_empty());
             assert!(engine.state.objects[&id].tapped);
             let pool = engine.state.players[0].mana_pool;
@@ -461,7 +466,7 @@ fn ring_replays_paid_cast_eight_real_upkeeps_and_parked_token_entry_commands() {
         actor: i32,
         command: RuledCommand,
     ) {
-        let batch = engine.apply_command(actor, &command).unwrap();
+        let batch = engine.apply_scenario_command(actor, &command).unwrap();
         log.push((actor, command, batch, engine.diagnostic_snapshot().unwrap()));
     }
     while engine.state.turn_step != TurnStep::Main1 {
@@ -524,7 +529,10 @@ fn ring_replays_paid_cast_eight_real_upkeeps_and_parked_token_entry_commands() {
     );
     let mut replay = game();
     for (actor, command, batch, snapshot) in log {
-        assert_eq!(replay.apply_command(actor, &command).unwrap(), batch);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &command).unwrap(),
+            batch
+        );
         assert_eq!(replay.diagnostic_snapshot().unwrap(), snapshot);
     }
 }

@@ -1,5 +1,6 @@
 //! Actual paid targetless graveyard returns, including interrupted simultaneous entry.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ChoiceKind;
 
@@ -36,13 +37,13 @@ fn triumphant_reckoning_abandoned_cohort_restores_only_current_provisional_aura_
             Some(tricerules_core::AttachmentRecipient::Object(host));
         let spell = cast_and_resolve(&mut engine, "triumphant_reckoning");
         engine
-            .apply_command(4, &submit_resolution_choice(vec![source]))
+            .apply_scenario_command(4, &submit_resolution_choice(vec![source]))
             .unwrap();
         engine
-            .apply_command(4, &submit_resolution_choice(vec![host]))
+            .apply_scenario_command(4, &submit_resolution_choice(vec![host]))
             .unwrap();
         engine
-            .apply_command(4, &submit_resolution_choice(vec![host]))
+            .apply_scenario_command(4, &submit_resolution_choice(vec![host]))
             .unwrap();
         assert_eq!(
             engine
@@ -74,7 +75,7 @@ fn triumphant_reckoning_abandoned_cohort_restores_only_current_provisional_aura_
             .get(&stale)
             .copied()
             .unwrap_or(0);
-        let batch = engine.apply_command(27, &concede()).unwrap();
+        let batch = engine.apply_scenario_command(27, &concede()).unwrap();
         assert_eq!(
             engine
                 .state
@@ -137,7 +138,7 @@ fn triumphant_reckoning_stale_accepted_aura_entrant_does_not_refuse_concession()
         let host = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
         let spell = cast_and_resolve(&mut engine, "triumphant_reckoning");
         engine
-            .apply_command(4, &submit_resolution_choice(vec![host]))
+            .apply_scenario_command(4, &submit_resolution_choice(vec![host]))
             .unwrap();
         assert_eq!(
             engine
@@ -163,7 +164,7 @@ fn triumphant_reckoning_stale_accepted_aura_entrant_does_not_refuse_concession()
             .unwrap_or(0);
         let revision = engine.state.objects[&aura].copy_revision;
         let batch = engine
-            .apply_command(27, &concede())
+            .apply_scenario_command(27, &concede())
             .expect("concession remains legal during stale recovery");
         assert!(engine.state.players[2].has_lost);
         for oid in [aura, artifact, spell] {
@@ -215,7 +216,7 @@ fn graveyard_return_empty_cohort_finishes_and_extra_targets_reject_atomically() 
         let slot = hand_index_for_card(&engine, 0, card);
         let before = engine.diagnostic_snapshot().unwrap();
         assert!(engine
-            .apply_command(4, &cast_spell(slot, target_object(excluded)))
+            .apply_scenario_command(4, &cast_spell(slot, target_object(excluded)))
             .is_err());
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
         let spell = cast_and_resolve(&mut engine, card);
@@ -261,7 +262,7 @@ fn triumphant_reckoning_aura_entry_is_untargeted_but_respects_enchantment_protec
             assert_eq!(pending.presentation.choice_kind, ChoiceKind::AuraPermanent);
             assert_eq!(pending.presentation.candidates, vec![host]);
             engine
-                .apply_command(4, &submit_resolution_choice(vec![host]))
+                .apply_scenario_command(4, &submit_resolution_choice(vec![host]))
                 .unwrap();
             finish_order(&mut engine);
             assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
@@ -362,7 +363,9 @@ fn primevals_glorious_rebirth_requires_a_controlled_legendary_creature_or_planes
         engine.state.players[0].mana_pool.black = 1;
         let slot = hand_index_for_card(&engine, 0, "primevals_glorious_rebirth");
         let before = format!("{:?}", engine.state);
-        assert!(engine.apply_command(4, &cast_spell(slot, vec![])).is_err());
+        assert!(engine
+            .apply_scenario_command(4, &cast_spell(slot, vec![]))
+            .is_err());
         assert_eq!(format!("{:?}", engine.state), before);
         assert!(!engine.initial_response_batch().legal_by_player[&4]
             .hand_actions
@@ -454,7 +457,7 @@ fn triumphant_reckoning_refreshes_unanswered_aura_while_skipping_prior_accepted_
         let surviving_host = inject_creature_on_battlefield(&mut engine, 2, "grizzly_bears");
         cast_and_resolve(&mut engine, "triumphant_reckoning");
         engine
-            .apply_command(4, &submit_resolution_choice(vec![departing_host]))
+            .apply_scenario_command(4, &submit_resolution_choice(vec![departing_host]))
             .unwrap();
         assert_eq!(
             engine
@@ -468,14 +471,14 @@ fn triumphant_reckoning_refreshes_unanswered_aura_while_skipping_prior_accepted_
         );
         let before = format!("{:?}", engine.state);
         assert!(engine
-            .apply_command(27, &submit_resolution_choice(vec![surviving_host]))
+            .apply_scenario_command(27, &submit_resolution_choice(vec![surviving_host]))
             .is_err());
         assert_eq!(format!("{:?}", engine.state), before);
         assert!(engine
-            .apply_command(4, &submit_resolution_choice(vec![artifact]))
+            .apply_scenario_command(4, &submit_resolution_choice(vec![artifact]))
             .is_err());
         assert_eq!(format!("{:?}", engine.state), before);
-        engine.apply_command(9, &concede()).unwrap();
+        engine.apply_scenario_command(9, &concede()).unwrap();
         let pending = engine
             .state
             .pending_resolution
@@ -484,7 +487,7 @@ fn triumphant_reckoning_refreshes_unanswered_aura_while_skipping_prior_accepted_
         assert!(!pending.presentation.candidates.contains(&departing_host));
         assert!(pending.presentation.candidates.contains(&surviving_host));
         engine
-            .apply_command(4, &submit_resolution_choice(vec![surviving_host]))
+            .apply_scenario_command(4, &submit_resolution_choice(vec![surviving_host]))
             .unwrap();
         finish_order(&mut engine);
         assert_eq!(engine.state.objects[&first_aura].zone, Zone::Graveyard);
@@ -521,14 +524,14 @@ fn triumphant_reckoning_restores_skipped_aura_copy_but_keeps_accepted_values_if_
             Some(tricerules_core::AttachmentRecipient::Object(source_host));
         let spell = cast_and_resolve(&mut engine, "triumphant_reckoning");
         engine
-            .apply_command(4, &submit_resolution_choice(vec![source]))
+            .apply_scenario_command(4, &submit_resolution_choice(vec![source]))
             .expect("Mirrormade copies Pacifism");
         engine
-            .apply_command(4, &submit_resolution_choice(vec![recipient]))
+            .apply_scenario_command(4, &submit_resolution_choice(vec![recipient]))
             .expect("copy accepts existing recipient");
         assert_eq!(engine.state.objects[&copy].copy_revision, 1);
         engine
-            .apply_command(if recipient_leaves { 9 } else { 27 }, &concede())
+            .apply_scenario_command(if recipient_leaves { 9 } else { 27 }, &concede())
             .unwrap();
         finish_order(&mut engine);
         if recipient_leaves {
@@ -568,7 +571,7 @@ fn triumphant_reckoning_does_not_rebind_accepted_recipient_to_a_new_incarnation_
     let host = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     cast_and_resolve(&mut engine, "triumphant_reckoning");
     engine
-        .apply_command(4, &submit_resolution_choice(vec![host]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![host]))
         .unwrap();
     // Internal fixture models the recipient leaving and returning under the same object ID.
     *engine.state.zone_change_generation.entry(host).or_default() += 2;
@@ -620,7 +623,7 @@ fn triumphant_reckoning_copied_planeswalker_gets_printed_loyalty_once() {
         });
     cast_and_resolve(&mut engine, "triumphant_reckoning");
     engine
-        .apply_command(4, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![source]))
         .unwrap();
     let pending = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(
@@ -629,14 +632,14 @@ fn triumphant_reckoning_copied_planeswalker_gets_printed_loyalty_once() {
     );
     let order = pending.presentation.candidates.clone();
     engine
-        .apply_command(4, &submit_resolution_choice(order))
+        .apply_scenario_command(4, &submit_resolution_choice(order))
         .unwrap();
     // Legend rule: same-controller Jaces enter together. The copy uses Jace's printed name.
     if let Some(pending) = engine.state.pending_resolution.as_ref() {
         assert_eq!(pending.presentation.choice_kind, ChoiceKind::LegendKeep);
         let actor = pending.deciding_player;
         engine
-            .apply_command(actor, &submit_resolution_choice(vec![copy]))
+            .apply_scenario_command(actor, &submit_resolution_choice(vec![copy]))
             .unwrap();
     }
     assert_eq!(
@@ -657,7 +660,7 @@ fn cast_and_resolve(engine: &mut GameEngine, card: &str) -> u32 {
     let spell = paid_cast(engine, card);
     for _ in 0..engine.state.players.len() {
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     spell
@@ -690,8 +693,8 @@ fn triumphant_reckoning_logged_aura_choice_and_concession_replay_identically() {
         let decoded =
             tricerules_proto::ruled::v1::RuledCommand::decode(command.encode_to_vec().as_slice())
                 .unwrap();
-        let observed = original.apply_command(actor, &command).unwrap();
-        let reproduced = replay.apply_command(actor, &decoded).unwrap();
+        let observed = original.apply_scenario_command(actor, &command).unwrap();
+        let reproduced = replay.apply_scenario_command(actor, &decoded).unwrap();
         assert_eq!(observed, reproduced);
         assert_eq!(
             original.diagnostic_snapshot().unwrap(),
@@ -732,7 +735,7 @@ fn paid_cast(engine: &mut GameEngine, card: &str) -> u32 {
     let slot = hand_index_for_card(engine, 0, card);
     let spell = engine.state.players[0].hand[slot];
     engine
-        .apply_command(4, &cast_spell(slot, vec![]))
+        .apply_scenario_command(4, &cast_spell(slot, vec![]))
         .expect("paid actual spell");
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert_eq!(engine.state.players[0].mana_pool.white, 0);
@@ -750,12 +753,12 @@ fn graveyard_return_twincast_uses_copy_controller_and_original_selects_fresh_coh
         let original_return = inject_graveyard_card(&mut engine, 0, "alhammarrets_archive");
         let copy_return = inject_graveyard_card(&mut engine, 1, "alhammarrets_archive");
         let original = paid_cast(&mut engine, card);
-        engine.apply_command(4, &pass()).unwrap();
+        engine.apply_scenario_command(4, &pass()).unwrap();
         inject_card_into_hand(&mut engine, 1, "twincast");
         engine.state.players[1].mana_pool.blue = 2;
         let slot = hand_index_for_card(&engine, 1, "twincast");
         engine
-            .apply_command(9, &cast_spell(slot, target_object(original)))
+            .apply_scenario_command(9, &cast_spell(slot, target_object(original)))
             .unwrap();
         pass_priority_round(&mut engine);
         let copy = engine.state.stack.last().unwrap();
@@ -814,7 +817,7 @@ fn finish_order(engine: &mut GameEngine) {
         let actor = pending.deciding_player;
         let ids = pending.presentation.candidates.clone();
         engine
-            .apply_command(actor, &submit_resolution_choice(ids))
+            .apply_scenario_command(actor, &submit_resolution_choice(ids))
             .unwrap();
     }
     panic!("entry ordering did not finish");
@@ -844,7 +847,7 @@ fn triumphant_reckoning_returns_all_three_types_once_and_only_own_current_gravey
         .iter()
         .all(|oid| engine.state.objects[oid].zone == Zone::Graveyard));
     engine
-        .apply_command(4, &submit_resolution_choice(vec![host]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![host]))
         .unwrap();
     finish_order(&mut engine);
     for oid in eligible {
@@ -878,7 +881,7 @@ fn triumphant_reckoning_skips_accepted_aura_if_recipient_owner_concedes_before_e
         .unwrap_or(0);
     let spell = cast_and_resolve(&mut engine, "triumphant_reckoning");
     engine
-        .apply_command(4, &submit_resolution_choice(vec![host]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![host]))
         .unwrap();
     assert_eq!(
         engine
@@ -892,7 +895,7 @@ fn triumphant_reckoning_skips_accepted_aura_if_recipient_owner_concedes_before_e
     );
     assert_eq!(engine.state.objects[&aura].zone, Zone::Graveyard);
     engine
-        .apply_command(9, &concede())
+        .apply_scenario_command(9, &concede())
         .expect("recipient owner can concede during entry ordering");
     finish_order(&mut engine);
     assert_eq!(engine.state.objects[&aura].zone, Zone::Graveyard);

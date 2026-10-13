@@ -3,10 +3,11 @@
 //! Oracle and rulings were checked against their exact Scryfall records on 2026-09-28.
 //! CR 702.114 and 613.1e govern Devoid and color layers; CR 121.2 the second draw; CR 503.1 the
 //! upkeep trigger; CR 701.23 the subtype search; and CR 605.1a/605.3b each Spawn/Scion mana ability.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Color;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{permanent_moved::Destination, ChoiceKind};
 
 fn engine(seed: u64) -> GameEngine {
@@ -84,10 +85,10 @@ fn resolve_search_ability(engine: &mut GameEngine) -> RuledEventBatch {
         engine.state.players[0].id
     };
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first player passes priority");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second player resolves the ability")
 }
 
@@ -127,7 +128,7 @@ fn emrakuls_messenger_creates_a_spawn_on_its_controllers_second_draw() {
 
     let divination = hand_index_for_card(&engine, 0, "divination");
     engine
-        .apply_command(0, &cast_spell(divination, vec![]))
+        .apply_scenario_command(0, &cast_spell(divination, vec![]))
         .expect("cast Divination to draw two cards");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -155,7 +156,7 @@ fn emrakuls_messenger_does_not_trigger_for_an_opponents_second_draw() {
 
     let divination = hand_index_for_card(&engine, 1, "divination");
     engine
-        .apply_command(1, &cast_spell(divination, vec![]))
+        .apply_scenario_command(1, &cast_spell(divination, vec![]))
         .expect("opponent casts Divination");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -208,7 +209,7 @@ fn from_beyond_sacrifices_to_search_reveal_and_shuffle_an_eldrazi_card() {
 
     assert!(
         engine
-            .apply_command(0, &submit_resolution_choice(vec![name_only_match]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![name_only_match]))
             .is_err(),
         "a non-Eldrazi choice is rejected"
     );
@@ -216,7 +217,7 @@ fn from_beyond_sacrifices_to_search_reveal_and_shuffle_an_eldrazi_card() {
     assert_eq!(engine.state.objects[&name_only_match].zone, Zone::Library);
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![eldrazi]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![eldrazi]))
         .expect("choose the Eldrazi card");
     assert_eq!(engine.state.objects[&eldrazi].zone, Zone::Hand);
     assert!(engine.state.players[0].hand.contains(&eldrazi));
@@ -253,7 +254,7 @@ fn from_beyond_shuffles_after_searching_without_an_eligible_eldrazi() {
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
     assert!(choice.candidate_object_ids.is_empty());
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("fail to find an Eldrazi card");
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&name_only_match].zone, Zone::Library);

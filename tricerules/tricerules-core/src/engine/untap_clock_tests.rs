@@ -43,7 +43,7 @@ fn next_turn(engine: &mut GameEngine) -> Vec<ObjectId> {
     let _ = engine.initial_response_batch();
     let active = engine.state.active_player_id();
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             active,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::PrimitiveYieldStructured(

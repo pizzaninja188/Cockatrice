@@ -71,6 +71,23 @@ pub(crate) fn reveal_cards(
         .collect()
 }
 
+/// Capture the public identity receipt for CR 406.3a without publishing it yet. Spell-cast
+/// reservations can still be canceled before payment commits, so their caller retains this
+/// snapshot and emits it only if the cast succeeds; land plays publish it at their accepted
+/// announcement boundary.
+pub(super) fn face_down_exile_reveal_events(
+    state: &GameState,
+    registry: &CardRegistry,
+    object_id: ObjectId,
+    source_description: &str,
+) -> Option<Vec<rv1::RuledEvent>> {
+    state
+        .objects
+        .get(&object_id)
+        .is_some_and(|object| object.zone == Zone::Exile && object.face_down)
+        .then(|| reveal_cards(state, registry, &[object_id], object_id, source_description))
+}
+
 /// A public choice over one zone uses exactly the same snapshot as an instant reveal.
 /// Its candidates are already validated by the effect; an empty cohort produces no window.
 pub(crate) fn reveal_choice(

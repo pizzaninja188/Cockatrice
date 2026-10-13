@@ -1,5 +1,6 @@
 //! Strict, bounded semantic evidence. Expectations belong to callers, not production emitters.
 use super::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::{TurnStep, Zone};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -53,7 +54,7 @@ pub(crate) fn accepted(
     command: &RuledCommand,
 ) -> RuledEventBatch {
     engine
-        .apply_command(player, command)
+        .apply_scenario_command(player, command)
         .unwrap_or_else(|error| panic!("expected accepted command {command:?}: {error:?}"))
 }
 

@@ -202,10 +202,16 @@ The `connect` lines live in `tab_game.cpp` and are the accepted residual fork de
 ## Invariants
 
 1. **One pending choice, separate public reveal.** The engine parks at most one decision and blocks, so
-   `RuledClientState::pendingChoice` is a single `std::optional`. `setPendingChoice()` tears down
-   whatever it replaces (including the revealed-cards popup); `clearPendingChoiceOfKind()` is how a
-   follow-up engine event retires the one choice it answers; `sendResolutionChoice()` is the only
-   `SubmitResolutionChoice` sender. `TriggerTarget` is answered with `ChooseTriggerTarget` instead.
+   `RuledClientState::pendingChoice` is a single `std::optional`. A choice is answerable only when
+   its nonzero `resolution_prompt_id` matches the final active prompt snapshot for the local decider;
+   submissions carry that captured ID so a delayed dialog cannot answer a replacement prompt.
+   `setPendingChoice()` tears down whatever it replaces (including the revealed-cards popup), and
+   `clearPendingChoiceOfKind()` retires the choice answered by a follow-up engine event. Ordinary
+   object-choice submissions use `sendResolutionChoice()`; dedicated payment, replacement, staged
+   cost, fallback-dialog, and special-cast paths construct their own `SubmitResolutionChoice`.
+   Every route must submit the exact nonzero prompt ID accepted by the current active snapshot;
+   modal and cast paths revalidate the captured ID after their interaction. `TriggerTarget` is
+   answered with `ChooseTriggerTarget` instead.
    A public reveal is mirrored separately on every participant, including observers that do not
    own the choice; authoritative batches replace or clear that exact snapshot, while local combat
    previews leave it untouched.

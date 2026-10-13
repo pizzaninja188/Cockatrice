@@ -4,6 +4,7 @@
 //! an activated ability resolves. CR 701.21a restricts sacrifice to a permanent
 //! controlled by the player paying the cost; the generated recipe's Land filter
 //! is therefore exercised through the engine's published cost choices below.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -61,7 +62,7 @@ fn three_player_main1(seed: u64) -> GameEngine {
     while engine.state.turn_step != tricerules_core::TurnStep::Main1 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("advance three-player turn");
     }
     engine
@@ -104,7 +105,7 @@ fn issue_300_ripchain_sacrifices_one_controlled_land_then_draws_one() {
     let hand_before = engine.state.players[0].hand.len();
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 source,
@@ -160,7 +161,7 @@ fn issue_300_no_controlled_land_publishes_no_payable_choice_and_fails_atomically
 
     let mana_before = engine.state.players[0].mana_pool;
     engine
-        .apply_command(0, &activate_ability_with_costs(source, 0, vec![], vec![]))
+        .apply_scenario_command(0, &activate_ability_with_costs(source, 0, vec![], vec![]))
         .expect_err("the missing land makes activation illegal");
     assert_eq!(engine.state.players[0].mana_pool, mana_before);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
@@ -176,7 +177,7 @@ fn issue_300_nonland_and_opponent_land_are_rejected_without_partial_payment() {
 
     for invalid in [nonland, opponent_land] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_ability_with_costs(
                     source,
@@ -200,7 +201,7 @@ fn issue_300_cost_stays_paid_while_opponent_responds_before_draw_resolution() {
     let hand_before = engine.state.players[0].hand.len();
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 source,
@@ -216,7 +217,7 @@ fn issue_300_cost_stays_paid_while_opponent_responds_before_draw_resolution() {
     assert_eq!(engine.state.players[0].hand.len(), hand_before);
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("controller passes response window");
     assert_eq!(engine.state.stack.len(), 1);
     assert_eq!(engine.state.players[0].hand.len(), hand_before);
@@ -225,7 +226,7 @@ fn issue_300_cost_stays_paid_while_opponent_responds_before_draw_resolution() {
     assert_eq!(engine.state.players[0].mana_pool.red, 0);
 
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes to resolve");
     assert_eq!(engine.state.stack.len(), 0);
     assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
@@ -247,7 +248,7 @@ fn issue_300_cost_stays_paid_when_source_leaves_before_resolution() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 source,
@@ -259,7 +260,7 @@ fn issue_300_cost_stays_paid_when_source_leaves_before_resolution() {
         .expect("pay the draw ability before responding");
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(source)))
         .expect("respond by removing the ability source");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -314,7 +315,7 @@ fn issue_300_countered_ability_keeps_paid_cost_and_does_not_draw() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 source,
@@ -327,18 +328,20 @@ fn issue_300_countered_ability_keeps_paid_cost_and_does_not_draw() {
     let ability_id = engine.state.stack.last().expect("ability on stack").id;
     let tidebinder = hand_index_for_card(&engine, 0, "tishanas_tidebinder");
     engine
-        .apply_command(0, &cast_spell(tidebinder, vec![]))
+        .apply_scenario_command(0, &cast_spell(tidebinder, vec![]))
         .expect("cast Tishana's Tidebinder in response");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(0, &choose_stack_target(ability_id))
+        .apply_scenario_command(0, &choose_stack_target(ability_id))
         .expect("target the exact activated ability");
     let first = engine.state.priority_player_id();
     let second = if first == 0 { 1 } else { 0 };
-    engine.apply_command(first, &pass()).expect("first pass");
+    engine
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
     let resolved = engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("counter resolves");
 
     assert!(resolved.events.iter().any(|event| matches!(
@@ -389,15 +392,17 @@ fn issue_300_seismic_mountaincycling_discards_from_hand_and_searches_revealed_mo
     let command = hand_ability(&engine, source, 1);
     let hand_before = engine.state.players[0].hand.len();
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("activate Mountaincycling from hand");
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert_eq!(engine.state.players[0].hand.len(), hand_before - 1);
 
-    engine.apply_command(0, &pass()).expect("controller passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
     let search = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("Mountaincycling resolves after the response window");
     let choice = find_resolution_choice(&search).expect("private revealed library search");
     assert_eq!(choice.deciding_player_id, 0);
@@ -405,7 +410,7 @@ fn issue_300_seismic_mountaincycling_discards_from_hand_and_searches_revealed_mo
     assert!(!choice.candidate_object_ids.contains(&forest));
 
     let completed = engine
-        .apply_command(0, &submit_resolution_choice(vec![mountain]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![mountain]))
         .expect("choose the Mountain");
     assert_eq!(engine.state.objects[&mountain].zone, Zone::Hand);
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
@@ -443,13 +448,13 @@ fn issue_300_three_player_controller_pays_and_draws_for_foreign_owned_source() {
     engine.state.players[2].mana_pool.red = 1;
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("P0 passes priority");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("P1 passes priority");
     engine
-        .apply_command(
+        .apply_scenario_command(
             2,
             &activate_ability_with_costs(
                 source,
@@ -466,7 +471,7 @@ fn issue_300_three_player_controller_pays_and_draws_for_foreign_owned_source() {
     while !engine.state.stack.is_empty() {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("three-player response pass");
     }
     assert_eq!(engine.state.players[2].hand.len(), 1);

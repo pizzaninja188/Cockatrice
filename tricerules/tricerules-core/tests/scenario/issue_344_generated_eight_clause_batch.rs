@@ -8,6 +8,7 @@
 //! self-attachment; CR 614.1c/122/508.1 the conditional Raid entry counter; CR 603.6/508.1/120 the
 //! intervening Raid damage trigger; and CR 603.6/701.14/115.1 the Aura fight with its up-to-one
 //! target.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -78,7 +79,7 @@ fn issue_344_illvoi_operative_counters_on_the_second_spell() {
 
     let first = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(first, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(first, target_player(1)))
         .expect("cast the first spell");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -89,7 +90,7 @@ fn issue_344_illvoi_operative_counters_on_the_second_spell() {
 
     let second = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(second, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(second, target_player(1)))
         .expect("cast the second spell");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -109,7 +110,7 @@ fn issue_344_icecave_crasher_landfall_pumps_then_expires() {
     inject_card_into_hand(&mut engine, 0, "island");
     let land = hand_index_for_card(&engine, 0, "island");
     engine
-        .apply_command(0, &play_land(land))
+        .apply_scenario_command(0, &play_land(land))
         .expect("play a land to trigger landfall");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -147,10 +148,12 @@ fn issue_344_refute_counters_then_loots_with_a_private_discard() {
     );
     let bear = hand_index_for_card(&engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &cast_spell(bear, vec![]))
+        .apply_scenario_command(0, &cast_spell(bear, vec![]))
         .expect("cast a creature spell");
     let bear_spell = engine.state.stack.last().expect("creature spell").id;
-    engine.apply_command(0, &pass()).expect("active passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("active passes");
 
     give_mana(
         &mut engine,
@@ -163,11 +166,13 @@ fn issue_344_refute_counters_then_loots_with_a_private_discard() {
     );
     let refute = hand_index_for_card(&engine, 1, "refute");
     engine
-        .apply_command(1, &cast_spell(refute, stack_target(bear_spell)))
+        .apply_scenario_command(1, &cast_spell(refute, stack_target(bear_spell)))
         .expect("counter the creature spell");
-    engine.apply_command(1, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("caster passes");
     let parked = engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("Refute resolves to the loot");
 
     let choice = find_resolution_choice(&parked).expect("private discard choice");
@@ -187,7 +192,7 @@ fn issue_344_refute_counters_then_loots_with_a_private_discard() {
     assert!(choice.candidate_object_ids.contains(&known));
 
     engine
-        .apply_command(1, &submit_resolution_choice(vec![known]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![known]))
         .expect("discard the known card");
     assert!(engine.state.players[1].graveyard.contains(&known));
     assert!(engine.state.stack.is_empty());
@@ -213,11 +218,13 @@ fn issue_344_romantic_rendezvous_discards_then_draws_two() {
 
     let slot = hand_index_for_card(&engine, 0, "romantic_rendezvous");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Romantic Rendezvous");
-    engine.apply_command(0, &pass()).expect("active passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("active passes");
     let parked = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("the sorcery resolves to the discard");
 
     let choice = find_resolution_choice(&parked).expect("private discard choice");
@@ -232,7 +239,7 @@ fn issue_344_romantic_rendezvous_discards_then_draws_two() {
     assert!(choice.candidate_object_ids.contains(&known));
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![known]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![known]))
         .expect("discard the known card");
     assert!(engine.state.players[0].graveyard.contains(&known));
     assert_eq!(
@@ -296,7 +303,7 @@ fn issue_344_gorehorn_raider_raid_damage_needs_the_intervening_condition() {
     );
     let slot = hand_index_for_card(&unattacked, 0, "gorehorn_raider");
     unattacked
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Gorehorn Raider without attacking");
     pass_both_players(&mut unattacked);
     assert!(
@@ -319,7 +326,7 @@ fn issue_344_gorehorn_raider_raid_damage_needs_the_intervening_condition() {
     engine.state.turn_history.current.player_mut(0).attacked = true;
     let slot = hand_index_for_card(&engine, 0, "gorehorn_raider");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Gorehorn Raider after attacking");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -328,7 +335,7 @@ fn issue_344_gorehorn_raider_raid_damage_needs_the_intervening_condition() {
         "the Raid ETB trigger waits for its mandatory any-target"
     );
     engine
-        .apply_command(0, &choose_trigger_targets(&[giant], false))
+        .apply_scenario_command(0, &choose_trigger_targets(&[giant], false))
         .expect("target the opposing creature");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -355,21 +362,23 @@ fn issue_344_pitiless_fists_fight_accepts_up_to_one_opposing_creature() {
     );
     let slot = hand_index_for_card(&engine, 0, "pitiless_fists");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(enchanted)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(enchanted)))
         .expect("cast Pitiless Fists");
-    engine.apply_command(0, &pass()).expect("active passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("active passes");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("the Aura resolves and its ETB fights");
 
     assert!(
         engine
-            .apply_command(0, &choose_trigger_targets(&[other], false))
+            .apply_scenario_command(0, &choose_trigger_targets(&[other], false))
             .is_err(),
         "CR 115.1: a creature the aura's controller controls is not a legal fight target"
     );
     engine
-        .apply_command(0, &choose_trigger_targets(&[victim], false))
+        .apply_scenario_command(0, &choose_trigger_targets(&[victim], false))
         .expect("fight the chosen opposing creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -404,14 +413,16 @@ fn issue_344_pitiless_fists_fight_may_be_declined() {
     );
     let slot = hand_index_for_card(&engine, 0, "pitiless_fists");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(enchanted)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(enchanted)))
         .expect("cast Pitiless Fists");
-    engine.apply_command(0, &pass()).expect("active passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("active passes");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("the Aura resolves and its ETB fights");
     engine
-        .apply_command(0, &choose_trigger_targets(&[], false))
+        .apply_scenario_command(0, &choose_trigger_targets(&[], false))
         .expect("CR 601.2c: decline the up-to-one fight target");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&victim].damage, 0);

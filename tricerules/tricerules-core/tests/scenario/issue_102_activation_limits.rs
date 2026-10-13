@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::TurnStep;
 use tricerules_proto::ruled::v1::{ruled_event::Ev, ChoiceKind, RuledEventBatch};
 
@@ -59,7 +60,7 @@ fn successful_activation_refreshes_public_legality_and_rejects_stale_replay() {
 
     let command = activate_ability(devotee, 0, vec![]);
     let batch = engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("the first activation is legal");
 
     assert!(
@@ -80,7 +81,7 @@ fn successful_activation_refreshes_public_legality_and_rejects_stale_replay() {
     let mana_before = mana_state(&engine, 0);
     let uses_before = engine.state.activation_uses_this_turn.clone();
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect_err("the stale second activation must be rejected");
     assert_eq!(mana_state(&engine, 0), mana_before);
     assert_eq!(engine.state.activation_uses_this_turn, uses_before);
@@ -92,7 +93,7 @@ fn failed_payment_does_not_consume_the_activation() {
     let devotee = inject_creature_on_battlefield(&mut engine, 0, "temur_devotee");
 
     engine
-        .apply_command(0, &activate_ability(devotee, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(devotee, 0, vec![]))
         .expect_err("the generic cost is unaffordable");
     assert!(engine.state.activation_uses_this_turn.is_empty());
     assert_eq!(zone_view_ability_flags(&mut engine, 0, devotee), [true]);
@@ -111,7 +112,7 @@ fn failed_payment_does_not_consume_the_activation() {
         Cmd::ActivateAbility(activation) => activation.clone(),
         _ => unreachable!(),
     };
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &tricerules_proto::ruled::v1::PreviewPayment {
             transaction_id: 1,
@@ -128,7 +129,7 @@ fn failed_payment_does_not_consume_the_activation() {
     });
     command.cmd = Some(Cmd::ActivateAbility(activation));
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("the unconsumed activation remains available");
     assert_eq!(engine.state.players[0].mana_pool.blue, 1);
     assert_eq!(engine.state.players[0].mana_pool.red, 0);
@@ -148,7 +149,7 @@ fn control_and_face_changes_preserve_the_limit_but_zone_changes_reset_identity()
         },
     );
     engine
-        .apply_command(0, &activate_ability(devotee, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(devotee, 0, vec![]))
         .expect("first controller activates");
 
     engine.state.players[0]
@@ -161,7 +162,7 @@ fn control_and_face_changes_preserve_the_limit_but_zone_changes_reset_identity()
     engine.state.priority_idx = 1;
     assert_eq!(zone_view_ability_flags(&mut engine, 1, devotee), [false]);
     engine
-        .apply_command(1, &activate_ability(devotee, 0, vec![]))
+        .apply_scenario_command(1, &activate_ability(devotee, 0, vec![]))
         .expect_err("changing control does not evade once-per-turn");
 
     *engine
@@ -212,12 +213,12 @@ fn activation_resets_only_after_cleanup_really_advances_the_turn() {
         },
     );
     engine
-        .apply_command(0, &activate_ability(devotee, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(devotee, 0, vec![]))
         .expect("activate in the current turn");
 
     let gnomes = inject_creature_on_battlefield(&mut engine, 0, "bottle_gnomes");
     engine
-        .apply_command(0, &activate_ability(gnomes, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(gnomes, 0, vec![]))
         .expect("put an ability on the stack for cleanup priority");
     engine.state.turn_step = TurnStep::Cleanup;
     engine.state.cleanup_priority_active = true;
@@ -255,7 +256,7 @@ fn mardu_devotee_scry_resolves_before_its_limited_mana_ability_is_used() {
     );
     let hand_index = hand_index_for_card(&engine, 0, "mardu_devotee");
     engine
-        .apply_command(0, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(hand_index, vec![]))
         .expect("cast Mardu Devotee");
     pass_both_players(&mut engine);
 
@@ -263,7 +264,7 @@ fn mardu_devotee_scry_resolves_before_its_limited_mana_ability_is_used() {
         .find_map(|_| {
             let player = engine.state.priority_player_id();
             let batch = engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("pass toward the enters-trigger resolution");
             find_resolution_choice(&batch)
         })
@@ -272,7 +273,7 @@ fn mardu_devotee_scry_resolves_before_its_limited_mana_ability_is_used() {
     assert_eq!((choice.min, choice.max), (0, 2));
     assert_eq!(choice.candidate_object_ids.len(), 2);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(choice.candidate_object_ids.clone()),
         )
@@ -311,7 +312,7 @@ fn same_seed_and_commands_replay_the_same_activation_state() {
             },
         );
         engine
-            .apply_command(0, &activate_ability(devotee, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability(devotee, 0, vec![]))
             .expect("accepted command");
         engine
     }

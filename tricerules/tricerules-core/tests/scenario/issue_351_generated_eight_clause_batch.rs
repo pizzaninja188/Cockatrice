@@ -8,6 +8,7 @@
 //! CR 602.1/611.2a/702.17 the mana-activated reach grant and its expiry; CR 602.1/509.1b/208
 //! the power-bounded unblockable activation; CR 603.6a/611.3 the source-excluding mass -2/-2 and
 //! its cleanup; and CR 604.1/611.3 the live control-an-artifact self modifier.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -34,13 +35,13 @@ fn main1_engine(seed: u64, own: &[&str], opposing: &[&str]) -> GameEngine {
 
 fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes in beginning of combat");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes in beginning of combat");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 }
@@ -54,7 +55,7 @@ fn issue_351_pillar_launch_pumps_reach_untaps_and_expires() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "pillar_launch");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
         .expect("cast Pillar Launch");
     assert_eq!(
         engine.effective_power(bear),
@@ -96,7 +97,7 @@ fn issue_351_smaugs_fury_pumps_reach_and_first_strike() {
     );
     let slot = hand_index_for_card(&engine, 0, "smaugs_fury");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
         .expect("cast Smaug's Fury");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.effective_power(bear), Some(5));
@@ -122,7 +123,7 @@ fn issue_351_agate_blade_assassin_drains_the_defending_player() {
     let assassin = inject_creature_on_battlefield(&mut engine, 0, "agate-blade_assassin");
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![assassin]))
+        .apply_scenario_command(0, &declare_attackers(vec![assassin]))
         .expect("attack with Agate-Blade Assassin");
     assert_eq!(
         engine.state.stack.len(),
@@ -155,7 +156,7 @@ fn issue_351_lecturing_scornmage_counts_only_targeted_instant_or_sorcery() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "titanic_growth");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(other)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(other)))
         .expect("cast a creature-targeting instant");
     assert_eq!(
         engine.state.stack.len(),
@@ -173,7 +174,7 @@ fn issue_351_lecturing_scornmage_counts_only_targeted_instant_or_sorcery() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "opt");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast a non-targeting instant");
     assert_eq!(
         engine.state.stack.len(),
@@ -252,7 +253,7 @@ fn issue_351_ragged_playmate_makes_a_small_creature_unblockable() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![small]))
+        .apply_scenario_command(0, &declare_attackers(vec![small]))
         .expect("attack with the small creature");
     let legal = engine.initial_response_batch().legal_by_player[&1]
         .legal_block_pairs
@@ -263,7 +264,7 @@ fn issue_351_ragged_playmate_makes_a_small_creature_unblockable() {
     );
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &declare_blockers(vec![BlockPair {
                     attacker_id: small,
@@ -284,7 +285,7 @@ fn issue_351_ragged_playmate_rejects_a_power_three_target() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "titanic_growth");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("pump the target to power six");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.effective_power(target), Some(6));

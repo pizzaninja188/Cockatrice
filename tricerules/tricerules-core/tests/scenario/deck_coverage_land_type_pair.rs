@@ -1,5 +1,6 @@
 //! Paid exact-card commands for the additive and setting basic-land effects.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::Keyword;
 use tricerules_core::{AttachmentRecipient, Zone};
 
@@ -44,7 +45,7 @@ fn play_yavimaya(engine: &mut GameEngine) -> u32 {
     ensure_card_in_hand(engine, 0, YAVIMAYA);
     let slot = hand_index_for_card(engine, 0, YAVIMAYA);
     let object = engine.state.players[0].hand[slot];
-    engine.apply_command(0, &play_land(slot)).unwrap();
+    engine.apply_scenario_command(0, &play_land(slot)).unwrap();
     object
 }
 
@@ -62,7 +63,7 @@ fn song(engine: &mut GameEngine, target: u32) -> u32 {
         },
     );
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap();
     while !engine.state.stack.is_empty() {
         pass_priority_round(engine);
@@ -88,7 +89,7 @@ fn disenchant(engine: &mut GameEngine, target: u32) {
     );
     let slot = hand_index_for_card(engine, 0, "disenchant");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap();
     while !engine.state.stack.is_empty() {
         pass_priority_round(engine);
@@ -135,7 +136,7 @@ fn song_suppresses_printed_targeting_tax_in_offers_and_paid_execution_then_resto
         },
     );
     engine
-        .apply_command(0, &cast_spell(slot, target_object(kopala)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(kopala)))
         .unwrap();
     while !engine.state.stack.is_empty() {
         pass_priority_round(&mut engine);
@@ -157,7 +158,7 @@ fn song_suppresses_printed_targeting_tax_in_offers_and_paid_execution_then_resto
         },
     );
     engine
-        .apply_command(0, &cast_spell(slot, target_object(merfolk)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(merfolk)))
         .expect("suppressed Kopala does not charge a targeting surcharge");
     while !engine.state.stack.is_empty() {
         pass_priority_round(&mut engine);
@@ -180,7 +181,7 @@ fn song_suppresses_printed_targeting_tax_in_offers_and_paid_execution_then_resto
     let before = engine.diagnostic_snapshot().unwrap();
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(merfolk)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(merfolk)))
         .expect_err("restored Kopala again requires two generic mana");
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
 }
@@ -221,10 +222,10 @@ fn yavimaya_paid_land_play_adds_forest_to_every_players_lands_and_preserves_othe
     let activation = activate_ability_for(&engine, yavimaya, 0, vec![]);
     let before = engine.state.command_index;
     engine
-        .apply_command(1, &activation)
+        .apply_scenario_command(1, &activation)
         .expect_err("wrong controller cannot use derived mana");
     assert_eq!(engine.state.command_index, before);
-    engine.apply_command(0, &activation).unwrap();
+    engine.apply_scenario_command(0, &activation).unwrap();
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
     assert!(engine.state.stack.is_empty());
     let mut island_activation = activate_ability_for(&engine, islands[0], 0, vec![]);
@@ -232,16 +233,20 @@ fn yavimaya_paid_land_play_adds_forest_to_every_players_lands_and_preserves_othe
         unreachable!()
     };
     ability.mana_option_index = 1;
-    engine.apply_command(0, &island_activation).unwrap();
+    engine
+        .apply_scenario_command(0, &island_activation)
+        .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.green, 2);
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     let mut opponent_activation = activate_ability_for(&engine, islands[1], 0, vec![]);
     let Some(Cmd::ActivateAbility(ability)) = opponent_activation.cmd.as_mut() else {
         unreachable!()
     };
     ability.mana_option_index = 1;
-    engine.apply_command(1, &opponent_activation).unwrap();
+    engine
+        .apply_scenario_command(1, &opponent_activation)
+        .unwrap();
     assert_eq!(engine.state.players[1].mana_pool.green, 1);
 }
 
@@ -279,7 +284,7 @@ fn song_paid_cast_sets_colorless_forest_preserves_identity_and_restores_when_des
             .len() as u32;
         let derived_index = if card == "island" { 0 } else { authored_span };
         let command = activate_ability_for(&engine, target, derived_index, vec![]);
-        engine.apply_command(0, &command).unwrap();
+        engine.apply_scenario_command(0, &command).unwrap();
         assert_eq!(engine.state.players[0].mana_pool.green, 1);
         assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
         assert!(engine.state.stack.is_empty());
@@ -352,7 +357,7 @@ fn song_rejects_unaffordable_and_player_targets_without_mutating_state() {
     let before = engine.state.command_index;
     let hand = engine.state.players[0].hand.clone();
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect_err("must pay 2G");
     assert_eq!(engine.state.command_index, before);
     assert_eq!(engine.state.players[0].hand, hand);
@@ -366,7 +371,7 @@ fn song_rejects_unaffordable_and_player_targets_without_mutating_state() {
         },
     );
     engine
-        .apply_command(0, &cast_spell(slot, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(slot, target_player(1)))
         .expect_err("Enchant permanent excludes players");
     assert_eq!(engine.state.command_index, before);
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
@@ -405,7 +410,7 @@ fn song_fizzles_on_a_new_target_incarnation_and_rejects_its_stale_mana_action() 
     let slot = hand_index_for_card(&engine, 0, SONG);
     let second_aura = engine.state.players[0].hand[slot];
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap();
     let generation = engine
         .state
@@ -416,7 +421,7 @@ fn song_fizzles_on_a_new_target_incarnation_and_rejects_its_stale_mana_action() 
     engine.enable_dev_commands();
     for zone in [DevZone::Graveyard, DevZone::Battlefield] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(Cmd::DevCommand(DevCommand {
@@ -439,7 +444,7 @@ fn song_fizzles_on_a_new_target_incarnation_and_rejects_its_stale_mana_action() 
     assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
     let before = engine.diagnostic_snapshot().unwrap();
     engine
-        .apply_command(0, &stale_mana)
+        .apply_scenario_command(0, &stale_mana)
         .expect_err("generation-bound action cannot follow the physical card");
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     while !engine.state.stack.is_empty() {
@@ -468,7 +473,7 @@ fn song_paid_response_destroying_its_only_target_fizzles_without_a_phantom_land(
     let slot = hand_index_for_card(&engine, 0, SONG);
     let aura = engine.state.players[0].hand[slot];
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap();
     disenchant(&mut engine, target);
     assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
@@ -496,7 +501,7 @@ fn song_retains_independent_mana_grants_in_either_order_and_restores_original_ma
             );
             let slot = hand_index_for_card(engine, 0, "gift_of_paradise");
             engine
-                .apply_command(0, &cast_spell(slot, target_object(island)))
+                .apply_scenario_command(0, &cast_spell(slot, target_object(island)))
                 .unwrap();
             resolve_entire_stack_two_player(engine);
         };
@@ -513,19 +518,25 @@ fn song_retains_independent_mana_grants_in_either_order_and_restores_original_ma
             unreachable!()
         };
         ability.mana_option_index = 1;
-        engine.apply_command(0, &grant).unwrap();
+        engine.apply_scenario_command(0, &grant).unwrap();
         assert_eq!(engine.state.players[0].mana_pool.blue, 2);
-        engine.apply_command(0, &undo_mana_ability()).unwrap();
+        engine
+            .apply_scenario_command(0, &undo_mana_ability())
+            .unwrap();
         let intrinsic = activate_ability_for(&engine, island, 0, vec![]);
-        engine.apply_command(0, &intrinsic).unwrap();
+        engine.apply_scenario_command(0, &intrinsic).unwrap();
         assert_eq!(engine.state.players[0].mana_pool.green, 1);
-        engine.apply_command(0, &undo_mana_ability()).unwrap();
+        engine
+            .apply_scenario_command(0, &undo_mana_ability())
+            .unwrap();
         disenchant(&mut engine, aura);
         let intrinsic = activate_ability_for(&engine, island, 0, vec![]);
-        engine.apply_command(0, &intrinsic).unwrap();
+        engine.apply_scenario_command(0, &intrinsic).unwrap();
         assert_eq!(engine.state.players[0].mana_pool.blue, 1);
-        engine.apply_command(0, &undo_mana_ability()).unwrap();
-        engine.apply_command(0, &grant).unwrap();
+        engine
+            .apply_scenario_command(0, &undo_mana_ability())
+            .unwrap();
+        engine.apply_scenario_command(0, &grant).unwrap();
         assert_eq!(engine.state.players[0].mana_pool.blue, 2);
     }
 }
@@ -554,7 +565,7 @@ fn land_pair_serialized_paid_commands_replay_exact_public_batches_and_current_in
     let mut engine = fresh();
     let mut recorded = Vec::new();
     let record = |engine: &mut GameEngine, recorded: &mut Vec<_>, actor, command: RuledCommand| {
-        let batch = engine.apply_command(actor, &command).unwrap();
+        let batch = engine.apply_scenario_command(actor, &command).unwrap();
         recorded.push((actor, command, batch));
     };
     let slot = hand_index_for_card(&engine, 0, YAVIMAYA);
@@ -588,7 +599,10 @@ fn land_pair_serialized_paid_commands_replay_exact_public_batches_and_current_in
     let mut replay = fresh();
     for (actor, command, batch) in recorded {
         let decoded = RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
-        assert_eq!(replay.apply_command(actor, &decoded).unwrap(), batch);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &decoded).unwrap(),
+            batch
+        );
     }
     assert_eq!(
         replay.diagnostic_snapshot().unwrap(),
@@ -619,7 +633,7 @@ fn song_targeting_a_face_down_permanent_preserves_granted_trigger_without_reveal
     );
     let slot = hand_index_for_card(&engine, 0, SONG);
     let activated = engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap();
     assert_eq!(
         engine.state.stack.len(),
@@ -651,7 +665,12 @@ fn song_targeting_a_face_down_permanent_preserves_granted_trigger_without_reveal
             break;
         }
         let actor = engine.state.priority_player_id();
-        events.extend(engine.apply_command(actor, &pass()).unwrap().events);
+        events.extend(
+            engine
+                .apply_scenario_command(actor, &pass())
+                .unwrap()
+                .events,
+        );
     }
     assert!(engine.state.pending_resolution.is_some());
     for event in &events {
@@ -670,6 +689,7 @@ fn song_targeting_a_face_down_permanent_preserves_granted_trigger_without_reveal
         &mut engine,
         0,
         SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::PayMana as i32,
             ..Default::default()
         },
@@ -681,7 +701,7 @@ fn song_targeting_a_face_down_permanent_preserves_granted_trigger_without_reveal
             break;
         }
         let actor = engine.state.priority_player_id();
-        engine.apply_command(actor, &pass()).unwrap();
+        engine.apply_scenario_command(actor, &pass()).unwrap();
     }
     assert!(engine.state.stack.is_empty());
     assert_eq!(
@@ -697,15 +717,17 @@ fn yavimaya_preserves_printed_utility_abilities_and_song_keeps_an_independent_gr
     play_yavimaya(&mut engine);
     let before_life = engine.state.players[0].life;
     let command = activate_ability_for(&engine, grove, 0, vec![]);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(engine.state.players[0].life, before_life - 1);
     // Reset this fixture's tap state; the life payment makes its printed ability nonundoable.
     engine.state.objects.get_mut(&grove).unwrap().tapped = false;
     let life_after_printed = engine.state.players[0].life;
     let command = activate_ability_for(&engine, grove, 2, vec![]);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(engine.state.players[0].life, life_after_printed);
-    engine.apply_command(0, &undo_mana_ability()).unwrap();
+    engine
+        .apply_scenario_command(0, &undo_mana_ability())
+        .unwrap();
     ensure_card_in_hand(&mut engine, 0, "gift_of_paradise");
     give_mana(
         &mut engine,
@@ -718,14 +740,14 @@ fn yavimaya_preserves_printed_utility_abilities_and_song_keeps_an_independent_gr
     );
     let slot = hand_index_for_card(&engine, 0, "gift_of_paradise");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(grove)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(grove)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     song(&mut engine, grove);
     let before = engine.diagnostic_snapshot().unwrap();
     let printed = activate_ability_for(&engine, grove, 0, vec![]);
     engine
-        .apply_command(0, &printed)
+        .apply_scenario_command(0, &printed)
         .expect_err("Song removes printed utility mana");
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     let mut granted = activate_ability_for(&engine, grove, 3, vec![]);
@@ -733,7 +755,7 @@ fn yavimaya_preserves_printed_utility_abilities_and_song_keeps_an_independent_gr
         unreachable!()
     };
     ability.mana_option_index = 1;
-    engine.apply_command(0, &granted).unwrap();
+    engine.apply_scenario_command(0, &granted).unwrap();
     assert_eq!(engine.state.players[0].mana_pool.blue, 2);
 }
 
@@ -758,13 +780,15 @@ fn copied_song_uses_its_current_aura_recipient_and_detaches_a_transformed_aura()
     );
     let slot = hand_index_for_card(&engine, 0, "clever_impersonator");
     let copy = engine.state.players[0].hand[slot];
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![original_song]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![original_song]))
         .unwrap();
     engine
-        .apply_command(0, &submit_resolution_choice(vec![pacifism]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![pacifism]))
         .unwrap();
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(

@@ -415,6 +415,8 @@ struct PendingRuledSpellCast
     quint64 engineTransactionId = 0;
     quint32 reservedObjectId = 0;
     bool resolutionTimeOffer = false;
+    /// Exact engine prompt that authorized a resolution-time cast; zero for ordinary casts.
+    quint64 resolutionPromptId = 0;
 
     struct SelectedMode
     {
@@ -1187,7 +1189,10 @@ public:
     /// Pick one engine-authoritative castable face. The physical CardItem may expose only its
     /// front display name (Adventure), so menu entries come exclusively from `faces`.
     /// Keep previews as cast proposals; bind only final submissions to the resolving offer.
-    static ruled::v1::RuledCommand submissionCommand(const ruled::v1::RuledCommand &command);
+    static std::optional<ruled::v1::RuledCommand> submissionCommand(
+        const ruled::v1::RuledCommand &command,
+        const PendingRuledSpellCast *pendingSpell,
+        const RuledClientState *state);
 
     static std::optional<RuledFaceOption>
     chooseFace(QWidget *parent, const QString &cardName, const QVector<RuledFaceOption> &faces);

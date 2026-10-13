@@ -155,7 +155,13 @@ void sendRuledCommand(const AbstractGame *game, const ruled::v1::RuledCommand &c
     // Through the host interface, where the method is public. GameEventHandler keeps its
     // RuledClientHost overrides private so the view model is the only thing that normally sends;
     // this is the one documented exception, rather than widening that class's interface.
-    static_cast<RuledClientHost *>(handler)->sendRuledCommand(RuledPendingCast::submissionCommand(command));
+    PlayerActions *const actions = localPlayerActions(game);
+    RuledClientState *const state = stateFor(game);
+    const auto *pendingSpell = actions ? &actions->pendingSpellCastForRuledSubmission() : nullptr;
+    const auto outgoing = RuledPendingCast::submissionCommand(command, pendingSpell, state);
+    if (!outgoing)
+        return;
+    static_cast<RuledClientHost *>(handler)->sendRuledCommand(*outgoing);
 }
 
 void sendRuledCommandExpectingAck(const AbstractGame *game,
@@ -169,7 +175,15 @@ void sendRuledCommandExpectingAck(const AbstractGame *game,
     if (!handler) {
         return;
     }
-    static_cast<RuledClientHost *>(handler)->sendRuledCommandExpectingAck(RuledPendingCast::submissionCommand(command), std::move(onFinished));
+    PlayerActions *const actions = localPlayerActions(game);
+    RuledClientState *const state = stateFor(game);
+    const auto *pendingSpell = actions ? &actions->pendingSpellCastForRuledSubmission() : nullptr;
+    const auto outgoing = RuledPendingCast::submissionCommand(command, pendingSpell, state);
+    if (!outgoing) {
+        onFinished(false);
+        return;
+    }
+    static_cast<RuledClientHost *>(handler)->sendRuledCommandExpectingAck(*outgoing, std::move(onFinished));
 }
 
 RuledClientState *stateForCard(const CardItem *card)

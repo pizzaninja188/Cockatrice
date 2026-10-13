@@ -11,6 +11,10 @@ use super::targeting::{
 use super::*;
 
 pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
+    // Handlers build their batches before the command-boundary prompt publisher assigns a fresh
+    // ID, so this early snapshot deliberately stays inactive for an unassigned offer. The command
+    // boundary refreshes it after publication; initial/reconnect/terminal batches end here.
+    batch.resolution_prompt_state = Some(eng.resolution_prompt_state_snapshot());
     let reveals = super::reveals::active_reveals(eng);
     super::reveals::preserve_active_occurrences(batch, &reveals);
     batch.events.push(rv1::RuledEvent {

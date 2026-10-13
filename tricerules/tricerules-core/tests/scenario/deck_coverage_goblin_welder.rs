@@ -1,5 +1,6 @@
 //! Exact Goblin Welder's two-target simultaneous sacrifice and return.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
 use tricerules_core::Zone;
 
@@ -29,7 +30,7 @@ fn resolve_one(engine: &mut GameEngine) -> RuledEventBatch {
     let mut batch = RuledEventBatch::default();
     for _ in 0..count {
         batch = engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     batch
@@ -59,7 +60,7 @@ fn exchange(engine: &GameEngine, source: u32, departure: u32, incoming: u32) -> 
 
 fn rejected_unchanged(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = format!("{:?}", engine.state);
-    assert!(engine.apply_command(actor, command).is_err());
+    assert!(engine.apply_scenario_command(actor, command).is_err());
     assert_eq!(format!("{:?}", engine.state), before);
 }
 
@@ -79,7 +80,9 @@ fn welder_actual_paid_cast_and_tap_cost_preserve_both_targets_until_resolution()
         },
     );
     let slot = hand_index_for_card(&engine, 0, "goblin_welder");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     resolve_one(&mut engine);
     let values = engine.characteristics(source).unwrap();
     assert_eq!((values.power, values.toughness), (Some(1), Some(1)));
@@ -96,7 +99,7 @@ fn welder_actual_paid_cast_and_tap_cost_preserve_both_targets_until_resolution()
         .unwrap()
         .summoning_sick = false;
     rejected_unchanged(&mut engine, 1, &command);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert!(engine.state.objects[&source].tapped);
     assert_eq!(engine.state.objects[&departure].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&incoming].zone, Zone::Graveyard);
@@ -124,7 +127,7 @@ fn welder_own_and_opponent_pairs_reject_crossed_targets_without_paying() {
         engine.state.objects.get_mut(&source).unwrap().tapped = true;
         rejected_unchanged(&mut engine, 0, &command);
         engine.state.objects.get_mut(&source).unwrap().tapped = false;
-        engine.apply_command(0, &command).unwrap();
+        engine.apply_scenario_command(0, &command).unwrap();
         resolve_one(&mut engine);
         assert_eq!(engine.state.objects[&departure].zone, Zone::Graveyard);
         assert_eq!(engine.state.objects[&incoming].zone, Zone::Battlefield);
@@ -143,7 +146,7 @@ fn welder_either_illegal_target_or_changed_controller_keeps_both_objects_and_pai
         let departure = inject_permanent_on_battlefield(&mut engine, 0, "sol_ring");
         let incoming = inject_graveyard_card(&mut engine, 0, "chromatic_lantern");
         engine
-            .apply_command(0, &exchange(&engine, source, departure, incoming))
+            .apply_scenario_command(0, &exchange(&engine, source, departure, incoming))
             .unwrap();
         // Synthetic mutations isolate each resolution-time check, including same-zone reincarnation.
         match invalidation {
@@ -221,7 +224,7 @@ fn welder_foreign_owned_departure_and_artifact_source_follow_current_controller(
             object
         };
         engine
-            .apply_command(0, &exchange(&engine, source, departure, incoming))
+            .apply_scenario_command(0, &exchange(&engine, source, departure, incoming))
             .unwrap();
         resolve_one(&mut engine);
         let owner = usize::from(!self_target);
@@ -249,7 +252,7 @@ fn welder_outgoing_orb_applies_before_departure_and_finality_does_not_prevent_re
                 .insert(CounterKind::Finality, 1);
         }
         engine
-            .apply_command(0, &exchange(&engine, source, departure, incoming))
+            .apply_scenario_command(0, &exchange(&engine, source, departure, incoming))
             .unwrap();
         resolve_one(&mut engine);
         for _ in 0..4 {
@@ -264,7 +267,7 @@ fn welder_outgoing_orb_applies_before_departure_and_finality_does_not_prevent_re
             assert_eq!(engine.state.objects[&departure].zone, Zone::Battlefield);
             assert_eq!(engine.state.objects[&incoming].zone, Zone::Graveyard);
             engine
-                .apply_command(0, &submit_resolution_choice(vec![application]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![application]))
                 .unwrap();
         }
         assert_eq!(
@@ -338,12 +341,12 @@ fn assert_aborted_copy_restored(aura_copy: bool, chained: bool) {
         .copied()
         .unwrap_or(0);
     engine
-        .apply_command(0, &exchange(&engine, source, departure, incoming))
+        .apply_scenario_command(0, &exchange(&engine, source, departure, incoming))
         .unwrap();
     resolve_one(&mut engine);
     if let Some(intermediate) = intermediate {
         engine
-            .apply_command(0, &submit_resolution_choice(vec![intermediate]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![intermediate]))
             .unwrap();
         assert!(
             engine.state.pending_resolution.is_some(),
@@ -355,12 +358,12 @@ fn assert_aborted_copy_restored(aura_copy: bool, chained: bool) {
         );
     }
     engine
-        .apply_command(0, &submit_resolution_choice(vec![copy_source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![copy_source]))
         .unwrap();
     assert!(engine.state.pending_resolution.is_some());
     assert_eq!(engine.state.objects[&incoming].zone, Zone::Graveyard);
     assert!(engine.state.objects[&incoming].copiable_values.is_some());
-    engine.apply_command(2, &concede()).unwrap();
+    engine.apply_scenario_command(2, &concede()).unwrap();
     assert!(!engine.state.objects.contains_key(&departure));
     assert_eq!(engine.state.objects[&incoming].zone, Zone::Graveyard);
     assert!(engine.state.objects[&incoming].copiable_values.is_none());
@@ -388,13 +391,13 @@ fn assert_aborted_copy_restored(aura_copy: bool, chained: bool) {
     let next_source = inject_permanent_on_battlefield(&mut engine, 0, "goblin_welder");
     let next_departure = inject_permanent_on_battlefield(&mut engine, 0, "sol_ring");
     engine
-        .apply_command(0, &exchange(&engine, next_source, next_departure, incoming))
+        .apply_scenario_command(0, &exchange(&engine, next_source, next_departure, incoming))
         .unwrap();
     resolve_one(&mut engine);
     let pending = engine.state.pending_resolution.as_ref().unwrap();
     assert!(pending.presentation.candidates.contains(&next_departure));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![next_departure]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![next_departure]))
         .unwrap();
     assert_eq!(engine.state.objects[&incoming].zone, Zone::Battlefield);
     assert!(engine
@@ -444,11 +447,11 @@ fn welder_copied_battle_rejects_departed_protector_then_commits_with_live_oppone
     resolve_one(&mut engine);
     let incoming = inject_graveyard_card(&mut engine, 0, "sculpting_steel");
     engine
-        .apply_command(0, &exchange(&engine, source, departure, incoming))
+        .apply_scenario_command(0, &exchange(&engine, source, departure, incoming))
         .unwrap();
     resolve_one(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![battle]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![battle]))
         .unwrap();
     assert_eq!(
         engine
@@ -460,7 +463,7 @@ fn welder_copied_battle_rejects_departed_protector_then_commits_with_live_oppone
             .choice_kind,
         ChoiceKind::BattleProtector
     );
-    engine.apply_command(2, &concede()).unwrap();
+    engine.apply_scenario_command(2, &concede()).unwrap();
     assert!(!engine
         .state
         .pending_resolution
@@ -473,7 +476,7 @@ fn welder_copied_battle_rejects_departed_protector_then_commits_with_live_oppone
     assert_eq!(engine.state.objects[&departure].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&incoming].zone, Zone::Graveyard);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![1]))
         .unwrap();
     assert_eq!(engine.state.objects[&departure].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&incoming].zone, Zone::Battlefield);
@@ -492,7 +495,7 @@ fn welder_outgoing_copy_source_remains_unmoved_through_logged_choice() {
     let departure = inject_permanent_on_battlefield(&mut engine, 1, "orb_of_dreams");
     let incoming = inject_graveyard_card(&mut engine, 1, "sculpting_steel");
     engine
-        .apply_command(0, &exchange(&engine, source, departure, incoming))
+        .apply_scenario_command(0, &exchange(&engine, source, departure, incoming))
         .unwrap();
     resolve_one(&mut engine);
     let pending = engine.state.pending_resolution.as_ref().unwrap();
@@ -503,7 +506,7 @@ fn welder_outgoing_copy_source_remains_unmoved_through_logged_choice() {
     rejected_unchanged(&mut engine, 0, &submit_resolution_choice(vec![departure]));
     rejected_unchanged(&mut engine, 1, &submit_resolution_choice(vec![source]));
     engine
-        .apply_command(1, &submit_resolution_choice(vec![departure]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![departure]))
         .unwrap();
     assert_eq!(engine.state.objects[&departure].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&incoming].zone, Zone::Battlefield);
@@ -526,12 +529,12 @@ fn welder_copy_choice_stale_member_and_player_concession_never_sacrifice_a_survi
         let departure = inject_permanent_on_battlefield(&mut engine, 1, "sol_ring");
         let incoming = inject_graveyard_card(&mut engine, 1, "sculpting_steel");
         engine
-            .apply_command(0, &exchange(&engine, source, departure, incoming))
+            .apply_scenario_command(0, &exchange(&engine, source, departure, incoming))
             .unwrap();
         resolve_one(&mut engine);
         assert!(engine.state.pending_resolution.is_some());
         if concession {
-            engine.apply_command(1, &concede()).unwrap();
+            engine.apply_scenario_command(1, &concede()).unwrap();
             assert!(!engine.state.objects.contains_key(&departure));
             assert!(!engine.state.objects.contains_key(&incoming));
             assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
@@ -569,11 +572,11 @@ fn welder_copied_aura_chooses_departing_incarnation_then_enters_before_separate_
         .copied()
         .unwrap_or(0);
     engine
-        .apply_command(0, &exchange(&engine, source, departure, incoming))
+        .apply_scenario_command(0, &exchange(&engine, source, departure, incoming))
         .unwrap();
     resolve_one(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![aura]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![aura]))
         .unwrap();
     let pending = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::AuraPermanent);
@@ -581,7 +584,7 @@ fn welder_copied_aura_chooses_departing_incarnation_then_enters_before_separate_
     assert_eq!(engine.state.objects[&departure].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&incoming].zone, Zone::Graveyard);
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![departure]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![departure]))
         .unwrap();
     assert_eq!(engine.state.objects[&departure].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&incoming].zone, Zone::Graveyard);
@@ -628,16 +631,16 @@ fn welder_copied_aura_keeps_a_surviving_recipient_attached() {
         .copied()
         .unwrap_or(0);
     engine
-        .apply_command(0, &exchange(&engine, source, departure, incoming))
+        .apply_scenario_command(0, &exchange(&engine, source, departure, incoming))
         .unwrap();
     resolve_one(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![aura]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![aura]))
         .unwrap();
     assert_eq!(engine.state.objects[&departure].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&incoming].zone, Zone::Graveyard);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![torque]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![torque]))
         .unwrap();
     assert_eq!(engine.state.objects[&departure].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&incoming].zone, Zone::Battlefield);
@@ -677,16 +680,16 @@ fn welder_copied_aura_without_a_recipient_still_sacrifices_the_legal_departure()
         .copied()
         .unwrap_or(0);
     engine
-        .apply_command(0, &exchange(&engine, source, departure, incoming))
+        .apply_scenario_command(0, &exchange(&engine, source, departure, incoming))
         .unwrap();
     resolve_one(&mut engine);
     // The land owner's real concession removes the sole land while this copy choice is parked.
     // The Aura belongs to the surviving player; pending-resolution SBA deferral keeps it as a source.
-    engine.apply_command(2, &concede()).unwrap();
+    engine.apply_scenario_command(2, &concede()).unwrap();
     assert!(!engine.state.objects.contains_key(&land));
     assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![aura]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![aura]))
         .unwrap();
     assert_eq!(engine.state.objects[&departure].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&incoming].zone, Zone::Graveyard);
@@ -719,7 +722,7 @@ fn welder_return_keeps_intrinsic_entry_counters_and_departing_warden_does_not_se
     let incoming = inject_graveyard_card(&mut engine, 0, "solemn_simulacrum");
     let life = engine.state.players[0].life;
     engine
-        .apply_command(0, &exchange(&engine, source, outgoing, incoming))
+        .apply_scenario_command(0, &exchange(&engine, source, outgoing, incoming))
         .unwrap();
     resolve_one(&mut engine);
     answer_trigger_order_in_engine_order(&mut engine);
@@ -740,7 +743,7 @@ fn welder_return_keeps_intrinsic_entry_counters_and_departing_warden_does_not_se
         resolve_one(&mut engine);
         if engine.state.pending_resolution.is_some() {
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &submit_resolution_decision(
                         tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,
@@ -755,7 +758,7 @@ fn welder_return_keeps_intrinsic_entry_counters_and_departing_warden_does_not_se
     let departure = inject_permanent_on_battlefield(&mut engine, 0, "sol_ring");
     let counter_artifact = inject_graveyard_card(&mut engine, 0, "pentavus");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &exchange(&engine, next_source, departure, counter_artifact),
         )
@@ -787,11 +790,11 @@ fn welder_real_zone_change_invalidates_target_but_source_departure_preserves_abi
         let departure = inject_permanent_on_battlefield(&mut engine, 0, "sol_ring");
         let incoming = inject_graveyard_card(&mut engine, 0, "chromatic_lantern");
         engine
-            .apply_command(0, &exchange(&engine, source, departure, incoming))
+            .apply_scenario_command(0, &exchange(&engine, source, departure, incoming))
             .unwrap();
         engine.enable_dev_commands();
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(Cmd::DevCommand(DevCommand {
@@ -839,16 +842,16 @@ fn welder_accepted_copy_commands_replay_identical_batches_and_incarnations() {
     let (mut original, source, departure, incoming) = create();
     let mut commands = vec![(0, exchange(&original, source, departure, incoming))];
     let mut batches = vec![original
-        .apply_command(commands[0].0, &commands[0].1)
+        .apply_scenario_command(commands[0].0, &commands[0].1)
         .unwrap()];
     for _ in 0..3 {
         let actor = original.state.priority_player_id();
         let command = pass();
-        batches.push(original.apply_command(actor, &command).unwrap());
+        batches.push(original.apply_scenario_command(actor, &command).unwrap());
         commands.push((actor, command));
     }
     let command = submit_resolution_choice(vec![departure]);
-    batches.push(original.apply_command(1, &command).unwrap());
+    batches.push(original.apply_scenario_command(1, &command).unwrap());
     commands.push((1, command));
     assert!(original.state.pending_resolution.is_none() && original.state.stack.is_empty());
     let (mut replay, replay_source, replay_departure, replay_incoming) = create();
@@ -858,7 +861,10 @@ fn welder_accepted_copy_commands_replay_identical_batches_and_incarnations() {
     );
     for ((actor, command), expected) in commands.iter().zip(batches) {
         let decoded = RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
-        assert_eq!(replay.apply_command(*actor, &decoded).unwrap(), expected);
+        assert_eq!(
+            replay.apply_scenario_command(*actor, &decoded).unwrap(),
+            expected
+        );
     }
     assert_eq!(
         replay.diagnostic_snapshot().unwrap(),

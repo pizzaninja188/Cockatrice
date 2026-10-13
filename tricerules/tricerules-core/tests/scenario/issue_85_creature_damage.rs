@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, CounterKind, EffectDuration, Keyword};
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
@@ -61,7 +62,9 @@ fn rabid_bite_publishes_independent_groups_and_rejects_forged_roles_atomically()
         bite_targets(theirs, mine),
         vec![bite_targets(mine, theirs)[0]],
     ] {
-        assert!(engine.apply_command(0, &cast_spell(slot, invalid)).is_err());
+        assert!(engine
+            .apply_scenario_command(0, &cast_spell(slot, invalid))
+            .is_err());
         assert_eq!(engine.state.players[0].hand, hand_before);
         assert_eq!(engine.state.players[0].mana_pool.green, mana_before);
     }
@@ -97,7 +100,7 @@ fn rabid_bite_uses_the_sources_current_power() {
 
     let spell = hand_index_for_card(&engine, 0, "rabid_bite");
     engine
-        .apply_command(0, &cast_spell(spell, bite_targets(source, recipient)))
+        .apply_scenario_command(0, &cast_spell(spell, bite_targets(source, recipient)))
         .expect("cast Rabid Bite");
     engine
         .state
@@ -140,7 +143,7 @@ fn hunters_edge_applies_its_counter_before_calculating_damage() {
 
     let spell = hand_index_for_card(&engine, 0, "hunters_edge");
     engine
-        .apply_command(0, &cast_spell(spell, bite_targets(source, recipient)))
+        .apply_scenario_command(0, &cast_spell(spell, bite_targets(source, recipient)))
         .expect("cast Hunter's Edge");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -181,7 +184,7 @@ fn hunters_edge_still_adds_the_counter_when_only_the_recipient_is_illegal() {
 
     let spell = hand_index_for_card(&engine, 0, "hunters_edge");
     engine
-        .apply_command(0, &cast_spell(spell, bite_targets(source, recipient)))
+        .apply_scenario_command(0, &cast_spell(spell, bite_targets(source, recipient)))
         .expect("cast Hunter's Edge");
     engine.state.players[1]
         .battlefield
@@ -236,7 +239,7 @@ fn bite_target_that_leaves_and_returns_is_a_new_object() {
 
     let spell = hand_index_for_card(&engine, 0, "rabid_bite");
     engine
-        .apply_command(0, &cast_spell(spell, bite_targets(source, recipient)))
+        .apply_scenario_command(0, &cast_spell(spell, bite_targets(source, recipient)))
         .expect("cast Rabid Bite");
     *engine
         .state
@@ -273,7 +276,7 @@ fn prodigal_sorcerer_lifelink_uses_the_shared_noncombat_damage_pipeline() {
     });
 
     engine
-        .apply_command(0, &activate_ability(source, 0, target_player(1)))
+        .apply_scenario_command(0, &activate_ability(source, 0, target_player(1)))
         .expect("activate Prodigal Sorcerer");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -300,7 +303,7 @@ fn prodigal_damage_feeds_general_damage_triggers_only_when_damage_is_dealt() {
         }
 
         engine
-            .apply_command(0, &activate_ability(source, 0, target_player(1)))
+            .apply_scenario_command(0, &activate_ability(source, 0, target_player(1)))
             .expect("activate Prodigal Sorcerer");
         // Model the source acquiring Thieving Magpie's copiable characteristics while the
         // activated ability is on the stack. The ability still resolves from its Prodigal stack
@@ -350,7 +353,7 @@ fn issue_175_noncombat_lifelink_preserves_damage_and_prevention() {
             engine.state.add_damage_prevention_shield(1, 1);
         }
         engine
-            .apply_command(0, &activate_ability(source, 0, target_player(1)))
+            .apply_scenario_command(0, &activate_ability(source, 0, target_player(1)))
             .unwrap();
         resolve_entire_stack_two_player(&mut engine);
         assert_eq!(
@@ -412,7 +415,7 @@ fn rabid_bite_uses_creature_deathtouch_and_lifelink_after_prevention() {
 
     let spell = hand_index_for_card(&engine, 0, "rabid_bite");
     engine
-        .apply_command(0, &cast_spell(spell, bite_targets(source, recipient)))
+        .apply_scenario_command(0, &cast_spell(spell, bite_targets(source, recipient)))
         .expect("cast Rabid Bite");
     resolve_entire_stack_two_player(&mut engine);
 

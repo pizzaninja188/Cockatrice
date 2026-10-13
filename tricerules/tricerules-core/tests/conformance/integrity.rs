@@ -4,8 +4,7 @@ use tricerules_core::{GameEngine, TurnStep, Zone};
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::{
     ActivateAbility, CastSource, CastSpell, CostObjectRef, LandSource, PassPriority, PaymentMana,
-    PaymentSelection, PlayLand, ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
-    TargetRef,
+    PaymentSelection, PlayLand, RuledCommand, RuledEventBatch, TargetRef,
 };
 
 fn pass() -> RuledCommand {
@@ -21,6 +20,7 @@ fn play_land(hand_card_index: u32) -> RuledCommand {
 fn play_land_face(hand_card_index: u32, face_index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::PlayLand(PlayLand {
+            resolution_prompt_id: 0,
             source: Some(LandSource {
                 location: Some(
                     tricerules_proto::ruled::v1::land_source::Location::HandIndex(hand_card_index),
@@ -194,64 +194,37 @@ fn exact_resolution_payment(
 }
 
 /// Resolve whatever sits on the stack, bounded so a target-prompt stall can't hang the test.
-fn try_drain_stack(e: &mut GameEngine) -> bool {
+fn try_drain_stack(e: &mut GameEngine, mut batch: RuledEventBatch) -> bool {
     for _ in 0..40 {
         if let Some(pending) = e.state.pending_resolution.as_ref() {
+            let choice = match super::active_resolution_choice(e, &batch) {
+                Ok(choice) => choice,
+                Err(_) => break,
+            };
             let deciding_player = pending.deciding_player;
-            let pick_count = (pending
-                .presentation
-                .min
-                .max(u32::from(!pending.presentation.candidates.is_empty())))
-            .min(pending.presentation.max)
-            .min(pending.presentation.candidates.len() as u32)
-                as usize;
-            let chosen_object_ids = pending
-                .presentation
-                .candidates
-                .iter()
-                .copied()
-                .take(pick_count)
-                .collect();
-            let payment = pending.continuation.mana_payment().map(|payment| {
+            let Ok(mut answer) = super::resolution_answer(choice) else {
+                break;
+            };
+            let Some(Cmd::SubmitResolutionChoice(response)) = answer.cmd.as_mut() else {
+                break;
+            };
+            response.payment = pending.continuation.mana_payment().map(|payment| {
                 exact_resolution_payment(e, payment, pending.presentation.source_object_id)
             });
-            let answer = RuledCommand {
-                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
-                    chosen_object_ids,
-                    decision: if pending.continuation.mana_payment().is_some() {
-                        ResolutionChoiceDecision::PayMana as i32
-                    } else if matches!(
-                        pending.continuation,
-                        tricerules_core::state::ResolutionContinuation::AuthoredBranch { .. }
-                            | tricerules_core::state::ResolutionContinuation::AmassChoice { .. }
-                            | tricerules_core::state::ResolutionContinuation::OwnerLibraryPlacement { .. }
-                            | tricerules_core::state::ResolutionContinuation::SearchZoneScope { .. }
-                    ) {
-                        ResolutionChoiceDecision::SelectBranch as i32
-                    } else {
-                        ResolutionChoiceDecision::Unspecified as i32
-                    },
-                    selected_branch_index: 0,
-                    cast_spell: None,
-                    spell_cast_announcement: None,
-                    chosen_combat_defender: None,
-                    payment,
-                    restricted_mana: vec![],
-                    chosen_player_ids: vec![],
-                })),
-            };
-            if e.apply_command(deciding_player, &answer).is_err() {
+            let Ok(next_batch) = e.apply_command(deciding_player, &answer) else {
                 break;
-            }
+            };
+            batch = next_batch;
             continue;
         }
         if e.state.stack.is_empty() {
             break;
         }
         let p = e.state.priority_player_id();
-        if e.apply_command(p, &pass()).is_err() {
+        let Ok(next_batch) = e.apply_command(p, &pass()) else {
             break;
-        }
+        };
+        batch = next_batch;
     }
     super::settled(e)
 }
@@ -364,10 +337,8 @@ fn exercise_face_in_fresh_game(card_id: &str, face_index: u32) -> bool {
     let mut completed = false;
     for targets in candidates {
         grant_ample_mana(&mut e);
-        if e.apply_command(0, &cast_spell_face(slot, targets, face_index))
-            .is_ok()
-        {
-            completed = try_drain_stack(&mut e);
+        if let Ok(batch) = e.apply_command(0, &cast_spell_face(slot, targets, face_index)) {
+            completed = try_drain_stack(&mut e, batch);
             break;
         }
     }
@@ -457,15 +428,15 @@ pub(super) fn observed_completed_cases() -> std::collections::BTreeSet<String> {
             vec![tref(their_creature)],
             vec![tref(my_creature)],
         ];
-        let mut cast_ok = false;
+        let mut cast_batch = None;
         for targets in candidates {
             grant_ample_mana(&mut e);
-            if e.apply_command(0, &cast_spell(slot, targets)).is_ok() {
-                cast_ok = true;
+            if let Ok(batch) = e.apply_command(0, &cast_spell(slot, targets)) {
+                cast_batch = Some(batch);
                 break;
             }
         }
-        if cast_ok && try_drain_stack(&mut e) {
+        if cast_batch.is_some_and(|batch| try_drain_stack(&mut e, batch)) {
             completed.insert(format!("{card_id}\t0\t{}", super::play_kind(card_id, 0)));
         }
         assert_zone_integrity(&e, baseline, &format!("{card_id} (spell)"));
@@ -502,11 +473,8 @@ pub(super) fn observed_completed_cases() -> std::collections::BTreeSet<String> {
                 ];
                 for targets in candidates {
                     grant_ample_mana(&mut ae);
-                    if ae
-                        .apply_command(0, &activate_ability(src, ai, targets))
-                        .is_ok()
-                    {
-                        if try_drain_stack(&mut ae) {
+                    if let Ok(batch) = ae.apply_command(0, &activate_ability(src, ai, targets)) {
+                        if try_drain_stack(&mut ae, batch) {
                             completed.insert(format!("{card_id}\t0\tability:{ai}"));
                         }
                         break;

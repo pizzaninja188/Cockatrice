@@ -78,7 +78,7 @@ fn resolve_portal_to_first_choice(engine: &mut GameEngine) -> Vec<rv1::RuledEven
         .unwrap();
     engine.state.players[0].mana_pool.colorless = 9;
     engine
-        .apply_command(
+        .apply_scenario_command(
             4,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
@@ -98,7 +98,7 @@ fn resolve_portal_to_first_choice(engine: &mut GameEngine) -> Vec<rv1::RuledEven
             return events;
         }
         let batch = engine
-            .apply_command(
+            .apply_scenario_command(
                 engine.state.priority_player_id(),
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(Default::default())),
@@ -128,7 +128,7 @@ fn target_portal_upkeep_trigger(engine: &mut GameEngine, target: ObjectId) {
     );
     let generation = engine.state.zone_change_generation[&target];
     engine
-        .apply_command(
+        .apply_scenario_command(
             active_player,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::ChooseTriggerTarget(
@@ -162,7 +162,7 @@ fn portal_upkeep_returns_an_opponents_creature_as_phyrexian_until_it_changes_zon
             break;
         }
         let player = engine.state.priority_player_id();
-        engine.apply_command(player, &pass).unwrap();
+        engine.apply_scenario_command(player, &pass).unwrap();
     }
 
     let object = &engine.state.objects[&target];
@@ -209,7 +209,7 @@ fn portal_collects_exact_apnap_choices_before_one_simultaneous_sacrifice() {
     assert_eq!(first.presentation.candidates.len(), 4);
     let first_picks = opponent_one[..3].to_vec();
     let accepted = engine
-        .apply_command(9, &answer(first_picks.clone()))
+        .apply_scenario_command(9, &answer(first_picks.clone()))
         .unwrap();
     let second = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(second.deciding_player, 27);
@@ -244,7 +244,7 @@ fn portal_collects_exact_apnap_choices_before_one_simultaneous_sacrifice() {
 
     let second_picks = opponent_two[..3].to_vec();
     let third_prompt = engine
-        .apply_command(27, &answer(second_picks.clone()))
+        .apply_scenario_command(27, &answer(second_picks.clone()))
         .unwrap();
     let third = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(third.deciding_player, 51);
@@ -266,7 +266,7 @@ fn portal_collects_exact_apnap_choices_before_one_simultaneous_sacrifice() {
 
     let third_picks = opponent_three[..3].to_vec();
     engine
-        .apply_command(51, &answer(third_picks.clone()))
+        .apply_scenario_command(51, &answer(third_picks.clone()))
         .unwrap();
     for pick in first_picks.iter().chain(&second_picks).chain(&third_picks) {
         assert_eq!(engine.state.objects[pick].zone, Zone::Graveyard);
@@ -308,7 +308,7 @@ fn portal_rejects_stale_exact_object_choice_without_consuming_the_prompt() {
     engine.state.zone_change_generation.insert(candidates[0], 1);
     let before = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(9, &answer(candidates[..3].to_vec()))
+        .apply_scenario_command(9, &answer(candidates[..3].to_vec()))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before);
     assert_eq!(

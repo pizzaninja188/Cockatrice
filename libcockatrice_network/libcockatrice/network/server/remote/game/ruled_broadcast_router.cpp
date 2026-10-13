@@ -29,6 +29,7 @@ void RuledBroadcastRouter::resetForNewGame()
     hasLastBroadcastHandSlotMap = false;
     lastBroadcastHandSlotParticipants.clear();
     pendingResolutionChoice.reset();
+    currentResolutionPromptState.reset();
     pendingResolutionState.Clear();
     pendingAnnouncementState.Clear();
     currentPublicZoneView.reset();
@@ -73,13 +74,62 @@ void RuledBroadcastRouter::broadcast(const ruled::v1::IpcResponse &resp, bool au
 
 void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::IpcResponse &response)
 {
+    if (response.has_batch() && response.batch().has_payment_preview() && response.batch().events().empty() &&
+        response.batch().legal_by_player().empty()) {
+        // PaymentPreview is a private query response, not a new authoritative resolution state.
+        return;
+    }
+
+    const std::optional<ruled::v1::ResolutionChoiceRequired> previousChoice = pendingResolutionChoice;
+    const std::optional<ruled::v1::ResolutionPromptState> previousPrompt = currentResolutionPromptState;
+    const ruled::v1::RuledEventBatch previousResolutionState = pendingResolutionState;
+
     pendingResolutionChoice.reset();
     pendingResolutionState.Clear();
     pendingAnnouncementState.Clear();
     pendingOpeningState.Clear();
     if (!response.has_batch()) {
+        currentResolutionPromptState.reset();
         return;
     }
+    currentResolutionPromptState.reset();
+    if (response.batch().has_resolution_prompt_state()) {
+        currentResolutionPromptState.emplace();
+        currentResolutionPromptState->CopyFrom(response.batch().resolution_prompt_state());
+    }
+
+    const auto activePromptId = [](const std::optional<ruled::v1::ResolutionPromptState> &prompt) {
+        return prompt && prompt->active() && prompt->has_resolution_prompt_id() &&
+                       prompt->resolution_prompt_id() != 0
+                   ? prompt->resolution_prompt_id()
+                   : quint64{0};
+    };
+    const quint64 currentPromptId = activePromptId(currentResolutionPromptState);
+    std::optional<ruled::v1::ResolutionChoiceRequired> matchingChoice;
+    if (currentPromptId != 0) {
+        for (const auto &event : response.batch().events()) {
+            if (!event.has_resolution_choice_required())
+                continue;
+            const auto &choice = event.resolution_choice_required();
+            if (choice.resolution_prompt_id() == currentPromptId &&
+                choice.deciding_player_id() == currentResolutionPromptState->deciding_player_id()) {
+                matchingChoice.emplace();
+                matchingChoice->CopyFrom(choice);
+            }
+        }
+    }
+    const bool samePromptRefresh = currentPromptId != 0 && previousChoice && previousPrompt &&
+                                  activePromptId(previousPrompt) == currentPromptId &&
+                                  previousPrompt->deciding_player_id() ==
+                                      currentResolutionPromptState->deciding_player_id() &&
+                                  previousChoice->resolution_prompt_id() == currentPromptId &&
+                                  previousChoice->deciding_player_id() ==
+                                      currentResolutionPromptState->deciding_player_id();
+    if (matchingChoice)
+        pendingResolutionChoice = matchingChoice;
+    else if (samePromptRefresh)
+        pendingResolutionChoice = previousChoice;
+
     const auto &legal = response.batch().legal_by_player();
     currentLegalActionsByPlayer.clear();
     for (const auto &entry : legal) {
@@ -124,21 +174,29 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
             currentPublicZoneView = std::move(view);
         }
 
-        if (!event.has_resolution_choice_required()) {
-            continue;
-        }
-        const auto &choice = event.resolution_choice_required();
-        pendingResolutionChoice.emplace();
-        pendingResolutionChoice->CopyFrom(choice);
     }
-    if (pendingResolutionChoice)
-        *pendingResolutionState.mutable_legal_by_player() = response.batch().legal_by_player();
+    if (pendingResolutionChoice) {
+        if (samePromptRefresh && legal.empty())
+            *pendingResolutionState.mutable_legal_by_player() = previousResolutionState.legal_by_player();
+        else
+            *pendingResolutionState.mutable_legal_by_player() = legal;
+    }
     if (pendingResolutionChoice) {
         if (currentPublicZoneView)
             pendingResolutionState.add_events()->mutable_zone_view()->CopyFrom(*currentPublicZoneView);
         if (pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
+            bool addedManaPool = false;
             for (const auto &event : response.batch().events()) {
-                if (event.has_mana_pool_updated()) pendingResolutionState.add_events()->CopyFrom(event);
+                if (event.has_mana_pool_updated()) {
+                    pendingResolutionState.add_events()->CopyFrom(event);
+                    addedManaPool = true;
+                }
+            }
+            if (samePromptRefresh && !addedManaPool) {
+                for (const auto &event : previousResolutionState.events()) {
+                    if (event.has_mana_pool_updated())
+                        pendingResolutionState.add_events()->CopyFrom(event);
+                }
             }
         }
     }
@@ -215,6 +273,8 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
         if (!batch->legal_by_player().contains(participant->getPlayerId()))
             (*batch->mutable_legal_by_player())[participant->getPlayerId()].Clear();
     }
+    if (currentResolutionPromptState)
+        batch->mutable_resolution_prompt_state()->CopyFrom(*currentResolutionPromptState);
     if (activePublicRevealSnapshot)
         batch->add_events()->mutable_active_public_reveal_snapshot()->CopyFrom(*activePublicRevealSnapshot);
     const bool restoreFullIdentityMaps =
@@ -801,6 +861,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
     // only these reviewed cases.
     bool hasOwnLegalActions = false;
     ruled::v1::LegalActions ownLegalActions;
+    std::optional<quint64> ownResolutionPromptId;
     const auto ownLegalIt = filtered.legal_by_player().find(participant->getPlayerId());
     if (ownLegalIt != filtered.legal_by_player().end()) {
         ownLegalActions.CopyFrom(ownLegalIt->second);
@@ -811,6 +872,13 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
     QHash<int, ruled::v1::TriggerNeedsTarget> routedTriggerChoices;
     QHash<int, ruled::v1::HandSlotMap> ownHandSlotMaps;
     QHash<int, ruled::v1::FaceDownObjectMap> ownFaceDownMaps;
+    if (batch.has_resolution_prompt_state()) {
+        const auto &prompt = batch.resolution_prompt_state();
+        if (prompt.active() && prompt.deciding_player_id() == participant->getPlayerId() &&
+            prompt.has_resolution_prompt_id() && prompt.resolution_prompt_id() != 0) {
+            ownResolutionPromptId = prompt.resolution_prompt_id();
+        }
+    }
     for (int ei = 0; ei < filtered.events_size(); ++ei) {
         const auto &event = filtered.events(ei);
         if (event.has_log()) {
@@ -831,6 +899,8 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
     if (hasOwnLegalActions) {
         (*filtered.mutable_legal_by_player())[participant->getPlayerId()] = ownLegalActions;
     }
+    if (ownResolutionPromptId && filtered.has_resolution_prompt_state())
+        filtered.mutable_resolution_prompt_state()->set_resolution_prompt_id(*ownResolutionPromptId);
     // The current top is private to its engine-authorized viewer. Restore it after recursive
     // fail-closed clearing, including on idle reconnect snapshots sourced from the public cache.
     const auto privateTop = privateLibraryTopByPlayer.constFind(participant->getPlayerId());
@@ -868,6 +938,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
         if (choiceIt.value().choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT)
             choice->mutable_replacement_options()->CopyFrom(choiceIt.value().replacement_options());
         if (choiceIt.value().deciding_player_id() == participant->getPlayerId()) {
+            choice->set_resolution_prompt_id(choiceIt.value().resolution_prompt_id());
             choice->mutable_candidate_token_identities()->CopyFrom(choiceIt.value().candidate_token_identities());
             choice->mutable_candidate_player_ids()->CopyFrom(choiceIt.value().candidate_player_ids());
             choice->set_waterbend(choiceIt.value().waterbend());

@@ -140,6 +140,7 @@ impl GameEngine {
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        resolution_prompt_id: 0,
                         variable_mana_contribution: false,
                         deciding_player_id: player,
                         source_object_id,
@@ -158,6 +159,9 @@ impl GameEngine {
             });
             events.push(events::ev_log_private(prompt.clone(), player));
             self.state.pending_resolution = Some(PendingResolution {
+                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                resolution_prompt_semantics: None,
+
                 deciding_player: player,
                 presentation: PendingResolutionPresentation {
                     source_object_id,
@@ -581,15 +585,17 @@ mod tests {
                 .iter()
                 .map(|entry| entry.event.object_id)
                 .collect::<Vec<_>>();
+            let mut events = Vec::new();
             assert!(engine
                 .begin_token_entry_batch(
                     item,
                     entries,
                     logs,
                     TokenEntryBatchOptions::default(),
-                    &mut vec![]
+                    &mut events
                 )
                 .unwrap());
+            engine.publish_resolution_prompt_ids(&mut events).unwrap();
             engine.transfer_entry_choice_resume(&stack);
             ids
         } else {
@@ -615,13 +621,19 @@ mod tests {
                     },
                 );
             }
+            let mut events = Vec::new();
             assert!(engine
-                .drain_immediate_observer_actions(Some(stack), &mut vec![])
+                .drain_immediate_observer_actions(Some(stack), &mut events)
                 .unwrap());
+            engine.publish_resolution_prompt_ids(&mut events).unwrap();
             ids
         };
-        engine.apply_command(0, &choice(vec![host])).unwrap();
-        engine.apply_command(0, &choice(vec![host])).unwrap();
+        engine
+            .apply_scenario_command(0, &choice(vec![host]))
+            .unwrap();
+        engine
+            .apply_scenario_command(0, &choice(vec![host]))
+            .unwrap();
         assert_eq!(
             engine
                 .state
@@ -651,14 +663,16 @@ mod tests {
             let generation = engine.state.zone_change_generation[&ids[0]];
             let revision = engine.state.objects[&ids[0]].copy_revision;
             let before = engine.diagnostic_snapshot().unwrap();
-            assert!(engine.apply_command(0, &choice(ids.clone())).is_err());
+            assert!(engine
+                .apply_scenario_command(0, &choice(ids.clone()))
+                .is_err());
             assert_eq!(
                 engine.diagnostic_snapshot().unwrap(),
                 before,
                 "stale ordinary answer must be atomic"
             );
             engine
-                .apply_command(
+                .apply_scenario_command(
                     2,
                     &rv1::RuledCommand {
                         cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
@@ -669,7 +683,7 @@ mod tests {
             let order = pending.presentation.candidates.clone();
             assert_eq!(order.len(), 2);
             assert!(!order.contains(&ids[0]));
-            engine.apply_command(0, &choice(order)).unwrap();
+            engine.apply_scenario_command(0, &choice(order)).unwrap();
             assert_eq!(engine.state.objects[&ids[0]].zone, Zone::Exile);
             assert_eq!(engine.state.zone_change_generation[&ids[0]], generation);
             assert_eq!(engine.state.objects[&ids[0]].copy_revision, revision);
@@ -712,10 +726,12 @@ mod tests {
                 .unwrap_or(0);
             let revision = engine.state.objects[&ids[0]].copy_revision;
             let before = engine.diagnostic_snapshot().unwrap();
-            assert!(engine.apply_command(0, &choice(ids.clone())).is_err());
+            assert!(engine
+                .apply_scenario_command(0, &choice(ids.clone()))
+                .is_err());
             assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
             let batch = engine
-                .apply_command(
+                .apply_scenario_command(
                     2,
                     &rv1::RuledCommand {
                         cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
@@ -808,17 +824,21 @@ mod tests {
         let ids: Vec<_> = entries.iter().map(|entry| entry.event.object_id).collect();
         let mut stack = ParkedStackResolution::new(item.clone());
         stack.resume_effect_index = Some(0);
+        let mut events = Vec::new();
         assert!(engine
             .begin_token_entry_batch(
                 item,
                 entries,
                 logs,
                 TokenEntryBatchOptions::default(),
-                &mut Vec::new()
+                &mut events
             )
             .unwrap());
         engine.transfer_entry_choice_resume(&stack);
-        engine.apply_command(0, &choice(vec![host])).unwrap();
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
+        engine
+            .apply_scenario_command(0, &choice(vec![host]))
+            .unwrap();
         assert_eq!(
             engine
                 .state
@@ -830,7 +850,7 @@ mod tests {
             rv1::ChoiceKind::AuraPermanent
         );
         let batch = engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
@@ -853,7 +873,7 @@ mod tests {
             .iter()
             .any(|event| matches!(event.ev, Some(rv1::ruled_event::Ev::TokenCreated(_)))));
         let hand_before = engine.state.players[0].hand.len();
-        engine.apply_command(0, &choice(vec![])).unwrap();
+        engine.apply_scenario_command(0, &choice(vec![])).unwrap();
         assert!(engine.state.pending_resolution.is_none());
         assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
     }
@@ -896,15 +916,17 @@ mod tests {
             )
             .unwrap();
         let ids: Vec<_> = entries.iter().map(|entry| entry.event.object_id).collect();
+        let mut events = Vec::new();
         assert!(engine
             .begin_token_entry_batch(
                 stack,
                 entries,
                 logs,
                 TokenEntryBatchOptions::default(),
-                &mut Vec::new(),
+                &mut events,
             )
             .unwrap());
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
         assert_eq!(
             engine
                 .state
@@ -934,7 +956,7 @@ mod tests {
             .iter()
             .all(|oid| engine.state.objects[oid].zone == Zone::Stack));
         engine
-            .apply_command(0, &choice(vec![ids[1], ids[0]]))
+            .apply_scenario_command(0, &choice(vec![ids[1], ids[0]]))
             .unwrap();
         assert!(engine.state.pending_resolution.is_none());
         assert!(ids
@@ -995,10 +1017,14 @@ mod tests {
         item.ability_text = None;
         let mut stack = ParkedStackResolution::new(item);
         stack.resume_effect_index = Some(0);
+        let mut events = Vec::new();
         assert!(engine
-            .drain_immediate_observer_actions(Some(stack), &mut Vec::new())
+            .drain_immediate_observer_actions(Some(stack), &mut events)
             .unwrap());
-        engine.apply_command(0, &choice(vec![host])).unwrap();
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
+        engine
+            .apply_scenario_command(0, &choice(vec![host]))
+            .unwrap();
         assert_eq!(
             engine
                 .state
@@ -1010,7 +1036,7 @@ mod tests {
             rv1::ChoiceKind::AuraPermanent
         );
         let batch = engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
@@ -1037,7 +1063,7 @@ mod tests {
         assert!(!batch.events.iter().any(|event| matches!(&event.ev,
             Some(rv1::ruled_event::Ev::AuraAttached(attachment)) if ids[..2].contains(&attachment.aura_object_id))));
         let hand_before = engine.state.players[0].hand.len();
-        engine.apply_command(0, &choice(vec![])).unwrap();
+        engine.apply_scenario_command(0, &choice(vec![])).unwrap();
         assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
         assert!(engine.state.pending_resolution.is_none());
         assert!(engine.state.pending_observer_return_batch.is_none());
@@ -1078,9 +1104,11 @@ mod tests {
                 },
             );
         }
+        let mut events = Vec::new();
         assert!(engine
-            .drain_immediate_observer_actions(None, &mut Vec::new())
+            .drain_immediate_observer_actions(None, &mut events)
             .unwrap());
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
         assert_eq!(
             engine
                 .state
@@ -1094,7 +1122,7 @@ mod tests {
             .iter()
             .all(|oid| engine.state.objects[oid].zone == Zone::Exile));
         engine
-            .apply_command(0, &choice(vec![ids[1], ids[0]]))
+            .apply_scenario_command(0, &choice(vec![ids[1], ids[0]]))
             .unwrap();
         assert!(engine.state.pending_resolution.is_none());
         assert!(ids
@@ -1165,9 +1193,11 @@ mod tests {
         item.ability_text = None;
         let mut stack = ParkedStackResolution::new(item);
         stack.resume_effect_index = Some(0);
+        let mut events = Vec::new();
         assert!(engine
-            .drain_immediate_observer_actions(Some(stack), &mut Vec::new())
+            .drain_immediate_observer_actions(Some(stack), &mut events)
             .unwrap());
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
         assert_eq!(
             engine
                 .state
@@ -1184,7 +1214,7 @@ mod tests {
         assert_eq!(engine.state.objects[&first].zone, Zone::Exile);
 
         engine
-            .apply_command(0, &choice(vec![attachment]))
+            .apply_scenario_command(0, &choice(vec![attachment]))
             .expect("choose the creature enchanted by the returning Aura");
         let pending = engine.state.pending_resolution.as_ref().unwrap();
         assert_eq!(
@@ -1203,7 +1233,7 @@ mod tests {
             .copied()
             .collect();
         engine
-            .apply_command(0, &choice(chosen_order))
+            .apply_scenario_command(0, &choice(chosen_order))
             .expect("choose timestamps after the Aura return resolves");
 
         let scry = engine.state.pending_resolution.as_ref().unwrap();
@@ -1217,7 +1247,7 @@ mod tests {
         );
         let hand_before_draw = engine.state.players[0].hand.len();
         engine
-            .apply_command(0, &choice(vec![]))
+            .apply_scenario_command(0, &choice(vec![]))
             .expect("keep Opt's scried card on top and finish its draw");
         assert!(engine.state.pending_resolution.is_none());
         assert_eq!(engine.state.players[0].hand.len(), hand_before_draw + 1);

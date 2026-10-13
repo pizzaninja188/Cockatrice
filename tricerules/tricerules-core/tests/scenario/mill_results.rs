@@ -1,5 +1,6 @@
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use crate::helpers::ScenarioCommandExt;
+use tricerules_core::Zone;
 
 fn put_on_top(e: &mut GameEngine, player: usize, card_ids: &[&str]) -> Vec<u32> {
     let objects: Vec<_> = card_ids
@@ -71,7 +72,7 @@ fn gorging_vulture_counts_only_creatures_milled_by_its_trigger() {
     let library_before = e.state.players[0].library.len();
     let graveyard_before = e.state.players[0].graveyard.len();
 
-    e.apply_command(0, &cast_spell(hand_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(hand_index, vec![]))
         .expect("cast Gorging Vulture");
     resolve_entire_stack_two_player(&mut e);
 
@@ -124,7 +125,7 @@ fn gorging_vulture_mills_as_many_as_possible_and_counts_that_short_cohort() {
     let hand_index = hand_index_for_card(&e, 0, "gorging_vulture");
     let life_before = e.state.players[0].life;
     let graveyard_before = e.state.players[0].graveyard.len();
-    e.apply_command(0, &cast_spell(hand_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(hand_index, vec![]))
         .expect("cast Gorging Vulture");
     resolve_entire_stack_two_player(&mut e);
 
@@ -177,7 +178,7 @@ fn milled_card_result_does_not_leak_to_a_later_resolution() {
         },
     );
     let first = hand_index_for_card(&e, 0, "gorging_vulture");
-    e.apply_command(0, &cast_spell(first, vec![]))
+    e.apply_scenario_command(0, &cast_spell(first, vec![]))
         .expect("cast first Gorging Vulture");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[0].life, 22);
@@ -193,7 +194,7 @@ fn milled_card_result_does_not_leak_to_a_later_resolution() {
         },
     );
     let second = hand_index_for_card(&e, 0, "gorging_vulture");
-    e.apply_command(0, &cast_spell(second, vec![]))
+    e.apply_scenario_command(0, &cast_spell(second, vec![]))
         .expect("cast second Gorging Vulture");
     resolve_entire_stack_two_player(&mut e);
 

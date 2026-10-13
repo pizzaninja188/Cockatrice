@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_proto::ruled::v1 as rv1;
 
@@ -42,7 +43,7 @@ fn activate_mana_option(
     };
     activation.mana_option_index = option_index;
     engine
-        .apply_command(player, &command)
+        .apply_scenario_command(player, &command)
         .expect("selected mana ability resolves")
 }
 
@@ -66,7 +67,7 @@ fn begin_spell_payment(engine: &mut GameEngine, player: i32, card_id: &str) -> u
         casting_permission_id: cast.casting_permission_id,
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             player,
             &RuledCommand {
                 cmd: Some(Cmd::BeginSpellCast(rv1::BeginSpellCast {
@@ -99,7 +100,7 @@ fn commit_green_spell(
         }),
         ..Default::default()
     };
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         player,
         &rv1::PreviewPayment {
             transaction_id,
@@ -110,7 +111,7 @@ fn commit_green_spell(
     );
     assert!(preview.valid && preview.complete, "{preview:?}");
     engine
-        .apply_command(
+        .apply_scenario_command(
             player,
             &RuledCommand {
                 cmd: Some(Cmd::CommitSpellCast(rv1::CommitSpellCast {
@@ -148,7 +149,7 @@ fn issue_494_each_in_scope_pain_mana_choice_resolves_without_stack_or_undo() {
         activation.mana_option_index = option;
 
         let batch = engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect("the selected mana option is legal");
 
         assert_eq!(
@@ -221,7 +222,7 @@ fn issue_494_pure_talisman_mana_remains_undoable_and_damage_activation_invalidat
     assert_eq!(mana_snapshot(&engine, 0), [1, 0, 0, 0, 0, 0]);
     assert_eq!(engine.state.undoable_mana_abilities.len(), 1);
     engine
-        .apply_command(0, &undo_mana_ability())
+        .apply_scenario_command(0, &undo_mana_ability())
         .expect("pure colorless Talisman mana remains undoable");
     assert_eq!(mana_snapshot(&engine, 0), [0, 0, 0, 0, 0, 0]);
     assert!(!engine.state.objects[&talisman].tapped);
@@ -236,7 +237,7 @@ fn issue_494_pure_talisman_mana_remains_undoable_and_damage_activation_invalidat
         "the consequential mana ability invalidates earlier float undo"
     );
     assert!(engine
-        .apply_command(0, &undo_mana_ability())
+        .apply_scenario_command(0, &undo_mana_ability())
         .expect_err("no mana activation remains undoable")
         .to_string()
         .contains("no mana ability to undo"));
@@ -290,16 +291,17 @@ fn issue_494_prevention_choice_preserves_source_identity_and_resumes_once() {
 
     let answer = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: vec![choice_id],
             ..Default::default()
         })),
     };
     assert!(
-        engine.apply_command(1, &answer).is_err(),
+        engine.apply_scenario_command(1, &answer).is_err(),
         "only the affected player chooses"
     );
     let resolved = engine
-        .apply_command(0, &answer)
+        .apply_scenario_command(0, &answer)
         .expect("resume the stackless damage event");
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(
@@ -332,7 +334,7 @@ fn issue_494_prevention_choice_preserves_source_identity_and_resumes_once() {
         Some(Ev::StackPushed(_)) | Some(Ev::StackResolved(_))
     )));
     assert!(engine
-        .apply_command(0, &answer)
+        .apply_scenario_command(0, &answer)
         .expect_err("the completed damage choice cannot be replayed")
         .to_string()
         .contains("no resolution awaiting a choice"));
@@ -361,10 +363,11 @@ fn issue_494_yavimaya_coast_damage_source_is_colorless() {
         .presentation
         .candidates[0];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     chosen_object_ids: vec![choice_id],
                     ..Default::default()
                 })),
@@ -406,7 +409,7 @@ fn issue_494_prevention_choice_keeps_spell_payment_open_until_damage_finishes() 
         }),
         ..Default::default()
     };
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &rv1::PreviewPayment {
             transaction_id,
@@ -429,12 +432,12 @@ fn issue_494_prevention_choice_keeps_spell_payment_open_until_damage_finishes() 
         })),
     };
     let pending_choice = format!("{:?}", engine.state.pending_resolution);
-    assert!(engine.apply_command(0, &commit).is_err());
+    assert!(engine.apply_scenario_command(0, &commit).is_err());
     assert_eq!(
         format!("{:?}", engine.state.pending_resolution),
         pending_choice
     );
-    assert!(engine.apply_command(0, &cancel).is_err());
+    assert!(engine.apply_scenario_command(0, &cancel).is_err());
     assert_eq!(
         format!("{:?}", engine.state.pending_resolution),
         pending_choice
@@ -455,10 +458,11 @@ fn issue_494_prevention_choice_keeps_spell_payment_open_until_damage_finishes() 
     )));
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     chosen_object_ids: vec![choice_id],
                     ..Default::default()
                 })),
@@ -517,7 +521,7 @@ fn issue_494_replacement_choice_resumes_resolution_time_mana_payment() {
     );
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(ward_creature)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(ward_creature)))
         .expect("cast Unsummon and trigger Ward");
     pass_both_players(&mut engine);
     assert!(engine
@@ -543,10 +547,11 @@ fn issue_494_replacement_choice_resumes_resolution_time_mana_payment() {
     assert!(parent.continuation.mana_payment().is_some());
     let choice_id = pending.presentation.candidates[0];
     let resolved_damage = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     chosen_object_ids: vec![choice_id],
                     ..Default::default()
                 })),
@@ -579,6 +584,7 @@ fn issue_494_replacement_choice_resumes_resolution_time_mana_payment() {
         &mut engine,
         0,
         SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: rv1::ResolutionChoiceDecision::PayMana as i32,
             ..Default::default()
         },
@@ -645,10 +651,10 @@ fn issue_494_activation_and_prevention_choice_replay_deterministically() {
 
     let activation = activate_ability_for(&original, source, 1, vec![]);
     let activated = original
-        .apply_command(0, &activation)
+        .apply_scenario_command(0, &activation)
         .expect("record the logged damage-mana activation");
     let replayed_activation = replay
-        .apply_command(0, &activation)
+        .apply_scenario_command(0, &activation)
         .expect("replay the same activation command");
     assert_eq!(activated, replayed_activation);
 
@@ -661,15 +667,16 @@ fn issue_494_activation_and_prevention_choice_replay_deterministically() {
         .candidates[0];
     let answer = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: vec![choice_id],
             ..Default::default()
         })),
     };
     let resolved = original
-        .apply_command(0, &answer)
+        .apply_scenario_command(0, &answer)
         .expect("record the logged damage-prevention choice");
     let replayed_resolution = replay
-        .apply_command(0, &answer)
+        .apply_scenario_command(0, &answer)
         .expect("replay the same damage-prevention choice");
     assert_eq!(resolved, replayed_resolution);
     assert_eq!(mana_snapshot(&original, 0), mana_snapshot(&replay, 0));

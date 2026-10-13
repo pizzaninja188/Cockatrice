@@ -1,10 +1,11 @@
 //! Exact Mutational Advantage identity and rules behavior.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::SpellEffectKind;
 use tricerules_cards::{CounterKind, Keyword, ManaCost};
 use tricerules_core::state::DamagePreventionScope;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ruled_command::Cmd, ChoiceKind, SubmitResolutionChoice};
 
 const MUTATIONAL_ADVANTAGE: &str = "mutational_advantage";
@@ -12,6 +13,7 @@ const MUTATIONAL_ADVANTAGE: &str = "mutational_advantage";
 fn choice(objects: Vec<u32>, players: Vec<i32>) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: objects,
             chosen_player_ids: players,
             ..Default::default()
@@ -114,7 +116,7 @@ fn protection_uses_one_resolution_snapshot_before_proliferate_then_prevents_late
     engine.state.players[0].mana_pool.blue = 1;
     let hand_index = hand_index_for_card(&engine, 0, MUTATIONAL_ADVANTAGE);
     engine
-        .apply_command(0, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(hand_index, vec![]))
         .expect("cast Mutational Advantage without targets");
     pass_both_players(&mut engine);
 
@@ -147,11 +149,11 @@ fn protection_uses_one_resolution_snapshot_before_proliferate_then_prevents_late
 
     let before_rejection = format!("{:?}", engine.state);
     engine
-        .apply_command(0, &choice(vec![unprotected], vec![]))
+        .apply_scenario_command(0, &choice(vec![unprotected], vec![]))
         .expect_err("Proliferate cannot select a permanent without a counter");
     assert_eq!(format!("{:?}", engine.state), before_rejection);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choice(
                 vec![
@@ -209,7 +211,7 @@ fn protection_uses_one_resolution_snapshot_before_proliferate_then_prevents_late
     engine.state.players[0].mana_pool.red = 1;
     let pyroclasm_hand_index = hand_index_for_card(&engine, 0, "pyroclasm");
     engine
-        .apply_command(0, &cast_spell(pyroclasm_hand_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(pyroclasm_hand_index, vec![]))
         .expect("cast untargeted noncombat damage");
     pass_both_players(&mut engine);
 
@@ -240,7 +242,7 @@ fn protection_uses_one_resolution_snapshot_before_proliferate_then_prevents_late
     engine.state.players[0].mana_pool.blue = 1;
     let unsummon_hand_index = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(unsummon_hand_index, target_object(protected)),
         )
@@ -259,7 +261,7 @@ fn protection_uses_one_resolution_snapshot_before_proliferate_then_prevents_late
     engine.state.players[0].mana_pool.green = 1;
     let returned_bear_hand_index = hand_index_for_card(&engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &cast_spell(returned_bear_hand_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(returned_bear_hand_index, vec![]))
         .expect("recast the returned physical card");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&protected].zone, Zone::Battlefield);
@@ -277,7 +279,7 @@ fn protection_uses_one_resolution_snapshot_before_proliferate_then_prevents_late
     engine.state.players[0].mana_pool.red = 1;
     let second_pyroclasm_hand_index = hand_index_for_card(&engine, 0, "pyroclasm");
     engine
-        .apply_command(0, &cast_spell(second_pyroclasm_hand_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(second_pyroclasm_hand_index, vec![]))
         .expect("cast damage against the new incarnation");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&protected].zone, Zone::Graveyard);

@@ -1,5 +1,6 @@
 //! Pentavus entry counters and two ordinary composite activation costs.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{ContinuousEffectKind, CounterKind, EffectDuration, Keyword};
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{
@@ -29,7 +30,9 @@ fn cast_pentavus(seed: u64) -> (GameEngine, u32) {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_priority_round(&mut engine);
     (engine, source)
 }
@@ -85,7 +88,7 @@ fn sacrifice_command(engine: &GameEngine, source: u32, payment: u32) -> RuledCom
 
 fn rejected_unchanged(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = serde_json::to_value(&engine.state).unwrap();
-    assert!(engine.apply_command(actor, command).is_err());
+    assert!(engine.apply_scenario_command(actor, command).is_err());
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
 }
 
@@ -130,7 +133,9 @@ fn pentavus_actual_cast_enters_as_five_five_with_five_counters() {
             ..Default::default()
         },
     );
-    engine.apply_command(10, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(10, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_priority_round(&mut engine);
     assert_eq!(
         engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
@@ -178,7 +183,7 @@ fn pentavus_removes_any_plus_counter_as_cost_then_creates_exact_token() {
     };
     selection.source.as_mut().unwrap().zone_change_generation += 1;
     rejected_unchanged(&mut engine, 0, &stale);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(
         engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
         5
@@ -212,7 +217,7 @@ fn pentavus_removes_any_plus_counter_as_cost_then_creates_exact_token() {
         },
     );
     let command = sacrifice_command(&engine, source, tokens[0]);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert!(!engine.state.players[0].battlefield.contains(&tokens[0]));
     assert_eq!(
         engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
@@ -264,7 +269,7 @@ fn pentavus_sacrifices_current_controlled_nontoken_pentavite_and_rejects_other_c
             ..Default::default()
         },
     );
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(engine.state.objects[&own].zone, Zone::Graveyard);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert_eq!(
@@ -324,7 +329,7 @@ fn pentavus_cannot_pay_with_stun_and_paid_creation_survives_source_death() {
         .get_mut(&source)
         .unwrap()
         .set_counter(CounterKind::PlusOnePlusOne, 1);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(
         engine.state.objects[&source].zone,
         Zone::Graveyard,

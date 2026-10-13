@@ -6,6 +6,7 @@
 //! unmet before costs are paid; CR 603.4 re-checks an intervening-if on resolution; CR 601.2
 //! records the cast origin consumed by the resolving snapshot; and CR 111.1 keeps token entry
 //! status (tapped) part of the created cohort.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::{TurnStep, Zone};
@@ -32,9 +33,11 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
+    engine
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
     let mut batch = engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item");
     for (_, _, order_batch) in answer_simultaneous_entry_order_in_engine_order(engine) {
         batch.events.extend(order_batch.events);
@@ -45,6 +48,7 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
 fn select_optional_effect() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: 0,
             ..Default::default()
@@ -55,6 +59,7 @@ fn select_optional_effect() -> RuledCommand {
 fn decline_optional_effect() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline as i32,
             ..Default::default()
         })),
@@ -111,7 +116,7 @@ fn flashback_cast(engine: &GameEngine, object_id: u32) -> RuledCommand {
 
 fn move_to_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
     inject_creature_on_battlefield(engine, 0, "grizzly_bears");
     pass_both_players(engine);
@@ -166,7 +171,7 @@ fn issue_371_aatchik_counts_only_its_controllers_artifact_and_creature_cards() {
     );
     let bolt = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(bolt, target_object(victim)))
+        .apply_scenario_command(0, &cast_spell(bolt, target_object(victim)))
         .expect("bolt the Insect token");
     resolve_entire_stack_two_player(&mut engine);
     let aatchik = battlefield_object_for_card(&engine, 0, "aatchik,_emerald_radian");
@@ -190,7 +195,7 @@ fn issue_371_arnim_zola_gate_and_land_discard_fail_closed() {
     // One creature card is below the printed two-or-more gate.
     inject_graveyard_card(&mut engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &activate_with_costs(&engine, arnim, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_with_costs(&engine, arnim, 0, Vec::new()))
         .expect_err("activation requires two or more creature cards in the graveyard");
     assert_eq!(engine.state.objects[&arnim].zone, Zone::Battlefield);
 
@@ -198,7 +203,7 @@ fn issue_371_arnim_zola_gate_and_land_discard_fail_closed() {
     // resolution.
     inject_graveyard_card(&mut engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &activate_with_costs(&engine, arnim, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_with_costs(&engine, arnim, 0, Vec::new()))
         .expect("activate with two creature cards");
     resolve_top_stack(&mut engine);
     let villains = battlefield_token_oids(&engine, 0, "villain_b_2_1_menace");
@@ -268,7 +273,7 @@ fn issue_371_kiora_etb_loots_two_and_the_threshold_attack_is_optional() {
         .take(2)
         .copied()
         .collect::<Vec<_>>();
-    etb.apply_command(0, &submit_resolution_choice(discards.clone()))
+    etb.apply_scenario_command(0, &submit_resolution_choice(discards.clone()))
         .expect("discard two cards");
     assert_eq!(
         etb.state.players[0].hand.len(),
@@ -288,7 +293,7 @@ fn issue_371_kiora_etb_loots_two_and_the_threshold_attack_is_optional() {
     let kiora = inject_creature_on_battlefield(&mut below, 0, "kiora,_the_rising_tide");
     move_to_declare_attackers(&mut below);
     below
-        .apply_command(0, &declare_attackers(vec![kiora]))
+        .apply_scenario_command(0, &declare_attackers(vec![kiora]))
         .expect("attack with Kiora below threshold");
     assert!(below.state.stack.is_empty(), "no trigger below seven cards");
     assert!(battlefield_token_oids(&below, 0, "scion_of_the_deep").is_empty());
@@ -300,11 +305,11 @@ fn issue_371_kiora_etb_loots_two_and_the_threshold_attack_is_optional() {
     }
     let kiora = inject_creature_on_battlefield(&mut at, 0, "kiora,_the_rising_tide");
     move_to_declare_attackers(&mut at);
-    at.apply_command(0, &declare_attackers(vec![kiora]))
+    at.apply_scenario_command(0, &declare_attackers(vec![kiora]))
         .expect("attack with Kiora at threshold");
     let prompt = resolve_top_stack(&mut at);
     find_resolution_choice(&prompt).expect("optional Scion creation choice");
-    at.apply_command(0, &select_optional_effect())
+    at.apply_scenario_command(0, &select_optional_effect())
         .expect("create the Scion");
     let scions = battlefield_token_oids(&at, 0, "scion_of_the_deep");
     assert_eq!(scions.len(), 1);
@@ -321,12 +326,12 @@ fn issue_371_kiora_etb_loots_two_and_the_threshold_attack_is_optional() {
     let kiora = inject_creature_on_battlefield(&mut decline, 0, "kiora,_the_rising_tide");
     move_to_declare_attackers(&mut decline);
     decline
-        .apply_command(0, &declare_attackers(vec![kiora]))
+        .apply_scenario_command(0, &declare_attackers(vec![kiora]))
         .expect("attack with Kiora at threshold");
     let prompt = resolve_top_stack(&mut decline);
     find_resolution_choice(&prompt).expect("optional Scion creation choice");
     decline
-        .apply_command(0, &decline_optional_effect())
+        .apply_scenario_command(0, &decline_optional_effect())
         .expect("decline the Scion");
     assert!(battlefield_token_oids(&decline, 0, "scion_of_the_deep").is_empty());
 }
@@ -350,7 +355,7 @@ fn issue_371_lluwen_activation_counts_lands_and_requires_a_land_discard() {
     );
     let land_slot = hand_index_for_card(&engine, 0, "forest") as u32;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_costs(&engine, lluwen, 0, vec![hand_cost_selection(2, land_slot)]),
         )
@@ -373,7 +378,7 @@ fn issue_371_lluwen_activation_counts_lands_and_requires_a_land_discard() {
     grant_pool(&mut engine, 0);
     let bear_slot = hand_index_for_card(&engine, 0, "grizzly_bears") as u32;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_costs(&engine, lluwen, 0, vec![hand_cost_selection(2, bear_slot)]),
         )
@@ -404,7 +409,7 @@ fn issue_371_lluwen_etb_tops_only_a_milled_creature_or_land() {
 
     let chosen = milled[1];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))
         .expect("put the milled land on top");
     assert_eq!(
         engine.state.players[0].library.front().copied(),
@@ -432,7 +437,7 @@ fn issue_371_morcant_is_sorcery_speed_and_sacrifices_itself() {
         },
     );
     engine
-        .apply_command(0, &activate_with_costs(&engine, morcant, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_with_costs(&engine, morcant, 0, Vec::new()))
         .expect("activate at sorcery speed");
     assert_eq!(
         engine.state.objects[&morcant].zone,
@@ -463,7 +468,7 @@ fn issue_371_morcant_is_sorcery_speed_and_sacrifices_itself() {
     );
     move_to_declare_attackers(&mut instant);
     instant
-        .apply_command(0, &activate_with_costs(&instant, morcant, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_with_costs(&instant, morcant, 0, Vec::new()))
         .expect_err("activate only as a sorcery");
 }
 
@@ -486,7 +491,7 @@ fn issue_371_revenge_of_the_rats_creates_tapped_rats_from_its_own_graveyard() {
     );
     let slot = hand_index_for_card(&engine, 0, "revenge_of_the_rats");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Revenge of the Rats");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -522,7 +527,7 @@ fn issue_371_the_final_days_uses_two_from_hand_and_x_from_graveyard() {
         },
     );
     let slot = hand_index_for_card(&hand, 0, "the_final_days");
-    hand.apply_command(0, &cast_spell(slot, Vec::new()))
+    hand.apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast The Final Days from hand");
     resolve_entire_stack_two_player(&mut hand);
     let horrors = battlefield_token_oids(&hand, 0, "horror_b_2_2");
@@ -539,7 +544,7 @@ fn issue_371_the_final_days_uses_two_from_hand_and_x_from_graveyard() {
     inject_graveyard_card(&mut flashback, 0, "grizzly_bears");
     grant_pool(&mut flashback, 0);
     flashback
-        .apply_command(0, &flashback_cast(&flashback, spell))
+        .apply_scenario_command(0, &flashback_cast(&flashback, spell))
         .expect("cast The Final Days from the graveyard");
     resolve_entire_stack_two_player(&mut flashback);
     let horrors = battlefield_token_oids(&flashback, 0, "horror_b_2_2");

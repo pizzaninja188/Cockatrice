@@ -1,6 +1,7 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn published_ability_mana_cost(
     engine: &mut GameEngine,
@@ -129,7 +130,7 @@ fn boneclub_berserker_counts_other_controlled_goblins_in_layer_seven() {
     );
     let hand_index = hand_index_for_card(&engine, 0, "boneclub_berserker");
     engine
-        .apply_command(0, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(hand_index, vec![]))
         .expect("cast Boneclub Berserker");
     resolve_entire_stack_two_player(&mut engine);
     let berserker = battlefield_object_for_card(&engine, 0, "boneclub_berserker");
@@ -177,7 +178,7 @@ fn sold_out_uses_the_chosen_targets_pre_exile_damage_identity() {
     );
     let shock = hand_index_for_card(&engine, 0, "shock");
     engine
-        .apply_command(0, &cast_spell(shock, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(shock, target_object(target)))
         .expect("cast Shock");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&target].damage, 2);
@@ -193,7 +194,7 @@ fn sold_out_uses_the_chosen_targets_pre_exile_damage_identity() {
     );
     let sold_out = hand_index_for_card(&engine, 0, "sold_out");
     engine
-        .apply_command(0, &cast_spell(sold_out, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(sold_out, target_object(target)))
         .expect("cast Sold Out");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -231,7 +232,7 @@ fn flaring_cinder_cast_trigger_includes_announced_x_in_mana_value() {
     );
     let first_blaze = hand_index_for_card(&engine, 0, "blaze");
     engine
-        .apply_command(0, &cast_spell_x(first_blaze, target_player(1), 2))
+        .apply_scenario_command(0, &cast_spell_x(first_blaze, target_player(1), 2))
         .expect("cast Blaze with mana value three");
     assert_eq!(
         engine.state.stack.len(),
@@ -252,7 +253,7 @@ fn flaring_cinder_cast_trigger_includes_announced_x_in_mana_value() {
     );
     let second_blaze = hand_index_for_card(&engine, 0, "blaze");
     engine
-        .apply_command(0, &cast_spell_x(second_blaze, target_player(1), 3))
+        .apply_scenario_command(0, &cast_spell_x(second_blaze, target_player(1), 3))
         .expect("cast Blaze with mana value four");
     assert_eq!(engine.state.stack.len(), 2);
     let trigger = engine.state.stack.last().expect("Flaring Cinder trigger");

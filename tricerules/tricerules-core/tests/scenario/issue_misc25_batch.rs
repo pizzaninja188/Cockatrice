@@ -1,6 +1,7 @@
 //! Actual-card scenarios for five pinned Standard entry and token identities.
 //! Exact Scryfall Oracle and rulings checked 2026-09-22 (no card-specific rulings).
 //! CR 111.10, 603.6a/603.6c, 701.22, 702.9, 702.20, and 702.122 govern these effects.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -119,7 +120,7 @@ fn issue_misc25_turtle_blimp_creates_mutant_and_crews_with_two_power() {
     let weak = inject_creature_with_stats(&mut e, 0, "news_helicopter", 1, 1);
     let too_weak = activate_on(&e, blimp, 0, vec![cost_selection(&e, &[weak])]);
     assert!(
-        e.apply_command(0, &too_weak).is_err(),
+        e.apply_scenario_command(0, &too_weak).is_err(),
         "one power cannot crew 2"
     );
     let crew = activate_on(&e, blimp, 0, vec![cost_selection(&e, &[tokens[0]])]);
@@ -201,7 +202,7 @@ fn issue_misc25_mighty_mutanimals_own_token_triggers_alliance_on_chosen_creature
     );
     assert_eq!(battlefield_token_oids(&e, 0, "mutant_r_2_2").len(), 1);
     assert!(
-        e.apply_command(0, &choose_trigger_target(opponent))
+        e.apply_scenario_command(0, &choose_trigger_target(opponent))
             .is_err(),
         "opponent creature is illegal"
     );

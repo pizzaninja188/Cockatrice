@@ -6,6 +6,7 @@
 //! CR 508.3 (attack trigger), CR 509.1b/509.3b (block trigger and evasion), CR 603.6a (entry
 //! trigger), CR 611.2c/613.4c (until-end-of-turn P/T), CR 701.22 (scry), CR 702.9 (flying),
 //! CR 702.17 (reach), and CR 702.20 (vigilance).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::{TurnStep, Zone};
@@ -112,16 +113,20 @@ fn activate_on_with_targets(
 }
 
 fn advance_main1_to_declare_attackers(e: &mut GameEngine) {
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
-    e.apply_command(0, &pass()).expect("active player passes");
-    e.apply_command(1, &pass()).expect("defender passes");
+    e.apply_scenario_command(0, &pass())
+        .expect("active player passes");
+    e.apply_scenario_command(1, &pass())
+        .expect("defender passes");
     assert_eq!(e.state.turn_step, TurnStep::DeclareAttackers);
 }
 
 fn pass_to_declare_blockers(e: &mut GameEngine) {
-    e.apply_command(0, &pass()).expect("active player passes");
-    e.apply_command(1, &pass()).expect("defender passes");
+    e.apply_scenario_command(0, &pass())
+        .expect("active player passes");
+    e.apply_scenario_command(1, &pass())
+        .expect("defender passes");
     assert_eq!(e.state.turn_step, TurnStep::DeclareBlockers);
 }
 
@@ -140,7 +145,7 @@ fn issue_misc15_dauntless_veteran_pumps_the_team_when_attacking() {
     let veteran = inject_creature_with_stats(&mut e, 0, "dauntless_veteran", 2, 2);
     let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     advance_main1_to_declare_attackers(&mut e);
-    e.apply_command(0, &declare_attackers(vec![veteran, bear]))
+    e.apply_scenario_command(0, &declare_attackers(vec![veteran, bear]))
         .expect("declare attackers");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.effective_power(veteran), Some(3), "+1/+1 to the Veteran");
@@ -180,7 +185,7 @@ fn issue_misc15_skystinger_pumps_when_blocking_a_flyer() {
     let flyer = inject_creature_with_stats(&mut e, 0, "air_elemental", 4, 4);
     let skystinger = inject_creature_with_stats(&mut e, 1, "skystinger", 3, 3);
     advance_main1_to_declare_attackers(&mut e);
-    e.apply_command(0, &declare_attackers(vec![flyer]))
+    e.apply_scenario_command(0, &declare_attackers(vec![flyer]))
         .expect("declare the flyer as an attacker");
     pass_to_declare_blockers(&mut e);
     semantic::accepted(
@@ -239,7 +244,7 @@ fn issue_misc15_cavern_stomper_scries_and_shrinks_its_blockers() {
     resolve_entire_stack_two_player(&mut e);
 
     advance_main1_to_declare_attackers(&mut e);
-    e.apply_command(0, &declare_attackers(vec![stomper]))
+    e.apply_scenario_command(0, &declare_attackers(vec![stomper]))
         .expect("declare Stomper as an attacker");
     pass_to_declare_blockers(&mut e);
     let pairs = e.initial_response_batch().legal_by_player[&1]

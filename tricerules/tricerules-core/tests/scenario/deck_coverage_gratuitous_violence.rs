@@ -1,7 +1,7 @@
 //! Actual-card coverage for Gratuitous Violence's creature-only damage replacement.
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 
 const CARD: &str = "gratuitous_violence";
 

@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
@@ -45,7 +46,7 @@ fn cast_giant_growth_at(engine: &mut GameEngine, target: u32) -> RuledEventBatch
     grant_pool(engine, 0);
     let slot = hand_index_for_card(engine, 0, "giant_growth");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Giant Growth at a creature")
 }
 
@@ -65,13 +66,13 @@ fn graduation_day_publishes_and_revalidates_its_own_creature_target() {
         .expect("Graduation Day target candidates");
     assert_eq!(candidates.groups[0].valid_permanent_ids, [own]);
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_target(opposing, TargetRefKind::Permanent),
         )
         .is_err());
     engine
-        .apply_command(0, &choose_trigger_target(own, TargetRefKind::Permanent))
+        .apply_scenario_command(0, &choose_trigger_target(own, TargetRefKind::Permanent))
         .expect("target own creature");
 
     pass_both_players(&mut engine);
@@ -103,7 +104,7 @@ fn forum_necroscribe_returns_only_a_current_own_graveyard_creature() {
         [departed, surviving]
     );
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_target(opposing, TargetRefKind::Graveyard),
         )
@@ -115,13 +116,13 @@ fn forum_necroscribe_returns_only_a_current_own_graveyard_creature() {
     engine.state.players[0].hand.push(departed);
     engine.state.objects.get_mut(&departed).unwrap().zone = Zone::Hand;
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_target(departed, TargetRefKind::Graveyard),
         )
         .is_err());
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_target(surviving, TargetRefKind::Graveyard),
         )
@@ -153,7 +154,7 @@ fn forum_necroscribe_ward_uses_the_existing_private_discard_payment() {
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     let spell_id = engine.state.players[0].hand[unsummon];
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(forum)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(forum)))
         .expect("target Forum Necroscribe");
     assert_eq!(engine.state.stack.len(), 2, "Ward is above Unsummon");
 
@@ -166,7 +167,7 @@ fn forum_necroscribe_ward_uses_the_existing_private_discard_payment() {
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::HandCards);
     assert!(pending.presentation.candidates.contains(&discard));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![discard]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
         .expect("discard to pay Ward");
     assert_eq!(engine.state.objects[&discard].zone, Zone::Graveyard);
     assert!(engine.state.stack.iter().any(|item| item.id == spell_id));

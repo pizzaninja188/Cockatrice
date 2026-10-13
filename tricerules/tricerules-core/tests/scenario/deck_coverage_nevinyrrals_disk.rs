@@ -4,10 +4,11 @@
 //! effect during entry; CR 602.2a-b covers the activation cost; CR 113.7a covers the activated
 //! ability existing independently on the stack; CR 701.8 covers destruction; and CR 702.12b
 //! covers indestructible permanents surviving it.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::CounterKind;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 
 const DISK: &str = "nevinyrrals_disk";
 
@@ -60,7 +61,7 @@ fn nevinyrrals_disk_enters_tapped_rejects_tapped_activation_then_sweeps_matching
     );
     let mana_before_rejected_activation = engine.state.players[0].mana_pool;
     engine
-        .apply_command(0, &activate_ability_for(&engine, disk, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, disk, 0, vec![]))
         .expect_err("a tapped Disk cannot pay its tap activation cost");
     assert_eq!(
         engine.state.players[0].mana_pool, mana_before_rejected_activation,
@@ -159,7 +160,7 @@ fn simultaneous_destroy_keeps_indestructibility_granted_by_aura_that_leaves_in_t
     );
     let aura_slot = hand_index_for_card(&engine, 0, "indestructibility");
     engine
-        .apply_command(0, &cast_spell(aura_slot, target_object(creature)))
+        .apply_scenario_command(0, &cast_spell(aura_slot, target_object(creature)))
         .expect("cast Indestructibility on the opposing creature");
     resolve_entire_stack_two_player(&mut engine);
     let aura = battlefield_object_for_card(&engine, 0, "indestructibility");
@@ -177,7 +178,7 @@ fn simultaneous_destroy_keeps_indestructibility_granted_by_aura_that_leaves_in_t
         },
     );
     engine
-        .apply_command(0, &activate_ability_for(&engine, disk, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, disk, 0, vec![]))
         .expect("activate the untapped Disk");
     resolve_entire_stack_two_player(&mut engine);
 

@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 
 fn three_player_main1(seed: u64) -> GameEngine {
@@ -18,7 +19,7 @@ fn three_player_main1(seed: u64) -> GameEngine {
     while engine.state.turn_step != tricerules_core::TurnStep::Main1 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("advance three-player turn");
     }
     engine
@@ -36,7 +37,7 @@ fn resolve_entire_stack_three_player(engine: &mut GameEngine) {
             }
             let player = engine.state.priority_player_id();
             engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("three-player priority pass");
         }
     }
@@ -93,7 +94,7 @@ fn issue_297_city_pigeon_leaves_to_hand_graveyard_and_exile_once() {
     );
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(cities[0])))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(cities[0])))
         .expect("bounce City Pigeon to hand");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&cities[0]].zone, Zone::Hand);
@@ -101,7 +102,7 @@ fn issue_297_city_pigeon_leaves_to_hand_graveyard_and_exile_once() {
 
     let bolt = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(bolt, target_object(cities[1])))
+        .apply_scenario_command(0, &cast_spell(bolt, target_object(cities[1])))
         .expect("damage City Pigeon into the graveyard");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&cities[1]].zone, Zone::Graveyard);
@@ -109,7 +110,7 @@ fn issue_297_city_pigeon_leaves_to_hand_graveyard_and_exile_once() {
 
     let wander_off = hand_index_for_card(&engine, 0, "wander_off");
     engine
-        .apply_command(0, &cast_spell(wander_off, target_object(cities[2])))
+        .apply_scenario_command(0, &cast_spell(wander_off, target_object(cities[2])))
         .expect("exile City Pigeon");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&cities[2]].zone, Zone::Exile);
@@ -154,7 +155,7 @@ fn issue_297_city_pigeon_uses_last_known_controller_but_owner_zone() {
         .unwrap_or(0);
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(city)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(city)))
         .expect("bounce foreign-controlled City Pigeon");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -185,7 +186,7 @@ fn issue_297_city_pigeon_multiplayer_food_stays_with_event_controller() {
     );
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(city)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(city)))
         .expect("bounce foreign-controlled City Pigeon in multiplayer");
     resolve_entire_stack_three_player(&mut engine);
 
@@ -236,7 +237,7 @@ fn issue_297_city_pigeon_blink_has_one_leave_food_and_no_return_duplicate() {
     );
     let wander_off = hand_index_for_card(&engine, 0, "wander_off");
     engine
-        .apply_command(0, &cast_spell(wander_off, target_object(city)))
+        .apply_scenario_command(0, &cast_spell(wander_off, target_object(city)))
         .expect("blink City Pigeon to exile");
     assert_eq!(engine.state.objects[&city].zone, Zone::Battlefield);
     assert_eq!(

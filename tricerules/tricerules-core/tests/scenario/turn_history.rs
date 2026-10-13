@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::TargetRef;
@@ -6,13 +7,13 @@ use tricerules_proto::ruled::v1::TargetRef;
 fn issue_166_cast(e: &mut GameEngine, player: usize, card: &str, targets: Vec<TargetRef>) -> u32 {
     ensure_in_hand(e, player, card);
     if e.state.priority_player_id() != player as i32 {
-        e.apply_command(e.state.priority_player_id(), &pass())
+        e.apply_scenario_command(e.state.priority_player_id(), &pass())
             .unwrap();
     }
     grant_pool(e, player);
     let index = hand_index_for_card(e, player, card);
     let id = e.state.players[player].hand[index];
-    e.apply_command(player as i32, &cast_spell(index, targets))
+    e.apply_scenario_command(player as i32, &cast_spell(index, targets))
         .unwrap();
     id
 }
@@ -85,7 +86,7 @@ fn issue_166_thunder_salvo_copies_exclude_only_their_own_actual_cast() {
         issue_166_cast(&mut e, copier, "twincast", target_object(salvo));
         pass_both_players(&mut e);
         assert!(e.state.pending_resolution.is_some());
-        e.apply_command(copier as i32, &submit_resolution_choice(vec![wall]))
+        e.apply_scenario_command(copier as i32, &submit_resolution_choice(vec![wall]))
             .unwrap();
         let copy = e.state.stack.last().unwrap();
         assert!(copy.is_copy);
@@ -140,7 +141,7 @@ fn issue_166_countered_casts_still_count_and_illegal_targets_do_not() {
     let before = e.state.turn_history.clone();
     let mana = e.state.players[0].mana_pool;
     assert!(e
-        .apply_command(0, &cast_spell(index, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(index, target_player(1)))
         .is_err());
     assert_eq!(e.state.turn_history, before);
     assert_eq!(e.state.players[0].mana_pool, mana);
@@ -181,7 +182,10 @@ fn issue_166_cast_history_replays_accepted_commands_and_rolls_at_turn_boundary()
         player: i32,
         command: RuledCommand,
     ) {
-        let bytes = e.apply_command(player, &command).unwrap().encode_to_vec();
+        let bytes = e
+            .apply_scenario_command(player, &command)
+            .unwrap()
+            .encode_to_vec();
         log.push((player, command, bytes));
     }
     fn dev(player: i32, payload: dev_command::Dev) -> RuledCommand {
@@ -323,7 +327,7 @@ fn issue_166_cast_history_replays_accepted_commands_and_rolls_at_turn_boundary()
     for (actor, command, expected) in &log {
         assert_eq!(
             replay
-                .apply_command(*actor, command)
+                .apply_scenario_command(*actor, command)
                 .unwrap()
                 .encode_to_vec(),
             *expected
@@ -364,7 +368,7 @@ fn issue_170_engine() -> GameEngine {
 fn issue_170_cast(e: &mut GameEngine, card: &str, targets: Vec<TargetRef>, mana: ManaGift) {
     ensure_in_hand(e, 0, card);
     give_mana(e, 0, mana);
-    e.apply_command(0, &cast_spell(hand_index_for_card(e, 0, card), targets))
+    e.apply_scenario_command(0, &cast_spell(hand_index_for_card(e, 0, card), targets))
         .unwrap();
 }
 
@@ -373,7 +377,7 @@ fn issue_170_end_step(e: &mut GameEngine) {
         if e.state.turn_step == tricerules_core::TurnStep::EndStep {
             return;
         }
-        e.apply_command(e.state.active_player_id(), &primitive_yield())
+        e.apply_scenario_command(e.state.active_player_id(), &primitive_yield())
             .unwrap();
     }
     panic!("did not reach end step");
@@ -446,8 +450,8 @@ fn issue_170_star_charter_looks_after_offsetting_changes_and_replays_choices() {
             e.state.players[0].exile.push(oid);
         }
         e.state.players[0].library.extend(looked.iter().copied());
-        e.apply_command(0, &pass()).unwrap();
-        let batch = e.apply_command(1, &pass()).unwrap();
+        e.apply_scenario_command(0, &pass()).unwrap();
+        let batch = e.apply_scenario_command(1, &pass()).unwrap();
         if count == 0 {
             assert!(find_resolution_choice(&batch).is_none());
         } else {
@@ -468,13 +472,13 @@ fn issue_170_star_charter_looks_after_offsetting_changes_and_replays_choices() {
                 (0, vec![u32::MAX]),
             ] {
                 let before = format!("{:?}", e.state);
-                e.apply_command(actor, &submit_resolution_choice(selected))
+                e.apply_scenario_command(actor, &submit_resolution_choice(selected))
                     .unwrap_err();
                 assert_eq!(format!("{:?}", e.state), before);
             }
             let take = !decline && matching;
             let chosen = if take { vec![looked[0]] } else { vec![] };
-            e.apply_command(0, &submit_resolution_choice(chosen))
+            e.apply_scenario_command(0, &submit_resolution_choice(chosen))
                 .unwrap();
             assert_eq!(e.state.players[0].hand.contains(&looked[0]), take);
             assert_eq!(e.state.players[0].library.len(), count - usize::from(take));
@@ -526,7 +530,7 @@ fn issue_170_star_charter_does_not_trigger_retroactively_at_end_step() {
     assert!(e.state.pending_resolution.is_none());
     assert!(e.state.stack.is_empty());
     assert_eq!(e.state.turn_history.current.player(0).life_lost, 2);
-    e.apply_command(0, &primitive_yield()).unwrap();
+    e.apply_scenario_command(0, &primitive_yield()).unwrap();
     resolve_cleanup_discards_if_any(&mut e);
     assert_eq!(e.state.turn_history.current.player(0).life_lost, 0);
     assert_eq!(e.state.turn_history.previous.player(0).life_lost, 2);
@@ -592,7 +596,7 @@ fn issue_170_gecko_uses_a_respondable_trigger_and_atomic_discard_payment() {
             },
         );
         let before = format!("{:?}", e.state);
-        e.apply_command(0, &command).unwrap_err();
+        e.apply_scenario_command(0, &command).unwrap_err();
         assert_eq!(format!("{:?}", e.state), before);
         if let Some(tricerules_proto::ruled::v1::ruled_command::Cmd::ActivateAbility(ability)) =
             command.cmd.as_mut()
@@ -602,7 +606,7 @@ fn issue_170_gecko_uses_a_respondable_trigger_and_atomic_discard_payment() {
         let pool = e.state.players[0].mana_pool;
         e.state.players[0].mana_pool = Default::default();
         let before = format!("{:?}", e.state);
-        e.apply_command(0, &command).unwrap_err();
+        e.apply_scenario_command(0, &command).unwrap_err();
         assert_eq!(
             format!("{:?}", e.state),
             before,
@@ -610,7 +614,7 @@ fn issue_170_gecko_uses_a_respondable_trigger_and_atomic_discard_payment() {
         );
         e.state.players[0].mana_pool = pool;
         let hand_before = e.state.players[0].hand.len();
-        e.apply_command(0, &command).unwrap();
+        e.apply_scenario_command(0, &command).unwrap();
         assert!(e.state.players[0].graveyard.contains(&discarded_oid));
         assert_eq!(e.state.players[0].hand.len(), hand_before - 1);
         resolve_entire_stack_two_player(&mut e);
@@ -635,7 +639,7 @@ fn issue_172_engine(cards: &[&str]) -> GameEngine {
 fn issue_172_cast(e: &mut GameEngine, card: &str, mana: ManaGift) -> RuledEventBatch {
     ensure_in_hand(e, 0, card);
     give_mana(e, 0, mana);
-    e.apply_command(0, &cast_spell(hand_index_for_card(e, 0, card), vec![]))
+    e.apply_scenario_command(0, &cast_spell(hand_index_for_card(e, 0, card), vec![]))
         .unwrap()
 }
 
@@ -727,7 +731,7 @@ fn issue_172_sacrificed_watcher_triggers_at_mana_payment_before_leaving() {
             ),
         }],
     );
-    e.apply_command(0, &command).unwrap();
+    e.apply_scenario_command(0, &command).unwrap();
     assert_eq!(
         e.state.objects[&source].zone,
         tricerules_core::Zone::Graveyard
@@ -768,7 +772,7 @@ fn issue_172_source_blink_does_not_apply_old_counter_to_new_incarnation() {
     );
     let source_generation = e.state.stack.last().unwrap().source_zone_change;
     for zone in [DevZone::Exile, DevZone::Battlefield] {
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -829,7 +833,7 @@ fn issue_172_countered_spells_keep_spending_and_spell_copies_add_none() {
             ..Default::default()
         },
     );
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             hand_index_for_card(&e, 0, "twincast"),
@@ -866,8 +870,8 @@ fn issue_172_countered_spells_keep_spending_and_spell_copies_add_none() {
             ..Default::default()
         },
     );
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(
         1,
         &cast_spell(
             hand_index_for_card(&e, 1, "cancel"),
@@ -905,7 +909,7 @@ fn issue_172_countered_spells_keep_spending_and_spell_copies_add_none() {
 fn issue_172_kicker_is_actual_spell_spending_and_activations_are_not() {
     let mut e = issue_172_engine(&["grow_from_the_ashes"]);
     let mentor = inject_creature_on_battlefield(&mut e, 0, "wandertale_mentor");
-    e.apply_command(0, &activate_ability(mentor, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(mentor, 0, vec![]))
         .unwrap();
     assert_eq!(
         e.state
@@ -929,7 +933,7 @@ fn issue_172_kicker_is_actual_spell_spending_and_activations_are_not() {
         },
     );
     ensure_in_hand(&mut e, 0, "grow_from_the_ashes");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_with_cast_cost_groups(
             hand_index_for_card(&e, 0, "grow_from_the_ashes"),
@@ -963,7 +967,7 @@ fn issue_172_rejected_casts_do_not_change_accepted_command_replay() {
         let bytes = cast_spell(hand_index_for_card(&e, 0, "hill_giant"), vec![]).encode_to_vec();
         let command = RuledCommand::decode(bytes.as_slice()).unwrap();
         if reject {
-            assert!(e.apply_command(0, &command).is_err());
+            assert!(e.apply_scenario_command(0, &command).is_err());
         }
         give_mana(
             &mut e,
@@ -974,10 +978,10 @@ fn issue_172_rejected_casts_do_not_change_accepted_command_replay() {
                 ..Default::default()
             },
         );
-        let mut batches = vec![e.apply_command(0, &command).unwrap()];
+        let mut batches = vec![e.apply_scenario_command(0, &command).unwrap()];
         while !e.state.stack.is_empty() {
             let player = e.state.priority_player_id();
-            batches.push(e.apply_command(player, &pass()).unwrap());
+            batches.push(e.apply_scenario_command(player, &pass()).unwrap());
         }
         (batches, e.state.turn_history.clone())
     }
@@ -1094,12 +1098,12 @@ fn issue_172_three_seats_track_spending_independently_and_damage_each_opponent()
         );
         e.state.priority_idx = player;
         let command = cast_spell(hand_index_for_card(&e, player, "angels_mercy"), vec![]);
-        e.apply_command(player as i32, &command).unwrap();
+        e.apply_scenario_command(player as i32, &command).unwrap();
         for _ in 0..12 {
             if e.state.stack.is_empty() {
                 break;
             }
-            e.apply_command(e.state.priority_player_id(), &pass())
+            e.apply_scenario_command(e.state.priority_player_id(), &pass())
                 .unwrap();
         }
         assert!(e.state.stack.is_empty());
@@ -1157,8 +1161,8 @@ fn issue_172_control_change_uses_new_controllers_spending_not_an_object_cap() {
             ..Default::default()
         },
     );
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(
         1,
         &cast_spell(hand_index_for_card(&e, 1, "angels_mercy"), vec![]),
     )
@@ -1220,7 +1224,7 @@ fn issue_172_expend_crosses_once_and_reuses_ordinary_trigger_effects() {
             },
         );
         let command = cast_spell(hand_index_for_card(&e, 0, "grizzly_bears"), vec![]);
-        e.apply_command(0, &command).unwrap();
+        e.apply_scenario_command(0, &command).unwrap();
         assert_eq!(e.state.pending_trigger_order.is_some(), cast_number == 2);
         resolve_entire_stack_two_player(&mut e);
         let triggered = cast_number >= 2;
@@ -1298,7 +1302,7 @@ fn issue_172_only_successful_casts_record_actual_mana_spending() {
     ensure_in_hand(&mut e, 0, "grizzly_bears");
     let command = cast_spell(hand_index_for_card(&e, 0, "grizzly_bears"), vec![]);
     let revision = e.state.command_index;
-    assert!(e.apply_command(0, &command).is_err());
+    assert!(e.apply_scenario_command(0, &command).is_err());
     assert_eq!(e.state.command_index, revision);
     assert_eq!(
         e.state
@@ -1325,7 +1329,7 @@ fn issue_172_only_successful_casts_record_actual_mana_spending() {
             .mana_spent_casting_spells,
         0
     );
-    e.apply_command(0, &command).unwrap();
+    e.apply_scenario_command(0, &command).unwrap();
     assert_eq!(
         e.state
             .turn_history
@@ -1374,7 +1378,7 @@ fn life_goes_on_gains_eight_after_a_creature_dies() {
         },
     );
     let murder = hand_index_for_card(&e, 0, "murder");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             murder,
@@ -1399,7 +1403,7 @@ fn life_goes_on_gains_eight_after_a_creature_dies() {
         },
     );
     let life_goes_on = hand_index_for_card(&e, 0, "life_goes_on");
-    e.apply_command(0, &cast_spell(life_goes_on, vec![]))
+    e.apply_scenario_command(0, &cast_spell(life_goes_on, vec![]))
         .expect("cast Life Goes On");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1436,7 +1440,7 @@ fn life_goes_on_gains_four_when_no_creature_died() {
     );
 
     let life_goes_on = hand_index_for_card(&e, 0, "life_goes_on");
-    e.apply_command(0, &cast_spell(life_goes_on, vec![]))
+    e.apply_scenario_command(0, &cast_spell(life_goes_on, vec![]))
         .expect("cast Life Goes On");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1481,11 +1485,11 @@ fn conditional_amount_is_evaluated_when_the_effect_resolves() {
     );
 
     let life_goes_on = hand_index_for_card(&e, 0, "life_goes_on");
-    e.apply_command(0, &cast_spell(life_goes_on, vec![]))
+    e.apply_scenario_command(0, &cast_spell(life_goes_on, vec![]))
         .expect("cast Life Goes On before any creature has died");
-    e.apply_command(0, &pass()).expect("pass priority");
+    e.apply_scenario_command(0, &pass()).expect("pass priority");
     let murder = hand_index_for_card(&e, 1, "murder");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             murder,
@@ -1535,7 +1539,7 @@ fn the_same_creature_can_die_more_than_once_in_a_turn() {
     );
 
     let first_murder = hand_index_for_card(&e, 0, "murder");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             first_murder,
@@ -1552,7 +1556,7 @@ fn the_same_creature_can_die_more_than_once_in_a_turn() {
     resolve_entire_stack_two_player(&mut e);
 
     let reanimate = hand_index_for_card(&e, 0, "reanimate");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             reanimate,
@@ -1570,7 +1574,7 @@ fn the_same_creature_can_die_more_than_once_in_a_turn() {
 
     ensure_in_hand(&mut e, 0, "murder");
     let second_murder = hand_index_for_card(&e, 0, "murder");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             second_murder,
@@ -1618,7 +1622,7 @@ fn noncreature_deaths_do_not_increment_the_creature_count() {
     );
 
     let shatterstorm = hand_index_for_card(&e, 0, "shatterstorm");
-    e.apply_command(0, &cast_spell(shatterstorm, vec![]))
+    e.apply_scenario_command(0, &cast_spell(shatterstorm, vec![]))
         .expect("cast Shatterstorm");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1653,7 +1657,7 @@ fn cleanup_rolls_current_history_to_previous_and_resets_current() {
         },
     );
     let murder = hand_index_for_card(&e, 0, "murder");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             murder,
@@ -1699,7 +1703,7 @@ fn rejected_casts_do_not_enter_turn_history() {
     ensure_in_hand(&mut e, 0, "life_goes_on");
     let life_goes_on = hand_index_for_card(&e, 0, "life_goes_on");
 
-    e.apply_command(0, &cast_spell(life_goes_on, vec![]))
+    e.apply_scenario_command(0, &cast_spell(life_goes_on, vec![]))
         .expect_err("casting without green mana is rejected");
 
     assert_eq!(e.state.turn_history.current.spells_cast, 0);

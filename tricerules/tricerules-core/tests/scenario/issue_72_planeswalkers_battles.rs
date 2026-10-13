@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ruled_event::Ev, ChooseTriggerTarget, RuledCommand,
@@ -81,7 +82,7 @@ fn cast_bolt_at(engine: &mut GameEngine, target: u32) {
     );
     let slot = hand_index_for_card(engine, 0, "lightning_bolt");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 slot,
@@ -132,7 +133,7 @@ fn damage_removes_loyalty_and_defense_counters() {
     );
     let slot = hand_index_for_card(&engine, 0, "jace_beleren");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Jace Beleren");
     resolve_entire_stack_two_player(&mut engine);
     let jace = battlefield_object_for_card(&engine, 0, "jace_beleren");
@@ -152,14 +153,14 @@ fn damage_removes_loyalty_and_defense_counters() {
     );
     let slot = hand_index_for_card(&engine, 0, "invasion_of_ulgrotha_grandmother_ravi_sengir");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Invasion of Ulgrotha");
     resolve_entire_stack_two_player(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![1]))
         .expect("choose Siege protector");
     let trigger_batch = engine
-        .apply_command(0, &choose_trigger_targets(target_player(1)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_player(1)))
         .expect("target opponent with Invasion ETB");
     let stack_display = trigger_batch
         .events
@@ -234,7 +235,7 @@ fn loyalty_cost_is_atomic_sorcery_speed_and_shared_across_abilities() {
     );
     let slot = hand_index_for_card(&engine, 0, "jace_beleren");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Jace");
     resolve_entire_stack_two_player(&mut engine);
     let jace = battlefield_object_for_card(&engine, 0, "jace_beleren");
@@ -279,10 +280,13 @@ fn siege_protector_is_chosen_before_the_battle_enters() {
     );
     let slot = hand_index_for_card(&duel, 0, "invasion_of_ulgrotha_grandmother_ravi_sengir");
     let battle = duel.state.players[0].hand[slot];
-    duel.apply_command(0, &cast_spell(slot, vec![]))
+    duel.apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Invasion");
-    duel.apply_command(0, &pass()).expect("caster pass");
-    let resolving = duel.apply_command(1, &pass()).expect("opponent pass");
+    duel.apply_scenario_command(0, &pass())
+        .expect("caster pass");
+    let resolving = duel
+        .apply_scenario_command(1, &pass())
+        .expect("opponent pass");
 
     let choice = find_resolution_choice(&resolving).expect("protector choice");
     assert_eq!(choice.choice_kind, ChoiceKind::BattleProtector as i32);
@@ -293,7 +297,7 @@ fn siege_protector_is_chosen_before_the_battle_enters() {
     );
     assert!(!duel.state.players[0].battlefield.contains(&battle));
 
-    duel.apply_command(0, &submit_resolution_choice(vec![1]))
+    duel.apply_scenario_command(0, &submit_resolution_choice(vec![1]))
         .expect("choose opponent to protect the Siege");
     assert_eq!(
         duel.state.objects[&battle].zone,
@@ -334,9 +338,11 @@ fn siege_ready_to_choose(seed: u64) -> (GameEngine, u32, u64) {
         .get_mut(&battle)
         .expect("Battle")
         .set_counter(tricerules_cards::primitives::CounterKind::Defense, 3);
-    engine.apply_command(0, &pass()).expect("assign protector");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("assign protector");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("advance with priority returned to the active player");
     let battlefield_generation = engine
         .state
@@ -356,7 +362,7 @@ fn siege_ready_to_choose(seed: u64) -> (GameEngine, u32, u64) {
     );
     let slot = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 slot,
@@ -410,7 +416,7 @@ fn siege_ready_to_choose(seed: u64) -> (GameEngine, u32, u64) {
 fn defeated_siege_decline_leaves_exact_card_in_exile() {
     let (mut engine, battle, exile_generation) = siege_ready_to_choose(72_005);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(
                 tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,
@@ -451,6 +457,7 @@ fn defeated_siege_casts_back_face_with_exact_physical_identity() {
     };
     let command = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::CastSpell as i32,
             selected_branch_index: 0,
@@ -468,12 +475,12 @@ fn defeated_siege_casts_back_face_with_exact_physical_identity() {
     }
     let before = format!("{:?}", engine.state);
     assert!(
-        engine.apply_command(0, &forged_payment).is_err(),
+        engine.apply_scenario_command(0, &forged_payment).is_err(),
         "a free Siege offer must not ignore an explicit payment payload"
     );
     assert_eq!(format!("{:?}", engine.state), before);
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("cast transformed back face");
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(
@@ -584,7 +591,7 @@ fn split_attackers_damage_player_planeswalker_and_battle() {
         published_attack_assignment(&mut engine, attack_battle, TargetRefKind::Permanent, battle),
     ];
     let declared = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -598,13 +605,17 @@ fn split_attackers_damage_player_planeswalker_and_battle() {
         .expect("declared event");
     assert_eq!(event.assignments, assignments);
 
-    engine.apply_command(0, &pass()).expect("AP pass attackers");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("AP pass attackers");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("NAP pass attackers");
-    engine.apply_command(0, &pass()).expect("AP pass blockers");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("AP pass blockers");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("NAP pass blockers and damage");
     assert_eq!(engine.state.players[1].life, 18);
     assert_eq!(
@@ -660,7 +671,7 @@ fn scorch_spitter_damages_attacked_planeswalker_but_not_battle() {
         jace,
     );
     planeswalker_game
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -693,7 +704,7 @@ fn scorch_spitter_damages_attacked_planeswalker_but_not_battle() {
     let assignment =
         published_attack_assignment(&mut battle_game, spitter, TargetRefKind::Permanent, battle);
     battle_game
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -737,7 +748,7 @@ fn attacker_stays_in_combat_but_deals_no_damage_when_permanent_defender_disappea
     let assignment =
         published_attack_assignment(&mut engine, attacker, TargetRefKind::Permanent, jace);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -761,11 +772,17 @@ fn attacker_stays_in_combat_but_deals_no_damage_when_permanent_defender_disappea
         .attacking
         .contains(&attacker));
 
-    engine.apply_command(0, &pass()).expect("AP pass attackers");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("AP pass attackers");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("NAP pass attackers");
-    engine.apply_command(0, &pass()).expect("AP pass blockers");
-    engine.apply_command(1, &pass()).expect("NAP pass blockers");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("AP pass blockers");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("NAP pass blockers");
     assert_eq!(engine.state.players[1].life, 20);
 }

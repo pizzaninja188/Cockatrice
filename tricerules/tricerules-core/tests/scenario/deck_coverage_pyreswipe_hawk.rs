@@ -2,13 +2,14 @@
 //!
 //! Oracle text and rulings are from the Wizards Bloomburrow release notes. CR 700.14, 611.2a-c,
 //! 613.1b/613.7, 400.7, 508.3a, and 603.2 govern these scenarios.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, ControllerReference, EffectDuration, TriggerCondition,
 };
 use tricerules_cards::{AbilityPresentation, Layout};
-use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine, TurnStep, Zone};
+use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     dev_command, AttackAssignment, ChooseTriggerTarget, DeclareAttackers, DevCommand, DevMoveCard,
     DevZone,
@@ -57,7 +58,9 @@ fn cast_two_mana_bear(engine: &mut GameEngine) {
         },
     );
     let cast = cast_spell(hand_index_for_card(engine, 0, "grizzly_bears"), vec![]);
-    engine.apply_command(2, &cast).expect("cast two-mana spell");
+    engine
+        .apply_scenario_command(2, &cast)
+        .expect("cast two-mana spell");
 }
 
 fn expend_six(engine: &mut GameEngine) {
@@ -81,7 +84,7 @@ fn expend_six(engine: &mut GameEngine) {
 
 fn choose_artifact(engine: &mut GameEngine, artifact: u32) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             2,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -100,7 +103,7 @@ fn choose_artifact(engine: &mut GameEngine, artifact: u32) {
 
 fn choose_no_artifact(engine: &mut GameEngine) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             2,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget::default())),
@@ -116,7 +119,7 @@ fn pass_until_player(engine: &mut GameEngine, player: i32) {
             return;
         }
         engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass priority to the requested player");
     }
     assert_eq!(engine.state.priority_player_id(), player);
@@ -138,7 +141,7 @@ fn cast_ray_of_command(engine: &mut GameEngine, player_index: usize, player_id: 
         target_object(hawk),
     );
     engine
-        .apply_command(player_id, &ray)
+        .apply_scenario_command(player_id, &ray)
         .expect("cast Ray of Command on the Hawk");
 }
 
@@ -146,7 +149,7 @@ fn dev_move_owned_card(engine: &mut GameEngine, owner: i32, card_name: &str, zon
     engine.enable_dev_commands();
     let actor = engine.state.priority_player_id();
     engine
-        .apply_command(
+        .apply_scenario_command(
             actor,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -240,7 +243,7 @@ fn pyreswipe_hawk_has_its_complete_single_face_and_attack_value_is_snapshotted_o
     );
 
     engine
-        .apply_command(2, &primitive_yield())
+        .apply_scenario_command(2, &primitive_yield())
         .expect("main phase to begin combat");
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
@@ -251,7 +254,7 @@ fn pyreswipe_hawk_has_its_complete_single_face_and_attack_value_is_snapshotted_o
         .copied()
         .unwrap_or(0);
     engine
-        .apply_command(
+        .apply_scenario_command(
             2,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {

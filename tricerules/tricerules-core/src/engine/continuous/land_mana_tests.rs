@@ -147,7 +147,7 @@ fn exotic_orchard_activates_for_zero_when_opponents_lands_cannot_produce_colors(
     assert!(info.mana_produced.is_empty());
 
     engine
-        .apply_command(0, &activate(&engine, orchard, 0, 0))
+        .apply_scenario_command(0, &activate(&engine, orchard, 0, 0))
         .unwrap();
     assert!(engine.state.objects[&orchard].tapped);
     assert_eq!(engine.state.players[0].mana_pool, Default::default());
@@ -308,7 +308,7 @@ fn exotic_orchard_ignores_opponent_land_activation_conditions_and_limits() {
 
     engine.state.priority_idx = 1;
     engine
-        .apply_command(1, &activate(&engine, conditional_land, 0, 0))
+        .apply_scenario_command(1, &activate(&engine, conditional_land, 0, 0))
         .unwrap();
     assert_eq!(
         engine.active_mana_options(source, orchard_ability),
@@ -658,13 +658,13 @@ fn intrinsic_land_mana_catalog_preserves_authored_holes_and_independent_identica
             }
         }
         let before = engine.diagnostic_snapshot().unwrap();
-        assert!(engine.apply_command(player, &command).is_err());
+        assert!(engine.apply_scenario_command(player, &command).is_err());
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     }
     for index in [3, 4] {
         engine.state.objects.get_mut(&source).unwrap().tapped = false;
         engine
-            .apply_command(0, &activate(&engine, source, index, 0))
+            .apply_scenario_command(0, &activate(&engine, source, index, 0))
             .unwrap();
     }
     assert_eq!(engine.state.players[0].mana_pool.green, 2);
@@ -702,7 +702,7 @@ fn intrinsic_land_mana_face_down_offers_and_activation_logs_hide_underlying_iden
         assert!(offer.presentation.is_none());
         offers.push(offer);
         let batch = engine
-            .apply_command(0, &activate(&engine, source, 0, 0))
+            .apply_scenario_command(0, &activate(&engine, source, 0, 0))
             .unwrap();
         assert_eq!(engine.state.players[0].mana_pool.green, 1);
         let logs = batch
@@ -811,14 +811,14 @@ fn intrinsic_land_mana_face_down_granted_nonmana_logs_and_resolution_hide_identi
             ..Default::default()
         }];
     }
-    let activated = engine.apply_command(0, &command).unwrap();
+    let activated = engine.apply_scenario_command(0, &command).unwrap();
     // Resolution must retain the public activation label even after the source is revealed.
     engine.state.objects.get_mut(&source).unwrap().face_down = false;
     let pass = rv1::RuledCommand {
         cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
     };
-    engine.apply_command(0, &pass).unwrap();
-    let resolved = engine.apply_command(1, &pass).unwrap();
+    engine.apply_scenario_command(0, &pass).unwrap();
+    let resolved = engine.apply_scenario_command(1, &pass).unwrap();
     assert_eq!(engine.state.players[1].life, 19);
     for event in activated.events.iter().chain(&resolved.events) {
         match &event.ev {
@@ -845,7 +845,7 @@ fn intrinsic_land_mana_countered_face_down_granted_ability_hides_identity() {
             ..Default::default()
         }];
     }
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     let stack_id = engine.state.stack.last().unwrap().id;
     let mut events = Vec::new();
     super::super::resolution::counter_stack_object(
@@ -916,7 +916,7 @@ fn intrinsic_land_mana_targeted_granted_trigger_captures_concealed_label_before_
         "Face-down permanent"
     );
     let chosen = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &rv1::RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::ChooseTriggerTarget(
@@ -936,8 +936,8 @@ fn intrinsic_land_mana_targeted_granted_trigger_captures_concealed_label_before_
     let pass = rv1::RuledCommand {
         cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
     };
-    events.extend(engine.apply_command(0, &pass).unwrap().events);
-    events.extend(engine.apply_command(1, &pass).unwrap().events);
+    events.extend(engine.apply_scenario_command(0, &pass).unwrap().events);
+    events.extend(engine.apply_scenario_command(1, &pass).unwrap().events);
     assert_eq!(engine.state.players[1].life, 19);
     assert!(engine.state.stack.is_empty());
     for event in events {
@@ -1009,7 +1009,7 @@ fn intrinsic_land_mana_mixed_zone_face_reserves_full_span_for_grants() {
         &engine.effective_activated_abilities(arbor)[0].definition
     ));
     assert!(engine
-        .apply_command(0, &activate(&engine, arbor, 0, 0))
+        .apply_scenario_command(0, &activate(&engine, arbor, 0, 0))
         .is_err());
 }
 
@@ -1119,8 +1119,8 @@ fn lantern_granted_slots_do_not_rebind_after_an_earlier_occurrence_expires() {
     let pass = rv1::RuledCommand {
         cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
     };
-    engine.apply_command(0, &pass).unwrap();
-    engine.apply_command(1, &pass).unwrap();
+    engine.apply_scenario_command(0, &pass).unwrap();
+    engine.apply_scenario_command(1, &pass).unwrap();
     let first = engine.effective_activated_abilities(recipient);
     let grants: Vec<_> = first
         .iter()
@@ -1132,8 +1132,8 @@ fn lantern_granted_slots_do_not_rebind_after_an_earlier_occurrence_expires() {
     engine.state.continuous_effects.retain(|effect| {
         effect.trigger_grant_origin != Some(TriggerAbilityOrigin::ResolvingGrant(0))
     });
-    engine.apply_command(0, &pass).unwrap();
-    engine.apply_command(1, &pass).unwrap();
+    engine.apply_scenario_command(0, &pass).unwrap();
+    engine.apply_scenario_command(1, &pass).unwrap();
     let remaining = engine.effective_activated_abilities(recipient);
     assert_eq!(
         remaining
@@ -1145,10 +1145,10 @@ fn lantern_granted_slots_do_not_rebind_after_an_earlier_occurrence_expires() {
         "removing occurrence A must leave a hole, not rebind A's stale slot to B"
     );
     let before = engine.diagnostic_snapshot().unwrap();
-    assert!(engine.apply_command(0, &stale).is_err());
+    assert!(engine.apply_scenario_command(0, &stale).is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     let live = activate(&engine, recipient, grants[1], 0);
-    engine.apply_command(0, &live).unwrap();
+    engine.apply_scenario_command(0, &live).unwrap();
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
     assert!(engine.state.objects[&recipient].tapped);
     assert!(engine.state.stack.is_empty());
@@ -1302,7 +1302,7 @@ fn lantern_recipient_slots_retire_even_on_same_zone_generation_changes() {
         1
     );
     let before = engine.diagnostic_snapshot().unwrap();
-    assert!(engine.apply_command(0, &stale).is_err());
+    assert!(engine.apply_scenario_command(0, &stale).is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     engine
         .state
@@ -1311,7 +1311,7 @@ fn lantern_recipient_slots_retire_even_on_same_zone_generation_changes() {
         .unwrap()
         .summoning_sick = false;
     engine
-        .apply_command(0, &activate(&engine, source, 0, 0))
+        .apply_scenario_command(0, &activate(&engine, source, 0, 0))
         .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.colorless, 2);
     assert!(engine.state.objects[&source].tapped);
@@ -1345,10 +1345,10 @@ fn lantern_identical_resolving_grants_have_independent_activation_limits() {
             );
         }
         engine
-            .apply_command(0, &activate(&engine, source, 2, 0))
+            .apply_scenario_command(0, &activate(&engine, source, 2, 0))
             .unwrap();
         engine
-            .apply_command(0, &activate(&engine, source, 3, 0))
+            .apply_scenario_command(0, &activate(&engine, source, 3, 0))
             .expect(
                 "identical definition from a second resolving occurrence has its own allowance",
             );
@@ -1357,7 +1357,7 @@ fn lantern_identical_resolving_grants_have_independent_activation_limits() {
         for slot in [2, 3] {
             let before = engine.diagnostic_snapshot().unwrap();
             assert!(engine
-                .apply_command(0, &activate(&engine, source, slot, 0))
+                .apply_scenario_command(0, &activate(&engine, source, slot, 0))
                 .is_err());
             assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
         }
@@ -1374,7 +1374,7 @@ fn lantern_identical_resolving_grants_have_independent_activation_limits() {
         engine.reconcile_activated_ability_slots();
         let before = engine.diagnostic_snapshot().unwrap();
         assert!(engine
-            .apply_command(0, &activate(&engine, source, 3, 0))
+            .apply_scenario_command(0, &activate(&engine, source, 3, 0))
             .is_err());
         assert_eq!(
             engine.diagnostic_snapshot().unwrap(),
@@ -1388,7 +1388,7 @@ fn lantern_identical_resolving_grants_have_independent_activation_limits() {
             3,
         );
         engine
-            .apply_command(0, &activate(&engine, source, 4, 0))
+            .apply_scenario_command(0, &activate(&engine, source, 4, 0))
             .unwrap();
         assert_eq!(engine.state.players[0].mana_pool.green, 3);
         assert_eq!(engine.state.players[0].life, 17);
@@ -1592,7 +1592,7 @@ fn lantern_rite_shaped_creature_grant_obeys_sickness_and_explicit_source_exclusi
     assert_eq!(granted.slot, 1);
     let command = activate(&engine, recipient, granted.slot, 0);
     let before = engine.diagnostic_snapshot().unwrap();
-    assert!(engine.apply_command(0, &command).is_err());
+    assert!(engine.apply_scenario_command(0, &command).is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     effect(
         &mut engine,
@@ -1600,7 +1600,7 @@ fn lantern_rite_shaped_creature_grant_obeys_sickness_and_explicit_source_exclusi
         ContinuousEffectKind::Layer6AddKeyword(Keyword::Haste),
         1,
     );
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
     assert!(engine.state.objects[&recipient].tapped);
     assert!(!engine.state.objects[&source].tapped);
@@ -1628,10 +1628,10 @@ fn lantern_identical_static_grants_keep_limits_when_a_source_is_suppressed() {
         let first = gift_fixture_with_child(&mut engine, land, child.clone());
         gift_fixture_with_child(&mut engine, land, child.clone());
         engine
-            .apply_command(0, &activate(&engine, land, 1, 0))
+            .apply_scenario_command(0, &activate(&engine, land, 1, 0))
             .unwrap();
         engine
-            .apply_command(0, &activate(&engine, land, 2, 0))
+            .apply_scenario_command(0, &activate(&engine, land, 2, 0))
             .unwrap();
         assert_eq!(engine.state.players[0].mana_pool.green, 2);
         assert_eq!(engine.state.players[0].life, 18);
@@ -1656,13 +1656,13 @@ fn lantern_identical_static_grants_keep_limits_when_a_source_is_suppressed() {
         for slot in [1, 2] {
             let before = engine.diagnostic_snapshot().unwrap();
             assert!(engine
-                .apply_command(0, &activate(&engine, land, slot, 0))
+                .apply_scenario_command(0, &activate(&engine, land, slot, 0))
                 .is_err());
             assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
         }
         gift_fixture_with_child(&mut engine, land, child);
         engine
-            .apply_command(0, &activate(&engine, land, 3, 0))
+            .apply_scenario_command(0, &activate(&engine, land, 3, 0))
             .unwrap();
         assert_eq!(engine.state.players[0].mana_pool.green, 3);
         assert_eq!(engine.state.players[0].life, 17);
@@ -1708,7 +1708,7 @@ fn lantern_nonmana_grants_capture_occurrence_and_presentation_before_source_cost
             cost_index: 0,
             selection: Some(rv1::cost_selection::Selection::PermanentId(aura)),
         }];
-        let batch = engine.apply_command(0, &command).unwrap();
+        let batch = engine.apply_scenario_command(0, &command).unwrap();
         assert_eq!(engine.state.objects[&aura].zone, Zone::Graveyard);
         let item = engine.state.stack.last().unwrap();
         assert_eq!(item.source_permanent_id, Some(land));
@@ -1735,7 +1735,7 @@ fn lantern_nonmana_grants_capture_occurrence_and_presentation_before_source_cost
     };
     for _ in 0..4 {
         engine
-            .apply_command(engine.state.priority_player_id(), &pass)
+            .apply_scenario_command(engine.state.priority_player_id(), &pass)
             .unwrap();
     }
     assert!(engine.state.stack.is_empty());

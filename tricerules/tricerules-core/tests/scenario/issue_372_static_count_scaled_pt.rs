@@ -5,6 +5,7 @@
 //! modifiers after base P/T setters; CR 208.2a / 604.3 govern Neo Exdeath's power-defining CDA;
 //! CR 303.4 / 611.3 govern Song of Stupefaction's attached modifier and its disappearance when
 //! the Aura leaves; CR 603.4 rechecks Exdeath's intervening-if on resolution.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::{TurnStep, Zone};
@@ -65,21 +66,21 @@ fn seat_on_top(engine: &mut GameEngine, player: usize, card_id: &str) -> u32 {
 
 fn advance_to_end_step(engine: &mut GameEngine, active: i32) {
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("main 1 to beginning of combat");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("beginning of combat advance");
     if engine.state.turn_step == TurnStep::DeclareAttackers {
         engine
-            .apply_command(active, &primitive_yield())
+            .apply_scenario_command(active, &primitive_yield())
             .expect("declare no attackers");
     }
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("end combat to main 2");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("main 2 to end step");
     assert_eq!(engine.state.turn_step, TurnStep::EndStep);
 }
@@ -91,15 +92,18 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }
 
 fn select_optional_effect() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: 0,
             ..Default::default()
@@ -110,6 +114,7 @@ fn select_optional_effect() -> RuledCommand {
 fn decline_optional_effect() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::Decline as i32,
             ..Default::default()
         })),
@@ -123,7 +128,7 @@ fn pass_until_song_entry_choice(engine: &mut GameEngine) {
         }
         answer_trigger_order_in_engine_order(engine);
         let priority = engine.state.priority_player_id();
-        if engine.apply_command(priority, &pass()).is_err() {
+        if engine.apply_scenario_command(priority, &pass()).is_err() {
             assert!(
                 engine.state.pending_resolution.is_some(),
                 "the Song entry choice must park a private decision"
@@ -147,12 +152,14 @@ fn cast_song_of_stupefaction(engine: &mut GameEngine, target: u32, accept_mill: 
     );
     let slot = hand_index_for_card(engine, 0, "song_of_stupefaction");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Song of Stupefaction");
     // The Aura spell resolves, then its optional entry mill triggers.
-    engine.apply_command(0, &pass()).expect("caster pass");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("opponent pass resolves the Aura spell");
     let aura = battlefield_object_for_card(engine, 0, "song_of_stupefaction");
     pass_until_song_entry_choice(engine);
@@ -162,7 +169,7 @@ fn cast_song_of_stupefaction(engine: &mut GameEngine, target: u32, accept_mill: 
         decline_optional_effect()
     };
     engine
-        .apply_command(0, &decision)
+        .apply_scenario_command(0, &decision)
         .expect("answer the optional entry mill");
     resolve_entire_stack_two_player(engine);
     aura

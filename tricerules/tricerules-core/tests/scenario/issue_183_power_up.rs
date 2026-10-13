@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{ActivatedCostModifier, PermanentEventFilter};
 use tricerules_cards::{AbilityId, CounterKind, GameCondition, Keyword, RelativePlayerSet};
 use tricerules_core::state::CopiableValues;
@@ -216,12 +217,16 @@ fn issue_183_cards_publish_reduced_costs_and_resolve_their_power_ups() {
     let ninja = sources[0];
     grant_pool(&mut engine, 0);
     apply_ability(&mut engine, 0, ninja, 0, vec![]).expect("activate Ninja of the Hand");
-    engine.apply_command(0, &pass()).expect("controller passes");
-    let batch = engine.apply_command(1, &pass()).expect("opponent passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
+    let batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("opponent passes");
     let choice = find_resolution_choice(&batch).expect("opponent discard choice");
     let discarded = choice.candidate_object_ids[0];
     engine
-        .apply_command(1, &submit_resolution_choice(vec![discarded]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![discarded]))
         .expect("opponent discards");
     assert_eq!(
         engine.state.objects[&ninja].counter_count(CounterKind::PlusOnePlusOne),
@@ -401,16 +406,16 @@ fn viv_vision_draws_on_attack_only_after_reaching_four_power() {
         }
         let before = engine.state.players[0].hand.len();
         engine
-            .apply_command(0, &primitive_yield())
+            .apply_scenario_command(0, &primitive_yield())
             .expect("main phase to begin combat");
         engine
-            .apply_command(0, &pass())
+            .apply_scenario_command(0, &pass())
             .expect("active player passes");
         engine
-            .apply_command(1, &pass())
+            .apply_scenario_command(1, &pass())
             .expect("nonactive player passes");
         engine
-            .apply_command(0, &declare_attackers(vec![viv]))
+            .apply_scenario_command(0, &declare_attackers(vec![viv]))
             .expect("Viv attacks");
         resolve_entire_stack_two_player(&mut engine);
         (before, engine.state.players[0].hand.len())

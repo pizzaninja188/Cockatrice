@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
 use tricerules_proto::ruled::v1::CastCostGroupSelection;
 
@@ -36,7 +37,7 @@ fn tackle_artist_uses_actual_mana_spent_for_its_opus_upgrade() {
 
     let slot = hand_index_for_card(&engine, 0, "unexpected_assistance");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast a five-mana instant");
     assert_eq!(
         engine
@@ -76,7 +77,7 @@ fn tackle_artist_uses_the_total_kicked_cost_not_printed_mana_value() {
 
     let slot = hand_index_for_card(&engine, 0, "grow_from_the_ashes");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -115,7 +116,7 @@ fn tackle_artist_uses_one_counter_below_five_and_ignores_creature_spells() {
     );
     let slot = hand_index_for_card(&engine, 0, "chandras_outrage");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(opposing)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(opposing)))
         .expect("cast a four-mana instant");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -135,7 +136,7 @@ fn tackle_artist_uses_one_counter_below_five_and_ignores_creature_spells() {
     );
     let slot = hand_index_for_card(&engine, 0, "hill_giant");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast a four-mana creature");
     assert_eq!(
         engine.state.objects[&artist].counter_count(CounterKind::PlusOnePlusOne),
@@ -162,7 +163,7 @@ fn increment_compares_spending_to_either_current_stat() {
     );
     let slot = hand_index_for_card(&engine, 0, "divination");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast for three");
     assert_eq!(engine.state.stack.len(), 1, "three exceeds neither 3 nor 4");
     resolve_entire_stack_two_player(&mut engine);
@@ -179,7 +180,7 @@ fn increment_compares_spending_to_either_current_stat() {
     );
     let slot = hand_index_for_card(&engine, 0, "chandras_outrage");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(opposing)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(opposing)))
         .expect("cast for four");
     assert_eq!(engine.state.stack.len(), 2, "four exceeds power three");
     pass_both_players(&mut engine);
@@ -208,11 +209,11 @@ fn increment_checks_current_power_and_toughness_again_on_resolution() {
 
     let spell = hand_index_for_card(&engine, 0, "unexpected_assistance");
     engine
-        .apply_command(0, &cast_spell(spell, vec![]))
+        .apply_scenario_command(0, &cast_spell(spell, vec![]))
         .expect("five mana creates the Increment trigger");
     let growth = hand_index_for_card(&engine, 0, "giant_growth");
     engine
-        .apply_command(0, &cast_spell(growth, target_object(graffalon)))
+        .apply_scenario_command(0, &cast_spell(growth, target_object(graffalon)))
         .expect("respond to Increment");
     pass_both_players(&mut engine);
     pass_both_players(&mut engine);
@@ -242,7 +243,7 @@ fn direct_spell_copies_do_not_create_spell_cast_spend_context() {
 
     let divination = hand_index_for_card(&engine, 0, "divination");
     engine
-        .apply_command(0, &cast_spell(divination, vec![]))
+        .apply_scenario_command(0, &cast_spell(divination, vec![]))
         .expect("cast Divination");
     let original = engine
         .state
@@ -253,7 +254,7 @@ fn direct_spell_copies_do_not_create_spell_cast_spend_context() {
         .id;
     let twincast = hand_index_for_card(&engine, 0, "twincast");
     engine
-        .apply_command(0, &cast_spell(twincast, target_object(original)))
+        .apply_scenario_command(0, &cast_spell(twincast, target_object(original)))
         .expect("cast Twincast");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -282,7 +283,7 @@ fn increment_trigger_does_not_follow_a_new_source_generation() {
 
     let spell = hand_index_for_card(&engine, 0, "unexpected_assistance");
     engine
-        .apply_command(0, &cast_spell(spell, vec![]))
+        .apply_scenario_command(0, &cast_spell(spell, vec![]))
         .expect("five mana creates the Increment trigger");
     *engine
         .state

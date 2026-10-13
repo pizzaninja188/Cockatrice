@@ -4,10 +4,11 @@
 //! Oracle and rulings were checked against Scryfall on 2026-09-26. CR 608.2b governs legality at
 //! resolution, CR 701.6a governs countering, and CR 111.3-4 define the Bird token's characteristics,
 //! name, and subtype.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{Color, Keyword};
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 const SWAN_SONG: &str = "swan_song";
 const BIRD_TOKEN: &str = "bird_u_2_2_flying";
@@ -49,7 +50,7 @@ fn cast_swan_song(engine: &mut GameEngine, target_spell: u32) {
     inject_card_into_hand(engine, 1, SWAN_SONG);
     let slot = hand_index_for_card(engine, 1, SWAN_SONG);
     engine
-        .apply_command(1, &cast_spell(slot, stack_target(target_spell)))
+        .apply_scenario_command(1, &cast_spell(slot, stack_target(target_spell)))
         .expect("cast Swan Song targeting the spell");
 }
 
@@ -109,17 +110,19 @@ fn swan_song_targets_each_allowed_spell_type_and_gives_its_controller_a_bird() {
         let slot = hand_index_for_card(&engine, 0, card_id);
         let targets = permanent.map_or_else(Vec::new, target_object);
         engine
-            .apply_command(0, &cast_spell(slot, targets))
+            .apply_scenario_command(0, &cast_spell(slot, targets))
             .expect("cast the selected instant, sorcery, or enchantment");
         engine
-            .apply_command(0, &pass())
+            .apply_scenario_command(0, &pass())
             .expect("pass to Swan Song's controller");
 
         cast_swan_song(&mut engine, target);
         engine
-            .apply_command(1, &pass())
+            .apply_scenario_command(1, &pass())
             .expect("pass after Swan Song");
-        engine.apply_command(0, &pass()).expect("resolve Swan Song");
+        engine
+            .apply_scenario_command(0, &pass())
+            .expect("resolve Swan Song");
 
         assert_eq!(
             engine.state.objects[&target].zone,
@@ -147,17 +150,19 @@ fn swan_song_gives_a_bird_even_when_its_target_cannot_be_countered() {
     );
     let slot = hand_index_for_card(&engine, 0, "eject");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(creature)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(creature)))
         .expect("cast the uncounterable instant Eject");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass to Swan Song's controller");
 
     cast_swan_song(&mut engine, eject);
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("pass after Swan Song");
-    engine.apply_command(0, &pass()).expect("resolve Swan Song");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("resolve Swan Song");
 
     assert!(engine.state.stack.iter().any(|item| item.id == eject));
     assert_eq!(engine.state.objects[&creature].zone, Zone::Battlefield);
@@ -183,10 +188,10 @@ fn swan_song_rejects_a_creature_spell_as_a_target() {
     );
     let slot = hand_index_for_card(&engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast the creature spell");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass to Swan Song's controller");
 
     give_mana(
@@ -201,7 +206,7 @@ fn swan_song_rejects_a_creature_spell_as_a_target() {
     let slot = hand_index_for_card(&engine, 1, SWAN_SONG);
     let command_index = engine.state.command_index;
     assert!(engine
-        .apply_command(1, &cast_spell(slot, stack_target(creature)))
+        .apply_scenario_command(1, &cast_spell(slot, stack_target(creature)))
         .is_err());
     assert_eq!(engine.state.command_index, command_index);
     assert!(engine.state.stack.iter().any(|item| item.id == creature));
@@ -222,14 +227,14 @@ fn swan_song_creates_no_bird_if_its_target_leaves_the_stack_first() {
     );
     let slot = hand_index_for_card(&engine, 0, "opt");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Opt");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass to Swan Song's controller");
     cast_swan_song(&mut engine, target);
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("pass to Opt's controller");
 
     give_mana(
@@ -243,13 +248,13 @@ fn swan_song_creates_no_bird_if_its_target_leaves_the_stack_first() {
     inject_card_into_hand(&mut engine, 0, "counterspell");
     let slot = hand_index_for_card(&engine, 0, "counterspell");
     engine
-        .apply_command(0, &cast_spell(slot, stack_target(target)))
+        .apply_scenario_command(0, &cast_spell(slot, stack_target(target)))
         .expect("counter Opt before Swan Song resolves");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass counterspell response");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve the counterspell");
     assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
 

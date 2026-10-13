@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{
     ConditionObjectRef, ContinuousEffectKind, EffectDuration, GameCondition,
@@ -42,38 +43,38 @@ fn engine_at_main1(seed: u64) -> GameEngine {
 
 fn advance_from_main1_to_main2(engine: &mut GameEngine, active: i32) -> RuledEventBatch {
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("main 1 to beginning of combat");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("beginning of combat advance");
     if engine.state.turn_step == TurnStep::DeclareAttackers {
         engine
-            .apply_command(active, &primitive_yield())
+            .apply_scenario_command(active, &primitive_yield())
             .expect("declare no attackers");
     }
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("end combat to second main")
 }
 
 fn finish_turn_from_begin_combat(engine: &mut GameEngine, active: i32) {
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("beginning of combat advance");
     if engine.state.turn_step == TurnStep::DeclareAttackers {
         engine
-            .apply_command(active, &primitive_yield())
+            .apply_scenario_command(active, &primitive_yield())
             .expect("declare no attackers");
     }
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("end combat to second main");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("second main to end step");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("end step to cleanup");
     resolve_cleanup_discards_if_any(engine);
 }
@@ -84,7 +85,7 @@ fn refire_second_main(engine: &mut GameEngine, active: usize) -> RuledEventBatch
     engine.state.priority_idx = active;
     engine.state.passes_since_stack_change = 0;
     engine
-        .apply_command(engine.state.players[active].id, &primitive_yield())
+        .apply_scenario_command(engine.state.players[active].id, &primitive_yield())
         .expect("enter another modeled second main phase")
 }
 
@@ -97,7 +98,7 @@ fn riling_dawnbreaker_targets_before_priority_and_pumps_only_another_controlled_
     let opposing = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
 
     let batch = engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("enter beginning of combat");
     assert_eq!(engine.state.turn_step, TurnStep::BeginCombat);
     assert_eq!(engine.state.pending_triggers.len(), 1);
@@ -127,12 +128,12 @@ fn riling_dawnbreaker_targets_before_priority_and_pumps_only_another_controlled_
 
     for illegal in [riling, opposing] {
         assert!(engine
-            .apply_command(0, &choose_trigger_target(illegal))
+            .apply_scenario_command(0, &choose_trigger_target(illegal))
             .is_err());
         assert_eq!(engine.state.pending_triggers.len(), 1);
     }
     engine
-        .apply_command(0, &choose_trigger_target(friendly))
+        .apply_scenario_command(0, &choose_trigger_target(friendly))
         .expect("choose friendly creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.effective_power(friendly), Some(3));
@@ -154,14 +155,14 @@ fn riling_dawnbreaker_is_controller_turn_only_and_does_not_retroactively_observe
     opponent_turn.state.active_player_idx = 1;
     opponent_turn.state.priority_idx = 1;
     opponent_turn
-        .apply_command(1, &primitive_yield())
+        .apply_scenario_command(1, &primitive_yield())
         .expect("opponent enters combat");
     assert!(opponent_turn.state.pending_triggers.is_empty());
     assert!(opponent_turn.state.stack.is_empty());
 
     let mut late_source = engine_at_main1(128_003);
     late_source
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("enter combat without Riling");
     inject_creature_on_battlefield(&mut late_source, 0, "riling_dawnbreaker_signaling_roar");
     inject_creature_on_battlefield(&mut late_source, 0, "grizzly_bears");
@@ -174,7 +175,7 @@ fn riling_dawnbreaker_skips_no_target_events_and_revalidates_target_generation()
     let mut no_target = engine_at_main1(128_004);
     inject_creature_on_battlefield(&mut no_target, 0, "riling_dawnbreaker_signaling_roar");
     let batch = no_target
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("enter combat without another controlled creature");
     assert!(no_target.state.pending_triggers.is_empty());
     assert!(no_target.state.stack.is_empty());
@@ -184,10 +185,10 @@ fn riling_dawnbreaker_skips_no_target_events_and_revalidates_target_generation()
     inject_creature_on_battlefield(&mut stale, 0, "riling_dawnbreaker_signaling_roar");
     let target = inject_creature_on_battlefield(&mut stale, 0, "grizzly_bears");
     stale
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("enter combat with a target");
     stale
-        .apply_command(0, &choose_trigger_target(target))
+        .apply_scenario_command(0, &choose_trigger_target(target))
         .expect("choose the target generation");
     *stale
         .state
@@ -293,7 +294,7 @@ fn acrobatic_cheerleader_uses_tap_lki_and_a_returned_object_is_fresh() {
     advance_from_main1_to_main2(&mut engine, 0);
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     grant_pool(&mut engine, 1);
     let unsummon_slot = engine.state.players[1]
@@ -302,7 +303,7 @@ fn acrobatic_cheerleader_uses_tap_lki_and_a_returned_object_is_fresh() {
         .position(|candidate| *candidate == unsummon)
         .expect("Unsummon in hand");
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_spell(unsummon_slot, targets_with_damage(vec![(cheerleader, 0)])),
         )
@@ -322,7 +323,7 @@ fn acrobatic_cheerleader_uses_tap_lki_and_a_returned_object_is_fresh() {
         .position(|candidate| *candidate == cheerleader)
         .expect("Cheerleader returned to hand");
     engine
-        .apply_command(0, &cast_spell(cheerleader_slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(cheerleader_slot, Vec::new()))
         .expect("recast Cheerleader");
     resolve_entire_stack_two_player(&mut engine);
     engine.state.objects.get_mut(&cheerleader).unwrap().tapped = true;
@@ -381,7 +382,7 @@ fn simultaneous_phase_triggers_use_apnap_order_before_priority() {
     }
 
     let batch = engine
-        .apply_command(1, &primitive_yield())
+        .apply_scenario_command(1, &primitive_yield())
         .expect("enter combat with three observers");
     assert_eq!(
         engine
@@ -450,7 +451,7 @@ fn refire_begin_combat(engine: &mut GameEngine) -> RuledEventBatch {
     engine.state.priority_idx = engine.state.active_player_idx;
     engine.state.passes_since_stack_change = 0;
     engine
-        .apply_command(engine.state.active_player_id(), &primitive_yield())
+        .apply_scenario_command(engine.state.active_player_id(), &primitive_yield())
         .unwrap()
 }
 
@@ -523,14 +524,14 @@ fn issue_164_decline_rejected_target_and_refresh_do_not_refund_a_trigger() {
     let usage = engine.state.trigger_uses_this_turn.clone();
     let command_index = engine.state.command_index;
     assert!(engine
-        .apply_command(0, &choose_trigger_target(source))
+        .apply_scenario_command(0, &choose_trigger_target(source))
         .is_err());
     assert_eq!(engine.state.command_index, command_index);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine.initial_response_batch();
     assert_eq!(engine.state.trigger_uses_this_turn, usage);
     engine
-        .apply_command(0, &choose_trigger_target(graveyard_card))
+        .apply_scenario_command(0, &choose_trigger_target(graveyard_card))
         .expect("choose a legal target after rejecting the wrong zone");
     pass_both_players(&mut engine);
     answer_optional_triggered_ability_choice(&mut engine, ResolutionChoiceDecision::Decline);
@@ -586,14 +587,14 @@ fn issue_164_target_leaving_before_resolution_does_not_refund_the_cap() {
     inject_card_into_hand(&mut engine, 0, "unsummon");
     refire_begin_combat(&mut engine);
     engine
-        .apply_command(0, &choose_trigger_target(target))
+        .apply_scenario_command(0, &choose_trigger_target(target))
         .unwrap();
     grant_pool(&mut engine, 0);
     let command = cast_spell(
         hand_index_for_card(&engine, 0, "unsummon"),
         target_object(target),
     );
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&target].zone, Zone::Hand);
     assert!(engine.state.stack.is_empty());

@@ -156,6 +156,25 @@ TEST(RuledE2EHarnessTest, PaymentPreviewDoesNotAdvanceTheObservedGame)
     EXPECT_EQ(client.nextCmdId, 1u);
 }
 
+TEST(RuledE2EHarnessTest, ActivePromptAcceptsZeroBasedFirstSeatId)
+{
+    QStringList transcript;
+    OpeningDriver firstSeat(true, "first-seat", &transcript);
+    firstSeat.myId = 0;
+    ruled::v1::RuledEventBatch batch;
+    auto *prompt = batch.mutable_resolution_prompt_state();
+    prompt->set_active(true);
+    prompt->set_deciding_player_id(0);
+    prompt->set_resolution_prompt_id(9302);
+
+    firstSeat.applyRuledBatch(batch);
+
+    EXPECT_TRUE(firstSeat.resolutionPromptSnapshotValid);
+    EXPECT_TRUE(firstSeat.resolutionPromptActive);
+    EXPECT_EQ(firstSeat.resolutionPromptDeciderPlayerId, 0);
+    EXPECT_EQ(firstSeat.currentResolutionPromptId, 9302u);
+}
+
 TEST(RuledE2EHarnessTest, ResponsesAndPhysicalEventsStayOrderedAndRecipientLocal)
 {
     QStringList transcript;

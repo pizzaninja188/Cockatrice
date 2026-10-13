@@ -1,9 +1,10 @@
 //! Teferi, Temporal Pilgrim complete-card rules coverage.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::CounterKind;
 use tricerules_cards::primitives::{ContinuousEffectKind, ControllerReference, EffectDuration};
-use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine, Zone};
+use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 
 const TEFERI: &str = "teferi,_temporal_pilgrim";
 
@@ -41,7 +42,7 @@ fn resolve_until_permanent_choice(
         }
         let priority = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("pass priority toward Teferi's ultimate");
         if engine.state.pending_resolution.is_some() {
             choice = find_resolution_choice(&batch);
@@ -75,7 +76,7 @@ fn resolve_current_stack_with_events(
         }
         let priority = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("pass priority toward the resolving Teferi ability");
         events.extend(batch.events);
     }
@@ -93,6 +94,7 @@ fn targeted_player_choice_answer(
 fn select_replacement_chooser(index: u32) -> tricerules_proto::ruled::v1::RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -149,7 +151,7 @@ fn teferis_ultimate_returns_the_chosen_land_and_shuffles_each_remaining_nonland_
         .owner = 40;
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &activate_ability_for(&engine, source, 2, target_player(20)),
         )
@@ -171,7 +173,7 @@ fn teferis_ultimate_returns_the_chosen_land_and_shuffles_each_remaining_nonland_
     assert!(choice.candidate_object_ids.contains(&foreign_nonland));
 
     let batch = engine
-        .apply_command(20, &submit_resolution_choice(vec![returned_land]))
+        .apply_scenario_command(20, &submit_resolution_choice(vec![returned_land]))
         .expect("the target opponent chooses a permanent");
 
     assert_eq!(engine.state.objects[&returned_land].zone, Zone::Hand);
@@ -223,7 +225,7 @@ fn ultimate_resolution_replays_identically_from_same_seed_and_accepted_commands(
     let mut expected_batches = Vec::new();
 
     let activate = activate_ability_for(&original, source, 2, target_player(20));
-    expected_batches.push(original.apply_command(10, &activate).unwrap());
+    expected_batches.push(original.apply_scenario_command(10, &activate).unwrap());
     accepted_commands.push((10, activate));
     assert_eq!(original.state.objects[&source].zone, Zone::Graveyard);
 
@@ -233,7 +235,7 @@ fn ultimate_resolution_replays_identically_from_same_seed_and_accepted_commands(
         }
         let actor = original.state.priority_player_id();
         let command = pass();
-        expected_batches.push(original.apply_command(actor, &command).unwrap());
+        expected_batches.push(original.apply_scenario_command(actor, &command).unwrap());
         accepted_commands.push((actor, command));
     }
     assert_eq!(
@@ -247,7 +249,7 @@ fn ultimate_resolution_replays_identically_from_same_seed_and_accepted_commands(
     );
 
     let choice = submit_resolution_choice(vec![returned_land]);
-    expected_batches.push(original.apply_command(20, &choice).unwrap());
+    expected_batches.push(original.apply_scenario_command(20, &choice).unwrap());
     accepted_commands.push((20, choice));
     assert_eq!(original.state.objects[&returned_land].zone, Zone::Hand);
     assert_eq!(
@@ -264,7 +266,10 @@ fn ultimate_resolution_replays_identically_from_same_seed_and_accepted_commands(
     );
     for ((actor, command), expected) in accepted_commands.iter().zip(&expected_batches) {
         let decoded = RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
-        assert_eq!(replay.apply_command(*actor, &decoded).unwrap(), *expected);
+        assert_eq!(
+            replay.apply_scenario_command(*actor, &decoded).unwrap(),
+            *expected
+        );
     }
     assert_eq!(
         replay.diagnostic_snapshot().unwrap(),
@@ -285,7 +290,7 @@ fn teferis_zero_draws_and_puts_a_loyalty_counter_on_each_draw() {
     let starting_library = engine.state.players[0].library.len();
 
     engine
-        .apply_command(10, &activate_ability_for(&engine, source, 0, Vec::new()))
+        .apply_scenario_command(10, &activate_ability_for(&engine, source, 0, Vec::new()))
         .expect("activate Teferi's draw ability");
     resolve_current_stack(&mut engine);
     assert_eq!(engine.state.players[0].library.len(), starting_library - 1);
@@ -306,7 +311,7 @@ fn teferis_minus_two_creates_a_vigilant_spirit_that_grows_on_each_draw() {
         .expect("Teferi")
         .set_counter(CounterKind::Loyalty, 4);
     engine
-        .apply_command(10, &activate_ability_for(&engine, source, 1, Vec::new()))
+        .apply_scenario_command(10, &activate_ability_for(&engine, source, 1, Vec::new()))
         .expect("activate Teferi's Spirit ability");
     resolve_current_stack(&mut engine);
     let token = engine.state.players[0]
@@ -332,7 +337,7 @@ fn teferis_minus_two_creates_a_vigilant_spirit_that_grows_on_each_draw() {
     engine.state.players[0].mana_pool.colorless = 2;
     engine.state.players[0].mana_pool.blue = 1;
     engine
-        .apply_command(10, &cast_spell(divination_index as usize, Vec::new()))
+        .apply_scenario_command(10, &cast_spell(divination_index as usize, Vec::new()))
         .expect("cast Divination to draw two cards");
     resolve_current_stack(&mut engine);
     assert_eq!(
@@ -376,13 +381,13 @@ fn target_departure_assigns_a_replacement_chooser_and_limits_it_to_the_lki_contr
     give_control_to(&mut engine, stolen_survivor, 20);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &activate_ability_for(&engine, source, 2, target_player(20)),
         )
         .expect("activate the targeted-player ultimate");
     resolve_until_permanent_choice(&mut engine);
-    let departure = engine.apply_command(20, &concede()).unwrap();
+    let departure = engine.apply_scenario_command(20, &concede()).unwrap();
 
     assert!(!engine.state.objects.contains_key(&target_owned));
     assert_eq!(
@@ -410,7 +415,7 @@ fn target_departure_assigns_a_replacement_chooser_and_limits_it_to_the_lki_contr
     assert_eq!(delegate_event.resolution_branches.len(), 2);
 
     engine
-        .apply_command(10, &select_replacement_chooser(0))
+        .apply_scenario_command(10, &select_replacement_chooser(0))
         .expect("the source controller assigns another opponent");
     let pending = engine
         .state
@@ -421,7 +426,7 @@ fn target_departure_assigns_a_replacement_chooser_and_limits_it_to_the_lki_contr
     assert_eq!(pending.presentation.candidates, [stolen_survivor]);
 
     let batch = engine
-        .apply_command(30, &targeted_player_choice_answer(vec![stolen_survivor]))
+        .apply_scenario_command(30, &targeted_player_choice_answer(vec![stolen_survivor]))
         .expect("the replacement chooser selects the surviving cohort permanent");
     assert_eq!(engine.state.objects[&stolen_survivor].zone, Zone::Hand);
     let owner_shuffle_logs = batch
@@ -465,7 +470,7 @@ fn owner_departure_refreshes_the_target_choice_and_rejects_the_removed_candidate
     give_control_to(&mut engine, surviving_nonland, 20);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &activate_ability_for(&engine, source, 2, target_player(20)),
         )
@@ -474,7 +479,7 @@ fn owner_departure_refreshes_the_target_choice_and_rejects_the_removed_candidate
     assert!(initial_choice
         .candidate_object_ids
         .contains(&owner_leaves_nonland));
-    let departure = engine.apply_command(30, &concede()).unwrap();
+    let departure = engine.apply_scenario_command(30, &concede()).unwrap();
     assert!(!engine.state.objects.contains_key(&owner_leaves_nonland));
     let pending = engine
         .state
@@ -493,7 +498,7 @@ fn owner_departure_refreshes_the_target_choice_and_rejects_the_removed_candidate
 
     let command_index = engine.state.command_index;
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             20,
             &targeted_player_choice_answer(vec![owner_leaves_nonland])
         )
@@ -502,7 +507,7 @@ fn owner_departure_refreshes_the_target_choice_and_rejects_the_removed_candidate
     assert!(engine.state.pending_resolution.is_some());
 
     let batch = engine
-        .apply_command(20, &targeted_player_choice_answer(vec![chosen_land]))
+        .apply_scenario_command(20, &targeted_player_choice_answer(vec![chosen_land]))
         .expect("the original target chooses a remaining permanent");
     assert_eq!(engine.state.objects[&chosen_land].zone, Zone::Hand);
     assert_eq!(engine.state.objects[&surviving_nonland].zone, Zone::Library);
@@ -548,7 +553,7 @@ fn live_target_choices_and_shuffle_use_current_control_after_another_player_leav
         .timestamp += 1;
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &activate_ability_for(&engine, source, 2, target_player(20)),
         )
@@ -562,7 +567,7 @@ fn live_target_choices_and_shuffle_use_current_control_after_another_player_leav
         .candidate_object_ids
         .contains(&control_reverts_to_target));
 
-    let departure = engine.apply_command(30, &concede()).unwrap();
+    let departure = engine.apply_scenario_command(30, &concede()).unwrap();
     assert_eq!(
         engine.state.objects[&control_reverts_to_target].controller, 20,
         "the departing player's control effect ends and the permanent reverts to its owner"
@@ -573,7 +578,7 @@ fn live_target_choices_and_shuffle_use_current_control_after_another_player_leav
         .contains(&control_reverts_to_target));
 
     let batch = engine
-        .apply_command(20, &targeted_player_choice_answer(vec![target_nonland]))
+        .apply_scenario_command(20, &targeted_player_choice_answer(vec![target_nonland]))
         .expect("the live target chooses one of their current permanents");
     assert_eq!(engine.state.objects[&target_nonland].zone, Zone::Hand);
     assert_eq!(engine.state.objects[&chosen_land].zone, Zone::Battlefield);
@@ -615,12 +620,12 @@ fn a_target_who_leaves_before_resolution_makes_the_ultimate_fail_to_resolve() {
     give_control_to(&mut engine, stolen_permanent, 20);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &activate_ability_for(&engine, source, 2, target_player(20)),
         )
         .expect("activate Teferi's ultimate");
-    engine.apply_command(20, &concede()).unwrap();
+    engine.apply_scenario_command(20, &concede()).unwrap();
     resolve_current_stack(&mut engine);
 
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
@@ -648,7 +653,7 @@ fn an_empty_target_control_cohort_skips_the_choice_and_shuffles_no_libraries() {
         .expect("Teferi")
         .set_counter(CounterKind::Loyalty, 13);
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &activate_ability_for(&engine, source, 2, target_player(20)),
         )

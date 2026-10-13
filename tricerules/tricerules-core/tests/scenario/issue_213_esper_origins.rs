@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{primitives::CounterKind, Keyword};
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
@@ -32,7 +33,7 @@ fn move_esper_to_graveyard(engine: &mut GameEngine) -> u32 {
         .expect("Esper in hand");
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -54,13 +55,15 @@ fn resolve_surveil_putting_everything_in_graveyard(
 ) -> rv1::RuledEventBatch {
     let first = engine.state.priority_player_id();
     let second = if first == 0 { 1 } else { 0 };
-    engine.apply_command(first, &pass()).expect("first pass");
+    engine
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
     let choice_batch = engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("resolve into surveil");
     let choice = find_resolution_choice(&choice_batch).expect("surveil choice");
     engine
-        .apply_command(
+        .apply_scenario_command(
             choice.deciding_player_id,
             &submit_resolution_choice(choice.candidate_object_ids.clone()),
         )
@@ -78,7 +81,7 @@ fn flashback_esper(engine: &mut GameEngine, esper: u32) {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CastSpell(CastSpell {
@@ -157,7 +160,7 @@ fn issue_213_normal_cast_resolves_to_graveyard_without_returning() {
     );
     let hand_index = hand_index_for_card(&engine, 0, ESPER);
     engine
-        .apply_command(0, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(hand_index, vec![]))
         .expect("cast Esper Origins from hand");
     resolve_surveil_putting_everything_in_graveyard(&mut engine);
 
@@ -180,9 +183,11 @@ fn issue_213_chapter_one_publicly_reveals_and_moves_a_permanent_to_hand() {
     answer_trigger_order_in_engine_order(&mut engine);
     let first = engine.state.priority_player_id();
     let second = if first == 0 { 1 } else { 0 };
-    engine.apply_command(first, &pass()).expect("first pass");
+    engine
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
     let batch = engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("resolve chapter I");
 
     assert_eq!(engine.state.objects[&revealed].zone, Zone::Hand);
@@ -215,9 +220,11 @@ fn issue_213_chapter_one_leaves_a_revealed_nonpermanent_on_top() {
     answer_trigger_order_in_engine_order(&mut engine);
     let first = engine.state.priority_player_id();
     let second = if first == 0 { 1 } else { 0 };
-    engine.apply_command(first, &pass()).expect("first pass");
+    engine
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
     let batch = engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("resolve chapter I");
 
     assert_eq!(engine.state.objects[&revealed].zone, Zone::Library);
@@ -248,7 +255,7 @@ fn issue_213_finality_replaces_battlefield_to_graveyard_with_exile() {
 
     engine.enable_dev_commands();
     let moved = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -289,7 +296,7 @@ fn issue_213_finality_applies_to_noncreatures_but_not_to_bounce() {
         .add_counters(CounterKind::Finality, 1, graveyard_move.state.command_index);
     graveyard_move.enable_dev_commands();
     graveyard_move
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -316,7 +323,7 @@ fn issue_213_finality_applies_to_noncreatures_but_not_to_bounce() {
         .add_counters(CounterKind::Finality, 1, bounce.state.command_index);
     bounce.enable_dev_commands();
     bounce
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {

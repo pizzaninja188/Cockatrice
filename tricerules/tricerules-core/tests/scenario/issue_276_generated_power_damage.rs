@@ -1,6 +1,7 @@
 //! Issue #276 — Hard-Hitting Question and Bite Down reuse the creature power-damage effect
 //! with an exact creature-or-planeswalker target union. CR 115, 119.2, 120.1, 120.2b, 120.3c,
 //! and 608.2b govern target publication, resolution-time power, and loyalty damage.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -67,7 +68,7 @@ fn generated_power_damage_publishes_and_resolves_against_a_planeswalker() {
     assert_eq!(legal.groups[1].valid_permanent_ids, [walker]);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 slot,
@@ -122,7 +123,7 @@ fn generated_instant_power_damage_publishes_and_resolves_against_a_planeswalker(
     assert_eq!(legal.groups[1].valid_permanent_ids, [walker]);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 slot,
@@ -172,7 +173,7 @@ fn generated_power_damage_rejects_forged_roles_and_fizzles_on_stale_target() {
     let mana_before = forged.state.players[0].mana_pool;
     let command_index = forged.state.command_index;
     assert!(forged
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 slot,
@@ -185,7 +186,7 @@ fn generated_power_damage_rejects_forged_roles_and_fizzles_on_stale_target() {
     assert_eq!(forged.state.players[0].mana_pool, mana_before);
 
     forged
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 slot,

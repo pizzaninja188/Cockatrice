@@ -3,6 +3,7 @@
 //! Oracle and rulings checked 2026-09-25. Its single triggered ability triggers on both entry
 //! and battlefield-to-graveyard events; CR 603.6a, 603.6c, 603.10a, and 603.3a govern those events
 //! and the event-time controller. CR 121.1 governs the draw instructions.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -32,7 +33,7 @@ fn ichor_wellspring_draws_for_entry_and_graveyard_events_on_one_ability() {
     let unpaid = cast_spell(hand_index_for_card(&engine, 0, ICHOR_WELLSPRING), vec![]);
     let command_index = engine.state.command_index;
     engine
-        .apply_command(0, &unpaid)
+        .apply_scenario_command(0, &unpaid)
         .expect_err("Ichor Wellspring requires {2}");
     assert_eq!(engine.state.command_index, command_index);
     assert_eq!(engine.state.objects[&wellspring].zone, Zone::Hand);

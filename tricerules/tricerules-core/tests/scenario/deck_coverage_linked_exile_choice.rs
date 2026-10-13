@@ -1,5 +1,6 @@
 //! Currency Converter and Nautiloid Ship's source-incarnation linked Exile choices.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::registry;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
@@ -32,11 +33,11 @@ fn start_converter_multi_card_discard(seed: u64) -> (GameEngine, u32, u32, u32) 
 
     let slot = hand_index_for_card(&engine, 0, "faithless_looting");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Faithless Looting");
     pass_priority_round(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![land, nonland]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![land, nonland]))
         .expect("discard the land and nonland together");
     assert_eq!(engine.state.objects[&looting].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&land].zone, Zone::Graveyard);
@@ -106,7 +107,7 @@ fn resolve_converter_discard_triggers(
             .unwrap()
             .deciding_player;
         engine
-            .apply_command(
+            .apply_scenario_command(
                 deciding_player,
                 &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
             )
@@ -125,7 +126,7 @@ fn currency_with_two_linked_cards(seed: u64) -> (GameEngine, u32, u32, u32) {
 fn activate_converter_return(engine: &mut GameEngine, converter: u32, chosen: u32) {
     let activation = activate_ability_for(engine, converter, 1, Vec::new());
     engine
-        .apply_command(0, &activation)
+        .apply_scenario_command(0, &activation)
         .expect("activate Currency Converter's linked-card return ability");
     pass_priority_round(engine);
     let pending = engine
@@ -139,7 +140,7 @@ fn activate_converter_return(engine: &mut GameEngine, converter: u32, chosen: u3
     );
     assert!(pending.presentation.candidates.contains(&chosen));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))
         .expect("choose the exact linked Exile object");
 }
 
@@ -167,7 +168,7 @@ fn move_owned_card_with_dev(
 ) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             owner,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -187,7 +188,7 @@ fn enter_nautiloid_targeting(engine: &mut GameEngine, target_player_id: u32) -> 
     inject_card_into_hand(engine, 0, NAUTILOID_SHIP);
     let ship = move_ready_to_battlefield(engine, 0, NAUTILOID_SHIP);
     engine
-        .apply_command(0, &answer_targeting_player(target_player_id))
+        .apply_scenario_command(0, &answer_targeting_player(target_player_id))
         .expect("choose the target player for Nautiloid Ship's ETB trigger");
     resolve_entire_stack_two_player(engine);
     ship
@@ -220,7 +221,7 @@ fn crew_nautiloid(engine: &mut GameEngine, ship: u32, creatures: &[u32]) {
     };
     activation.expected_zone_change_generation = generation(ship);
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("tap three power to crew Nautiloid Ship");
     resolve_entire_stack_two_player(engine);
     assert!(creatures
@@ -231,7 +232,7 @@ fn crew_nautiloid(engine: &mut GameEngine, ship: u32, creatures: &[u32]) {
 
 fn advance_to_combat_damage(engine: &mut GameEngine, ship: u32) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("begin combat");
     for _ in 0..12 {
         if engine.state.turn_step == tricerules_core::TurnStep::DeclareAttackers {
@@ -245,7 +246,7 @@ fn advance_to_combat_damage(engine: &mut GameEngine, ship: u32) {
         "game did not reach attacker declaration"
     );
     engine
-        .apply_command(0, &declare_attackers(vec![ship]))
+        .apply_scenario_command(0, &declare_attackers(vec![ship]))
         .expect("attack with the crewed Nautiloid Ship");
     for _ in 0..12 {
         if engine.state.turn_step == tricerules_core::TurnStep::CombatDamage {
@@ -355,7 +356,7 @@ fn nautiloid_ship_does_not_substitute_a_player_who_lost_before_resolution() {
     inject_card_into_hand(&mut engine, 0, NAUTILOID_SHIP);
     let ship = move_ready_to_battlefield(&mut engine, 0, NAUTILOID_SHIP);
     engine
-        .apply_command(0, &answer_targeting_player(1))
+        .apply_scenario_command(0, &answer_targeting_player(1))
         .expect("target the opponent's graveyard");
     engine.state.players[1].has_lost = true;
 
@@ -413,7 +414,7 @@ fn currency_converter_does_not_link_a_discard_replaced_to_the_library() {
     );
 
     engine
-        .apply_command(0, &activate_ability_for(&engine, converter, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_ability_for(&engine, converter, 0, Vec::new()))
         .expect("activate Currency Converter's draw-discard ability");
     pass_priority_round(&mut engine);
     assert_eq!(
@@ -427,7 +428,7 @@ fn currency_converter_does_not_link_a_discard_replaced_to_the_library() {
         ChoiceKind::HandCards
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![discarded]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discarded]))
         .expect("discard Forest");
     assert_eq!(
         engine
@@ -440,7 +441,7 @@ fn currency_converter_does_not_link_a_discard_replaced_to_the_library() {
         ChoiceKind::PrivateReplacement
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![1]))
         .expect("replace the discard with putting Forest on top of the library");
 
     for _ in 0..6 {
@@ -461,7 +462,7 @@ fn currency_converter_does_not_link_a_discard_replaced_to_the_library() {
     engine.state.objects.get_mut(&converter).unwrap().tapped = false;
     engine.initial_response_batch();
     engine
-        .apply_command(0, &activate_ability_for(&engine, converter, 1, Vec::new()))
+        .apply_scenario_command(0, &activate_ability_for(&engine, converter, 1, Vec::new()))
         .expect("the linked-card return ability is legal even with no linked cards");
     pass_priority_round(&mut engine);
     assert!(engine.state.stack.is_empty());
@@ -528,13 +529,13 @@ fn currency_converter_control_transfer_uses_the_exiled_cards_owner_for_its_type_
     let current_priority = engine.state.priority_player_id();
     if current_priority != 1 {
         engine
-            .apply_command(current_priority, &pass())
+            .apply_scenario_command(current_priority, &pass())
             .expect("active player passes priority to the new controller");
     }
 
     let activation = activate_ability_for(&engine, converter, 1, Vec::new());
     engine
-        .apply_command(1, &activation)
+        .apply_scenario_command(1, &activation)
         .expect("the new controller activates Currency Converter");
     pass_priority_round(&mut engine);
     let pending = engine
@@ -545,7 +546,7 @@ fn currency_converter_control_transfer_uses_the_exiled_cards_owner_for_its_type_
     assert_eq!(pending.deciding_player, 1);
     assert!(pending.presentation.candidates.contains(&land));
     engine
-        .apply_command(1, &submit_resolution_choice(vec![land]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![land]))
         .expect("choose the owner's linked land");
 
     assert_eq!(
@@ -585,7 +586,7 @@ fn currency_converter_declining_one_discard_trigger_does_not_exile_that_card() {
         .expect("optional discard branch")
         .deciding_player;
     engine
-        .apply_command(
+        .apply_scenario_command(
             chooser,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -601,7 +602,7 @@ fn currency_converter_declining_one_discard_trigger_does_not_exile_that_card() {
         .expect("the other discard trigger remains on the stack")
         .deciding_player;
     engine
-        .apply_command(
+        .apply_scenario_command(
             chooser,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -621,7 +622,7 @@ fn currency_converter_has_no_token_branch_when_no_linked_card_remains_in_exile()
     engine.initial_response_batch();
 
     engine
-        .apply_command(0, &activate_ability_for(&engine, converter, 1, Vec::new()))
+        .apply_scenario_command(0, &activate_ability_for(&engine, converter, 1, Vec::new()))
         .expect("activate with an empty linked Exile set");
     pass_priority_round(&mut engine);
     assert!(engine.state.pending_resolution.is_none());
@@ -649,7 +650,7 @@ fn stale_discard_trigger_cannot_exile_a_card_that_returned_to_its_graveyard() {
         })
         .expect("find nonland trigger");
     engine
-        .apply_command(0, &submit_trigger_order(first.object_id))
+        .apply_scenario_command(0, &submit_trigger_order(first.object_id))
         .expect("put the nonland trigger below the stale land trigger");
     assert!(engine.state.pending_trigger_order.is_none());
     assert_eq!(
@@ -685,7 +686,7 @@ fn stale_discard_trigger_cannot_exile_a_card_that_returned_to_its_graveyard() {
         .expect("the untouched nonland trigger remains selectable")
         .deciding_player;
     engine
-        .apply_command(
+        .apply_scenario_command(
             chooser,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -704,7 +705,7 @@ fn currency_converter_rejects_a_stale_linked_exile_answer_without_consuming_the_
     let (mut engine, converter, land, nonland) = currency_with_two_linked_cards(20_261_104);
     let activation = activate_ability_for(&engine, converter, 1, Vec::new());
     engine
-        .apply_command(0, &activation)
+        .apply_scenario_command(0, &activation)
         .expect("activate Currency Converter");
     pass_priority_round(&mut engine);
     let pending = engine
@@ -725,12 +726,12 @@ fn currency_converter_rejects_a_stale_linked_exile_answer_without_consuming_the_
 
     let before_unauthorized = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![selected_as_stale]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![selected_as_stale]))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before_unauthorized);
     let before_malformed = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![u32::MAX]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![u32::MAX]))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before_malformed);
 
@@ -748,7 +749,7 @@ fn currency_converter_rejects_a_stale_linked_exile_answer_without_consuming_the_
         .zone = Zone::Graveyard;
     let before_rejection = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![selected_as_stale]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected_as_stale]))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before_rejection);
     assert_eq!(engine.state.objects[&other].zone, Zone::Exile);
@@ -776,7 +777,7 @@ fn nautiloid_returns_only_a_linked_creature_on_combat_damage() {
         .candidates
         .contains(&linked_noncreature));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![linked_creature]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![linked_creature]))
         .expect("return the linked creature");
     assert_eq!(
         engine.state.objects[&linked_creature].zone,
@@ -813,7 +814,7 @@ fn nautiloid_return_preserves_object_through_nested_etb_library_choice() {
     );
     assert_eq!(pending.presentation.candidates, [solemn]);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![solemn]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![solemn]))
         .expect("return the linked Solemn Simulacrum");
 
     // Returning the same physical object triggers its ETB search. Resolve that nested choice
@@ -832,7 +833,7 @@ fn nautiloid_return_preserves_object_through_nested_etb_library_choice() {
     );
     assert_eq!(branch.deciding_player, 0);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -846,7 +847,7 @@ fn nautiloid_return_preserves_object_through_nested_etb_library_choice() {
     assert_eq!(search.presentation.choice_kind, ChoiceKind::LibrarySearch);
     assert!(search.presentation.candidates.contains(&forest));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .expect("put the chosen basic land onto the battlefield tapped");
 
     assert_eq!(engine.state.objects[&solemn].zone, Zone::Battlefield);
@@ -869,7 +870,7 @@ fn nautiloid_combat_trigger_can_be_declined() {
         .expect("Nautiloid's optional combat trigger offers its linked creature");
     assert_eq!(pending.presentation.candidates, [linked_creature]);
     engine
-        .apply_command(0, &submit_resolution_choice(Vec::new()))
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
         .expect("decline to return an exiled creature");
     assert_eq!(engine.state.objects[&linked_creature].zone, Zone::Exile);
     assert_eq!(engine.state.objects[&linked_noncreature].zone, Zone::Exile);
@@ -893,7 +894,7 @@ fn nautiloid_reentry_cannot_return_a_creature_linked_to_its_prior_incarnation() 
     move_owned_card_with_dev(&mut engine, 0, NAUTILOID_SHIP, DevZone::Battlefield, true);
     assert!(engine.state.zone_change_generation[&ship] > first_generation);
     engine
-        .apply_command(0, &answer_targeting_player(1))
+        .apply_scenario_command(0, &answer_targeting_player(1))
         .expect("choose the opponent again for the new entry trigger");
     resolve_entire_stack_two_player(&mut engine);
 

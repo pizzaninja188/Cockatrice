@@ -1,5 +1,6 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
-use tricerules_core::{GameEngine, TurnStep};
+use tricerules_core::TurnStep;
 use tricerules_proto::ruled::v1::{
     dev_command, ruled_command::Cmd, BlockPair, DevCommand, DevMoveCard, DevZone, RuledCommand,
 };
@@ -29,14 +30,14 @@ fn coveted_jewel_auto_empty_blocker_event_draws_transfers_control_and_untaps() {
     let hand_before = engine.state.players[0].hand.len();
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker at player 1");
     assert!(engine.state.stack.is_empty(), "Jewel waits for blockers");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defending player passes attackers step");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareBlockers);
     assert_eq!(
@@ -77,18 +78,18 @@ fn coveted_jewel_explicit_mixed_blockers_trigger_once_for_the_unblocked_group() 
     let hand_before = engine.state.players[0].hand.len();
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker_a, attacker_b]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker_a, attacker_b]))
         .expect("declare both attackers at player 1");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defending player passes attackers step");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareBlockers);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker_a,
@@ -132,7 +133,7 @@ fn coveted_jewel_enters_with_three_cards_and_makes_three_mana_of_one_color() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(hand_index_for_card(&engine, 0, "coveted_jewel"), vec![]),
         )
@@ -156,7 +157,7 @@ fn coveted_jewel_enters_with_three_cards_and_makes_three_mana_of_one_color() {
     };
     command.mana_option_index = 3;
     engine
-        .apply_command(0, &activation)
+        .apply_scenario_command(0, &activation)
         .expect("choose Coveted Jewel's red three-mana option");
     assert_eq!(engine.state.players[0].mana_pool.red, 3);
     assert!(engine.state.objects[&jewel].tapped);
@@ -197,20 +198,20 @@ fn old_coveted_jewel_trigger_does_not_change_returned_source_incarnation() {
     let attacker_hand_before = engine.state.players[0].hand.len();
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker at player 1");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass attackers step");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defending player passes attackers step");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareBlockers);
     assert_eq!(engine.state.stack.len(), 1, "old Jewel trigger is pending");
 
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             engine.state.priority_player_id(),
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -226,7 +227,7 @@ fn old_coveted_jewel_trigger_does_not_change_returned_source_incarnation() {
         .expect("the attacking creature leaves before the old trigger resolves");
     for zone in [DevZone::Graveyard, DevZone::Battlefield] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 engine.state.priority_player_id(),
                 &RuledCommand {
                     cmd: Some(Cmd::DevCommand(DevCommand {
@@ -293,19 +294,19 @@ fn coveted_jewel_keeps_the_triggering_attacker_after_its_creature_leaves() {
     let hand_before = engine.state.players[0].hand.len();
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker at player 1");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defending player passes attackers step");
     assert_eq!(engine.state.stack.len(), 1, "Jewel trigger is on the stack");
 
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             engine.state.priority_player_id(),
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -369,12 +370,12 @@ fn coveted_jewel_multiplayer_attack_group_waits_for_last_defender_and_uses_effec
     let _player_two_blocker = inject_creature_on_battlefield(&mut engine, 2, "grizzly_bears");
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("begin combat");
     for _ in 0..3 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("pass combat start");
     }
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
@@ -393,7 +394,7 @@ fn coveted_jewel_multiplayer_attack_group_waits_for_last_defender_and_uses_effec
             .unwrap_or_else(|| panic!("missing legal attack assignment {attacker} -> {defender}"))
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(
@@ -420,7 +421,7 @@ fn coveted_jewel_multiplayer_attack_group_waits_for_last_defender_and_uses_effec
     );
 
     let first_defender = engine
-        .apply_command(1, &declare_blockers(vec![]))
+        .apply_scenario_command(1, &declare_blockers(vec![]))
         .expect("player 1 declares no blockers");
     assert!(
         engine.state.stack.is_empty(),
@@ -433,7 +434,7 @@ fn coveted_jewel_multiplayer_attack_group_waits_for_last_defender_and_uses_effec
     assert_eq!(engine.state.priority_player_id(), 2);
 
     let last_defender = engine
-        .apply_command(2, &declare_blockers(vec![]))
+        .apply_scenario_command(2, &declare_blockers(vec![]))
         .expect("player 2 makes the final blocker declaration");
     assert_eq!(
         engine.state.stack.len(),

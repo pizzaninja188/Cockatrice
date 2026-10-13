@@ -5,6 +5,7 @@
 //! Every expectation is the reviewed printed Oracle behavior. Governance: CR 111.1 (tokens),
 //! 603.6c (dies triggers), 508.1/603.2c (attack triggers), and 608.2 (a conditional instruction
 //! is evaluated as it resolves).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -49,10 +50,11 @@ fn combat_engine(seed: u64) -> GameEngine {
 fn kill_with_murder(e: &mut GameEngine, source: u32) {
     inject_card_into_hand(e, 0, "murder");
     let slot = hand_index_for_card(e, 0, "murder");
-    e.apply_command(0, &cast_spell(slot, target_object(source)))
+    e.apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .expect("cast Murder");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("murder resolves");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("murder resolves");
 }
 
 fn remove_from_battlefield(e: &mut GameEngine, player: usize, object_id: u32) {
@@ -99,7 +101,7 @@ fn issue_465_scalestorm_summoner() {
     // ability still triggers (its condition is not an intervening "if").
     let mut weak = combat_engine(722_003);
     let summoner = inject_creature_on_battlefield(&mut weak, 0, "scalestorm_summoner");
-    weak.apply_command(0, &declare_attackers(vec![summoner]))
+    weak.apply_scenario_command(0, &declare_attackers(vec![summoner]))
         .expect("declare the Summoner as an attacker");
     assert_eq!(
         weak.state.stack.len(),
@@ -117,7 +119,7 @@ fn issue_465_scalestorm_summoner() {
     let summoner = inject_creature_on_battlefield(&mut strong, 0, "scalestorm_summoner");
     inject_creature_with_stats(&mut strong, 0, "grizzly_bears", 4, 4);
     strong
-        .apply_command(0, &declare_attackers(vec![summoner]))
+        .apply_scenario_command(0, &declare_attackers(vec![summoner]))
         .expect("declare the Summoner as an attacker");
     resolve_entire_stack_two_player(&mut strong);
     assert_eq!(
@@ -131,7 +133,7 @@ fn issue_465_scalestorm_summoner() {
     let mut response = combat_engine(722_006);
     let summoner = inject_creature_on_battlefield(&mut response, 0, "scalestorm_summoner");
     response
-        .apply_command(0, &declare_attackers(vec![summoner]))
+        .apply_scenario_command(0, &declare_attackers(vec![summoner]))
         .expect("declare the Summoner as an attacker");
     assert_eq!(response.state.stack.len(), 1);
     inject_creature_with_stats(&mut response, 0, "grizzly_bears", 4, 4);
@@ -148,7 +150,7 @@ fn issue_465_scalestorm_summoner() {
     let summoner = inject_creature_on_battlefield(&mut intervening, 0, "scalestorm_summoner");
     let big = inject_creature_with_stats(&mut intervening, 0, "grizzly_bears", 4, 4);
     intervening
-        .apply_command(0, &declare_attackers(vec![summoner]))
+        .apply_scenario_command(0, &declare_attackers(vec![summoner]))
         .expect("declare the Summoner as an attacker");
     remove_from_battlefield(&mut intervening, 0, big);
     resolve_entire_stack_two_player(&mut intervening);

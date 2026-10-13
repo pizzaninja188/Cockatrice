@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::GameEngine;
 
 fn hidden_lair_engine(seed: u64) -> GameEngine {
@@ -39,7 +40,7 @@ fn hidden_lair_colored_mana_is_legal_during_its_entry_turn() {
     );
     let priority_before = engine.state.priority_player_id();
     engine
-        .apply_command(0, &mana_option(&engine, source, 1, 0))
+        .apply_scenario_command(0, &mana_option(&engine, source, 1, 0))
         .expect("entry-turn branch enables blue mana");
     assert!(engine.state.objects[&source].tapped);
     assert_eq!(engine.state.players[0].mana_pool.blue, 1);
@@ -63,7 +64,7 @@ fn hidden_lair_requires_either_its_entry_generation_or_a_controlled_basic() {
     let mana_before = engine.state.players[0].mana_pool;
     let command_before = engine.state.command_index;
     engine
-        .apply_command(0, &mana_option(&engine, source, 1, 0))
+        .apply_scenario_command(0, &mana_option(&engine, source, 1, 0))
         .expect_err("neither branch holds");
     assert!(!engine.state.objects[&source].tapped);
     assert_eq!(engine.state.players[0].mana_pool, mana_before);
@@ -82,7 +83,7 @@ fn hidden_lair_requires_either_its_entry_generation_or_a_controlled_basic() {
         [true, true]
     );
     engine
-        .apply_command(0, &mana_option(&engine, source, 1, 1))
+        .apply_scenario_command(0, &mana_option(&engine, source, 1, 1))
         .expect("controlled-basic branch enables black mana");
     assert_eq!(engine.state.players[0].mana_pool.black, 1);
 }
@@ -116,7 +117,7 @@ fn hidden_lair_entry_branch_tracks_exact_generation_across_control_changes() {
         [true, false]
     );
     engine
-        .apply_command(1, &stale)
+        .apply_scenario_command(1, &stale)
         .expect_err("old generation cannot activate the new object");
     assert!(!engine.state.objects[&source].tapped);
     assert_eq!(engine.state.players[1].mana_pool.blue, 0);

@@ -1,4 +1,5 @@
 //! Exact Threefold Thunderhulk coverage; pinned Oracle b8020a8b-557b-465d-865d-b59fecd7abc1.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::*;
@@ -274,7 +275,7 @@ fn threefold_thunderhulk_rejects_invalid_costs_wrong_actor_and_insufficient_mana
         let before = engine.diagnostic_snapshot().unwrap();
         let command = sacrifice(&engine, source, selected);
         engine
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect_err("invalid actor or sacrifice selection");
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     }
@@ -282,7 +283,7 @@ fn threefold_thunderhulk_rejects_invalid_costs_wrong_actor_and_insufficient_mana
     let before = engine.diagnostic_snapshot().unwrap();
     let command = sacrifice(&engine, source, own_artifact);
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect_err("two generic mana required");
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
 }
@@ -463,7 +464,7 @@ fn threefold_thunderhulk_four_player_tokens_and_costs_use_actual_controller_ids(
     let before = engine.diagnostic_snapshot().unwrap();
     let invalid = sacrifice(&engine, source, foreign);
     engine
-        .apply_command(7, &invalid)
+        .apply_scenario_command(7, &invalid)
         .expect_err("opponent 42's artifact cannot pay controller 7's cost");
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     let own = tokens(&engine)[0];

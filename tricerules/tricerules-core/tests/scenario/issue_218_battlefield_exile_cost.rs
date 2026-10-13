@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::Keyword;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::permanent_moved;
@@ -48,7 +49,7 @@ fn issue_218_landfall_creates_the_reach_treefolk_token() {
 
     let forest = hand_index_for_card(&engine, 0, "forest");
     engine
-        .apply_command(0, &play_land(forest))
+        .apply_scenario_command(0, &play_land(forest))
         .expect("play a Forest");
     pass_both_players(&mut engine);
 

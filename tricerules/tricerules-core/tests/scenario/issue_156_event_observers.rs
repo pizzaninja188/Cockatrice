@@ -1,5 +1,6 @@
 //! Issue #156: tapped, leaves-the-battlefield, and sacrifice observers use committed engine
 //! events and preserve event-time identity.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{
@@ -48,7 +49,7 @@ fn attacking_fires_a_self_becomes_tapped_trigger() {
 
     advance_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![source]))
+        .apply_scenario_command(0, &declare_attackers(vec![source]))
         .expect("declare tapping attacker");
 
     assert_eq!(engine.state.stack.len(), 1, "tap trigger reaches the stack");
@@ -74,7 +75,7 @@ fn sacrificing_a_source_fires_its_leaves_trigger() {
     );
 
     engine
-        .apply_command(0, &activate_ability(relic, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(relic, 0, vec![]))
         .expect("sacrifice Bottle Gnomes");
 
     assert_eq!(
@@ -108,7 +109,7 @@ fn issue_168_filtered_departure_observes_a_committed_sacrifice() {
         },
     );
     engine
-        .apply_command(0, &activate_ability(relic, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(relic, 0, vec![]))
         .unwrap();
     assert_eq!(
         engine.state.stack.len(),
@@ -169,7 +170,9 @@ fn issue_168_soul_salvage_is_one_graveyard_departure_batch() {
         })
         .collect();
     let slot = hand_index_for_card(&engine, 0, "soul_salvage");
-    engine.apply_command(0, &cast_spell(slot, targets)).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, targets))
+        .unwrap();
     pass_both_players(&mut engine);
     assert_eq!(
         engine.state.stack.len(),
@@ -247,7 +250,7 @@ fn issue_168_reanimation_group_waits_for_all_replacement_choices() {
     let first = inject_graveyard_card(&mut engine, 0, "hill_giant");
     let second = inject_graveyard_card(&mut engine, 0, "clone");
     engine
-        .apply_command(0, &activate_ability(source, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(source, 0, vec![]))
         .unwrap();
     let targets = [first, second]
         .into_iter()
@@ -258,7 +261,7 @@ fn issue_168_reanimation_group_waits_for_all_replacement_choices() {
         })
         .collect();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -278,7 +281,7 @@ fn issue_168_reanimation_group_waits_for_all_replacement_choices() {
     assert_eq!(engine.state.objects[&second].zone, Zone::Graveyard);
     let state_before = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![observer]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![observer]))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), state_before);
     let generation = engine.state.zone_change_generation.get(&first).copied();
@@ -288,7 +291,7 @@ fn issue_168_reanimation_group_waits_for_all_replacement_choices() {
         .insert(first, generation.unwrap_or(0) + 1);
     let stale_state = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![observer]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![observer]))
         .is_err());
     assert_eq!(
         format!("{:?}", engine.state),
@@ -304,7 +307,7 @@ fn issue_168_reanimation_group_waits_for_all_replacement_choices() {
         engine.state.zone_change_generation.remove(&first);
     }
     engine
-        .apply_command(0, &submit_resolution_choice(vec![observer]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![observer]))
         .unwrap();
     answer_simultaneous_entry_order_in_engine_order(&mut engine);
     assert_eq!(engine.state.objects[&first].zone, Zone::Battlefield);
@@ -348,7 +351,7 @@ fn sacrificing_another_permanent_fires_controller_observer() {
     let sacrifice = inject_creature_on_battlefield(&mut engine, 0, "bottle_gnomes");
 
     engine
-        .apply_command(0, &activate_ability(sacrifice, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(sacrifice, 0, vec![]))
         .expect("sacrifice Bottle Gnomes");
 
     assert_eq!(
@@ -384,7 +387,7 @@ fn another_permanent_observer_excludes_the_sacrificed_source_generation() {
     );
 
     engine
-        .apply_command(0, &activate_ability(source, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(source, 0, vec![]))
         .expect("sacrifice the observer itself");
 
     assert_eq!(
@@ -409,7 +412,7 @@ fn chrome_companion_attacking_uses_its_authored_tap_trigger() {
 
     advance_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![companion]))
+        .apply_scenario_command(0, &declare_attackers(vec![companion]))
         .expect("declare Chrome Companion as an attacker");
 
     assert_eq!(
@@ -443,7 +446,7 @@ fn cryoshatter_remembers_the_creature_that_became_tapped() {
 
     advance_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![creature]))
+        .apply_scenario_command(0, &declare_attackers(vec![creature]))
         .expect("declare enchanted creature as an attacker");
     assert_eq!(
         engine.state.stack.len(),
@@ -485,7 +488,7 @@ fn a_triggering_mana_ability_cannot_be_undone() {
     );
 
     let batch = engine
-        .apply_command(0, &activate_ability(elf, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(elf, 0, vec![]))
         .expect("activate Llanowar Elves");
 
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
@@ -526,7 +529,7 @@ fn sacrifice_observer_fires_when_a_replacement_exiles_the_permanent() {
         });
 
     engine
-        .apply_command(0, &activate_ability(victim, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(victim, 0, vec![]))
         .expect("sacrifice replaced by exile");
 
     assert_eq!(engine.state.objects[&victim].zone, Zone::Exile);
@@ -572,7 +575,7 @@ fn cryogen_relic_leaves_trigger_fires_when_returned_to_hand() {
     let slot = hand_index_for_card(&engine, 0, "boomerang");
 
     engine
-        .apply_command(0, &cast_spell(slot, target_object(relic)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(relic)))
         .expect("cast Boomerang on Cryogen Relic");
     pass_both_players(&mut engine);
 
@@ -605,7 +608,9 @@ fn issue_168_cast(engine: &mut GameEngine, card: &str, targets: Vec<TargetRef>) 
         .iter()
         .position(|id| *id == oid)
         .unwrap();
-    engine.apply_command(0, &cast_spell(slot, targets)).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, targets))
+        .unwrap();
     oid
 }
 
@@ -651,7 +656,7 @@ fn issue_168_tabby_activation_grants_deathtouch() {
     let tabby = inject_creature_on_battlefield(&mut engine, 0, "warehouse_tabby");
     grant_pool(&mut engine, 0);
     engine
-        .apply_command(0, &activate_ability(tabby, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(tabby, 0, vec![]))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine
@@ -673,14 +678,14 @@ fn issue_168_tracker_damages_the_sacrificing_opponent_in_three_seats() {
     engine.state.players.push(third);
     inject_creature_on_battlefield(&mut engine, 0, "vengeful_tracker");
     let artifact = inject_creature_on_battlefield(&mut engine, 1, "bottle_gnomes");
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     engine
-        .apply_command(1, &activate_ability(artifact, 0, vec![]))
+        .apply_scenario_command(1, &activate_ability(artifact, 0, vec![]))
         .unwrap();
     assert_eq!(engine.state.stack.len(), 2);
     while !engine.state.stack.is_empty() {
         let player = engine.state.priority_player_id();
-        engine.apply_command(player, &pass()).unwrap();
+        engine.apply_scenario_command(player, &pass()).unwrap();
     }
     assert_eq!(
         engine
@@ -709,7 +714,7 @@ fn issue_168_rakish_crew_creates_a_functional_mercenary_and_drains_once_per_outl
         .unwrap()
         .summoning_sick = false;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&engine, mercenary, 0, target_object(bear)),
         )
@@ -742,11 +747,11 @@ fn issue_168_vial_smasher_outlaw_or_is_one_targeted_trigger_and_excludes_self() 
     assert_eq!(engine.state.pending_triggers.len(), 1);
     let before = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(0, &issue_168_choose(target_player(0)))
+        .apply_scenario_command(0, &issue_168_choose(target_player(0)))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before);
     engine
-        .apply_command(0, &issue_168_choose(target_player(1)))
+        .apply_scenario_command(0, &issue_168_choose(target_player(1)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.players[1].life, 19);
@@ -762,15 +767,15 @@ fn issue_168_carrot_cake_entry_and_sacrifice_each_create_then_scry() {
     assert!(engine.state.pending_resolution.is_some());
     let before = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![]))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .unwrap();
     grant_pool(&mut engine, 0);
     engine
-        .apply_command(0, &activate_ability_for(&engine, cake, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, cake, 0, vec![]))
         .unwrap();
     assert_eq!(
         engine.state.stack.len(),
@@ -784,7 +789,7 @@ fn issue_168_carrot_cake_entry_and_sacrifice_each_create_then_scry() {
         "life is not gained until the original activation resolves"
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.players[0].life, 23);
@@ -815,11 +820,11 @@ fn issue_168_scribe_bounce_uses_old_source_and_publishes_a_current_target() {
     assert_eq!(engine.state.pending_triggers.len(), 1);
     let before = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(0, &issue_168_choose(target_object(scribe)))
+        .apply_scenario_command(0, &issue_168_choose(target_object(scribe)))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before);
     engine
-        .apply_command(0, &issue_168_choose(target_object(bear)))
+        .apply_scenario_command(0, &issue_168_choose(target_object(bear)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.effective_power(bear), Some(3));
@@ -840,7 +845,7 @@ fn issue_168_celebration_cards_count_nonland_entry_history_even_after_departure(
         .iter()
         .position(|oid| *oid == land)
         .unwrap();
-    engine.apply_command(0, &play_land(slot)).unwrap();
+    engine.apply_scenario_command(0, &play_land(slot)).unwrap();
     let bear = issue_168_cast(&mut engine, "grizzly_bears", vec![]);
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -881,7 +886,7 @@ fn issue_168_scribe_distinguishes_death_from_sacrifice_replaced_by_exile() {
                 });
         }
         engine
-            .apply_command(0, &activate_ability(gnomes, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability(gnomes, 0, vec![]))
             .unwrap();
         assert_eq!(
             engine.state.objects[&gnomes].zone,
@@ -894,7 +899,7 @@ fn issue_168_scribe_distinguishes_death_from_sacrifice_replaced_by_exile() {
         assert_eq!(engine.state.pending_triggers.len(), usize::from(replaced));
         if replaced {
             engine
-                .apply_command(0, &issue_168_choose(target_object(scribe)))
+                .apply_scenario_command(0, &issue_168_choose(target_object(scribe)))
                 .unwrap();
         }
         resolve_entire_stack_two_player(&mut engine);
@@ -938,12 +943,12 @@ fn issue_168_graveyard_cast_is_observed_only_after_successful_commit() {
     };
     let before = format!("{:?}", engine.state);
     assert!(
-        engine.apply_command(0, &cast).is_err(),
+        engine.apply_scenario_command(0, &cast).is_err(),
         "cannot pay the flashback cost"
     );
     assert_eq!(format!("{:?}", engine.state), before);
     grant_pool(&mut engine, 0);
-    engine.apply_command(0, &cast).unwrap();
+    engine.apply_scenario_command(0, &cast).unwrap();
     assert_eq!(engine.state.objects[&spell].zone, Zone::Stack);
     assert_eq!(
         engine.state.stack.len(),

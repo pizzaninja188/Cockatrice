@@ -6,6 +6,7 @@
 //! Every expectation is the reviewed printed Oracle behavior. Governance: CR 400.7 (zone
 //! changes), CR 508.1/508.3 (attack declaration), CR 603.2c (one trigger per event), CR 603.6
 //! (entry triggers), CR 701.13 (exile), and CR 111.10a-b (Treasure/Food).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::{TurnStep, Zone};
@@ -25,7 +26,7 @@ fn advance_to_next_main1(engine: &mut GameEngine, active_player: i32) {
         resolve_cleanup_discards_if_any(engine);
         let priority = engine.state.priority_player_id();
         engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("advance through the rest of the turn");
     }
     panic!("turn advancement stalled before the next main phase");
@@ -136,7 +137,7 @@ fn issue_misc9_disruptor_wanderglyph_exiles_an_opponent_graveyard_card() {
     advance_to_declare_attackers(&mut e);
     let glyph = inject_creature_on_battlefield(&mut e, 0, "disruptor_wanderglyph");
     let their_card = inject_graveyard_card(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![glyph]))
+    e.apply_scenario_command(0, &declare_attackers(vec![glyph]))
         .expect("declare the Wanderglyph");
     assert_eq!(e.state.pending_triggers.len(), 1);
     semantic::accepted(&mut e, 0, &choose_trigger_card_target(their_card));
@@ -156,10 +157,10 @@ fn issue_misc9_disruptor_wanderglyph_exiles_an_opponent_graveyard_card() {
     advance_to_declare_attackers(&mut bad);
     let glyph = inject_creature_on_battlefield(&mut bad, 0, "disruptor_wanderglyph");
     let own_card = inject_graveyard_card(&mut bad, 0, "grizzly_bears");
-    bad.apply_command(0, &declare_attackers(vec![glyph]))
+    bad.apply_scenario_command(0, &declare_attackers(vec![glyph]))
         .expect("declare the Wanderglyph");
     assert!(
-        bad.apply_command(0, &choose_trigger_card_target(own_card))
+        bad.apply_scenario_command(0, &choose_trigger_card_target(own_card))
             .is_err(),
         "the controller's own graveyard is not a legal target"
     );
@@ -181,7 +182,7 @@ fn issue_misc9_seasoned_consultant_pumps_when_three_attack() {
     let a = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let b = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let base_power = e.effective_power(consultant).expect("power");
-    e.apply_command(0, &declare_attackers(vec![consultant, a, b]))
+    e.apply_scenario_command(0, &declare_attackers(vec![consultant, a, b]))
         .expect("declare three attackers");
     assert_eq!(
         e.state.stack.len(),
@@ -205,7 +206,7 @@ fn issue_misc9_seasoned_consultant_pumps_when_three_attack() {
     let consultant = inject_creature_on_battlefield(&mut no_trigger, 0, "seasoned_consultant");
     let a = inject_creature_on_battlefield(&mut no_trigger, 0, "grizzly_bears");
     no_trigger
-        .apply_command(0, &declare_attackers(vec![consultant, a]))
+        .apply_scenario_command(0, &declare_attackers(vec![consultant, a]))
         .expect("declare two attackers");
     assert!(no_trigger.state.stack.is_empty() && no_trigger.state.pending_triggers.is_empty());
 }
@@ -264,12 +265,13 @@ fn issue_misc9_meteor_golem_destroys_an_opponent_nonland_permanent() {
     let mine = inject_permanent_on_battlefield(&mut bad, 0, "swiftfoot_boots");
     cast(&mut bad, 0, "meteor_golem", vec![]);
     assert!(
-        bad.apply_command(0, &choose_trigger_target(their_land))
+        bad.apply_scenario_command(0, &choose_trigger_target(their_land))
             .is_err(),
         "a land is not a nonland permanent"
     );
     assert!(
-        bad.apply_command(0, &choose_trigger_target(mine)).is_err(),
+        bad.apply_scenario_command(0, &choose_trigger_target(mine))
+            .is_err(),
         "the controller's own permanent is not an opponent's"
     );
 }
@@ -289,7 +291,7 @@ fn issue_misc9_jumbo_cactuar_pumps_itself_when_attacking() {
     let cactuar = inject_creature_on_battlefield(&mut e, 0, "jumbo_cactuar");
     let base_power = e.effective_power(cactuar).expect("power");
     let base_toughness = e.effective_toughness(cactuar).expect("toughness");
-    e.apply_command(0, &declare_attackers(vec![cactuar]))
+    e.apply_scenario_command(0, &declare_attackers(vec![cactuar]))
         .expect("declare the Cactuar");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.effective_power(cactuar), Some(base_power + 9999));

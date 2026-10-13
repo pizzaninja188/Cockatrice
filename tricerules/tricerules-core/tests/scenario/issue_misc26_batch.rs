@@ -1,6 +1,7 @@
 //! Actual-card scenarios for five pinned Standard Food, Treasure, and Clue identities.
 //! Exact Scryfall Oracle and rulings checked 2026-09-22. CR 111.10, 601.2, 603.2/603.6a,
 //! 613.4c, 702.7/702.10/702.17/702.19, and 701.8 govern the selected behavior.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -152,7 +153,7 @@ fn issue_misc26_sharepot_creates_food_then_rejects_land_target_and_destroys_crea
     let land = inject_permanent_on_battlefield(&mut e, 1, "forest");
     let bad = activate_on(&e, sharepot, target_object(land));
     assert!(
-        e.apply_command(0, &bad).is_err(),
+        e.apply_scenario_command(0, &bad).is_err(),
         "land is not a legal target"
     );
     assert_eq!(
@@ -179,7 +180,7 @@ fn issue_misc26_sharepot_creates_food_then_rejects_land_target_and_destroys_crea
     semantic::accepted(&mut combat, 0, &primitive_yield());
     let late = activate_on(&combat, sharepot, target_object(victim));
     assert!(
-        combat.apply_command(0, &late).is_err(),
+        combat.apply_scenario_command(0, &late).is_err(),
         "sorcery-only ability is illegal at beginning of combat"
     );
     assert_eq!(combat.state.objects[&sharepot].zone, Zone::Battlefield);

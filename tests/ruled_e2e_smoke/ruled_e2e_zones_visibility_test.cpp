@@ -1784,6 +1784,13 @@ TEST_F(RuledE2ESmokeTest, SpyglassSirenMapExplorePublishesOnePublicLibraryCardTo
 
     ASSERT_TRUE(p1.pendingChoice.has_value());
     ASSERT_TRUE(p2.lastResolutionChoice.has_value());
+    EXPECT_TRUE(p1.resolutionPromptSnapshotValid);
+    EXPECT_EQ(p1.resolutionPromptDeciderPlayerId, p1.myId);
+    EXPECT_NE(p1.currentResolutionPromptId, 0u);
+    EXPECT_TRUE(p2.resolutionPromptSnapshotValid);
+    EXPECT_EQ(p2.resolutionPromptDeciderPlayerId, p1.myId);
+    EXPECT_EQ(p2.currentResolutionPromptId, 0u)
+        << "the observer receives the public decider but not the private answer ID";
     const auto &chooser = *p1.pendingChoice;
     const auto &observer = *p2.lastResolutionChoice;
     ASSERT_EQ(chooser.choice_kind(), ruled::v1::CHOICE_KIND_LIBRARY_LOOK);

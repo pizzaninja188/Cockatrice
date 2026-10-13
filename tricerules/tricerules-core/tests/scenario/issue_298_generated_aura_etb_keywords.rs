@@ -5,6 +5,7 @@
 //! 608.2b, 611.2a, 613.1f, 514.2, 704.5m, and 400.7 govern Aura attachment,
 //! enters-the-battlefield triggers, attached-object resolution, temporary keyword expiry, static
 //! attached modifiers, Aura state-based cleanup, and leave/re-entry generations.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -46,7 +47,7 @@ fn resolve_entire_stack_three_player(engine: &mut GameEngine) {
             }
             let player = engine.state.priority_player_id();
             engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("three-player priority pass");
         }
     }
@@ -62,7 +63,7 @@ fn cast_and_resolve_aura(
     give_mana(engine, 0, mana);
     let slot = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap_or_else(|error| panic!("cast {card_id}: {error:?}"));
     resolve_entire_stack_two_player(engine);
     battlefield_object_for_card(engine, 0, card_id)
@@ -78,11 +79,13 @@ fn cast_aura_until_etb_trigger(
     give_mana(engine, 0, mana);
     let slot = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap_or_else(|error| panic!("cast {card_id}: {error:?}"));
-    engine.apply_command(0, &pass()).expect("caster pass");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("opponent pass resolves Aura spell");
     let aura = battlefield_object_for_card(engine, 0, card_id);
     assert_eq!(
@@ -126,7 +129,7 @@ fn return_object_to_battlefield(engine: &mut GameEngine, player: usize, object_i
 fn dev_move_card(engine: &mut GameEngine, player_id: i32, card_name: &str, zone: DevZone) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             player_id,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -253,14 +256,14 @@ fn issue_298_aquitects_defenses_is_controller_only_in_three_player_target_public
     for opponent in [opponent_one, opponent_two] {
         assert!(
             engine
-                .apply_command(0, &cast_spell(slot, target_object(opponent)))
+                .apply_scenario_command(0, &cast_spell(slot, target_object(opponent)))
                 .is_err(),
             "Aquitect's Defenses cannot target an opponent's creature"
         );
     }
 
     engine
-        .apply_command(0, &cast_spell(slot, target_object(own)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(own)))
         .expect("Aquitect's Defenses can target a creature controlled by its caster");
     resolve_entire_stack_three_player(&mut engine);
     let aura = battlefield_object_for_card(&engine, 0, "aquitects_defenses");
@@ -313,7 +316,7 @@ fn issue_298_etb_grant_reads_current_attachment_and_rejects_stale_cast_target() 
     );
     let slot = hand_index_for_card(&stale, 0, "fae_flight");
     stale
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Fae Flight at the initially legal target");
     move_battlefield_object_to_graveyard(&mut stale, 0, target);
     resolve_entire_stack_two_player(&mut stale);
@@ -339,7 +342,7 @@ fn issue_298_aquitects_target_becomes_illegal_if_control_changes_before_resoluti
     );
     let slot = hand_index_for_card(&engine, 0, "aquitects_defenses");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Aquitect's Defenses at the initially legal target");
 
     // Change control while the Aura spell is still on the stack. The target remains the same
@@ -415,7 +418,7 @@ fn issue_298_aura_leave_and_reenter_keeps_pending_etb_source_generations_distinc
     );
     let slot = hand_index_for_card(&engine, 0, "super_speed");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(second)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(second)))
         .expect("cast the re-entered Super Speed at the second creature");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
@@ -480,7 +483,7 @@ fn issue_298_leave_and_reenter_does_not_reuse_the_old_temporary_keyword_generati
     );
     let bolt_slot = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(bolt_slot, target_object(creature)))
+        .apply_scenario_command(0, &cast_spell(bolt_slot, target_object(creature)))
         .expect("cast Lightning Bolt at the attached creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&creature].zone, Zone::Graveyard);

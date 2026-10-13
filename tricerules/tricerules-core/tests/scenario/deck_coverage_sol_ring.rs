@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::GameEngine;
 
 #[test]
@@ -18,7 +19,7 @@ fn sol_ring_casts_then_its_tap_ability_adds_two_colorless_mana() {
 
     let ring_in_hand = hand_index_for_card(&engine, 0, "sol_ring");
     engine
-        .apply_command(0, &cast_spell(ring_in_hand, vec![]))
+        .apply_scenario_command(0, &cast_spell(ring_in_hand, vec![]))
         .expect("cast Sol Ring for {1}");
     resolve_entire_stack_two_player(&mut engine);
     let ring = battlefield_object_for_card(&engine, 0, "sol_ring");

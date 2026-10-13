@@ -1,5 +1,6 @@
 //! Actual-card semantics for six pinned Standard targeted and modal spells.
 //! Exact pinned Oracle records and published rulings reviewed 2026-09-22.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -133,7 +134,7 @@ fn issue_misc40_mabels_mettle() {
     inject_card_into_hand(&mut invalid, 0, "mabels_mettle");
     let slot = hand_index_for_card(&invalid, 0, "mabels_mettle");
     assert!(invalid
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(slot, vec![target_object(first)[0], group_one(first)])
         )
@@ -156,10 +157,10 @@ fn issue_misc40_skulduggery() {
     inject_card_into_hand(&mut e, 0, "skulduggery");
     let slot = hand_index_for_card(&e, 0, "skulduggery");
     assert!(e
-        .apply_command(0, &cast_spell(slot, target_object(own)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(own)))
         .is_err());
     assert!(e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(slot, vec![target_object(own)[0], group_one(own)])
         )
@@ -195,7 +196,7 @@ fn issue_misc40_combat_tutorial() {
     inject_card_into_hand(&mut e, 0, "combat_tutorial");
     let slot = hand_index_for_card(&e, 0, "combat_tutorial");
     assert!(e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(slot, vec![target_player(1)[0], group_one(foe)])
         )
@@ -274,7 +275,7 @@ fn issue_misc40_mouser_attack() {
     inject_card_into_hand(&mut pump, 0, "mouser_attack!");
     let slot = hand_index_for_card(&pump, 0, "mouser_attack!");
     assert!(pump
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, vec![])]))
         .is_err());
     semantic::accepted(
         &mut pump,

@@ -193,7 +193,7 @@ fn place_ready(engine: &mut GameEngine, player: PlayerId, name: &str) -> ObjectI
 
 fn concede(engine: &mut GameEngine, player: PlayerId) -> RuledEventBatch {
     engine
-        .apply_command(
+        .apply_scenario_command(
             player,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
@@ -208,7 +208,7 @@ fn arena_staged_departing_chooser_refreshes_explicit_actor_choice() {
     place_ready(&mut engine, 30, "Grizzly Bears");
     place_ready(&mut engine, 40, "Grizzly Bears");
     engine
-        .apply_command(10, &begin_choice(&engine, &legacy))
+        .apply_scenario_command(10, &begin_choice(&engine, &legacy))
         .unwrap();
     let batch = concede(&mut engine, 20);
     let pending = engine
@@ -235,7 +235,7 @@ fn arena_staged_departing_chooser_refreshes_explicit_actor_choice() {
         ..Default::default()
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
@@ -266,7 +266,7 @@ fn arena_staged_actor_or_source_owner_departure_abandons_without_payment() {
             .unwrap()
             .owner = 30;
         engine
-            .apply_command(10, &begin_choice(&engine, &legacy))
+            .apply_scenario_command(10, &begin_choice(&engine, &legacy))
             .unwrap();
         concede(&mut engine, departed);
         assert!(
@@ -328,7 +328,7 @@ fn arena_staged_answered_opponent_departure_retains_fixed_target_and_payable_cos
         legacy.targets[1].object_id
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(commit)),
@@ -355,7 +355,7 @@ fn arena_staged_answered_opponent_departure_retains_fixed_target_and_payable_cos
     );
     for player in [10, 30, 40] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 player,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -374,7 +374,7 @@ fn arena_staged_committed_target_requires_the_chosen_opponents_control() {
     let (mut engine, legacy) = choice_engine_players(&[10, 20, 30, 40]);
     let commit = announce_both(&mut engine, &legacy);
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(commit)),
@@ -395,7 +395,7 @@ fn arena_staged_committed_target_requires_the_chosen_opponents_control() {
     engine.state.players[2].battlefield.push(opponent);
     for player in [10, 20, 30, 40] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 player,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -459,7 +459,7 @@ fn announce_both(
     legacy: &rv1::ActivateAbility,
 ) -> rv1::CommitAbilityActivation {
     let begin = begin_choice(engine, legacy);
-    let batch = engine.apply_command(10, &begin).unwrap();
+    let batch = engine.apply_scenario_command(10, &begin).unwrap();
     let pending = batch.legal_by_player[&20]
         .pending_ability_activation
         .as_ref()
@@ -471,7 +471,7 @@ fn announce_both(
         ..Default::default()
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             20,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
@@ -587,7 +587,7 @@ fn arena_staged_locks_nonzero_tax_and_conditional_reduction() {
         assert!(preview.complete);
         commit.payment = preview.selection;
         engine
-            .apply_command(
+            .apply_scenario_command(
                 10,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(commit)),
@@ -709,7 +709,7 @@ fn arena_staged_snapshots_target_observers_repoints_allocated_id_and_commits_cri
             })
         };
         engine
-            .apply_command(10, &RuledCommand { cmd: Some(command) })
+            .apply_scenario_command(10, &RuledCommand { cmd: Some(command) })
             .unwrap();
         assert_eq!(
             engine
@@ -796,7 +796,7 @@ fn arena_staged_unrelated_departure_refreshes_candidates_without_repicking_recei
     let foreign = place_ready(&mut engine, 20, "Grizzly Bears");
     engine.state.objects.get_mut(&foreign).unwrap().owner = 30;
     engine
-        .apply_command(10, &begin_choice(&engine, &legacy))
+        .apply_scenario_command(10, &begin_choice(&engine, &legacy))
         .unwrap();
     let before = engine
         .state
@@ -837,7 +837,7 @@ fn arena_staged_unrelated_departure_refreshes_candidates_without_repicking_recei
     );
     let state = format!("{:?}", engine.state);
     engine
-        .apply_command(
+        .apply_scenario_command(
             20,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
@@ -859,7 +859,7 @@ fn arena_staged_unrelated_departure_refreshes_candidates_without_repicking_recei
         .expect_err("departed candidate and superseded revision");
     assert_eq!(format!("{:?}", engine.state), state);
     engine
-        .apply_command(
+        .apply_scenario_command(
             20,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
@@ -888,7 +888,7 @@ fn arena_staged_unrelated_departure_refreshes_candidates_without_repicking_recei
     assert_eq!(retained.announced_targets, paid.announced_targets);
     assert_eq!(retained.locked_total_cost, paid.locked_total_cost);
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
@@ -903,7 +903,7 @@ fn arena_staged_unrelated_departure_refreshes_candidates_without_repicking_recei
         .unwrap();
     for player in [10, 20] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 player,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -926,7 +926,7 @@ fn arena_committed_ability_survives_foreign_source_owner_departure() {
     engine.state.objects.get_mut(&source).unwrap().owner = 30;
     let commit = announce_both(&mut engine, &legacy);
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(commit)),
@@ -959,7 +959,7 @@ fn arena_committed_ability_survives_foreign_source_owner_departure() {
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     for player in [10, 20, 40] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 player,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -984,7 +984,7 @@ fn activate_fixture_mana(engine: &mut GameEngine, source: ObjectId) -> RuledEven
         .find(|a| a.definition.is_mana_ability())
         .unwrap();
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
@@ -1040,7 +1040,7 @@ fn arena_staged_new_restricted_mana_group_is_refreshed_without_unlocking_costs()
             ..Default::default()
         }];
         let before = serde_json::to_value(&engine.state).unwrap();
-        let outcome = engine.apply_command(
+        let outcome = engine.apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(commit)),
@@ -1088,12 +1088,12 @@ fn arena_staged_nested_mana_damage_choice_resumes_same_transaction() {
         }),
     ] {
         engine
-            .apply_command(10, &RuledCommand { cmd: Some(cmd) })
+            .apply_scenario_command(10, &RuledCommand { cmd: Some(cmd) })
             .expect_err("nested work must finish before outer action");
         assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     }
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -1122,7 +1122,7 @@ fn arena_staged_nested_mana_damage_choice_resumes_same_transaction() {
         .payment_preview
         .is_some());
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(commit)),
@@ -1142,7 +1142,7 @@ fn arena_staged_cancel_retains_completed_mana_and_failed_commit_preserves_undo()
     assert_eq!(engine.state.undoable_mana_abilities.len(), 1);
     let before = serde_json::to_value(&engine.state).unwrap();
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
@@ -1153,7 +1153,7 @@ fn arena_staged_cancel_retains_completed_mana_and_failed_commit_preserves_undo()
         .expect_err("one mana is insufficient");
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
@@ -1170,7 +1170,7 @@ fn arena_staged_cancel_retains_completed_mana_and_failed_commit_preserves_undo()
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
     assert_eq!(engine.state.undoable_mana_abilities.len(), 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::UndoManaAbility(
@@ -1208,7 +1208,7 @@ fn arena_staged_magus_source_sickness_self_target_and_definition_snapshot() {
         legacy.targets[0].object_id = source;
         let before = serde_json::to_value(&engine.state).unwrap();
         engine
-            .apply_command(10, &begin_choice(&engine, &legacy))
+            .apply_scenario_command(10, &begin_choice(&engine, &legacy))
             .expect_err("Magus tap cost requires haste or nonsick source");
         assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
         engine
@@ -1223,7 +1223,7 @@ fn arena_staged_magus_source_sickness_self_target_and_definition_snapshot() {
             engine.reconcile_activated_ability_slots();
         }
         engine
-            .apply_command(
+            .apply_scenario_command(
                 10,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(commit)),
@@ -1241,7 +1241,7 @@ fn arena_staged_magus_source_sickness_self_target_and_definition_snapshot() {
         if !lose_definition {
             for player in [10, 20] {
                 engine
-                    .apply_command(
+                    .apply_scenario_command(
                         player,
                         &RuledCommand {
                             cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -1282,18 +1282,18 @@ fn arena_staged_paid_commit_and_preview_preserve_rejected_state() {
         cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(commit)),
     };
     engine
-        .apply_command(20, &cmd(commit.clone()))
+        .apply_scenario_command(20, &cmd(commit.clone()))
         .expect_err("only the payer commits");
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     let mut stale = commit.clone();
     stale.expected_revision += 1;
     engine
-        .apply_command(10, &cmd(stale))
+        .apply_scenario_command(10, &cmd(stale))
         .expect_err("stale revision");
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     commit.payment = preview.selection;
     let batch = engine
-        .apply_command(10, &cmd(commit))
+        .apply_scenario_command(10, &cmd(commit))
         .expect("pay and finish the announcement");
     assert!(engine.state.pending_ability_activation.is_none());
     assert!(engine.pending_ability_activation_internal.is_none());
@@ -1307,7 +1307,7 @@ fn arena_staged_paid_commit_and_preview_preserve_rejected_state() {
         .all(|legal| legal.pending_ability_activation.is_none()));
     for player in [10, 20] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 player,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -1349,11 +1349,11 @@ fn arena_staged_mana_sacrifice_keeps_announced_incarnation_and_partial_resolutio
         )),
     };
     engine
-        .apply_command(10, &begin_choice(&engine, &legacy))
+        .apply_scenario_command(10, &begin_choice(&engine, &legacy))
         .unwrap();
     let before = serde_json::to_value(&engine.state).unwrap();
     engine
-        .apply_command(10, &mana)
+        .apply_scenario_command(10, &mana)
         .expect_err("no mana window before opponent answer");
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     let pending = engine.state.pending_ability_activation.as_ref().unwrap();
@@ -1364,7 +1364,7 @@ fn arena_staged_mana_sacrifice_keeps_announced_incarnation_and_partial_resolutio
         ..Default::default()
     };
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             20,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
@@ -1384,7 +1384,7 @@ fn arena_staged_mana_sacrifice_keeps_announced_incarnation_and_partial_resolutio
         .mana_payment_by_ability
         .is_empty());
     engine
-        .apply_command(10, &mana)
+        .apply_scenario_command(10, &mana)
         .expect("sacrifice chosen own creature for mana after cost lock");
     assert!(engine.state.players[0].graveyard.contains(&own));
     assert_eq!(engine.state.players[0].mana_pool.colorless, 3);
@@ -1396,7 +1396,7 @@ fn arena_staged_mana_sacrifice_keeps_announced_incarnation_and_partial_resolutio
         ..Default::default()
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(commit)),
@@ -1413,7 +1413,7 @@ fn arena_staged_mana_sacrifice_keeps_announced_incarnation_and_partial_resolutio
     );
     for player in [10, 20] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 player,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -1467,7 +1467,9 @@ fn pending_staged_loyalty_cost_replacement() -> (
             },
         )),
     };
-    engine.apply_command(10, &begin).expect("announce ability");
+    engine
+        .apply_scenario_command(10, &begin)
+        .expect("announce ability");
     let pending = engine.state.pending_ability_activation.as_ref().unwrap();
     let opponent_choice = rv1::SubmitAbilityActivationChoice {
         transaction_id: pending.transaction_id,
@@ -1476,7 +1478,7 @@ fn pending_staged_loyalty_cost_replacement() -> (
         ..Default::default()
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             20,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
@@ -1514,7 +1516,7 @@ fn pending_staged_loyalty_cost_replacement() -> (
     let stack_len = engine.state.stack.len();
     let mana_before = engine.state.players[0].mana_pool;
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
@@ -1570,7 +1572,7 @@ fn staged_positive_loyalty_cost_waits_for_replacement_order_before_payment_commi
 
         let before_invalid = serde_json::to_value(&engine.state).unwrap();
         engine
-            .apply_command(
+            .apply_scenario_command(
                 10,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
@@ -1584,7 +1586,7 @@ fn staged_positive_loyalty_cost_waits_for_replacement_order_before_payment_commi
             .expect_err("a staged payment cannot be canceled during replacement order");
         assert_eq!(serde_json::to_value(&engine.state).unwrap(), before_invalid);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 10,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
@@ -1595,7 +1597,7 @@ fn staged_positive_loyalty_cost_waits_for_replacement_order_before_payment_commi
             .expect_err("a staged payment cannot be committed twice");
         assert_eq!(serde_json::to_value(&engine.state).unwrap(), before_invalid);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 20,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -1609,7 +1611,7 @@ fn staged_positive_loyalty_cost_waits_for_replacement_order_before_payment_commi
             .expect_err("only the affected player's replacement choice is accepted");
         assert_eq!(serde_json::to_value(&engine.state).unwrap(), before_invalid);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 10,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -1644,7 +1646,7 @@ fn failed_staged_loyalty_payment_does_not_commit_counter_tap_or_stack() {
     let choice = engine.state.pending_resolution.as_ref().unwrap();
     let selected = choice.presentation.candidates[0];
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -1660,7 +1662,7 @@ fn failed_staged_loyalty_payment_does_not_commit_counter_tap_or_stack() {
     let choice = engine.state.pending_resolution.as_ref().unwrap();
     let selected = choice.presentation.candidates[0];
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -1713,7 +1715,7 @@ fn arena_staged_locked_tap_cost_rejects_changed_source_and_failed_payment_atomic
         }
         let before = serde_json::to_value(&engine.state).unwrap();
         engine
-            .apply_command(
+            .apply_scenario_command(
                 10,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(commit)),
@@ -1734,7 +1736,7 @@ fn arena_staged_announcement_hands_target_choice_to_opponent_before_payment() {
     let (mut engine, legacy) = choice_engine();
     let begin = begin_choice(&engine, &legacy);
     let batch = engine
-        .apply_command(10, &begin)
+        .apply_scenario_command(10, &begin)
         .expect("begin announced ability");
     let actor = batch.legal_by_player[&10]
         .pending_ability_activation
@@ -1784,11 +1786,11 @@ fn arena_staged_announcement_hands_target_choice_to_opponent_before_payment() {
     };
     let before = serde_json::to_value(&engine.state).unwrap();
     engine
-        .apply_command(10, &answer)
+        .apply_scenario_command(10, &answer)
         .expect_err("actor cannot answer for opponent");
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -1798,7 +1800,7 @@ fn arena_staged_announcement_hands_target_choice_to_opponent_before_payment() {
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
 
     let batch = engine
-        .apply_command(20, &answer)
+        .apply_scenario_command(20, &answer)
         .expect("opponent announces their target");
     let actor = batch.legal_by_player[&10]
         .pending_ability_activation
@@ -1827,7 +1829,7 @@ fn arena_staged_announcement_hands_target_choice_to_opponent_before_payment() {
 fn arena_staged_choice_has_no_normal_action_offers() {
     let (mut engine, legacy) = choice_engine();
     let batch = engine
-        .apply_command(10, &begin_choice(&engine, &legacy))
+        .apply_scenario_command(10, &begin_choice(&engine, &legacy))
         .unwrap();
     for legal in batch.legal_by_player.values() {
         assert!(legal.hand_actions.is_empty());
@@ -1846,10 +1848,10 @@ fn arena_staged_choice_has_no_normal_action_offers() {
 fn arena_staged_terminal_game_abandons_announcement() {
     let (mut engine, legacy) = choice_engine();
     engine
-        .apply_command(10, &begin_choice(&engine, &legacy))
+        .apply_scenario_command(10, &begin_choice(&engine, &legacy))
         .unwrap();
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             20,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
@@ -1868,7 +1870,7 @@ fn arena_staged_terminal_game_abandons_announcement() {
 fn arena_staged_invalid_target_answers_are_atomic_and_actor_can_cancel() {
     let (mut engine, legacy) = choice_engine();
     let batch = engine
-        .apply_command(10, &begin_choice(&engine, &legacy))
+        .apply_scenario_command(10, &begin_choice(&engine, &legacy))
         .unwrap();
     let pending = batch.legal_by_player[&20]
         .pending_ability_activation
@@ -1902,7 +1904,7 @@ fn arena_staged_invalid_target_answers_are_atomic_and_actor_can_cancel() {
     let before = serde_json::to_value(&engine.state).unwrap();
     for reply in invalid {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 20,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
@@ -1922,10 +1924,10 @@ fn arena_staged_invalid_target_answers_are_atomic_and_actor_can_cancel() {
         )),
     };
     engine
-        .apply_command(20, &cancel)
+        .apply_scenario_command(20, &cancel)
         .expect_err("only the actor may cancel");
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
-    let batch = engine.apply_command(10, &cancel).unwrap();
+    let batch = engine.apply_scenario_command(10, &cancel).unwrap();
     assert!(engine.state.pending_ability_activation.is_none());
     assert!(engine.state.blocking_choice().is_none());
     assert!(batch

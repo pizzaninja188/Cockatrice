@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ChoiceKind;
 
@@ -37,7 +38,7 @@ fn cast_fanatic_and_resolve_creature(engine: &mut GameEngine) {
     );
     let slot = hand_index_for_card(engine, 0, "fanatic_of_the_harrowing");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Fanatic of the Harrowing");
     pass_both_players(engine);
     assert_eq!(engine.state.stack.len(), 1, "ETB trigger is on the stack");
@@ -48,7 +49,7 @@ fn cast_creature_and_leave_etb_trigger(engine: &mut GameEngine, card_id: &str, m
     give_mana(engine, 0, mana);
     let slot = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .unwrap_or_else(|error| panic!("cast {card_id}: {error}"));
     pass_both_players(engine);
     assert_eq!(engine.state.stack.len(), 1, "ETB trigger is on the stack");
@@ -56,10 +57,10 @@ fn cast_creature_and_leave_etb_trigger(engine: &mut GameEngine, card_id: &str, m
 
 fn resolve_trigger_to_choice(engine: &mut GameEngine) -> RuledEventBatch {
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve trigger to a choice")
 }
 
@@ -71,10 +72,10 @@ fn fanatic_collects_private_apnap_choices_before_committing_the_discard() {
     cast_fanatic_and_resolve_creature(&mut engine);
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     let first = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve trigger to first private choice");
     let first_choice = find_resolution_choice(&first).expect("active player's discard choice");
     assert_eq!(first_choice.deciding_player_id, 0);
@@ -84,7 +85,7 @@ fn fanatic_collects_private_apnap_choices_before_committing_the_discard() {
     assert!(!first_choice.candidate_object_ids.contains(&opponent_card));
 
     let second = engine
-        .apply_command(0, &submit_resolution_choice(vec![controller_card]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![controller_card]))
         .expect("record active player's hidden choice");
     assert_eq!(engine.state.objects[&controller_card].zone, Zone::Hand);
     assert_eq!(engine.state.objects[&opponent_card].zone, Zone::Hand);
@@ -96,7 +97,7 @@ fn fanatic_collects_private_apnap_choices_before_committing_the_discard() {
         .contains(&controller_card));
 
     engine
-        .apply_command(1, &submit_resolution_choice(vec![opponent_card]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![opponent_card]))
         .expect("commit the complete discard action");
     assert_eq!(engine.state.objects[&controller_card].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&opponent_card].zone, Zone::Graveyard);
@@ -118,7 +119,7 @@ fn fanatic_does_not_draw_when_only_the_opponent_discarded() {
     let choice = find_resolution_choice(&batch).expect("opponent discard choice");
     assert_eq!(choice.deciding_player_id, 1);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![opponent_card]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![opponent_card]))
         .expect("opponent discards");
 
     assert!(engine.state.players[0].hand.is_empty());
@@ -134,10 +135,10 @@ fn player_set_discard_rejects_wrong_player_cardinality_and_stale_identity() {
     resolve_trigger_to_choice(&mut engine);
 
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![controller_card]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![controller_card]))
         .is_err());
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(Vec::new()))
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
         .is_err());
     *engine
         .state
@@ -145,7 +146,7 @@ fn player_set_discard_rejects_wrong_player_cardinality_and_stale_identity() {
         .entry(controller_card)
         .or_default() += 1;
     let error = engine
-        .apply_command(0, &submit_resolution_choice(vec![controller_card]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![controller_card]))
         .expect_err("stale physical identity must fail closed");
     assert!(error.to_string().contains("stale"));
     assert_eq!(
@@ -168,11 +169,11 @@ fn conceding_during_the_second_hidden_choice_commits_no_staged_discard() {
     cast_fanatic_and_resolve_creature(&mut engine);
     resolve_trigger_to_choice(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![controller_card]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![controller_card]))
         .expect("stage the first choice");
 
     engine
-        .apply_command(1, &concede())
+        .apply_scenario_command(1, &concede())
         .expect("concede at any time");
     assert_eq!(engine.state.winner(), Some(0));
     assert!(engine.state.pending_resolution.is_none());
@@ -201,7 +202,7 @@ fn burglar_rat_discards_only_from_each_opponent() {
     assert!(choice.candidate_object_ids.contains(&opponent_card));
     assert!(!choice.candidate_object_ids.contains(&controller_card));
     engine
-        .apply_command(1, &submit_resolution_choice(vec![opponent_card]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![opponent_card]))
         .expect("opponent discards");
     assert_eq!(engine.state.objects[&opponent_card].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&controller_card].zone, Zone::Hand);
@@ -218,7 +219,7 @@ fn friendly_teddy_death_trigger_draws_for_each_player() {
     ];
     engine.state.objects.get_mut(&teddy).unwrap().damage = 99;
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("SBA destroys Teddy");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -243,13 +244,13 @@ fn macabre_waltz_discards_with_zero_targets() {
     );
     let slot = hand_index_for_card(&engine, 0, "macabre_waltz");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast with zero targets");
     let batch = resolve_trigger_to_choice(&mut engine);
     let choice = find_resolution_choice(&batch).expect("mandatory self-discard");
     assert_eq!(choice.candidate_object_ids, vec![discard]);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![discard]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
         .expect("discard despite choosing zero targets");
     assert_eq!(engine.state.objects[&discard].zone, Zone::Graveyard);
 }
@@ -270,13 +271,13 @@ fn macabre_waltz_can_discard_the_creature_it_returned() {
     );
     let slot = hand_index_for_card(&engine, 0, "macabre_waltz");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(returned)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(returned)))
         .expect("cast targeting one creature card");
     let batch = resolve_trigger_to_choice(&mut engine);
     let choice = find_resolution_choice(&batch).expect("discard after return");
     assert!(choice.candidate_object_ids.contains(&returned));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![returned]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![returned]))
         .expect("discard the returned creature");
     assert_eq!(engine.state.objects[&returned].zone, Zone::Graveyard);
 }

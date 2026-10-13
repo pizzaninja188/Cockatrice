@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
 #[test]
@@ -29,7 +30,7 @@ fn issue_173_faerie_fencing_freezes_the_cast_condition() {
                 ..Default::default()
             },
         );
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &cast_spell_x(
                 hand_index_for_card(&e, 0, "faerie_fencing"),
@@ -70,7 +71,7 @@ fn issue_173_steer_clear_uses_cast_time_mount_and_live_combat_targets() {
         .unwrap();
         advance_to_declare_attackers(&mut e);
         let target = inject_creature_with_stats(&mut e, 0, "colossal_dreadmaw", 6, 6);
-        e.apply_command(0, &declare_attackers(vec![target]))
+        e.apply_scenario_command(0, &declare_attackers(vec![target]))
             .unwrap();
         let mount = controlled_at_cast
             .then(|| inject_creature_on_battlefield(&mut e, 0, "changeling_wayfinder"));
@@ -87,12 +88,12 @@ fn issue_173_steer_clear_uses_cast_time_mount_and_live_combat_targets() {
         let slot = hand_index_for_card(&e, 0, "steer_clear");
         let command_index = e.state.command_index;
         assert!(e
-            .apply_command(0, &cast_spell(slot, target_object(bystander)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(bystander)))
             .is_err());
         assert_eq!(e.state.command_index, command_index);
         assert_eq!(e.state.players[0].mana_pool.white, 1);
         assert!(e.state.stack.is_empty());
-        e.apply_command(0, &cast_spell(slot, target_object(target)))
+        e.apply_scenario_command(0, &cast_spell(slot, target_object(target)))
             .unwrap();
         assert_eq!(
             e.state.stack.last().unwrap().cast_condition_results,
@@ -159,7 +160,7 @@ fn issue_173_pending_casts_and_recasts_have_independent_snapshots() {
             ..Default::default()
         },
     );
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_x(
             hand_index_for_card(&e, 0, "faerie_fencing"),
@@ -171,7 +172,7 @@ fn issue_173_pending_casts_and_recasts_have_independent_snapshots() {
     let first_spell = e.state.stack.last().unwrap().id;
     inject_creature_on_battlefield(&mut e, 0, "changeling_wayfinder");
     ensure_in_hand(&mut e, 0, "faerie_fencing");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_x(
             hand_index_for_card(&e, 0, "faerie_fencing"),
@@ -212,7 +213,7 @@ fn issue_173_pending_casts_and_recasts_have_independent_snapshots() {
         .iter()
         .position(|id| *id == first_spell)
         .unwrap();
-    e.apply_command(0, &cast_spell_x(slot, target_object(first_target), 0))
+    e.apply_scenario_command(0, &cast_spell_x(slot, target_object(first_target), 0))
         .unwrap();
     assert_eq!(
         e.state.stack.last().unwrap().cast_condition_results,
@@ -274,7 +275,7 @@ fn go_for_the_throat_destroys_target_creature() {
         .zone = tricerules_core::Zone::Battlefield;
 
     let swamp_to_play_idx = hand_index_for_card(&e, 0, "swamp");
-    e.apply_command(0, &play_land(swamp_to_play_idx))
+    e.apply_scenario_command(0, &play_land(swamp_to_play_idx))
         .expect("play second swamp");
 
     give_mana(
@@ -287,7 +288,7 @@ fn go_for_the_throat_destroys_target_creature() {
         },
     );
     let gftt_idx = hand_index_for_card(&e, 0, "go_for_the_throat");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             gftt_idx,
@@ -301,8 +302,8 @@ fn go_for_the_throat_destroys_target_creature() {
         ),
     )
     .expect("cast go for the throat");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
     assert!(e.state.players[1].graveyard.contains(&p1_bear));
     assert_eq!(
         e.state
@@ -351,10 +352,11 @@ fn healing_salve_shield_fully_consumed_by_bolt() {
         },
     );
     let salve_idx = hand_index_for_card(&e, 0, "healing_salve");
-    e.apply_command(0, &cast_modal_spell(salve_idx, vec![(1, target_player(1))]))
+    e.apply_scenario_command(0, &cast_modal_spell(salve_idx, vec![(1, target_player(1))]))
         .expect("cast salve on P1");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass resolves salve");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("p1 pass resolves salve");
     assert_eq!(
         e.state.remaining_damage_prevention(1),
         3,
@@ -372,10 +374,11 @@ fn healing_salve_shield_fully_consumed_by_bolt() {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt on P1");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass resolves bolt");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("p1 pass resolves bolt");
     assert_eq!(
         e.state.players[1].life, p1_life,
         "shield absorbs all 3 — P1 life unchanged"
@@ -425,10 +428,11 @@ fn healing_salve_double_shield_partially_consumed_by_bolt() {
             },
         );
         let salve_idx = hand_index_for_card(&e, 0, "healing_salve");
-        e.apply_command(0, &cast_modal_spell(salve_idx, vec![(1, target_player(1))]))
+        e.apply_scenario_command(0, &cast_modal_spell(salve_idx, vec![(1, target_player(1))]))
             .expect("cast salve");
-        e.apply_command(0, &pass()).expect("p0 pass");
-        e.apply_command(1, &pass()).expect("p1 pass resolves salve");
+        e.apply_scenario_command(0, &pass()).expect("p0 pass");
+        e.apply_scenario_command(1, &pass())
+            .expect("p1 pass resolves salve");
     }
     assert_eq!(
         e.state.remaining_damage_prevention(1),
@@ -447,10 +451,12 @@ fn healing_salve_double_shield_partially_consumed_by_bolt() {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt on P1");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    let batch = e.apply_command(1, &pass()).expect("p1 pass resolves bolt");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("p1 pass resolves bolt");
     let choice = batch
         .events
         .iter()
@@ -480,7 +486,7 @@ fn healing_salve_double_shield_partially_consumed_by_bolt() {
         .expect("two independent shields require a CR 616 choice")
         .presentation
         .candidates[0];
-    e.apply_command(1, &submit_resolution_choice(vec![application]))
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![application]))
         .expect("P1 chooses which shield absorbs Bolt");
     assert_eq!(
         e.state.players[1].life, p1_life,
@@ -524,10 +530,10 @@ fn fog_prevents_all_combat_damage() {
         .battlefield
         .last()
         .expect("bears on battlefield");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     // P0 passes — P1 has priority in DeclareAttackers.
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("p0 pass DeclareAttackers");
     // P1 casts Fog at instant speed before passing.
     give_mana(
@@ -539,21 +545,23 @@ fn fog_prevents_all_combat_damage() {
         },
     );
     let fog_idx = hand_index_for_card(&e, 1, "fog");
-    e.apply_command(1, &cast_spell(fog_idx, vec![]))
+    e.apply_scenario_command(1, &cast_spell(fog_idx, vec![]))
         .expect("P1 casts Fog");
-    e.apply_command(1, &pass()).expect("p1 pass on stack");
-    e.apply_command(0, &pass()).expect("p0 pass → Fog resolves");
+    e.apply_scenario_command(1, &pass())
+        .expect("p1 pass on stack");
+    e.apply_scenario_command(0, &pass())
+        .expect("p0 pass → Fog resolves");
     // Active player (P0) has priority in DeclareAttackers with empty stack.
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("p0 pass DeclareAttackers after Fog");
     // Both passed → no eligible P1 blockers → auto-declare empty blockers → DeclareBlockers, P0 has priority.
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("p1 pass → DeclareBlockers auto-advance");
     // Both pass in DeclareBlockers to resolve combat damage.
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("p0 pass DeclareBlockers");
     let b = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("p1 pass → combat damage resolves");
     // Fog prevents all combat damage; P1 life must be 20.
     let life = life_changes_in(&b);
@@ -595,10 +603,10 @@ fn angels_mercy_gains_seven_life_for_controller() {
     );
     let mercy_idx = hand_index_for_card(&e, 0, "angels_mercy");
     let life_before = e.state.players[0].life;
-    e.apply_command(0, &cast_spell(mercy_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(mercy_idx, vec![]))
         .expect("cast mercy");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
     assert_eq!(e.state.players[0].life, life_before + 7, "mercy gains 7");
 }
 
@@ -637,11 +645,11 @@ fn bump_in_the_night_drains_three_from_target_player() {
     let bump_idx = hand_index_for_card(&e, 0, "bump_in_the_night");
     let p1_life_before = e.state.players[1].life;
     let p0_life_before = e.state.players[0].life;
-    e.apply_command(0, &cast_spell(bump_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bump_idx, target_player(1)))
         .expect("cast bump");
     let batch = {
-        e.apply_command(0, &pass()).expect("p0 pass");
-        e.apply_command(1, &pass()).expect("p1 pass")
+        e.apply_scenario_command(0, &pass()).expect("p0 pass");
+        e.apply_scenario_command(1, &pass()).expect("p1 pass")
     };
     assert_eq!(e.state.players[1].life, p1_life_before - 3);
     assert_eq!(
@@ -684,11 +692,11 @@ fn blood_tithe_drains_each_opponent_and_gains_controller_equal_life() {
     let tithe_idx = hand_index_for_card(&e, 0, "blood_tithe");
     let p1_life_before = e.state.players[1].life;
     let p0_life_before = e.state.players[0].life;
-    e.apply_command(0, &cast_spell(tithe_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(tithe_idx, vec![]))
         .expect("cast tithe");
     let batch = {
-        e.apply_command(0, &pass()).expect("p0 pass");
-        e.apply_command(1, &pass()).expect("p1 pass")
+        e.apply_scenario_command(0, &pass()).expect("p0 pass");
+        e.apply_scenario_command(1, &pass()).expect("p1 pass")
     };
     assert_eq!(e.state.players[1].life, p1_life_before - 3);
     assert_eq!(
@@ -738,7 +746,7 @@ fn eyeblights_ending_destroys_target_creature() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "eyeblights_ending");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -753,8 +761,8 @@ fn eyeblights_ending_destroys_target_creature() {
     )
     .expect("cast eyeblight");
     let batch = {
-        e.apply_command(0, &pass()).expect("p0 pass");
-        e.apply_command(1, &pass()).expect("p1 pass")
+        e.apply_scenario_command(0, &pass()).expect("p0 pass");
+        e.apply_scenario_command(1, &pass()).expect("p1 pass")
     };
     assert_eq!(
         e.state.objects.get(&bear).expect("bear").zone,
@@ -807,7 +815,7 @@ fn swords_to_plowshares_exiles_and_gains_life_equal_to_power() {
     );
     let idx = hand_index_for_card(&e, 0, "swords_to_plowshares");
     let p1_life_before = e.state.players[1].life;
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -821,8 +829,8 @@ fn swords_to_plowshares_exiles_and_gains_life_equal_to_power() {
         ),
     )
     .expect("cast swords");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
 
     assert_eq!(
         e.state.objects.get(&bear).expect("bear").zone,
@@ -871,7 +879,7 @@ fn unsummon_returns_target_creature_to_owner_hand() {
     );
     let idx = hand_index_for_card(&e, 0, "unsummon");
     let p1_hand_before = e.state.players[1].hand.len();
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -886,8 +894,8 @@ fn unsummon_returns_target_creature_to_owner_hand() {
     )
     .expect("cast unsummon");
     let batch = {
-        e.apply_command(0, &pass()).expect("p0 pass");
-        e.apply_command(1, &pass()).expect("p1 pass")
+        e.apply_scenario_command(0, &pass()).expect("p0 pass");
+        e.apply_scenario_command(1, &pass()).expect("p1 pass")
     };
     assert_eq!(
         e.state.objects.get(&bear).expect("bear").zone,
@@ -937,7 +945,7 @@ fn boomerang_returns_target_land_to_owner_hand() {
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let island_idx = hand_index_for_card(&e, 0, "island");
-    e.apply_command(0, &play_land(island_idx))
+    e.apply_scenario_command(0, &play_land(island_idx))
         .expect("play island");
     let island_oid = battlefield_object_for_card(&e, 0, "island");
     give_mana(
@@ -949,7 +957,7 @@ fn boomerang_returns_target_land_to_owner_hand() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "boomerang");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -963,8 +971,8 @@ fn boomerang_returns_target_land_to_owner_hand() {
         ),
     )
     .expect("cast boomerang on own island");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
     assert_eq!(
         e.state.objects.get(&island_oid).expect("island").zone,
         tricerules_core::Zone::Hand
@@ -1047,11 +1055,11 @@ fn tome_scour_mills_five_cards_from_target_player() {
         .expect("scour in hand");
     let lib_before = e.state.players[1].library.len();
     let grave_before = e.state.players[1].graveyard.len();
-    e.apply_command(0, &cast_spell(scour_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(scour_idx, target_player(1)))
         .expect("cast tome scour");
     let batch = {
-        e.apply_command(0, &pass()).expect("p0 pass");
-        e.apply_command(1, &pass()).expect("p1 pass")
+        e.apply_scenario_command(0, &pass()).expect("p0 pass");
+        e.apply_scenario_command(1, &pass()).expect("p1 pass")
     };
     assert_eq!(e.state.players[1].library.len(), lib_before - 5);
     assert_eq!(e.state.players[1].graveyard.len(), grave_before + 5);
@@ -1143,10 +1151,10 @@ fn tome_scour_caps_at_library_size() {
         .iter()
         .position(|&oid| oid == scour_id)
         .expect("scour in hand");
-    e.apply_command(0, &cast_spell(scour_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(scour_idx, target_player(1)))
         .expect("cast scour");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
     // Library should be empty (only had 2 to mill), graveyard should hold both — engine must not panic.
     assert_eq!(e.state.players[1].library.len(), 0);
 }
@@ -1216,10 +1224,10 @@ fn tome_scour_can_target_controller() {
         .position(|&oid| oid == scour_id)
         .expect("scour in hand");
     let lib_before = e.state.players[0].library.len();
-    e.apply_command(0, &cast_spell(scour_idx, target_player(0)))
+    e.apply_scenario_command(0, &cast_spell(scour_idx, target_player(0)))
         .expect("tome scour targeting its controller is legal");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
     // Five cards milled from the controller's own library (the resolved sorcery also lands
     // in the controller's graveyard, so assert the library side for an unambiguous count).
     assert_eq!(e.state.players[0].library.len(), lib_before - 5);
@@ -1296,10 +1304,10 @@ fn tome_scour_self_mill_puts_the_spell_under_the_milled_cards() {
     let top_five: Vec<_> = e.state.players[0].library.iter().take(5).copied().collect();
     let grave_before = e.state.players[0].graveyard.len();
 
-    e.apply_command(0, &cast_spell(scour_idx, target_player(0)))
+    e.apply_scenario_command(0, &cast_spell(scour_idx, target_player(0)))
         .expect("cast tome scour at self");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
 
     let graveyard = &e.state.players[0].graveyard;
     assert_eq!(
@@ -1353,7 +1361,7 @@ fn wrath_of_god_destroys_all_creatures_except_indestructible() {
         },
     );
     let wrath_idx = hand_index_for_card(&e, 0, "wrath_of_god");
-    e.apply_command(0, &cast_spell(wrath_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(wrath_idx, vec![]))
         .expect("cast wrath of god");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1416,7 +1424,7 @@ fn tranquility_destroys_only_enchantments() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "tranquility");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Tranquility");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1480,7 +1488,7 @@ fn shatterstorm_destroys_only_artifacts() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "shatterstorm");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Shatterstorm");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1538,7 +1546,7 @@ fn perish_destroys_only_green_creatures() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "perish");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Perish");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1595,7 +1603,7 @@ fn pyroclasm_deals_two_damage_to_each_creature() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "pyroclasm");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast pyroclasm");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1726,7 +1734,7 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
         .position(|&oid| oid == disentomb_oid)
         .expect("disentomb in hand");
     let hand_before = e.state.players[0].hand.len();
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             disentomb_idx,
@@ -1740,8 +1748,8 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
         ),
     )
     .expect("cast disentomb");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
         .expect("p1 pass resolves disentomb");
 
     // Grizzly Bears should now be in P0's hand, not the graveyard.
@@ -1872,7 +1880,7 @@ fn move_graveyard_cards_fizzles_when_target_removed_before_resolution() {
         .iter()
         .position(|&oid| oid == disentomb_oid)
         .expect("disentomb in hand");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             disentomb_idx,
@@ -1904,8 +1912,9 @@ fn move_graveyard_cards_fizzles_when_target_removed_before_resolution() {
     }
 
     // Resolution should fizzle gracefully (no panic, no error).
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass — fizzle");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("p1 pass — fizzle");
 
     // The dummy OID must NOT be in hand (fizzle = no move).
     assert!(
@@ -2021,13 +2030,13 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
         .iter()
         .position(|&oid| oid == gd_oid)
         .expect("gravedigger in hand");
-    e.apply_command(0, &cast_spell(gd_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(gd_idx, vec![]))
         .expect("cast gravedigger");
 
     // Both players pass; Gravedigger resolves and ETB trigger fires.
-    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
     let batch = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("p1 pass resolves gravedigger");
 
     // Gravedigger ETB trigger requires a target from the graveyard.
@@ -2067,7 +2076,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
     }
 
     // P0 chooses Grizzly Bears as the graveyard target.
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -2086,9 +2095,9 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
     .expect("choose trigger target — bears from graveyard");
 
     // Trigger resolves: bears should move from graveyard to hand.
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("p0 pass trigger on stack");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("p1 pass resolves trigger");
     answer_optional_triggered_ability_choice(&mut e, ResolutionChoiceDecision::SelectBranch);
 
@@ -2121,17 +2130,17 @@ fn cast_graveyard_return_creature(
     give_mana(engine, 0, mana);
     let hand_index = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(hand_index, vec![]))
         .expect("cast graveyard-return creature");
-    engine.apply_command(0, &pass()).expect("P0 pass");
+    engine.apply_scenario_command(0, &pass()).expect("P0 pass");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("P1 pass resolves graveyard-return creature")
 }
 
 fn choose_graveyard_return_target(engine: &mut GameEngine, object_id: u32) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -2206,7 +2215,7 @@ fn graveyard_card_type_salvager_targets_only_own_instants_and_sorceries() {
     assert!(!candidates.contains(&opponent_instant));
 
     let err = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -2404,13 +2413,13 @@ fn draw_spell_decking_out_loses_without_erroring() {
         },
     );
     let div_idx = hand_index_for_card(&e, 0, "divination");
-    e.apply_command(0, &cast_spell(div_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(div_idx, vec![]))
         .expect("p0 cast divination");
 
     // Resolving must succeed even though the library runs dry partway through the draw.
-    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
     let terminal_batch = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("p1 pass resolves divination (must not error)");
 
     assert!(e.state.players[0].library.is_empty(), "library drawn dry");
@@ -2516,10 +2525,10 @@ fn resolve_hymn_random_discard(random_seed: u64, affected_player: i32) -> Vec<St
         },
     );
     let hymn_idx = hand_index_for_card(&e, 0, "hymn_to_tourach");
-    e.apply_command(0, &cast_spell(hymn_idx, target_player(affected_player)))
+    e.apply_scenario_command(0, &cast_spell(hymn_idx, target_player(affected_player)))
         .expect("cast hymn");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(affected_player, &pass())
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(affected_player, &pass())
         .expect("affected player pass — hymn resolves");
 
     assert_eq!(
@@ -2608,10 +2617,10 @@ fn hymn_to_tourach_discards_all_when_hand_smaller_than_count() {
         },
     );
     let hymn_idx = hand_index_for_card(&e, 0, "hymn_to_tourach");
-    e.apply_command(0, &cast_spell(hymn_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(hymn_idx, target_player(1)))
         .expect("cast hymn");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
         .expect("p1 pass — hymn resolves");
 
     // CR 609.3 / 701.9a: if the player has fewer cards than count, they discard all.
@@ -2654,10 +2663,10 @@ fn hymn_to_tourach_empty_hand_is_no_op() {
         },
     );
     let hymn_idx = hand_index_for_card(&e, 0, "hymn_to_tourach");
-    e.apply_command(0, &cast_spell(hymn_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(hymn_idx, target_player(1)))
         .expect("cast hymn");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
         .expect("p1 pass — hymn resolves (no-op)");
 
     assert_eq!(
@@ -2702,12 +2711,12 @@ fn coercion_caster_chooses_which_card_to_discard() {
         },
     );
     let coercion_idx = hand_index_for_card(&e, 0, "coercion");
-    e.apply_command(0, &cast_spell(coercion_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(coercion_idx, target_player(1)))
         .expect("cast coercion");
 
-    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
     let resolve_batch = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("p1 pass — coercion parks for choice");
 
     // Engine should be waiting for P0 (caster) to choose.
@@ -2738,7 +2747,7 @@ fn coercion_caster_chooses_which_card_to_discard() {
     ));
 
     // P0 picks the grizzly_bears.
-    e.apply_command(0, &submit_resolution_choice(vec![bear_oid]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![bear_oid]))
         .expect("P0 submits choice");
 
     assert_eq!(
@@ -2786,11 +2795,11 @@ fn issue_58_mind_rot_affected_player_chooses_cards_to_discard() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "mind_rot");
-    e.apply_command(0, &cast_spell(idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(idx, target_player(1)))
         .expect("cast mind rot");
-    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
     let resolve_batch = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("p1 pass parks mind rot for a discard choice");
 
     let choice =
@@ -2837,11 +2846,11 @@ fn issue_58_teferis_protege_draws_before_discard_choice() {
     let hand_before = e.state.players[0].hand.len();
     let library_before = e.state.players[0].library.len();
 
-    e.apply_command(0, &activate_ability(protege, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(protege, 0, vec![]))
         .expect("activate Teferi's Protege");
-    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
     let batch = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("p1 pass parks after the draw");
 
     let choice = find_resolution_choice(&batch).expect("discard choice");
@@ -2883,16 +2892,19 @@ fn issue_58_keldon_raider_decline_does_not_draw() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "keldon_raider");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Keldon Raider");
     pass_both_players(&mut e);
     let library_before = e.state.players[0].library.len();
-    e.apply_command(0, &pass()).expect("p0 pass on trigger");
-    let batch = e.apply_command(1, &pass()).expect("p1 pass on trigger");
+    e.apply_scenario_command(0, &pass())
+        .expect("p0 pass on trigger");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("p1 pass on trigger");
 
     let choice = find_resolution_choice(&batch).expect("optional discard choice");
     assert_eq!((choice.min, choice.max), (0, 1));
-    e.apply_command(0, &submit_resolution_choice(vec![]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("decline discard");
     assert_eq!(
         e.state.players[0].library.len(),
@@ -2928,15 +2940,18 @@ fn issue_58_keldon_raider_discard_then_draws() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "keldon_raider");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Keldon Raider");
     pass_both_players(&mut e);
     let library_before = e.state.players[0].library.len();
-    e.apply_command(0, &pass()).expect("p0 pass on trigger");
-    let batch = e.apply_command(1, &pass()).expect("p1 pass on trigger");
+    e.apply_scenario_command(0, &pass())
+        .expect("p0 pass on trigger");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("p1 pass on trigger");
     let choice = find_resolution_choice(&batch).expect("optional discard choice");
     let discarded = choice.candidate_object_ids[0];
-    e.apply_command(0, &submit_resolution_choice(vec![discarded]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![discarded]))
         .expect("discard then draw");
     assert_eq!(e.state.players[0].library.len(), library_before - 1);
     assert!(e.state.players[0].graveyard.contains(&discarded));
@@ -2969,11 +2984,14 @@ fn issue_275_yuyan_archers_choice_is_controller_private_and_optional() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "yuyan_archers");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Yuyan Archers");
     pass_both_players(&mut e);
-    e.apply_command(0, &pass()).expect("p0 pass on trigger");
-    let batch = e.apply_command(1, &pass()).expect("p1 pass on trigger");
+    e.apply_scenario_command(0, &pass())
+        .expect("p0 pass on trigger");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("p1 pass on trigger");
     let choice = find_resolution_choice(&batch).expect("optional discard choice");
     assert_eq!(choice.deciding_player_id, 0);
     assert_eq!(choice.choice_kind(), ChoiceKind::HandCards);
@@ -2981,7 +2999,7 @@ fn issue_275_yuyan_archers_choice_is_controller_private_and_optional() {
     let hand_before = e.state.players[0].hand.clone();
     let graveyard_before = e.state.players[0].graveyard.clone();
     let library_before = e.state.players[0].library.len();
-    e.apply_command(0, &submit_resolution_choice(vec![]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("decline discard");
     assert_eq!(e.state.players[0].library.len(), library_before);
     assert_eq!(e.state.players[0].hand, hand_before);
@@ -3016,15 +3034,18 @@ fn issue_275_yuyan_archers_accept_discards_selected_then_draws() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "yuyan_archers");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Yuyan Archers");
     pass_both_players(&mut e);
-    e.apply_command(0, &pass()).expect("p0 pass on trigger");
-    let batch = e.apply_command(1, &pass()).expect("p1 pass on trigger");
+    e.apply_scenario_command(0, &pass())
+        .expect("p0 pass on trigger");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("p1 pass on trigger");
     let choice = find_resolution_choice(&batch).expect("optional discard choice");
     let discarded = choice.candidate_object_ids[0];
     let library_before = e.state.players[0].library.len();
-    e.apply_command(0, &submit_resolution_choice(vec![discarded]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![discarded]))
         .expect("accept discard");
     assert!(e.state.players[0].graveyard.contains(&discarded));
     assert_eq!(e.state.players[0].library.len(), library_before - 1);
@@ -3057,14 +3078,17 @@ fn issue_275_yuyan_archers_empty_hand_cannot_pay_and_does_not_draw() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "yuyan_archers");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Yuyan Archers");
     let emptied_hand: Vec<_> = e.state.players[0].hand.drain(..).collect();
     e.state.players[0].library.extend(emptied_hand);
     let library_before = e.state.players[0].library.len();
     pass_both_players(&mut e);
-    e.apply_command(0, &pass()).expect("p0 pass on trigger");
-    let batch = e.apply_command(1, &pass()).expect("p1 pass on trigger");
+    e.apply_scenario_command(0, &pass())
+        .expect("p0 pass on trigger");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("p1 pass on trigger");
     assert!(find_resolution_choice(&batch).is_none());
     assert_eq!(e.state.players[0].library.len(), library_before);
 }
@@ -3091,14 +3115,14 @@ fn issue_58_lilianas_steward_sacrifices_and_affected_opponent_chooses() {
     inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
     inject_card_into_hand(&mut e, 1, 1, "storm_crow");
 
-    e.apply_command(0, &activate_ability(steward, 0, target_player(1)))
+    e.apply_scenario_command(0, &activate_ability(steward, 0, target_player(1)))
         .expect("activate Liliana's Steward");
     assert!(
         e.state.players[0].graveyard.contains(&steward),
         "the source is sacrificed as an activation cost"
     );
-    e.apply_command(0, &pass()).expect("p0 pass");
-    let batch = e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    let batch = e.apply_scenario_command(1, &pass()).expect("p1 pass");
     let choice = find_resolution_choice(&batch).expect("opponent discard choice");
     assert_eq!(choice.deciding_player_id, 1);
     assert_eq!(choice.choice_kind(), ChoiceKind::HandCards);
@@ -3122,7 +3146,7 @@ fn issue_58_lilianas_steward_is_sorcery_speed_only() {
     .expect("new");
     let steward = inject_creature_on_battlefield(&mut e, 0, "lilianas_steward");
 
-    let result = e.apply_command(0, &activate_ability(steward, 0, target_player(1)));
+    let result = e.apply_scenario_command(0, &activate_ability(steward, 0, target_player(1)));
     assert!(result.is_err(), "the ability is illegal during upkeep");
     assert!(e.state.players[0].battlefield.contains(&steward));
     assert!(!e.state.objects.get(&steward).expect("steward").tapped);
@@ -3156,7 +3180,7 @@ fn issue_58_rousing_read_draws_then_discards_and_buffs_attached_creature() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "rousing_read");
-    e.apply_command(0, &cast_spell(idx, target_object(bear)))
+    e.apply_scenario_command(0, &cast_spell(idx, target_object(bear)))
         .expect("cast Rousing Read");
     pass_both_players(&mut e);
     assert_eq!(e.effective_power(bear), Some(3));
@@ -3164,8 +3188,11 @@ fn issue_58_rousing_read_draws_then_discards_and_buffs_attached_creature() {
     assert!(e.effective_has_keyword(bear, Keyword::Flying));
 
     let library_before = e.state.players[0].library.len();
-    e.apply_command(0, &pass()).expect("p0 pass on trigger");
-    let batch = e.apply_command(1, &pass()).expect("p1 pass on trigger");
+    e.apply_scenario_command(0, &pass())
+        .expect("p0 pass on trigger");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("p1 pass on trigger");
     let choice = find_resolution_choice(&batch).expect("discard after drawing two");
     assert_eq!((choice.min, choice.max), (1, 1));
     assert_eq!(e.state.players[0].library.len(), library_before - 2);
@@ -3207,7 +3234,7 @@ fn zombify_returns_creature_from_graveyard_to_battlefield() {
     );
 
     let idx = hand_index_for_card(&e, 0, "zombify");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -3222,8 +3249,8 @@ fn zombify_returns_creature_from_graveyard_to_battlefield() {
     )
     .expect("cast zombify");
     let hand_before_resolution = e.state.players[0].hand.len();
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
         .expect("p1 pass — zombify resolves");
 
     assert!(
@@ -3284,7 +3311,7 @@ fn zombify_cannot_target_a_noncreature_graveyard_card() {
     );
 
     let idx = hand_index_for_card(&e, 0, "zombify");
-    let err = e.apply_command(
+    let err = e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -3335,7 +3362,7 @@ fn zombify_cannot_target_an_opponents_graveyard() {
     );
 
     let idx = hand_index_for_card(&e, 0, "zombify");
-    let err = e.apply_command(
+    let err = e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -3401,11 +3428,11 @@ fn issue_143_thoughtseize_publicly_reveals_then_loses_two_life() {
     let opponent_life_before = e.state.players[1].life;
 
     let idx = hand_index_for_card(&e, 0, "thoughtseize");
-    e.apply_command(0, &cast_spell(idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(idx, target_player(1)))
         .expect("cast thoughtseize");
-    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
     let resolve_batch = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("p1 pass — thoughtseize parks for the discard choice");
 
     // The life loss comes after the suspending discard, so it has *not* happened yet while the
@@ -3434,7 +3461,7 @@ fn issue_143_thoughtseize_publicly_reveals_then_loses_two_life() {
     );
 
     let resume_batch = e
-        .apply_command(0, &submit_resolution_choice(vec![bear_oid]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![bear_oid]))
         .expect("P0 submits choice");
 
     assert!(
@@ -3496,10 +3523,11 @@ fn thoughtseize_loses_life_even_when_the_discard_does_not_park() {
     let life_before = e.state.players[0].life;
 
     let idx = hand_index_for_card(&e, 0, "thoughtseize");
-    e.apply_command(0, &cast_spell(idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(idx, target_player(1)))
         .expect("cast thoughtseize");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass — resolves");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("p1 pass — resolves");
 
     assert!(
         e.state.pending_resolution.is_none(),
@@ -3555,12 +3583,14 @@ fn diabolic_edict_forces_target_player_to_sacrifice_a_creature() {
     );
 
     let edict_idx = hand_index_for_card(&e, 0, "diabolic_edict");
-    e.apply_command(0, &cast_spell(edict_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(edict_idx, target_player(1)))
         .expect("P0 casts Diabolic Edict targeting P1");
 
     // Both players pass priority to let it resolve.
-    e.apply_command(0, &pass()).expect("P0 pass");
-    let batch = e.apply_command(1, &pass()).expect("P1 pass resolves edict");
+    e.apply_scenario_command(0, &pass()).expect("P0 pass");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("P1 pass resolves edict");
 
     // Engine should emit a ResolutionChoiceRequired for P1 to pick a creature.
     let req = find_resolution_choice(&batch).expect("resolution choice required");
@@ -3585,7 +3615,7 @@ fn diabolic_edict_forces_target_player_to_sacrifice_a_creature() {
 
     // P1 sacrifices the bear.
     let result = e
-        .apply_command(1, &submit_resolution_choice(vec![bear_id]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![bear_id]))
         .expect("P1 submits sacrifice choice");
 
     assert!(
@@ -3649,12 +3679,12 @@ fn diabolic_edict_fizzles_when_target_has_no_creatures() {
     );
 
     let edict_idx = hand_index_for_card(&e, 0, "diabolic_edict");
-    e.apply_command(0, &cast_spell(edict_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(edict_idx, target_player(1)))
         .expect("P0 casts Diabolic Edict");
 
-    e.apply_command(0, &pass()).expect("P0 pass");
+    e.apply_scenario_command(0, &pass()).expect("P0 pass");
     let batch = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("P1 pass resolves edict (fizzle)");
 
     // No ResolutionChoiceRequired — effect fizzled with no valid sacrifice.
@@ -3709,16 +3739,18 @@ fn diabolic_edict_rejects_invalid_sacrifice_choice() {
     );
 
     let edict_idx = hand_index_for_card(&e, 0, "diabolic_edict");
-    e.apply_command(0, &cast_spell(edict_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(edict_idx, target_player(1)))
         .expect("P0 casts Diabolic Edict");
 
-    e.apply_command(0, &pass()).expect("P0 pass");
-    let batch = e.apply_command(1, &pass()).expect("P1 pass resolves edict");
+    e.apply_scenario_command(0, &pass()).expect("P0 pass");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("P1 pass resolves edict");
     assert!(find_resolution_choice(&batch).is_some());
 
     // P1 tries to submit an object_id that is not in the candidates (e.g. a forest land).
     let forest_id = inject_permanent_on_battlefield(&mut e, 1, "forest");
-    let bad_result = e.apply_command(1, &submit_resolution_choice(vec![forest_id]));
+    let bad_result = e.apply_scenario_command(1, &submit_resolution_choice(vec![forest_id]));
     assert!(
         bad_result.is_err(),
         "submitting a non-candidate object is rejected"
@@ -3732,7 +3764,7 @@ fn diabolic_edict_rejects_invalid_sacrifice_choice() {
     assert!(e.state.players[1].battlefield.contains(&bear_id));
 
     // Now submit the correct choice — bear gets sacrificed.
-    e.apply_command(1, &submit_resolution_choice(vec![bear_id]))
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![bear_id]))
         .expect("valid sacrifice choice accepted");
 
     assert!(e.state.pending_resolution.is_none());
@@ -3775,11 +3807,13 @@ fn diabolic_edict_targeting_self_is_legal() {
 
     let edict_idx = hand_index_for_card(&e, 0, "diabolic_edict");
     // Target P0 (self) — should be legal for AnyPlayer kind.
-    e.apply_command(0, &cast_spell(edict_idx, target_player(0)))
+    e.apply_scenario_command(0, &cast_spell(edict_idx, target_player(0)))
         .expect("P0 targets self with Diabolic Edict");
 
-    e.apply_command(0, &pass()).expect("P0 pass");
-    let batch = e.apply_command(1, &pass()).expect("P1 pass resolves edict");
+    e.apply_scenario_command(0, &pass()).expect("P0 pass");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("P1 pass resolves edict");
 
     let req = find_resolution_choice(&batch).expect("choice required");
     assert_eq!(
@@ -3787,7 +3821,7 @@ fn diabolic_edict_targeting_self_is_legal() {
         "P0 is the deciding player (self-target)"
     );
 
-    e.apply_command(0, &submit_resolution_choice(vec![bear_id]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![bear_id]))
         .expect("P0 sacrifices own bear");
 
     assert!(!e.state.players[0].battlefield.contains(&bear_id));
@@ -3827,7 +3861,7 @@ fn healing_salve_shield_absorbs_mass_damage() {
         },
     );
     let salve_idx = hand_index_for_card(&e, 0, "healing_salve");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_modal_spell(
             salve_idx,
@@ -3857,7 +3891,7 @@ fn healing_salve_shield_absorbs_mass_damage() {
         },
     );
     let pyro_idx = hand_index_for_card(&e, 0, "pyroclasm");
-    e.apply_command(0, &cast_spell(pyro_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(pyro_idx, vec![]))
         .expect("cast Pyroclasm");
     pass_both_players(&mut e);
 
@@ -3902,7 +3936,7 @@ fn healing_salve_shield_absorbs_multi_target_damage() {
         },
     );
     let salve_idx = hand_index_for_card(&e, 0, "healing_salve");
-    e.apply_command(0, &cast_modal_spell(salve_idx, vec![(1, target_player(1))]))
+    e.apply_scenario_command(0, &cast_modal_spell(salve_idx, vec![(1, target_player(1))]))
         .expect("shield P1");
     pass_both_players(&mut e);
     let p1_life = e.state.players[1].life;
@@ -3920,7 +3954,7 @@ fn healing_salve_shield_absorbs_multi_target_damage() {
         },
     );
     let fire_idx = hand_index_for_card(&e, 0, "fire_ice");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_face(fire_idx, targets_with_damage(vec![(1, 1), (0, 1)]), 0),
     )
@@ -3977,7 +4011,7 @@ fn setup_noncombat_deathtouch_scenario(
 fn activated_noncombat_damage_from_deathtouch_source_kills_larger_creature() {
     let (mut engine, source, target) = setup_noncombat_deathtouch_scenario(true, 0);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability(
                 source,
@@ -4005,7 +4039,7 @@ fn activated_noncombat_damage_from_deathtouch_source_kills_larger_creature() {
 fn activated_noncombat_damage_without_deathtouch_is_not_lethal() {
     let (mut engine, source, target) = setup_noncombat_deathtouch_scenario(false, 0);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability(
                 source,
@@ -4031,7 +4065,7 @@ fn activated_noncombat_damage_without_deathtouch_is_not_lethal() {
 fn fully_prevented_deathtouch_damage_marks_neither_damage_nor_history() {
     let (mut engine, source, target) = setup_noncombat_deathtouch_scenario(true, 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability(
                 source,
@@ -4089,7 +4123,7 @@ fn bladebrand_turns_prodigal_sorcerer_damage_lethal_and_draws_a_card() {
     );
     let bladebrand = hand_index_for_card(&engine, 0, "bladebrand");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 bladebrand,
@@ -4122,7 +4156,7 @@ fn bladebrand_turns_prodigal_sorcerer_damage_lethal_and_draws_a_card() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability(
                 source,
@@ -4186,7 +4220,7 @@ fn bladebrand_does_not_draw_when_its_target_leaves_before_resolution() {
     );
     let bladebrand = hand_index_for_card(&engine, 0, "bladebrand");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 bladebrand,
@@ -4201,7 +4235,7 @@ fn bladebrand_does_not_draw_when_its_target_leaves_before_resolution() {
         )
         .expect("cast Bladebrand");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass priority to opponent");
 
     give_mana(
@@ -4214,7 +4248,7 @@ fn bladebrand_does_not_draw_when_its_target_leaves_before_resolution() {
     );
     let unsummon = hand_index_for_card(&engine, 1, "unsummon");
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_spell(
                 unsummon,

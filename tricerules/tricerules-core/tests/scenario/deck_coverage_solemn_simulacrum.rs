@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ChoiceKind, ResolutionChoiceDecision};
 
@@ -21,7 +22,7 @@ fn cast_solemn_simulacrum(engine: &mut GameEngine) -> u32 {
     grant_pool(engine, 0);
     let hand_index = hand_index_for_card(engine, 0, "solemn_simulacrum");
     engine
-        .apply_command(0, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(hand_index, vec![]))
         .expect("cast Solemn Simulacrum");
     pass_both_players(engine);
     assert_eq!(engine.state.objects[&solemn].zone, Zone::Battlefield);
@@ -36,10 +37,10 @@ fn pass_both_and_capture(engine: &mut GameEngine) -> tricerules_proto::ruled::v1
         engine.state.players[0].id
     };
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first player passes");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second player passes")
 }
 
@@ -47,7 +48,7 @@ fn pass_priority_to(engine: &mut GameEngine, player: i32) {
     while engine.state.priority_player_id() != player {
         let current = engine.state.priority_player_id();
         engine
-            .apply_command(current, &pass())
+            .apply_scenario_command(current, &pass())
             .expect("pass priority to the requested player");
     }
 }
@@ -66,7 +67,7 @@ fn solemn_simulacrum_searches_for_a_tapped_basic_and_its_controller_may_draw_on_
     assert_eq!((branch.min, branch.max), (0, 1));
 
     let search_batch = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -79,7 +80,7 @@ fn solemn_simulacrum_searches_for_a_tapped_basic_and_its_controller_may_draw_on_
     assert!(!search.candidate_object_ids.contains(&taiga));
 
     let searched = engine
-        .apply_command(0, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .expect("choose Forest");
     assert_eq!(engine.state.objects[&forest].zone, Zone::Battlefield);
     assert!(engine.state.objects[&forest].tapped);
@@ -105,7 +106,7 @@ fn solemn_simulacrum_searches_for_a_tapped_basic_and_its_controller_may_draw_on_
     grant_pool(&mut engine, 1);
     let bolt_index = hand_index_for_card(&engine, 1, "lightning_bolt");
     engine
-        .apply_command(1, &cast_spell(bolt_index, target_object(solemn)))
+        .apply_scenario_command(1, &cast_spell(bolt_index, target_object(solemn)))
         .expect("cast Lightning Bolt at Solemn Simulacrum");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&solemn].zone, Zone::Graveyard);
@@ -117,7 +118,7 @@ fn solemn_simulacrum_searches_for_a_tapped_basic_and_its_controller_may_draw_on_
     assert_eq!((death_branch.min, death_branch.max), (0, 1));
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -142,7 +143,7 @@ fn solemn_simulacrum_can_decline_both_optional_abilities() {
     assert_eq!(branch.deciding_player_id, 0);
     assert_eq!(branch.choice_kind(), ChoiceKind::ResolutionBranch);
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -165,7 +166,7 @@ fn solemn_simulacrum_can_decline_both_optional_abilities() {
     grant_pool(&mut engine, 1);
     let bolt_index = hand_index_for_card(&engine, 1, "lightning_bolt");
     engine
-        .apply_command(1, &cast_spell(bolt_index, target_object(solemn)))
+        .apply_scenario_command(1, &cast_spell(bolt_index, target_object(solemn)))
         .expect("cast Lightning Bolt at Solemn Simulacrum");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&solemn].zone, Zone::Graveyard);
@@ -175,7 +176,7 @@ fn solemn_simulacrum_can_decline_both_optional_abilities() {
     assert_eq!(death_branch.deciding_player_id, 0);
     assert_eq!(death_branch.choice_kind(), ChoiceKind::ResolutionBranch);
     let completion = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )

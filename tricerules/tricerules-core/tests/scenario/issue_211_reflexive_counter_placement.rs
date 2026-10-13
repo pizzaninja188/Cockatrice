@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
 use tricerules_core::Zone;
@@ -78,21 +79,21 @@ fn earthbender_ascension_etb_earthbends_then_searches_and_landfalls() {
     let ascension = move_ready_to_battlefield(&mut engine, 0, "earthbender_ascension");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(0, &choose_trigger_target(land))
+        .apply_scenario_command(0, &choose_trigger_target(land))
         .expect("choose land to earthbend");
     let first = engine.state.priority_player_id();
     let second = if first == 0 { 1 } else { 0 };
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first player passes");
     let search_batch = engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second player passes and starts resolution");
     let choice = find_resolution_choice(&search_batch).expect("basic-land search choice");
     assert!(choice.candidate_object_ids.contains(&searched_land));
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![searched_land]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![searched_land]))
         .expect("put Plains onto the battlefield");
 
     let earthbent = engine.characteristics(land).expect("earthbent land");
@@ -122,7 +123,7 @@ fn fourth_quest_counter_creates_a_targeted_reflexive_trigger() {
         .expect("Forest in hand");
 
     engine
-        .apply_command(0, &play_land(forest_slot))
+        .apply_scenario_command(0, &play_land(forest_slot))
         .expect("play Forest");
     pass_both_players(&mut engine);
 
@@ -132,7 +133,7 @@ fn fourth_quest_counter_creates_a_targeted_reflexive_trigger() {
     );
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(0, &choose_trigger_target(creature))
+        .apply_scenario_command(0, &choose_trigger_target(creature))
         .expect("target controlled creature");
     pass_both_players(&mut engine);
 
@@ -154,11 +155,11 @@ fn reflexive_intervening_if_is_rechecked_on_resolution() {
         .expect("Forest in hand");
 
     engine
-        .apply_command(0, &play_land(forest_slot))
+        .apply_scenario_command(0, &play_land(forest_slot))
         .expect("play Forest");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &choose_trigger_target(creature))
+        .apply_scenario_command(0, &choose_trigger_target(creature))
         .expect("target controlled creature");
     engine
         .state
@@ -187,15 +188,15 @@ fn reflexive_trigger_uses_last_known_counters_after_its_source_leaves() {
         .expect("Forest in hand");
 
     engine
-        .apply_command(0, &play_land(forest_slot))
+        .apply_scenario_command(0, &play_land(forest_slot))
         .expect("play Forest");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &choose_trigger_target(creature))
+        .apply_scenario_command(0, &choose_trigger_target(creature))
         .expect("target controlled creature");
     engine.enable_dev_commands();
     engine
-        .apply_command(0, &move_ascension_to(DevZone::Graveyard))
+        .apply_scenario_command(0, &move_ascension_to(DevZone::Graveyard))
         .expect("move source before reflexive trigger resolves");
     assert_eq!(engine.state.objects[&ascension].zone, Zone::Graveyard);
     pass_both_players(&mut engine);
@@ -219,10 +220,10 @@ fn reflexive_intervening_if_uses_departed_generation_not_returned_counters() {
                 .iter()
                 .position(|candidate| *candidate == forest)
                 .unwrap();
-            engine.apply_command(0, &play_land(slot)).unwrap();
+            engine.apply_scenario_command(0, &play_land(slot)).unwrap();
             pass_both_players(&mut engine);
             engine
-                .apply_command(0, &choose_trigger_target(creature))
+                .apply_scenario_command(0, &choose_trigger_target(creature))
                 .unwrap();
             assert_eq!(engine.state.stack.len(), 1);
             let generation = engine
@@ -240,10 +241,10 @@ fn reflexive_intervening_if_uses_departed_generation_not_returned_counters() {
                 .insert(CounterKind::Quest, departed_count);
             engine.enable_dev_commands();
             engine
-                .apply_command(0, &move_ascension_to(DevZone::Graveyard))
+                .apply_scenario_command(0, &move_ascension_to(DevZone::Graveyard))
                 .unwrap();
             engine
-                .apply_command(0, &move_ascension_to(DevZone::Battlefield))
+                .apply_scenario_command(0, &move_ascension_to(DevZone::Battlefield))
                 .unwrap();
             assert_ne!(engine.state.zone_change_generation[&ascension], generation);
             engine
@@ -258,11 +259,11 @@ fn reflexive_intervening_if_uses_departed_generation_not_returned_counters() {
             // cards so no fresh landfall can change its counters or create another reflexive.
             assert_eq!(engine.state.pending_triggers.len(), 1);
             engine
-                .apply_command(0, &choose_trigger_target(forest))
+                .apply_scenario_command(0, &choose_trigger_target(forest))
                 .unwrap();
             pass_both_players(&mut engine);
             engine
-                .apply_command(0, &submit_resolution_choice(vec![]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![]))
                 .unwrap();
             assert_eq!(
                 engine.state.stack.len(),
@@ -306,7 +307,7 @@ fn fewer_than_four_quest_counters_do_not_stage_the_reflexive_trigger() {
         .expect("Forest in hand");
 
     engine
-        .apply_command(0, &play_land(forest_slot))
+        .apply_scenario_command(0, &play_land(forest_slot))
         .expect("play Forest");
     pass_both_players(&mut engine);
 

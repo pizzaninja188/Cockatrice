@@ -1,6 +1,8 @@
 //! Shared helpers for scenario tests.
 #![allow(dead_code)]
 
+use prost::Message;
+
 #[path = "helpers/authoring_actions.rs"]
 pub(crate) mod authoring_actions;
 #[path = "helpers/authoring_fixture.rs"]
@@ -47,6 +49,111 @@ pub(crate) use tricerules_proto::ruled::v1::{
     SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TargetRefKind,
     UndoManaAbility,
 };
+
+/// Fill an omitted choice ID from an already-assigned engine prompt for a scenario fixture.
+///
+/// Foreign-actor cases still carry the active ID so they exercise authorization after freshness
+/// validation. Explicit nonzero IDs are preserved, and raw missing/stale-ID tests call the
+/// engine's `apply_command` entrypoint directly.
+fn stamp_scenario_choice_prompt_id(command: &mut RuledCommand, prompt_id: u64) {
+    if prompt_id == 0 {
+        return;
+    }
+    match command.cmd.as_mut() {
+        Some(Cmd::SubmitResolutionChoice(answer)) if answer.resolution_prompt_id == 0 => {
+            answer.resolution_prompt_id = prompt_id;
+        }
+        Some(Cmd::CanonicalGameplay(canonical)) => {
+            let Ok(mut inner) = rv1::RuledCommand::decode(canonical.command.as_slice()) else {
+                return;
+            };
+            let Some(Cmd::SubmitResolutionChoice(answer)) = inner.cmd.as_mut() else {
+                return;
+            };
+            if answer.resolution_prompt_id == 0 {
+                answer.resolution_prompt_id = prompt_id;
+                canonical.command = inner.encode_to_vec();
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Scenario-only adapter for pre-correlation positive-path fixtures.
+///
+/// It fills only a zero ID from an already-assigned pending offer. Ordinary land plays are never
+/// rewritten; explicit stale/nonzero handles and raw missing-ID tests remain engine-authoritative.
+pub(crate) trait ScenarioCommandExt {
+    fn apply_scenario_command(
+        &mut self,
+        player: i32,
+        command: &RuledCommand,
+    ) -> Result<RuledEventBatch, tricerules_core::EngineError>;
+
+    fn preview_payment_scenario(
+        &self,
+        player: i32,
+        request: &rv1::PreviewPayment,
+    ) -> rv1::PaymentPreview;
+}
+
+impl ScenarioCommandExt for GameEngine {
+    fn apply_scenario_command(
+        &mut self,
+        player: i32,
+        command: &RuledCommand,
+    ) -> Result<RuledEventBatch, tricerules_core::EngineError> {
+        let mut adapted = command.clone();
+        let Some(pending) = self.state.pending_resolution.as_ref() else {
+            return self.apply_command(player, &adapted);
+        };
+        let prompt_id = pending.resolution_prompt_id.get();
+        if prompt_id != 0 {
+            stamp_scenario_choice_prompt_id(&mut adapted, prompt_id);
+        }
+        if pending.deciding_player == player && prompt_id != 0 {
+            if let Some(cmd) = adapted.cmd.as_mut() {
+                match cmd {
+                    Cmd::PlayLand(land)
+                        if land.resolution_prompt_id == 0
+                            && matches!(
+                                &pending.continuation,
+                                tricerules_core::state::ResolutionContinuation::SpecialCast {
+                                    permission_scope: Some(
+                                        tricerules_core::state::ExilePlayPermissionScope::PlayCard
+                                    ),
+                                    ..
+                                }
+                            ) =>
+                    {
+                        land.resolution_prompt_id = prompt_id;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        self.apply_command(player, &adapted)
+    }
+
+    fn preview_payment_scenario(
+        &self,
+        player: i32,
+        request: &rv1::PreviewPayment,
+    ) -> rv1::PaymentPreview {
+        let mut adapted = request.clone();
+        if let Some(answer) = adapted.resolution_choice.as_mut() {
+            if answer.resolution_prompt_id == 0 {
+                if let Some(pending) = self.state.pending_resolution.as_ref() {
+                    if pending.deciding_player == player && pending.resolution_prompt_id.get() != 0
+                    {
+                        answer.resolution_prompt_id = pending.resolution_prompt_id.get();
+                    }
+                }
+            }
+        }
+        self.preview_payment(player, &adapted)
+    }
+}
 
 pub(crate) fn pass() -> RuledCommand {
     RuledCommand {
@@ -147,7 +254,7 @@ pub(crate) fn submit_mana_resolution(
             ..Default::default()
         });
     }
-    engine.apply_command(
+    engine.apply_scenario_command(
         player,
         &RuledCommand {
             cmd: Some(Cmd::SubmitResolutionChoice(answer)),
@@ -164,6 +271,7 @@ pub(crate) fn submit_mana_resolution_decision(
         engine,
         player,
         SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: decision as i32,
             ..Default::default()
         },
@@ -227,7 +335,7 @@ pub(crate) fn execute_permanent_action_with_payment(
         panic!("expected permanent action command");
     };
     preview_permanent_action_payment(engine, player, action);
-    engine.apply_command(player, &command)
+    engine.apply_scenario_command(player, &command)
 }
 
 pub(crate) fn cast_modal_spell(
@@ -290,7 +398,7 @@ pub(crate) fn resolve_cleanup_discards_if_any(e: &mut GameEngine) {
             "cleanup without over-max hand"
         );
         let count = e.state.players[idx].hand.len() - 7;
-        e.apply_command(cp, &discard_cleanup_batch((0..count as u32).collect()))
+        e.apply_scenario_command(cp, &discard_cleanup_batch((0..count as u32).collect()))
             .expect("discard during cleanup");
     }
 }
@@ -302,6 +410,7 @@ pub(crate) fn play_land(hand_card_index: usize) -> RuledCommand {
 pub(crate) fn play_land_face(hand_card_index: usize, face_index: usize) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::PlayLand(PlayLand {
+            resolution_prompt_id: 0,
             source: Some(LandSource {
                 location: Some(rv1::land_source::Location::HandIndex(
                     hand_card_index as u32,
@@ -465,7 +574,7 @@ pub(crate) fn apply_ability(
     targets: Vec<TargetRef>,
 ) -> Result<RuledEventBatch, tricerules_core::EngineError> {
     let command = activate_ability_for(engine, permanent_id, ability_index, targets);
-    engine.apply_command(player, &command)
+    engine.apply_scenario_command(player, &command)
 }
 
 pub(crate) fn activate_ability_with_costs(
@@ -659,20 +768,20 @@ pub(crate) fn battlefield_object_for_card(e: &GameEngine, player: usize, card_id
 }
 
 pub(crate) fn end_active_turn(e: &mut GameEngine, player: i32) {
-    e.apply_command(player, &primitive_yield())
+    e.apply_scenario_command(player, &primitive_yield())
         .expect("main1 to begin combat");
-    e.apply_command(player, &primitive_yield())
+    e.apply_scenario_command(player, &primitive_yield())
         .expect("begin combat advance");
     // If eligible attackers exist, BeginCombat enters DeclareAttackers; skip them.
     if e.state.turn_step == tricerules_core::TurnStep::DeclareAttackers {
-        e.apply_command(player, &primitive_yield())
+        e.apply_scenario_command(player, &primitive_yield())
             .expect("skip attackers to end combat");
     }
-    e.apply_command(player, &primitive_yield())
+    e.apply_scenario_command(player, &primitive_yield())
         .expect("end combat to main2");
-    e.apply_command(player, &primitive_yield())
+    e.apply_scenario_command(player, &primitive_yield())
         .expect("main2 to end step");
-    e.apply_command(player, &primitive_yield())
+    e.apply_scenario_command(player, &primitive_yield())
         .expect("end step to cleanup or next upkeep");
     resolve_cleanup_discards_if_any(e);
 }
@@ -707,7 +816,7 @@ pub(crate) fn answer_trigger_order_in_engine_order(e: &mut GameEngine) -> bool {
         }
         let player = pending.deciding_player;
         let first = pending.candidates[0].object_id;
-        e.apply_command(player, &submit_trigger_order(first))
+        e.apply_scenario_command(player, &submit_trigger_order(first))
             .expect("submit trigger order");
         answered = true;
     }
@@ -730,7 +839,7 @@ pub(crate) fn answer_simultaneous_entry_order_in_engine_order(
         let player = pending.deciding_player;
         let command = submit_resolution_choice(pending.presentation.candidates.clone());
         let batch = e
-            .apply_command(player, &command)
+            .apply_scenario_command(player, &command)
             .expect("submit simultaneous-entry timestamp order");
         answers.push((player, command, batch));
     }
@@ -746,6 +855,12 @@ pub(crate) fn submit_trigger_order(trigger_object_id: u32) -> RuledCommand {
 }
 
 pub(crate) fn pass_both_players(e: &mut GameEngine) {
+    let _ = pass_both_players_with_batch(e);
+}
+
+/// Pass both players while retaining the most recently published batch for assertions that must
+/// answer with the exact wire offer that was shown to the chooser.
+pub(crate) fn pass_both_players_with_batch(e: &mut GameEngine) -> RuledEventBatch {
     // A pending ordering prompt blocks every command, `pass` included — clear it the boring way so
     // scenarios about something else don't have to know this mechanic exists.
     answer_simultaneous_entry_order_in_engine_order(e);
@@ -756,10 +871,16 @@ pub(crate) fn pass_both_players(e: &mut GameEngine) {
     } else {
         e.state.players[0].id
     };
-    e.apply_command(first, &pass()).expect("first player pass");
-    e.apply_command(second, &pass())
+    e.apply_scenario_command(first, &pass())
+        .expect("first player pass");
+    let batch = e
+        .apply_scenario_command(second, &pass())
         .expect("second player pass");
-    answer_simultaneous_entry_order_in_engine_order(e);
+    let order_answers = answer_simultaneous_entry_order_in_engine_order(e);
+    order_answers
+        .last()
+        .map(|(_, _, latest)| latest.clone())
+        .unwrap_or(batch)
 }
 
 /// After each stack resolution the active player receives priority (CR-style);
@@ -795,12 +916,13 @@ pub(crate) fn answer_optional_triggered_ability_choice(
     let deciding_player = pending.deciding_player;
     let command = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: decision as i32,
             selected_branch_index: 0,
             ..Default::default()
         })),
     };
-    e.apply_command(deciding_player, &command)
+    e.apply_scenario_command(deciding_player, &command)
         .expect("answer optional triggered ability resolution choice")
 }
 
@@ -849,7 +971,7 @@ pub(crate) fn pass_priority_round(e: &mut GameEngine) {
         .expect("consistent priority pass count");
     for _ in 0..count {
         let actor = e.state.priority_player_id();
-        e.apply_command(actor, &pass())
+        e.apply_scenario_command(actor, &pass())
             .expect("current priority holder passes");
     }
     answer_simultaneous_entry_order_in_engine_order(e);
@@ -1138,12 +1260,14 @@ pub(crate) fn inject_graveyard_card(e: &mut GameEngine, player: usize, card_id: 
 
 pub(crate) fn advance_to_declare_attackers(e: &mut GameEngine) {
     advance_to_main1_from_game_start(e);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
     // Inject an eligible attacker (no hand/library consumed) so BeginCombat enters DeclareAttackers.
     inject_creature_on_battlefield(e, 0, "grizzly_bears");
-    e.apply_command(0, &pass()).expect("ap pass begin combat");
-    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin combat");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::DeclareAttackers
@@ -1270,11 +1394,11 @@ pub(crate) fn setup_two_blockers_assign_phase(
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let blocker_a = put_creature_on_battlefield(&mut e, 1, "savannah_lions");
     let blocker_b = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("active pass");
-    e.apply_command(1, &pass()).expect("defender pass");
-    e.apply_command(
+    e.apply_scenario_command(0, &pass()).expect("active pass");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![
             BlockPair {
@@ -1288,9 +1412,9 @@ pub(crate) fn setup_two_blockers_assign_phase(
         ]),
     )
     .expect("declare two blockers");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
-    e.apply_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
     assert!(e.state.combat.as_ref().unwrap().assign_combat_damage_phase);
     (e, attacker, blocker_a, blocker_b)
 }
@@ -1384,14 +1508,14 @@ pub(crate) fn setup_trample_single_blocker_assign_phase() -> (GameEngine, u32, u
     let attacker = put_creature_on_battlefield(&mut e, 0, "colossal_dreadmaw");
     let blocker = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
 
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare dreadmaw attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
 
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: attacker,
@@ -1407,10 +1531,10 @@ pub(crate) fn setup_trample_single_blocker_assign_phase() -> (GameEngine, u32, u
     );
 
     // Pass priority in declare-blockers to open assign-combat-damage phase.
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
     let batch = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass → assign phase");
     assert!(
         e.state.combat.as_ref().unwrap().assign_combat_damage_phase,
@@ -1485,7 +1609,7 @@ pub(crate) fn move_ready_to_battlefield(e: &mut GameEngine, player: usize, card_
         .name
         .clone();
     e.enable_dev_commands();
-    e.apply_command(
+    e.apply_scenario_command(
         player_id,
         &RuledCommand {
             cmd: Some(Cmd::DevCommand(DevCommand {
@@ -1573,6 +1697,7 @@ pub(crate) fn token_created_events(
 pub(crate) fn submit_resolution_choice(chosen: Vec<u32>) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: chosen,
             decision: 0,
             selected_branch_index: 0,
@@ -1589,6 +1714,7 @@ pub(crate) fn submit_resolution_choice(chosen: Vec<u32>) -> RuledCommand {
 pub(crate) fn submit_resolution_decision(decision: rv1::ResolutionChoiceDecision) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: decision as i32,
             selected_branch_index: 0,
@@ -1620,10 +1746,12 @@ pub(crate) fn cast_instant_and_resolve(
     ensure_in_hand(e, caster as usize, card_id);
     give_mana(e, caster, mana);
     let idx = hand_index_for_card(e, caster as usize, card_id);
-    e.apply_command(caster, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(caster, &cast_spell(idx, vec![]))
         .expect("cast");
-    e.apply_command(caster, &pass()).expect("caster pass");
-    e.apply_command(1 - caster, &pass()).expect("other pass")
+    e.apply_scenario_command(caster, &pass())
+        .expect("caster pass");
+    e.apply_scenario_command(1 - caster, &pass())
+        .expect("other pass")
 }
 
 // ===========================================================================

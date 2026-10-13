@@ -4,6 +4,7 @@
 //! Oracle and rulings were checked 2026-09-12. CR 115.1b, 301.5, 303.4, 601.2c,
 //! 608.2b, 613.1f, 613.4c, 702.5, 702.6, and 704.5m-n govern Aura targeting and
 //! revalidation, attachment legality, continuous modifiers, Equip, and state-based cleanup.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -57,7 +58,9 @@ fn advance_to_upkeep(engine: &mut GameEngine, player: i32) {
             }
             None => (engine.state.priority_player_id(), pass()),
         };
-        engine.apply_command(actor, &command).expect("advance turn");
+        engine
+            .apply_scenario_command(actor, &command)
+            .expect("advance turn");
         if engine.state.active_player_id() == player
             && engine.state.turn_step == tricerules_core::TurnStep::Upkeep
         {
@@ -92,7 +95,7 @@ fn generated_charmed_sleep_publishes_revalidates_and_cleans_up_its_attachment() 
     assert!(!published.contains(&artifact));
 
     stale
-        .apply_command(0, &cast_spell(slot, target_object(stale_creature)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(stale_creature)))
         .expect("cast Charmed Sleep");
     move_battlefield_object_to_graveyard(&mut stale, 1, stale_creature);
     resolve_entire_stack_two_player(&mut stale);
@@ -120,7 +123,7 @@ fn generated_charmed_sleep_publishes_revalidates_and_cleans_up_its_attachment() 
     );
     let slot = hand_index_for_card(&attached, 0, "charmed_sleep");
     attached
-        .apply_command(0, &cast_spell(slot, target_object(creature)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(creature)))
         .expect("cast Charmed Sleep");
     resolve_entire_stack_two_player(&mut attached);
     let aura = battlefield_object_for_card(&attached, 0, "charmed_sleep");
@@ -165,7 +168,7 @@ fn generated_charmed_sleep_publishes_revalidates_and_cleans_up_its_attachment() 
 
     move_battlefield_object_to_graveyard(&mut attached, 0, creature);
     attached
-        .apply_command(attached.state.priority_player_id(), &pass())
+        .apply_scenario_command(attached.state.priority_player_id(), &pass())
         .expect("state-based actions clean up the Aura");
     assert_eq!(attached.state.objects[&aura].zone, Zone::Graveyard);
     assert_eq!(attached.state.objects[&aura].attached_to, None);
@@ -185,7 +188,7 @@ fn generated_short_bow_enforces_atomic_sorcery_speed_equip_and_moves_its_modifie
     );
     let slot = hand_index_for_card(&engine, 0, "short_bow");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Short Bow");
     resolve_entire_stack_two_player(&mut engine);
     let bow = battlefield_object_for_card(&engine, 0, "short_bow");

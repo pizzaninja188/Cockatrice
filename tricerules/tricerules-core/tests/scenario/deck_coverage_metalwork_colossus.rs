@@ -1,5 +1,6 @@
 //! Actual Colossus: derived mana-value sum, locked costs and exact graveyard-source payments.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use prost::Message;
 use tricerules_cards::{
     ContinuousEffectKind, ControllerReference, EffectDuration, PermanentTypeFilter,
@@ -32,7 +33,10 @@ fn setup() -> GameEngine {
 
 fn rejected(e: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = e.diagnostic_snapshot().unwrap();
-    assert!(e.apply_command(actor, command).is_err(), "{command:?}");
+    assert!(
+        e.apply_scenario_command(actor, command).is_err(),
+        "{command:?}"
+    );
     assert_eq!(e.diagnostic_snapshot().unwrap(), before);
 }
 
@@ -67,11 +71,11 @@ fn begin_command(e: &GameEngine) -> RuledCommand {
 
 fn expect_cost(e: &mut GameEngine, expected: &str) {
     let command = begin_command(e);
-    e.apply_command(10, &command).unwrap();
+    e.apply_scenario_command(10, &command).unwrap();
     let pending = e.state.pending_spell_cast.as_ref().unwrap();
     assert_eq!(pending.locked_total_cost, expected);
     let transaction_id = pending.transaction_id;
-    e.apply_command(
+    e.apply_scenario_command(
         10,
         &RuledCommand {
             cmd: Some(Cmd::CancelSpellCast(CancelSpellCast { transaction_id })),
@@ -113,7 +117,7 @@ fn resolve_one(e: &mut GameEngine) {
         - e.state.passes_since_stack_change as usize;
     for _ in 0..count {
         let actor = e.state.priority_player_id();
-        e.apply_command(actor, &pass()).unwrap();
+        e.apply_scenario_command(actor, &pass()).unwrap();
     }
 }
 
@@ -237,7 +241,7 @@ fn metalwork_locked_real_ironworks_payment_paid_cast_and_serialized_replay() {
     let mut apply = |e: &mut GameEngine, actor: i32, command: RuledCommand| {
         let bytes = command.encode_to_vec();
         let decoded = RuledCommand::decode(bytes.as_slice()).unwrap();
-        events.push(e.apply_command(actor, &decoded).unwrap());
+        events.push(e.apply_scenario_command(actor, &decoded).unwrap());
         commands.push((actor, decoded));
     };
     let begin = begin_command(&e);
@@ -300,7 +304,7 @@ fn metalwork_locked_real_ironworks_payment_paid_cast_and_serialized_replay() {
             .locked_total_cost,
         "{5}"
     );
-    let preview = e.preview_payment(
+    let preview = e.preview_payment_scenario(
         10,
         &PreviewPayment {
             transaction_id,
@@ -343,7 +347,7 @@ fn metalwork_locked_real_ironworks_payment_paid_cast_and_serialized_replay() {
     let (mut replay, _, _) = fresh();
     let replayed: Vec<_> = commands
         .iter()
-        .map(|(actor, command)| replay.apply_command(*actor, command).unwrap())
+        .map(|(actor, command)| replay.apply_scenario_command(*actor, command).unwrap())
         .collect();
     assert_eq!(events, replayed);
     assert_eq!(
@@ -464,7 +468,7 @@ fn metalwork_graveyard_exact_cost_offers_reject_invalid_atomic_and_return_only_s
         .get(&source)
         .copied()
         .unwrap_or(0);
-    e.apply_command(10, &command).unwrap();
+    e.apply_scenario_command(10, &command).unwrap();
     assert_eq!(e.state.objects[&source].zone, Zone::Graveyard);
     assert_eq!(e.state.objects[&other].zone, Zone::Graveyard);
     assert!(e.state.players[0].graveyard.contains(&a));
@@ -480,7 +484,7 @@ fn metalwork_graveyard_exact_cost_offers_reject_invalid_atomic_and_return_only_s
 
 fn move_source(e: &mut GameEngine, zone: DevZone) {
     e.enable_dev_commands();
-    e.apply_command(
+    e.apply_scenario_command(
         10,
         &RuledCommand {
             cmd: Some(Cmd::DevCommand(DevCommand {
@@ -508,7 +512,7 @@ fn metalwork_departed_or_reentered_source_does_not_return_old_incarnation() {
         let a = inject_permanent_on_battlefield(&mut e, 0, "sol_ring");
         let b = inject_permanent_on_battlefield(&mut e, 0, "mind_stone");
         let command = activation(&e, source, &[a, b]);
-        e.apply_command(10, &command).unwrap();
+        e.apply_scenario_command(10, &command).unwrap();
         move_source(&mut e, DevZone::Exile);
         if reenter {
             move_source(&mut e, DevZone::Graveyard);
@@ -543,14 +547,14 @@ fn metalwork_second_activation_and_serialized_return_replay_retrieve_only_once()
         let command = activation(&e, source, pair);
         let bytes = command.encode_to_vec();
         let decoded = RuledCommand::decode(bytes.as_slice()).unwrap();
-        events.push(e.apply_command(10, &decoded).unwrap());
+        events.push(e.apply_scenario_command(10, &decoded).unwrap());
         commands.push((10, decoded));
     }
     assert_eq!(e.state.stack.len(), 2);
     for resolution in 0..2 {
         for _ in 0..3 {
             let actor = e.state.priority_player_id();
-            events.push(e.apply_command(actor, &pass()).unwrap());
+            events.push(e.apply_scenario_command(actor, &pass()).unwrap());
             commands.push((actor, pass()));
         }
         assert_eq!(e.state.objects[&source].zone, Zone::Hand);
@@ -567,7 +571,7 @@ fn metalwork_second_activation_and_serialized_return_replay_retrieve_only_once()
     let (mut replay, _, _) = fresh();
     let replayed: Vec<_> = commands
         .iter()
-        .map(|(actor, command)| replay.apply_command(*actor, command).unwrap())
+        .map(|(actor, command)| replay.apply_scenario_command(*actor, command).unwrap())
         .collect();
     assert_eq!(events, replayed);
     assert_eq!(
@@ -619,7 +623,7 @@ fn metalwork_simultaneous_cost_departing_observer_and_exile_replacement() {
             );
         }
         let command = activation(&e, source, &[observer, member]);
-        e.apply_command(10, &command).unwrap();
+        e.apply_scenario_command(10, &command).unwrap();
         let captured = e.state.pending_triggers.len()
             + e.state
                 .pending_trigger_order

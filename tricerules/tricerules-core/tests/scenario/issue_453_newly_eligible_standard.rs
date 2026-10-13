@@ -7,9 +7,10 @@
 //! (surveil), 702.29 (cycling/basic landcycling), 614.1d (enters tapped), 603.6c/700.4 (dies
 //! triggers), 702.108 (prowess), 715 (Adventure), 303.4 (Aura attach), 113.6 (graveyard
 //! abilities), and 111.10b (Food).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     self as rv1, AbilitySourceZone, ChoiceKind, ResolutionChoiceDecision,
 };
@@ -39,11 +40,11 @@ fn land_engine(seed: u64) -> GameEngine {
 fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     let first = engine.state.priority_player_id();
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first priority pass");
     let second = engine.state.priority_player_id();
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second priority pass resolves the stack item")
 }
 
@@ -178,7 +179,7 @@ fn issue_453_bilbos_deadly_slice_destroys_only_creatures() {
     for illegal in [target_player(1), target_object(artifact)] {
         let before = engine.state.command_index;
         engine
-            .apply_command(0, &cast_spell(slot, illegal.clone()))
+            .apply_scenario_command(0, &cast_spell(slot, illegal.clone()))
             .expect_err("destroy target creature rejects players and artifacts");
         assert_eq!(engine.state.command_index, before);
     }
@@ -209,7 +210,7 @@ fn issue_453_vote_out_convoke_taps_a_creature_without_mana_for_the_generic() {
     // CR 601.2h: without mana or an offered Convoke contribution the whole cost is illegal.
     let before = engine.state.command_index;
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect_err("Vote Out is uncastable with no mana and no contributions");
     assert_eq!(engine.state.command_index, before);
     assert_eq!(engine.state.players[0].hand[slot], source);
@@ -235,7 +236,7 @@ fn issue_453_vote_out_convoke_taps_a_creature_without_mana_for_the_generic() {
         },
     );
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("one creature pays one generic and the pool pays {2}{B}");
     assert!(
         engine.state.objects[&bear].tapped,
@@ -275,15 +276,15 @@ fn issue_453_protective_response_destroys_only_attacking_or_blocking_creatures()
     );
     let slot = hand_index_for_card(&engine, 1, "protective_response");
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare the attacker");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes; the defender receives priority");
 
     let before = engine.state.command_index;
     engine
-        .apply_command(1, &cast_spell(slot, target_object(bystander)))
+        .apply_scenario_command(1, &cast_spell(slot, target_object(bystander)))
         .expect_err("an untapped noncombat creature is not an attacking or blocking creature");
     assert_eq!(engine.state.command_index, before);
 
@@ -297,7 +298,7 @@ fn issue_453_protective_response_destroys_only_attacking_or_blocking_creatures()
         },
     );
     engine
-        .apply_command(1, &cast_spell(slot, target_object(attacker)))
+        .apply_scenario_command(1, &cast_spell(slot, target_object(attacker)))
         .expect("the attacking creature is a legal target");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&attacker].zone, Zone::Graveyard);
@@ -348,7 +349,7 @@ fn issue_453_magnificent_end_reduces_only_for_a_tapped_creature_target() {
 
     let before = engine.state.command_index;
     engine
-        .apply_command(0, &cast_spell(slot, target_object(untapped)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(untapped)))
         .expect_err("two mana does not cover the full {4}{W} on an untapped target");
     assert_eq!(engine.state.command_index, before);
 
@@ -385,7 +386,7 @@ fn issue_453_huatli_final_strike_pumps_then_deals_the_pumped_power() {
     ] {
         let before = engine.state.command_index;
         engine
-            .apply_command(0, &cast_spell(slot, illegal))
+            .apply_scenario_command(0, &cast_spell(slot, illegal))
             .expect_err("each printed target group keeps its own controller scope");
         assert_eq!(engine.state.command_index, before);
     }
@@ -423,7 +424,7 @@ fn issue_453_surveil_lands_enter_tapped_and_partition_the_library() {
         let slot = hand_index_for_card(&engine, 0, card_id);
 
         let played = engine
-            .apply_command(0, &play_land(slot))
+            .apply_scenario_command(0, &play_land(slot))
             .expect("play the surveil land");
         let land = battlefield_object_for_card(&engine, 0, card_id);
         assert!(
@@ -441,7 +442,7 @@ fn issue_453_surveil_lands_enter_tapped_and_partition_the_library() {
         assert_eq!(choice.deciding_player_id, 0);
         assert_eq!(choice.candidate_object_ids, vec![top[0]]);
         engine
-            .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
             .expect("put the surveilled card into the graveyard");
 
         assert_eq!(engine.state.objects[&top[0]].zone, Zone::Graveyard);
@@ -458,7 +459,7 @@ fn issue_453_bloodfell_caves_gains_life_then_taps_for_black_or_red() {
     let source = inject_card_into_hand(&mut engine, 0, "bloodfell_caves");
     let slot = hand_index_for_card(&engine, 0, "bloodfell_caves");
     engine
-        .apply_command(0, &play_land(slot))
+        .apply_scenario_command(0, &play_land(slot))
         .expect("play Bloodfell Caves");
     let land = battlefield_object_for_card(&engine, 0, "bloodfell_caves");
     assert!(engine.state.objects[&land].tapped);
@@ -468,7 +469,7 @@ fn issue_453_bloodfell_caves_gains_life_then_taps_for_black_or_red() {
     // Untap through the fixture so the printed mana ability can be activated as a real command.
     engine.state.objects.get_mut(&land).expect("land").tapped = false;
     engine
-        .apply_command(0, &activate_ability_for(&engine, land, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, land, 0, vec![]))
         .expect("activate {B} or {R}");
     assert_eq!(engine.state.players[0].mana_pool.black, 1);
     assert_eq!(engine.state.players[0].mana_pool.red, 0);
@@ -486,10 +487,14 @@ fn issue_453_stony_voiced_goblins_makes_each_opponent_discard() {
     let opposing_hand_before = engine.state.players[1].hand.clone();
 
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Stony-Voiced Goblins");
-    engine.apply_command(0, &pass()).expect("caster pass");
-    engine.apply_command(1, &pass()).expect("spell resolves");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("spell resolves");
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     assert!(engine
         .state
@@ -505,7 +510,7 @@ fn issue_453_stony_voiced_goblins_makes_each_opponent_discard() {
     assert_eq!(choice.candidate_object_ids, opposing_hand_before);
     let discarded = choice.candidate_object_ids[0];
     engine
-        .apply_command(1, &submit_resolution_choice(vec![discarded]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![discarded]))
         .expect("opponent discards");
 
     assert_eq!(engine.state.objects[&discarded].zone, Zone::Graveyard);
@@ -527,7 +532,7 @@ fn issue_453_gingerbread_hunter_makes_food_and_puny_snack_shrinks() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "gingerbread_hunter_puny_snack");
     engine
-        .apply_command(0, &cast_spell_face(slot, vec![], 0))
+        .apply_scenario_command(0, &cast_spell_face(slot, vec![], 0))
         .expect("cast Gingerbread Hunter");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
@@ -545,7 +550,7 @@ fn issue_453_gingerbread_hunter_makes_food_and_puny_snack_shrinks() {
     grant_pool(&mut adventure, 0);
     let slot = hand_index_for_card(&adventure, 0, "gingerbread_hunter_puny_snack");
     adventure
-        .apply_command(0, &cast_spell_face(slot, target_object(target), 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, target_object(target), 1))
         .expect("cast Puny Snack");
     resolve_entire_stack_two_player(&mut adventure);
     assert_eq!(adventure.effective_power(target), Some(3));
@@ -562,7 +567,7 @@ fn issue_453_minecart_daredevil_ride_the_rails_pumps() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "minecart_daredevil_ride_the_rails");
     engine
-        .apply_command(0, &cast_spell_face(slot, target_object(target), 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, target_object(target), 1))
         .expect("cast Ride the Rails");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.effective_power(target), Some(4));
@@ -579,7 +584,7 @@ fn issue_453_smaug_spew_flame_deals_five() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "smaug,_the_great_calamity_spew_flame");
     engine
-        .apply_command(0, &cast_spell_face(slot, target_object(target), 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, target_object(target), 1))
         .expect("cast Spew Flame");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
@@ -604,7 +609,7 @@ fn issue_453_al_bhed_salvagers_drains_once_per_permanent() {
 
     let priority = engine.state.priority_player_id();
     engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("lethal-damage state-based action");
     assert_eq!(engine.state.objects[&first].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&second].zone, Zone::Graveyard);
@@ -612,7 +617,7 @@ fn issue_453_al_bhed_salvagers_drains_once_per_permanent() {
     let mut answered = 0;
     while !engine.state.pending_triggers.is_empty() {
         engine
-            .apply_command(0, &choose_trigger_targets(target_player(1)))
+            .apply_scenario_command(0, &choose_trigger_targets(target_player(1)))
             .expect("choose target opponent");
         answered += 1;
     }
@@ -642,18 +647,18 @@ fn issue_453_al_bhed_salvagers_drains_once_per_permanent() {
     );
     let disenchant = hand_index_for_card(&artifact_engine, 0, "disenchant");
     artifact_engine
-        .apply_command(0, &cast_spell(disenchant, target_object(prism)))
+        .apply_scenario_command(0, &cast_spell(disenchant, target_object(prism)))
         .expect("cast Disenchant at the controlled artifact");
     artifact_engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("caster passes");
     artifact_engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("Disenchant resolves");
     assert_eq!(artifact_engine.state.objects[&prism].zone, Zone::Graveyard);
     assert_eq!(artifact_engine.state.pending_triggers.len(), 1);
     artifact_engine
-        .apply_command(0, &choose_trigger_targets(target_player(1)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_player(1)))
         .expect("choose target opponent");
     resolve_entire_stack_two_player(&mut artifact_engine);
     assert_eq!(
@@ -677,7 +682,7 @@ fn issue_453_lightshell_duo_prowess_surveils_and_expires() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "lightshell_duo");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Lightshell Duo");
     pass_both_players(&mut engine);
     let resolution = resolve_top_stack(&mut engine);
@@ -686,7 +691,7 @@ fn issue_453_lightshell_duo_prowess_surveils_and_expires() {
     assert_eq!((surveil.min, surveil.max), (0, 2));
     assert_eq!(surveil.candidate_object_ids, top[..2]);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .expect("put one surveilled card into the graveyard");
     assert_eq!(engine.state.objects[&top[0]].zone, Zone::Graveyard);
     assert_eq!(engine.state.players[0].library.front(), Some(&top[1]));
@@ -696,7 +701,7 @@ fn issue_453_lightshell_duo_prowess_surveils_and_expires() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "bonesplitter");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast a noncreature spell");
     assert_eq!(engine.state.stack.len(), 2);
     assert!(engine
@@ -713,7 +718,7 @@ fn issue_453_lightshell_duo_prowess_surveils_and_expires() {
     let creature = inject_card_into_hand(&mut engine, 0, "grizzly_bears");
     let slot = hand_index_for_card(&engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast a creature spell");
     assert_eq!(
         engine.state.stack.len(),
@@ -786,18 +791,20 @@ fn issue_453_basic_landcycling_searches_from_hand() {
             "{card_id} publishes its hand ability"
         );
         engine
-            .apply_command(0, &hand_ability(&engine, source, 0))
+            .apply_scenario_command(0, &hand_ability(&engine, source, 0))
             .expect_err("the complete cost is checked before any discard");
         assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
 
         give_mana(&mut engine, 0, mana);
         engine
-            .apply_command(0, &hand_ability(&engine, source, 0))
+            .apply_scenario_command(0, &hand_ability(&engine, source, 0))
             .expect("activate basic landcycling");
         assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
-        engine.apply_command(0, &pass()).expect("controller passes");
+        engine
+            .apply_scenario_command(0, &pass())
+            .expect("controller passes");
         let search = engine
-            .apply_command(1, &pass())
+            .apply_scenario_command(1, &pass())
             .expect("basic landcycling resolves to a private search");
         let choice = find_resolution_choice(&search).expect("private library search");
         assert_eq!(choice.deciding_player_id, 0);
@@ -815,7 +822,7 @@ fn issue_453_basic_landcycling_searches_from_hand() {
         }));
 
         let completed = engine
-            .apply_command(0, &submit_resolution_choice(vec![mountain]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![mountain]))
             .expect("choose the basic land");
         assert_eq!(engine.state.objects[&mountain].zone, Zone::Hand);
         assert!(completed.events.iter().any(|event| matches!(
@@ -837,7 +844,7 @@ fn issue_453_capital_city_cycles_to_draw() {
     let drawn = seat_on_top(&mut engine, 0, &["grizzly_bears"])[0];
 
     engine
-        .apply_command(0, &hand_ability(&engine, source, 2))
+        .apply_scenario_command(0, &hand_ability(&engine, source, 2))
         .expect_err("cycling {2} needs mana");
     assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
 
@@ -850,7 +857,7 @@ fn issue_453_capital_city_cycles_to_draw() {
         },
     );
     engine
-        .apply_command(0, &hand_ability(&engine, source, 2))
+        .apply_scenario_command(0, &hand_ability(&engine, source, 2))
         .expect("activate cycling");
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     resolve_entire_stack_two_player(&mut engine);
@@ -862,11 +869,11 @@ fn issue_453_capital_city_cycles_to_draw() {
     let source = inject_card_into_hand(&mut land_engine, 0, "capital_city");
     let slot = hand_index_for_card(&land_engine, 0, "capital_city");
     land_engine
-        .apply_command(0, &play_land(slot))
+        .apply_scenario_command(0, &play_land(slot))
         .expect("play Capital City");
     let land = battlefield_object_for_card(&land_engine, 0, "capital_city");
     land_engine
-        .apply_command(0, &activate_ability_for(&land_engine, land, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&land_engine, land, 0, vec![]))
         .expect("tap for {C}");
     assert_eq!(land_engine.state.players[0].mana_pool.colorless, 1);
     assert_eq!(land_engine.state.objects[&source].zone, Zone::Battlefield);
@@ -889,7 +896,7 @@ fn issue_453_bestial_bloodline_attaches_modifies_and_returns_from_graveyard() {
     );
     let slot = hand_index_for_card(&engine, 0, "bestial_bloodline");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
         .expect("cast Bestial Bloodline");
     resolve_entire_stack_two_player(&mut engine);
     let aura = battlefield_object_for_card(&engine, 0, "bestial_bloodline");
@@ -911,7 +918,7 @@ fn issue_453_bestial_bloodline_attaches_modifies_and_returns_from_graveyard() {
     );
     let disenchant = hand_index_for_card(&engine, 0, "disenchant");
     engine
-        .apply_command(0, &cast_spell(disenchant, target_object(aura)))
+        .apply_scenario_command(0, &cast_spell(disenchant, target_object(aura)))
         .expect("disenchant the Aura");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&aura].zone, Zone::Graveyard);
@@ -928,7 +935,7 @@ fn issue_453_bestial_bloodline_attaches_modifies_and_returns_from_graveyard() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &zone_ability(&engine, aura, AbilitySourceZone::Graveyard, 0),
         )
@@ -953,10 +960,10 @@ fn issue_453_archive_dragon_ward_counters_unless_the_caster_pays() {
             ..Default::default()
         },
     );
-    paid.apply_command(0, &pass())
+    paid.apply_scenario_command(0, &pass())
         .expect("active player passes priority to the opponent");
     let unsummon = hand_index_for_card(&paid, 1, "unsummon");
-    paid.apply_command(1, &cast_spell(unsummon, target_object(dragon)))
+    paid.apply_scenario_command(1, &cast_spell(unsummon, target_object(dragon)))
         .expect("opponent casts Unsummon at the Dragon");
     assert_eq!(paid.state.stack.len(), 2, "Ward is above the spell");
     assert!(paid
@@ -998,11 +1005,11 @@ fn issue_453_archive_dragon_ward_counters_unless_the_caster_pays() {
         },
     );
     declined
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes priority to the opponent");
     let unsummon = hand_index_for_card(&declined, 1, "unsummon");
     declined
-        .apply_command(1, &cast_spell(unsummon, target_object(dragon)))
+        .apply_scenario_command(1, &cast_spell(unsummon, target_object(dragon)))
         .expect("opponent casts Unsummon at the Dragon");
     pass_both_players(&mut declined);
     submit_mana_resolution_decision(&mut declined, 1, ResolutionChoiceDecision::Decline)
@@ -1027,7 +1034,7 @@ fn issue_453_impact_tremors_damages_each_opponent_on_creature_entry() {
     );
     let slot = hand_index_for_card(&engine, 0, "impact_tremors");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Impact Tremors");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -1054,7 +1061,7 @@ fn issue_453_impact_tremors_damages_each_opponent_on_creature_entry() {
     );
     let slot = hand_index_for_card(&engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast a creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&entered].zone, Zone::Battlefield);

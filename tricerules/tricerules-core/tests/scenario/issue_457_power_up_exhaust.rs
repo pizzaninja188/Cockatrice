@@ -9,10 +9,11 @@
 //! 2026-09-25 Comprehensive Rules): CR 602.2b (activated-ability costs), CR 702.193 (Power-up and
 //! its entry-turn cost reduction), CR 702.177 (Exhaust and its once-per-object limit), CR 122.1
 //! (+1/+1 counters), and CR 400.7 (new object on zone change).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn mana_pool(engine: &GameEngine) -> (u32, u32, u32, u32, u32, u32) {
     let pool = &engine.state.players[0].mana_pool;
@@ -77,7 +78,7 @@ fn move_permanent_to_graveyard(engine: &mut GameEngine, player: usize, card_id: 
         .clone();
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             player_id,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {

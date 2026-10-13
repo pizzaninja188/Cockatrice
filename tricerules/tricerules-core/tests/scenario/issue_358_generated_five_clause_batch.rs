@@ -6,6 +6,7 @@
 //! 601.2f/700.4 the conditional {3} cost reduction; CR 113.6b/602.2/701.13/121.2 the graveyard
 //! exile-self draw-then-lose-life; and CR 603.6c/603.10a/700.4/115.1 the self-inclusive
 //! creature-or-artifact leaves-the-battlefield drain.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -119,7 +120,7 @@ fn issue_358_frilled_sparkshooter_counts_only_an_opponents_life_loss() {
     );
     let bump = hand_index_for_card(&opponent_loss, 0, "bump_in_the_night");
     opponent_loss
-        .apply_command(0, &cast_spell(bump, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(bump, target_player(1)))
         .expect("cast Bump in the Night at the opponent");
     resolve_entire_stack_two_player(&mut opponent_loss);
     assert_eq!(opponent_loss.state.players[1].life, 17);
@@ -159,7 +160,7 @@ fn issue_358_frilled_sparkshooter_counts_only_an_opponents_life_loss() {
     );
     let decode = hand_index_for_card(&controller_loss, 0, "decode_transmissions");
     controller_loss
-        .apply_command(0, &cast_spell(decode, vec![]))
+        .apply_scenario_command(0, &cast_spell(decode, vec![]))
         .expect("cast Decode Transmissions");
     resolve_entire_stack_two_player(&mut controller_loss);
     assert_eq!(controller_loss.state.players[0].life, 18);
@@ -231,7 +232,7 @@ fn issue_358_dreaded_bat_cloud_reduces_only_after_a_creature_dies() {
     );
     let murder = hand_index_for_card(&engine, 0, "murder");
     engine
-        .apply_command(0, &cast_spell(murder, target_object(doomed)))
+        .apply_scenario_command(0, &cast_spell(murder, target_object(doomed)))
         .expect("cast Murder at the controlled creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&doomed].zone, Zone::Graveyard);
@@ -253,7 +254,7 @@ fn issue_358_dreaded_bat_cloud_reduces_only_after_a_creature_dies() {
     );
     let slot = hand_index_for_card(&engine, 0, "dreaded_bat-cloud");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Dreaded Bat-Cloud for {1}{B}");
     resolve_entire_stack_two_player(&mut engine);
     battlefield_object_for_card(&engine, 0, "dreaded_bat-cloud");
@@ -276,7 +277,7 @@ fn issue_358_faerie_dreamthief_exiles_itself_to_draw_and_lose() {
     let library_before = engine.state.players[0].library.len();
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &zone_ability(&engine, thief, AbilitySourceZone::Graveyard, 0),
         )
@@ -310,13 +311,13 @@ fn issue_358_susurian_voidborn_drains_when_a_controlled_creature_dies() {
         .damage = 2;
     let priority = engine.state.priority_player_id();
     engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("lethal-damage state-based action");
     assert_eq!(engine.state.objects[&friendly].zone, Zone::Graveyard);
     assert_eq!(engine.state.pending_triggers.len(), 1);
 
     engine
-        .apply_command(0, &choose_trigger_targets(target_player(1)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_player(1)))
         .expect("choose target opponent");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -339,7 +340,7 @@ fn issue_358_susurian_voidborn_drains_when_the_source_dies() {
         .damage = 2;
     let priority = engine.state.priority_player_id();
     engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("lethal-damage state-based action");
     assert_eq!(engine.state.objects[&voidborn].zone, Zone::Graveyard);
     assert_eq!(
@@ -349,7 +350,7 @@ fn issue_358_susurian_voidborn_drains_when_the_source_dies() {
     );
 
     engine
-        .apply_command(0, &choose_trigger_targets(target_player(1)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_player(1)))
         .expect("choose target opponent");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -376,11 +377,13 @@ fn issue_358_susurian_voidborn_drains_when_a_controlled_artifact_leaves() {
 
     let slot = hand_index_for_card(&engine, 0, "disenchant");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(prism)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(prism)))
         .expect("cast Disenchant at the controlled artifact");
-    engine.apply_command(0, &pass()).expect("caster passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and Disenchant resolves");
     assert_eq!(engine.state.objects[&prism].zone, Zone::Graveyard);
     assert_eq!(
@@ -390,7 +393,7 @@ fn issue_358_susurian_voidborn_drains_when_a_controlled_artifact_leaves() {
     );
 
     engine
-        .apply_command(0, &choose_trigger_targets(target_player(1)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_player(1)))
         .expect("choose target opponent");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -418,7 +421,7 @@ fn issue_358_susurian_voidborn_observes_a_controlled_token_dying() {
         .damage = 1;
     let priority = engine.state.priority_player_id();
     engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("lethal-damage state-based action");
     assert_eq!(
         engine.state.pending_triggers.len(),
@@ -427,7 +430,7 @@ fn issue_358_susurian_voidborn_observes_a_controlled_token_dying() {
     );
 
     engine
-        .apply_command(0, &choose_trigger_targets(target_player(1)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_player(1)))
         .expect("choose target opponent");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -450,7 +453,7 @@ fn issue_358_susurian_voidborn_excludes_nonqualifying_departures() {
         .damage = 2;
     let priority = engine.state.priority_player_id();
     engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("lethal-damage state-based action");
     assert_eq!(engine.state.objects[&opposing].zone, Zone::Graveyard);
     assert!(

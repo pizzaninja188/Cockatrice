@@ -8,6 +8,7 @@
 //! (destroy), 700.2/608.2h (delirium card types), 301.5/702.6 (Equipment and equip), 702.18
 //! (hexproof), 509.1b (combat restrictions), 601.3e/715 (adventure alternative characteristics),
 //! and 400.7 (zone identity).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -114,7 +115,7 @@ fn issue_338_drag_to_the_roots_delirium_reduction_and_nonland_target() {
     ensure_card_in_hand(&mut land, 0, "drag_to_the_roots");
     let slot = hand_index_for_card(&land, 0, "drag_to_the_roots");
     assert!(
-        land.apply_command(0, &cast_spell(slot, target_object(forest)))
+        land.apply_scenario_command(0, &cast_spell(slot, target_object(forest)))
             .is_err(),
         "a land is not a nonland permanent"
     );

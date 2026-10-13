@@ -1,12 +1,13 @@
 //! The Mycosynth Gardens: engine-published X/target pairs and exact permanent copy behavior.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, ControllerReference, EffectDuration, PermanentTypeFilter,
     TypeLineReplacement,
 };
 use tricerules_cards::CounterKind;
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::{
     DevCommand, DevMoveCard, DevZone, RuledCommand, TargetRef, TargetRefKind,
@@ -57,7 +58,7 @@ fn dev_move_card(
     engine.enable_dev_commands();
     let actor = engine.state.priority_player_id();
     engine
-        .apply_command(
+        .apply_scenario_command(
             actor,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -111,7 +112,7 @@ fn resolve_one(engine: &mut GameEngine) {
     {
         let actor = engine.state.priority_player_id();
         engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass priority to resolve the ability");
     }
 }
@@ -138,7 +139,7 @@ fn advance_to_next_turn_instance(engine: &mut GameEngine) {
             pass()
         };
         engine
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("pass through the end of the turn");
     }
     panic!("game did not advance to the next turn instance");
@@ -160,7 +161,7 @@ fn gardens_first_mana_ability_adds_colorless_immediately() {
     let priority = engine.state.priority_player_id();
 
     engine
-        .apply_command(0, &activate_ability_for(&engine, gardens, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, gardens, 0, vec![]))
         .expect("tap for colorless mana");
 
     let pool = &engine.state.players[0].mana_pool;
@@ -205,7 +206,7 @@ fn gardens_second_mana_ability_pays_one_and_adds_each_color_immediately() {
         ability.mana_option_index = option as u32;
 
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect("pay one generic mana and choose one color");
 
         let pool = &engine.state.players[0].mana_pool;
@@ -297,7 +298,7 @@ fn gardens_rejects_a_target_that_left_and_returned_before_submission() {
     assert_eq!(engine.state.objects[&ring].zone, Zone::Battlefield);
 
     let before = format!("{:?}", engine.state);
-    assert!(engine.apply_command(0, &stale).is_err());
+    assert!(engine.apply_scenario_command(0, &stale).is_err());
     assert_eq!(format!("{:?}", engine.state), before);
     assert!(!engine.state.objects[&gardens].tapped);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
@@ -320,7 +321,7 @@ fn gardens_copies_target_characteristics_but_keeps_its_physical_state() {
     engine.state.players[0].mana_pool.colorless = 1;
 
     engine
-        .apply_command(0, &copy_command(&engine, gardens, ring, 1))
+        .apply_scenario_command(0, &copy_command(&engine, gardens, ring, 1))
         .expect("X equals Sol Ring's mana value");
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert!(engine.state.objects[&gardens].tapped);
@@ -357,7 +358,7 @@ fn gardens_copy_carries_the_target_combat_requirements() {
     engine.state.players[0].mana_pool.colorless = 4;
 
     engine
-        .apply_command(0, &copy_command(&engine, gardens, juggernaut, 4))
+        .apply_scenario_command(0, &copy_command(&engine, gardens, juggernaut, 4))
         .expect("X equals Juggernaut's mana value");
     resolve_one(&mut engine);
 
@@ -377,7 +378,7 @@ fn gardens_can_legally_target_itself_when_it_is_an_artifact() {
         ..Default::default()
     };
     engine
-        .apply_command(0, &activate_ability_for(&engine, coating, 0, vec![target]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, coating, 0, vec![target]))
         .expect("Liquimetal Coating can make Gardens an artifact");
     resolve_one(&mut engine);
     assert!(engine.characteristics(gardens).unwrap().is_artifact());
@@ -398,7 +399,7 @@ fn gardens_can_legally_target_itself_when_it_is_an_artifact() {
             .any(|candidate| candidate.object_id == gardens)));
 
     engine
-        .apply_command(0, &copy_command(&engine, gardens, gardens, 0))
+        .apply_scenario_command(0, &copy_command(&engine, gardens, gardens, 0))
         .expect("the source is a legal target when it is also an artifact");
     resolve_one(&mut engine);
 
@@ -416,7 +417,7 @@ fn gardens_does_not_copy_a_new_source_incarnation_after_it_leaves_and_returns() 
     let source_generation = generation(&engine, gardens);
 
     engine
-        .apply_command(0, &copy_command(&engine, gardens, ring, 1))
+        .apply_scenario_command(0, &copy_command(&engine, gardens, ring, 1))
         .expect("activate Gardens before it changes zones");
     dev_move_card(
         &mut engine,
@@ -450,7 +451,7 @@ fn gardens_rechecks_target_controller_when_the_ability_resolves() {
     engine.state.players[0].mana_pool.colorless = 2;
 
     engine
-        .apply_command(0, &copy_command(&engine, gardens, signet, 2))
+        .apply_scenario_command(0, &copy_command(&engine, gardens, signet, 2))
         .expect("activate while Arcane Signet is controlled by its targeter");
     engine.state.continuous_effects.push(ContinuousEffect {
         trigger_grant_origin: None,
@@ -479,7 +480,7 @@ fn gardens_rechecks_artifact_type_when_the_ability_resolves() {
     engine.state.players[0].mana_pool.colorless = 2;
 
     engine
-        .apply_command(0, &copy_command(&engine, gardens, signet, 2))
+        .apply_scenario_command(0, &copy_command(&engine, gardens, signet, 2))
         .expect("activate while Arcane Signet is an artifact");
     engine.state.continuous_effects.push(ContinuousEffect {
         trigger_grant_origin: None,
@@ -520,7 +521,7 @@ fn gardens_keeps_a_snapshot_of_cursed_mirrors_temporary_copy() {
     engine.state.players[0].mana_pool.red = 1;
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(hand_index_for_card(&engine, 0, "clone"), Vec::new()),
         )
@@ -533,7 +534,7 @@ fn gardens_keeps_a_snapshot_of_cursed_mirrors_temporary_copy() {
         .unwrap()
         .deciding_player;
     engine
-        .apply_command(
+        .apply_scenario_command(
             deciding_player,
             &submit_resolution_choice(vec![ornithopter]),
         )
@@ -546,7 +547,7 @@ fn gardens_keeps_a_snapshot_of_cursed_mirrors_temporary_copy() {
     let hand_slot = hand_index_for_card(&engine, 0, "cursed_mirror");
 
     engine
-        .apply_command(0, &cast_spell(hand_slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_slot, Vec::new()))
         .expect("cast Cursed Mirror");
     resolve_until_copy_choice(&mut engine);
     let deciding_player = engine
@@ -556,7 +557,7 @@ fn gardens_keeps_a_snapshot_of_cursed_mirrors_temporary_copy() {
         .unwrap()
         .deciding_player;
     engine
-        .apply_command(deciding_player, &submit_resolution_choice(vec![clone]))
+        .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![clone]))
         .expect("Cursed Mirror copies an artifact that is already copying Ornithopter");
     assert_eq!(
         engine.characteristics(mirror).unwrap().primary_name(),
@@ -565,7 +566,7 @@ fn gardens_keeps_a_snapshot_of_cursed_mirrors_temporary_copy() {
     assert!(engine.effective_has_keyword(mirror, tricerules_cards::Keyword::Haste));
 
     engine
-        .apply_command(0, &copy_command(&engine, gardens, mirror, 0))
+        .apply_scenario_command(0, &copy_command(&engine, gardens, mirror, 0))
         .expect("copy the current Cursed Mirror characteristics");
     resolve_one(&mut engine);
     let gardens_revision = engine.state.objects[&gardens].copy_revision;
@@ -602,7 +603,7 @@ fn gardens_rejects_mismatched_or_stale_x_target_choices_without_paying() {
     let before = format!("{:?}", engine.state);
 
     assert!(engine
-        .apply_command(0, &copy_command(&engine, gardens, ring, 2))
+        .apply_scenario_command(0, &copy_command(&engine, gardens, ring, 2))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before);
 
@@ -611,7 +612,7 @@ fn gardens_rejects_mismatched_or_stale_x_target_choices_without_paying() {
         unreachable!()
     };
     ability.targets[0].expected_zone_change_generation = Some(generation(&engine, ring) + 1);
-    assert!(engine.apply_command(0, &stale).is_err());
+    assert!(engine.apply_scenario_command(0, &stale).is_err());
     assert_eq!(format!("{:?}", engine.state), before);
 
     let mut unbound = copy_command(&engine, gardens, ring, 1);
@@ -619,7 +620,7 @@ fn gardens_rejects_mismatched_or_stale_x_target_choices_without_paying() {
         unreachable!()
     };
     ability.targets[0].expected_zone_change_generation = None;
-    assert!(engine.apply_command(0, &unbound).is_err());
+    assert!(engine.apply_scenario_command(0, &unbound).is_err());
     assert_eq!(format!("{:?}", engine.state), before);
 }
 
@@ -631,7 +632,7 @@ fn gardens_does_not_copy_when_target_mana_value_changes_before_resolution() {
     engine.state.players[0].mana_pool.colorless = 1;
     let source_generation = generation(&engine, gardens);
     engine
-        .apply_command(0, &copy_command(&engine, gardens, ring, 1))
+        .apply_scenario_command(0, &copy_command(&engine, gardens, ring, 1))
         .expect("the target is legal when activated");
 
     engine.state.objects.get_mut(&ring).unwrap().card_id = "arcane_signet".to_string();

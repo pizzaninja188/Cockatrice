@@ -2,6 +2,7 @@
 //!
 //! Oracle and rulings checked 2026-09-30. CR 702.40a governs storm and its copies; CR 608.2b
 //! rechecks targets, CR 701.6a governs countering, and CR 118.12 governs the conditional payment.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -36,7 +37,7 @@ fn stack_target(object_id: u32) -> Vec<TargetRef> {
 
 fn assert_rejected_without_mutation(engine: &mut GameEngine, player: i32, command: RuledCommand) {
     let before = serde_json::to_value(&engine.state).expect("serialize pre-command state");
-    assert!(engine.apply_command(player, &command).is_err());
+    assert!(engine.apply_scenario_command(player, &command).is_err());
     assert_eq!(
         serde_json::to_value(&engine.state).expect("serialize post-command state"),
         before
@@ -68,14 +69,16 @@ fn flusterstorm_copies_and_each_copy_resolves_its_own_one_mana_payment() {
 
     let divination_slot = hand_index_for_card(&engine, 0, "divination");
     engine
-        .apply_command(0, &cast_spell(divination_slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(divination_slot, Vec::new()))
         .expect("cast Sorcery spell to target");
     let divination = engine.state.stack.last().expect("Divination on stack").id;
-    engine.apply_command(0, &pass()).expect("yield priority");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("yield priority");
 
     let flusterstorm_slot = hand_index_for_card(&engine, 1, FLUSTERSTORM);
     engine
-        .apply_command(1, &cast_spell(flusterstorm_slot, stack_target(divination)))
+        .apply_scenario_command(1, &cast_spell(flusterstorm_slot, stack_target(divination)))
         .expect("cast Flusterstorm at the Sorcery");
     pass_both_players(&mut engine);
 
@@ -87,10 +90,11 @@ fn flusterstorm_copies_and_each_copy_resolves_its_own_one_mana_payment() {
     assert_eq!(copy_choice.deciding_player, 1);
     assert!(copy_choice.presentation.candidates.contains(&divination));
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     chosen_object_ids: vec![divination],
                     ..Default::default()
                 })),
@@ -166,10 +170,12 @@ fn flusterstorm_rejects_a_creature_spell_as_its_target() {
 
     let bears_slot = hand_index_for_card(&engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &cast_spell(bears_slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(bears_slot, Vec::new()))
         .expect("cast creature spell");
     let bears = engine.state.stack.last().expect("Bears on stack").id;
-    engine.apply_command(0, &pass()).expect("yield priority");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("yield priority");
 
     let flusterstorm_slot = hand_index_for_card(&engine, 1, FLUSTERSTORM);
     assert_rejected_without_mutation(

@@ -1,4 +1,5 @@
 //! Issue #99: CR 709.5 Room casting, public door state, and special-action unlocks.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::Keyword;
@@ -9,7 +10,7 @@ use tricerules_proto::ruled::v1::{DevCommand, DevMoveCard, DevPutCardInZone, Dev
 
 fn conjure_room(engine: &mut GameEngine, name: &str, card_id: &str) -> u32 {
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -73,7 +74,7 @@ fn either_room_door_casts_and_only_that_door_unlocks() {
     );
 
     engine
-        .apply_command(0, &cast_spell_face(hand_index, Vec::new(), 1))
+        .apply_scenario_command(0, &cast_spell_face(hand_index, Vec::new(), 1))
         .expect("cast Shattered Yard");
     pass_both_players(&mut engine);
 
@@ -112,7 +113,7 @@ fn unlocking_is_atomic_retains_priority_and_refreshes_public_room_state() {
     advance_to_main1_from_game_start(&mut engine);
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -132,7 +133,7 @@ fn unlocking_is_atomic_retains_priority_and_refreshes_public_room_state() {
 
     let pool_before = engine.state.players[0].mana_pool;
     let error = engine
-        .apply_command(0, &execute_unlock(room, generation + 1, 0))
+        .apply_scenario_command(0, &execute_unlock(room, generation + 1, 0))
         .expect_err("stale generation rejected");
     assert!(error.to_string().contains("stale"));
     let pool_after = engine.state.players[0].mana_pool;
@@ -215,16 +216,16 @@ fn unlock_revalidates_controller_timing_stack_payment_and_door_state() {
     let generation = engine.state.zone_change_generation[&room];
 
     assert!(engine
-        .apply_command(1, &execute_unlock(room, generation, 0))
+        .apply_scenario_command(1, &execute_unlock(room, generation, 0))
         .is_err());
     assert!(engine
-        .apply_command(0, &execute_unlock(room, generation, 0))
+        .apply_scenario_command(0, &execute_unlock(room, generation, 0))
         .is_err());
     assert_eq!(engine.state.room_states[&room].unlocked, [false, false]);
 
     engine.state.objects.get_mut(&room).unwrap().controller = 1;
     assert!(engine
-        .apply_command(0, &execute_unlock(room, generation, 0))
+        .apply_scenario_command(0, &execute_unlock(room, generation, 0))
         .expect_err("former controller rejected")
         .to_string()
         .contains("do not control"));
@@ -233,7 +234,7 @@ fn unlock_revalidates_controller_timing_stack_payment_and_door_state() {
 
     engine.state.turn_step = TurnStep::BeginCombat;
     assert!(engine
-        .apply_command(0, &execute_unlock(room, generation, 0))
+        .apply_scenario_command(0, &execute_unlock(room, generation, 0))
         .expect_err("nonmain phase rejected")
         .to_string()
         .contains("main phase"));
@@ -255,10 +256,10 @@ fn unlock_revalidates_controller_timing_stack_payment_and_door_state() {
         },
     );
     engine
-        .apply_command(0, &cast_spell(growth_index, target_object(creature)))
+        .apply_scenario_command(0, &cast_spell(growth_index, target_object(creature)))
         .expect("cast Giant Growth");
     assert!(engine
-        .apply_command(0, &execute_unlock(room, generation, 0))
+        .apply_scenario_command(0, &execute_unlock(room, generation, 0))
         .expect_err("nonempty stack rejected")
         .to_string()
         .contains("empty stack"));
@@ -276,7 +277,7 @@ fn unlock_revalidates_controller_timing_stack_payment_and_door_state() {
     execute_permanent_action_with_payment(&mut engine, 0, execute_unlock(room, generation, 0))
         .expect("unlock Glassworks");
     assert!(engine
-        .apply_command(0, &execute_unlock(room, generation, 0))
+        .apply_scenario_command(0, &execute_unlock(room, generation, 0))
         .expect_err("repeated door rejected")
         .to_string()
         .contains("already unlocked"));
@@ -300,7 +301,7 @@ fn noncast_entry_and_zone_change_start_room_fully_locked() {
         })),
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &command(Dev::PutCardInZone(DevPutCardInZone {
                 card_name: "Ticket Booth // Tunnel of Hate".into(),
@@ -313,7 +314,7 @@ fn noncast_entry_and_zone_change_start_room_fully_locked() {
     assert_eq!(engine.state.room_states[&room].unlocked, [false, false]);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &command(Dev::MoveCard(DevMoveCard {
                 card_name: "Ticket Booth // Tunnel of Hate".into(),
@@ -324,7 +325,7 @@ fn noncast_entry_and_zone_change_start_room_fully_locked() {
         .expect("leave battlefield");
     assert!(!engine.state.room_states.contains_key(&room));
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &command(Dev::MoveCard(DevMoveCard {
                 card_name: "Ticket Booth // Tunnel of Hate".into(),
@@ -410,12 +411,12 @@ fn room_attack_triggers_use_the_declared_attacker_cohort() {
     let first = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let second = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("begin combat");
     pass_both_players(&mut engine);
 
     let batch = engine
-        .apply_command(0, &declare_attackers(vec![first, second]))
+        .apply_scenario_command(0, &declare_attackers(vec![first, second]))
         .expect("declare two attackers");
     let target_prompt = batch
         .events
@@ -455,12 +456,12 @@ fn widows_walk_binds_the_only_declared_attacker() {
     engine.state.room_states.get_mut(&room).unwrap().unlocked = [false, true];
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("begin combat");
     pass_both_players(&mut engine);
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("attack alone");
     assert_eq!(
         engine
@@ -498,21 +499,21 @@ fn room_trigger_stack_card_uses_the_physical_double_sided_name() {
     engine.state.room_states.get_mut(&room).unwrap().unlocked = [false, true];
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main 1 to beginning of combat");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("beginning of combat advance");
     if engine.state.turn_step == TurnStep::DeclareAttackers {
         engine
-            .apply_command(0, &primitive_yield())
+            .apply_scenario_command(0, &primitive_yield())
             .expect("declare no attackers");
     }
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("end combat to main 2");
     let batch = engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main 2 to end step");
 
     let pushed = batch

@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, ControllerReference, EffectDuration, PermanentTypeFilter,
     TypeLineReplacement,
@@ -17,13 +18,13 @@ fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
         .sole_defending_player_id()
         .expect("sole defending player");
     engine
-        .apply_command(active_player, &primitive_yield())
+        .apply_scenario_command(active_player, &primitive_yield())
         .expect("main phase to beginning of combat");
     engine
-        .apply_command(active_player, &pass())
+        .apply_scenario_command(active_player, &pass())
         .expect("active player passes in beginning of combat");
     engine
-        .apply_command(defending_player, &pass())
+        .apply_scenario_command(defending_player, &pass())
         .expect("defender passes in beginning of combat");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 }
@@ -35,10 +36,10 @@ fn pass_to_declare_blockers(engine: &mut GameEngine) -> RuledEventBatch {
         .sole_defending_player_id()
         .expect("sole defending player");
     engine
-        .apply_command(active_player, &pass())
+        .apply_scenario_command(active_player, &pass())
         .expect("active player passes after declaring attackers");
     engine
-        .apply_command(defending_player, &pass())
+        .apply_scenario_command(defending_player, &pass())
         .expect("defender passes after attackers are declared")
 }
 
@@ -249,14 +250,14 @@ fn source_control_departure_and_return_retarget_the_scope() {
         .retain(|effect| effect.timestamp != control_timestamp);
     let generation = engine.state.zone_change_generation[&herald];
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &move_card(10, DevZone::Hand, "Herald of Secret Streams"),
         )
         .expect("move Herald to hand");
     assert!(zone_view_rules_annotation_labels(&mut engine, 0, original_bear).is_empty());
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &move_card(10, DevZone::Battlefield, "Herald of Secret Streams"),
         )
@@ -290,10 +291,10 @@ fn clone_copies_the_scoped_restriction_for_its_controller() {
     advance_to_main1_from_game_start(&mut engine);
     let herald = move_ready_to_battlefield(&mut engine, 1, "herald_of_secret_streams");
     engine
-        .apply_command(0, &put_ready_on_battlefield(0, "Clone"))
+        .apply_scenario_command(0, &put_ready_on_battlefield(0, "Clone"))
         .expect("put Clone and request a copy source");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![herald]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![herald]))
         .expect("copy Herald");
     let clone = battlefield_object_for_card(&engine, 0, "clone");
     let bear = move_ready_to_battlefield(&mut engine, 0, "grizzly_bears");
@@ -331,7 +332,7 @@ fn maximum_one_publishes_pairs_and_rejects_a_forged_double_block_atomically() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     let blockers = pass_to_declare_blockers(&mut engine);
     let legal = &blockers.legal_by_player[&1].legal_block_pairs;
@@ -339,7 +340,7 @@ fn maximum_one_publishes_pairs_and_rejects_a_forged_double_block_atomically() {
 
     let command_before = engine.state.command_index;
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![
                 BlockPair {
@@ -362,7 +363,7 @@ fn maximum_one_publishes_pairs_and_rejects_a_forged_double_block_atomically() {
         .blockers
         .is_empty());
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -411,12 +412,12 @@ fn cumulative_prohibition_removes_pairs_and_forged_blocks_are_rejected() {
     );
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     let blockers = pass_to_declare_blockers(&mut engine);
     assert!(blockers.legal_by_player[&1].legal_block_pairs.is_empty());
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -447,11 +448,11 @@ fn gaining_a_counter_after_blockers_does_not_make_the_attacker_unblocked() {
     let blocker = move_ready_to_battlefield(&mut engine, 1, "grizzly_bears");
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     pass_to_declare_blockers(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -493,7 +494,7 @@ fn michelangelo_creates_mutagen_on_entry_and_attack() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![michelangelo]))
+        .apply_scenario_command(0, &declare_attackers(vec![michelangelo]))
         .expect("Michelangelo attacks");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(battlefield_token_oids(&engine, 0, "mutagen").len(), 2);

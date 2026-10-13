@@ -1595,7 +1595,7 @@ mod growth_tests {
         };
         for _ in 0..2 {
             let actor = engine.state.priority_player_id();
-            engine.apply_command(actor, &pass).unwrap();
+            engine.apply_scenario_command(actor, &pass).unwrap();
         }
         let c = engine.characteristics(creatures[0]).unwrap();
         assert_eq!((c.signed_power, c.signed_toughness), (Some(-4), Some(6)));
@@ -1610,7 +1610,7 @@ mod growth_tests {
         engine.flush_staged_triggers(&mut Vec::new());
         for _ in 0..2 {
             let actor = engine.state.priority_player_id();
-            engine.apply_command(actor, &pass).unwrap();
+            engine.apply_scenario_command(actor, &pass).unwrap();
         }
         assert_eq!(engine.state.turn, turn);
         let c = engine.characteristics(creatures[0]).unwrap();
@@ -1642,13 +1642,13 @@ mod growth_tests {
         let pass = RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
         };
-        engine.apply_command(0, &pass).unwrap();
+        engine.apply_scenario_command(0, &pass).unwrap();
         let before = engine.diagnostic_snapshot().unwrap();
         let zones = engine.private_zone_cache.clone();
         let battlefield = engine.battlefield_view_cache.clone();
         let strike = engine.first_strike_step_pending_cache;
         assert!(matches!(
-            engine.apply_command(1, &pass),
+            engine.apply_scenario_command(1, &pass),
             Err(EngineError::PowerToughnessNumericRange(_))
         ));
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);

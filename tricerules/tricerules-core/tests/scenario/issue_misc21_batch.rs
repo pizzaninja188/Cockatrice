@@ -6,6 +6,7 @@
 //! conditions and Descend), CR 119 (life-change history), CR 122.1 (+1/+1 counters), CR 701.21
 //! (sacrifice cost), CR 701.22 (scry), CR 701.25 (surveil), CR 702.15 (lifelink), and CR 702.110
 //! (menace).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -61,22 +62,23 @@ fn kill_with_murder(e: &mut GameEngine, source: u32) {
     inject_card_into_hand(e, 0, "murder");
     let slot = hand_index_for_card(e, 0, "murder");
     semantic::accepted(e, 0, &cast_spell(slot, target_object(source)));
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("murder resolves");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("murder resolves");
 }
 
 fn advance_to_end_step(e: &mut GameEngine, active: i32) {
-    e.apply_command(active, &primitive_yield())
+    e.apply_scenario_command(active, &primitive_yield())
         .expect("main 1 to beginning of combat");
-    e.apply_command(active, &primitive_yield())
+    e.apply_scenario_command(active, &primitive_yield())
         .expect("beginning of combat advance");
     if e.state.turn_step == TurnStep::DeclareAttackers {
-        e.apply_command(active, &primitive_yield())
+        e.apply_scenario_command(active, &primitive_yield())
             .expect("declare no attackers");
     }
-    e.apply_command(active, &primitive_yield())
+    e.apply_scenario_command(active, &primitive_yield())
         .expect("end combat to main 2");
-    e.apply_command(active, &primitive_yield())
+    e.apply_scenario_command(active, &primitive_yield())
         .expect("main 2 to end step");
     assert_eq!(e.state.turn_step, TurnStep::EndStep);
 }

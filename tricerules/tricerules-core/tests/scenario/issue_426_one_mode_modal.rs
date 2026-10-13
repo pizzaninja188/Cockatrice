@@ -5,6 +5,7 @@
 //! CR 122 (counters), CR 702.12b (indestructible), CR 701.44 (explore), CR 613.1d (type
 //! addition), CR 701.9/701.20 (discard and public reveal), and CR 608.2c-f (printed instruction
 //! order) govern the exercised behavior.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -53,7 +54,7 @@ fn cast_murder(engine: &mut GameEngine, target: u32) {
     grant_pool(engine, 0);
     let slot = hand_index_for_card(engine, 0, "murder");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Murder");
     resolve_entire_stack_two_player(engine);
 }
@@ -80,11 +81,13 @@ fn cerebral_confiscation_reveals_and_discards_a_chosen_nonland() {
     let slot = prepare_spell(&mut engine, "cerebral_confiscation");
 
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, target_player(1))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, target_player(1))]))
         .expect("cast the reveal mode");
-    engine.apply_command(0, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
     let parked = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and the spell parks for the choice");
 
     let choice = find_resolution_choice(&parked).expect("opponent-hand choice");
@@ -110,7 +113,7 @@ fn cerebral_confiscation_reveals_and_discards_a_chosen_nonland() {
     );
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![nonland]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![nonland]))
         .expect("choose the nonland card");
     assert_eq!(engine.state.objects[&nonland].zone, Zone::Graveyard);
     assert!(engine.state.players[1].hand.contains(&land));
@@ -127,17 +130,19 @@ fn cerebral_confiscation_discard_two_mode_uses_the_affected_player_choice() {
     let slot = prepare_spell(&mut engine, "cerebral_confiscation");
 
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, target_player(1))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, target_player(1))]))
         .expect("cast the discard-two mode");
-    engine.apply_command(0, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
     let parked = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("the affected player receives the choice");
     let choice = find_resolution_choice(&parked).expect("discard choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::HandCards);
     assert_eq!(choice.deciding_player_id, 1, "the affected player chooses");
     engine
-        .apply_command(1, &submit_resolution_choice(vec![first, second]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![first, second]))
         .expect("the affected player discards two cards");
 
     assert_eq!(engine.state.objects[&first].zone, Zone::Graveyard);
@@ -156,7 +161,7 @@ fn collision_course_counts_creatures_and_vehicles_you_control() {
     let slot = prepare_spell(&mut engine, "collision_course");
 
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, target_object(target))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, target_object(target))]))
         .expect("cast the creature and/or Vehicle count damage");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -176,7 +181,7 @@ fn coordinated_maneuver_damages_a_planeswalker_with_the_creature_count() {
     let slot = prepare_spell(&mut engine, "coordinated_maneuver");
 
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, target_object(jace))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, target_object(jace))]))
         .expect("the creature-or-planeswalker target is legal");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -198,7 +203,7 @@ fn crash_and_burn_six_damage_destroys_a_planeswalker() {
     let slot = prepare_spell(&mut engine, "crash_and_burn");
 
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, target_object(jace))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, target_object(jace))]))
         .expect("six damage to a planeswalker");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -209,7 +214,7 @@ fn crash_and_burn_six_damage_destroys_a_planeswalker() {
     let vehicle = inject_permanent_on_battlefield(&mut vehicle_engine, 1, "cultivators_caravan");
     let slot = prepare_spell(&mut vehicle_engine, "crash_and_burn");
     vehicle_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(0, target_object(vehicle))]),
         )
@@ -226,7 +231,7 @@ fn frontline_rush_pump_scales_with_controlled_creatures() {
     let slot = prepare_spell(&mut engine, "frontline_rush");
 
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, target_object(target))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, target_object(target))]))
         .expect("cast the X pump mode");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -242,13 +247,13 @@ fn keep_out_damages_only_tapped_creatures() {
 
     assert!(
         engine
-            .apply_command(0, &cast_modal_spell(slot, vec![(0, target_object(target))]))
+            .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, target_object(target))]))
             .is_err(),
         "an untapped creature is not a legal target"
     );
     engine.state.objects.get_mut(&target).unwrap().tapped = true;
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, target_object(target))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, target_object(target))]))
         .expect("the tapped creature is a legal target");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
@@ -257,7 +262,7 @@ fn keep_out_damages_only_tapped_creatures() {
     let anthem = inject_permanent_on_battlefield(&mut enchantment_engine, 1, "glorious_anthem");
     let slot = prepare_spell(&mut enchantment_engine, "keep_out");
     enchantment_engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, target_object(anthem))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, target_object(anthem))]))
         .expect("the paired enchantment mode is legal");
     resolve_entire_stack_two_player(&mut enchantment_engine);
     assert_eq!(
@@ -274,7 +279,7 @@ fn moment_of_valor_untaps_pumps_and_grants_indestructible() {
     let slot = prepare_spell(&mut engine, "moment_of_valor");
 
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, target_object(target))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, target_object(target))]))
         .expect("cast the untap, pump, and indestructible mode");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -300,7 +305,7 @@ fn over_the_edge_explores_twice_and_keeps_its_destroy_mode() {
     let slot = prepare_spell(&mut engine, "over_the_edge");
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(1, target_object(explorer))]),
         )
@@ -319,7 +324,7 @@ fn over_the_edge_explores_twice_and_keeps_its_destroy_mode() {
     let anthem = inject_permanent_on_battlefield(&mut destroy_engine, 1, "glorious_anthem");
     let slot = prepare_spell(&mut destroy_engine, "over_the_edge");
     destroy_engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, target_object(anthem))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, target_object(anthem))]))
         .expect("the paired destroy mode is legal");
     resolve_entire_stack_two_player(&mut destroy_engine);
     assert_eq!(destroy_engine.state.objects[&anthem].zone, Zone::Graveyard);
@@ -332,7 +337,7 @@ fn spectacular_tactics_counters_and_grants_hexproof() {
     let slot = prepare_spell(&mut engine, "spectacular_tactics");
 
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, target_object(target))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, target_object(target))]))
         .expect("cast the counter and hexproof mode");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -347,10 +352,12 @@ fn spectacular_tactics_counters_and_grants_hexproof() {
     inject_card_into_hand(&mut engine, 1, "abrade");
     grant_pool(&mut engine, 1);
     let slot = hand_index_for_card(&engine, 1, "abrade");
-    engine.apply_command(0, &pass()).expect("pass priority");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass priority");
     assert!(
         engine
-            .apply_command(1, &cast_modal_spell(slot, vec![(0, target_object(target))]))
+            .apply_scenario_command(1, &cast_modal_spell(slot, vec![(0, target_object(target))]))
             .is_err(),
         "CR 702.11b: an opponent cannot target the hexproof creature"
     );
@@ -363,7 +370,7 @@ fn stone_by_sunlight_adds_artifact_and_grants_indestructible() {
     let slot = prepare_spell(&mut engine, "stone_by_sunlight");
 
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, target_object(target))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, target_object(target))]))
         .expect("cast the artifact type addition mode");
     resolve_entire_stack_two_player(&mut engine);
 

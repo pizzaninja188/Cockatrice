@@ -1,5 +1,6 @@
 //! Exact Goblin Engineer: optional artifact search and targeted artifact return.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ResolutionChoiceDecision;
 
@@ -23,7 +24,7 @@ fn resolve_one(engine: &mut GameEngine) -> RuledEventBatch {
     let mut batch = RuledEventBatch::default();
     for _ in 0..count {
         batch = engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     batch
@@ -31,7 +32,7 @@ fn resolve_one(engine: &mut GameEngine) -> RuledEventBatch {
 
 fn rejected_unchanged(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = format!("{:?}", engine.state);
-    assert!(engine.apply_command(actor, command).is_err());
+    assert!(engine.apply_scenario_command(actor, command).is_err());
     assert_eq!(format!("{:?}", engine.state), before);
 }
 
@@ -51,7 +52,9 @@ fn cast_engineer(engine: &mut GameEngine) -> u32 {
         },
     );
     let slot = hand_index_for_card(engine, 0, "goblin_engineer");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     resolve_one(engine);
     source
 }
@@ -96,7 +99,7 @@ fn engineer_actual_etb_selects_exact_duplicate_into_graveyard() {
         &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
     );
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -125,7 +128,7 @@ fn engineer_actual_etb_selects_exact_duplicate_into_graveyard() {
         rejected_unchanged(&mut engine, actor, &submit_resolution_choice(selection));
     }
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![selected]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
         .unwrap();
     assert_eq!(shuffle_count(&completion), 1);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
@@ -154,17 +157,17 @@ fn engineer_declining_search_differs_from_accepting_and_finding_zero() {
         let original = engine.state.players[0].library.clone();
         let completion = if accept {
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
                 )
                 .unwrap();
             engine
-                .apply_command(0, &submit_resolution_choice(vec![]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![]))
                 .unwrap()
         } else {
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &submit_resolution_decision(ResolutionChoiceDecision::Decline),
                 )
@@ -203,7 +206,7 @@ fn engineer_return_pays_costs_after_valid_target_and_enters_untapped() {
         }
         let command = return_command(&engine, source, sacrifice, target);
         rejected_unchanged(&mut engine, 1, &command);
-        engine.apply_command(0, &command).unwrap();
+        engine.apply_scenario_command(0, &command).unwrap();
         assert!(engine.state.objects[&source].tapped);
         assert_eq!(engine.state.objects[&sacrifice].zone, Zone::Graveyard);
         assert_eq!(engine.state.players[0].mana_pool.red, 0);
@@ -262,7 +265,7 @@ fn engineer_fresh_cast_cannot_tap_and_stale_return_target_keeps_paid_costs() {
     let source = cast_engineer(&mut engine);
     resolve_one(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -283,7 +286,7 @@ fn engineer_fresh_cast_cannot_tap_and_stale_return_target_keeps_paid_costs() {
     // The helper installs an established permanent to isolate post-payment target identity.
     let established = inject_permanent_on_battlefield(&mut engine, 0, "goblin_engineer");
     let command = return_command(&engine, established, sacrifice, target);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     *engine
         .state
         .zone_change_generation
@@ -329,7 +332,7 @@ fn engineer_sacrifices_controlled_foreign_artifact_or_artifact_self() {
             },
         );
         let command = return_command(&engine, source, sacrifice, target);
-        engine.apply_command(0, &command).unwrap();
+        engine.apply_scenario_command(0, &command).unwrap();
         assert_eq!(engine.state.objects[&sacrifice].zone, Zone::Graveyard);
         let owner = usize::from(!sacrifice_self);
         assert!(engine.state.players[owner].graveyard.contains(&sacrifice));
@@ -358,7 +361,9 @@ fn engineer_actual_paid_cast_has_exact_characteristics_and_optional_etb() {
         },
     );
     let slot = hand_index_for_card(&engine, 0, "goblin_engineer");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     let characteristics = engine.characteristics(source).unwrap();

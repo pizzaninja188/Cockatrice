@@ -3,6 +3,7 @@
 //! Oracle and rulings checked 2026-09-25. CR 115.1a governs choosing the artifact target,
 //! CR 601.2 governs casting with an alternative cost, CR 701.8 governs destroying the permanent,
 //! and CR 702.34 governs casting from the graveyard and exiling the spell after it leaves the stack.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -40,7 +41,7 @@ fn ancient_grudge_destroys_an_artifact_and_uses_flashback() {
 
     let command_index = engine.state.command_index;
     engine
-        .apply_command(0, &cast_spell_face(slot, target_object(creature), 0))
+        .apply_scenario_command(0, &cast_spell_face(slot, target_object(creature), 0))
         .expect_err("Ancient Grudge cannot target a creature");
     assert_eq!(engine.state.command_index, command_index);
 
@@ -73,7 +74,7 @@ fn ancient_grudge_destroys_an_artifact_and_uses_flashback() {
 
     let command_index = engine.state.command_index;
     engine
-        .apply_command(0, &flashback)
+        .apply_scenario_command(0, &flashback)
         .expect_err("flashback cannot be cast without paying its green alternative cost");
     assert_eq!(engine.state.command_index, command_index);
     assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
@@ -91,7 +92,7 @@ fn ancient_grudge_destroys_an_artifact_and_uses_flashback() {
     assert_eq!(engine.state.objects[&second_artifact].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&spell].zone, Zone::Exile);
     assert!(
-        engine.apply_command(0, &flashback).is_err(),
+        engine.apply_scenario_command(0, &flashback).is_err(),
         "the exiled physical spell cannot be flashback-cast again"
     );
 }

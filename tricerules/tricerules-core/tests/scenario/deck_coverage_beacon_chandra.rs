@@ -1,6 +1,7 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::CounterKind;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 #[test]
 fn exact_single_face_characteristics_and_complete_ability_counts() {
@@ -58,7 +59,7 @@ fn engine(seed: u64) -> GameEngine {
 fn beacon(e: &mut GameEngine) -> u32 {
     let source = inject_card_into_hand(e, 0, "interplanar_beacon");
     let slot = hand_index_for_card(e, 0, "interplanar_beacon");
-    e.apply_command(0, &play_land(slot))
+    e.apply_scenario_command(0, &play_land(slot))
         .expect("play actual Beacon");
     assert_eq!(e.state.objects[&source].zone, Zone::Battlefield);
     assert!(!e.state.objects[&source].tapped);
@@ -70,7 +71,7 @@ fn chandra(e: &mut GameEngine) -> u32 {
     e.state.players[0].mana_pool.colorless = 3;
     e.state.players[0].mana_pool.red = 1;
     let slot = hand_index_for_card(e, 0, CHANDRA);
-    e.apply_command(0, &cast_spell(slot, vec![]))
+    e.apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast actual Chandra");
     resolve_entire_stack_two_player(e);
     assert_eq!(e.state.objects[&source].zone, Zone::Battlefield);
@@ -114,7 +115,7 @@ fn cast_with(e: &GameEngine, card: &str, payment: ManaSpendSelection) -> RuledCo
 
 fn reject_unchanged(e: &mut GameEngine, player: i32, cmd: &RuledCommand) {
     let before = format!("{:?}", e.state);
-    e.apply_command(player, cmd)
+    e.apply_scenario_command(player, cmd)
         .expect_err("invalid command must reject");
     assert_eq!(format!("{:?}", e.state), before);
 }
@@ -124,7 +125,7 @@ fn beacon_colorless_and_all_ten_restricted_pairs_pay_only_planeswalker_spells() 
     let mut e = engine(26_110_000);
     let source = beacon(&mut e);
     let cmd = activate_ability_for(&e, source, 0, vec![]);
-    e.apply_command(0, &cmd).unwrap();
+    e.apply_scenario_command(0, &cmd).unwrap();
     assert_eq!(e.state.players[0].mana_pool.colorless, 1);
     assert!(e.state.players[0].restricted_mana.is_empty());
     assert!(e.state.objects[&source].tapped);
@@ -141,7 +142,7 @@ fn beacon_colorless_and_all_ten_restricted_pairs_pay_only_planeswalker_spells() 
         let invalid = option(&e, source, 10);
         reject_unchanged(&mut e, 0, &invalid);
         let batch = e
-            .apply_command(0, &cmd)
+            .apply_scenario_command(0, &cmd)
             .expect("pay one and tap for two colors");
         assert!(e.state.objects[&source].tapped);
         assert_eq!(e.state.players[0].mana_pool, Default::default());
@@ -188,7 +189,7 @@ fn beacon_colorless_and_all_ten_restricted_pairs_pay_only_planeswalker_spells() 
         e.state.players[0].mana_pool.red = u32::from(expected.3 == 0);
         e.state.players[0].mana_pool.colorless = if expected.3 == 0 { 1 } else { 2 };
         let cast = cast_with(&e, CHANDRA, spend(group, *expected));
-        e.apply_command(0, &cast)
+        e.apply_scenario_command(0, &cast)
             .expect("both colors pay one planeswalker spell");
         assert!(e.state.players[0].restricted_mana.is_empty());
         assert_eq!(e.state.players[0].mana_pool, Default::default());
@@ -215,13 +216,13 @@ fn beacon_two_mana_can_pay_different_planeswalkers_and_unspent_mana_expires() {
     let source = beacon(&mut e);
     e.state.players[0].mana_pool.colorless = 1;
     let cmd = option(&e, source, 0);
-    e.apply_command(0, &cmd).unwrap();
+    e.apply_scenario_command(0, &cmd).unwrap();
     let group = e.state.players[0].restricted_mana[0].restriction_group_id;
     inject_card_into_hand(&mut e, 0, "jace_beleren");
     e.state.players[0].mana_pool.blue = 1;
     e.state.players[0].mana_pool.colorless = 1;
     let cast = cast_with(&e, "jace_beleren", spend(group, (0, 1, 0, 0, 0, 0)));
-    e.apply_command(0, &cast).unwrap();
+    e.apply_scenario_command(0, &cast).unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[0].restricted_mana[0].amount.w, 1);
     assert_eq!(e.state.players[0].restricted_mana[0].amount.u, 0);
@@ -229,7 +230,7 @@ fn beacon_two_mana_can_pay_different_planeswalkers_and_unspent_mana_expires() {
     e.state.players[0].mana_pool.red = 1;
     e.state.players[0].mana_pool.colorless = 2;
     let cast = cast_with(&e, CHANDRA, spend(group, (1, 0, 0, 0, 0, 0)));
-    e.apply_command(0, &cast).unwrap();
+    e.apply_scenario_command(0, &cast).unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert!(e.state.players[0].restricted_mana.is_empty());
     assert_eq!(e.state.players[0].life, 22);
@@ -238,7 +239,7 @@ fn beacon_two_mana_can_pay_different_planeswalkers_and_unspent_mana_expires() {
     let source = beacon(&mut e);
     e.state.players[0].mana_pool.colorless = 1;
     let cmd = option(&e, source, 0);
-    e.apply_command(0, &cmd).unwrap();
+    e.apply_scenario_command(0, &cmd).unwrap();
     pass_both_players(&mut e);
     assert!(e.state.players[0].restricted_mana.is_empty());
 }
@@ -251,13 +252,14 @@ fn beacon_cast_trigger_survives_counter_and_ignores_other_spells_and_players() {
     e.state.players[0].mana_pool.colorless = 3;
     e.state.players[0].mana_pool.red = 1;
     let slot = hand_index_for_card(&e, 0, CHANDRA);
-    e.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    e.apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(e.state.players[0].life, 20);
-    e.apply_command(0, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
     inject_card_into_hand(&mut e, 1, "counterspell");
     e.state.players[1].mana_pool.blue = 2;
     let slot = hand_index_for_card(&e, 1, "counterspell");
-    e.apply_command(1, &cast_spell(slot, targets_with_damage(vec![(walker, 0)])))
+    e.apply_scenario_command(1, &cast_spell(slot, targets_with_damage(vec![(walker, 0)])))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.objects[&walker].zone, Zone::Graveyard);
@@ -265,7 +267,8 @@ fn beacon_cast_trigger_survives_counter_and_ignores_other_spells_and_players() {
     inject_card_into_hand(&mut e, 0, "sol_ring");
     e.state.players[0].mana_pool.colorless = 1;
     let slot = hand_index_for_card(&e, 0, "sol_ring");
-    e.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    e.apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(e.state.stack.len(), 1);
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[0].life, 21);
@@ -275,7 +278,8 @@ fn beacon_cast_trigger_survives_counter_and_ignores_other_spells_and_players() {
     e.state.players[1].mana_pool.blue = 2;
     e.state.players[1].mana_pool.colorless = 1;
     let slot = hand_index_for_card(&e, 1, "jace_beleren");
-    e.apply_command(1, &cast_spell(slot, vec![])).unwrap();
+    e.apply_scenario_command(1, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(e.state.stack.len(), 1);
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[0].life, 21);
@@ -290,7 +294,7 @@ fn chandra_pump_is_a_controlled_elemental_snapshot_and_expires_at_cleanup() {
     let opponent = inject_permanent_on_battlefield(&mut e, 1, "fire_elemental");
     let bear = inject_permanent_on_battlefield(&mut e, 0, "grizzly_bears");
     let cmd = activate_ability_for(&e, source, 0, vec![]);
-    e.apply_command(0, &cmd).unwrap();
+    e.apply_scenario_command(0, &cmd).unwrap();
     assert_eq!(
         e.state.objects[&source].counter_count(CounterKind::Loyalty),
         6
@@ -313,7 +317,7 @@ fn chandra_red_mana_uses_the_stack_and_expires_at_the_step_boundary() {
     let mut e = engine(26_110_400);
     let source = chandra(&mut e);
     let cmd = activate_ability_for(&e, source, 1, vec![]);
-    e.apply_command(0, &cmd).unwrap();
+    e.apply_scenario_command(0, &cmd).unwrap();
     assert_eq!(
         e.state.objects[&source].counter_count(CounterKind::Loyalty),
         4
@@ -329,7 +333,7 @@ fn chandra_red_mana_uses_the_stack_and_expires_at_the_step_boundary() {
     reject_unchanged(&mut e, 0, &cmd);
     inject_card_into_hand(&mut e, 0, "lightning_bolt");
     let slot = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(slot, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(slot, target_player(1)))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[1].life, 17);
@@ -340,7 +344,7 @@ fn chandra_red_mana_uses_the_stack_and_expires_at_the_step_boundary() {
         if e.state.active_player_id() != 0 {
             break;
         }
-        e.apply_command(0, &primitive_yield()).unwrap();
+        e.apply_scenario_command(0, &primitive_yield()).unwrap();
     }
     assert_eq!(e.state.active_player_id(), 1);
     advance_to_main1_from_game_start(&mut e);
@@ -389,7 +393,7 @@ fn chandra_two_damage_accepts_every_any_target_kind_and_rejects_a_land() {
             targets_with_damage(vec![(target, 0)])
         };
         let cmd = activate_ability_for(&e, source, 2, targets);
-        e.apply_command(0, &cmd).unwrap();
+        e.apply_scenario_command(0, &cmd).unwrap();
         assert_eq!(
             e.state.objects[&source].counter_count(CounterKind::Loyalty),
             3

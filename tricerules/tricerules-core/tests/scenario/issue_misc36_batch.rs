@@ -1,5 +1,6 @@
 //! Actual-card semantics for three pinned Standard graveyard spells.
 //! Oracle and rulings checked 2026-09-22; CR 115.3, 400.7, 608.2b-c.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -67,7 +68,7 @@ fn issue_misc36_true_ancestry_semantics() {
     assert!(!offered.contains(&instant) && !offered.contains(&opposing));
     for invalid in [instant, opposing] {
         assert!(chosen
-            .apply_command(0, &cast_spell(slot, vec![target(invalid, 0)]))
+            .apply_scenario_command(0, &cast_spell(slot, vec![target(invalid, 0)]))
             .is_err());
         assert!(chosen.state.stack.is_empty());
     }
@@ -105,7 +106,7 @@ fn issue_misc36_pull_through_the_weft_semantics() {
     assert!(second.contains(&land_a) && second.contains(&land_b));
     assert!(!second.contains(&creature) && !second.contains(&opposing));
     assert!(e
-        .apply_command(0, &cast_spell(slot, vec![target(land_a, 0)]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![target(land_a, 0)]))
         .is_err());
     assert!(e.state.stack.is_empty());
     semantic::accepted(

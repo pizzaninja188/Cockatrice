@@ -335,6 +335,12 @@ public slots:
     /// so the prompt reflects the authoritative state.
     void setRuledUndoableManaCount(int count);
 
+    /// Read the pending cast captured by this player when filtering a command before relay.
+    [[nodiscard]] const PendingRuledSpellCast &pendingSpellCastForRuledSubmission() const
+    {
+        return pendingRuledSpellCast;
+    }
+
 private:
     friend class RuledTargetUi;
 
@@ -351,7 +357,8 @@ private:
     bool sendRuledPlayLand(int sourceIndex,
                           int faceIndex,
                           RuledCastSource source = RuledCastSource::Hand,
-                          quint64 zoneChangeGeneration = 0);
+                          quint64 zoneChangeGeneration = 0,
+                          quint64 resolutionPromptId = 0);
     bool tryStartRuledSpellCast(CardItem *card);
     // Set up and begin a pending ruled cast for an already-resolved hand slot + face. faceIndex selects
     // the split/MDFC half (0 for single-face); castName/castCost are that face's name and mana cost.
@@ -366,7 +373,10 @@ private:
                              int genericCostReduction,
                              RuledCastSource source,
                              ruled::v1::CastMethod castMethod,
-                             quint64 castingPermissionId = 0);
+                             quint64 castingPermissionId = 0,
+                             bool prototyped = false,
+                             quint64 resolutionPromptId = 0,
+                             quint64 expectedZoneChangeGeneration = 0);
     void finalizePendingSpellManaCost();
     bool storeCurrentModalTargetsAndAdvance();
     bool storeCurrentTargetGroupAndAdvance();

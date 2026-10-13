@@ -2,9 +2,10 @@
 //!
 //! Oracle text is from the pinned Scryfall corpus. CR 514.1 applies the maximum hand size during
 //! cleanup; CR 604.1 describes static abilities as continuously true while they apply.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn two_player_engine(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
@@ -27,12 +28,12 @@ fn verify_no_maximum_hand_size(card_id: &str, seed: u64, is_land: bool, mana_cos
 
     if is_land {
         engine
-            .apply_command(0, &play_land(slot))
+            .apply_scenario_command(0, &play_land(slot))
             .expect("play Reliquary Tower as a land");
     } else {
         engine.state.players[0].mana_pool.colorless = mana_cost;
         engine
-            .apply_command(0, &cast_spell(slot, vec![]))
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
             .expect("cast the hand-size artifact");
         resolve_entire_stack_two_player(&mut engine);
     }
@@ -46,10 +47,10 @@ fn verify_no_maximum_hand_size(card_id: &str, seed: u64, is_land: bool, mana_cos
 
     engine.state.turn_step = tricerules_core::TurnStep::EndStep;
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass the active player's end step");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("pass the opponent's end step");
 
     assert_eq!(engine.state.cleanup_discard_player, None);
@@ -58,10 +59,10 @@ fn verify_no_maximum_hand_size(card_id: &str, seed: u64, is_land: bool, mana_cos
 
     engine.state.turn_step = tricerules_core::TurnStep::EndStep;
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("pass the next active player's end step");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass priority to the next active player");
     assert_eq!(engine.state.cleanup_discard_player, Some(1));
 }
@@ -112,12 +113,12 @@ fn hand_limit_mana_sources_produce_every_printed_option_immediately() {
             let slot = hand_index_for_card(&engine, 0, card);
             if *is_land {
                 engine
-                    .apply_command(0, &play_land(slot))
+                    .apply_scenario_command(0, &play_land(slot))
                     .expect("play land");
             } else {
                 engine.state.players[0].mana_pool.colorless = *cost;
                 engine
-                    .apply_command(0, &cast_spell(slot, vec![]))
+                    .apply_scenario_command(0, &cast_spell(slot, vec![]))
                     .expect("cast artifact");
                 resolve_entire_stack_two_player(&mut engine);
             }
@@ -131,11 +132,11 @@ fn hand_limit_mana_sources_produce_every_printed_option_immediately() {
             ability.mana_option_index = option as u32;
             let before = serde_json::to_value(&engine.state).unwrap();
             engine
-                .apply_command(1, &command)
+                .apply_scenario_command(1, &command)
                 .expect_err("opponent cannot tap this source");
             assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
             engine
-                .apply_command(0, &command)
+                .apply_scenario_command(0, &command)
                 .expect("produce printed mana");
             let pool = &engine.state.players[0].mana_pool;
             assert_eq!(
@@ -158,7 +159,7 @@ fn hand_limit_mana_sources_produce_every_printed_option_immediately() {
             assert!(engine.state.pending_resolution.is_none());
             let after = serde_json::to_value(&engine.state).unwrap();
             engine
-                .apply_command(0, &command)
+                .apply_scenario_command(0, &command)
                 .expect_err("tapped source cannot pay again");
             assert_eq!(serde_json::to_value(&engine.state).unwrap(), after);
         }

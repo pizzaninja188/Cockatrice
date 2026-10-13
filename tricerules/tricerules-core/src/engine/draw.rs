@@ -83,6 +83,7 @@ mod library_replacement_tests {
                 &mut events,
             )
             .unwrap();
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
         (progress, events)
     }
 
@@ -164,7 +165,7 @@ mod library_replacement_tests {
 
     fn branch(engine: &mut GameEngine, index: u32) -> RuledEventBatch {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -209,7 +210,7 @@ mod library_replacement_tests {
                     },
                 ] {
                     assert!(engine
-                        .apply_command(
+                        .apply_scenario_command(
                             0,
                             &rv1::RuledCommand {
                                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(answer)),
@@ -226,7 +227,7 @@ mod library_replacement_tests {
             }
             assert!(engine.state.pending_resolution.is_some());
             let done = engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &rv1::RuledCommand {
                         cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -815,6 +816,7 @@ mod zurs_weirding_tests {
             )
             .unwrap();
         assert!(matches!(progress, DrawProgress::Parked));
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
         events
     }
 
@@ -1395,8 +1397,8 @@ mod zurs_weirding_tests {
 
         let commands = [(0, branch(0)), (2, branch(0)), (3, branch(1))];
         for (actor, command) in &commands {
-            let recorded = engine.apply_command(*actor, command).unwrap();
-            let replayed = replay.apply_command(*actor, command).unwrap();
+            let recorded = engine.apply_scenario_command(*actor, command).unwrap();
+            let replayed = replay.apply_scenario_command(*actor, command).unwrap();
             assert_eq!(recorded, replayed);
             assert_eq!(engine.state.command_index, replay.state.command_index);
             assert_eq!(
@@ -1745,6 +1747,9 @@ impl GameEngine {
                 self.state.pending_replacement_event =
                     Some(PendingReplacementEvent::Draw(Box::new(work)));
                 self.state.pending_resolution = Some(PendingResolution {
+                    resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                    resolution_prompt_semantics: None,
+
                     deciding_player: player,
                     presentation: PendingResolutionPresentation {
                         source_object_id,
@@ -2040,15 +2045,16 @@ impl GameEngine {
             return None;
         };
         if work.action.is_some() {
+            let mut choice = self.draw_library_choice(work);
+            choice.resolution_prompt_id = pending.resolution_prompt_id.get();
             return Some(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-                    self.draw_library_choice(work),
-                )),
+                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)),
             });
         }
         Some(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: pending.resolution_prompt_id.get(),
                     variable_mana_contribution: false,
                     deciding_player_id: pending.deciding_player,
                     source_object_id: pending.presentation.source_object_id,

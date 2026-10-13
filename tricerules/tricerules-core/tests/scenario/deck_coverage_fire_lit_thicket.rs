@@ -4,9 +4,10 @@
 //! rulings. CR 107.4c/107.4e and 107.5 govern its colorless/hybrid symbols and tap cost, CR
 //! 602.2b/601.2h govern payment, and CR 605.1a/605.3b classify and immediately resolve both mana
 //! abilities.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 
 type ManaPool = (u32, u32, u32, u32, u32, u32);
@@ -38,7 +39,7 @@ fn fire_lit_thicket_engine(seed: u64) -> (GameEngine, u32) {
     inject_card_into_hand(&mut engine, 0, "fire-lit_thicket");
     let slot = hand_index_for_card(&engine, 0, "fire-lit_thicket");
     engine
-        .apply_command(0, &play_land(slot))
+        .apply_scenario_command(0, &play_land(slot))
         .expect("play Fire-Lit Thicket as a land");
     let thicket = battlefield_object_for_card(&engine, 0, "fire-lit_thicket");
     (engine, thicket)
@@ -142,7 +143,7 @@ fn fire_lit_thicket_pays_red_or_green_for_each_of_its_three_mana_choices() {
         give_mana(&mut engine, 0, payment);
 
         engine
-            .apply_command(0, &activate_mana_option(&engine, thicket, 1, option))
+            .apply_scenario_command(0, &activate_mana_option(&engine, thicket, 1, option))
             .expect("pay either half of {R/G}, tap, and choose the mana output");
 
         assert_eq!(
@@ -172,7 +173,7 @@ fn fire_lit_thicket_rejects_unpaid_or_invalid_hybrid_activations_atomically() {
     let before_command = engine.state.command_index;
 
     engine
-        .apply_command(0, &activate_mana_option(&engine, thicket, 1, 0))
+        .apply_scenario_command(0, &activate_mana_option(&engine, thicket, 1, 0))
         .expect_err("colorless mana cannot pay the {R/G} hybrid cost");
     assert_eq!(engine.state.command_index, before_command);
     assert_eq!(mana_pool(&engine), (0, 0, 0, 0, 0, 1));
@@ -191,7 +192,7 @@ fn fire_lit_thicket_rejects_unpaid_or_invalid_hybrid_activations_atomically() {
     let before_command = engine.state.command_index;
 
     let error = engine
-        .apply_command(0, &activate_mana_option(&engine, thicket, 1, 3))
+        .apply_scenario_command(0, &activate_mana_option(&engine, thicket, 1, 3))
         .expect_err("the ability offers only three mana output choices");
     assert!(
         matches!(

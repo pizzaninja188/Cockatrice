@@ -1,5 +1,6 @@
 //! Actual-card coverage for Arcane Denial's target-controller capture and two independently
 //! ordered delayed triggers at the next actual turn's upkeep.
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{PlayerRecipient, SpellEffectKind, TriggerCondition};
 use tricerules_cards::AbilityPresentation;
@@ -25,6 +26,7 @@ fn stack_target(object_id: u32) -> Vec<TargetRef> {
 fn choose_branch(branch_index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: branch_index,
             ..Default::default()
@@ -87,19 +89,19 @@ fn prepare_arcane_denial_against_opt_with_players(
     );
 
     engine
-        .apply_command(player_ids[0], &pass())
+        .apply_scenario_command(player_ids[0], &pass())
         .expect("active player passes");
     let opt_slot = hand_index_for_card(&engine, 1, "opt");
     engine
-        .apply_command(player_ids[1], &cast_spell(opt_slot, vec![]))
+        .apply_scenario_command(player_ids[1], &cast_spell(opt_slot, vec![]))
         .expect("target player casts Opt");
     let opt = engine.state.stack.last().expect("Opt on stack").id;
     engine
-        .apply_command(player_ids[1], &pass())
+        .apply_scenario_command(player_ids[1], &pass())
         .expect("target player passes");
     let denial_slot = hand_index_for_card(&engine, 2, "arcane_denial");
     engine
-        .apply_command(player_ids[2], &cast_spell(denial_slot, stack_target(opt)))
+        .apply_scenario_command(player_ids[2], &cast_spell(denial_slot, stack_target(opt)))
         .expect("third player casts Arcane Denial");
     (engine, opt)
 }
@@ -161,22 +163,22 @@ fn resolve_arcane_denial_against_uncounterable_eject(seed: u64) -> (GameEngine, 
     );
 
     engine
-        .apply_command(PLAYER_IDS[0], &pass())
+        .apply_scenario_command(PLAYER_IDS[0], &pass())
         .expect("active player passes");
     let eject_slot = hand_index_for_card(&engine, 1, "eject");
     engine
-        .apply_command(
+        .apply_scenario_command(
             PLAYER_IDS[1],
             &cast_spell(eject_slot, target_object(creature)),
         )
         .expect("target player casts the uncounterable Eject");
     let eject = engine.state.stack.last().expect("Eject on stack").id;
     engine
-        .apply_command(PLAYER_IDS[1], &pass())
+        .apply_scenario_command(PLAYER_IDS[1], &pass())
         .expect("target player passes");
     let denial_slot = hand_index_for_card(&engine, 2, "arcane_denial");
     engine
-        .apply_command(PLAYER_IDS[2], &cast_spell(denial_slot, stack_target(eject)))
+        .apply_scenario_command(PLAYER_IDS[2], &cast_spell(denial_slot, stack_target(eject)))
         .expect("third player casts Arcane Denial at Eject");
     pass_priority_round(&mut engine);
     assert_eq!(
@@ -235,7 +237,7 @@ fn order_arcane_delayed_triggers(engine: &mut GameEngine, target_resolves_first:
         target_trigger.object_id
     };
     engine
-        .apply_command(PLAYER_IDS[2], &submit_trigger_order(first_to_place))
+        .apply_scenario_command(PLAYER_IDS[2], &submit_trigger_order(first_to_place))
         .expect("choose the first delayed trigger to put on the stack");
     assert!(engine.state.pending_trigger_order.is_none());
     let top = engine
@@ -279,12 +281,12 @@ fn resolve_arcane_delayed_triggers(
             target_choice_seen = true;
             assert!(
                 engine
-                    .apply_command(PLAYER_IDS[2], &choose_branch(0))
+                    .apply_scenario_command(PLAYER_IDS[2], &choose_branch(0))
                     .is_err(),
                 "the trigger controller cannot choose the draw count"
             );
             engine
-                .apply_command(deciding_player, &choose_branch(draw_count))
+                .apply_scenario_command(deciding_player, &choose_branch(draw_count))
                 .expect("the target player or their rules-selected delegate chooses 0, 1, or 2");
         } else {
             pass_priority_round(engine);
@@ -365,7 +367,7 @@ fn arcane_denial_discards_delayed_triggers_when_the_caster_leaves_before_upkeep(
     assert_eq!(engine.state.active_event_observers.len(), 2);
 
     engine
-        .apply_command(ids[2], &concede())
+        .apply_scenario_command(ids[2], &concede())
         .expect("Arcane Denial's controller leaves before the next upkeep");
 
     assert!(
@@ -393,7 +395,7 @@ fn arcane_denial_discards_staged_triggers_when_the_caster_leaves_before_placemen
     assert_eq!(order.candidates.len(), 2);
 
     engine
-        .apply_command(ids[2], &concede())
+        .apply_scenario_command(ids[2], &concede())
         .expect("the delayed-trigger controller leaves before placing either ability");
 
     assert!(engine.state.pending_trigger_order.is_none());
@@ -488,7 +490,7 @@ fn arcane_denial_with_all_targets_illegal_creates_no_delayed_triggers() {
 fn arcane_denials_target_player_leaving_before_upkeep_does_not_stall_the_controllers_draw() {
     let (mut engine, _) = cast_arcane_denial_against_opt(84230);
     engine
-        .apply_command(PLAYER_IDS[1], &concede())
+        .apply_scenario_command(PLAYER_IDS[1], &concede())
         .expect("target spell controller concedes before the upkeep");
     let controller_hand_before = engine.state.players[2].hand.len();
     let controller_cards = set_library_top(&mut engine, 2, &["grizzly_bears", "storm_crow"]);
@@ -531,7 +533,7 @@ fn arcane_denial_refreshes_delegate_candidates_without_reusing_stale_indices() {
     let ids = FOUR_PLAYER_IDS;
     let (mut engine, _) = cast_arcane_denial_against_opt_with_players(84250, &ids);
     engine
-        .apply_command(ids[1], &concede())
+        .apply_scenario_command(ids[1], &concede())
         .expect("target spell controller leaves before the upkeep");
     end_active_turn(&mut engine, ids[0]);
     assert_eq!(engine.state.active_player_id(), ids[2]);
@@ -550,10 +552,12 @@ fn arcane_denial_refreshes_delegate_candidates_without_reusing_stale_indices() {
         panic!("controller selects between two surviving delegates")
     };
     assert_eq!(candidates, &[Some(ids[0]), Some(ids[3])]);
-    assert!(engine.apply_command(ids[0], &choose_branch(0)).is_err());
+    assert!(engine
+        .apply_scenario_command(ids[0], &choose_branch(0))
+        .is_err());
 
     let events = engine
-        .apply_command(ids[0], &concede())
+        .apply_scenario_command(ids[0], &concede())
         .expect("one delegate candidate leaves while the controller is choosing");
     let pending = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(pending.deciding_player, ids[2]);
@@ -578,7 +582,9 @@ fn arcane_denial_refreshes_delegate_candidates_without_reusing_stale_indices() {
             .fallback_text,
         "P35 makes the choice"
     );
-    assert!(engine.apply_command(ids[2], &choose_branch(0)).is_err());
+    assert!(engine
+        .apply_scenario_command(ids[2], &choose_branch(0))
+        .is_err());
     assert_eq!(
         engine
             .state
@@ -591,7 +597,7 @@ fn arcane_denial_refreshes_delegate_candidates_without_reusing_stale_indices() {
     );
 
     engine
-        .apply_command(ids[2], &choose_branch(1))
+        .apply_scenario_command(ids[2], &choose_branch(1))
         .expect("the preserved index selects the remaining delegate");
     assert_eq!(
         engine
@@ -602,9 +608,11 @@ fn arcane_denial_refreshes_delegate_candidates_without_reusing_stale_indices() {
             .deciding_player,
         ids[3]
     );
-    assert!(engine.apply_command(ids[2], &choose_branch(2)).is_err());
+    assert!(engine
+        .apply_scenario_command(ids[2], &choose_branch(2))
+        .is_err());
     engine
-        .apply_command(ids[3], &choose_branch(2))
+        .apply_scenario_command(ids[3], &choose_branch(2))
         .expect("the selected delegate chooses the count for the departed target");
 
     let target_hand_before = engine.state.players[1].hand.len();
@@ -637,7 +645,7 @@ fn arcane_denial_delegate_choice_replays_accepted_commands_from_identical_state(
         command: RuledCommand,
     ) {
         let batch = engine
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("record only accepted commands");
         log.push((
             actor,
@@ -651,10 +659,10 @@ fn arcane_denial_delegate_choice_replays_accepted_commands_from_identical_state(
     let (mut engine, _) = cast_arcane_denial_against_opt_with_players(84272, &ids);
     let (mut replay, _) = cast_arcane_denial_against_opt_with_players(84272, &ids);
     engine
-        .apply_command(ids[1], &concede())
+        .apply_scenario_command(ids[1], &concede())
         .expect("target player leaves before the delayed upkeep");
     replay
-        .apply_command(ids[1], &concede())
+        .apply_scenario_command(ids[1], &concede())
         .expect("replay the target player's concession");
     end_active_turn(&mut engine, ids[0]);
     end_active_turn(&mut replay, ids[0]);
@@ -734,7 +742,7 @@ fn arcane_denial_delegate_choice_replays_accepted_commands_from_identical_state(
     for (actor, encoded, expected_batch, expected_state) in accepted {
         let command = RuledCommand::decode(encoded.as_slice()).unwrap();
         assert_eq!(
-            replay.apply_command(actor, &command).unwrap(),
+            replay.apply_scenario_command(actor, &command).unwrap(),
             expected_batch
         );
         assert_eq!(replay.diagnostic_snapshot().unwrap(), expected_state);
@@ -746,13 +754,13 @@ fn arcane_denial_reassigns_when_the_selected_delegate_leaves_during_their_choice
     let ids = FOUR_PLAYER_IDS;
     let (mut engine, _) = cast_arcane_denial_against_opt_with_players(84251, &ids);
     engine
-        .apply_command(ids[1], &concede())
+        .apply_scenario_command(ids[1], &concede())
         .expect("target spell controller leaves before the upkeep");
     end_active_turn(&mut engine, ids[0]);
     order_arcane_delayed_triggers(&mut engine, true);
     resolve_target_draw_trigger(&mut engine, ids[2]);
     engine
-        .apply_command(ids[2], &choose_branch(0))
+        .apply_scenario_command(ids[2], &choose_branch(0))
         .expect("controller delegates to the first surviving opponent");
     assert_eq!(
         engine
@@ -765,7 +773,7 @@ fn arcane_denial_reassigns_when_the_selected_delegate_leaves_during_their_choice
     );
 
     let refreshed = engine
-        .apply_command(ids[0], &concede())
+        .apply_scenario_command(ids[0], &concede())
         .expect("selected delegate leaves before answering the branch choice");
     let pending = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(pending.deciding_player, ids[3]);
@@ -786,7 +794,7 @@ fn arcane_denial_reassigns_when_the_selected_delegate_leaves_during_their_choice
         }
     ));
     engine
-        .apply_command(ids[3], &choose_branch(1))
+        .apply_scenario_command(ids[3], &choose_branch(1))
         .expect("the remaining eligible player receives the refreshed branch prompt");
 }
 
@@ -807,7 +815,7 @@ fn narset_keeps_arcane_denials_zero_and_one_draw_options_but_hides_two() {
         }
         let actor = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass priority until the target draw choice is published");
         if let Some(choice) = batch.events.iter().find_map(|event| match &event.ev {
             Some(tricerules_proto::ruled::v1::ruled_event::Ev::ResolutionChoiceRequired(
@@ -848,7 +856,7 @@ fn narset_keeps_arcane_denials_zero_and_one_draw_options_but_hides_two() {
     let pending_after_limit_changed = format!("{:?}", engine.state.pending_resolution);
     assert!(
         engine
-            .apply_command(PLAYER_IDS[1], &choose_branch(1))
+            .apply_scenario_command(PLAYER_IDS[1], &choose_branch(1))
             .is_err(),
         "the previously published one-card branch is rejected after the cap is used"
     );
@@ -865,7 +873,7 @@ fn narset_keeps_arcane_denials_zero_and_one_draw_options_but_hides_two() {
         .cards_drawn = 0;
 
     engine
-        .apply_command(PLAYER_IDS[1], &choose_branch(1))
+        .apply_scenario_command(PLAYER_IDS[1], &choose_branch(1))
         .expect("the affected player selects the legal one-card branch");
     assert_eq!(engine.state.players[1].hand.len(), target_hand_before + 1);
     assert_eq!(

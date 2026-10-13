@@ -1,7 +1,8 @@
 //! Exact Garruk's Uprising clauses and its intervening-if versus entry-event distinction.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{CounterKind, Keyword};
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn game() -> GameEngine {
     assert!(
@@ -32,9 +33,9 @@ fn seed_creature(engine: &mut GameEngine, player: usize, card_id: &str) -> u32 {
 fn resolve_top(engine: &mut GameEngine) {
     answer_trigger_order_in_engine_order(engine);
     let first = engine.state.priority_player_id();
-    engine.apply_command(first, &pass()).unwrap();
+    engine.apply_scenario_command(first, &pass()).unwrap();
     let second = engine.state.priority_player_id();
-    engine.apply_command(second, &pass()).unwrap();
+    engine.apply_scenario_command(second, &pass()).unwrap();
 }
 
 fn cast(
@@ -48,7 +49,7 @@ fn cast(
     grant_pool(engine, player);
     let slot = hand_index_for_card(engine, player, card_id);
     engine
-        .apply_command(player as i32, &cast_spell_x(slot, targets, x))
+        .apply_scenario_command(player as i32, &cast_spell_x(slot, targets, x))
         .unwrap();
     resolve_top(engine);
     object
@@ -79,7 +80,7 @@ fn advance_to_main(engine: &mut GameEngine, player: i32) {
             }
             None => (engine.state.priority_player_id(), pass()),
         };
-        engine.apply_command(actor, &command).unwrap();
+        engine.apply_scenario_command(actor, &command).unwrap();
     }
     panic!("did not reach requested main phase");
 }
@@ -241,7 +242,7 @@ fn creature_entry_sees_static_bonus_counters_and_copied_values() {
                     "copy source precedes entry"
                 );
                 engine
-                    .apply_command(0, &submit_resolution_choice(vec![source]))
+                    .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
                     .unwrap();
                 creature
             }
@@ -284,7 +285,7 @@ fn casting_requires_green_and_rejection_preserves_the_card_and_resources() {
     let command_index = engine.state.command_index;
     let slot = hand_index_for_card(&engine, 0, "garruks_uprising");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect_err("three generic mana cannot pay the green pip");
     assert_eq!(engine.state.players[0].hand, hand);
     assert_eq!(engine.state.players[0].library, library);

@@ -932,6 +932,7 @@ impl GameEngine {
         if self.state.passes_since_stack_change < n {
             let mut batch = RuledEventBatch {
                 payment_preview: None,
+                resolution_prompt_state: None,
                 events: ev,
                 legal_by_player: Default::default(),
             };

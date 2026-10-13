@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 
 fn setup(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
@@ -17,7 +18,7 @@ fn setup(seed: u64) -> GameEngine {
 fn produce_restricted_mana(engine: &mut GameEngine, card_id: &str) -> (u32, u32) {
     let source = inject_permanent_on_battlefield(engine, 0, card_id);
     engine
-        .apply_command(0, &activate_ability_for(engine, source, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(engine, source, 0, vec![]))
         .unwrap_or_else(|error| panic!("activate {card_id}: {error}"));
     let group = engine.state.players[0]
         .restricted_mana
@@ -47,7 +48,7 @@ fn spend_restricted_on_ability(
         _ => unreachable!(),
     }
     ability.restricted_mana.push(selection);
-    engine.apply_command(0, &command)
+    engine.apply_scenario_command(0, &command)
 }
 
 #[test]
@@ -163,7 +164,7 @@ fn both_cards_allow_artifact_spells_and_reject_nonartifact_spells_atomically() {
             ..Default::default()
         });
         artifact_engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect("restricted mana casts an artifact spell");
 
         let mut creature_engine = setup(seed + 100);
@@ -192,7 +193,7 @@ fn both_cards_allow_artifact_spells_and_reject_nonartifact_spells_atomically() {
         let pool_before = creature_engine.state.players[0].mana_pool;
         let restricted_before = creature_engine.state.players[0].restricted_mana.clone();
         creature_engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect_err("restricted mana cannot cast a nonartifact spell");
         assert_eq!(creature_engine.state.players[0].mana_pool, pool_before);
         assert_eq!(
@@ -219,7 +220,7 @@ fn ward_payment_fixture(seed: u64, mana_source_card_id: &str) -> (GameEngine, u3
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     let spell_id = engine.state.players[0].hand[slot];
     engine
-        .apply_command(0, &cast_spell(slot, target_object(warded)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(warded)))
         .expect("cast Unsummon at Ward permanent");
     pass_both_players(&mut engine);
     assert!(
@@ -227,7 +228,7 @@ fn ward_payment_fixture(seed: u64, mana_source_card_id: &str) -> (GameEngine, u3
         "Ward payment prompt"
     );
     engine
-        .apply_command(0, &activate_ability_for(&engine, mana_source, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, mana_source, 0, vec![]))
         .expect("activate restricted mana ability during Ward payment");
     let group = engine.state.players[0]
         .restricted_mana
@@ -307,7 +308,7 @@ fn declining_a_resolution_payment_rewinds_restricted_mana_produced_during_the_pr
     assert_eq!(engine.state.players[0].restricted_mana.len(), 1);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(
                 tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,

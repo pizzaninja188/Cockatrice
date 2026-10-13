@@ -1,4 +1,5 @@
 //! Actual-card coverage for Voltaic Key's `{1}, {T}: Untap target artifact` ability.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 
@@ -59,7 +60,7 @@ fn voltaic_key_pays_and_taps_as_cost_then_untaps_an_opponents_artifact() {
     );
 
     engine
-        .apply_command(0, &activate_ability(key, 0, target(target_key)))
+        .apply_scenario_command(0, &activate_ability(key, 0, target(target_key)))
         .expect("activate targeting an opponent's artifact");
     assert!(
         is_tapped(&engine, key),
@@ -96,7 +97,7 @@ fn voltaic_key_can_target_itself_and_untaps_after_paying_its_tap_cost() {
     );
 
     engine
-        .apply_command(0, &activate_ability(key, 0, target(key)))
+        .apply_scenario_command(0, &activate_ability(key, 0, target(key)))
         .expect("the artifact may target itself");
     assert!(
         is_tapped(&engine, key),
@@ -125,7 +126,7 @@ fn voltaic_key_may_target_an_already_untapped_artifact() {
     );
 
     engine
-        .apply_command(0, &activate_ability(key, 0, target(target_key)))
+        .apply_scenario_command(0, &activate_ability(key, 0, target(target_key)))
         .expect("an untapped artifact remains a legal target");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -150,7 +151,7 @@ fn voltaic_key_rejects_a_nonartifact_without_paying_any_cost() {
     );
 
     let err = engine
-        .apply_command(0, &activate_ability(key, 0, target(land)))
+        .apply_scenario_command(0, &activate_ability(key, 0, target(land)))
         .expect_err("a land without the artifact type is not a legal target");
 
     assert!(matches!(err, tricerules_core::EngineError::Illegal(_)));

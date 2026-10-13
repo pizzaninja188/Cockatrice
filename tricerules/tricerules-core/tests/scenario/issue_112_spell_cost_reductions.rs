@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::GameEngine;
 
 #[test]
@@ -22,7 +23,7 @@ fn issue_165_witchstalker_reduction_is_published_and_cannot_pay_colored_mana() {
         .collect();
     let target = inject_creature_with_stats(&mut engine, 1, "grizzly_bears", 6, 6);
     engine
-        .apply_command(0, &declare_attackers(attackers))
+        .apply_scenario_command(0, &declare_attackers(attackers))
         .unwrap();
     assert_eq!(
         hand_action_reduction(&mut engine, 0, "witchstalker_frenzy", "after attacks"),
@@ -33,7 +34,7 @@ fn issue_165_witchstalker_reduction_is_published_and_cannot_pay_colored_mana() {
         target_object(target),
     );
     let index = engine.state.command_index;
-    assert!(engine.apply_command(0, &command).is_err());
+    assert!(engine.apply_scenario_command(0, &command).is_err());
     assert_eq!(engine.state.command_index, index);
     give_mana(
         &mut engine,
@@ -43,7 +44,7 @@ fn issue_165_witchstalker_reduction_is_published_and_cannot_pay_colored_mana() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(engine.state.players[0].mana_pool.red, 0);
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&target].damage, 5);
@@ -122,7 +123,7 @@ fn tapped_target_reduction_is_authoritative_and_untapped_target_is_not_reduced()
     engine.state.players[0].mana_pool.white = 1;
     engine.state.players[0].mana_pool.colorless = 1;
     engine
-        .apply_command(0, &cast_spell(luminous, target_object(tapped_bear)))
+        .apply_scenario_command(0, &cast_spell(luminous, target_object(tapped_bear)))
         .expect("Luminous Rebuke costs {1}{W} against a tapped creature");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.state.players[1].graveyard.contains(&tapped_bear));
@@ -133,7 +134,7 @@ fn tapped_target_reduction_is_authoritative_and_untapped_target_is_not_reduced()
     let command_before = engine.state.command_index;
     let seized = hand_index_for_card(&engine, 0, "seized_from_slumber");
     assert!(engine
-        .apply_command(0, &cast_spell(seized, target_object(untapped_bear)))
+        .apply_scenario_command(0, &cast_spell(seized, target_object(untapped_bear)))
         .is_err());
     assert_eq!(engine.state.players[0].hand, hand_before);
     assert_eq!(engine.state.command_index, command_before);
@@ -186,7 +187,7 @@ fn battlefield_sources_filter_and_stack_their_reductions() {
     engine.state.players[0].mana_pool.blue = 1;
     let first_spell = hand_index_for_card(&engine, 0, "unending_whisper");
     engine
-        .apply_command(0, &cast_spell(first_spell, vec![]))
+        .apply_scenario_command(0, &cast_spell(first_spell, vec![]))
         .expect("two Mocking Sprites reduce an instant or sorcery's generic component only");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -199,7 +200,7 @@ fn battlefield_sources_filter_and_stack_their_reductions() {
     engine.state.players[0].mana_pool.blue = 1;
     let divination = hand_index_for_card(&engine, 0, "divination");
     engine
-        .apply_command(0, &cast_spell(divination, vec![]))
+        .apply_scenario_command(0, &cast_spell(divination, vec![]))
         .expect("second spell is reduced to {U}");
     resolve_entire_stack_two_player(&mut engine);
     ensure_in_hand(&mut engine, 0, "divination");
@@ -244,7 +245,7 @@ fn affinity_counts_controlled_creatures_and_packbeast_draws_on_entry() {
     let hand_before = engine.state.players[0].hand.len();
     let packbeast = hand_index_for_card(&engine, 0, "salt_road_packbeast");
     engine
-        .apply_command(0, &cast_spell(packbeast, vec![]))
+        .apply_scenario_command(0, &cast_spell(packbeast, vec![]))
         .expect("Packbeast costs {3}{W} with two creatures");
     resolve_entire_stack_two_player(&mut engine);
 

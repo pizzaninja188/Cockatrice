@@ -3,6 +3,7 @@
 //! Oracle and rulings checked 2026-09-11. CR 603.6c and 603.10 preserve death-trigger LKI;
 //! CR 608.2c preserves printed instruction order; CR 701.25 defines surveil; and CR 605.1a
 //! makes the targetless tap abilities mana abilities.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -29,9 +30,11 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }
 
@@ -63,12 +66,12 @@ fn generated_synthoids_surveils_two_with_private_ordered_library_choice() {
     assert_eq!(choice.candidate_object_ids, top);
 
     let ordering = engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("keep both cards on top");
     let order_choice = find_resolution_choice(&ordering).expect("top-order choice");
     assert_eq!((order_choice.min, order_choice.max), (2, 2));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
         .expect("order retained cards");
     assert_eq!(
         engine.state.players[0]
@@ -103,7 +106,9 @@ fn generated_buzz_bots_death_lki_draws_for_its_last_controller() {
         .get_mut(&bots)
         .expect("Buzz Bots")
         .damage = 1;
-    engine.apply_command(0, &pass()).expect("death SBA");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("death SBA");
     assert_eq!(engine.state.objects[&bots].zone, Zone::Graveyard);
     assert!(engine
         .state
@@ -206,7 +211,7 @@ fn generated_druid_publishes_and_produces_each_colored_mana_option() {
         ability.mana_option_index = option;
 
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect("activate chosen mana option");
         let pool = &engine.state.players[0].mana_pool;
         assert_eq!(
@@ -238,7 +243,7 @@ fn generated_druid_publishes_and_produces_each_colored_mana_option() {
     };
     ability.mana_option_index = 5;
     engine
-        .apply_command(0, &invalid)
+        .apply_scenario_command(0, &invalid)
         .expect_err("out-of-range mana option");
     assert!(!engine.state.objects[&druid].tapped);
 }

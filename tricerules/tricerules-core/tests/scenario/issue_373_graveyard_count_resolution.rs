@@ -6,6 +6,7 @@
 //! CR 202.3 keep the affine damage formulas tied to the resolving stack item, so the resolving
 //! spell's own card is on the stack rather than in a graveyard; and CR 603.4/602.5b distinguish
 //! intervening-if re-checks from activation conditions.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -33,15 +34,18 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }
 
 fn select_optional_effect() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: 0,
             ..Default::default()
@@ -110,7 +114,7 @@ fn damage_on(engine: &GameEngine, object_id: u32) -> u32 {
 
 fn advance_to_declare_attackers_from_main1(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("move to beginning of combat");
     pass_both_players(engine);
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
@@ -134,7 +138,7 @@ fn issue_373_combustion_technique_counts_lessons_and_not_itself() {
     );
     let slot = hand_index_for_card(&no_lessons, 0, "combustion_technique");
     no_lessons
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Combustion Technique");
     resolve_entire_stack_two_player(&mut no_lessons);
     assert_eq!(
@@ -160,7 +164,7 @@ fn issue_373_combustion_technique_counts_lessons_and_not_itself() {
     );
     let slot = hand_index_for_card(&two_lessons, 0, "combustion_technique");
     two_lessons
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Combustion Technique");
     resolve_entire_stack_two_player(&mut two_lessons);
     assert_eq!(
@@ -184,7 +188,7 @@ fn issue_373_combustion_technique_counts_lessons_and_not_itself() {
     );
     let slot = hand_index_for_card(&lethal, 0, "combustion_technique");
     lethal
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Combustion Technique");
     resolve_entire_stack_two_player(&mut lethal);
     assert_eq!(
@@ -219,7 +223,7 @@ fn issue_373_frantic_firebolt_union_counts_instants_sorceries_and_adventures() {
     );
     let slot = hand_index_for_card(&matched, 0, "frantic_firebolt");
     matched
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Frantic Firebolt");
     resolve_entire_stack_two_player(&mut matched);
     assert_eq!(
@@ -243,7 +247,7 @@ fn issue_373_frantic_firebolt_union_counts_instants_sorceries_and_adventures() {
     );
     let slot = hand_index_for_card(&unmatched, 0, "frantic_firebolt");
     unmatched
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Frantic Firebolt");
     resolve_entire_stack_two_player(&mut unmatched);
     assert_eq!(damage_on(&unmatched, target), 2, "only the base constant");
@@ -286,7 +290,7 @@ fn issue_373_cloud_of_darkness_particle_beam_scales_with_permanent_cards() {
 
     move_ready_to_battlefield(&mut engine, 0, "cloud_of_darkness");
     engine
-        .apply_command(0, &choose_trigger_targets(target_object(target)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_object(target)))
         .expect("choose Particle Beam target");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -312,7 +316,7 @@ fn issue_373_gran_pulse_ochu_counts_only_permanent_cards() {
         },
     );
     engine
-        .apply_command(0, &activate_ability_for(&engine, ochu, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, ochu, 0, vec![]))
         .expect("activate Gran Pulse Ochu");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -332,7 +336,7 @@ fn issue_373_malamet_veteran_checks_the_intervening_permanent_count() {
     inject_graveyard_card(&mut below, 0, "bump_in_the_night");
     advance_to_declare_attackers_from_main1(&mut below);
     below
-        .apply_command(0, &declare_attackers(vec![veteran]))
+        .apply_scenario_command(0, &declare_attackers(vec![veteran]))
         .expect("declare Malamet Veteran");
     assert!(
         below.state.stack.is_empty(),
@@ -347,9 +351,9 @@ fn issue_373_malamet_veteran_checks_the_intervening_permanent_count() {
     }
     inject_graveyard_card(&mut at, 0, "unsummon");
     advance_to_declare_attackers_from_main1(&mut at);
-    at.apply_command(0, &declare_attackers(vec![veteran]))
+    at.apply_scenario_command(0, &declare_attackers(vec![veteran]))
         .expect("declare Malamet Veteran");
-    at.apply_command(0, &choose_trigger_targets(target_object(veteran)))
+    at.apply_scenario_command(0, &choose_trigger_targets(target_object(veteran)))
         .expect("choose the counter target");
     resolve_entire_stack_two_player(&mut at);
     assert_eq!(
@@ -377,7 +381,7 @@ fn issue_373_thought_shucker_threshold_and_once_limit() {
     );
     assert!(
         engine
-            .apply_command(0, &activate_ability_for(&engine, shucker, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability_for(&engine, shucker, 0, vec![]))
             .is_err(),
         "six cards in the graveyard do not satisfy Threshold seven"
     );
@@ -385,7 +389,7 @@ fn issue_373_thought_shucker_threshold_and_once_limit() {
     inject_graveyard_card(&mut engine, 0, "forest");
     let hand_before = engine.state.players[0].hand.len();
     engine
-        .apply_command(0, &activate_ability_for(&engine, shucker, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, shucker, 0, vec![]))
         .expect("seven cards satisfy Threshold");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -399,7 +403,7 @@ fn issue_373_thought_shucker_threshold_and_once_limit() {
     );
     assert!(
         engine
-            .apply_command(0, &activate_ability_for(&engine, shucker, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability_for(&engine, shucker, 0, vec![]))
             .is_err(),
         "the PerObject limit allows only one activation"
     );
@@ -417,7 +421,7 @@ fn issue_373_gloom_ripper_sums_battlefield_elves_and_graveyard_elf_cards() {
 
     let _ = ripper;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_targets(vec![
                 tricerules_proto::ruled::v1::TargetRef {
@@ -468,7 +472,7 @@ fn issue_373_join_the_dead_replaces_the_base_pump_at_descend_four() {
     );
     let slot = hand_index_for_card(&below, 0, "join_the_dead");
     below
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Join the Dead");
     resolve_entire_stack_two_player(&mut below);
     assert_eq!(
@@ -496,7 +500,7 @@ fn issue_373_join_the_dead_replaces_the_base_pump_at_descend_four() {
         },
     );
     let slot = hand_index_for_card(&at, 0, "join_the_dead");
-    at.apply_command(0, &cast_spell(slot, target_object(target)))
+    at.apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Join the Dead");
     resolve_entire_stack_two_player(&mut at);
     assert_eq!(
@@ -522,7 +526,7 @@ fn issue_373_lasyd_prowler_mills_per_controlled_land() {
         ChoiceKind::ResolutionBranch
     );
     engine
-        .apply_command(0, &select_optional_effect())
+        .apply_scenario_command(0, &select_optional_effect())
         .expect("accept the optional ETB mill");
     assert_eq!(
         engine.state.players[0].graveyard.len(),
@@ -549,7 +553,7 @@ fn issue_373_lasyd_prowler_renew_counts_graveyard_land_cards() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &graveyard_ability(&engine, prowler, 0, target_object(target)),
         )
@@ -582,7 +586,7 @@ fn issue_373_violent_urge_delirium_adds_double_strike_at_four_types() {
     );
     let slot = hand_index_for_card(&below, 0, "violent_urge");
     below
-        .apply_command(0, &cast_spell(slot, target_object(creature)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(creature)))
         .expect("cast Violent Urge");
     resolve_entire_stack_two_player(&mut below);
     assert_eq!(below.effective_power(creature), Some(3));
@@ -605,7 +609,7 @@ fn issue_373_violent_urge_delirium_adds_double_strike_at_four_types() {
         },
     );
     let slot = hand_index_for_card(&at, 0, "violent_urge");
-    at.apply_command(0, &cast_spell(slot, target_object(creature)))
+    at.apply_scenario_command(0, &cast_spell(slot, target_object(creature)))
         .expect("cast Violent Urge");
     resolve_entire_stack_two_player(&mut at);
     assert!(at.effective_has_keyword(creature, Keyword::FirstStrike));
@@ -633,7 +637,7 @@ fn issue_373_beastie_beatdown_counters_precede_the_power_damage() {
     );
     let slot = hand_index_for_card(&below, 0, "beastie_beatdown");
     below
-        .apply_command(0, &cast_spell(slot, grouped_targets(own, opposing)))
+        .apply_scenario_command(0, &cast_spell(slot, grouped_targets(own, opposing)))
         .expect("cast Beastie Beatdown");
     resolve_entire_stack_two_player(&mut below);
     assert_eq!(
@@ -661,7 +665,7 @@ fn issue_373_beastie_beatdown_counters_precede_the_power_damage() {
         },
     );
     let slot = hand_index_for_card(&at, 0, "beastie_beatdown");
-    at.apply_command(0, &cast_spell(slot, grouped_targets(own, opposing)))
+    at.apply_scenario_command(0, &cast_spell(slot, grouped_targets(own, opposing)))
         .expect("cast Beastie Beatdown");
     resolve_entire_stack_two_player(&mut at);
     assert_eq!(

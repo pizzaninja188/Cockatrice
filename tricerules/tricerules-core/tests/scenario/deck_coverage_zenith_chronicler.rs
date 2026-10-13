@@ -1,4 +1,5 @@
 //! Exact Zenith Chronicler cast-event and caster-relative draw evidence.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{Color, ContinuousEffectKind, EffectDuration};
@@ -40,7 +41,7 @@ fn cast_card(engine: &mut GameEngine, seat: usize, card: &str, targets: Vec<Targ
     inject_card_into_hand(engine, seat, card);
     let index = hand_index_for_card(engine, seat, card);
     engine
-        .apply_command(actor, &cast_spell(index, targets))
+        .apply_scenario_command(actor, &cast_spell(index, targets))
         .unwrap();
     engine
         .state
@@ -72,7 +73,7 @@ fn advance(engine: &mut GameEngine, player: i32) {
             let seat = engine.state.player_idx(actor).unwrap();
             let excess = engine.state.players[seat].hand.len() - 7;
             engine
-                .apply_command(actor, &discard_cleanup_batch((0..excess as u32).collect()))
+                .apply_scenario_command(actor, &discard_cleanup_batch((0..excess as u32).collect()))
                 .unwrap();
         } else {
             pass_priority_round(engine);
@@ -93,7 +94,7 @@ fn resolve_all(engine: &mut GameEngine) {
 
 fn rejected(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = serde_json::to_vec(&engine.state).unwrap();
-    assert!(engine.apply_command(actor, command).is_err());
+    assert!(engine.apply_scenario_command(actor, command).is_err());
     assert_eq!(serde_json::to_vec(&engine.state).unwrap(), before);
 }
 
@@ -117,7 +118,7 @@ fn zenith_real_clone_has_independent_trigger_and_order_replies_are_atomic() {
     pass_priority_round(&mut engine);
     assert!(engine.state.pending_resolution.is_some());
     engine
-        .apply_command(10, &submit_resolution_choice(vec![zenith]))
+        .apply_scenario_command(10, &submit_resolution_choice(vec![zenith]))
         .unwrap();
     let copy = battlefield_object_for_card(&engine, 0, "clone");
     assert_eq!(engine.effective_power(copy), Some(3));
@@ -187,7 +188,7 @@ fn zenith_source_departure_and_control_change_preserve_captured_caster() {
         let zenith = battlefield_object_for_card(&engine, 0, "zenith_chronicler");
         cast_card(&mut engine, 1, "lightning_helix", target_player(30));
         if leave {
-            engine.apply_command(20, &pass()).unwrap();
+            engine.apply_scenario_command(20, &pass()).unwrap();
             cast_card(&mut engine, 2, "unsummon", target_object(zenith));
             pass_priority_round(&mut engine);
             assert_eq!(
@@ -236,7 +237,7 @@ fn zenith_caster_departure_retains_anchor_and_lost_other_player_does_not_draw() 
         let cmd = rv1::RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
         };
-        engine.apply_command(departing, &cmd).unwrap();
+        engine.apply_scenario_command(departing, &cmd).unwrap();
         let hands: Vec<_> = engine.state.players.iter().map(|p| p.hand.len()).collect();
         let libraries: Vec<_> = engine
             .state
@@ -273,7 +274,7 @@ fn zenith_group_draw_finishes_before_empty_library_loss_and_draw_triggers() {
         let mut logs = vec![];
         for _ in 0..3 {
             let actor = engine.state.priority_player_id();
-            let batch = engine.apply_command(actor, &pass()).unwrap();
+            let batch = engine.apply_scenario_command(actor, &pass()).unwrap();
             logs.extend(batch.events.iter().filter_map(|event| match &event.ev {
                 Some(Ev::Log(log)) => Some(log.text.clone()),
                 _ => None,
@@ -345,17 +346,19 @@ fn zenith_accepted_cast_and_draw_commands_replay_identically() {
     let invalid = cast_spell(card, target_object(u32::MAX));
     rejected(&mut engine, 10, &invalid);
     let mut commands = vec![(10, cast)];
-    let mut batches = vec![engine.apply_command(commands[0].0, &commands[0].1).unwrap()];
+    let mut batches = vec![engine
+        .apply_scenario_command(commands[0].0, &commands[0].1)
+        .unwrap()];
     while !engine.state.stack.is_empty() {
         let actor = engine.state.priority_player_id();
         let command = pass();
-        batches.push(engine.apply_command(actor, &command).unwrap());
+        batches.push(engine.apply_scenario_command(actor, &command).unwrap());
         commands.push((actor, command));
     }
     let mut replay = start();
     let replayed: Vec<_> = commands
         .iter()
-        .map(|(actor, command)| replay.apply_command(*actor, command).unwrap())
+        .map(|(actor, command)| replay.apply_scenario_command(*actor, command).unwrap())
         .collect();
     assert_eq!(replayed, batches);
     assert_eq!(
@@ -398,13 +401,13 @@ fn zenith_chronicler_opponent_first_multicolor_draws_casters_complement() {
     );
     let hand_index = hand_index_for_card(&engine, 0, "zenith_chronicler");
     engine
-        .apply_command(10, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(10, &cast_spell(hand_index, vec![]))
         .unwrap();
     pass_priority_round(&mut engine);
     let zenith = battlefield_object_for_card(&engine, 0, "zenith_chronicler");
     assert_eq!(engine.state.objects[&zenith].controller, 10);
 
-    engine.apply_command(10, &pass()).unwrap();
+    engine.apply_scenario_command(10, &pass()).unwrap();
     ensure_in_hand(&mut engine, 1, "lightning_helix");
     give_mana(
         &mut engine,
@@ -417,7 +420,7 @@ fn zenith_chronicler_opponent_first_multicolor_draws_casters_complement() {
     );
     let helix = hand_index_for_card(&engine, 1, "lightning_helix");
     engine
-        .apply_command(20, &cast_spell(helix, target_player(30)))
+        .apply_scenario_command(20, &cast_spell(helix, target_player(30)))
         .unwrap();
     assert_eq!(
         engine.state.stack.len(),
@@ -526,7 +529,7 @@ fn zenith_first_matching_cast_is_per_caster_and_resets_next_turn() {
         );
         resolve_all(&mut engine);
     }
-    engine.apply_command(10, &pass()).unwrap();
+    engine.apply_scenario_command(10, &pass()).unwrap();
     cast_card(&mut engine, 1, "lightning_helix", target_player(30));
     assert_eq!(
         engine.state.stack.iter().filter(|s| s.is_triggered).count(),
@@ -568,7 +571,7 @@ fn zenith_history_before_entry_and_countered_cast_still_count() {
     resolve_all(&mut engine);
     advance(&mut engine, 20);
     let helix = cast_card(&mut engine, 1, "lightning_helix", target_player(30));
-    engine.apply_command(20, &pass()).unwrap();
+    engine.apply_scenario_command(20, &pass()).unwrap();
     cast_card(&mut engine, 2, "counterspell", target_object(helix));
     pass_priority_round(&mut engine);
     assert!(!engine.state.stack.iter().any(|s| s.id == helix));
@@ -596,14 +599,14 @@ fn zenith_twincast_created_stack_copy_is_not_another_cast() {
     let mut engine = setup();
     advance(&mut engine, 20);
     let helix = cast_card(&mut engine, 1, "lightning_helix", target_player(30));
-    engine.apply_command(20, &pass()).unwrap();
+    engine.apply_scenario_command(20, &pass()).unwrap();
     cast_card(&mut engine, 2, "twincast", target_object(helix));
     let history = engine.state.turn_history.current.spell_casts.clone();
     pass_priority_round(&mut engine);
     assert!(engine.state.pending_resolution.is_some());
     rejected(&mut engine, 10, &submit_resolution_choice(vec![30]));
     engine
-        .apply_command(30, &submit_resolution_choice(vec![30]))
+        .apply_scenario_command(30, &submit_resolution_choice(vec![30]))
         .unwrap();
     let copy = engine.state.stack.last().unwrap();
     assert!(copy.is_copy);
@@ -633,7 +636,7 @@ fn zenith_preparation_copy_actually_cast_records_exile_event_and_mono_filter() {
     );
     let index = hand_index_for_card(&engine, 1, "infirmary_healer_stream_of_life");
     engine
-        .apply_command(20, &cast_spell_face(index, vec![], 0))
+        .apply_scenario_command(20, &cast_spell_face(index, vec![], 0))
         .unwrap();
     let healer = engine.state.stack.last().unwrap().id;
     resolve_all(&mut engine);
@@ -666,7 +669,7 @@ fn zenith_preparation_copy_actually_cast_records_exile_event_and_mono_filter() {
             ..Default::default()
         })),
     };
-    engine.apply_command(20, &cmd).unwrap();
+    engine.apply_scenario_command(20, &cmd).unwrap();
     let spell = engine.state.stack.iter().find(|s| !s.is_triggered).unwrap();
     assert!(spell.is_copy && spell.cast_occurrence.is_some());
     assert_eq!(spell.cast_by, Some(20));

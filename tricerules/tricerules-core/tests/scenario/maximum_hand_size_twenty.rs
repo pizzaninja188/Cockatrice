@@ -1,8 +1,9 @@
 //! Engine regression for Twenty-Toed Toad's fixed maximum hand size (CR 613.11, 514.1).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::StaticAbilityDef;
-use tricerules_core::{state::CopiableValues, GameEngine, TurnStep};
+use tricerules_core::{state::CopiableValues, TurnStep};
 
 #[test]
 fn fixed_twenty_hand_limit_does_not_request_cleanup_discard_at_twenty() {
@@ -46,9 +47,11 @@ fn fixed_twenty_hand_limit_does_not_request_cleanup_discard_at_twenty() {
     }
     engine.state.turn_step = TurnStep::EndStep;
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
-    engine.apply_command(1, &pass()).expect("opponent passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("opponent passes");
 
     assert_eq!(engine.state.cleanup_discard_player, None);
     assert_eq!(engine.state.players[0].hand.len(), 20);

@@ -193,6 +193,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     variable_mana_contribution: false,
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: controller,
@@ -210,6 +211,9 @@ impl GameEngine {
         });
         events.push(ev_log(prompt.clone()));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+
             deciding_player: controller,
             presentation: PendingResolutionPresentation {
                 source_object_id: stack.item.id,

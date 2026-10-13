@@ -1,8 +1,9 @@
 //! Actual Frantic Search: private draw/discard, then untargeted simultaneous chosen-land untap.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{ContinuousEffectKind, CounterKind, EffectDuration, Keyword};
-use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine, Zone};
+use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEventBatch};
 
 const SEARCH: &str = "frantic_search";
@@ -34,12 +35,14 @@ fn cast_and_discard(engine: &mut GameEngine) -> RuledEventBatch {
         },
     );
     let slot = hand_index_for_card(engine, 0, SEARCH);
-    engine.apply_command(10, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(10, &cast_spell(slot, vec![]))
+        .unwrap();
     let batch = resolve_one(engine);
     let discard = find_resolution_choice(&batch).expect("discard before land choice");
     assert_eq!(discard.choice_kind(), ChoiceKind::HandCards);
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &submit_resolution_choice(discard.candidate_object_ids[..2].to_vec()),
         )
@@ -49,7 +52,7 @@ fn cast_and_discard(engine: &mut GameEngine) -> RuledEventBatch {
 fn reject(engine: &mut GameEngine, actor: i32, chosen: Vec<u32>) {
     let before = format!("{:?}", engine.state);
     engine
-        .apply_command(actor, &submit_resolution_choice(chosen))
+        .apply_scenario_command(actor, &submit_resolution_choice(chosen))
         .unwrap_err();
     assert_eq!(format!("{:?}", engine.state), before);
 }
@@ -70,7 +73,7 @@ fn resolve_one(e: &mut GameEngine) -> RuledEventBatch {
     let mut batch = RuledEventBatch::default();
     for _ in 0..e.state.players.len() {
         let actor = e.state.priority_player_id();
-        batch = e.apply_command(actor, &pass()).unwrap();
+        batch = e.apply_scenario_command(actor, &pass()).unwrap();
     }
     batch
 }
@@ -97,7 +100,7 @@ fn frantic_search_rejects_illegal_and_stale_land_choices_without_mutation() {
     *engine.state.zone_change_generation.entry(oid).or_default() += 1;
     reject(&mut engine, 10, vec![oid]);
     engine
-        .apply_command(10, &submit_resolution_choice(vec![lands[1]]))
+        .apply_scenario_command(10, &submit_resolution_choice(vec![lands[1]]))
         .unwrap();
     assert!(engine.state.objects[&lands[0]].tapped);
     assert!(!engine.state.objects[&lands[1]].tapped);
@@ -143,7 +146,7 @@ fn frantic_search_untargeted_lands_include_opponents_and_respect_stun_and_prohib
         assert!(choice.candidate_object_ids.contains(&oid));
     }
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &submit_resolution_choice(vec![protected, stunned, prohibited]),
         )
@@ -167,7 +170,7 @@ fn frantic_search_untargeted_lands_include_opponents_and_respect_stun_and_prohib
         .candidate_object_ids
         .contains(&untapped));
     engine
-        .apply_command(10, &submit_resolution_choice(vec![untapped]))
+        .apply_scenario_command(10, &submit_resolution_choice(vec![untapped]))
         .unwrap();
     assert!(!engine.state.objects[&untapped].tapped);
     assert!(engine.state.stack.is_empty());
@@ -229,7 +232,7 @@ fn frantic_search_paid_cast_and_both_choices_replay_deterministically() {
     let mut log = Vec::new();
     let mut record =
         |engine: &mut GameEngine, actor, command: tricerules_proto::ruled::v1::RuledCommand| {
-            let batch = engine.apply_command(actor, &command).unwrap();
+            let batch = engine.apply_scenario_command(actor, &command).unwrap();
             log.push((actor, command, batch.clone()));
             batch
         };
@@ -252,7 +255,10 @@ fn frantic_search_paid_cast_and_both_choices_replay_deterministically() {
     record(&mut engine, 10, submit_resolution_choice(lands));
     let (mut replay, _, _) = prepared();
     for (actor, command, expected) in log {
-        assert_eq!(replay.apply_command(actor, &command).unwrap(), expected);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &command).unwrap(),
+            expected
+        );
     }
     assert_eq!(
         serde_json::to_value(&replay.state).unwrap(),
@@ -303,7 +309,8 @@ fn frantic_search_paid_cast_private_discard_then_zero_one_three_lands() {
             },
         );
         let slot = hand_index_for_card(&e, 0, SEARCH);
-        e.apply_command(10, &cast_spell(slot, vec![])).unwrap();
+        e.apply_scenario_command(10, &cast_spell(slot, vec![]))
+            .unwrap();
         assert_eq!(e.state.players[0].mana_pool, Default::default());
         let batch = resolve_one(&mut e);
         let discard =
@@ -314,10 +321,10 @@ fn frantic_search_paid_cast_private_discard_then_zero_one_three_lands() {
         assert_eq!((discard.min, discard.max), (2, 2));
         assert_eq!(e.state.players[0].library.len(), library_before - 2);
         assert_eq!(e.state.players[0].hand.len(), hand_before + 1);
-        assert!(e.apply_command(20, &pass()).is_err());
+        assert!(e.apply_scenario_command(20, &pass()).is_err());
         let discarded = discard.candidate_object_ids[..2].to_vec();
         let batch = e
-            .apply_command(10, &submit_resolution_choice(discarded.clone()))
+            .apply_scenario_command(10, &submit_resolution_choice(discarded.clone()))
             .unwrap();
         assert!(discarded
             .iter()
@@ -331,8 +338,8 @@ fn frantic_search_paid_cast_private_discard_then_zero_one_three_lands() {
         assert!(lands
             .iter()
             .all(|oid| choice.candidate_object_ids.contains(oid)));
-        assert!(e.apply_command(30, &pass()).is_err());
-        e.apply_command(10, &submit_resolution_choice(lands[..count].to_vec()))
+        assert!(e.apply_scenario_command(30, &pass()).is_err());
+        e.apply_scenario_command(10, &submit_resolution_choice(lands[..count].to_vec()))
             .unwrap();
         for (index, oid) in lands.iter().enumerate() {
             assert_eq!(e.state.objects[oid].tapped, index >= count);

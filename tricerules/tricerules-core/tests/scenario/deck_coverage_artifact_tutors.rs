@@ -1,5 +1,6 @@
 //! Actual-card payment, private selection, and zone-incarnation coverage.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 
 fn game(seed: u64) -> GameEngine {
@@ -80,12 +81,12 @@ fn terrain_puts_only_own_basic_hand_land_tapped_or_declines_without_land_play_or
         let before = format!("{:?}", engine.state.pending_resolution);
         for (actor, object) in [(1, forest), (0, taiga), (0, foreign)] {
             engine
-                .apply_command(actor, &submit_resolution_choice(vec![object]))
+                .apply_scenario_command(actor, &submit_resolution_choice(vec![object]))
                 .expect_err("invalid actor/nonbasic/foreign hand");
             assert_eq!(format!("{:?}", engine.state.pending_resolution), before);
         }
         let completion = engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &submit_resolution_choice(if choose { vec![forest] } else { vec![] }),
             )
@@ -110,7 +111,7 @@ fn terrain_puts_only_own_basic_hand_land_tapped_or_declines_without_land_play_or
         assert!(engine.state.stack.is_empty());
         let slot = hand_index_for_card(&engine, 0, "island");
         engine
-            .apply_command(0, &play_land(slot))
+            .apply_scenario_command(0, &play_land(slot))
             .expect("normal land play remains available");
         assert_eq!(engine.state.lands_played_this_turn, 1);
     }
@@ -156,7 +157,7 @@ fn trash_targets_before_sacrifice_pays_red_and_returns_exact_artifact_with_etb()
             vec![permanent_cost_selection(0, fodder)],
         );
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect_err("target must already be own graveyard artifact");
         assert_eq!(engine.state.players[0].mana_pool.red, 1);
         assert_eq!(engine.state.players[0].mana_pool.colorless, 2);
@@ -169,7 +170,7 @@ fn trash_targets_before_sacrifice_pays_red_and_returns_exact_artifact_with_etb()
         graveyard(target),
         vec![permanent_cost_selection(0, fodder)],
     );
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(engine.state.players[0].mana_pool.red, 0);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert_eq!(engine.state.objects[&fodder].zone, Zone::Graveyard);
@@ -204,7 +205,7 @@ fn trash_rejects_missing_red_and_revalidates_target_incarnation() {
         vec![permanent_cost_selection(0, fodder)],
     );
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect_err("generic cannot pay red pip");
     assert_eq!(engine.state.objects[&fodder].zone, Zone::Battlefield);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 3);
@@ -217,7 +218,7 @@ fn trash_rejects_missing_red_and_revalidates_target_incarnation() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     // Simulate the same physical card leaving and returning to the graveyard: new incarnation.
     *engine
         .state

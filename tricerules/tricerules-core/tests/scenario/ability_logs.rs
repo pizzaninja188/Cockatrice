@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_proto::ruled::v1::LogMessage;
 
@@ -38,7 +39,7 @@ fn ability_logs_cover_activated_mana_sacrifice_and_targeted_abilities() {
         advance_to_main1_from_game_start(&mut engine);
         let source = inject_permanent_on_battlefield(&mut engine, 0, card_id);
         let batch = engine
-            .apply_command(0, &activate_ability(source, 0, targets.clone()))
+            .apply_scenario_command(0, &activate_ability(source, 0, targets.clone()))
             .unwrap();
         let log = ability_log(&batch);
         let presentation = log.ability_presentation.as_ref().unwrap();
@@ -100,13 +101,13 @@ fn ability_logs_preserve_optional_targeted_trigger_presentation_through_decline(
     inject_card_into_hand(&mut engine, 0, "gravedigger");
     grant_pool(&mut engine, 0);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(hand_index_for_card(&engine, 0, "gravedigger"), vec![]),
         )
         .unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    let batch = engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let batch = engine.apply_scenario_command(1, &pass()).unwrap();
     let ability = ability_log(&batch)
         .ability_presentation
         .as_ref()
@@ -131,16 +132,16 @@ fn ability_logs_preserve_optional_targeted_trigger_presentation_through_decline(
         })),
     };
     assert!(
-        engine.apply_command(1, &decline).is_err(),
+        engine.apply_scenario_command(1, &decline).is_err(),
         "opponent cannot decline"
     );
     assert!(
-        engine.apply_command(0, &decline).is_err(),
+        engine.apply_scenario_command(0, &decline).is_err(),
         "the controller chooses targets before the resolution-time may decision"
     );
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {

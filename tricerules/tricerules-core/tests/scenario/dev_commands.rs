@@ -4,6 +4,7 @@
 //! by default, and once open the cheats must produce state indistinguishable from the real thing
 //! — a conjured permanent has to fire ETB triggers, register static abilities, and *not* be a
 //! token, or the console silently lies to whoever is using it to test a card.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_core::Zone;
@@ -105,7 +106,7 @@ fn dev_move_declared_commander_from_command_zone_round_trips_physical_identity_a
     ];
     let mut batches = vec![];
     for (index, command) in commands.iter().enumerate() {
-        let batch = engine.apply_command(0, command).unwrap();
+        let batch = engine.apply_scenario_command(0, command).unwrap();
         assert_eq!(engine.state.objects.len(), initial_object_count);
         assert_eq!(
             engine.state.players[0].declared_commander_object_ids,
@@ -136,7 +137,7 @@ fn dev_move_declared_commander_from_command_zone_round_trips_physical_identity_a
     }
     let mut replay = create();
     for (command, expected) in commands.iter().zip(batches) {
-        assert_eq!(replay.apply_command(0, command).unwrap(), expected);
+        assert_eq!(replay.apply_scenario_command(0, command).unwrap(), expected);
     }
     assert_eq!(replay.state.players[0].command_zone, [commander]);
 }
@@ -150,7 +151,9 @@ fn preparation_display_identity_matches_the_whole_card_database_entry() {
         "Pigment Wrangler // Striking Palette",
         "Quill-Blade Laureate // Twofold Intent",
     ] {
-        let batch = e.apply_command(0, &put(0, DevZone::Hand, name)).unwrap();
+        let batch = e
+            .apply_scenario_command(0, &put(0, DevZone::Hand, name))
+            .unwrap();
         let conjured = batch
             .events
             .iter()
@@ -161,7 +164,7 @@ fn preparation_display_identity_matches_the_whole_card_database_entry() {
             .unwrap();
         assert_eq!(conjured.card_name, name, "hand card database identity");
         let batch = e
-            .apply_command(0, &put(0, DevZone::Battlefield, name))
+            .apply_scenario_command(0, &put(0, DevZone::Battlefield, name))
             .unwrap();
         let views = batch.events.iter().filter_map(|event| match &event.ev {
             Some(Ev::ZoneView(view)) => Some(view),
@@ -182,15 +185,15 @@ fn preparation_display_identity_matches_the_whole_card_database_entry() {
 fn issue_157_dounguard_removes_counters_only_for_other_friendly_entries() {
     use tricerules_cards::CounterKind::MinusOneMinusOne;
     let mut e = basics_engine(15701);
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Reluctant Dounguard"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Reluctant Dounguard"))
         .unwrap();
     let source = *e.state.players[0].battlefield.last().unwrap();
     assert_eq!(e.state.objects[&source].counter_count(MinusOneMinusOne), 2);
-    e.apply_command(0, &put(1, DevZone::Battlefield, "Grizzly Bears"))
+    e.apply_scenario_command(0, &put(1, DevZone::Battlefield, "Grizzly Bears"))
         .unwrap();
     assert!(e.state.stack.is_empty());
     for expected in [1, 0, 0] {
-        e.apply_command(0, &put(0, DevZone::Battlefield, "Grizzly Bears"))
+        e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Grizzly Bears"))
             .unwrap();
         resolve_entire_stack_two_player(&mut e);
         assert_eq!(
@@ -204,10 +207,10 @@ fn issue_157_dounguard_removes_counters_only_for_other_friendly_entries() {
 fn issue_157_drone_copies_all_pre_sba_counters_even_after_returning() {
     use tricerules_cards::CounterKind;
     let mut e = basics_engine(15702);
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Dockworker Drone"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Dockworker Drone"))
         .unwrap();
     let source = *e.state.players[0].battlefield.last().unwrap();
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Hill Giant"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Hill Giant"))
         .unwrap();
     let recipient = *e.state.players[0].battlefield.last().unwrap();
     e.state
@@ -220,10 +223,10 @@ fn issue_157_drone_copies_all_pre_sba_counters_even_after_returning() {
         .get_mut(&source)
         .unwrap()
         .add_counters(CounterKind::MinusOneMinusOne, 2, 0);
-    e.apply_command(e.state.priority_player_id(), &pass())
+    e.apply_scenario_command(e.state.priority_player_id(), &pass())
         .unwrap();
     assert_eq!(e.state.objects[&source].zone, Zone::Graveyard);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -237,7 +240,7 @@ fn issue_157_drone_copies_all_pre_sba_counters_even_after_returning() {
         },
     )
     .unwrap();
-    e.apply_command(0, &mv(0, DevZone::Hand, "Dockworker Drone"))
+    e.apply_scenario_command(0, &mv(0, DevZone::Hand, "Dockworker Drone"))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
@@ -258,13 +261,14 @@ fn issue_157_brute_counter_payment_is_typed_atomic_and_generation_bound() {
         cost_selection, CostObjectRef, CostSelection, CounterRemovalSelection,
     };
     let mut e = basics_engine(15703);
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Brambleback Brute"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Brambleback Brute"))
         .unwrap();
     let source = *e.state.players[0].battlefield.last().unwrap();
-    e.apply_command(0, &put(1, DevZone::Battlefield, "Hill Giant"))
+    e.apply_scenario_command(0, &put(1, DevZone::Battlefield, "Hill Giant"))
         .unwrap();
     let target = *e.state.players[1].battlefield.last().unwrap();
-    e.apply_command(0, &add_mana(0, 0, 0, 0, 2, 0, 0)).unwrap();
+    e.apply_scenario_command(0, &add_mana(0, 0, 0, 0, 2, 0, 0))
+        .unwrap();
     e.state
         .objects
         .get_mut(&source)
@@ -295,12 +299,13 @@ fn issue_157_brute_counter_payment_is_typed_atomic_and_generation_bound() {
         command
     };
     for invalid in [command(generation + 1, 3), command(generation, 999)] {
-        assert!(e.apply_command(0, &invalid).is_err());
+        assert!(e.apply_scenario_command(0, &invalid).is_err());
         assert_eq!(e.state.players[0].mana_pool.red, 2);
         assert_eq!(e.state.objects[&source].counter_count(CounterKind::Stun), 1);
         assert!(e.state.stack.is_empty());
     }
-    e.apply_command(0, &command(generation, 3)).unwrap();
+    e.apply_scenario_command(0, &command(generation, 3))
+        .unwrap();
     assert_eq!(e.state.players[0].mana_pool.red, 0);
     assert_eq!(e.state.objects[&source].counter_count(CounterKind::Stun), 0);
     assert_eq!(
@@ -315,26 +320,26 @@ fn issue_157_auntie_surveils_before_removal_and_retains_departure_identity() {
     use tricerules_cards::CounterKind;
     for simultaneous_death in [false, true] {
         let mut e = basics_engine(15706);
-        e.apply_command(0, &put(0, DevZone::Battlefield, "Heirloom Auntie"))
+        e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Heirloom Auntie"))
             .unwrap();
         let source = *e.state.players[0].battlefield.last().unwrap();
-        e.apply_command(0, &put(0, DevZone::Battlefield, "Hill Giant"))
+        e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Hill Giant"))
             .unwrap();
         let other = *e.state.players[0].battlefield.last().unwrap();
         e.state.objects.get_mut(&other).unwrap().damage = 3;
         if simultaneous_death {
             e.state.objects.get_mut(&source).unwrap().damage = 2;
         }
-        e.apply_command(0, &pass()).unwrap();
+        e.apply_scenario_command(0, &pass()).unwrap();
         assert_eq!(e.state.stack.len(), 1);
         if simultaneous_death {
-            e.apply_command(0, &mv(0, DevZone::Battlefield, "Heirloom Auntie"))
+            e.apply_scenario_command(0, &mv(0, DevZone::Battlefield, "Heirloom Auntie"))
                 .unwrap();
         }
-        e.apply_command(e.state.priority_player_id(), &pass())
+        e.apply_scenario_command(e.state.priority_player_id(), &pass())
             .unwrap();
         let resolution = e
-            .apply_command(e.state.priority_player_id(), &pass())
+            .apply_scenario_command(e.state.priority_player_id(), &pass())
             .unwrap();
         let choice = find_resolution_choice(&resolution).expect("surveil before counter removal");
         assert_eq!(
@@ -342,7 +347,7 @@ fn issue_157_auntie_surveils_before_removal_and_retains_departure_identity() {
             2
         );
         let top = choice.candidate_object_ids[0];
-        e.apply_command(0, &submit_resolution_choice(vec![top]))
+        e.apply_scenario_command(0, &submit_resolution_choice(vec![top]))
             .unwrap();
         assert!(e.state.players[0].graveyard.contains(&top));
         assert_eq!(
@@ -359,13 +364,14 @@ fn issue_157_brute_can_pay_a_lethal_counter_cost() {
         cost_selection, CostObjectRef, CostSelection, CounterRemovalSelection,
     };
     let mut e = basics_engine(15710);
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Brambleback Brute"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Brambleback Brute"))
         .unwrap();
     let source = *e.state.players[0].battlefield.last().unwrap();
-    e.apply_command(0, &put(1, DevZone::Battlefield, "Hill Giant"))
+    e.apply_scenario_command(0, &put(1, DevZone::Battlefield, "Hill Giant"))
         .unwrap();
     let target = *e.state.players[1].battlefield.last().unwrap();
-    e.apply_command(0, &add_mana(0, 0, 0, 0, 2, 0, 0)).unwrap();
+    e.apply_scenario_command(0, &add_mana(0, 0, 0, 0, 2, 0, 0))
+        .unwrap();
     let object = e.state.objects.get_mut(&source).unwrap();
     object.set_counter(CounterKind::MinusOneMinusOne, 0);
     object.add_counters(CounterKind::PlusOnePlusOne, 1, 0);
@@ -385,7 +391,7 @@ fn issue_157_brute_can_pay_a_lethal_counter_cost() {
             )),
         });
     }
-    e.apply_command(0, &command).unwrap();
+    e.apply_scenario_command(0, &command).unwrap();
     assert_eq!(e.state.objects[&source].zone, Zone::Graveyard);
     assert_eq!(e.state.stack.len(), 1);
     assert_eq!(e.state.players[0].mana_pool.red, 0);
@@ -403,7 +409,7 @@ fn issue_157_counter_payment_replays_with_engine_published_options() {
     ];
     let mut batches = Vec::new();
     for (actor, command) in &commands {
-        batches.push(e.apply_command(*actor, command).unwrap());
+        batches.push(e.apply_scenario_command(*actor, command).unwrap());
     }
     let source = *e.state.players[0].battlefield.last().unwrap();
     let target = *e.state.players[1].battlefield.last().unwrap();
@@ -427,17 +433,20 @@ fn issue_157_counter_payment_replays_with_engine_published_options() {
             )),
         });
     }
-    batches.push(e.apply_command(0, &command).unwrap());
+    batches.push(e.apply_scenario_command(0, &command).unwrap());
     commands.push((0, command));
     while !e.state.stack.is_empty() {
         let actor = e.state.priority_player_id();
         let command = pass();
-        batches.push(e.apply_command(actor, &command).unwrap());
+        batches.push(e.apply_scenario_command(actor, &command).unwrap());
         commands.push((actor, command));
     }
     let mut replay = basics_engine(15711);
     for ((actor, command), expected) in commands.iter().zip(batches) {
-        assert_eq!(replay.apply_command(*actor, command).unwrap(), expected);
+        assert_eq!(
+            replay.apply_scenario_command(*actor, command).unwrap(),
+            expected
+        );
     }
 }
 
@@ -458,7 +467,7 @@ fn earthbend_logged_animation_and_return_replay_identically() {
     ];
     let mut batches = Vec::new();
     for (actor, command) in &commands {
-        batches.push(engine.apply_command(*actor, command).unwrap());
+        batches.push(engine.apply_scenario_command(*actor, command).unwrap());
     }
     let battlefield = &engine.state.players[0].battlefield;
     let land = *battlefield
@@ -470,19 +479,19 @@ fn earthbend_logged_animation_and_return_replay_identically() {
         .find(|oid| engine.state.objects[oid].card_id == "rebellious_captives")
         .unwrap();
     let command = activate_ability_for(&engine, source, 0, target_object(land));
-    batches.push(engine.apply_command(0, &command).unwrap());
+    batches.push(engine.apply_scenario_command(0, &command).unwrap());
     commands.push((0, command));
     for returning in [false, true] {
         if returning {
             let command = mv(0, DevZone::Exile, "Plains");
-            batches.push(engine.apply_command(0, &command).unwrap());
+            batches.push(engine.apply_scenario_command(0, &command).unwrap());
             commands.push((0, command));
             assert_eq!(engine.state.stack.len(), 1);
         }
         while !engine.state.stack.is_empty() {
             let actor = engine.state.priority_player_id();
             let command = pass();
-            batches.push(engine.apply_command(actor, &command).unwrap());
+            batches.push(engine.apply_scenario_command(actor, &command).unwrap());
             commands.push((actor, command));
         }
         assert_eq!(
@@ -493,7 +502,10 @@ fn earthbend_logged_animation_and_return_replay_identically() {
     assert!(engine.state.objects[&land].tapped);
     let mut replay = basics_engine(150_200);
     for ((actor, command), expected) in commands.iter().zip(&batches) {
-        assert_eq!(&replay.apply_command(*actor, command).unwrap(), expected);
+        assert_eq!(
+            &replay.apply_scenario_command(*actor, command).unwrap(),
+            expected
+        );
     }
     assert_eq!(
         replay.state.zone_change_generation[&land],
@@ -519,7 +531,7 @@ fn issue_176_graveyard_payment_and_stale_target_replay() {
         ];
         let mut batches = Vec::new();
         for (actor, command) in &commands {
-            batches.push(engine.apply_command(*actor, command).unwrap());
+            batches.push(engine.apply_scenario_command(*actor, command).unwrap());
         }
         let target = *engine.state.players[0]
             .graveyard
@@ -534,19 +546,19 @@ fn issue_176_graveyard_payment_and_stale_target_replay() {
                 ..Default::default()
             }],
         );
-        batches.push(engine.apply_command(0, &command).unwrap());
+        batches.push(engine.apply_scenario_command(0, &command).unwrap());
         commands.push((0, command));
         if stale {
             for zone in [DevZone::Hand, DevZone::Graveyard] {
                 let command = mv(0, zone, name);
-                batches.push(engine.apply_command(0, &command).unwrap());
+                batches.push(engine.apply_scenario_command(0, &command).unwrap());
                 commands.push((0, command));
             }
         }
         while !engine.state.stack.is_empty() {
             let actor = engine.state.priority_player_id();
             let command = pass();
-            batches.push(engine.apply_command(actor, &command).unwrap());
+            batches.push(engine.apply_scenario_command(actor, &command).unwrap());
             commands.push((actor, command));
         }
         assert_eq!(
@@ -561,7 +573,10 @@ fn issue_176_graveyard_payment_and_stale_target_replay() {
         assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
         let mut replay = basics_engine(176_200);
         for ((actor, command), expected) in commands.iter().zip(&batches) {
-            assert_eq!(&replay.apply_command(*actor, command).unwrap(), expected);
+            assert_eq!(
+                &replay.apply_scenario_command(*actor, command).unwrap(),
+                expected
+            );
         }
         assert_eq!(
             replay.state.objects[&target].zone,
@@ -593,7 +608,7 @@ fn dev_command_rejected_when_gate_is_off() {
     let before = e.state.command_index;
 
     let err = e
-        .apply_command(0, &put(0, DevZone::Hand, "Grizzly Bears"))
+        .apply_scenario_command(0, &put(0, DevZone::Hand, "Grizzly Bears"))
         .expect_err("dev commands are off by default");
     assert!(
         err.to_string().contains("dev commands are not enabled"),
@@ -628,7 +643,7 @@ fn dev_command_rejected_during_opening() {
     assert!(e.state.opening.is_some(), "still in the opening procedure");
 
     let err = e
-        .apply_command(0, &put(0, DevZone::Hand, "Grizzly Bears"))
+        .apply_scenario_command(0, &put(0, DevZone::Hand, "Grizzly Bears"))
         .expect_err("dev commands are refused during the opening");
     assert!(
         err.to_string().contains("during opening"),
@@ -646,9 +661,9 @@ fn dev_command_rejected_during_opening() {
 #[test]
 fn dev_put_always_conjures_so_repeating_it_builds_multiples() {
     let mut e = basics_engine(902);
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Serra Angel"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Serra Angel"))
         .expect("first conjure");
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Serra Angel"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Serra Angel"))
         .expect("second conjure");
 
     let on_battlefield = e.state.players[0]
@@ -674,7 +689,7 @@ fn dev_put_always_conjures_so_repeating_it_builds_multiples() {
     .expect("new");
     e2.enable_dev_commands();
     advance_to_main1_from_game_start(&mut e2);
-    e2.apply_command(0, &put(0, DevZone::Hand, "Lightning Bolt"))
+    e2.apply_scenario_command(0, &put(0, DevZone::Hand, "Lightning Bolt"))
         .expect("conjure a Bolt");
     let total = e2
         .state
@@ -705,7 +720,7 @@ fn dev_move_relocates_an_owned_card_without_duplicating_it() {
     advance_to_main1_from_game_start(&mut e);
 
     let batch = e
-        .apply_command(0, &mv(0, DevZone::Hand, "Lightning Bolt"))
+        .apply_scenario_command(0, &mv(0, DevZone::Hand, "Lightning Bolt"))
         .expect("move bolt to hand");
 
     let total = e
@@ -732,9 +747,9 @@ fn dev_move_relocates_an_owned_card_without_duplicating_it() {
 #[test]
 fn dev_move_skips_copies_already_in_the_destination() {
     let mut e = basics_engine(9024);
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Serra Angel"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Serra Angel"))
         .expect("first conjure");
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Serra Angel"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Serra Angel"))
         .expect("second conjure");
 
     let on_battlefield = |e: &GameEngine| {
@@ -746,12 +761,12 @@ fn dev_move_skips_copies_already_in_the_destination() {
     };
     assert_eq!(on_battlefield(&e), 2);
 
-    e.apply_command(0, &mv(0, DevZone::Graveyard, "Serra Angel"))
+    e.apply_scenario_command(0, &mv(0, DevZone::Graveyard, "Serra Angel"))
         .expect("move the first");
     assert_eq!(count_card_id_in_graveyard(&e, 0, "serra_angel"), 1);
     assert_eq!(on_battlefield(&e), 1);
 
-    e.apply_command(0, &mv(0, DevZone::Graveyard, "Serra Angel"))
+    e.apply_scenario_command(0, &mv(0, DevZone::Graveyard, "Serra Angel"))
         .expect("move the second");
     assert_eq!(
         count_card_id_in_graveyard(&e, 0, "serra_angel"),
@@ -762,7 +777,7 @@ fn dev_move_skips_copies_already_in_the_destination() {
 
     // With nothing left to move, say so distinctly rather than claiming the card does not exist.
     let err = e
-        .apply_command(0, &mv(0, DevZone::Graveyard, "Serra Angel"))
+        .apply_scenario_command(0, &mv(0, DevZone::Graveyard, "Serra Angel"))
         .expect_err("every copy is already there");
     assert!(
         err.to_string().contains("already in that zone"),
@@ -776,7 +791,7 @@ fn dev_move_skips_copies_already_in_the_destination() {
 fn dev_move_without_an_owned_copy_is_rejected() {
     let mut e = basics_engine(9023);
     let err = e
-        .apply_command(0, &mv(0, DevZone::Hand, "Serra Angel"))
+        .apply_scenario_command(0, &mv(0, DevZone::Hand, "Serra Angel"))
         .expect_err("nothing to move");
     assert!(
         err.to_string().contains("no copy of that card"),
@@ -796,12 +811,12 @@ fn dev_put_conjures_a_card_no_deck_contains_and_it_is_castable() {
         "precondition: no Bolt anywhere"
     );
 
-    e.apply_command(0, &put(0, DevZone::Hand, "Lightning Bolt"))
+    e.apply_scenario_command(0, &put(0, DevZone::Hand, "Lightning Bolt"))
         .expect("conjure bolt into hand");
 
     let idx = hand_index_for_card(&e, 0, "lightning_bolt");
     grant_pool(&mut e, 0);
-    e.apply_command(0, &cast_spell(idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(idx, target_player(1)))
         .expect("conjured card is castable");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[1].life, 17, "Bolt dealt 3");
@@ -813,7 +828,7 @@ fn dev_put_conjures_a_card_no_deck_contains_and_it_is_castable() {
 fn dev_conjure_emits_catalog_and_conjure_events() {
     let mut e = basics_engine(904);
     let batch = e
-        .apply_command(0, &put(0, DevZone::Hand, "Serra Angel"))
+        .apply_scenario_command(0, &put(0, DevZone::Hand, "Serra Angel"))
         .expect("conjure");
 
     let conjured: Vec<_> = batch
@@ -845,7 +860,7 @@ fn dev_conjure_emits_catalog_and_conjure_events() {
 fn dev_conjured_land_is_classified_in_the_battlefield_view() {
     let mut e = basics_engine(940);
     let batch = e
-        .apply_command(0, &put(0, DevZone::Battlefield, "Forest"))
+        .apply_scenario_command(0, &put(0, DevZone::Battlefield, "Forest"))
         .expect("conjure Forest");
     let forest = batch
         .events
@@ -867,9 +882,9 @@ fn dev_conjured_land_is_classified_in_the_battlefield_view() {
     assert!(forest.is_land);
     assert!(!forest.is_creature);
 
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Grizzly Bears"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Grizzly Bears"))
         .expect("conjure creature");
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Glorious Anthem"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Glorious Anthem"))
         .expect("conjure noncreature nonland permanent");
     let snapshot = e.initial_response_batch();
     let view = snapshot
@@ -899,11 +914,11 @@ fn dev_conjured_land_is_classified_in_the_battlefield_view() {
 #[test]
 fn dev_conjure_waits_for_entry_replacement_choice_before_announcing_or_committing() {
     let mut e = basics_engine(933);
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Orb of Dreams"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Orb of Dreams"))
         .expect("conjure Orb");
 
     let prompt_batch = e
-        .apply_command(0, &put(0, DevZone::Battlefield, "Diregraf Ghoul"))
+        .apply_scenario_command(0, &put(0, DevZone::Battlefield, "Diregraf Ghoul"))
         .expect("propose Ghoul entry");
     assert!(prompt_batch
         .events
@@ -926,7 +941,7 @@ fn dev_conjure_waits_for_entry_replacement_choice_before_announcing_or_committin
     assert_eq!(pending.presentation.candidates.len(), 2);
     let application = pending.presentation.candidates[0];
     let completion = e
-        .apply_command(0, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![application]))
         .expect("choose entry replacement");
 
     let ghoul = e
@@ -946,9 +961,9 @@ fn dev_conjure_waits_for_entry_replacement_choice_before_announcing_or_committin
 #[test]
 fn dev_move_waits_for_entry_replacement_choice_before_leaving_the_source_zone() {
     let mut e = basics_engine(934);
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Orb of Dreams"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Orb of Dreams"))
         .expect("conjure Orb");
-    e.apply_command(0, &put(0, DevZone::Hand, "Diregraf Ghoul"))
+    e.apply_scenario_command(0, &put(0, DevZone::Hand, "Diregraf Ghoul"))
         .expect("conjure Ghoul into hand");
     let ghoul = *e.state.players[0]
         .hand
@@ -957,7 +972,7 @@ fn dev_move_waits_for_entry_replacement_choice_before_leaving_the_source_zone() 
         .expect("Ghoul in hand");
 
     let prompt_batch = e
-        .apply_command(0, &mv(0, DevZone::Battlefield, "Diregraf Ghoul"))
+        .apply_scenario_command(0, &mv(0, DevZone::Battlefield, "Diregraf Ghoul"))
         .expect("propose move");
     assert_eq!(e.state.objects[&ghoul].zone, tricerules_core::Zone::Hand);
     assert!(e.state.players[0].hand.contains(&ghoul));
@@ -975,7 +990,7 @@ fn dev_move_waits_for_entry_replacement_choice_before_leaving_the_source_zone() 
         .presentation
         .candidates[0];
     let completion = e
-        .apply_command(0, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![application]))
         .expect("choose entry replacement");
     assert_eq!(
         e.state.objects[&ghoul].zone,
@@ -995,7 +1010,7 @@ fn dev_move_waits_for_entry_replacement_choice_before_leaving_the_source_zone() 
 fn dev_conjuring_transform_back_face_name_displays_the_front_face() {
     let mut e = basics_engine(930);
     let batch = e
-        .apply_command(0, &put(0, DevZone::Hand, "Merciless Predator"))
+        .apply_scenario_command(0, &put(0, DevZone::Hand, "Merciless Predator"))
         .expect("conjure by back-face alias");
 
     let conjured = batch
@@ -1022,7 +1037,7 @@ fn dev_conjuring_transform_back_face_name_displays_the_front_face() {
 fn dev_conjuring_split_face_name_keeps_the_combined_display() {
     let mut e = basics_engine(931);
     let batch = e
-        .apply_command(0, &put(0, DevZone::Hand, "Ice"))
+        .apply_scenario_command(0, &put(0, DevZone::Hand, "Ice"))
         .expect("conjure by split-face alias");
 
     let conjured = batch
@@ -1043,7 +1058,7 @@ fn dev_conjuring_split_face_name_keeps_the_combined_display() {
 fn dev_conjuring_adventure_face_name_keeps_the_combined_display() {
     let mut e = basics_engine(932);
     let batch = e
-        .apply_command(0, &put(0, DevZone::Hand, "Bonecrusher Giant"))
+        .apply_scenario_command(0, &put(0, DevZone::Hand, "Bonecrusher Giant"))
         .expect("conjure by creature-face alias");
 
     let conjured = batch
@@ -1064,7 +1079,7 @@ fn dev_conjure_into_graveyard_exile_or_library_is_rejected() {
     let mut e = basics_engine(905);
     for zone in [DevZone::Graveyard, DevZone::Exile, DevZone::Library] {
         let err = e
-            .apply_command(0, &put(0, zone, "Serra Angel"))
+            .apply_scenario_command(0, &put(0, zone, "Serra Angel"))
             .expect_err("conjuring is restricted to hand and battlefield");
         assert!(
             err.to_string().contains("hand and battlefield only"),
@@ -1077,7 +1092,7 @@ fn dev_conjure_into_graveyard_exile_or_library_is_rejected() {
 fn dev_put_unknown_card_name_is_rejected() {
     let mut e = basics_engine(906);
     let err = e
-        .apply_command(0, &put(0, DevZone::Hand, "Not A Real Card"))
+        .apply_scenario_command(0, &put(0, DevZone::Hand, "Not A Real Card"))
         .expect_err("unknown Oracle name");
     assert!(
         err.to_string().contains("Not A Real Card"),
@@ -1105,11 +1120,11 @@ fn dev_move_reaches_zones_conjuring_cannot() {
     e.enable_dev_commands();
     advance_to_main1_from_game_start(&mut e);
 
-    e.apply_command(0, &mv(0, DevZone::Graveyard, "Lightning Bolt"))
+    e.apply_scenario_command(0, &mv(0, DevZone::Graveyard, "Lightning Bolt"))
         .expect("move to graveyard");
     assert_eq!(count_card_id_in_graveyard(&e, 0, "lightning_bolt"), 1);
 
-    e.apply_command(0, &mv(0, DevZone::Exile, "Lightning Bolt"))
+    e.apply_scenario_command(0, &mv(0, DevZone::Exile, "Lightning Bolt"))
         .expect("move on to exile");
     assert_eq!(count_card_id_in_graveyard(&e, 0, "lightning_bolt"), 0);
     assert_eq!(e.state.players[0].exile.len(), 1);
@@ -1119,9 +1134,9 @@ fn dev_move_reaches_zones_conjuring_cannot() {
 #[test]
 fn dev_conjure_then_move_reaches_the_graveyard() {
     let mut e = basics_engine(9071);
-    e.apply_command(0, &put(0, DevZone::Hand, "Serra Angel"))
+    e.apply_scenario_command(0, &put(0, DevZone::Hand, "Serra Angel"))
         .expect("conjure into hand");
-    e.apply_command(0, &mv(0, DevZone::Graveyard, "Serra Angel"))
+    e.apply_scenario_command(0, &mv(0, DevZone::Graveyard, "Serra Angel"))
         .expect("then move it to the graveyard");
     assert_eq!(count_card_id_in_graveyard(&e, 0, "serra_angel"), 1);
 }
@@ -1151,7 +1166,7 @@ fn dev_conjure_then_move_prefers_the_staged_hand_copy_over_the_library() {
         .iter()
         .find(|oid| e.state.objects[oid].card_id == "lightning_bolt")
         .expect("deck copy");
-    e.apply_command(0, &put(0, DevZone::Hand, "Lightning Bolt"))
+    e.apply_scenario_command(0, &put(0, DevZone::Hand, "Lightning Bolt"))
         .expect("conjure staged copy");
     let staged_oid = *e.state.players[0]
         .hand
@@ -1159,7 +1174,7 @@ fn dev_conjure_then_move_prefers_the_staged_hand_copy_over_the_library() {
         .find(|oid| e.state.objects[oid].card_id == "lightning_bolt")
         .expect("staged hand copy");
 
-    e.apply_command(0, &mv(0, DevZone::Graveyard, "Lightning Bolt"))
+    e.apply_scenario_command(0, &mv(0, DevZone::Graveyard, "Lightning Bolt"))
         .expect("move staged copy to graveyard");
 
     assert!(e.state.players[0].graveyard.contains(&staged_oid));
@@ -1177,7 +1192,7 @@ fn dev_conjure_then_move_prefers_the_staged_hand_copy_over_the_library() {
 #[test]
 fn dev_put_onto_battlefield_is_summoning_sick_by_default() {
     let mut e = basics_engine(908);
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Grizzly Bears"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Grizzly Bears"))
         .expect("conjure onto battlefield");
 
     let oid = battlefield_object_for_card(&e, 0, "grizzly_bears");
@@ -1191,7 +1206,7 @@ fn dev_put_onto_battlefield_is_summoning_sick_by_default() {
 #[test]
 fn dev_put_ready_clears_summoning_sickness_and_allows_attacking() {
     let mut e = basics_engine(909);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &put_ready(0, DevZone::Battlefield, "Grizzly Bears", true),
     )
@@ -1204,15 +1219,17 @@ fn dev_put_ready_clears_summoning_sickness_and_allows_attacking() {
     );
 
     // And it can actually be declared as an attacker this turn.
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
-    e.apply_command(0, &pass()).expect("ap pass begin combat");
-    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin combat");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::DeclareAttackers
     );
-    e.apply_command(0, &declare_attackers(vec![oid]))
+    e.apply_scenario_command(0, &declare_attackers(vec![oid]))
         .expect("a readied creature can attack the turn it arrives");
 }
 
@@ -1221,22 +1238,22 @@ fn dev_put_ready_clears_summoning_sickness_and_allows_attacking() {
 #[test]
 fn dev_put_without_ready_cannot_attack_the_turn_it_arrives() {
     let mut e = basics_engine(910);
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Grizzly Bears"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Grizzly Bears"))
         .expect("conjure");
     let oid = battlefield_object_for_card(&e, 0, "grizzly_bears");
 
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
-    e.apply_command(0, &pass()).expect("ap pass");
-    e.apply_command(1, &pass()).expect("nap pass");
-    e.apply_command(0, &declare_attackers(vec![oid]))
+    e.apply_scenario_command(0, &pass()).expect("ap pass");
+    e.apply_scenario_command(1, &pass()).expect("nap pass");
+    e.apply_scenario_command(0, &declare_attackers(vec![oid]))
         .expect_err("summoning sick creature cannot attack");
 }
 
 #[test]
 fn dev_put_ready_into_hand_is_a_no_op_not_an_error() {
     let mut e = basics_engine(911);
-    e.apply_command(0, &put_ready(0, DevZone::Hand, "Grizzly Bears", true))
+    e.apply_scenario_command(0, &put_ready(0, DevZone::Hand, "Grizzly Bears", true))
         .expect("ready is ignored for non-battlefield zones");
     assert_eq!(hand_index_for_card(&e, 0, "grizzly_bears"), {
         e.state.players[0]
@@ -1251,11 +1268,11 @@ fn dev_put_ready_into_hand_is_a_no_op_not_an_error() {
 #[test]
 fn dev_put_onto_battlefield_fires_etb_triggers() {
     let mut e = basics_engine(912);
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Soul Warden"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Soul Warden"))
         .expect("conjure warden");
     let life_before = e.state.players[0].life;
 
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Grizzly Bears"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Grizzly Bears"))
         .expect("conjure a creature for the warden to see");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1272,7 +1289,7 @@ fn dev_put_onto_battlefield_fires_etb_triggers() {
 #[test]
 fn dev_put_onto_battlefield_registers_static_abilities() {
     let mut e = basics_engine(913);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &put_ready(0, DevZone::Battlefield, "Grizzly Bears", true),
     )
@@ -1280,7 +1297,7 @@ fn dev_put_onto_battlefield_registers_static_abilities() {
     let bears = battlefield_object_for_card(&e, 0, "grizzly_bears");
     assert_eq!(power_of(&e, bears), 2, "printed 2/2 before the anthem");
 
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Glorious Anthem"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Glorious Anthem"))
         .expect("conjure anthem");
     assert_eq!(
         power_of(&e, bears),
@@ -1289,7 +1306,7 @@ fn dev_put_onto_battlefield_registers_static_abilities() {
     );
 
     // And the reverse direction: leaving the battlefield drains it (CR 604.3/611.3).
-    e.apply_command(0, &mv(0, DevZone::Hand, "Glorious Anthem"))
+    e.apply_scenario_command(0, &mv(0, DevZone::Hand, "Glorious Anthem"))
         .expect("move the anthem off the battlefield");
     assert_eq!(power_of(&e, bears), 2, "the anthem stops applying on leave");
 }
@@ -1300,12 +1317,12 @@ fn dev_put_onto_battlefield_registers_static_abilities() {
 #[test]
 fn dev_put_onto_battlefield_fires_no_cast_trigger() {
     let mut e = basics_engine(914);
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Argothian Enchantress"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Argothian Enchantress"))
         .expect("conjure enchantress");
     resolve_entire_stack_two_player(&mut e);
     let hand_before = e.state.players[0].hand.len();
 
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Glorious Anthem"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Glorious Anthem"))
         .expect("conjure an enchantment");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1321,11 +1338,11 @@ fn dev_put_onto_battlefield_fires_no_cast_trigger() {
 #[test]
 fn dev_conjured_permanent_is_not_a_token() {
     let mut e = basics_engine(915);
-    e.apply_command(0, &put(0, DevZone::Battlefield, "Grizzly Bears"))
+    e.apply_scenario_command(0, &put(0, DevZone::Battlefield, "Grizzly Bears"))
         .expect("conjure");
     let oid = battlefield_object_for_card(&e, 0, "grizzly_bears");
 
-    e.apply_command(0, &mv(0, DevZone::Graveyard, "Grizzly Bears"))
+    e.apply_scenario_command(0, &mv(0, DevZone::Graveyard, "Grizzly Bears"))
         .expect("move it to the graveyard");
 
     assert_eq!(count_card_id_in_graveyard(&e, 0, "grizzly_bears"), 1);
@@ -1343,19 +1360,19 @@ fn dev_conjured_permanent_is_not_a_token() {
 #[test]
 fn dev_add_mana_lets_a_spell_be_cast_with_no_lands() {
     let mut e = basics_engine(916);
-    e.apply_command(0, &put(0, DevZone::Hand, "Lightning Bolt"))
+    e.apply_scenario_command(0, &put(0, DevZone::Hand, "Lightning Bolt"))
         .expect("conjure bolt");
     assert!(
         e.state.players[0].battlefield.is_empty(),
         "precondition: no lands in play"
     );
 
-    e.apply_command(0, &add_mana(0, 0, 0, 0, 1, 0, 0))
+    e.apply_scenario_command(0, &add_mana(0, 0, 0, 0, 1, 0, 0))
         .expect("add {R}");
     assert_eq!(e.state.players[0].mana_pool.red, 1);
 
     let idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(idx, target_player(1)))
         .expect("dev mana pays for the spell");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[1].life, 17);
@@ -1364,9 +1381,9 @@ fn dev_add_mana_lets_a_spell_be_cast_with_no_lands() {
 #[test]
 fn dev_add_mana_is_additive_and_targets_the_named_seat() {
     let mut e = basics_engine(917);
-    e.apply_command(0, &add_mana(1, 2, 0, 0, 0, 0, 3))
+    e.apply_scenario_command(0, &add_mana(1, 2, 0, 0, 0, 0, 3))
         .expect("add mana to the opponent");
-    e.apply_command(0, &add_mana(1, 1, 0, 0, 0, 0, 0))
+    e.apply_scenario_command(0, &add_mana(1, 1, 0, 0, 0, 0, 0))
         .expect("add more");
 
     assert_eq!(e.state.players[1].mana_pool.white, 3, "2 + 1, additive");
@@ -1381,11 +1398,11 @@ fn dev_add_mana_is_additive_and_targets_the_named_seat() {
 #[test]
 fn dev_add_mana_empties_at_the_next_step_change() {
     let mut e = basics_engine(918);
-    e.apply_command(0, &add_mana(0, 0, 0, 0, 5, 0, 0))
+    e.apply_scenario_command(0, &add_mana(0, 0, 0, 0, 5, 0, 0))
         .expect("add {R}{R}{R}{R}{R}");
     assert_eq!(e.state.players[0].mana_pool.red, 5);
 
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
     assert_eq!(
         e.state.players[0].mana_pool.red, 0,
@@ -1396,6 +1413,6 @@ fn dev_add_mana_empties_at_the_next_step_change() {
 #[test]
 fn dev_command_for_an_unknown_seat_is_rejected() {
     let mut e = basics_engine(919);
-    e.apply_command(0, &add_mana(42, 1, 0, 0, 0, 0, 0))
+    e.apply_scenario_command(0, &add_mana(42, 1, 0, 0, 0, 0, 0))
         .expect_err("unknown player id");
 }

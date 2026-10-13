@@ -1,5 +1,6 @@
 //! Boseiju's real hand activation, counted discount, required targets and optional search.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     AbilitySourceZone, PaymentMana, PreviewPayment, ResolutionChoiceDecision,
@@ -49,7 +50,7 @@ fn preview(
     let Some(Cmd::ActivateAbility(ability)) = &command.cmd else {
         unreachable!()
     };
-    engine.preview_payment(
+    engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             activate_ability: Some(ability.clone()),
@@ -74,8 +75,8 @@ fn paid(engine: &GameEngine, command: &RuledCommand, generic: u32, green: u32) -
 }
 
 fn resolve(engine: &mut GameEngine) -> RuledEventBatch {
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap()
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap()
 }
 
 #[test]
@@ -143,14 +144,14 @@ fn boseiju_channel_counted_reduction_consumes_kopala_tax() {
             if generic == 0 { 0 } else { 1 },
         );
         let before = format!("{:?}", engine.state);
-        assert!(engine.apply_command(0, &underpaid).is_err());
+        assert!(engine.apply_scenario_command(0, &underpaid).is_err());
         assert_eq!(
             format!("{:?}", engine.state),
             before,
             "rejected payment is atomic"
         );
         let exact = paid(&engine, &command, generic, 1);
-        engine.apply_command(0, &exact).unwrap();
+        engine.apply_scenario_command(0, &exact).unwrap();
         assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
         assert_eq!(engine.state.players[0].mana_pool.green, 0);
         assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
@@ -185,7 +186,7 @@ fn boseiju_optional_search_uses_destroyed_targets_controller_and_all_basic_subty
         },
     );
     engine
-        .apply_command(0, &channel(&engine, source, target))
+        .apply_scenario_command(0, &channel(&engine, source, target))
         .unwrap();
     let batch = resolve(&mut engine);
     assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
@@ -196,9 +197,9 @@ fn boseiju_optional_search_uses_destroyed_targets_controller_and_all_basic_subty
     );
     let accept = submit_resolution_decision(ResolutionChoiceDecision::SelectBranch);
     let before = format!("{:?}", engine.state);
-    assert!(engine.apply_command(0, &accept).is_err());
+    assert!(engine.apply_scenario_command(0, &accept).is_err());
     assert_eq!(format!("{:?}", engine.state), before);
-    let batch = engine.apply_command(1, &accept).unwrap();
+    let batch = engine.apply_scenario_command(1, &accept).unwrap();
     let choice = find_resolution_choice(&batch).unwrap();
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
     for id in &eligible {
@@ -207,14 +208,14 @@ fn boseiju_optional_search_uses_destroyed_targets_controller_and_all_basic_subty
     assert!(!choice.candidate_object_ids.contains(&ineligible));
     let before = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![eligible[5]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![eligible[5]]))
         .is_err());
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![ineligible]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![ineligible]))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before);
     let completion = engine
-        .apply_command(1, &submit_resolution_choice(vec![eligible[5]]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![eligible[5]]))
         .unwrap();
     let found = &engine.state.objects[&eligible[5]];
     assert_eq!(found.zone, Zone::Battlefield);
@@ -266,7 +267,7 @@ fn boseiju_illegal_targets_missing_targets_and_stale_sources_preserve_resources(
     ] {
         let before = format!("{:?}", engine.state);
         assert!(!preview(&engine, &command).valid);
-        assert!(engine.apply_command(0, &command).is_err());
+        assert!(engine.apply_scenario_command(0, &command).is_err());
         assert_eq!(format!("{:?}", engine.state), before);
     }
 }
@@ -287,7 +288,7 @@ fn boseiju_decline_does_not_shuffle_but_accepted_failure_to_find_does() {
             },
         );
         engine
-            .apply_command(0, &channel(&engine, source, target))
+            .apply_scenario_command(0, &channel(&engine, source, target))
             .unwrap();
         let batch = resolve(&mut engine);
         assert_eq!(
@@ -301,7 +302,7 @@ fn boseiju_decline_does_not_shuffle_but_accepted_failure_to_find_does() {
         );
         let before = engine.state.players[1].library.clone();
         let batch = engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &submit_resolution_decision(if decline {
                     ResolutionChoiceDecision::Decline
@@ -316,7 +317,7 @@ fn boseiju_decline_does_not_shuffle_but_accepted_failure_to_find_does() {
         } else {
             assert!(find_resolution_choice(&batch).is_some());
             let batch = engine
-                .apply_command(1, &submit_resolution_choice(vec![]))
+                .apply_scenario_command(1, &submit_resolution_choice(vec![]))
                 .unwrap();
             assert_eq!(batch.events.iter().filter(|event| matches!(&event.ev, Some(Ev::Log(log)) if log.text == "P1 shuffles their library.")).count(), 1);
         }
@@ -341,11 +342,11 @@ fn boseiju_stale_private_search_keeps_the_choice_and_recovers() {
         },
     );
     engine
-        .apply_command(0, &channel(&engine, source, target))
+        .apply_scenario_command(0, &channel(&engine, source, target))
         .unwrap();
     resolve(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -357,11 +358,11 @@ fn boseiju_stale_private_search_keeps_the_choice_and_recovers() {
         .or_default() += 1;
     let before = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![found]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![found]))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![]))
         .unwrap();
     assert!(engine.state.pending_resolution.is_none());
 }
@@ -381,9 +382,9 @@ fn boseiju_fizzle_after_paid_response_retains_discard_without_search() {
         },
     );
     engine
-        .apply_command(0, &channel(&engine, source, target))
+        .apply_scenario_command(0, &channel(&engine, source, target))
         .unwrap();
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     ensure_card_in_hand(&mut engine, 1, "disenchant");
     give_mana(
         &mut engine,
@@ -396,12 +397,12 @@ fn boseiju_fizzle_after_paid_response_retains_discard_without_search() {
     );
     let slot = hand_index_for_card(&engine, 1, "disenchant");
     engine
-        .apply_command(1, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(1, &cast_spell(slot, target_object(target)))
         .unwrap();
     let mut batches = Vec::new();
     while !engine.state.stack.is_empty() {
         let actor = engine.state.priority_player_id();
-        batches.push(engine.apply_command(actor, &pass()).unwrap());
+        batches.push(engine.apply_scenario_command(actor, &pass()).unwrap());
     }
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
@@ -430,6 +431,7 @@ fn boseiju_countered_channel_retains_paid_discard_without_search() {
         &mut engine,
         0,
         SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::PayMana as i32,
             ..Default::default()
         },
@@ -448,12 +450,12 @@ fn boseiju_countered_channel_retains_paid_discard_without_search() {
         },
     );
     engine
-        .apply_command(0, &channel(&engine, source, target))
+        .apply_scenario_command(0, &channel(&engine, source, target))
         .unwrap();
     assert_eq!(engine.state.stack.len(), 2);
     resolve(&mut engine);
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -487,7 +489,7 @@ fn boseiju_channel_preview_keeps_colored_cost_and_discards_as_cost() {
     let Some(Cmd::ActivateAbility(ability)) = &command.cmd else {
         unreachable!()
     };
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             activate_ability: Some(ability.clone()),
@@ -505,7 +507,7 @@ fn boseiju_channel_preview_keeps_colored_cost_and_discards_as_cost() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(
         engine.state.objects[&source].zone,
         tricerules_core::Zone::Graveyard
@@ -521,7 +523,9 @@ fn paid_cast(engine: &mut GameEngine, card: &str, targets: Vec<TargetRef>, mana:
         .iter()
         .position(|id| *id == object)
         .unwrap();
-    engine.apply_command(0, &cast_spell(slot, targets)).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, targets))
+        .unwrap();
     resolve(engine);
     object
 }
@@ -547,7 +551,7 @@ fn boseiju_discount_uses_copied_and_token_legendary_characteristics() {
         },
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![original]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![original]))
         .unwrap();
     assert!(engine.state.objects[&clone].copiable_values.is_some());
     let characteristics = engine.characteristics(clone).unwrap();
@@ -588,7 +592,7 @@ fn boseiju_discount_uses_copied_and_token_legendary_characteristics() {
         .find(|id| engine.state.objects[id].is_token())
         .unwrap();
     engine
-        .apply_command(0, &submit_resolution_choice(vec![token]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![token]))
         .unwrap();
     assert_eq!(engine.state.objects[&original].zone, Zone::Graveyard);
     assert!(engine.state.objects[&token].is_token());
@@ -628,7 +632,7 @@ fn boseiju_discount_excludes_face_down_legend_and_tracks_song_removal() {
         },
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![legend]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![legend]))
         .unwrap();
     assert!(engine.state.objects[&legend].face_down);
     assert_eq!(
@@ -724,13 +728,16 @@ fn boseiju_serialized_paid_channel_and_private_search_replay_exactly() {
         ),
         (1, submit_resolution_choice(vec![found])),
     ] {
-        let batch = engine.apply_command(actor, &command).unwrap();
+        let batch = engine.apply_scenario_command(actor, &command).unwrap();
         recorded.push((actor, command, batch));
     }
     let (mut replay, ..) = fresh();
     for (actor, command, batch) in recorded {
         let decoded = RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
-        assert_eq!(replay.apply_command(actor, &decoded).unwrap(), batch);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &decoded).unwrap(),
+            batch
+        );
     }
     assert_eq!(
         replay.diagnostic_snapshot().unwrap(),
@@ -751,14 +758,16 @@ fn boseiju_printed_mana_ability_and_playing_land_are_independent_of_channel() {
         .iter()
         .position(|id| *id == source)
         .unwrap();
-    engine.apply_command(0, &play_land(slot)).unwrap();
+    engine.apply_scenario_command(0, &play_land(slot)).unwrap();
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     let command = activate_ability_for(&engine, source, 0, vec![]);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
     assert!(engine.state.objects[&source].tapped);
     assert!(engine.state.stack.is_empty());
-    engine.apply_command(0, &undo_mana_ability()).unwrap();
+    engine
+        .apply_scenario_command(0, &undo_mana_ability())
+        .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.green, 0);
     assert!(!engine.state.objects[&source].tapped);
 }
@@ -809,14 +818,14 @@ fn boseiju_target_union_accepts_enchantment_nonbasic_and_basic_artifact_land() {
         );
         let command = channel(&engine, source, target);
         assert!(preview(&engine, &command).valid, "{card}");
-        engine.apply_command(0, &command).unwrap();
+        engine.apply_scenario_command(0, &command).unwrap();
         let batch = resolve(&mut engine);
         assert_eq!(
             find_resolution_choice(&batch).unwrap().deciding_player_id,
             1
         );
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &submit_resolution_decision(ResolutionChoiceDecision::Decline),
             )
@@ -850,7 +859,7 @@ fn boseiju_refresh_recounts_live_legends_and_sanitizes_excess_payment() {
     assert_eq!((mana.c, mana.g), (0, 1));
     assert_eq!(format!("{:?}", engine.state), before);
     assert!(
-        engine.apply_command(0, &old).is_err(),
+        engine.apply_scenario_command(0, &old).is_err(),
         "excess old payment cannot execute"
     );
     assert_eq!(format!("{:?}", engine.state), before);
@@ -859,7 +868,7 @@ fn boseiju_refresh_recounts_live_legends_and_sanitizes_excess_payment() {
         unreachable!()
     };
     ability.payment = refreshed.selection;
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
     assert_eq!(engine.state.players[0].mana_pool.green, 0);
 }

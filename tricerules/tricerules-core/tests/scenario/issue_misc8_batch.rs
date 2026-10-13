@@ -6,6 +6,7 @@
 //! CR 118/119 (life), CR 120 (damage), CR 202.3 (mana value), CR 301.5 (Treasure/Food),
 //! CR 508/509 (combat designations), CR 608.2b (target revalidation), CR 611.2c (until end of
 //! turn), CR 701.25 (surveil), and CR 702.12b (indestructible).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -40,8 +41,10 @@ fn cast_and_resolve(
     grant_pool(e, caster as usize);
     let slot = hand_index_for_card(e, caster as usize, card_id);
     semantic::accepted(e, caster, &cast_spell(slot, targets));
-    e.apply_command(caster, &pass()).expect("caster pass");
-    e.apply_command(1 - caster, &pass()).expect("other pass")
+    e.apply_scenario_command(caster, &pass())
+        .expect("caster pass");
+    e.apply_scenario_command(1 - caster, &pass())
+        .expect("other pass")
 }
 
 #[test]
@@ -114,7 +117,7 @@ fn issue_misc8_masterful_flourish_pumps_and_grants_indestructible() {
     grant_pool(&mut bad, 0);
     let slot = hand_index_for_card(&bad, 0, "masterful_flourish");
     assert!(
-        bad.apply_command(0, &cast_spell(slot, target_object(theirs)))
+        bad.apply_scenario_command(0, &cast_spell(slot, target_object(theirs)))
             .is_err(),
         "an opponent creature is not a legal target"
     );
@@ -135,7 +138,7 @@ fn issue_misc8_kin_tree_severance_exiles_a_large_permanent() {
     grant_pool(&mut bad, 0);
     let slot = hand_index_for_card(&bad, 0, "kin-tree_severance");
     assert!(
-        bad.apply_command(0, &cast_spell(slot, target_object(small)))
+        bad.apply_scenario_command(0, &cast_spell(slot, target_object(small)))
             .is_err(),
         "mana value 2 is below the bound"
     );
@@ -154,7 +157,7 @@ fn issue_misc8_joust_through_hits_an_attacker_and_gains_life() {
     .expect("engine");
     advance_to_declare_attackers(&mut e);
     let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare the attacker");
     let life_before = e.state.players[0].life;
     inject_card_into_hand(&mut e, 0, "joust_through");
@@ -176,7 +179,7 @@ fn issue_misc8_joust_through_hits_an_attacker_and_gains_life() {
     grant_pool(&mut bad, 0);
     let slot = hand_index_for_card(&bad, 0, "joust_through");
     assert!(
-        bad.apply_command(0, &cast_spell(slot, target_object(bench)))
+        bad.apply_scenario_command(0, &cast_spell(slot, target_object(bench)))
             .is_err(),
         "a nonattacking creature is not attacking or blocking"
     );
@@ -203,7 +206,7 @@ fn issue_misc8_spider_food_destroys_or_makes_food() {
     grant_pool(&mut bad, 0);
     let slot = hand_index_for_card(&bad, 0, "spider_food");
     assert!(
-        bad.apply_command(0, &cast_spell(slot, target_object(bear)))
+        bad.apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
             .is_err(),
         "a ground creature is not an artifact, enchantment, or flier"
     );

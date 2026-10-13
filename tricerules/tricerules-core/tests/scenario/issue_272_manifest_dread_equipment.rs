@@ -1,5 +1,6 @@
 //! Issue #272: Manifest Dread passes its exact face-down object to a following
 //! non-targeting Equipment attachment without exposing hidden identity.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{AbilityCost, EffectSubject};
@@ -49,7 +50,7 @@ fn cast_equipment(engine: &mut GameEngine, card_id: &str) -> u32 {
     inject_card_into_hand(engine, 0, card_id);
     let slot = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .unwrap_or_else(|e| panic!("cast {card_id}: {e:?}"));
     pass_both_players(engine);
     battlefield_object_for_card(engine, 0, card_id)
@@ -58,9 +59,11 @@ fn cast_equipment(engine: &mut GameEngine, card_id: &str) -> u32 {
 fn reach_manifest_choice(engine: &mut GameEngine) -> RuledEventBatch {
     let first = engine.state.priority_player_id();
     let second = if first == 0 { 1 } else { 0 };
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("resolve trigger")
 }
 
@@ -111,7 +114,7 @@ fn all_three_attach_to_the_exact_manifested_object_and_apply_their_modifier() {
         assert_eq!(choice.deciding_player_id, 0);
         assert_eq!(choice.candidate_object_ids, top);
         let completed = engine
-            .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
             .expect("manifest and attach");
         assert_eq!(engine.state.objects[&top[0]].zone, Zone::Battlefield);
         assert!(engine.state.objects[&top[0]].face_down);
@@ -157,7 +160,7 @@ fn replacement_completion_preserves_result_but_rejects_stale_source() {
     inject_permanent_on_battlefield(&mut engine, 0, "orb_of_dreams");
     assert!(find_resolution_choice(&reach_manifest_choice(&mut engine)).is_some());
     let replacement = engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .expect("park replacement ordering");
     let choice = find_resolution_choice(&replacement).expect("replacement choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::ReplacementEffect);
@@ -167,7 +170,7 @@ fn replacement_completion_preserves_result_but_rejects_stale_source() {
         .entry(equipment)
         .or_default() += 1;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(vec![choice.candidate_object_ids[0]]),
         )

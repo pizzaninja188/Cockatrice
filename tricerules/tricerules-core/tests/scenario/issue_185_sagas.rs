@@ -1,7 +1,8 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{CounterKind, Keyword, TriggerCondition};
 use tricerules_core::state::CopiableValues;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     dev_command, ruled_command::Cmd, ruled_event::Ev, ChooseTriggerTarget, DevCommand, DevMoveCard,
     DevZone, ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice, TargetRef,
@@ -20,6 +21,7 @@ fn choose_trigger_targets(targets: Vec<TargetRef>) -> RuledCommand {
 fn choose_read_ahead(branch_index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: branch_index,
             ..Default::default()
@@ -61,7 +63,7 @@ fn saga_entry_places_lore_and_stages_the_crossed_chapter() {
     );
 
     engine
-        .apply_command(0, &choose_trigger_targets(target_object(target)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_object(target)))
         .expect("choose chapter I target");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
@@ -101,7 +103,7 @@ fn chapter_two_targets_and_destroys_an_opponents_artifact() {
         2
     );
     engine
-        .apply_command(0, &choose_trigger_targets(target_object(artifact)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_object(artifact)))
         .expect("choose chapter II target");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&artifact].zone, Zone::Graveyard);
@@ -202,7 +204,7 @@ fn read_ahead_uses_a_logged_branch_and_suppresses_skipped_chapters() {
 
     engine.enable_dev_commands();
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -235,12 +237,16 @@ fn read_ahead_uses_a_logged_branch_and_suppresses_skipped_chapters() {
     );
     assert_eq!(engine.state.objects[&saga].zone, starting_zone);
 
-    assert!(engine.apply_command(1, &choose_read_ahead(2)).is_err());
+    assert!(engine
+        .apply_scenario_command(1, &choose_read_ahead(2))
+        .is_err());
     assert_eq!(engine.state.objects[&saga].zone, starting_zone);
-    assert!(engine.apply_command(0, &choose_read_ahead(4)).is_err());
+    assert!(engine
+        .apply_scenario_command(0, &choose_read_ahead(4))
+        .is_err());
     assert_eq!(engine.state.objects[&saga].zone, starting_zone);
     engine
-        .apply_command(0, &choose_read_ahead(2))
+        .apply_scenario_command(0, &choose_read_ahead(2))
         .expect("choose chapter III");
     assert_eq!(engine.state.objects[&saga].zone, Zone::Battlefield);
     assert_eq!(
@@ -291,7 +297,7 @@ fn countering_the_final_chapter_allows_the_next_sba_to_sacrifice() {
     let countered = engine.state.stack.pop().expect("final chapter on stack");
     engine.state.stack_presentations.remove(&countered.id);
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("next priority action checks SBAs");
     assert_eq!(engine.state.objects[&saga].zone, Zone::Graveyard);
 }
@@ -409,7 +415,7 @@ fn saga_leave_and_reentry_starts_a_fresh_generation_at_chapter_one() {
     let second_target = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let saga = move_ready_to_battlefield(&mut engine, 0, "burn,_burn,_tree_and_fern");
     engine
-        .apply_command(0, &choose_trigger_targets(target_object(first_target)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_object(first_target)))
         .expect("first chapter I target");
     resolve_entire_stack_two_player(&mut engine);
     let first_generation = engine
@@ -420,7 +426,7 @@ fn saga_leave_and_reentry_starts_a_fresh_generation_at_chapter_one() {
         .unwrap_or(0);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -460,7 +466,7 @@ fn saga_leave_and_reentry_starts_a_fresh_generation_at_chapter_one() {
     );
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(0, &choose_trigger_targets(target_object(second_target)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_object(second_target)))
         .expect("new chapter I target");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&second_target].zone, Zone::Graveyard);
@@ -502,7 +508,7 @@ fn precombat_lore_is_controller_scoped_and_final_triggers_wait_in_ordering() {
     for _ in 0..2 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("priority pass");
     }
 

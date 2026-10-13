@@ -5,6 +5,7 @@
 //! resolution revalidation; CR 508.1m/508.3a and 603.2c govern declaration-time triggers;
 //! CR 611.2c/613.1f/613.4c govern the ordered temporary P/T and keyword effects; CR 702.12b
 //! governs destruction prevention; and CR 514.2 governs cleanup expiry.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -39,7 +40,7 @@ fn advance_to_next_main1(engine: &mut GameEngine, active_player: i32) {
         resolve_cleanup_discards_if_any(engine);
         let priority = engine.state.priority_player_id();
         engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("advance through the rest of the turn");
     }
     panic!("turn advancement stalled before the next main phase");
@@ -50,7 +51,7 @@ fn cast_murder(engine: &mut GameEngine, target: u32) {
     grant_pool(engine, 0);
     let slot = hand_index_for_card(engine, 0, "murder");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Murder at the granted-indestructible creature");
     resolve_entire_stack_two_player(engine);
 }
@@ -74,7 +75,7 @@ fn attack_trigger_publishes_exact_targets_and_applies_ordered_temporary_effects(
         let unrelated = inject_creature_on_battlefield(&mut engine, 0, "storm_crow");
 
         let declaration = engine
-            .apply_command(0, &declare_attackers(vec![attacker]))
+            .apply_scenario_command(0, &declare_attackers(vec![attacker]))
             .expect("declare the generated creature as an attacker");
         assert_eq!(
             engine.state.pending_triggers.len(),
@@ -97,18 +98,18 @@ fn attack_trigger_publishes_exact_targets_and_applies_ordered_temporary_effects(
 
         assert!(
             engine
-                .apply_command(0, &choose_trigger_target(attacker))
+                .apply_scenario_command(0, &choose_trigger_target(attacker))
                 .is_err(),
             "the attacking source is excluded"
         );
         assert!(
             engine
-                .apply_command(0, &choose_trigger_target(opponent))
+                .apply_scenario_command(0, &choose_trigger_target(opponent))
                 .is_err(),
             "an opponent creature is outside the You filter"
         );
         engine
-            .apply_command(0, &choose_trigger_target(target))
+            .apply_scenario_command(0, &choose_trigger_target(target))
             .expect("choose another controlled creature");
         assert_eq!(engine.state.pending_triggers.len(), 0);
         assert_eq!(
@@ -159,10 +160,10 @@ fn attack_trigger_revalidates_a_removed_target_by_exact_zone_generation() {
     let unrelated = inject_creature_on_battlefield(&mut engine, 0, "storm_crow");
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare Hardened Escort as an attacker");
     engine
-        .apply_command(0, &choose_trigger_target(target))
+        .apply_scenario_command(0, &choose_trigger_target(target))
         .expect("choose the initially legal controlled creature");
 
     engine.state.players[0]
@@ -200,10 +201,10 @@ fn attack_trigger_rejects_same_object_reentry_with_new_zone_generation() {
     let unrelated = inject_creature_on_battlefield(&mut engine, 0, "storm_crow");
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare Hardened Escort as an attacker");
     engine
-        .apply_command(0, &choose_trigger_target(target))
+        .apply_scenario_command(0, &choose_trigger_target(target))
         .expect("choose the initially legal controlled creature");
 
     let old_generation = engine

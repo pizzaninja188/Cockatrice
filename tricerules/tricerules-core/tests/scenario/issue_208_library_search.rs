@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1 as rv1;
@@ -41,6 +42,7 @@ fn engine_with_wan(seed: u64, controller: usize, search_cards: &[&str]) -> (Game
 fn select_search_zones(branch_index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(rv1::SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: branch_index,
             ..Default::default()
@@ -114,7 +116,7 @@ fn wan_etb_retains_cast_x_until_its_trigger_resolves() {
     let hand_index = hand_index_for_card(&engine, 0, "wan_shi_tong,_librarian");
     let wan = engine.state.players[0].hand[hand_index];
     engine
-        .apply_command(0, &cast_spell_x(hand_index, Vec::new(), 5))
+        .apply_scenario_command(0, &cast_spell_x(hand_index, Vec::new(), 5))
         .expect("cast Wan with X=5");
     pass_both_players(&mut engine);
 
@@ -160,7 +162,7 @@ fn wan_etb_draw_keeps_x_if_the_source_leaves_before_resolution() {
     let hand_index = hand_index_for_card(&engine, 0, "wan_shi_tong,_librarian");
     let wan = engine.state.players[0].hand[hand_index];
     engine
-        .apply_command(0, &cast_spell_x(hand_index, Vec::new(), 5))
+        .apply_scenario_command(0, &cast_spell_x(hand_index, Vec::new(), 5))
         .expect("cast Wan with X=5");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.stack[0].chosen_x, 5);
@@ -208,7 +210,7 @@ fn opponent_own_library_search_triggers_once_including_failure_to_find() {
         give_mana(&mut engine, 0, mana);
         let tutor_index = hand_index_for_card(&engine, 0, tutor);
         engine
-            .apply_command(0, &cast_spell(tutor_index, Vec::new()))
+            .apply_scenario_command(0, &cast_spell(tutor_index, Vec::new()))
             .expect("cast tutor");
         pass_both_players(&mut engine);
         let pending = engine
@@ -223,7 +225,7 @@ fn opponent_own_library_search_triggers_once_including_failure_to_find() {
         };
         let opponent_hand_before = engine.state.players[1].hand.len();
         engine
-            .apply_command(0, &submit_resolution_choice(chosen))
+            .apply_scenario_command(0, &submit_resolution_choice(chosen))
             .expect("complete search");
 
         assert_eq!(engine.state.stack.len(), 1, "one search trigger");
@@ -249,7 +251,7 @@ fn controller_search_does_not_trigger_wan() {
     );
     let tutor_index = hand_index_for_card(&engine, 0, "demonic_tutor");
     engine
-        .apply_command(0, &cast_spell(tutor_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(tutor_index, Vec::new()))
         .expect("cast tutor");
     pass_both_players(&mut engine);
     let chosen = engine
@@ -260,7 +262,7 @@ fn controller_search_does_not_trigger_wan() {
         .presentation
         .candidates[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))
         .expect("complete own search");
     assert!(engine.state.stack.is_empty());
     assert_eq!(counter_count(&engine, wan), 0);
@@ -287,11 +289,11 @@ fn gifts_search_trigger_waits_until_the_whole_spell_finishes() {
     );
     let gifts = hand_index_for_card(&engine, 0, "gifts_ungiven");
     engine
-        .apply_command(0, &cast_spell(gifts, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(gifts, Vec::new()))
         .expect("cast Gifts Ungiven");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(revealed.to_vec()))
+        .apply_scenario_command(0, &submit_resolution_choice(revealed.to_vec()))
         .expect("complete the library-search portion");
 
     assert!(
@@ -304,7 +306,7 @@ fn gifts_search_trigger_waits_until_the_whole_spell_finishes() {
     );
     assert_eq!(engine.state.staged_trigger_groups.len(), 1);
     engine
-        .apply_command(1, &submit_resolution_choice(revealed[..2].to_vec()))
+        .apply_scenario_command(1, &submit_resolution_choice(revealed[..2].to_vec()))
         .expect("finish Gifts");
 
     assert_eq!(
@@ -333,14 +335,14 @@ fn multi_zone_search_triggers_only_when_library_is_in_the_chosen_scope() {
             inject_card_into_hand(&mut engine, 0, "altanak,_the_thrice-called")
         };
         engine
-            .apply_command(0, &activate_say_its_name_search(&engine, source, costs))
+            .apply_scenario_command(0, &activate_say_its_name_search(&engine, source, costs))
             .expect("activate Say Its Name from the graveyard");
         pass_both_players(&mut engine);
         engine
-            .apply_command(0, &select_search_zones(branch_index))
+            .apply_scenario_command(0, &select_search_zones(branch_index))
             .expect("choose search zones");
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &submit_resolution_choice(if include_library {
                     vec![altanak]

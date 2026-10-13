@@ -1,12 +1,14 @@
 //! Exact deck-corpus coverage for Zur's Weirding's global draw replacement.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1 as rv1;
 
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -42,7 +44,7 @@ fn pass_until_resolution_choice(
     for _ in 0..16 {
         let actor = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass until the resolving draw asks for input");
         if let Some(choice) = find_resolution_choice(&batch) {
             return (choice, batch);
@@ -75,13 +77,13 @@ fn advance_to_opponent_main1_with_draw_declined(engine: &mut GameEngine) {
                 rv1::ChoiceKind::ResolutionBranch
             );
             engine
-                .apply_command(0, &select_branch(1))
+                .apply_scenario_command(0, &select_branch(1))
                 .expect("decline the normal draw's Zur payment");
             continue;
         }
         let actor = engine.state.priority_player_id();
         engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass through the opponent's turn start");
     }
     panic!("opponent did not reach main phase");
@@ -135,14 +137,14 @@ fn zurs_weirding_replaces_each_opponent_draw_in_divination() {
     let third_draw = engine.state.players[1].library[2];
     let divination = hand_index_for_card(&engine, 1, "divination");
     engine
-        .apply_command(1, &cast_spell(divination, Vec::new()))
+        .apply_scenario_command(1, &cast_spell(divination, Vec::new()))
         .expect("cast Divination");
 
     engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .expect("caster passes");
     let first_resolution = engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .expect("Divination resolves into a Zur choice");
     let first_choice = find_resolution_choice(&first_resolution).expect("first payer choice");
     assert_eq!(first_choice.deciding_player_id, 0);
@@ -153,7 +155,7 @@ fn zurs_weirding_replaces_each_opponent_draw_in_divination() {
     assert_eq!(first_choice.resolution_branches[1].label, "Decline");
 
     let second_resolution = engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("pay to put the first revealed card in its owner's graveyard");
     assert_eq!(engine.state.players[0].life, 18);
     assert_eq!(engine.state.objects[&first_draw].zone, Zone::Graveyard);
@@ -166,7 +168,7 @@ fn zurs_weirding_replaces_each_opponent_draw_in_divination() {
     assert_eq!(revealed_object_id(&second_resolution), second_draw);
 
     let final_batch = engine
-        .apply_command(0, &select_branch(1))
+        .apply_scenario_command(0, &select_branch(1))
         .expect("decline the second draw's payment");
     assert_eq!(engine.state.objects[&second_draw].zone, Zone::Hand);
     assert!(engine.state.players[1].hand.contains(&second_draw));
@@ -214,7 +216,7 @@ fn zurs_weirding_collects_four_player_apnap_choices_before_debiting_life() {
     let third_draw = engine.state.players[0].library[2];
     let divination = hand_index_for_card(&engine, 0, "divination");
     engine
-        .apply_command(0, &cast_spell(divination, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(divination, Vec::new()))
         .expect("cast Divination");
 
     let (first_choice, first_batch) = pass_until_resolution_choice(&mut engine);
@@ -222,7 +224,7 @@ fn zurs_weirding_collects_four_player_apnap_choices_before_debiting_life() {
     assert!(first_choice.public_reveal.is_none());
     assert_eq!(revealed_object_id(&first_batch), first_draw);
     let p1_pays = engine
-        .apply_command(1, &select_branch(0))
+        .apply_scenario_command(1, &select_branch(0))
         .expect("first APNAP payer chooses to pay");
     assert!(p1_pays.events.iter().any(|event| matches!(
         &event.ev,
@@ -242,7 +244,7 @@ fn zurs_weirding_collects_four_player_apnap_choices_before_debiting_life() {
     assert_eq!(second_payer.deciding_player_id, 2);
 
     let p2_pays = engine
-        .apply_command(2, &select_branch(0))
+        .apply_scenario_command(2, &select_branch(0))
         .expect("second APNAP payer chooses to pay");
     assert!(p2_pays.events.iter().any(|event| matches!(
         &event.ev,
@@ -263,7 +265,7 @@ fn zurs_weirding_collects_four_player_apnap_choices_before_debiting_life() {
     );
 
     let p3_declines = engine
-        .apply_command(3, &select_branch(1))
+        .apply_scenario_command(3, &select_branch(1))
         .expect("last APNAP payer declines");
     assert_eq!(
         engine
@@ -286,7 +288,7 @@ fn zurs_weirding_collects_four_player_apnap_choices_before_debiting_life() {
     let mut final_batch = None;
     for payer in [1, 2, 3] {
         let batch = engine
-            .apply_command(payer, &select_branch(1))
+            .apply_scenario_command(payer, &select_branch(1))
             .expect("decline payment for the second individual draw");
         if payer < 3 {
             assert_eq!(
@@ -361,11 +363,13 @@ fn song_of_the_dryads_removes_zurs_weirding_public_hand_and_draw_replacement() {
     );
     let song_slot = hand_index_for_card(&engine, 0, "song_of_the_dryads");
     engine
-        .apply_command(0, &cast_spell(song_slot, target_object(zur)))
+        .apply_scenario_command(0, &cast_spell(song_slot, target_object(zur)))
         .expect("cast Song of the Dryads on Zur's Weirding");
-    engine.apply_command(0, &pass()).expect("caster passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("Song resolves onto Zur's Weirding");
     let song = battlefield_object_for_card(&engine, 0, "song_of_the_dryads");
     assert_eq!(
@@ -402,7 +406,7 @@ fn song_of_the_dryads_removes_zurs_weirding_public_hand_and_draw_replacement() {
         }
         let actor = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("advance through the opponent's draw step");
         assert!(find_resolution_choice(&batch).is_none());
     }

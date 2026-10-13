@@ -11,6 +11,7 @@
 //! (targeting and revalidation), 701.7 (destroy), 701.30/118.8 (blight), 121.1 (draw),
 //! 122.1 (counters), 509.1b/611.3 (combat restrictions), 611.2c (granted triggered abilities),
 //! 400.7 (new-object identity for token copies), and 701.18/608.2h (search and owner placement).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::ContinuousEffectKind;
@@ -104,6 +105,7 @@ fn submit_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(
             tricerules_proto::ruled::v1::SubmitResolutionChoice {
+                resolution_prompt_id: 0,
                 chosen_object_ids: Vec::new(),
                 selected_branch_index: index,
                 decision: ResolutionChoiceDecision::SelectBranch as i32,
@@ -141,7 +143,7 @@ fn issue_359_three_steps_ahead_modes_and_linked_costs() {
     ensure_card_in_hand(&mut e, 0, "grizzly_bears");
     let bear_slot = hand_index_for_card(&e, 0, "grizzly_bears");
     let bear_card = e.state.players[0].hand[bear_slot];
-    e.apply_command(0, &cast_spell(bear_slot, vec![]))
+    e.apply_scenario_command(0, &cast_spell(bear_slot, vec![]))
         .expect("cast Grizzly Bears");
     let bear_spell = e.state.stack.last().expect("bear spell").id;
     let slot = hand_index_for_card(&e, 0, "three_steps_ahead");
@@ -388,7 +390,7 @@ fn issue_359_pyrrhic_strike_blight_unlocks_both_modes() {
     ensure_card_in_hand(&mut both, 0, "pyrrhic_strike");
     let slot = hand_index_for_card(&both, 0, "pyrrhic_strike");
     assert!(
-        both.apply_command(
+        both.apply_scenario_command(
             0,
             &cast_spree(
                 slot,
@@ -413,7 +415,7 @@ fn issue_359_pyrrhic_strike_blight_unlocks_both_modes() {
         blight_target,
     );
     assert!(
-        paid_one.apply_command(0, &command).is_err(),
+        paid_one.apply_scenario_command(0, &command).is_err(),
         "paying the blight requires choosing both modes"
     );
 
@@ -448,7 +450,7 @@ fn issue_359_pyrrhic_strike_blight_unlocks_both_modes() {
     let slot = hand_index_for_card(&small, 0, "pyrrhic_strike");
     assert!(
         small
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spree(slot, vec![(1, target_object(small_creature))], vec![]),
             )

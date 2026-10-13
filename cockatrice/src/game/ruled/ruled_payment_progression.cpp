@@ -21,12 +21,52 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <algorithm>
 #include <libcockatrice/utility/zone_names.h>
 #include <limits>
 #include <optional>
 
 namespace
 {
+bool isSpecialCastCandidate(const RuledClientState *state, quint32 oid)
+{
+    return state && state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast) &&
+           state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast, oid);
+}
+
+quint64 captureSpecialCastPromptId(const RuledClientState *state, quint32 oid)
+{
+    if (!isSpecialCastCandidate(state, oid) || !state->pendingChoice.has_value())
+        return 0;
+    const quint64 promptId = state->pendingChoice->resolutionPromptId;
+    return state->isCurrentResolutionPrompt(promptId) ? promptId : 0;
+}
+
+bool isCapturedSpecialCastPromptCurrent(const RuledClientState *state, quint64 promptId, quint32 oid)
+{
+    return promptId != 0 && state && state->isCurrentResolutionPrompt(promptId) && state->pendingChoice.has_value() &&
+           state->pendingChoice->resolutionPromptId == promptId && isSpecialCastCandidate(state, oid);
+}
+
+bool hasExactCastOffer(const RuledClientState *state,
+                       quint32 oid,
+                       RuledCastSource source,
+                       quint64 promptId,
+                       const RuledFaceOption &captured)
+{
+    if (!state)
+        return false;
+    if (promptId != 0 && !isCapturedSpecialCastPromptCurrent(state, promptId, oid))
+        return false;
+    const auto offers = state->zoneActionFaceOptions(oid, source);
+    return std::any_of(offers.cbegin(), offers.cend(), [&](const auto &current) {
+        return current.faceIndex == captured.faceIndex && current.castMethod == captured.castMethod &&
+               current.castingPermissionId == captured.castingPermissionId &&
+               current.prototyped == captured.prototyped &&
+               current.zoneChangeGeneration == captured.zoneChangeGeneration;
+    });
+}
+
 std::optional<quint32> promptMultikickerCount(const QString &cardName, quint32 maximum)
 {
     if (maximum == 0 || maximum > static_cast<quint32>(std::numeric_limits<int>::max()))
@@ -1789,9 +1829,15 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
                                          RuledCastSource source,
                                          ruled::v1::CastMethod castMethod,
                                          quint64 castingPermissionId,
-                                         bool prototyped)
+                                         bool prototyped,
+                                         quint64 resolutionPromptId,
+                                         quint64 expectedSourceZoneChangeGeneration)
 {
     RuledClientState *const geh = actions->player->getGame()->getGameEventHandler()->ruled();
+    const bool isResolutionSpecialCast = source == RuledCastSource::Exile &&
+                                         isSpecialCastCandidate(geh, static_cast<quint32>(ruledHandIndex));
+    if (isResolutionSpecialCast && resolutionPromptId == 0)
+        return false;
     std::optional<quint64> expectedGeneration;
     if (source == RuledCastSource::Library) {
         if (!geh->privateLibraryTop || geh->privateLibraryTop->objectId != static_cast<quint32>(ruledHandIndex)) {
@@ -1857,6 +1903,23 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
         }
     }
 
+    if (resolutionPromptId != 0) {
+        if (source != RuledCastSource::Exile || !geh->isCurrentResolutionPrompt(resolutionPromptId) ||
+            !geh->pendingChoice.has_value() || geh->pendingChoice->resolutionPromptId != resolutionPromptId ||
+            !geh->isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast,
+                                           static_cast<quint32>(ruledHandIndex)))
+            return false;
+        const auto currentOffers = geh->zoneActionFaceOptions(ruledHandIndex, source);
+        const bool exactOfferStillLegal = std::any_of(
+            currentOffers.cbegin(), currentOffers.cend(), [&](const auto &offer) {
+                return offer.faceIndex == faceIndex && offer.castMethod == castMethod &&
+                       offer.castingPermissionId == castingPermissionId && offer.prototyped == prototyped &&
+                       offer.zoneChangeGeneration == expectedSourceZoneChangeGeneration;
+            });
+        if (!exactOfferStillLegal)
+            return false;
+    }
+
     // Timing legality (sorcery vs. instant speed, flash, combat-declaration locks, priority) is
     // decided by the engine and surfaced via the CastSpell legality check above — the single
     // source of truth. We deliberately do NOT re-gate by card type here: doing so would block
@@ -1876,6 +1939,7 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
     actions->pendingRuledSpellCast.source = source;
     actions->pendingRuledSpellCast.castMethod = castMethod;
     actions->pendingRuledSpellCast.castingPermissionId = castingPermissionId;
+    actions->pendingRuledSpellCast.resolutionPromptId = resolutionPromptId;
     actions->pendingRuledSpellCast.prototyped = prototyped;
     actions->pendingRuledSpellCast.faceIndex = faceIndex;
     const auto paymentFaces = source == RuledCastSource::Hand
@@ -2643,15 +2707,22 @@ bool RuledPaymentUi::startPublicZoneCast(PlayerActions *actions, CardItem *card,
     const auto source =
         card->getZone()->getName() == ZoneNames::EXILE ? RuledCastSource::Exile : RuledCastSource::Graveyard;
     const quint32 oid = RuledActions::resolvePublicZoneObjectId(state, card);
+    const bool hasSpecialOffer = source == RuledCastSource::Exile && isSpecialCastCandidate(state, oid);
+    const quint64 promptId = hasSpecialOffer ? captureSpecialCastPromptId(state, oid) : 0;
+    if (hasSpecialOffer && promptId == 0)
+        return true;
     const auto options = state->zoneActionFaceOptions(oid, source);
     if (options.isEmpty()) {
         return false;
     }
     const auto choice = RuledPendingCast::chooseFace(actions->player->getGame()->getTab(), card->getName(), options);
     if (choice) {
+        if (!hasExactCastOffer(state, oid, source, promptId, *choice))
+            return true;
         actions->ruledPayment->beginRuledSpellCast(card, static_cast<int>(oid), choice->faceIndex, choice->faceName,
                                                    choice->manaCost, choice->genericCostReduction, source,
-                                                   choice->castMethod, choice->castingPermissionId, choice->prototyped);
+                                                   choice->castMethod, choice->castingPermissionId, choice->prototyped,
+                                                   promptId, choice->zoneChangeGeneration);
     }
     return true;
 }
@@ -2678,6 +2749,10 @@ bool RuledPaymentUi::tryStartRuledSpellCast(CardItem *card)
         if (objectId == 0 || !geh->isZoneActionLegal(objectId, source)) {
             return false;
         }
+        const bool hasSpecialOffer = source == RuledCastSource::Exile && isSpecialCastCandidate(geh, objectId);
+        const quint64 promptId = hasSpecialOffer ? captureSpecialCastPromptId(geh, objectId) : 0;
+        if (hasSpecialOffer && promptId == 0)
+            return true;
         const QVector<RuledFaceOption> options = geh->zoneActionFaceOptions(objectId, source);
         if (options.isEmpty()) {
             return false;
@@ -2691,6 +2766,8 @@ bool RuledPaymentUi::tryStartRuledSpellCast(CardItem *card)
             }
             option = *chosen;
         }
+        if (!hasExactCastOffer(geh, objectId, source, promptId, option))
+            return true;
         const QString cost =
             geh->zoneActionCost(objectId, option.faceIndex, source, option.castMethod, option.castingPermissionId,
                                 option.prototyped);
@@ -2699,7 +2776,7 @@ bool RuledPaymentUi::tryStartRuledSpellCast(CardItem *card)
         }
         return beginRuledSpellCast(card, static_cast<int>(objectId), option.faceIndex, option.faceName, cost,
                                    option.genericCostReduction, source, option.castMethod, option.castingPermissionId,
-                                   option.prototyped);
+                                   option.prototyped, promptId, option.zoneChangeGeneration);
     }
 
     const int ruledHandIndex = RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
@@ -2751,6 +2828,12 @@ bool RuledPaymentUi::tryRuledSpellCastFaceMenu(CardItem *card)
          (sourceIndex == 0 || !geh->isZoneActionLegal(static_cast<quint32>(sourceIndex), publicSource)))) {
         return false;
     }
+    const quint32 sourceOid = static_cast<quint32>(sourceIndex);
+    const bool hasSpecialOffer = !fromHand && publicSource == RuledCastSource::Exile &&
+                                 isSpecialCastCandidate(geh, sourceOid);
+    const quint64 promptId = hasSpecialOffer ? captureSpecialCastPromptId(geh, sourceOid) : 0;
+    if (hasSpecialOffer && promptId == 0)
+        return true;
     const QVector<RuledFaceOption> faces =
         fromHand ? geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, sourceIndex)
                  : geh->zoneActionFaceOptions(static_cast<quint32>(sourceIndex), publicSource);
@@ -2773,16 +2856,22 @@ bool RuledPaymentUi::tryRuledSpellCastFaceMenu(CardItem *card)
             return false;
         }
         const auto &face = faces.first();
+        if (fromPublicZone && !hasExactCastOffer(geh, sourceOid, publicSource, promptId, face))
+            return true;
         return beginRuledSpellCast(card, sourceIndex, face.faceIndex, face.faceName, face.manaCost,
                                    face.genericCostReduction, fromHand ? RuledCastSource::Hand : publicSource,
-                                   face.castMethod, face.castingPermissionId, face.prototyped);
+                                   face.castMethod, face.castingPermissionId, face.prototyped, promptId,
+                                   face.zoneChangeGeneration);
     }
     const auto chosen = RuledPendingCast::chooseFace(actions->player->getGame()->getTab(), card->getName(), faces);
     if (!chosen.has_value()) {
         return true; // menu was shown, player cancelled
     }
+    if (fromPublicZone && !hasExactCastOffer(geh, sourceOid, publicSource, promptId, *chosen))
+        return true;
     beginRuledSpellCast(card, sourceIndex, chosen->faceIndex, chosen->faceName, chosen->manaCost,
                         chosen->genericCostReduction, fromHand ? RuledCastSource::Hand : publicSource,
-                        chosen->castMethod, chosen->castingPermissionId, chosen->prototyped);
+                        chosen->castMethod, chosen->castingPermissionId, chosen->prototyped, promptId,
+                        chosen->zoneChangeGeneration);
     return true;
 }

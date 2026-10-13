@@ -2,6 +2,7 @@
 //!
 //! Oracle and rulings were checked 2026-09-13. CR 115.8, 601.2b-d, 608.2b-c, and 700.2
 //! govern cast-time mode and target choices, target revalidation, and printed resolution order.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -56,7 +57,7 @@ fn prepare_spell(engine: &mut GameEngine, card_id: &str) -> usize {
 
 fn dev_move_card(engine: &mut GameEngine, target_player_id: i32, card_name: &str, zone: DevZone) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -89,7 +90,7 @@ fn overwhelming_surge_supports_both_modes_with_local_targets_and_revalidation() 
 
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_modal_spell(
                     slot,
@@ -101,7 +102,7 @@ fn overwhelming_surge_supports_both_modes_with_local_targets_and_revalidation() 
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(
                 slot,
@@ -138,7 +139,7 @@ fn overwhelming_surge_supports_both_modes_with_local_targets_and_revalidation() 
     let first_creature = inject_creature_on_battlefield(&mut first_only, 1, "grizzly_bears");
     let first_slot = prepare_spell(&mut first_only, "overwhelming_surge");
     first_only
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(first_slot, vec![(0, target_object(first_creature))]),
         )
@@ -153,7 +154,7 @@ fn overwhelming_surge_supports_both_modes_with_local_targets_and_revalidation() 
     let second_artifact = inject_permanent_on_battlefield(&mut second_only, 1, "short_sword");
     let second_slot = prepare_spell(&mut second_only, "overwhelming_surge");
     second_only
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(second_slot, vec![(1, target_object(second_artifact))]),
         )
@@ -180,7 +181,7 @@ fn issue_449_iroh_targeted_mode_preserves_source_and_creature_only_damage() {
     let generation = semantic::generation(&engine, source);
     for illegal in [target_object(artifact), target_player(1)] {
         assert!(engine
-            .apply_command(0, &cast_modal_spell(slot, vec![(1, illegal)]))
+            .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, illegal)]))
             .is_err());
     }
     let cast = semantic::accepted(
@@ -218,7 +219,7 @@ fn irohs_demonstration_damage_is_limited_to_opponent_creatures() {
     let slot = prepare_spell(&mut engine, "irohs_demonstration");
 
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, vec![])]))
         .expect("choose the untargeted opponent-creature mode");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -235,7 +236,7 @@ fn irohs_demonstration_damages_all_and_only_opponent_creatures_in_multiplayer() 
     let slot = prepare_spell(&mut engine, "irohs_demonstration");
 
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, vec![])]))
         .expect("choose the untargeted opponent-creature mode");
     resolve_entire_stack_three_player(&mut engine);
 
@@ -252,7 +253,7 @@ fn giantfall_and_valorous_stance_keep_exact_source_and_toughness_filters() {
     engine.state.objects.get_mut(&opposing).unwrap().toughness = Some(4);
     let giantfall = prepare_spell(&mut engine, "giantfall");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(
                 giantfall,
@@ -274,7 +275,7 @@ fn giantfall_and_valorous_stance_keep_exact_source_and_toughness_filters() {
     let stance_slot = prepare_spell(&mut stance, "valorous_stance");
     assert!(
         stance
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_modal_spell(stance_slot, vec![(1, target_object(small))])
             )
@@ -282,7 +283,7 @@ fn giantfall_and_valorous_stance_keep_exact_source_and_toughness_filters() {
         "toughness four or greater must not use the power or default filter"
     );
     stance
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(stance_slot, vec![(1, target_object(large))]),
         )
@@ -298,7 +299,7 @@ fn origin_of_metalbending_applies_both_ordered_effects_to_one_target() {
     let creature = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let slot = prepare_spell(&mut engine, "origin_of_metalbending");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(1, target_object(creature))]),
         )
@@ -336,7 +337,7 @@ fn resolve_entire_stack_three_player(engine: &mut GameEngine) {
     loop {
         let priority = engine.state.priority_player_id();
         engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("pass priority");
         if engine.state.stack.is_empty() {
             return;
@@ -351,7 +352,7 @@ fn seekers_folly_uses_a_private_opponent_hand_choice() {
     let second = inject_card_into_hand(&mut engine, 1, "island");
     let slot = prepare_spell(&mut engine, "seekers_folly");
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, target_player(1))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, target_player(1))]))
         .expect("target opponent for Seeker's Folly");
     let resolution = resolve_top_stack(&mut engine);
     let choice = find_resolution_choice(&resolution).expect("private discard choice");
@@ -363,7 +364,7 @@ fn seekers_folly_uses_a_private_opponent_hand_choice() {
     assert!(choice.candidate_object_ids.contains(&second));
 
     engine
-        .apply_command(1, &submit_resolution_choice(vec![first, second]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![first, second]))
         .expect("opponent chooses two cards to discard");
     assert_eq!(engine.state.objects[&first].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&second].zone, Zone::Graveyard);
@@ -376,8 +377,10 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }

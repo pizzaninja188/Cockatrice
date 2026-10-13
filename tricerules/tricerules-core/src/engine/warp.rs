@@ -196,7 +196,7 @@ mod tests {
     fn pass(engine: &mut GameEngine) {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(
+            .apply_scenario_command(
                 player,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -211,7 +211,7 @@ mod tests {
                 let player = pending.deciding_player;
                 let trigger_object_id = pending.candidates[0].object_id;
                 engine
-                    .apply_command(
+                    .apply_scenario_command(
                         player,
                         &RuledCommand {
                             cmd: Some(rv1::ruled_command::Cmd::SubmitTriggerOrder(
@@ -236,7 +236,7 @@ mod tests {
         engine.state.players[0].mana_pool.white = 1;
         engine.state.players[0].mana_pool.colorless = 1;
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
@@ -355,7 +355,7 @@ mod tests {
         engine.state.players[0].mana_pool.colorless = 3;
         let before = engine.state.command_index;
         assert!(matches!(
-            engine.apply_command(0, &command),
+            engine.apply_scenario_command(0, &command),
             Err(EngineError::Illegal(_))
         ));
         assert_eq!(engine.state.command_index, before);
@@ -371,7 +371,7 @@ mod tests {
         engine.state.players[0].mana_pool.blue = 1;
         let slot = engine.state.players[0].hand.len() as u32 - 1;
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
@@ -559,7 +559,7 @@ mod tests {
         let slot = e.state.players[0].hand.len() as u32 - 1;
         let before = e.state.command_index;
         assert!(e
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
@@ -586,7 +586,7 @@ mod tests {
         e.state.players[0].mana_pool.white = 1;
         e.state.players[0].mana_pool.colorless = 1;
         let batch = e
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {

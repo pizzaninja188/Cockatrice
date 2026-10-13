@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{ActivationLimit, ContinuousEffectKind, EffectDuration};
 use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep};
 
@@ -9,7 +10,7 @@ fn red_mana(engine: &GameEngine, player: usize) -> (u32, u32) {
 
 fn enter_declare_attackers_from_main1(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase yields to beginning of combat");
     pass_both_players(engine);
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
@@ -34,7 +35,7 @@ fn firebending_uses_the_stack_captures_controller_and_expires_after_end_of_comba
     let warden = relocate_to_battlefield(&mut engine, 0, "vindictive_warden", false);
 
     engine
-        .apply_command(0, &declare_attackers(vec![warden]))
+        .apply_scenario_command(0, &declare_attackers(vec![warden]))
         .expect("declare the firebender");
     assert_eq!(engine.state.stack.len(), 1, "firebending uses the stack");
     assert_eq!(red_mana(&engine, 0), (0, 0), "mana waits for resolution");
@@ -92,7 +93,7 @@ fn fire_nation_cadets_has_firebending_only_when_a_lesson_is_in_its_graveyard() {
         );
         let hand_index = hand_index_for_card(&engine, 0, "fire_nation_cadets");
         engine
-            .apply_command(0, &cast_spell(hand_index, vec![]))
+            .apply_scenario_command(0, &cast_spell(hand_index, vec![]))
             .expect("cast Cadets");
         resolve_entire_stack_two_player(&mut engine);
         let cadets = battlefield_object_for_card(&engine, 0, "fire_nation_cadets");
@@ -104,7 +105,7 @@ fn fire_nation_cadets_has_firebending_only_when_a_lesson_is_in_its_graveyard() {
             .summoning_sick = false;
         enter_declare_attackers_from_main1(&mut engine);
         engine
-            .apply_command(0, &declare_attackers(vec![cadets]))
+            .apply_scenario_command(0, &declare_attackers(vec![cadets]))
             .expect("declare Cadets");
         engine.state.stack.len()
     }
@@ -143,7 +144,7 @@ fn separately_granted_firebending_instances_trigger_and_resolve_independently() 
     });
 
     engine
-        .apply_command(0, &declare_attackers(vec![warden]))
+        .apply_scenario_command(0, &declare_attackers(vec![warden]))
         .expect("declare Warden");
     answer_trigger_order_in_engine_order(&mut engine);
     assert_eq!(engine.state.stack.len(), 2);
@@ -169,7 +170,7 @@ fn a_creature_put_onto_the_battlefield_attacking_does_not_fire_its_granted_fireb
     advance_to_declare_attackers(&mut engine);
     let lancer = relocate_to_battlefield(&mut engine, 0, "dragonback_lancer", false);
     engine
-        .apply_command(0, &declare_attackers(vec![lancer]))
+        .apply_scenario_command(0, &declare_attackers(vec![lancer]))
         .expect("declare the mobilize attacker");
 
     let firebending = tricerules_cards::registry::global()
@@ -213,7 +214,7 @@ fn same_seed_and_commands_replay_the_same_firebending_state() {
         advance_to_declare_attackers(&mut engine);
         let warden = relocate_to_battlefield(&mut engine, 0, "vindictive_warden", false);
         engine
-            .apply_command(0, &declare_attackers(vec![warden]))
+            .apply_scenario_command(0, &declare_attackers(vec![warden]))
             .expect("declare Warden");
         resolve_entire_stack_two_player(&mut engine);
         let mana = red_mana(&engine, 0);

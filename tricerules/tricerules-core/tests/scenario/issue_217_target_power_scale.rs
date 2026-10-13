@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
@@ -40,10 +41,10 @@ fn put_landfall_on_stack(engine: &mut GameEngine, target: u32) -> u32 {
     inject_card_into_hand(engine, 0, "forest");
     let forest = hand_index_for_card(engine, 0, "forest");
     engine
-        .apply_command(0, &play_land(forest))
+        .apply_scenario_command(0, &play_land(forest))
         .expect("play a Forest");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -108,10 +109,10 @@ fn issue_217_rejects_an_opponent_target_and_ignores_a_stale_generation() {
     inject_card_into_hand(&mut illegal, 0, "forest");
     let forest = hand_index_for_card(&illegal, 0, "forest");
     illegal
-        .apply_command(0, &play_land(forest))
+        .apply_scenario_command(0, &play_land(forest))
         .expect("play a Forest");
     assert!(illegal
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {

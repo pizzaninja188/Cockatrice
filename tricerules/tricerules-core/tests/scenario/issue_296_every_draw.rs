@@ -1,4 +1,5 @@
 //! CR 121.2: each successfully drawn card creates its own event and trigger.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::CounterKind;
@@ -35,7 +36,9 @@ fn draw_two(engine: &mut GameEngine) {
         },
     );
     let slot = hand_index_for_card(engine, 0, "divination");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     resolve_entire_stack_two_player(engine);
 }
 
@@ -71,7 +74,9 @@ fn a_single_effect_draw_triggers_once_and_an_opponents_draw_does_not() {
         },
     );
     let slot = hand_index_for_card(&engine, 0, "elvish_visionary");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
         engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
@@ -100,7 +105,9 @@ fn pending_draw_triggers_do_not_put_counters_on_a_new_source_generation() {
         },
     );
     let slot = hand_index_for_card(&engine, 0, "divination");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine); // Resolve Divination; draw triggers remain pending/on stack.
     assert_eq!(
         engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),

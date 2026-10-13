@@ -4,6 +4,7 @@
 //! both-target legality; CR 608.2b covers target rechecks; CR 712.11b-c and 712.12 cover choosing
 //! the modal double-faced card's spell or land face; CR 614.1c and 605.1a/605.3b cover the back
 //! face entering tapped and its immediate mana ability.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -82,7 +83,7 @@ fn khalni_ambush_fights_with_current_power_and_rejects_wrong_controller_targets(
     let mana_before = engine.state.players[0].mana_pool;
     let hand_before = engine.state.players[0].hand.clone();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_face(slot, creature_targets(opposing, friendly), 0),
         )
@@ -169,7 +170,7 @@ fn khalni_territory_enters_tapped_then_produces_green_mana_immediately() {
     assert_eq!(engine.state.objects[&land].face_up_index, 1);
     assert!(engine.state.objects[&land].tapped);
     engine
-        .apply_command(0, &activate_ability_for(&engine, land, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, land, 0, vec![]))
         .expect_err("Khalni Territory enters tapped");
 
     end_active_turn(&mut engine, 0);
@@ -181,7 +182,7 @@ fn khalni_territory_enters_tapped_then_produces_green_mana_immediately() {
     assert!(!engine.state.objects[&land].tapped);
 
     engine
-        .apply_command(0, &activate_ability_for(&engine, land, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, land, 0, vec![]))
         .expect("activate Khalni Territory's green mana ability");
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);

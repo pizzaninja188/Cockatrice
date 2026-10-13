@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_core::Zone;
 
@@ -24,7 +25,7 @@ fn cast_grab_the_prize(discard_card: &str, seed: u64) -> GameEngine {
     engine.state.players[0].mana_pool.colorless = 1;
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_costs(
                 spell_slot,
@@ -80,10 +81,10 @@ fn grab_the_prize_keeps_payment_results_for_copies_and_later_zone_changes() {
         },
     );
     let original = copied.state.stack.last().unwrap().id;
-    copied.apply_command(0, &pass()).unwrap();
+    copied.apply_scenario_command(0, &pass()).unwrap();
     let twincast = hand_index_for_card(&copied, 1, "twincast");
     copied
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_spell(
                 twincast,
@@ -135,10 +136,10 @@ fn cast_gerrards_verdict(cards: &[&str], seed: u64) -> (GameEngine, Vec<u32>) {
     );
     let spell_slot = hand_index_for_card(&engine, 0, "gerrards_verdict");
     engine
-        .apply_command(0, &cast_spell(spell_slot, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(spell_slot, target_player(1)))
         .expect("cast Gerrard's Verdict");
-    engine.apply_command(0, &pass()).unwrap();
-    let parked = engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let parked = engine.apply_scenario_command(1, &pass()).unwrap();
     let choice = find_resolution_choice(&parked).expect("discard choice");
     assert_eq!(choice.deciding_player_id, 1);
     assert_eq!((choice.min, choice.max), (2, 2));
@@ -149,13 +150,13 @@ fn cast_gerrards_verdict(cards: &[&str], seed: u64) -> (GameEngine, Vec<u32>) {
 fn gerrards_verdict_counts_the_exact_discarded_land_cohort_after_resume() {
     let (mut one_land, chosen) = cast_gerrards_verdict(&["forest", "grizzly_bears"], 12_203);
     one_land
-        .apply_command(1, &submit_resolution_choice(chosen))
+        .apply_scenario_command(1, &submit_resolution_choice(chosen))
         .expect("submit one land and one nonland");
     assert_eq!(one_land.state.players[0].life, 23);
 
     let (mut two_lands, chosen) = cast_gerrards_verdict(&["forest", "mountain"], 12_204);
     two_lands
-        .apply_command(1, &submit_resolution_choice(chosen))
+        .apply_scenario_command(1, &submit_resolution_choice(chosen))
         .expect("submit two lands");
     assert_eq!(two_lands.state.players[0].life, 26);
 }
@@ -170,7 +171,7 @@ fn gerrards_verdict_rejects_a_stale_discard_choice_without_losing_the_prompt() {
         .or_default() += 1;
 
     let error = engine
-        .apply_command(1, &submit_resolution_choice(chosen))
+        .apply_scenario_command(1, &submit_resolution_choice(chosen))
         .expect_err("stale chosen identity must fail closed");
     assert!(error.to_string().contains("stale"));
     assert!(engine.state.pending_resolution.is_some());

@@ -6,6 +6,7 @@
 //! `021e4165-2f02-4bd4-86ca-cb7bf4c9e23d`. CR 107.1b and 107.3a govern the bounded X choice;
 //! CR 605.1a, 605.2, and 605.3a-b govern the mana ability and payment timing; CR 614.16 and
 //! 106.6a cover the independently tested counter-placement and mana-output replacement hooks.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::StaticAbilityDef;
@@ -298,7 +299,7 @@ fn issue_499_rejects_invalid_x_split_and_stale_generation_atomically() {
         let before_revision = engine.state.command_index;
         let command = activate_storage_mana(&engine, source, x_value, first_count);
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect_err("X above the live maximum or a split above X is forged input");
         assert_eq!(mana_pool(&engine), before_pool);
         assert_eq!(
@@ -326,7 +327,7 @@ fn issue_499_rejects_invalid_x_split_and_stale_generation_atomically() {
     let before_counters = engine.state.objects[&source].counter_count(CounterKind::Storage);
     let before_revision = engine.state.command_index;
     engine
-        .apply_command(0, &stale)
+        .apply_scenario_command(0, &stale)
         .expect_err("activation choice is bound to the observed source generation");
     assert_eq!(mana_pool(&engine), before_pool);
     assert_eq!(
@@ -342,7 +343,7 @@ fn issue_499_generic_one_is_paid_atomically_with_x_storage_counters() {
     let before_counters = engine.state.objects[&source].counter_count(CounterKind::Storage);
     let command = activate_storage_mana(&engine, source, 4, 2);
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect_err("the printed {1} cost is still required at X=4");
     assert_eq!(mana_pool(&engine), (0, 0, 0, 0, 0, 0));
     assert_eq!(
@@ -512,7 +513,7 @@ fn issue_499_storage_mana_preview_and_commit_share_x_split_validation() {
     let Some(Cmd::ActivateAbility(activation)) = command.cmd.as_ref() else {
         unreachable!()
     };
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             revision: engine.state.command_index,
@@ -532,7 +533,7 @@ fn issue_499_storage_mana_preview_and_commit_share_x_split_validation() {
     activation.payment = preview.selection;
     activation.restricted_mana = preview.restricted_mana;
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("commit accepts the same choice accepted by preview");
     assert_eq!(mana_pool(&engine), (0, 1, 1, 0, 0, 0));
     assert_eq!(
@@ -551,7 +552,7 @@ fn issue_499_storage_mana_preview_and_commit_share_x_split_validation() {
         let Some(Cmd::ActivateAbility(activation)) = command.cmd.as_ref() else {
             unreachable!()
         };
-        let preview = engine.preview_payment(
+        let preview = engine.preview_payment_scenario(
             0,
             &PreviewPayment {
                 revision: engine.state.command_index,
@@ -570,7 +571,7 @@ fn issue_499_storage_mana_preview_and_commit_share_x_split_validation() {
             "preview should report the shared choice-validation error: {preview:?}"
         );
         let error = engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect_err("the same forged X/split is rejected on commit");
         assert!(
             error
@@ -612,7 +613,7 @@ fn begin_opt_cast(engine: &mut GameEngine) -> u64 {
         casting_permission_id: cast.casting_permission_id,
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
@@ -657,7 +658,7 @@ fn issue_499_mana_ability_is_usable_during_cast_payment_without_using_stack() {
         }),
         ..Default::default()
     };
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             transaction_id,
@@ -668,7 +669,7 @@ fn issue_499_mana_ability_is_usable_during_cast_payment_without_using_stack() {
     );
     assert!(preview.valid && preview.complete, "{preview:?}");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {

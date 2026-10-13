@@ -8,6 +8,7 @@
 //! 603.10a make Lead Pipe's look-back equipped-creature-dies trigger drain each opponent. CR
 //! 509.1b enforces Rope's one-blocker cap, and CR 611.3 / 613.1f / 613.4c apply the attached
 //! static modifiers.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -71,9 +72,11 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }
 
@@ -173,13 +176,17 @@ fn issue_415_shared_activation_requires_battlefield_and_mana_and_is_atomic() {
 fn issue_415_candlestick_granted_attack_trigger_surveils_two_privately() {
     let mut engine = engine(415_040);
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     equip_to(&mut engine, "candlestick", attacker);
     let top = seat_on_top(&mut engine, 0, &["storm_crow", "hill_giant"]);
-    engine.apply_command(0, &pass()).expect("attacker passes");
-    engine.apply_command(1, &pass()).expect("defender passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("attacker passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("defender passes");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 
     assert_eq!(
@@ -193,7 +200,7 @@ fn issue_415_candlestick_granted_attack_trigger_surveils_two_privately() {
     );
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare the equipped attacker");
     assert_eq!(
         engine.state.stack.len(),
@@ -216,12 +223,12 @@ fn issue_415_candlestick_granted_attack_trigger_surveils_two_privately() {
     );
 
     let ordering = engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("keep both surveilled cards on top");
     let order_choice = find_resolution_choice(&ordering).expect("top-order choice");
     assert_eq!((order_choice.min, order_choice.max), (2, 2));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
         .expect("order the retained cards");
     assert_eq!(
         engine.state.players[0]
@@ -276,7 +283,7 @@ fn issue_415_lead_pipe_drains_each_opponent_when_the_equipped_creature_dies() {
         .expect("creature")
         .damage = 2;
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("state-based actions kill the equipped creature");
     assert_eq!(engine.state.objects[&creature].zone, Zone::Graveyard);
     assert_eq!(
@@ -314,26 +321,30 @@ fn issue_415_rope_grants_reach_and_caps_blockers_at_one() {
     );
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
-    engine.apply_command(0, &pass()).expect("attacker passes");
-    engine.apply_command(1, &pass()).expect("defender passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("attacker passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("defender passes");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare the equipped attacker");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("attacker passes after declaration");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes after declaration");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareBlockers);
 
     let before_index = engine.state.command_index;
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &declare_blockers(vec![
                     BlockPair {
@@ -352,7 +363,7 @@ fn issue_415_rope_grants_reach_and_caps_blockers_at_one() {
     assert_eq!(engine.state.command_index, before_index);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,

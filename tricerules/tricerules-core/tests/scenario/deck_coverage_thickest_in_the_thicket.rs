@@ -3,6 +3,7 @@
 //! Oracle and both card-specific rulings are from the official Bloomburrow release notes.
 //! CR 107.1b, 208.5, 603.2, 608.2b/h, and 613.4c govern signed power, trigger timing, target
 //! identity, resolution-time information, and derived power.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{
@@ -11,7 +12,7 @@ use tricerules_cards::primitives::{
 };
 use tricerules_cards::{AbilityPresentation, CounterKind, Layout, ManaCost};
 use tricerules_core::state::CopiableValues;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     dev_command, ruled_command::Cmd, ChooseTriggerTarget, DevCommand, DevMoveCard, DevZone,
     RuledCommand,
@@ -40,14 +41,14 @@ fn cast_thickest(engine: &mut GameEngine, player: i32) -> u32 {
     grant_pool(engine, player_index);
     let slot = hand_index_for_card(engine, player_index, THICKEST);
     engine
-        .apply_command(player, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(player, &cast_spell(slot, Vec::new()))
         .expect("cast Thickest in the Thicket");
     object
 }
 
 fn choose_entry_target(engine: &mut GameEngine, target: u32) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -63,7 +64,7 @@ fn dev_move_owned_card(engine: &mut GameEngine, owner: i32, card_name: &str, zon
     engine.enable_dev_commands();
     let actor = engine.state.priority_player_id();
     engine
-        .apply_command(
+        .apply_scenario_command(
             actor,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {

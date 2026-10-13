@@ -7,6 +7,7 @@
 //! The entry effects exercise mandatory draw-then-discard ordering (CR
 //! 121.1-2 and 603.2), any-target revalidation (CR 115.1d and 608.2b), and
 //! zone-change generations (CR 400.7).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use prost::Message;
@@ -93,10 +94,12 @@ fn choose_trigger_target(targets: Vec<TargetRef>) -> RuledCommand {
 
 fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     let first = engine.state.priority_player_id();
-    engine.apply_command(first, &pass()).expect("first pass");
+    engine
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
     let second = engine.state.priority_player_id();
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }
 
@@ -111,11 +114,11 @@ fn settle_entry_trigger(engine: &mut GameEngine, card_id: &str) {
             .copied()
             .expect("Uthros has a discard candidate");
         engine
-            .apply_command(0, &submit_resolution_choice(vec![discard]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
             .expect("settle Uthros entry discard");
     } else {
         engine
-            .apply_command(0, &choose_trigger_target(target_player(1)))
+            .apply_scenario_command(0, &choose_trigger_target(target_player(1)))
             .expect("settle Debris entry target");
         resolve_entire_stack_two_player(engine);
     }
@@ -148,7 +151,7 @@ fn move_named_card_to_hand_via_engine(engine: &mut GameEngine, player: usize, ca
         .clone();
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             player_id,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -201,7 +204,7 @@ fn resolve_entire_stack_all_players(engine: &mut GameEngine) {
             }
             let player = engine.state.priority_player_id();
             engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("player passes priority");
         }
     }
@@ -247,7 +250,7 @@ fn issue_309_station_publishes_only_controlled_untapped_creatures_and_reads_powe
     let payment_generation = generation(&engine, crew);
     assert_eq!(engine.effective_power(crew), Some(3));
     engine
-        .apply_command(0, &activate_station(&engine, station, crew))
+        .apply_scenario_command(0, &activate_station(&engine, station, crew))
         .expect("controlled untapped creature pays Station");
     assert!(engine.state.objects[&crew].tapped);
     move_named_card_to_hand_via_engine(&mut engine, 0, "storm_crow");
@@ -325,7 +328,7 @@ fn issue_309_station_uses_current_controller_not_owner_in_multiplayer() {
     assert_eq!(*controlled_away, [foreign_owned_controlled]);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_station(&engine, station, foreign_owned_controlled),
         )
@@ -355,7 +358,7 @@ fn issue_309_station_canonical_command_log_replays_identically() {
             command_log.push((player, command.encode_to_vec()));
             response_log.push(
                 engine
-                    .apply_command(player, &command)
+                    .apply_scenario_command(player, &command)
                     .expect("replay command accepted")
                     .encode_to_vec(),
             );
@@ -381,7 +384,7 @@ fn issue_309_station_is_sorcery_speed_and_fails_atomically_without_a_payment_can
     let mana_before = engine.state.players[0].mana_pool;
     engine.state.turn_step = TurnStep::Upkeep;
     engine
-        .apply_command(0, &activate_station(&engine, station, crew))
+        .apply_scenario_command(0, &activate_station(&engine, station, crew))
         .expect_err("Station is sorcery-speed");
     assert_eq!(engine.state.players[0].mana_pool, mana_before);
     assert!(!engine.state.objects[&crew].tapped);
@@ -397,7 +400,7 @@ fn issue_309_station_is_sorcery_speed_and_fails_atomically_without_a_payment_can
     assert!(!legal.non_mana_costs_payable);
     assert!(legal.choices[0].candidate_ids.is_empty());
     engine
-        .apply_command(0, &activate_station(&engine, station, crew))
+        .apply_scenario_command(0, &activate_station(&engine, station, crew))
         .expect_err("a tapped creature cannot pay Station");
     assert_eq!(
         engine.state.objects[&station].counter_count(CounterKind::Charge),
@@ -482,7 +485,7 @@ fn issue_309_station_threshold_is_exactly_eight_and_ability_remains_usable_above
     engine.state.continuous_effects.pop();
 
     engine
-        .apply_command(0, &activate_station(&engine, station, crew))
+        .apply_scenario_command(0, &activate_station(&engine, station, crew))
         .expect("Station remains activatable at and above its threshold");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -495,7 +498,7 @@ fn issue_309_station_threshold_is_exactly_eight_and_ability_remains_usable_above
 fn issue_309_station_old_generation_cannot_counter_a_reentered_source() {
     let (mut engine, station, crew) = station_engine(309_004, "uthros_scanship");
     engine
-        .apply_command(0, &activate_station(&engine, station, crew))
+        .apply_scenario_command(0, &activate_station(&engine, station, crew))
         .expect("activate Station");
     move_to_hand(&mut engine, 0, station);
     let departed_generation = generation(&engine, station);
@@ -574,10 +577,10 @@ fn issue_309_uthros_enters_with_private_mandatory_draw_then_discard() {
             .all(|card| card.object_id != *object_id)
     }));
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![discard]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![discard]))
         .is_err());
     engine
-        .apply_command(0, &submit_resolution_choice(vec![discard]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
         .expect("controller chooses the mandatory discard");
     assert_eq!(engine.state.objects[&discard].zone, Zone::Graveyard);
     assert!(engine.state.stack.is_empty());
@@ -620,7 +623,7 @@ fn issue_309_uthros_short_library_draws_as_much_as_possible_before_discard() {
         "state-based loss cannot end the game mid-resolution"
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![discard]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
         .expect("the mandatory discard completes before the deferred deck loss");
     assert_eq!(engine.state.objects[&discard].zone, Zone::Graveyard);
     assert!(engine.state.players[0].has_lost);
@@ -645,7 +648,7 @@ fn issue_309_debris_etb_hits_any_target_and_revalidates_a_departed_target() {
     let creature = inject_creature_with_stats(&mut engine, 1, "grizzly_bears", 2, 5);
     move_ready_to_battlefield(&mut engine, 0, "debris_field_crusher");
     engine
-        .apply_command(0, &choose_trigger_target(vec![trigger_target(creature)]))
+        .apply_scenario_command(0, &choose_trigger_target(vec![trigger_target(creature)]))
         .expect("choose legal creature any-target");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&creature].damage, 3);
@@ -667,7 +670,7 @@ fn issue_309_debris_etb_hits_any_target_and_revalidates_a_departed_target() {
     let departed = inject_creature_with_stats(&mut stale, 1, "grizzly_bears", 2, 5);
     move_ready_to_battlefield(&mut stale, 0, "debris_field_crusher");
     stale
-        .apply_command(0, &choose_trigger_target(vec![trigger_target(departed)]))
+        .apply_scenario_command(0, &choose_trigger_target(vec![trigger_target(departed)]))
         .expect("choose target before it leaves");
     stale.state.players[1]
         .battlefield
@@ -710,13 +713,13 @@ fn issue_309_debris_etb_accepts_a_planeswalker_and_requires_exactly_one_target()
 
     assert!(
         engine
-            .apply_command(0, &choose_trigger_target(Vec::new()))
+            .apply_scenario_command(0, &choose_trigger_target(Vec::new()))
             .is_err(),
         "the mandatory any-target group rejects zero targets"
     );
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &choose_trigger_target(vec![
                     trigger_target(planeswalker),
@@ -727,7 +730,7 @@ fn issue_309_debris_etb_accepts_a_planeswalker_and_requires_exactly_one_target()
         "the exact-one any-target group rejects multiple targets"
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_target(vec![trigger_target(planeswalker)]),
         )
@@ -758,7 +761,7 @@ fn issue_309_debris_etb_can_damage_a_player_and_pump_accumulates_until_cleanup()
     advance_to_main1_from_game_start(&mut engine);
     move_ready_to_battlefield(&mut engine, 0, "debris_field_crusher");
     engine
-        .apply_command(0, &choose_trigger_target(target_player(1)))
+        .apply_scenario_command(0, &choose_trigger_target(target_player(1)))
         .expect("choose opponent as any-target");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.players[1].life, 17);
@@ -929,7 +932,7 @@ fn issue_309_primitive_draw_loss_finishes_the_effect_tail_before_sweeping() {
     let choice = find_resolution_choice(&resolving).expect("Surveil choice");
     assert_eq!(choice.candidate_object_ids, [top, second]);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![top]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top]))
         .expect("finish Surveil and resolve draw plus life-loss tail");
 
     assert_eq!(engine.state.players[0].life, 18);
@@ -987,7 +990,7 @@ fn issue_309_brainstorm_can_resume_after_deferred_library_loss() {
         .copied()
         .collect();
     engine
-        .apply_command(0, &submit_resolution_choice(chosen))
+        .apply_scenario_command(0, &submit_resolution_choice(chosen))
         .expect("resume and finish Brainstorm");
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.players[0].has_lost);
@@ -1054,7 +1057,7 @@ fn issue_309_pending_library_losses_are_deterministic_for_both_players() {
             engine.state.players[player].pending_library_loss = pending;
         }
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .expect("commit pending losses at command boundary");
         (
             [

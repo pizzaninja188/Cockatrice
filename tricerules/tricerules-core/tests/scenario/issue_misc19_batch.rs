@@ -7,6 +7,7 @@
 //! CR 120.3 (damage), CR 400.7/608.2b (a returned card is a new object), CR 603.6a (entry trigger),
 //! CR 608.2b (an illegal target fails the whole spell), CR 609.2 (the dealt-damage-this-turn
 //! predicate), CR 701.23 (search), CR 702.9 (flying), and CR 702.185 (warp).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -173,7 +174,7 @@ fn issue_misc19_peerless_ropemaster_bounces_only_a_tapped_creature() {
     cast(&mut untapped, 0, "peerless_ropemaster", vec![]);
     assert!(
         untapped
-            .apply_command(0, &choose_trigger_target(fresh))
+            .apply_scenario_command(0, &choose_trigger_target(fresh))
             .is_err(),
         "an untapped creature is not a legal target"
     );
@@ -194,7 +195,7 @@ fn issue_misc19_ragamuffin_raptor_returns_a_creature_or_food_card() {
     let forest = inject_graveyard_card(&mut land, 0, "forest");
     cast(&mut land, 0, "ragamuffin_raptor", vec![]);
     assert!(
-        land.apply_command(0, &choose_graveyard_trigger_target(forest))
+        land.apply_scenario_command(0, &choose_graveyard_trigger_target(forest))
             .is_err(),
         "a land card is not a legal target"
     );
@@ -216,7 +217,7 @@ fn issue_misc19_defibrillating_current_damages_and_gains_life() {
     grant_pool(&mut land, 0);
     let slot = hand_index_for_card(&land, 0, "defibrillating_current");
     assert!(
-        land.apply_command(0, &cast_spell(slot, target_object(forest)))
+        land.apply_scenario_command(0, &cast_spell(slot, target_object(forest)))
             .is_err(),
         "a land is not a legal target"
     );
@@ -243,7 +244,7 @@ fn issue_misc19_unsparing_boltcaster_needs_a_damaged_target() {
     cast(&mut fresh, 0, "unsparing_boltcaster", vec![]);
     assert!(
         fresh
-            .apply_command(0, &choose_trigger_target(untouched))
+            .apply_scenario_command(0, &choose_trigger_target(untouched))
             .is_err(),
         "an undamaged creature is not a legal target"
     );

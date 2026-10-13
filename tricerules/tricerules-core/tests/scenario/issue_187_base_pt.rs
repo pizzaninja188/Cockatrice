@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
 use tricerules_cards::CounterKind;
@@ -57,7 +58,7 @@ fn issue_187_mind_transfer_animates_an_artifact_sets_base_pt_and_draws() {
     );
     let slot = hand_index_for_card(&engine, 0, "mind_transfer_protocol");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(artifact)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(artifact)))
         .expect("cast Mind Transfer Protocol on an artifact");
     let hand_before_resolution = engine.state.players[0].hand.len();
     resolve_entire_stack_two_player(&mut engine);
@@ -116,7 +117,7 @@ fn issue_187_quandrix_charm_third_mode_sets_base_pt() {
     );
     let slot = hand_index_for_card(&engine, 0, "quandrix_charm");
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(2, target_object(target))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(2, target_object(target))]))
         .expect("cast Quandrix Charm's third mode");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -149,11 +150,11 @@ fn issue_187_galion_samples_source_pt_at_resolution_and_uses_lki() {
     let galion = put_creature_on_battlefield(&mut engine, 0, "galion,_elvenkings_butler");
 
     engine
-        .apply_command(0, &declare_attackers(vec![galion]))
+        .apply_scenario_command(0, &declare_attackers(vec![galion]))
         .expect("attack with Galion");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -191,7 +192,7 @@ fn issue_187_galion_samples_source_pt_at_resolution_and_uses_lki() {
 
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             engine.state.priority_player_id(),
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {

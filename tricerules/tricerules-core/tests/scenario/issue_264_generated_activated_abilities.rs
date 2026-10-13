@@ -4,6 +4,7 @@
 //! Oracle and rulings checked 2026-09-12. CR 106, 117, 118, 400.7, 602, and 605 govern mana,
 //! priority, costs, zone-change identity, and activated/mana abilities; CR 613.4c and 611.2a
 //! govern the temporary P/T effects; CR 701.21 and 701.23 govern sacrifice and search/shuffle.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -53,7 +54,7 @@ fn generated_terramorphic_expanse_pays_atomically_and_searches_with_exact_identi
         unreachable!()
     };
     activation.expected_zone_change_generation += 1;
-    assert!(engine.apply_command(0, &stale).is_err());
+    assert!(engine.apply_scenario_command(0, &stale).is_err());
     assert_eq!(engine.state.objects[&expanse].zone, Zone::Battlefield);
     assert!(!engine.state.objects[&expanse].tapped);
 
@@ -69,9 +70,11 @@ fn generated_terramorphic_expanse_pays_atomically_and_searches_with_exact_identi
         moved.object_id == expanse && moved.destination == Destination::Graveyard as i32
     }));
 
-    engine.apply_command(0, &pass()).expect("controller passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
     let search = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve search ability");
     let choice = find_resolution_choice(&search).expect("private basic-land search");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
@@ -85,7 +88,7 @@ fn generated_terramorphic_expanse_pays_atomically_and_searches_with_exact_identi
         .copied()
         .unwrap_or(0);
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .expect("choose the published basic land");
     assert_eq!(engine.state.objects[&forest].zone, Zone::Battlefield);
     assert!(engine.state.objects[&forest].tapped);
@@ -104,7 +107,7 @@ fn generated_scarecrow_guide_offers_five_colors_and_resets_its_turn_limit() {
     let guide = relocate_to_battlefield(&mut engine, 0, "scarecrow_guide", false);
 
     assert!(engine
-        .apply_command(0, &activate_with_mana_option(&engine, guide, 0, 0))
+        .apply_scenario_command(0, &activate_with_mana_option(&engine, guide, 0, 0))
         .is_err());
     assert!(engine.state.activation_uses_this_turn.is_empty());
 
@@ -126,7 +129,7 @@ fn generated_scarecrow_guide_offers_five_colors_and_resets_its_turn_limit() {
             },
         );
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_with_mana_option(&engine, source, 0, option as u32),
             )
@@ -147,7 +150,7 @@ fn generated_scarecrow_guide_offers_five_colors_and_resets_its_turn_limit() {
     );
     let pool_before = engine.state.players[0].mana_pool;
     engine
-        .apply_command(0, &activate_with_mana_option(&engine, guide, 0, 4))
+        .apply_scenario_command(0, &activate_with_mana_option(&engine, guide, 0, 4))
         .expect_err("one source cannot activate twice in the same turn");
     assert_eq!(engine.state.players[0].mana_pool, pool_before);
 
@@ -163,7 +166,7 @@ fn generated_scarecrow_guide_offers_five_colors_and_resets_its_turn_limit() {
         },
     );
     engine
-        .apply_command(0, &activate_with_mana_option(&engine, guide, 0, 4))
+        .apply_scenario_command(0, &activate_with_mana_option(&engine, guide, 0, 4))
         .expect("per-turn activation resets on the next turn");
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
 }
@@ -190,7 +193,7 @@ fn generated_self_pumps_pay_exact_costs_obey_limits_and_expire_at_cleanup() {
     );
     let pool_before = engine.state.players[0].mana_pool;
     engine
-        .apply_command(0, &stale)
+        .apply_scenario_command(0, &stale)
         .expect_err("stale source generation is illegal");
     assert_eq!(engine.state.players[0].mana_pool, pool_before);
 
@@ -208,7 +211,7 @@ fn generated_self_pumps_pay_exact_costs_obey_limits_and_expire_at_cleanup() {
         },
     );
     engine
-        .apply_command(0, &activate_ability_for(&engine, cats, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_ability_for(&engine, cats, 0, Vec::new()))
         .expect_err("Cats is exhausted for this turn");
 
     assert!(apply_ability(&mut engine, 0, burrog, 0, Vec::new()).is_err());

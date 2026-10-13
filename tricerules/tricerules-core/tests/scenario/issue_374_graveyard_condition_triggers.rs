@@ -6,6 +6,7 @@
 //! path and pin the `0↔1` Elf/Lesson boundaries, the four-distinct-card-type Delirium boundary,
 //! the four-permanent-card Descend boundary, the controller-owner scope, and the printed order of
 //! Dawnhand Eulogist's mill-then-branch instruction.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -40,21 +41,21 @@ fn counters(engine: &GameEngine, oid: u32) -> u32 {
 
 fn advance_to_end_step(engine: &mut GameEngine, active: i32) {
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("main 1 to beginning of combat");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("beginning of combat advance");
     if engine.state.turn_step == TurnStep::DeclareAttackers {
         engine
-            .apply_command(active, &primitive_yield())
+            .apply_scenario_command(active, &primitive_yield())
             .expect("declare no attackers");
     }
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("end combat to main 2");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("main 2 to end step");
     assert_eq!(engine.state.turn_step, TurnStep::EndStep);
 }
@@ -96,7 +97,7 @@ fn declare_sole_attacker(engine: &mut GameEngine, attacker: u32) {
         .cloned()
         .expect("the attacker is legal");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -122,7 +123,7 @@ fn kill_with_lightning_bolt(engine: &mut GameEngine, target: u32) {
     );
     let slot = hand_index_for_card(engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Lightning Bolt");
     resolve_entire_stack_two_player(engine);
 }

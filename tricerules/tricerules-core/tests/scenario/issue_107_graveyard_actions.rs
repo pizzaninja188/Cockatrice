@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ChooseTriggerTarget, RuledCommand, TargetRef,
@@ -48,7 +49,7 @@ fn cast_creature(engine: &mut GameEngine, card_id: &str) -> u32 {
     grant_pool(engine, 0);
     let index = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_spell(index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(index, Vec::new()))
         .unwrap_or_else(|error| panic!("cast {card_id}: {error}"));
     pass_both_players(engine);
     object_id
@@ -72,10 +73,10 @@ fn arashin_sunshield_requires_one_graveyard_and_revalidates_each_target() {
     assert_eq!(targets.groups[0].min, 0);
     assert_eq!(targets.groups[0].max, 2);
     assert!(engine
-        .apply_command(0, &choose_trigger_targets(&[own_first, opposing]))
+        .apply_scenario_command(0, &choose_trigger_targets(&[own_first, opposing]))
         .is_err());
     engine
-        .apply_command(0, &choose_trigger_targets(&[own_first, own_second]))
+        .apply_scenario_command(0, &choose_trigger_targets(&[own_first, own_second]))
         .expect("choose two cards from one graveyard");
 
     engine.state.players[0]
@@ -99,7 +100,7 @@ fn graveyard_actions_place_cards_at_the_requested_library_end() {
     let mut top = engine(107_010);
     let top_card = inject_graveyard_card(&mut top, 0, "lightning_bolt");
     cast_creature(&mut top, "monastery_messenger");
-    top.apply_command(0, &choose_trigger_targets(&[top_card]))
+    top.apply_scenario_command(0, &choose_trigger_targets(&[top_card]))
         .expect("choose top card");
     pass_both_players(&mut top);
     assert_eq!(top.state.players[0].library.front(), Some(&top_card));
@@ -109,7 +110,7 @@ fn graveyard_actions_place_cards_at_the_requested_library_end() {
     let chandelier = inject_creature_on_battlefield(&mut bottom, 0, "malevolent_chandelier");
     grant_pool(&mut bottom, 0);
     bottom
-        .apply_command(0, &activate_ability(chandelier, 0, grouped(&[bottom_card])))
+        .apply_scenario_command(0, &activate_ability(chandelier, 0, grouped(&[bottom_card])))
         .expect("activate Chandelier");
     pass_both_players(&mut bottom);
     assert_eq!(bottom.state.players[1].library.back(), Some(&bottom_card));
@@ -123,7 +124,7 @@ fn soul_shackled_zombie_drains_only_when_a_creature_was_actually_exiled() {
     drain.state.add_damage_prevention_shield(1, 2);
     cast_creature(&mut drain, "soul-shackled_zombie");
     drain
-        .apply_command(0, &choose_trigger_targets(&[creature, noncreature]))
+        .apply_scenario_command(0, &choose_trigger_targets(&[creature, noncreature]))
         .expect("choose graveyard cohort");
     pass_both_players(&mut drain);
     assert_eq!(drain.state.players[0].life, 22);
@@ -139,7 +140,7 @@ fn soul_shackled_zombie_drains_only_when_a_creature_was_actually_exiled() {
     let surviving_noncreature = inject_graveyard_card(&mut no_drain, 1, "forest");
     cast_creature(&mut no_drain, "soul-shackled_zombie");
     no_drain
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_targets(&[stale_creature, surviving_noncreature]),
         )
@@ -179,7 +180,7 @@ fn rooftop_percher_accepts_targets_from_different_graveyards() {
     assert_eq!((targets.groups[0].min, targets.groups[0].max), (0, 2));
     assert!(!targets.groups[0].same_graveyard);
     engine
-        .apply_command(0, &choose_trigger_targets(&[own, opposing]))
+        .apply_scenario_command(0, &choose_trigger_targets(&[own, opposing]))
         .expect("choose one target from each graveyard");
     pass_both_players(&mut engine);
 
@@ -194,7 +195,7 @@ fn rooftop_percher_can_choose_no_targets_and_still_gain_life() {
     let unchosen = inject_graveyard_card(&mut engine, 1, "grizzly_bears");
     cast_creature(&mut engine, "rooftop_percher");
     engine
-        .apply_command(0, &choose_trigger_targets(&[]))
+        .apply_scenario_command(0, &choose_trigger_targets(&[]))
         .expect("decline all optional targets");
     pass_both_players(&mut engine);
 

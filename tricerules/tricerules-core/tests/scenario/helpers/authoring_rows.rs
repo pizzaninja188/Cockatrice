@@ -1,5 +1,6 @@
 //! Small reviewed scenario families, not a rules DSL. Expectations never come from card effects.
 use super::{semantic::*, *};
+use crate::helpers::ScenarioCommandExt;
 use std::collections::{BTreeMap, BTreeSet};
 use tricerules_cards::authoring_schema::{Row, Surface};
 use tricerules_core::{TurnStep, Zone};
@@ -394,7 +395,7 @@ pub(crate) fn run_rows(text: &str, mut engine: impl FnMut() -> GameEngine) -> BT
                 let slot = hand_index_for_card(&e, 0, &card);
                 let before = format!("{:?}", e.state);
                 assert!(
-                    e.apply_command(0, &cast_spell(slot, target_object(illegal)))
+                    e.apply_scenario_command(0, &cast_spell(slot, target_object(illegal)))
                         .is_err(),
                     "illegal target accepted"
                 );
@@ -439,7 +440,7 @@ fn pool(e: &GameEngine, player: usize) -> [u32; 6] {
 fn reject_unchanged(e: &mut GameEngine, player: i32, command: &RuledCommand) {
     let before = format!("{:?}", e.state);
     assert!(
-        e.apply_command(player, command).is_err(),
+        e.apply_scenario_command(player, command).is_err(),
         "expected rejected command"
     );
     assert_eq!(

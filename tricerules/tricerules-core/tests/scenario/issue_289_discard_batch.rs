@@ -6,13 +6,14 @@
 //! Waste Not) still fires per card while "one or more cards" fires once with the committed count.
 //! CR 701.9 and CR 514.1 place cost, effect, and cleanup discards under the same semantic action
 //! boundary; CR 608.2h fixes the count when the trigger resolves from the event-time value.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{
     Amount, CastTriggerPlayer, ContinuousEffectKind, CounterKind, EffectDuration, EffectSubject,
     SpellEffectKind, TriggerCondition,
 };
-use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine, Zone};
+use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{
     dev_command, ruled_command::Cmd, AbilitySourceZone, ActivateAbility, DevCommand, DevMoveCard,
     DevZone, RuledCommand,
@@ -111,10 +112,14 @@ fn cast_mind_rot(engine: &mut GameEngine) {
     );
     let slot = hand_index_for_card(engine, 0, "mind_rot");
     engine
-        .apply_command(0, &cast_spell(slot, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(slot, target_player(1)))
         .expect("cast Mind Rot");
-    engine.apply_command(0, &pass()).expect("controller passes");
-    engine.apply_command(1, &pass()).expect("target passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("target passes");
 }
 
 fn counters(engine: &GameEngine, source: u32) -> u32 {
@@ -129,7 +134,7 @@ fn issue_289_simultaneous_multi_card_discard_triggers_once_with_the_committed_co
     let second = relocate_to_hand(&mut engine, 1, "grizzly_bears");
     cast_mind_rot(&mut engine);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![first, second]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![first, second]))
         .expect("discard both cards");
     assert_eq!(
         counters(&engine, source),
@@ -150,7 +155,7 @@ fn issue_289_one_card_discard_carries_count_one() {
     let only = relocate_to_hand(&mut engine, 1, "grizzly_bears");
     cast_mind_rot(&mut engine);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![only]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![only]))
         .expect("discard the only card");
     assert_eq!(engine.state.stack.len(), 1);
     resolve_entire_stack_two_player(&mut engine);
@@ -165,7 +170,7 @@ fn issue_289_partial_discard_counts_only_the_committed_cards() {
     assert_eq!(engine.state.players[1].hand.len(), 1);
     cast_mind_rot(&mut engine);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![only]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![only]))
         .expect("discard what exists");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(counters(&engine, source), 1, "count is the committed set");
@@ -178,7 +183,7 @@ fn issue_289_separate_discard_actions_remain_separate_events() {
     let first = relocate_to_hand(&mut engine, 1, "grizzly_bears");
     cast_mind_rot(&mut engine);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![first]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![first]))
         .expect("first discard");
     assert_eq!(engine.state.stack.len(), 1);
     resolve_entire_stack_two_player(&mut engine);
@@ -187,7 +192,7 @@ fn issue_289_separate_discard_actions_remain_separate_events() {
     let second = relocate_to_hand(&mut engine, 1, "grizzly_bears");
     cast_mind_rot(&mut engine);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![second]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![second]))
         .expect("second discard");
     assert_eq!(
         engine.state.stack.len(),
@@ -208,7 +213,7 @@ fn issue_289_per_card_observers_keep_every_occurrence_alongside_the_batch_trigge
     let second = relocate_to_hand(&mut engine, 1, "grizzly_bears");
     cast_mind_rot(&mut engine);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![first, second]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![first, second]))
         .expect("discard both cards");
     let ordering = engine
         .state
@@ -235,7 +240,7 @@ fn issue_289_cleanup_discard_is_one_event() {
     engine.state.cleanup_discard_player = Some(0);
     let excess = engine.state.players[0].hand.len() - 7;
     engine
-        .apply_command(0, &discard_cleanup_batch((0..excess as u32).collect()))
+        .apply_scenario_command(0, &discard_cleanup_batch((0..excess as u32).collect()))
         .expect("cleanup discard");
     assert_eq!(counters(&engine, source), 0);
     assert!(
@@ -261,14 +266,14 @@ fn issue_289_replaced_destinations_still_count_committed_discards() {
     let second = relocate_to_hand(&mut engine, 1, "grizzly_bears");
     cast_mind_rot(&mut engine);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![first, second]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![first, second]))
         .expect("choose both cards");
     // Opaque destination choices: 0 graveyard, 1 library.
     engine
-        .apply_command(1, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![1]))
         .expect("first replacement destination");
     engine
-        .apply_command(1, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![1]))
         .expect("second replacement destination");
     let ordered = engine
         .state
@@ -279,7 +284,7 @@ fn issue_289_replaced_destinations_still_count_committed_discards() {
         .candidates
         .clone();
     engine
-        .apply_command(1, &submit_resolution_choice(ordered))
+        .apply_scenario_command(1, &submit_resolution_choice(ordered))
         .expect("finish the ordered replacement");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -298,14 +303,14 @@ fn issue_289_counters_do_not_land_on_a_new_incarnation() {
     let second = relocate_to_hand(&mut engine, 1, "grizzly_bears");
     cast_mind_rot(&mut engine);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![first, second]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![first, second]))
         .expect("discard both cards");
     engine.enable_dev_commands();
     engine
-        .apply_command(1, &dev_move(1, "Silvercoat Lion", DevZone::Graveyard))
+        .apply_scenario_command(1, &dev_move(1, "Silvercoat Lion", DevZone::Graveyard))
         .expect("source leaves the battlefield");
     engine
-        .apply_command(1, &dev_move(1, "Silvercoat Lion", DevZone::Battlefield))
+        .apply_scenario_command(1, &dev_move(1, "Silvercoat Lion", DevZone::Battlefield))
         .expect("source returns as a new object");
     assert_ne!(
         engine.state.objects[&source].zone,
@@ -368,7 +373,7 @@ fn issue_289_generated_skyray_cycling_is_one_discard_event() {
     );
     let hand_before = engine.state.players[0].hand.len();
     engine
-        .apply_command(0, &hand_ability(&engine, in_hand))
+        .apply_scenario_command(0, &hand_ability(&engine, in_hand))
         .expect("activate Cycling");
     assert_eq!(engine.state.objects[&in_hand].zone, Zone::Graveyard);
     assert_eq!(
@@ -441,11 +446,11 @@ fn issue_289_ward_discard_cost_is_one_event() {
     );
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(snatcher)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(snatcher)))
         .expect("cast Unsummon at Spectral Snatcher");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![discard]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
         .expect("pay Ward by discarding");
     assert_eq!(engine.state.objects[&discard].zone, Zone::Graveyard);
     let triggers = engine
@@ -491,11 +496,11 @@ fn issue_289_ward_discard_exiles_a_madness_card_and_still_counts_it() {
     );
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(snatcher)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(snatcher)))
         .expect("cast Unsummon at Spectral Snatcher");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![madness_card]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![madness_card]))
         .expect("pay Ward by discarding the madness card");
     assert_eq!(
         engine.state.objects[&madness_card].zone,
@@ -564,12 +569,16 @@ fn issue_289_generated_mako_groups_a_two_card_instruction() {
     );
     let slot = hand_index_for_card(&engine, 0, "mind_rot");
     engine
-        .apply_command(0, &cast_spell(slot, target_player(0)))
+        .apply_scenario_command(0, &cast_spell(slot, target_player(0)))
         .expect("cast Mind Rot");
-    engine.apply_command(0, &pass()).expect("caster passes");
-    engine.apply_command(1, &pass()).expect("target passes");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![first, second]))
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("target passes");
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![first, second]))
         .expect("discard both cards");
     let triggers = engine
         .state
@@ -634,7 +643,7 @@ fn issue_289_whole_hand_discard_is_one_event_with_every_card_counted() {
     );
     let slot = hand_index_for_card(&engine, 0, "hearth_elemental_stoke_genius");
     engine
-        .apply_command(0, &cast_spell_face(slot, vec![], 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, vec![], 1))
         .expect("cast Stoke Genius");
     pass_both_players(&mut engine);
     let triggers = engine
@@ -687,20 +696,20 @@ fn issue_289_simultaneous_multiplayer_discard_fires_once_per_player() {
     );
     let slot = hand_index_for_card(&engine, 0, "fanatic_of_the_harrowing");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Fanatic of the Harrowing");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.stack.len(), 1, "ETB trigger is on the stack");
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes to the first private choice");
     let caster_hand = engine.state.players[0].hand.len();
     engine
-        .apply_command(0, &submit_resolution_choice(vec![first_card]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![first_card]))
         .expect("record the active player's hidden choice");
     assert!(
         engine.state.stack.is_empty(),
@@ -708,7 +717,7 @@ fn issue_289_simultaneous_multiplayer_discard_fires_once_per_player() {
     );
     assert_eq!(engine.state.objects[&first_card].zone, Zone::Hand);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![second_card]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![second_card]))
         .expect("commit both discards");
 
     let triggers = engine
@@ -770,7 +779,7 @@ fn issue_289_random_multi_card_discard_is_one_event() {
     );
     let slot = hand_index_for_card(&engine, 0, "hymn_to_tourach");
     engine
-        .apply_command(0, &cast_spell(slot, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(slot, target_player(1)))
         .expect("cast Hymn to Tourach");
     pass_both_players(&mut engine);
     let triggers = engine

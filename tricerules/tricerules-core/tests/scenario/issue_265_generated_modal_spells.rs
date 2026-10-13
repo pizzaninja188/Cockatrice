@@ -2,6 +2,7 @@
 //!
 //! Oracle and rulings were checked 2026-09-12. CR 115.8, 601.2b-d, 608.2b-c, and 700.2
 //! govern cast-time mode and target choices, target revalidation, and printed resolution order.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -47,7 +48,7 @@ fn cast_generated_mode(
     fund_modal_spell(engine);
     let slot = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(mode_index, targets)]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(mode_index, targets)]))
         .unwrap_or_else(|error| panic!("cast {card_id} mode {mode_index}: {error:?}"));
 }
 
@@ -58,9 +59,11 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }
 
@@ -119,14 +122,14 @@ fn generated_sarkhan_modes_enforce_only_the_chosen_modes_filter() {
     fund_modal_spell(&mut engine);
     let slot = hand_index_for_card(&engine, 0, "sarkhans_resolve");
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(1, target_object(ordinary))]),
         )
         .is_err());
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(0, target_object(ordinary))]),
         )
@@ -157,7 +160,7 @@ fn generated_spellgyre_surveils_privately_before_drawing_two() {
     assert_eq!(choice.candidate_object_ids, vec![first, second]);
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![first]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![first]))
         .expect("put one card into the graveyard, then draw two");
     assert_eq!(engine.state.objects[&first].zone, Zone::Graveyard);
     assert_eq!(

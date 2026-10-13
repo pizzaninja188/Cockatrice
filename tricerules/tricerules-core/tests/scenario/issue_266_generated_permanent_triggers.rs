@@ -5,6 +5,7 @@
 //! targets and resolution revalidation; CR 118.3 governs life gain; CR 122.1a governs
 //! +1/+1 counters; CR 400.7 governs zone-change identity; CR 603 governs trigger staging
 //! and ordering; and CR 701.9 governs discard.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -18,9 +19,11 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }
 
@@ -75,7 +78,7 @@ fn generated_life_payoffs_observe_one_committed_life_gain_event() {
 
     let mercy = hand_index_for_card(&engine, 0, "angels_mercy");
     engine
-        .apply_command(0, &cast_spell(mercy, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(mercy, Vec::new()))
         .expect("cast Angel's Mercy");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -117,10 +120,10 @@ fn generated_target_opponent_discard_is_chosen_by_the_affected_player() {
 
     move_ready_to_battlefield(&mut engine, 0, "corrupt_court_official");
     assert!(engine
-        .apply_command(0, &choose_trigger_targets(target_player(0)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_player(0)))
         .is_err());
     engine
-        .apply_command(0, &choose_trigger_targets(target_player(1)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_player(1)))
         .expect("choose opponent");
 
     let batch = resolve_top_stack(&mut engine);
@@ -130,10 +133,10 @@ fn generated_target_opponent_discard_is_chosen_by_the_affected_player() {
     assert_eq!((choice.min, choice.max), (1, 1));
     assert!(choice.candidate_object_ids.contains(&discarded));
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![discarded]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discarded]))
         .is_err());
     engine
-        .apply_command(1, &submit_resolution_choice(vec![discarded]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![discarded]))
         .expect("affected player chooses the discard");
     assert_eq!(engine.state.objects[&discarded].zone, Zone::Graveyard);
 }
@@ -158,10 +161,10 @@ fn generated_optional_bounce_excludes_source_and_revalidates_generation() {
 
     let recluse = move_ready_to_battlefield(&mut engine, 0, "rimekin_recluse");
     assert!(engine
-        .apply_command(0, &choose_trigger_targets(vec![permanent_target(recluse)]))
+        .apply_scenario_command(0, &choose_trigger_targets(vec![permanent_target(recluse)]))
         .is_err());
     engine
-        .apply_command(0, &choose_trigger_targets(vec![permanent_target(target)]))
+        .apply_scenario_command(0, &choose_trigger_targets(vec![permanent_target(target)]))
         .expect("choose another creature");
 
     let generation = engine

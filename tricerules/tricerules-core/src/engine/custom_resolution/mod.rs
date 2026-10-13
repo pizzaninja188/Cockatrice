@@ -12,7 +12,7 @@ use super::legal_actions::fill_legal;
 use super::resolution::{
     counter_stack_object, counter_stack_object_ref, move_object_to_zone, permanent_moved_event,
     permanent_moved_event_with_library_position, sacrifice_permanent,
-    seat_resolved_spell_last_in_graveyard,
+    seat_resolved_spell_last_in_graveyard, ResolutionEffect,
 };
 use super::targeting::{
     capture_stack_target, compute_spell_targets, validate_ability_targets_with_context,
@@ -47,6 +47,342 @@ struct SpecialCastCleanupPlan {
 }
 
 impl GameEngine {
+    pub(in crate::engine) fn resolution_prompt_should_be_active(
+        &self,
+        pending: &PendingResolution,
+    ) -> bool {
+        !self
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .is_some_and(|cast| cast.resolution_time_offer)
+            && self
+                .state
+                .player_idx(pending.deciding_player)
+                .is_some_and(|index| !self.state.players[index].has_lost)
+    }
+
+    /// Build the authoritative final prompt status. An unassigned pending value can exist briefly
+    /// inside dispatch before the command-boundary publisher allocates its ID; it is never exposed
+    /// as active during that intermediate step.
+    pub(in crate::engine) fn resolution_prompt_state_snapshot(&self) -> rv1::ResolutionPromptState {
+        let active = self.state.pending_resolution.as_ref().filter(|pending| {
+            self.resolution_prompt_should_be_active(pending)
+                && pending.resolution_prompt_id.get() != 0
+        });
+        if let Some(pending) = active {
+            rv1::ResolutionPromptState {
+                active: true,
+                deciding_player_id: pending.deciding_player,
+                resolution_prompt_id: Some(pending.resolution_prompt_id.get()),
+            }
+        } else {
+            rv1::ResolutionPromptState {
+                active: false,
+                deciding_player_id: 0,
+                resolution_prompt_id: None,
+            }
+        }
+    }
+
+    pub(in crate::engine) fn refresh_resolution_prompt_state(&self, batch: &mut RuledEventBatch) {
+        batch.resolution_prompt_state = Some(self.resolution_prompt_state_snapshot());
+    }
+
+    /// Reject every missing, stale, or wrong-actor answer before command settlement takes a
+    /// checkpoint or mutates the parked continuation.
+    pub(in crate::engine) fn validate_resolution_prompt_id(
+        &self,
+        player: PlayerId,
+        provided_id: u64,
+    ) -> Result<(), EngineError> {
+        let pending = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .ok_or(EngineError::Illegal("no resolution awaiting a choice"))?;
+        if pending.deciding_player != player
+            || provided_id == 0
+            || pending.resolution_prompt_id.get() == 0
+            || pending.resolution_prompt_id.get() != provided_id
+        {
+            return Err(EngineError::Illegal("stale or foreign resolution prompt"));
+        }
+        Ok(())
+    }
+
+    pub(in crate::engine) fn validate_play_land_prompt_id(
+        &self,
+        player: PlayerId,
+        command: &rv1::PlayLand,
+    ) -> Result<(), EngineError> {
+        let resolves_play_card = self.state.blocking_choice() == Some(BlockingChoice::Resolution)
+            && self
+                .state
+                .pending_resolution
+                .as_ref()
+                .is_some_and(|pending| pending.deciding_player == player)
+            && self
+                .special_cast_permission(player)
+                .is_some_and(|permission| permission.scope == ExilePlayPermissionScope::PlayCard);
+        if resolves_play_card {
+            self.validate_resolution_prompt_id(player, command.resolution_prompt_id)
+        } else if command.resolution_prompt_id != 0 {
+            Err(EngineError::Illegal(
+                "resolution prompt ID is not valid for this land play",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Assign IDs to the exact offers emitted by one accepted command. New active pending values
+    /// have the zero sentinel, so a byte-identical next prompt still allocates unconditionally.
+    /// The existing ID is retained only for a same-offer republication with equal answer semantics.
+    pub(in crate::engine) fn publish_resolution_prompt_ids(
+        &mut self,
+        events: &mut [rv1::RuledEvent],
+    ) -> Result<(), EngineError> {
+        let prompt_indices = events
+            .iter()
+            .enumerate()
+            .filter_map(|(index, event)| {
+                matches!(
+                    event.ev,
+                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+                )
+                .then_some(index)
+            })
+            .collect::<Vec<_>>();
+        let active_index = prompt_indices.last().copied();
+        let active_pending = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .filter(|pending| self.resolution_prompt_should_be_active(pending));
+
+        if let Some(index) = active_index {
+            let active_choice = match events[index].ev.as_ref() {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => choice,
+                _ => unreachable!(),
+            };
+            if let Some(pending) = active_pending {
+                if active_choice.deciding_player_id != pending.deciding_player
+                    || active_choice.source_object_id != pending.presentation.source_object_id
+                    || active_choice.choice_kind != pending.presentation.choice_kind as i32
+                {
+                    return Err(EngineError::ProgramInvariant(
+                        "published resolution offer does not match its pending continuation",
+                    ));
+                }
+                let semantics = self.resolution_prompt_semantics(pending, active_choice)?;
+                let old_id = pending.resolution_prompt_id;
+                let old_semantics_match = pending
+                    .resolution_prompt_semantics
+                    .as_ref()
+                    .is_some_and(|snapshot| snapshot.answer_semantics == semantics);
+                let assigned_id = if old_id.get() == 0 || !old_semantics_match {
+                    self.allocate_resolution_prompt_id(pending.deciding_player)?
+                } else {
+                    old_id
+                };
+                let pending = self
+                    .state
+                    .pending_resolution
+                    .as_mut()
+                    .expect("active pending resolution was checked above");
+                pending.resolution_prompt_id = assigned_id;
+                let mut published_choice = active_choice.clone();
+                published_choice.resolution_prompt_id = assigned_id.get();
+                pending.resolution_prompt_semantics =
+                    Some(crate::state::ResolutionPromptSemanticSnapshot {
+                        answer_semantics: semantics,
+                        published_choice,
+                    });
+                if let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) =
+                    events[index].ev.as_mut()
+                {
+                    choice.resolution_prompt_id = assigned_id.get();
+                }
+            } else {
+                // This was a transient offer during a batch that leaves no actionable prompt (for
+                // example, an accepted concession invalidating a retained entry cohort). Preserve
+                // its reveal/event effects while making the stale choice visibly unanswerable.
+                if let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) =
+                    events[index].ev.as_mut()
+                {
+                    choice.resolution_prompt_id = 0;
+                }
+            }
+            for transient_index in prompt_indices
+                .into_iter()
+                .filter(|transient_index| *transient_index != index)
+            {
+                if let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) =
+                    events[transient_index].ev.as_mut()
+                {
+                    choice.resolution_prompt_id = 0;
+                }
+            }
+        } else if let Some(pending) = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .filter(|pending| self.resolution_prompt_should_be_active(pending))
+        {
+            if pending.resolution_prompt_id.get() == 0 {
+                return Err(EngineError::ProgramInvariant(
+                    "new active resolution prompt was not published",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Re-publish a restored active offer when its domain continuation has no specialized
+    /// renderer. The cached projection is only a source for the event; it is accepted only when
+    /// the current continuation and generation-bound answer semantics still match exactly. The
+    /// normal batch publisher assigns the fresh ID after this method appends the event.
+    pub(in crate::engine) fn republish_cached_resolution_choice(
+        &self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let Some(pending) = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .filter(|pending| self.resolution_prompt_should_be_active(pending))
+        else {
+            return Ok(false);
+        };
+        if pending.resolution_prompt_id.get() != 0 {
+            return Ok(false);
+        }
+        let Some(snapshot) = pending.resolution_prompt_semantics.as_ref() else {
+            return Ok(false);
+        };
+        let last_choice = events
+            .iter()
+            .rev()
+            .find_map(|event| match event.ev.as_ref() {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            });
+        if last_choice.is_some_and(|choice| {
+            choice.deciding_player_id == pending.deciding_player
+                && choice.source_object_id == pending.presentation.source_object_id
+                && choice.choice_kind == pending.presentation.choice_kind as i32
+        }) {
+            return Ok(false);
+        }
+
+        // Object generations are retained after a card leaves the game, so the cached semantic
+        // snapshot alone cannot prove that every candidate is still live. Player candidates use
+        // their separate candidate_player_ids field; every object candidate must still exist
+        // before this fallback is allowed to republish the old projection.
+        if snapshot
+            .published_choice
+            .candidate_object_ids
+            .iter()
+            .any(|object_id| !self.state.objects.contains_key(object_id))
+        {
+            return Ok(false);
+        }
+
+        let current_semantics =
+            self.resolution_prompt_semantics(pending, &snapshot.published_choice)?;
+        if current_semantics != snapshot.answer_semantics {
+            return Ok(false);
+        }
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                snapshot.published_choice.clone(),
+            )),
+        });
+        Ok(true)
+    }
+
+    fn allocate_resolution_prompt_id(
+        &mut self,
+        deciding_player: PlayerId,
+    ) -> Result<crate::state::ResolutionPromptId, EngineError> {
+        let last = self
+            .state
+            .next_resolution_prompt_id
+            .get(&deciding_player)
+            .copied()
+            .unwrap_or(0);
+        let value = last.checked_add(1).filter(|value| *value != 0).ok_or(
+            EngineError::ProgramInvariant("resolution prompt ID space exhausted"),
+        )?;
+        let id = crate::state::ResolutionPromptId::assigned(value).ok_or(
+            EngineError::ProgramInvariant("resolution prompt ID allocation returned zero"),
+        )?;
+        self.state
+            .next_resolution_prompt_id
+            .insert(deciding_player, value);
+        Ok(id)
+    }
+
+    fn resolution_prompt_semantics(
+        &self,
+        pending: &PendingResolution,
+        choice: &rv1::ResolutionChoiceRequired,
+    ) -> Result<Vec<u8>, EngineError> {
+        let mut normalized = choice.clone();
+        normalized.resolution_prompt_id = 0;
+        normalized.prompt_text.clear();
+        normalized.candidate_server_card_ids.clear();
+        normalized.public_reveal = None;
+        if !normalized.unique_names {
+            normalized.candidate_card_ids.clear();
+            normalized.candidate_names.clear();
+        }
+        for branch in &mut normalized.resolution_branches {
+            branch.label.clear();
+            branch.cost_text.clear();
+            branch.presentation = None;
+        }
+        for slot in &mut normalized.selection_slots {
+            slot.label.clear();
+            slot.presentation = None;
+        }
+        for option in &mut normalized.replacement_options {
+            option.source_card_name.clear();
+            option.effect_summary.clear();
+        }
+        let source_generation = self
+            .state
+            .zone_change_generation
+            .get(&pending.presentation.source_object_id)
+            .copied()
+            .unwrap_or(0);
+        let candidate_incarnations = choice
+            .candidate_object_ids
+            .iter()
+            .map(|object_id| {
+                (
+                    *object_id,
+                    self.state
+                        .zone_change_generation
+                        .get(object_id)
+                        .copied()
+                        .unwrap_or(0),
+                )
+            })
+            .collect::<Vec<_>>();
+        let continuation = serde_json::to_vec(&pending.continuation).map_err(|_| {
+            EngineError::ProgramInvariant("resolution continuation cannot be fingerprinted")
+        })?;
+        serde_json::to_vec(&(
+            normalized,
+            (pending.presentation.source_object_id, source_generation),
+            candidate_incarnations,
+            continuation,
+        ))
+        .map_err(|_| EngineError::ProgramInvariant("resolution offer cannot be fingerprinted"))
+    }
+
     /// Finish the typed follow-up attached to a special-cast offer. The exact exile cohort returns
     /// in a stable event sequence; only the final owner-private zone view exposes any new library
     /// order.
@@ -330,6 +666,9 @@ impl GameEngine {
             "P{library_owner}: Put {name} into the command zone instead of {destination_label}?"
         );
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+
             deciding_player: library_owner,
             presentation: PendingResolutionPresentation {
                 source_object_id: stack.item.id,
@@ -388,6 +727,7 @@ impl GameEngine {
         Some(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: pending.resolution_prompt_id.get(),
                     deciding_player_id: pending.deciding_player,
                     source_object_id: pending.presentation.source_object_id,
                     prompt_text: pending.presentation.prompt.clone(),
@@ -1399,12 +1739,14 @@ impl GameEngine {
                 if let Some(announcement) = answer.spell_cast_announcement.as_ref() {
                     let player = pending.deciding_player;
                     self.state.pending_resolution = Some(pending);
-                    return self.begin_spell_cast(
+                    let batch = self.begin_spell_cast(
                         player,
                         &rv1::BeginSpellCast {
                             announcement: Some(announcement.clone()),
                         },
-                    );
+                    )?;
+                    self.retire_resolution_prompt_during_child_cast();
+                    return Ok(batch);
                 }
                 let Some(cast) = answer.cast_spell.as_ref() else {
                     self.state.pending_resolution = Some(pending);
@@ -1433,6 +1775,23 @@ impl GameEngine {
             stack.previous_result,
             events,
         )
+    }
+
+    /// The parent special-cast offer is suspended while its accepted child cast is being paid.
+    /// Clearing only its publication identity makes a duplicate parent answer stale; cancellation
+    /// republishes the same continuation as a fresh offer.
+    fn retire_resolution_prompt_during_child_cast(&mut self) {
+        if self
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .is_some_and(|pending| pending.resolution_time_offer)
+        {
+            if let Some(pending) = self.state.pending_resolution.as_mut() {
+                pending.resolution_prompt_id = crate::state::ResolutionPromptId::UNASSIGNED;
+                pending.resolution_prompt_semantics = None;
+            }
+        }
     }
 
     fn finish_special_cast_commander_cleanup(
@@ -2261,32 +2620,71 @@ impl GameEngine {
         item: StackItem,
         resume_effect_index: Option<u32>,
         previous_result: EffectResult,
-        mut ev: Vec<rv1::RuledEvent>,
+        ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        let is_linked_play_root =
-            self.state
-                .pending_linked_exile_play
-                .as_ref()
-                .is_some_and(|cohort| {
-                    cohort.stack.item.id == item.id
-                        && cohort.stack.item.source_zone_change == item.source_zone_change
-                });
-        if is_linked_play_root {
-            let mut cohort = *self
-                .state
-                .pending_linked_exile_play
-                .take()
-                .expect("linked play cohort checked above");
-            cohort.stack = ParkedStackResolution {
+        if self.is_pending_linked_exile_play_root(&item) {
+            return self.resume_pending_linked_exile_play_root(
                 item,
                 resume_effect_index,
                 previous_result,
-                program: None,
-            };
-            return self.advance_pending_linked_exile_play(cohort, ev);
+                ev,
+            );
         }
+        let (effects, spell_label) = if resume_effect_index.is_some() {
+            self.build_resolution_effects(&item)
+        } else {
+            (Vec::new(), String::new())
+        };
+        self.finish_parked_resolution_with_effects_and_previous(
+            item,
+            resume_effect_index,
+            effects,
+            spell_label,
+            previous_result,
+            ev,
+        )
+    }
+
+    /// Resume a standard effect list from an already captured list. Observer restoration uses
+    /// this when it must replace the exact chooser that already began resolving, while preserving
+    /// that entry's target bindings and keeping the normal tail and cleanup path.
+    pub(super) fn complete_parked_resolution_with_effects_and_previous(
+        &mut self,
+        item: StackItem,
+        resume_effect_index: Option<u32>,
+        effects: Vec<ResolutionEffect>,
+        spell_label: String,
+        previous_result: EffectResult,
+        ev: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if self.is_pending_linked_exile_play_root(&item) {
+            return self.resume_pending_linked_exile_play_root(
+                item,
+                resume_effect_index,
+                previous_result,
+                ev,
+            );
+        }
+        self.finish_parked_resolution_with_effects_and_previous(
+            item,
+            resume_effect_index,
+            effects,
+            spell_label,
+            previous_result,
+            ev,
+        )
+    }
+
+    fn finish_parked_resolution_with_effects_and_previous(
+        &mut self,
+        item: StackItem,
+        resume_effect_index: Option<u32>,
+        effects: Vec<ResolutionEffect>,
+        spell_label: String,
+        previous_result: EffectResult,
+        mut ev: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
         if let Some(start) = resume_effect_index {
-            let (effects, spell_label) = self.build_resolution_effects(&item);
             let progress = self.run_effect_list_with_previous(
                 &item,
                 &spell_label,
@@ -2311,6 +2709,37 @@ impl GameEngine {
             ev.push(ev_priority_changed(self));
         }
         Ok(finish_with_events(self, ev))
+    }
+
+    fn is_pending_linked_exile_play_root(&self, item: &StackItem) -> bool {
+        self.state
+            .pending_linked_exile_play
+            .as_ref()
+            .is_some_and(|cohort| {
+                cohort.stack.item.id == item.id
+                    && cohort.stack.item.source_zone_change == item.source_zone_change
+            })
+    }
+
+    fn resume_pending_linked_exile_play_root(
+        &mut self,
+        item: StackItem,
+        resume_effect_index: Option<u32>,
+        previous_result: EffectResult,
+        ev: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let mut cohort = *self
+            .state
+            .pending_linked_exile_play
+            .take()
+            .expect("linked play cohort checked above");
+        cohort.stack = ParkedStackResolution {
+            item,
+            resume_effect_index,
+            previous_result,
+            program: None,
+        };
+        self.advance_pending_linked_exile_play(cohort, ev)
     }
 
     /// Resume a standard effect list or a finite authored program using the exact parked cursor.
@@ -2391,6 +2820,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
@@ -2435,6 +2865,9 @@ impl GameEngine {
         });
         events.push(ev_log(interrupt.prompt.clone()));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+
             deciding_player: interrupt.deciding_player,
             presentation: PendingResolutionPresentation {
                 source_object_id: item.id,

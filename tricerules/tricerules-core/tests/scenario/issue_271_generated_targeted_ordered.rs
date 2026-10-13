@@ -2,6 +2,7 @@
 //! private Surveil, and creature-as-damage-source contracts. Oracle/rulings and the current
 //! Comprehensive Rules were checked 2026-09-13. CR 115, 118.7, 119-121, 400.7, 601.2c/f,
 //! 608.2b-c/h, 610.3, and 701.25 govern these scenarios.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -41,7 +42,9 @@ fn three_player_engine(seed: u64) -> GameEngine {
         .push(tricerules_core::state::PlayerState::new(2, 20));
     while engine.state.turn_step != TurnStep::Main1 {
         let player = engine.state.priority_player_id();
-        engine.apply_command(player, &pass()).expect("advance turn");
+        engine
+            .apply_scenario_command(player, &pass())
+            .expect("advance turn");
     }
     engine
 }
@@ -84,7 +87,7 @@ fn cast_named(engine: &mut GameEngine, card_id: &str, targets: Vec<TargetRef>) {
     inject_card_into_hand(engine, 0, card_id);
     let slot = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_spell(slot, targets))
+        .apply_scenario_command(0, &cast_spell(slot, targets))
         .unwrap_or_else(|error| panic!("cast {card_id}: {error:?}"));
 }
 
@@ -111,7 +114,7 @@ fn resolve_three_player_stack(engine: &mut GameEngine) -> Vec<RuledEventBatch> {
         let player = engine.state.priority_player_id();
         batches.push(
             engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("priority pass"),
         );
     }
@@ -147,7 +150,7 @@ fn tapped_target_reduction_applies_once_and_only_for_the_announced_tapped_creatu
     engine.state.players[0].mana_pool.white = 1;
     engine.state.players[0].mana_pool.colorless = 1;
     engine
-        .apply_command(0, &cast_spell(grounded, target_object(tapped)))
+        .apply_scenario_command(0, &cast_spell(grounded, target_object(tapped)))
         .expect("Grounded for Life costs {1}{W} against the tapped target");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&tapped].zone, Zone::Graveyard);
@@ -157,7 +160,7 @@ fn tapped_target_reduction_applies_once_and_only_for_the_announced_tapped_creatu
     let whirlpool = hand_index_for_card(&engine, 0, "quicksand_whirlpool");
     let command_before = engine.state.command_index;
     assert!(engine
-        .apply_command(0, &cast_spell(whirlpool, target_object(untapped)))
+        .apply_scenario_command(0, &cast_spell(whirlpool, target_object(untapped)))
         .is_err());
     assert_eq!(engine.state.command_index, command_before);
 }
@@ -170,7 +173,7 @@ fn optional_linked_exile_handles_decline_illegal_target_and_departed_source() {
     cast_named(&mut declined, "liminal_hold", vec![]);
     pass_both_players(&mut declined);
     declined
-        .apply_command(0, &choose_trigger_target(None))
+        .apply_scenario_command(0, &choose_trigger_target(None))
         .expect("decline the optional target");
     resolve_entire_stack_two_player(&mut declined);
     assert_eq!(declined.state.players[0].life, 17);
@@ -182,7 +185,7 @@ fn optional_linked_exile_handles_decline_illegal_target_and_departed_source() {
     cast_named(&mut illegal, "prayer_of_binding", vec![]);
     pass_both_players(&mut illegal);
     illegal
-        .apply_command(0, &choose_trigger_target(Some(target)))
+        .apply_scenario_command(0, &choose_trigger_target(Some(target)))
         .expect("choose the optional target");
     leave_battlefield(&mut illegal, 1, target, Zone::Hand);
     resolve_entire_stack_two_player(&mut illegal);
@@ -196,7 +199,7 @@ fn optional_linked_exile_handles_decline_illegal_target_and_departed_source() {
     cast_named(&mut departed, "liminal_hold", vec![]);
     pass_both_players(&mut departed);
     departed
-        .apply_command(0, &choose_trigger_target(Some(target)))
+        .apply_scenario_command(0, &choose_trigger_target(Some(target)))
         .expect("choose a legal target");
     let source = battlefield_object_for_card(&departed, 0, "liminal_hold");
     leave_battlefield(&mut departed, 0, source, Zone::Graveyard);
@@ -221,9 +224,13 @@ fn surveil_choice_finishes_before_draw_two_and_life_loss() {
     }
     let hand_before = engine.state.players[0].hand.len();
     cast_named(&mut engine, "risky_research", vec![]);
-    let resolving = engine.apply_command(0, &pass()).expect("caster pass");
+    let resolving = engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
     assert!(find_resolution_choice(&resolving).is_none());
-    let resolving = engine.apply_command(1, &pass()).expect("opponent pass");
+    let resolving = engine
+        .apply_scenario_command(1, &pass())
+        .expect("opponent pass");
     let choice = find_resolution_choice(&resolving).expect("private Surveil choice");
     assert_eq!(choice.deciding_player_id, 0);
     assert_eq!(choice.candidate_object_ids, [top, second]);
@@ -231,7 +238,7 @@ fn surveil_choice_finishes_before_draw_two_and_life_loss() {
     assert_eq!(engine.state.players[0].hand.len(), hand_before);
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![top]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top]))
         .expect("finish Surveil and resume the effect tail");
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&top].zone, Zone::Graveyard);
@@ -278,7 +285,7 @@ fn power_damage_revalidates_both_roles_and_uses_current_power_and_source_identit
     assert!(legal.groups[1].valid_permanent_ids.contains(&p1_target));
     assert!(legal.groups[1].valid_permanent_ids.contains(&p2_target));
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 slot,

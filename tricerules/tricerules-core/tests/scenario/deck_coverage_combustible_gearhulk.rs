@@ -4,9 +4,10 @@
 //! and the uninterrupted mill-then-damage sequence. CR 115.1d/603.3 govern target announcement;
 //! 608.2b governs target legality; 202.3/202.3d govern mana value outside the stack; 701.17 and
 //! 120.2 govern the mill result and damage source.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     dev_command::Dev, ruled_command::Cmd, DevCommand, DevMoveCard, DevZone,
     ResolutionChoiceDecision, SubmitResolutionChoice,
@@ -40,6 +41,7 @@ fn choose_trigger_target(player: i32) -> RuledCommand {
 fn resolution_decision(decision: ResolutionChoiceDecision, branch_index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: decision as i32,
             selected_branch_index: branch_index,
             ..Default::default()
@@ -60,7 +62,7 @@ fn cast_gearhulk_and_choose_target(engine: &mut GameEngine, target: i32) -> u32 
     );
     let hand_index = hand_index_for_card(engine, 0, GEARHULK);
     engine
-        .apply_command(0, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
         .expect("cast Combustible Gearhulk");
 
     for _ in 0..8 {
@@ -73,12 +75,14 @@ fn cast_gearhulk_and_choose_target(engine: &mut GameEngine, target: i32) -> u32 
 
     let before_invalid_target = format!("{:?}", engine.state);
     assert!(
-        engine.apply_command(0, &choose_trigger_target(0)).is_err(),
+        engine
+            .apply_scenario_command(0, &choose_trigger_target(0))
+            .is_err(),
         "the trigger cannot target its controller"
     );
     assert_eq!(format!("{:?}", engine.state), before_invalid_target);
     engine
-        .apply_command(0, &choose_trigger_target(target))
+        .apply_scenario_command(0, &choose_trigger_target(target))
         .expect("choose one target opponent");
     gearhulk
 }
@@ -110,7 +114,7 @@ fn set_library_top(engine: &mut GameEngine, card_ids: &[&str]) -> Vec<u32> {
 fn move_gearhulk_to_graveyard(engine: &mut GameEngine) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -150,7 +154,7 @@ fn targeted_opponent_can_decline_and_take_the_sum_of_exact_milled_card_mana_valu
 
     let before_wrong_actor = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &resolution_decision(ResolutionChoiceDecision::Decline, 0)
         )
@@ -158,7 +162,7 @@ fn targeted_opponent_can_decline_and_take_the_sum_of_exact_milled_card_mana_valu
     assert_eq!(format!("{:?}", engine.state), before_wrong_actor);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             2,
             &resolution_decision(ResolutionChoiceDecision::Decline, 0),
         )
@@ -202,7 +206,7 @@ fn targeted_opponent_may_choose_the_draw_branch_with_fewer_than_three_cards() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &resolution_decision(ResolutionChoiceDecision::SelectBranch, 0),
         )
@@ -253,7 +257,7 @@ fn trigger_does_not_resolve_if_its_target_opponent_leaves_before_resolution() {
     let library = set_library_top(&mut engine, &["island", "mountain", "forest"]);
     cast_gearhulk_and_choose_target(&mut engine, 1);
     engine
-        .apply_command(1, &concede())
+        .apply_scenario_command(1, &concede())
         .expect("target opponent concedes before the trigger resolves");
     assert!(engine.state.players[1].has_lost);
 

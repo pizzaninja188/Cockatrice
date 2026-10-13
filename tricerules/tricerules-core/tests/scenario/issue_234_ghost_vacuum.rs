@@ -1,5 +1,6 @@
 //! Ghost Vacuum: generation-bound linked exile and modified simultaneous reanimation.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use prost::Message;
 use tricerules_cards::{CounterKind, Keyword};
 use tricerules_core::state::CopiableValues;
@@ -34,7 +35,7 @@ fn resolve_top(engine: &mut GameEngine) {
 fn pass_all_players(engine: &mut GameEngine) {
     for _ in 0..engine.state.players.len() {
         let actor = engine.state.priority_player_id();
-        engine.apply_command(actor, &pass()).unwrap();
+        engine.apply_scenario_command(actor, &pass()).unwrap();
     }
 }
 
@@ -43,7 +44,7 @@ fn exile_with(engine: &mut GameEngine, vacuum: u32, target: u32) {
     let slot = vacuum_ability_slots(engine, vacuum)[0];
     let command = activate_ability_for(engine, vacuum, slot, target_object(target));
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("activate linked graveyard exile");
     resolve_top(engine);
 }
@@ -53,7 +54,7 @@ fn release_with(engine: &mut GameEngine, vacuum: u32) {
     let slot = vacuum_ability_slots(engine, vacuum)[1];
     let command = activate_ability_for(engine, vacuum, slot, vec![]);
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("activate linked return");
     assert_ne!(engine.state.objects[&vacuum].zone, Zone::Battlefield);
     resolve_top(engine);
@@ -132,7 +133,7 @@ fn apply_serialized_and_record(
     command: RuledCommand,
 ) {
     let command = RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
-    batches.push(engine.apply_command(actor, &command).unwrap());
+    batches.push(engine.apply_scenario_command(actor, &command).unwrap());
     commands.push((actor, command));
 }
 
@@ -228,7 +229,7 @@ fn issue_234_returns_only_linked_creatures_with_spirit_characteristics_and_flyin
     inject_card_into_hand(&mut engine, 0, "unsummon");
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(creature)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(creature)))
         .unwrap();
     resolve_top(&mut engine);
     let new_object = engine.characteristics(creature).unwrap();
@@ -265,10 +266,10 @@ fn issue_234_blinked_source_cannot_use_its_old_link() {
     let creature = inject_graveyard_card(&mut engine, 1, "grizzly_bears");
     exile_with(&mut engine, vacuum, creature);
     engine
-        .apply_command(0, &dev_move(0, "Ghost Vacuum", DevZone::Hand))
+        .apply_scenario_command(0, &dev_move(0, "Ghost Vacuum", DevZone::Hand))
         .unwrap();
     engine
-        .apply_command(0, &dev_move(0, "Ghost Vacuum", DevZone::Battlefield))
+        .apply_scenario_command(0, &dev_move(0, "Ghost Vacuum", DevZone::Battlefield))
         .unwrap();
     release_with(&mut engine, vacuum);
     assert_eq!(engine.state.objects[&creature].zone, Zone::Exile);
@@ -283,10 +284,10 @@ fn issue_234_card_that_leaves_and_reenters_exile_is_not_linked() {
     exile_with(&mut engine, vacuum, creature);
     let linked_generation = engine.state.zone_change_generation[&creature];
     engine
-        .apply_command(0, &dev_move(1, "Hill Giant", DevZone::Hand))
+        .apply_scenario_command(0, &dev_move(1, "Hill Giant", DevZone::Hand))
         .unwrap();
     engine
-        .apply_command(0, &dev_move(1, "Hill Giant", DevZone::Exile))
+        .apply_scenario_command(0, &dev_move(1, "Hill Giant", DevZone::Exile))
         .unwrap();
     assert!(engine.state.zone_change_generation[&creature] > linked_generation);
     release_with(&mut engine, vacuum);
@@ -305,7 +306,7 @@ fn issue_234_simultaneous_return_waits_for_copy_choice_then_applies_modifiers() 
 
     engine.state.objects.get_mut(&vacuum).unwrap().tapped = false;
     engine
-        .apply_command(0, &activate_ability(vacuum, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(vacuum, 1, vec![]))
         .unwrap();
     resolve_top(&mut engine);
     assert!(engine.state.pending_resolution.is_some());
@@ -313,7 +314,7 @@ fn issue_234_simultaneous_return_waits_for_copy_choice_then_applies_modifiers() 
     assert_eq!(engine.state.objects[&bear].zone, Zone::Exile);
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![model]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![model]))
         .unwrap();
     answer_simultaneous_entry_order_in_engine_order(&mut engine);
     for oid in [clone, bear] {
@@ -347,7 +348,7 @@ fn issue_234_multiplayer_copy_choices_use_destination_controller_before_atomic_r
     for target in [first, second] {
         engine.state.objects.get_mut(&vacuum).unwrap().tapped = false;
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_ability_for(&engine, vacuum, 0, target_object(target)),
             )
@@ -357,7 +358,7 @@ fn issue_234_multiplayer_copy_choices_use_destination_controller_before_atomic_r
 
     engine.state.objects.get_mut(&vacuum).unwrap().tapped = false;
     engine
-        .apply_command(0, &activate_ability_for(&engine, vacuum, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, vacuum, 1, vec![]))
         .unwrap();
     pass_all_players(&mut engine);
     assert_eq!(engine.state.objects[&first].zone, Zone::Exile);
@@ -373,7 +374,7 @@ fn issue_234_multiplayer_copy_choices_use_destination_controller_before_atomic_r
     );
 
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![model]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![model]))
         .is_err());
     assert_eq!(
         engine
@@ -385,7 +386,7 @@ fn issue_234_multiplayer_copy_choices_use_destination_controller_before_atomic_r
         0
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![model]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![model]))
         .unwrap();
     assert_eq!(engine.state.objects[&first].zone, Zone::Exile);
     assert_eq!(engine.state.objects[&second].zone, Zone::Exile);
@@ -399,7 +400,7 @@ fn issue_234_multiplayer_copy_choices_use_destination_controller_before_atomic_r
         0
     );
     assert!(engine
-        .apply_command(3, &submit_resolution_choice(vec![model]))
+        .apply_scenario_command(3, &submit_resolution_choice(vec![model]))
         .is_err());
     assert_eq!(
         engine
@@ -411,7 +412,7 @@ fn issue_234_multiplayer_copy_choices_use_destination_controller_before_atomic_r
         0
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![model]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![model]))
         .unwrap();
     answer_simultaneous_entry_order_in_engine_order(&mut engine);
 
@@ -451,7 +452,7 @@ fn issue_234_copied_release_and_permanent_or_token_copies_keep_source_links() {
 
     engine.state.objects.get_mut(&token).unwrap().tapped = false;
     engine
-        .apply_command(0, &activate_ability(token, 3, vec![]))
+        .apply_scenario_command(0, &activate_ability(token, 3, vec![]))
         .unwrap();
     let mut copy = engine.state.stack.last().unwrap().clone();
     copy.id = engine.state.next_object_id;
@@ -497,7 +498,7 @@ fn issue_234_release_is_sorcery_speed_and_stale_target_records_nothing() {
     let vacuum = inject_permanent_on_battlefield(&mut engine, 0, "ghost_vacuum");
     let creature = inject_graveyard_card(&mut engine, 1, "grizzly_bears");
     engine
-        .apply_command(0, &activate_ability(vacuum, 0, target_object(creature)))
+        .apply_scenario_command(0, &activate_ability(vacuum, 0, target_object(creature)))
         .unwrap();
     let owner = engine.state.player_idx(1).unwrap();
     engine.state.players[owner]
@@ -512,11 +513,13 @@ fn issue_234_release_is_sorcery_speed_and_stale_target_records_nothing() {
     assert_eq!(engine.state.objects[&creature].zone, Zone::Hand);
 
     let second_vacuum = inject_permanent_on_battlefield(&mut engine, 0, "ghost_vacuum");
-    engine.apply_command(0, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(0, &primitive_yield())
+        .unwrap();
     assert_ne!(engine.state.turn_step, TurnStep::Main1);
     let before = engine.diagnostic_snapshot().unwrap();
     assert!(engine
-        .apply_command(0, &activate_ability(second_vacuum, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(second_vacuum, 1, vec![]))
         .is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
 }
@@ -613,7 +616,10 @@ fn issue_234_serialized_commands_replay_linked_exile_identically() {
 
     let mut replay = setup();
     for ((actor, command), expected) in commands.iter().zip(&batches) {
-        assert_eq!(&replay.apply_command(*actor, command).unwrap(), expected);
+        assert_eq!(
+            &replay.apply_scenario_command(*actor, command).unwrap(),
+            expected
+        );
     }
     assert_eq!(
         replay.diagnostic_snapshot().unwrap(),

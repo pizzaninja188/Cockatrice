@@ -3,6 +3,7 @@
 //! Oracle and rulings checked 2026-09-11. CR 602.1–.2 defines activated abilities and
 //! their payment process, CR 601.2h and 118.3 require complete payment, CR 701.21
 //! defines sacrifice, CR 701.26 defines tapping, and CR 121 governs drawing.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -34,13 +35,13 @@ fn generated_land_draw_activation_is_generation_safe_atomic_and_resolves_from_th
 
     engine.state.priority_idx = 1;
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 1, vec![]))
         .expect_err("the controller cannot activate without priority");
     engine.state.priority_idx = 0;
 
     let unfunded = activate_ability_for(&engine, source, 1, vec![]);
     engine
-        .apply_command(0, &unfunded)
+        .apply_scenario_command(0, &unfunded)
         .expect_err("insufficient mana must reject the entire activation");
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     assert!(!engine.state.objects[&source].tapped);
@@ -60,7 +61,7 @@ fn generated_land_draw_activation_is_generation_safe_atomic_and_resolves_from_th
     };
     ability.expected_zone_change_generation += 1;
     engine
-        .apply_command(0, &stale)
+        .apply_scenario_command(0, &stale)
         .expect_err("stale source generation must reject before payment");
     assert_eq!(engine.state.players[0].mana_pool.colorless, 4);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);

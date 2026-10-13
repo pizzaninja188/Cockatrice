@@ -10,7 +10,7 @@ use tricerules_cards::primitives::{
     TypeLineAddition,
 };
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::TokenCreated;
 
 fn main_phase(seed: u64) -> GameEngine {

@@ -7,6 +7,7 @@
 //! CR 603.6c/700.4 ("dies"), CR 605/106.1b (any-color mana), CR 611.2c/613.4c (P/T and keyword
 //! changes), CR 701.9 (discard), CR 702.8 (flash), CR 702.19 (reach), CR 702.29 (cycling), and
 //! CR 702.122 (crew).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -288,7 +289,8 @@ fn issue_misc12_skycrash_destroys_an_artifact_and_cycles() {
     grant_pool(&mut bad, 0);
     let slot = hand_index_for_card(&bad, 0, "skycrash");
     assert!(
-        bad.apply_command(0, &cast_spell(slot, vec![])).is_err(),
+        bad.apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .is_err(),
         "the destruction requires an artifact target"
     );
 }

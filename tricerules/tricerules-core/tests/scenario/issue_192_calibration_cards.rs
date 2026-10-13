@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{CounterKind, Keyword};
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
@@ -36,6 +37,7 @@ fn choose_trigger_target(object_id: u32) -> RuledCommand {
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -89,12 +91,14 @@ fn issue_192_zog_mountaincycling_is_private_and_generation_bound() {
     );
     let command = zone_ability(&engine, zog);
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("activate Mountaincycling");
     assert_eq!(engine.state.objects[&zog].zone, Zone::Graveyard);
-    engine.apply_command(0, &pass()).expect("controller passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
     let batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("Mountaincycling resolves");
     let choice = find_resolution_choice(&batch).expect("private library search");
     assert!(!choice.candidate_object_ids.is_empty());
@@ -104,11 +108,11 @@ fn issue_192_zog_mountaincycling_is_private_and_generation_bound() {
         .all(|oid| engine.state.objects[oid].card_id == "mountain"));
     let mountain = choice.candidate_object_ids[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![mountain]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![mountain]))
         .expect("choose Mountain");
     assert_eq!(engine.state.objects[&mountain].zone, Zone::Hand);
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect_err("stale hand action cannot be replayed");
 }
 
@@ -142,16 +146,20 @@ fn issue_192_return_to_sewers_uses_owner_choice_then_creates_working_mutagen() {
     );
     let slot = hand_index_for_card(&engine, 0, "return_to_the_sewers");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Return to the Sewers");
-    engine.apply_command(0, &pass()).expect("caster passes");
-    let batch = engine.apply_command(1, &pass()).expect("resolve to choice");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    let batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolve to choice");
     let choice = find_resolution_choice(&batch).expect("owner placement choice");
     assert_eq!(choice.deciding_player_id, 1);
     assert_eq!(choice.choice_kind(), ChoiceKind::ResolutionBranch);
-    assert!(engine.apply_command(0, &select_branch(1)).is_err());
+    assert!(engine.apply_scenario_command(0, &select_branch(1)).is_err());
     engine
-        .apply_command(1, &select_branch(1))
+        .apply_scenario_command(1, &select_branch(1))
         .expect("owner chooses bottom");
     assert_eq!(engine.state.objects[&target].zone, Zone::Library);
     assert_eq!(
@@ -220,7 +228,7 @@ fn issue_192_alliance_triggers_only_for_another_controlled_creature() {
     );
     let slot = hand_index_for_card(&engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast controlled creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.effective_power(musicians), Some(3));
@@ -259,7 +267,7 @@ fn issue_192_punk_frogs_ward_counters_the_exact_targeting_spell() {
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     let spell = engine.state.players[0].hand[slot];
     engine
-        .apply_command(0, &cast_spell(slot, target_object(frogs)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(frogs)))
         .expect("target Punk Frogs");
     assert_eq!(engine.state.stack.len(), 2, "Ward is above Unsummon");
     pass_both_players(&mut engine);
@@ -273,7 +281,7 @@ fn issue_192_punk_frogs_ward_counters_the_exact_targeting_spell() {
         .expect("mana payment");
     assert_eq!(payment.generic_mana_cost, 3);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -309,20 +317,24 @@ fn issue_192_april_rejects_blockers_with_power_three_or_greater() {
         .candidates
         .to_vec();
     engine
-        .apply_command(0, &submit_resolution_choice(scry_cards))
+        .apply_scenario_command(0, &submit_resolution_choice(scry_cards))
         .expect("bottom April's scry cohort");
     let bear = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let giant = relocate_to_battlefield(&mut engine, 1, "hill_giant", false);
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![april]))
+        .apply_scenario_command(0, &declare_attackers(vec![april]))
         .expect("attack with April");
-    engine.apply_command(0, &pass()).expect("attacker passes");
-    let blockers = engine.apply_command(1, &pass()).expect("defender passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("attacker passes");
+    let blockers = engine
+        .apply_scenario_command(1, &pass())
+        .expect("defender passes");
     let legal = &blockers.legal_by_player[&1].legal_block_pairs;
     assert!(legal
         .iter()
@@ -331,7 +343,7 @@ fn issue_192_april_rejects_blockers_with_power_three_or_greater() {
         .iter()
         .all(|pair| pair.attacker_id != april || pair.blocker_id != giant));
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: april,
@@ -369,7 +381,7 @@ fn issue_192_featherbrained_filcher_leaves_and_creates_working_food() {
     );
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(filcher)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(filcher)))
         .expect("bounce Filcher");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&filcher].zone, Zone::Hand);
@@ -425,7 +437,7 @@ fn issue_192_tenderize_and_bot_bashing_use_shared_damage_and_exile_pipelines() {
     );
     let tenderize = hand_index_for_card(&engine, 0, "tenderize");
     engine
-        .apply_command(0, &cast_spell(tenderize, bite_targets(source, recipient)))
+        .apply_scenario_command(0, &cast_spell(tenderize, bite_targets(source, recipient)))
         .expect("cast Tenderize");
     engine
         .state
@@ -449,7 +461,7 @@ fn issue_192_tenderize_and_bot_bashing_use_shared_damage_and_exile_pipelines() {
     );
     let bot_bashing = hand_index_for_card(&engine, 0, "bot_bashing_time");
     engine
-        .apply_command(0, &cast_spell(bot_bashing, target_object(exile_target)))
+        .apply_scenario_command(0, &cast_spell(bot_bashing, target_object(exile_target)))
         .expect("cast Bot Bashing Time");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&exile_target].zone, Zone::Exile);
@@ -490,11 +502,11 @@ fn issue_192_skateboard_taps_then_attaches_power_and_haste() {
     );
     let slot = hand_index_for_card(&engine, 0, "skateboard");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Skateboard");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &choose_trigger_target(permanent))
+        .apply_scenario_command(0, &choose_trigger_target(permanent))
         .expect("choose permanent to tap");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.state.objects[&permanent].tapped);

@@ -4,9 +4,10 @@
 //! entry triggers and that power is checked as the creature enters. CR 603.3/603.5 cover putting
 //! the trigger on the stack and choosing the optional draw on resolution; CR 603.6a covers the
 //! entry event, and CR 121.1 covers drawing a card.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ChoiceKind, ResolutionChoiceDecision, RuledEventBatch};
 
 const GARRUKS_PACKLEADER: &str = "garruks_packleader";
@@ -34,10 +35,10 @@ fn resolve_top_stack_item(engine: &mut GameEngine) -> RuledEventBatch {
         engine.state.players[0].id
     };
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first player passes priority");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second player passes priority and the top item resolves")
 }
 
@@ -57,7 +58,7 @@ fn advance_to_player_main1(engine: &mut GameEngine, player: i32) {
             None => (engine.state.priority_player_id(), pass()),
         };
         engine
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("pass priority toward the requested player's main phase");
     }
     panic!("game did not reach player {player}'s main phase");
@@ -68,7 +69,7 @@ fn cast_permanent(engine: &mut GameEngine, player: i32, card_id: &str) -> u32 {
     grant_pool(engine, player as usize);
     let slot = hand_index_for_card(engine, player as usize, card_id);
     engine
-        .apply_command(player, &cast_spell(slot, vec![]))
+        .apply_scenario_command(player, &cast_spell(slot, vec![]))
         .unwrap_or_else(|error| panic!("cast {card_id}: {error:?}"));
     let _ = resolve_top_stack_item(engine);
     assert_eq!(engine.state.objects[&card].zone, Zone::Battlefield);
@@ -115,7 +116,7 @@ fn garruks_packleader_draws_for_a_controlled_creature_with_power_three_or_greate
 
     let choice = optional_draw_choice(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             choice.deciding_player_id,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -152,7 +153,7 @@ fn garruks_packleader_can_decline_its_optional_draw() {
         .expect("a library card to remain");
     let _choice = optional_draw_choice(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )

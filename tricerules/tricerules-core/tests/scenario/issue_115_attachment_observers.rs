@@ -3,6 +3,7 @@
 //! Oracle and rulings verified 2026-08-20 for Goldvein Pick, Cracked Skull, and
 //! Quick-Draw Katana. Governing rules: CR 111.10a, 113.7a, 113.8, 120.4,
 //! 301.5, 303.4, 510.2-3a, 603.2-3, 611.3, 613.1f-g, and 702.6.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::Keyword;
@@ -49,15 +50,19 @@ fn issue_115_goldvein_pick_observes_equipped_creature_combat_damage() {
         .attached_to = Some(AttachmentRecipient::Object(attacker));
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare equipped attacker");
-    engine.apply_command(0, &pass()).expect("attacker pass");
-    engine.apply_command(1, &pass()).expect("defender pass");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("attacker pass");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("defender pass");
+    engine
+        .apply_scenario_command(0, &pass())
         .expect("attacker blockers pass");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender blockers pass and combat damage");
 
     assert_eq!(
@@ -80,7 +85,7 @@ fn issue_115_goldvein_pick_observes_equipped_creature_combat_damage() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ActivateAbility(ActivateAbility {
@@ -128,7 +133,7 @@ fn issue_115_goldvein_pick_ignores_equipped_creature_noncombat_damage() {
         .expect("Goldvein Pick")
         .attached_to = Some(AttachmentRecipient::Object(sorcerer));
     engine
-        .apply_command(0, &activate_ability(sorcerer, 0, target_player(1)))
+        .apply_scenario_command(0, &activate_ability(sorcerer, 0, target_player(1)))
         .expect("activate Prodigal Sorcerer");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -179,11 +184,13 @@ fn issue_115_cracked_skull_destroys_the_damaged_same_generation_creature() {
     ensure_card_in_hand(&mut engine, 0, "lightning_bolt");
     let shock_index = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(shock_index, target_object(creature)))
+        .apply_scenario_command(0, &cast_spell(shock_index, target_object(creature)))
         .expect("cast Shock");
-    engine.apply_command(0, &pass()).expect("caster pass");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("opponent pass and Shock resolves");
 
     assert_eq!(
@@ -242,10 +249,14 @@ fn issue_115_cracked_skull_does_not_destroy_a_returned_new_object() {
     ensure_card_in_hand(&mut engine, 0, "lightning_bolt");
     let bolt_index = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(bolt_index, target_object(creature)))
+        .apply_scenario_command(0, &cast_spell(bolt_index, target_object(creature)))
         .expect("cast Lightning Bolt");
-    engine.apply_command(0, &pass()).expect("caster pass");
-    engine.apply_command(1, &pass()).expect("Bolt resolves");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("Bolt resolves");
     assert_eq!(engine.state.stack.len(), 1);
 
     engine
@@ -322,7 +333,7 @@ fn issue_115_quick_draw_katana_tracks_its_controllers_turn() {
     );
     let katana_index = hand_index_for_card(&engine, 0, "quick-draw_katana");
     engine
-        .apply_command(0, &cast_spell(katana_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(katana_index, vec![]))
         .expect("cast Quick-Draw Katana");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -377,11 +388,13 @@ fn issue_143_coercion_publicly_reveals_and_can_choose_any_card() {
     );
     let coercion_index = hand_index_for_card(&engine, 0, "coercion");
     engine
-        .apply_command(0, &cast_spell(coercion_index, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(coercion_index, target_player(1)))
         .expect("cast Coercion");
-    engine.apply_command(0, &pass()).expect("caster pass");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
     let batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent pass and Coercion parks");
 
     let choice = find_resolution_choice(&batch).expect("opponent-hand choice");
@@ -405,7 +418,7 @@ fn issue_143_coercion_publicly_reveals_and_can_choose_any_card() {
     );
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![land]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
         .expect("choose land");
     assert_eq!(
         engine.state.objects[&land].zone,
@@ -449,18 +462,22 @@ fn issue_143_cracked_skull_remains_a_private_look() {
     );
     let skull_index = hand_index_for_card(&engine, 0, "cracked_skull");
     engine
-        .apply_command(0, &cast_spell(skull_index, target_object(enchanted)))
+        .apply_scenario_command(0, &cast_spell(skull_index, target_object(enchanted)))
         .expect("cast Cracked Skull");
-    engine.apply_command(0, &pass()).expect("caster pass");
-    engine.apply_command(1, &pass()).expect("Aura resolves");
     engine
-        .apply_command(0, &choose_trigger_targets(target_player(1)))
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("Aura resolves");
+    engine
+        .apply_scenario_command(0, &choose_trigger_targets(target_player(1)))
         .expect("target opponent with the ETB trigger");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("trigger controller pass");
     let batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("trigger resolves and parks for the optional choice");
 
     let choice = find_resolution_choice(&batch).expect("private hand choice");
@@ -470,7 +487,7 @@ fn issue_143_cracked_skull_remains_a_private_look() {
     assert!(choice.public_reveal.is_none());
     assert_eq!((choice.min, choice.max), (0, 1));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("decline after looking");
     assert!(engine.state.players[1].hand.contains(&land));
     assert!(engine.state.players[1].hand.contains(&nonland));

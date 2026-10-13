@@ -4,6 +4,7 @@
 //! governs entering with counters, CR 614.12 governs the tapped entry replacement, CR 605.1a and
 //! 605.3b classify and immediately resolve the mana abilities, and CR 105.4 / 106.1 distinguish
 //! colored mana from colorless mana.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -36,7 +37,7 @@ fn enter_vivid_grove(engine: &mut GameEngine) -> u32 {
     let source = inject_card_into_hand(engine, 0, VIVID_GROVE);
     let slot = hand_index_for_card(engine, 0, VIVID_GROVE);
     engine
-        .apply_command(0, &play_land(slot))
+        .apply_scenario_command(0, &play_land(slot))
         .expect("play Vivid Grove as a land");
 
     let pending = engine
@@ -56,7 +57,7 @@ fn enter_vivid_grove(engine: &mut GameEngine) -> u32 {
     );
     let application = pending.presentation.candidates[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![application]))
         .expect("choose the next Vivid Grove entry replacement");
     assert!(
         engine.state.pending_resolution.is_none(),
@@ -159,7 +160,7 @@ fn vivid_grove_enters_tapped_adds_green_and_spends_its_two_counters_atomically()
     );
     let command_index = engine.state.command_index;
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 0, vec![]))
         .expect_err("the entering tapped land cannot pay a tap cost");
     assert_eq!(engine.state.command_index, command_index);
     assert_eq!(mana_pool(&engine), (0, 0, 0, 0, 0, 0));
@@ -170,7 +171,7 @@ fn vivid_grove_enters_tapped_adds_green_and_spends_its_two_counters_atomically()
 
     advance_to_grove_controller_next_main1(&mut engine);
     engine
-        .apply_command(0, &activate_mana_option(&engine, source, 0, 0, None))
+        .apply_scenario_command(0, &activate_mana_option(&engine, source, 0, 0, None))
         .expect("tap Vivid Grove to add one green mana");
     assert_eq!(mana_pool(&engine), (0, 0, 0, 0, 1, 0));
     assert!(engine.state.objects[&source].tapped);
@@ -182,7 +183,7 @@ fn vivid_grove_enters_tapped_adds_green_and_spends_its_two_counters_atomically()
     advance_to_grove_controller_next_main1(&mut engine);
     let first_charge_selection = published_charge_selection(&mut engine, source, 2);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_mana_option(&engine, source, 1, 1, Some(first_charge_selection.clone())),
         )
@@ -201,7 +202,7 @@ fn vivid_grove_enters_tapped_adds_green_and_spends_its_two_counters_atomically()
     advance_to_grove_controller_next_main1(&mut engine);
     let second_charge_selection = published_charge_selection(&mut engine, source, 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_mana_option(&engine, source, 1, 3, Some(second_charge_selection)),
         )
@@ -221,7 +222,7 @@ fn vivid_grove_enters_tapped_adds_green_and_spends_its_two_counters_atomically()
     let mana_before_rejection = mana_pool(&engine);
     let command_index = engine.state.command_index;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_mana_option(&engine, source, 1, 3, Some(first_charge_selection)),
         )
@@ -262,7 +263,7 @@ fn vivid_grove_counter_ability_selects_each_color_and_rejects_colorless() {
 
         let selection = published_charge_selection(&mut engine, source, 2);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_mana_option(&engine, source, 1, option, Some(selection)),
             )
@@ -283,7 +284,7 @@ fn vivid_grove_counter_ability_selects_each_color_and_rejects_colorless() {
     let before = mana_pool(&engine);
     let command_index = engine.state.command_index;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_mana_option(&engine, source, 1, 5, Some(selection)),
         )

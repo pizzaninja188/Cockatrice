@@ -3,6 +3,7 @@
 //! Oracle and rulings checked 2026-09-30. CR 602.2 and 701.21a govern activation and sacrificing
 //! the creature as a cost; CR 608.2h uses its last known power for the draw count. CR 121.2 and
 //! 701.9a govern drawing, then discarding three cards during the same resolution.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -113,7 +114,7 @@ fn greater_good_rejects_an_opponents_creature_or_a_noncreature_as_its_cost() {
 
     for permanent in [opponent_creature, own_land] {
         let command = activate_greater_good(&engine, source, permanent);
-        assert!(engine.apply_command(0, &command).is_err());
+        assert!(engine.apply_scenario_command(0, &command).is_err());
         assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
         assert_eq!(engine.state.objects[&permanent].zone, Zone::Battlefield);
         assert!(engine.state.stack.is_empty());

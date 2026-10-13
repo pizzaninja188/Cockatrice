@@ -5,6 +5,7 @@
 //! Every expectation is the reviewed printed Oracle behavior. Governance: CR 115 (targets),
 //! 119/120 (life), 121.1 (draw), 122.1 (counters), 602 (activated abilities), 603.6 (entry
 //! triggers), and 611.2c (until end of turn).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 
@@ -65,7 +66,7 @@ fn issue_misc4_taxi_driver() {
     let driver = inject_creature_on_battlefield(&mut bad, 0, "taxi_driver");
     let boots = inject_permanent_on_battlefield(&mut bad, 0, "swiftfoot_boots");
     assert!(
-        bad.apply_command(0, &activate_ability(driver, 0, target_object(boots)))
+        bad.apply_scenario_command(0, &activate_ability(driver, 0, target_object(boots)))
             .is_err(),
         "an artifact is not a creature"
     );
@@ -95,7 +96,7 @@ fn issue_misc4_daring_mechanic() {
     let mechanic = inject_creature_on_battlefield(&mut bad, 0, "daring_mechanic");
     let bear = inject_creature_on_battlefield(&mut bad, 0, "grizzly_bears");
     assert!(
-        bad.apply_command(0, &activate_ability(mechanic, 0, target_object(bear)))
+        bad.apply_scenario_command(0, &activate_ability(mechanic, 0, target_object(bear)))
             .is_err(),
         "a creature that is neither a Mount nor a Vehicle is not a legal target"
     );
@@ -192,7 +193,7 @@ fn issue_misc4_slagdrill_scrapper() {
     grant_pool(&mut alone, 0);
     assert!(
         alone
-            .apply_command(0, &activate_ability(scrapper, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability(scrapper, 0, vec![]))
             .is_err(),
         "the source is the only artifact and is excluded from the sacrifice"
     );

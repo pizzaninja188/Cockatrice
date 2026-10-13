@@ -3,6 +3,7 @@
 //! Oracle refs: Bonesplitter (+2/+0, Equip {1}), Vulshok Morningstar (+2/+2, Equip {2}).
 //! Happy paths: equip, re-equip. Illegal paths: opponent's creature.
 //! SBA: equipment falls off when attached creature leaves the battlefield (CR 704.5p).
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::Keyword;
@@ -25,7 +26,7 @@ fn cast_and_resolve_equipment(
     take_card_from_library_to_hand(e, player, card_id);
     give_mana(e, player as i32, mana);
     let idx = hand_index_for_card(e, player, card_id);
-    e.apply_command(player as i32, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(player as i32, &cast_spell(idx, vec![]))
         .expect("cast equipment");
     resolve_entire_stack_two_player(e);
     battlefield_object_for_card(e, player, card_id)
@@ -586,15 +587,18 @@ fn swiftfoot_boots_moves_both_keywords_on_reequip() {
         "multiple granted keywords retain their effective-characteristics order"
     );
 
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
-    e.apply_command(0, &pass()).expect("ap pass begin combat");
-    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin combat");
     assert!(
-        e.apply_command(0, &declare_attackers(vec![bear1])).is_err(),
+        e.apply_scenario_command(0, &declare_attackers(vec![bear1]))
+            .is_err(),
         "the previously equipped summoning-sick creature lost haste"
     );
-    e.apply_command(0, &declare_attackers(vec![bear2]))
+    e.apply_scenario_command(0, &declare_attackers(vec![bear2]))
         .expect("the currently equipped creature can attack with haste");
 }
 
@@ -636,7 +640,8 @@ fn equipment_unattaches_when_host_stops_being_a_creature() {
     pass_both_players(&mut e);
 
     e.state.objects.get_mut(&bear).expect("bear").card_id = "plains".into();
-    e.apply_command(0, &pass()).expect("pass triggers SBAs");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass triggers SBAs");
     assert_eq!(
         e.state
             .objects

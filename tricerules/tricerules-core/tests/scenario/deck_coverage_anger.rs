@@ -1,5 +1,6 @@
 //! Anger's graveyard grant keeps the timestamp of entry even while its condition is false.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{ContinuousEffectKind, EffectDuration, Keyword};
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
@@ -22,7 +23,7 @@ fn setup() -> GameEngine {
 
 fn move_card(engine: &mut GameEngine, player: i32, name: &str, zone: DevZone) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -84,7 +85,7 @@ fn resolve_one(engine: &mut GameEngine) -> tricerules_proto::ruled::v1::RuledEve
     let mut batch = Default::default();
     for _ in 0..engine.state.players.len() {
         batch = engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     batch
@@ -144,7 +145,7 @@ fn anger_actual_cast_printed_haste_cost_and_graveyard_only_public_grant() {
     );
     let before = serde_json::to_value(&engine.state).unwrap();
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect_err("Anger costs 3R");
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     give_mana(
@@ -155,7 +156,9 @@ fn anger_actual_cast_printed_haste_cost_and_graveyard_only_public_grant() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(engine.state.objects[&source].zone, Zone::Stack);
     assert!(!haste(&engine, bear));
     resolve_one(&mut engine);
@@ -167,7 +170,7 @@ fn anger_actual_cast_printed_haste_cost_and_graveyard_only_public_grant() {
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     let before = serde_json::to_value(&engine.state).unwrap();
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 0, vec![]))
         .expect_err("a static ability cannot be activated");
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     move_card(&mut engine, 0, "Anger", DevZone::Graveyard);
@@ -276,7 +279,7 @@ fn anger_stolen_death_grants_owners_creatures_and_not_former_controllers() {
         inject_permanent_on_battlefield(&mut engine, player, "mountain");
     }
     engine.state.objects.get_mut(&source).unwrap().damage = 2;
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     assert!(engine.state.players[0].graveyard.contains(&source));
     assert!(haste(&engine, own));
@@ -305,15 +308,17 @@ fn anger_actual_mill_and_discard_create_the_graveyard_static() {
                 },
             );
             let slot = hand_index_for_card(&engine, 0, "frantic_search");
-            engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+            engine
+                .apply_scenario_command(0, &cast_spell(slot, vec![]))
+                .unwrap();
             let batch = resolve_one(&mut engine);
             let choice = find_resolution_choice(&batch).unwrap();
             assert!(choice.candidate_object_ids.contains(&source));
             engine
-                .apply_command(0, &submit_resolution_choice(vec![source, other]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![source, other]))
                 .unwrap();
             engine
-                .apply_command(0, &submit_resolution_choice(vec![]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![]))
                 .unwrap();
         } else {
             source = inject_library_card(&mut engine, 0, "anger");
@@ -410,10 +415,12 @@ fn anger_clone_loses_copied_static_but_physical_anger_recovers_its_own_after_dea
         },
     );
     let slot = hand_index_for_card(&engine, 0, "clone");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     resolve_one(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .unwrap();
     assert!(haste(&engine, copy));
     assert!(!haste(&engine, bear));
@@ -443,7 +450,7 @@ fn anger_clone_loses_copied_static_but_physical_anger_recovers_its_own_after_dea
     });
     assert!(!haste(&engine, source));
     engine.state.objects.get_mut(&source).unwrap().damage = 2;
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     assert!(engine.state.objects[&source].copiable_values.is_none());
     assert!(
@@ -471,7 +478,7 @@ fn anger_actual_token_copy_ceases_and_leaves_no_graveyard_grant() {
     );
     let slot = hand_index_for_card(&engine, 0, "cackling_counterpart");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .unwrap();
     resolve_one(&mut engine);
     let token = engine.state.players[0]
@@ -490,7 +497,7 @@ fn anger_actual_token_copy_ceases_and_leaves_no_graveyard_grant() {
         "anger"
     );
     engine.state.objects.get_mut(&token).unwrap().damage = 2;
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     assert!(!engine.state.objects.contains_key(&token));
     assert!(!engine
         .state
@@ -572,7 +579,9 @@ fn anger_grant_and_loss_refresh_summoning_sick_attack_legality() {
     inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     inject_permanent_on_battlefield(&mut engine, 0, "mountain");
     inject_card_into_hand(&mut engine, 0, "anger");
-    engine.apply_command(0, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(0, &primitive_yield())
+        .unwrap();
     resolve_one(&mut engine);
     assert_eq!(
         engine.state.turn_step,
@@ -591,7 +600,7 @@ fn anger_grant_and_loss_refresh_summoning_sick_attack_legality() {
     };
     let state_before = serde_json::to_value(&engine.state).unwrap();
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect_err("summoning sick attacker without haste");
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), state_before);
     move_card(&mut engine, 0, "Anger", DevZone::Graveyard);
@@ -603,7 +612,7 @@ fn anger_grant_and_loss_refresh_summoning_sick_attack_legality() {
         .selectable_attacker_ids
         .contains(&bear));
     move_card(&mut engine, 0, "Anger", DevZone::Graveyard);
-    let batch = engine.apply_command(0, &command).unwrap();
+    let batch = engine.apply_scenario_command(0, &command).unwrap();
     assert!(!attackers_declared_in(&batch).is_empty());
     assert!(engine.state.objects[&bear].tapped);
 }
@@ -626,7 +635,7 @@ fn anger_logged_zone_condition_changes_replay_deterministically() {
         ] {
             batches.push(
                 engine
-                    .apply_command(
+                    .apply_scenario_command(
                         0,
                         &RuledCommand {
                             cmd: Some(Cmd::DevCommand(DevCommand {

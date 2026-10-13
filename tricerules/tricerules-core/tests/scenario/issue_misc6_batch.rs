@@ -6,6 +6,7 @@
 //! Every expectation is the reviewed printed Oracle behavior. Governance: CR 115 (targets),
 //! CR 118.12/119 (life payments), CR 301.5 (Treasure), CR 602 (activated abilities),
 //! CR 608.2b (target revalidation), and CR 611.2c (until end of turn).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::CounterKind;
@@ -64,12 +65,12 @@ fn issue_misc6_patriot_pumps_and_grants_hexproof_to_another_creature() {
     let opponent = inject_creature_on_battlefield(&mut bad, 1, "grizzly_bears");
     grant_pool(&mut bad, 0);
     assert!(
-        bad.apply_command(0, &activate_ability(patriot, 0, target_object(patriot)))
+        bad.apply_scenario_command(0, &activate_ability(patriot, 0, target_object(patriot)))
             .is_err(),
         "the source is not 'another' creature"
     );
     assert!(
-        bad.apply_command(0, &activate_ability(patriot, 0, target_object(opponent)))
+        bad.apply_scenario_command(0, &activate_ability(patriot, 0, target_object(opponent)))
             .is_err(),
         "an opponent creature is outside the You filter"
     );
@@ -102,7 +103,7 @@ fn issue_misc6_brave_kin_duo_pumps_a_target_at_sorcery_speed() {
     let target = inject_creature_on_battlefield(&mut combat, 0, "grizzly_bears");
     assert!(
         combat
-            .apply_command(0, &activate_ability(duo, 0, target_object(target)))
+            .apply_scenario_command(0, &activate_ability(duo, 0, target_object(target)))
             .is_err(),
         "sorcery-speed activation is illegal in the declare-attackers step"
     );
@@ -129,7 +130,7 @@ fn issue_misc6_raccoon_rallier_grants_haste_at_sorcery_speed() {
     let opponent = inject_creature_on_battlefield(&mut bad, 1, "grizzly_bears");
     grant_pool(&mut bad, 0);
     assert!(
-        bad.apply_command(0, &activate_ability(rallier, 0, target_object(opponent)))
+        bad.apply_scenario_command(0, &activate_ability(rallier, 0, target_object(opponent)))
             .is_err(),
         "an opponent creature is outside the You filter"
     );
@@ -149,7 +150,7 @@ fn issue_misc6_raccoon_rallier_grants_haste_at_sorcery_speed() {
     let target = inject_creature_on_battlefield(&mut combat, 0, "grizzly_bears");
     assert!(
         combat
-            .apply_command(0, &activate_ability(rallier, 0, target_object(target)))
+            .apply_scenario_command(0, &activate_ability(rallier, 0, target_object(target)))
             .is_err(),
         "sorcery-speed activation is illegal in the declare-attackers step"
     );
@@ -178,7 +179,7 @@ fn issue_misc6_vampiric_rites_sacrifices_for_life_and_a_card() {
     grant_pool(&mut alone, 0);
     assert!(
         alone
-            .apply_command(0, &activate_ability(rites, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability(rites, 0, vec![]))
             .is_err(),
         "no creature is available to sacrifice"
     );
@@ -210,12 +211,12 @@ fn issue_misc6_deserters_disciple_makes_a_small_attacker_unblockable() {
     add_plus_one_counter(&mut bad, big);
     grant_pool(&mut bad, 0);
     assert!(
-        bad.apply_command(0, &activate_ability(disciple, 0, target_object(disciple)))
+        bad.apply_scenario_command(0, &activate_ability(disciple, 0, target_object(disciple)))
             .is_err(),
         "the source is not 'another' creature"
     );
     assert!(
-        bad.apply_command(0, &activate_ability(disciple, 0, target_object(big)))
+        bad.apply_scenario_command(0, &activate_ability(disciple, 0, target_object(big)))
             .is_err(),
         "power 3 is outside the power-2-or-less bound"
     );

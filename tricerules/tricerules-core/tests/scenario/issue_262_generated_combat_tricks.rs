@@ -5,6 +5,7 @@
 //! 613.1f, 613.4c, 701.21, 702.2, 702.12, 702.18, and 702.19 govern targeting and
 //! revalidation, printed resolution order, drawing, temporary P/T and keyword effects, untap,
 //! deathtouch, indestructible, reach, trample, and cleanup expiry.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -43,7 +44,7 @@ fn cast_generated(engine: &mut GameEngine, card_id: &str, target: u32) {
     inject_card_into_hand(engine, 0, card_id);
     let slot = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap_or_else(|error| panic!("cast {card_id}: {error:?}"));
 }
 
@@ -69,14 +70,14 @@ fn magic_damper_publishes_only_controlled_creatures_then_untaps_and_expires() {
         [own]
     );
     assert!(engine
-        .apply_command(0, &cast_spell(slot, target_object(opponent)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(opponent)))
         .is_err());
     assert!(engine
-        .apply_command(0, &cast_spell(slot, target_object(artifact)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(artifact)))
         .is_err());
 
     engine
-        .apply_command(0, &cast_spell(slot, target_object(own)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(own)))
         .expect("controlled creature is legal");
     resolve_entire_stack_two_player(&mut engine);
     assert!(!engine.state.objects[&own].tapped);
@@ -144,7 +145,7 @@ fn offer_immortality_grants_both_keywords_and_their_distinct_rules_behavior() {
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
 
     engine
-        .apply_command(0, &activate_ability(source, 0, target_object(victim)))
+        .apply_scenario_command(0, &activate_ability(source, 0, target_object(victim)))
         .expect("activate deathtouch pinger");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&victim].zone, Zone::Graveyard);

@@ -1,7 +1,8 @@
 //! Actual-card behavior for Waterlogged Grove, checked against its pinned Oracle and rulings.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 type ManaPool = (u32, u32, u32, u32, u32, u32);
 
@@ -51,7 +52,7 @@ fn waterlogged_grove_pays_one_life_and_immediately_adds_the_chosen_color() {
         let (mut engine, grove) = waterlogged_grove_engine(202_609_270 + option as u64);
 
         engine
-            .apply_command(0, &activate_mana_option(&engine, grove, option))
+            .apply_scenario_command(0, &activate_mana_option(&engine, grove, option))
             .expect("activate Waterlogged Grove's mana ability");
 
         assert_eq!(engine.state.players[0].life, 19);
@@ -71,7 +72,7 @@ fn waterlogged_grove_cannot_pay_its_mana_ability_life_cost_at_zero_life() {
     let before_pool = mana_pool(&engine);
 
     engine
-        .apply_command(0, &activate_mana_option(&engine, grove, 0))
+        .apply_scenario_command(0, &activate_mana_option(&engine, grove, 0))
         .expect_err("a player at zero life cannot pay one life");
 
     assert_eq!(engine.state.players[0].life, 0);
@@ -97,7 +98,7 @@ fn waterlogged_grove_draws_after_its_source_is_sacrificed_as_an_activation_cost(
         .unwrap_or_default();
 
     engine
-        .apply_command(0, &activate_ability_for(&engine, grove, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, grove, 1, vec![]))
         .expect_err("the draw ability requires one generic mana");
     assert_eq!(engine.state.objects[&grove].zone, Zone::Battlefield);
     assert!(!engine.state.objects[&grove].tapped);
@@ -113,7 +114,7 @@ fn waterlogged_grove_draws_after_its_source_is_sacrificed_as_an_activation_cost(
         },
     );
     engine
-        .apply_command(0, &activate_ability_for(&engine, grove, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, grove, 1, vec![]))
         .expect("pay {1}, tap, and sacrifice Waterlogged Grove");
 
     assert_eq!(engine.state.objects[&grove].zone, Zone::Graveyard);

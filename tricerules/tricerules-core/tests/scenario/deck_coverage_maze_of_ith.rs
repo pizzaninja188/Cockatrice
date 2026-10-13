@@ -1,5 +1,6 @@
 //! Actual Maze of Ith: targeted untap and prospective prevention in both directions.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::state::{
     DamagePreventionProhibition, DamagePreventionScope, ResolutionContinuation,
 };
@@ -8,7 +9,7 @@ use tricerules_core::{TurnStep, Zone};
 fn reject(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = engine.diagnostic_snapshot().unwrap();
     engine
-        .apply_command(actor, command)
+        .apply_scenario_command(actor, command)
         .expect_err("illegal input");
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
 }
@@ -31,14 +32,16 @@ fn blocked_maze(seed: u64) -> (GameEngine, u32, u32, u32, u32) {
     let attacker = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let unrelated = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let blocker = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
-    engine.apply_command(0, &primitive_yield()).unwrap();
-    pass_both_players(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker, unrelated]))
+        .apply_scenario_command(0, &primitive_yield())
         .unwrap();
     pass_both_players(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(0, &declare_attackers(vec![attacker, unrelated]))
+        .unwrap();
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -217,14 +220,14 @@ fn maze_outgoing_overlap_parks_the_entire_combat_batch_and_replays_choices() {
     replay.state.add_damage_prevention_shield(blocker, 1);
     let command = activate_ability_for(&first, maze, 0, target_object(attacker));
     assert_eq!(
-        first.apply_command(0, &command).unwrap(),
-        replay.apply_command(0, &command).unwrap()
+        first.apply_scenario_command(0, &command).unwrap(),
+        replay.apply_scenario_command(0, &command).unwrap()
     );
     for _ in 0..4 {
         let actor = first.state.priority_player_id();
         assert_eq!(
-            first.apply_command(actor, &pass()).unwrap(),
-            replay.apply_command(actor, &pass()).unwrap()
+            first.apply_scenario_command(actor, &pass()).unwrap(),
+            replay.apply_scenario_command(actor, &pass()).unwrap()
         );
     }
     let pending = first.state.pending_resolution.as_ref().unwrap();
@@ -249,8 +252,8 @@ fn maze_outgoing_overlap_parks_the_entire_combat_batch_and_replays_choices() {
     reject(&mut first, 0, &command);
     reject(&mut first, 1, &submit_resolution_choice(vec![u32::MAX]));
     assert_eq!(
-        first.apply_command(1, &command).unwrap(),
-        replay.apply_command(1, &command).unwrap()
+        first.apply_scenario_command(1, &command).unwrap(),
+        replay.apply_scenario_command(1, &command).unwrap()
     );
     assert_eq!(
         first.diagnostic_snapshot().unwrap(),
@@ -277,7 +280,7 @@ fn maze_parked_damage_terminal_completion_publishes_no_priority_or_remaining_cho
     let pending = engine.state.pending_resolution.as_ref().unwrap();
     let choice = pending.presentation.candidates[0];
     let result = engine
-        .apply_command(1, &submit_resolution_choice(vec![choice]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![choice]))
         .unwrap();
     assert!(engine.state.is_terminal());
     assert!(engine.state.pending_resolution.is_none());
@@ -307,7 +310,9 @@ fn third_player_maze_targets_an_opponents_attacker_against_another_defender() {
     let attacker = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     let blocker = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let maze = relocate_to_battlefield(&mut engine, 2, "maze_of_ith", false);
-    engine.apply_command(0, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(0, &primitive_yield())
+        .unwrap();
     pass_priority_round(&mut engine);
     let assignment = *engine.initial_response_batch().legal_by_player[&0]
         .legal_attack_assignments
@@ -317,7 +322,7 @@ fn third_player_maze_targets_an_opponents_attacker_against_another_defender() {
         })
         .unwrap();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -328,7 +333,7 @@ fn third_player_maze_targets_an_opponents_attacker_against_another_defender() {
         .unwrap();
     pass_priority_round(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -338,7 +343,7 @@ fn third_player_maze_targets_an_opponents_attacker_against_another_defender() {
         .unwrap();
     while engine.state.priority_player_id() != 2 {
         let actor = engine.state.priority_player_id();
-        engine.apply_command(actor, &pass()).unwrap();
+        engine.apply_scenario_command(actor, &pass()).unwrap();
     }
     apply_ability(&mut engine, 2, maze, 0, target_object(attacker)).unwrap();
     pass_priority_round(&mut engine); // resolve Maze
@@ -388,7 +393,9 @@ fn combat_damage_settles_player_departure_before_creature_deaths_and_targeted_tr
             engine.state.add_damage_prevention_shield(1, 1);
             engine.state.add_damage_prevention_shield(1, 1);
         }
-        engine.apply_command(0, &primitive_yield()).unwrap();
+        engine
+            .apply_scenario_command(0, &primitive_yield())
+            .unwrap();
         pass_priority_round(&mut engine);
         let offers = engine.initial_response_batch().legal_by_player[&0]
             .legal_attack_assignments
@@ -403,7 +410,7 @@ fn combat_damage_settles_player_departure_before_creature_deaths_and_targeted_tr
             })
             .collect();
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(Cmd::DeclareAttackers(DeclareAttackers { assignments })),
@@ -412,7 +419,7 @@ fn combat_damage_settles_player_departure_before_creature_deaths_and_targeted_tr
             .unwrap();
         pass_priority_round(&mut engine);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &declare_blockers(vec![BlockPair {
                     attacker_id: attacker,
@@ -445,7 +452,7 @@ fn combat_damage_settles_player_departure_before_creature_deaths_and_targeted_tr
             } else {
                 pass()
             };
-            final_batch = Some(engine.apply_command(actor, &command).unwrap());
+            final_batch = Some(engine.apply_scenario_command(actor, &command).unwrap());
         }
         if parked {
             assert_eq!(engine.state.players[1].life, 2);
@@ -455,7 +462,7 @@ fn combat_damage_settles_player_departure_before_creature_deaths_and_targeted_tr
             let chosen = pending.presentation.candidates[0];
             final_batch = Some(
                 engine
-                    .apply_command(1, &submit_resolution_choice(vec![chosen]))
+                    .apply_scenario_command(1, &submit_resolution_choice(vec![chosen]))
                     .unwrap(),
             );
         }
@@ -469,7 +476,7 @@ fn combat_damage_settles_player_departure_before_creature_deaths_and_targeted_tr
             "targeted death trigger blocks priority publication"
         );
         let chosen = engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {

@@ -1,5 +1,6 @@
 //! Actual Standstill: successful source sacrifice and frozen caster-relative draw.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{ContinuousEffectKind, ControllerReference, EffectDuration};
 use tricerules_core::state::ActiveDeathReplacement;
 use tricerules_core::Zone;
@@ -19,8 +20,8 @@ fn start() -> (GameEngine, u32) {
     .expect("complete Standstill registration");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_permanent_on_battlefield(&mut engine, 1, "standstill");
-    engine.apply_command(10, &pass()).unwrap();
-    engine.apply_command(20, &pass()).unwrap();
+    engine.apply_scenario_command(10, &pass()).unwrap();
+    engine.apply_scenario_command(20, &pass()).unwrap();
     give_mana(
         &mut engine,
         30,
@@ -37,7 +38,7 @@ fn pending() -> (GameEngine, u32) {
     let (mut engine, source) = start();
     let slot = hand_index_for_card(&engine, 2, "lightning_bolt");
     engine
-        .apply_command(30, &cast_spell(slot, target_player(10)))
+        .apply_scenario_command(30, &cast_spell(slot, target_player(10)))
         .unwrap();
     assert_eq!(engine.state.stack.len(), 2);
     let trigger = engine.state.stack.last().unwrap();
@@ -98,7 +99,7 @@ fn standstill_sacrifices_then_draws_three_for_casters_opponents_before_spell() {
 fn move_source(engine: &mut GameEngine, zone: rv1::DevZone) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             20,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(rv1::DevCommand {
@@ -207,7 +208,7 @@ fn standstill_uses_controller_for_payment_and_owner_for_destination() {
 #[test]
 fn standstill_first_successful_of_two_cast_triggers_draws_only_that_casters_opponents() {
     let (mut engine, source) = pending();
-    engine.apply_command(30, &pass()).unwrap();
+    engine.apply_scenario_command(30, &pass()).unwrap();
     inject_card_into_hand(&mut engine, 0, "lightning_bolt");
     give_mana(
         &mut engine,
@@ -219,7 +220,7 @@ fn standstill_first_successful_of_two_cast_triggers_draws_only_that_casters_oppo
     );
     let slot = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(10, &cast_spell(slot, target_player(30)))
+        .apply_scenario_command(10, &cast_spell(slot, target_player(30)))
         .unwrap();
     assert_eq!(engine.state.stack.len(), 4);
     assert_eq!(
@@ -307,7 +308,7 @@ fn standstill_caster_and_other_departure_preserve_cohort_but_controller_departur
 {
     for departed in [10, 20, 30] {
         let (mut engine, source) = pending();
-        engine.apply_command(departed, &concede()).unwrap();
+        engine.apply_scenario_command(departed, &concede()).unwrap();
         let hands: Vec<_> = engine.state.players.iter().map(|p| p.hand.len()).collect();
         if departed == 20 {
             assert!(engine.state.stack.iter().all(|item| !item.is_triggered));
@@ -363,14 +364,16 @@ fn standstill_own_cast_and_activated_ability_are_not_its_spell_cast_trigger() {
         },
     );
     let slot = hand_index_for_card(&engine, 0, "standstill");
-    engine.apply_command(10, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(10, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(engine.state.stack.len(), 1);
     assert!(!engine.state.stack[0].is_triggered);
     pass_priority_round(&mut engine);
     let source = battlefield_object_for_card(&engine, 0, "standstill");
     let artifact = inject_permanent_on_battlefield(&mut engine, 0, "codex_shredder");
     engine
-        .apply_command(10, &activate_ability(artifact, 0, target_player(20)))
+        .apply_scenario_command(10, &activate_ability(artifact, 0, target_player(20)))
         .unwrap();
     assert_eq!(engine.state.stack.len(), 1);
     assert!(!engine.state.stack[0].is_triggered);
@@ -388,20 +391,22 @@ fn standstill_logged_resolution_replays_identical_batches_and_state() {
         (30, cast_spell(slot, target_object(u32::MAX))),
     ] {
         let before = engine.diagnostic_snapshot().unwrap();
-        assert!(engine.apply_command(actor, &command).is_err());
+        assert!(engine.apply_scenario_command(actor, &command).is_err());
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     }
     let mut commands = vec![(30, cast_spell(slot, target_player(10)))];
-    let mut batches = vec![engine.apply_command(commands[0].0, &commands[0].1).unwrap()];
+    let mut batches = vec![engine
+        .apply_scenario_command(commands[0].0, &commands[0].1)
+        .unwrap()];
     while !engine.state.stack.is_empty() {
         let actor = engine.state.priority_player_id();
         let command = pass();
-        batches.push(engine.apply_command(actor, &command).unwrap());
+        batches.push(engine.apply_scenario_command(actor, &command).unwrap());
         commands.push((actor, command));
     }
     let repeated: Vec<_> = commands
         .iter()
-        .map(|(actor, cmd)| replay.apply_command(*actor, cmd).unwrap())
+        .map(|(actor, cmd)| replay.apply_scenario_command(*actor, cmd).unwrap())
         .collect();
     assert_eq!(repeated, batches);
     assert_eq!(
@@ -435,13 +440,13 @@ fn standstill_on_battlefield_during_twincast_copy_is_not_triggered_by_copy_creat
     inject_card_into_hand(&mut engine, 0, "lightning_bolt");
     let bolt_slot = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(10, &cast_spell(bolt_slot, target_player(20)))
+        .apply_scenario_command(10, &cast_spell(bolt_slot, target_player(20)))
         .unwrap();
     let bolt = engine.state.stack[0].id;
     inject_card_into_hand(&mut engine, 0, "twincast");
     let slot = hand_index_for_card(&engine, 0, "twincast");
     engine
-        .apply_command(10, &cast_spell(slot, target_object(bolt)))
+        .apply_scenario_command(10, &cast_spell(slot, target_object(bolt)))
         .unwrap();
     // The source exists during actual copy creation, but was absent for the two real casts.
     let source = inject_permanent_on_battlefield(&mut engine, 1, "standstill");
@@ -455,7 +460,7 @@ fn standstill_on_battlefield_during_twincast_copy_is_not_triggered_by_copy_creat
     pass_priority_round(&mut engine);
     assert!(engine.state.pending_resolution.is_some());
     engine
-        .apply_command(10, &submit_resolution_choice(vec![20]))
+        .apply_scenario_command(10, &submit_resolution_choice(vec![20]))
         .unwrap();
     assert!(engine.state.stack.last().unwrap().is_copy);
     assert_eq!(engine.state.stack.last().unwrap().cast_occurrence, None);

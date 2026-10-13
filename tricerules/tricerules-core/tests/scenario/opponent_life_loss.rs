@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 
 #[test]
 fn infectious_horror_attack_trigger_is_untargeted_life_loss_not_damage() {
@@ -16,7 +17,7 @@ fn infectious_horror_attack_trigger_is_untargeted_life_loss_not_damage() {
     engine.state.add_damage_prevention_shield(1, 2);
 
     engine
-        .apply_command(0, &declare_attackers(vec![horror]))
+        .apply_scenario_command(0, &declare_attackers(vec![horror]))
         .expect("declare Infectious Horror as an attacker");
 
     assert_eq!(

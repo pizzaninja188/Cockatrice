@@ -3,6 +3,7 @@
 //! 400.7, 509.1b, 514.1, 603, 604, 611.3, 613, 614.1d, and 701.18 govern land-play limits,
 //! new-object identity, blocking legality, cleanup, trigger staging, static effects, continuous
 //! effects, effect layers, entry replacements, and library searches.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -12,11 +13,11 @@ use tricerules_proto::ruled::v1::{self as rv1, ChoiceKind};
 fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     let first = engine.state.priority_player_id();
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first priority pass");
     let second = engine.state.priority_player_id();
     let mut batch = engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second priority pass resolves stack item");
     for (_, _, order_batch) in answer_simultaneous_entry_order_in_engine_order(engine) {
         batch.events.extend(order_batch.events);
@@ -43,7 +44,7 @@ fn three_player_main1(seed: u64) -> GameEngine {
     while engine.state.turn_step != TurnStep::Main1 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("advance three-player turn");
     }
     engine
@@ -59,7 +60,7 @@ fn resolve_three_player_stack(engine: &mut GameEngine) {
         for _ in 0..player_count {
             let player = engine.state.priority_player_id();
             engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("three-player priority pass");
             if engine.state.stack.is_empty() {
                 break;
@@ -71,6 +72,7 @@ fn resolve_three_player_stack(engine: &mut GameEngine) {
 fn play_graveyard_land(object_id: u32, generation: u64) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::PlayLand(rv1::PlayLand {
+            resolution_prompt_id: 0,
             source: Some(rv1::LandSource {
                 location: Some(rv1::land_source::Location::GraveyardObjectId(object_id)),
                 expected_zone_change_generation: Some(generation),
@@ -149,11 +151,11 @@ fn issue_267_self_restriction_is_published_and_rejects_a_block() {
     );
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main1 to beginning of combat");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     pass_both_players(&mut engine);
     let legal = &engine.initial_response_batch().legal_by_player[&1];
@@ -162,7 +164,7 @@ fn issue_267_self_restriction_is_published_and_rejects_a_block() {
         .iter()
         .any(|pair| pair.blocker_id == interloper));
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -195,7 +197,7 @@ fn issue_267_icetill_grants_two_land_plays_and_mills_after_landfall() {
     let library_before = engine.state.players[0].library.len();
     let first = hand_index_for_card(&engine, 0, "forest");
     engine
-        .apply_command(0, &play_land(first))
+        .apply_scenario_command(0, &play_land(first))
         .expect("first land play");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.lands_played_this_turn, 1);
@@ -203,14 +205,14 @@ fn issue_267_icetill_grants_two_land_plays_and_mills_after_landfall() {
 
     let second = hand_index_for_card(&engine, 0, "forest");
     engine
-        .apply_command(0, &play_land(second))
+        .apply_scenario_command(0, &play_land(second))
         .expect("second land play from Icetill Explorer");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.lands_played_this_turn, 2);
 
     let third = hand_index_for_card(&engine, 0, "forest");
     engine
-        .apply_command(0, &play_land(third))
+        .apply_scenario_command(0, &play_land(third))
         .expect_err("third land exceeds one extra play");
 }
 
@@ -244,12 +246,12 @@ fn issue_267_icetill_reuses_generation_bound_graveyard_land_permission() {
     }));
 
     engine
-        .apply_command(0, &play_graveyard_land(forest, generation))
+        .apply_scenario_command(0, &play_graveyard_land(forest, generation))
         .expect("play a Forest from the graveyard");
     assert_eq!(engine.state.objects[&forest].zone, Zone::Battlefield);
     assert_eq!(engine.state.lands_played_this_turn, 1);
     assert!(engine
-        .apply_command(0, &play_graveyard_land(forest, generation))
+        .apply_scenario_command(0, &play_graveyard_land(forest, generation))
         .is_err());
 }
 
@@ -275,7 +277,7 @@ fn issue_267_adventure_search_is_filtered_and_rat_tokens_keep_their_restriction(
     grant_pool(&mut engine, 0);
     let arkenstone = hand_index_for_card(&engine, 0, "the_arkenstone_seek_the_heart");
     engine
-        .apply_command(0, &cast_spell_face(arkenstone, Vec::new(), 1))
+        .apply_scenario_command(0, &cast_spell_face(arkenstone, Vec::new(), 1))
         .expect("cast Seek the Heart Adventure face");
     let search_batch = resolve_top_stack(&mut engine);
     let choice = find_resolution_choice(&search_batch).expect("legendary creature search");
@@ -284,7 +286,7 @@ fn issue_267_adventure_search_is_filtered_and_rat_tokens_keep_their_restriction(
     assert!(!choice.candidate_object_ids.contains(&ordinary));
     assert!(choice.public_reveal.is_none());
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![legendary]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![legendary]))
         .expect("choose the private search candidate");
     assert_eq!(engine.state.objects[&legendary].zone, Zone::Hand);
     assert!(completion.events.iter().any(|event| {
@@ -308,7 +310,7 @@ fn issue_267_adventure_search_is_filtered_and_rat_tokens_keep_their_restriction(
     grant_pool(&mut tokens, 0);
     let slot = hand_index_for_card(&tokens, 0, "ratcatcher_trainee_pest_problem");
     tokens
-        .apply_command(0, &cast_spell_face(slot, Vec::new(), 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, Vec::new(), 1))
         .expect("cast Pest Problem Adventure face");
     let token_batch = resolve_top_stack(&mut tokens);
     let rats = battlefield_token_oids(&tokens, 0, "rat_b_1_1_cant_block");

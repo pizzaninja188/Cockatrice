@@ -1,9 +1,15 @@
 add_executable(
   modal_cast_menu_test modal_cast_menu_test.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_pending_cast.cpp
+  ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_client_prompt_state.cpp
 )
 
-target_include_directories(modal_cast_menu_test PRIVATE ${CMAKE_SOURCE_DIR}/cockatrice/src)
+target_include_directories(
+  modal_cast_menu_test
+  PRIVATE ${CMAKE_SOURCE_DIR}/cockatrice/src
+  PRIVATE ${CMAKE_SOURCE_DIR}/libcockatrice_card
+  PRIVATE ${CMAKE_SOURCE_DIR}/libcockatrice_interfaces
+)
 
 target_link_libraries(
   modal_cast_menu_test

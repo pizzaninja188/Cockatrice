@@ -81,6 +81,9 @@ pub(super) fn move_one_counter_between_targets(
         .with_previous_result(cx.previous_effect_result.clone());
     let prompt = "Choose a counter to move.".to_string();
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: cx.controller,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
@@ -123,6 +126,7 @@ pub(super) fn move_one_counter_between_targets(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 deciding_player_id: cx.controller,
                 source_object_id: cx.top.id,
                 prompt_text: prompt.clone(),
@@ -482,6 +486,7 @@ pub(super) fn choose_permanents(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 variable_mana_contribution: false,
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: deciding_player,
@@ -513,6 +518,8 @@ pub(super) fn choose_permanents(
         })
         .collect();
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
         deciding_player,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
@@ -640,6 +647,7 @@ pub(super) fn may_behold(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 variable_mana_contribution: false,
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: deciding_player,
@@ -672,6 +680,8 @@ pub(super) fn may_behold(
         })
         .collect();
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
         deciding_player,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
@@ -1276,6 +1286,8 @@ fn park_resolution_branches_for(
         }
     };
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
         deciding_player,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
@@ -1474,6 +1486,7 @@ pub(in crate::engine) fn authored_resolution_branch_choice_event(
     Some(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 variable_mana_contribution: false,
                 deciding_player_id: pending.deciding_player,
                 source_object_id: pending.presentation.source_object_id,
@@ -1612,6 +1625,7 @@ pub(in crate::engine) fn targeted_player_permanent_choice_event(
             return Some(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        resolution_prompt_id: 0,
                         variable_mana_contribution: false,
                         candidate_player_ids: Vec::new(),
                         deciding_player_id: pending.deciding_player,
@@ -1632,6 +1646,7 @@ pub(in crate::engine) fn targeted_player_permanent_choice_event(
     Some(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 variable_mana_contribution: false,
                 candidate_player_ids,
                 deciding_player_id: pending.deciding_player,

@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{ContinuousEffectKind, CounterKind, Keyword};
 use tricerules_cards::{EffectDuration, PermanentTypeFilter, TypeLineAddition};
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
@@ -30,7 +31,9 @@ fn cast_copy(engine: &mut GameEngine, card: &str) -> u32 {
         },
     );
     let slot = hand_index_for_card(engine, 0, card);
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(engine);
     oid
 }
@@ -93,7 +96,7 @@ fn phyrexian_metamorph_artifact_exception_is_copiable() {
     engine.state.objects.get_mut(&source).unwrap().tapped = true;
     let metamorph = cast_copy(&mut engine, "phyrexian_metamorph");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .unwrap();
     let characteristics = engine.characteristics(metamorph).unwrap();
     assert!(
@@ -106,7 +109,7 @@ fn phyrexian_metamorph_artifact_exception_is_copiable() {
     assert!(!engine.state.objects[&metamorph].tapped);
     let clone = cast_copy(&mut engine, "clone");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![metamorph]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![metamorph]))
         .unwrap();
     assert!(engine.characteristics(clone).unwrap().has_type("Artifact"));
     assert_eq!(engine.effective_power(clone), Some(4));
@@ -128,9 +131,11 @@ fn phyrexian_metamorph_face_down_candidate_conceals_registry_identity() {
         },
     );
     let slot = hand_index_for_card(&engine, 0, "phyrexian_metamorph");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    let batch = engine.apply_command(1, &pass()).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let batch = engine.apply_scenario_command(1, &pass()).unwrap();
     let choice = batch
         .events
         .iter()
@@ -150,7 +155,7 @@ fn phyrexian_metamorph_face_down_candidate_conceals_registry_identity() {
         "public copy-source metadata must not expose a face-down card"
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .unwrap();
     let copied = engine.characteristics(metamorph).unwrap();
     assert!(copied.has_type("Artifact") && copied.has_type("Creature"));
@@ -161,7 +166,7 @@ fn phyrexian_metamorph_face_down_candidate_conceals_registry_identity() {
 
 fn illegal(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = format!("{:?}", engine.state);
-    assert!(engine.apply_command(actor, command).is_err());
+    assert!(engine.apply_scenario_command(actor, command).is_err());
     assert_eq!(format!("{:?}", engine.state), before);
 }
 
@@ -193,7 +198,7 @@ fn phyrexian_metamorph_blue_or_life_payment_and_unaffordable_rejection() {
         } else {
             cast_spell(slot, vec![])
         };
-        let batch = engine.apply_command(0, &command).unwrap();
+        let batch = engine.apply_scenario_command(0, &command).unwrap();
         assert_eq!(
             engine.state.players[0].life,
             if life_payment { 18 } else { 20 }
@@ -207,7 +212,7 @@ fn phyrexian_metamorph_blue_or_life_payment_and_unaffordable_rejection() {
         assert_eq!(engine.state.players[0].mana_pool.blue, 0);
         pass_both_players(&mut engine);
         engine
-            .apply_command(0, &submit_resolution_choice(vec![source]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
             .unwrap();
         assert!(engine.characteristics(metamorph).unwrap().is_artifact());
     }
@@ -265,7 +270,7 @@ fn phyrexian_metamorph_source_filter_is_optional_untargeted_artifact_or_creature
         &submit_resolution_choice(vec![creature, artifact]),
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![creature]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![creature]))
         .unwrap();
     assert!(engine.effective_has_keyword(metamorph, Keyword::Hexproof));
     assert!(engine.characteristics(metamorph).unwrap().is_artifact());
@@ -277,7 +282,7 @@ fn phyrexian_metamorph_noncreature_artifact_and_decline_preserve_exact_types() {
     let source = inject_creature_on_battlefield(&mut engine, 1, "sol_ring");
     let metamorph = cast_copy(&mut engine, "phyrexian_metamorph");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .unwrap();
     let copied = engine.characteristics(metamorph).unwrap();
     assert!(copied.is_artifact() && !copied.is_creature());
@@ -293,7 +298,7 @@ fn phyrexian_metamorph_noncreature_artifact_and_decline_preserve_exact_types() {
     assert!(!engine.state.objects[&metamorph].is_token());
     let colorless_before = engine.state.players[0].mana_pool.colorless;
     let ability = activate_ability_for(&engine, metamorph, 0, vec![]);
-    engine.apply_command(0, &ability).unwrap();
+    engine.apply_scenario_command(0, &ability).unwrap();
     assert_eq!(
         engine.state.players[0].mana_pool.colorless,
         colorless_before + 2
@@ -303,7 +308,7 @@ fn phyrexian_metamorph_noncreature_artifact_and_decline_preserve_exact_types() {
     assert!(engine.state.stack.is_empty());
     let declined = cast_copy(&mut engine, "phyrexian_metamorph");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .unwrap();
     assert_eq!(engine.state.objects[&declined].zone, Zone::Graveyard);
     assert!(engine.state.objects[&declined].copiable_values.is_none());
@@ -325,7 +330,7 @@ fn phyrexian_metamorph_copies_tokens_without_becoming_token_and_excludes_counter
         .set_counter(CounterKind::PlusOnePlusOne, 4);
     let metamorph = cast_copy(&mut engine, "phyrexian_metamorph");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![token]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![token]))
         .unwrap();
     assert!(!engine.state.objects[&metamorph].is_token());
     assert_eq!(engine.effective_power(metamorph), Some(1));
@@ -346,10 +351,10 @@ fn phyrexian_metamorph_copies_tokens_without_becoming_token_and_excludes_counter
     );
     let slot = hand_index_for_card(&engine, 0, "cackling_counterpart");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(metamorph)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(metamorph)))
         .unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    let batch = engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let batch = engine.apply_scenario_command(1, &pass()).unwrap();
     let events = token_created_events(&batch);
     assert_eq!(events.len(), 1);
     let copied_token = events[0].object_id;
@@ -371,14 +376,14 @@ fn phyrexian_metamorph_later_clone_replacement_replaces_the_artifact_exception()
     let bears = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let metamorph = cast_copy(&mut engine, "phyrexian_metamorph");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![clone]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![clone]))
         .unwrap();
     assert!(
         engine.state.pending_resolution.is_some(),
         "copied Clone entry replacement applies"
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![bears]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![bears]))
         .unwrap();
     let copied = engine.characteristics(metamorph).unwrap();
     assert!(
@@ -397,7 +402,7 @@ fn phyrexian_metamorph_copied_entry_replacements_and_draw_trigger_apply() {
         let metamorph = cast_copy(&mut engine, "phyrexian_metamorph");
         let hand_before = engine.state.players[0].hand.len();
         engine
-            .apply_command(0, &submit_resolution_choice(vec![source]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
             .unwrap();
         assert_eq!(
             engine.state.objects[&metamorph].tapped,
@@ -449,10 +454,10 @@ fn phyrexian_metamorph_copied_sunburst_uses_its_own_committed_colors() {
         } else {
             cast_spell(slot, vec![])
         };
-        engine.apply_command(0, &command).unwrap();
+        engine.apply_scenario_command(0, &command).unwrap();
         pass_both_players(&mut engine);
         engine
-            .apply_command(0, &submit_resolution_choice(vec![prism]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![prism]))
             .unwrap();
         assert_eq!(
             engine.state.objects[&metamorph].counter_count(CounterKind::Charge),
@@ -496,7 +501,7 @@ fn phyrexian_metamorph_structural_animated_room_preserves_exception_on_owned_doo
     assert!(engine.characteristics(room).unwrap().is_creature());
     let metamorph = cast_copy(&mut engine, "phyrexian_metamorph");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![room]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![room]))
         .unwrap();
     assert_eq!(
         engine.state.room_states[&metamorph].unlocked,
@@ -544,7 +549,7 @@ fn phyrexian_metamorph_structural_animated_room_preserves_exception_on_owned_doo
     pass_both_players(&mut engine);
     let steel = cast_copy(&mut engine, "sculpting_steel");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![metamorph]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![metamorph]))
         .unwrap();
     assert_eq!(engine.state.room_states[&steel].unlocked, [false, false]);
     assert!(engine.characteristics(steel).unwrap().is_artifact());
@@ -557,13 +562,13 @@ fn phyrexian_metamorph_bounce_clears_copy_and_recast_uses_a_new_source() {
     let ring = inject_creature_on_battlefield(&mut engine, 1, "sol_ring");
     let metamorph = cast_copy(&mut engine, "phyrexian_metamorph");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![bears]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![bears]))
         .unwrap();
     let generation = semantic::generation(&engine, metamorph);
     inject_card_into_hand(&mut engine, 0, "unsummon");
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(metamorph)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(metamorph)))
         .unwrap();
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&metamorph].zone, Zone::Hand);
@@ -579,10 +584,12 @@ fn phyrexian_metamorph_bounce_clears_copy_and_recast_uses_a_new_source() {
         },
     );
     let slot = hand_index_for_card(&engine, 0, "phyrexian_metamorph");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![ring]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![ring]))
         .unwrap();
     assert_eq!(
         engine.state.objects[&metamorph].card_id,
@@ -622,8 +629,8 @@ fn phyrexian_metamorph_serialized_accepted_commands_replay_identically() {
         (0, submit_resolution_choice(vec![source])),
     ] {
         let decoded = RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
-        let actual = engine.apply_command(actor, &command).unwrap();
-        let reproduced = replay.apply_command(actor, &decoded).unwrap();
+        let actual = engine.apply_scenario_command(actor, &command).unwrap();
+        let reproduced = replay.apply_scenario_command(actor, &decoded).unwrap();
         assert_eq!(actual.encode_to_vec(), reproduced.encode_to_vec());
         assert_eq!(
             engine.diagnostic_snapshot().unwrap(),
@@ -660,7 +667,9 @@ fn phyrexian_metamorph_four_nonconsecutive_seats_keep_copy_choice_with_its_contr
         .iter()
         .position(|oid| *oid == metamorph)
         .unwrap();
-    engine.apply_command(3, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(3, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_priority_round(&mut engine);
     assert_eq!(
         engine
@@ -675,7 +684,7 @@ fn phyrexian_metamorph_four_nonconsecutive_seats_keep_copy_choice_with_its_contr
         illegal(&mut engine, actor, &submit_resolution_choice(vec![source]));
     }
     engine
-        .apply_command(3, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(3, &submit_resolution_choice(vec![source]))
         .unwrap();
     assert_eq!(engine.state.objects[&metamorph].owner, 3);
     assert_eq!(engine.characteristics(metamorph).unwrap().controller, 3);

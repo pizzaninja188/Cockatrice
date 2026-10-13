@@ -14,11 +14,12 @@
 //! CR 603.1-3.  Target legality and fizzle use CR 115.1/608.2b, the mill and
 //! graveyard choice use CR 701.13/701.17 and 608.2h, and physical-object
 //! identity is checked with CR 400.7 zone-change generations.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use prost::Message;
 use tricerules_cards::{CounterKind, Keyword};
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     CanonicalGameplayCommand, ChoiceCandidateSourceZone, ChooseTriggerTarget, TargetRef,
 };
@@ -142,7 +143,7 @@ fn station_engine(seed: u64, card_id: &str) -> (GameEngine, u32, u32) {
     let source = move_ready_to_battlefield(&mut engine, 0, card_id);
     if let Some(target) = target {
         engine
-            .apply_command(0, &choose_trigger_target(target))
+            .apply_scenario_command(0, &choose_trigger_target(target))
             .expect("Extinguisher noncreature target");
     }
     // Fell's default padded library contains only lands, so its mandatory
@@ -171,9 +172,11 @@ fn fell_engine(seed: u64) -> GameEngine {
 }
 
 fn resolve_fell_to_choice(engine: &mut GameEngine) -> ResolutionChoiceRequired {
-    engine.apply_command(0, &pass()).expect("controller pass");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller pass");
     let batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve Fell trigger");
     find_resolution_choice(&batch).expect("Fell graveyard choice")
 }
@@ -235,7 +238,7 @@ fn issue_313_station_thresholds_are_exact_and_remain_usable_above_them() {
         );
 
         engine
-            .apply_command(0, &activate_station(&engine, source, creature))
+            .apply_scenario_command(0, &activate_station(&engine, source, creature))
             .expect("Station remains activatable at threshold");
         resolve_entire_stack_two_player(&mut engine);
         assert_eq!(
@@ -247,7 +250,7 @@ fn issue_313_station_thresholds_are_exact_and_remain_usable_above_them() {
         engine.state.turn_step = TurnStep::Upkeep;
         let before = engine.state.objects[&source].counter_count(CounterKind::Charge);
         assert!(engine
-            .apply_command(0, &activate_station(&engine, source, creature))
+            .apply_scenario_command(0, &activate_station(&engine, source, creature))
             .is_err());
         assert_eq!(
             engine.state.objects[&source].counter_count(CounterKind::Charge),
@@ -268,7 +271,7 @@ fn issue_313_station_revalidates_source_payment_generations_and_current_controll
         let source_generation = generation(&source_stale, source);
         move_battlefield_to_hand(&mut source_stale, 0, source);
         assert!(generation(&source_stale, source) > source_generation);
-        assert!(source_stale.apply_command(0, &command).is_err());
+        assert!(source_stale.apply_scenario_command(0, &command).is_err());
         assert!(!source_stale.state.objects[&creature].tapped);
 
         let (mut payment_stale, source, creature) = station_engine(seed + 10, card_id);
@@ -285,7 +288,7 @@ fn issue_313_station_revalidates_source_payment_generations_and_current_controll
             .zone_change_generation
             .entry(creature)
             .or_default() += 1;
-        assert!(payment_stale.apply_command(0, &command).is_err());
+        assert!(payment_stale.apply_scenario_command(0, &command).is_err());
         assert!(!payment_stale.state.objects[&creature].tapped);
         assert_eq!(
             payment_stale.state.objects[&source].counter_count(CounterKind::Charge),
@@ -313,7 +316,7 @@ fn issue_313_station_revalidates_source_payment_generations_and_current_controll
         controlled.state.active_player_idx = 1;
         controlled.state.priority_idx = 1;
         controlled
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &activate_station(&controlled, source, controller_creature),
             )
@@ -377,16 +380,18 @@ fn issue_313_extinguisher_destroys_only_the_legal_target_then_damages_all_creatu
     assert!(!legal_targets.contains(&opponent));
     assert!(
         fresh
-            .apply_command(1, &choose_trigger_target(artifact))
+            .apply_scenario_command(1, &choose_trigger_target(artifact))
             .is_err(),
         "only the trigger controller may publish Extinguisher's target"
     );
     assert!(
-        fresh.apply_command(0, &choose_trigger_target(own)).is_err(),
+        fresh
+            .apply_scenario_command(0, &choose_trigger_target(own))
+            .is_err(),
         "creatures are excluded from Extinguisher's target"
     );
     fresh
-        .apply_command(0, &choose_trigger_target(artifact))
+        .apply_scenario_command(0, &choose_trigger_target(artifact))
         .expect("noncreature target");
     resolve_entire_stack_two_player(&mut fresh);
     assert_eq!(fresh.state.objects[&artifact].zone, Zone::Graveyard);
@@ -419,7 +424,7 @@ fn issue_313_extinguisher_target_fizzle_suppresses_mass_damage_and_indestructibl
     stale.state.objects.get_mut(&creature).unwrap().toughness = Some(20);
     let source = move_ready_to_battlefield(&mut stale, 0, "extinguisher_battleship");
     stale
-        .apply_command(0, &choose_trigger_target(target))
+        .apply_scenario_command(0, &choose_trigger_target(target))
         .expect("choose target");
     let old_generation = generation(&stale, target);
     move_battlefield_to_hand(&mut stale, 1, target);
@@ -452,7 +457,7 @@ fn issue_313_extinguisher_target_fizzle_suppresses_mass_damage_and_indestructibl
         .toughness = Some(20);
     let _source = move_ready_to_battlefield(&mut indestructible, 0, "extinguisher_battleship");
     indestructible
-        .apply_command(0, &choose_trigger_target(citadel))
+        .apply_scenario_command(0, &choose_trigger_target(citadel))
         .expect("indestructible noncreature target");
     resolve_entire_stack_two_player(&mut indestructible);
     assert_eq!(
@@ -488,7 +493,7 @@ fn issue_313_extinguisher_source_changes_and_multiplayer_replay_remain_authorita
         }
         let source = move_ready_to_battlefield(&mut engine, 0, "extinguisher_battleship");
         let mut responses = vec![engine
-            .apply_command(0, &canonical_command(choose_trigger_target(target)))
+            .apply_scenario_command(0, &canonical_command(choose_trigger_target(target)))
             .expect("P0 chooses opponent's noncreature")
             .encode_to_vec()];
         // The source changes controller after target publication.  The trigger
@@ -515,7 +520,7 @@ fn issue_313_extinguisher_source_changes_and_multiplayer_replay_remain_authorita
                 let player = engine.state.priority_player_id();
                 responses.push(
                     engine
-                        .apply_command(player, &canonical_command(pass()))
+                        .apply_scenario_command(player, &canonical_command(pass()))
                         .expect("player-set pass")
                         .encode_to_vec(),
                 );
@@ -555,7 +560,7 @@ fn issue_313_extinguisher_source_changes_and_multiplayer_replay_remain_authorita
     leaves.state.objects.get_mut(&creature).unwrap().toughness = Some(20);
     let source = move_ready_to_battlefield(&mut leaves, 0, "extinguisher_battleship");
     leaves
-        .apply_command(0, &choose_trigger_target(target))
+        .apply_scenario_command(0, &choose_trigger_target(target))
         .expect("choose target before source leaves");
     move_battlefield_to_hand(&mut leaves, 0, source);
     resolve_entire_stack_two_player(&mut leaves);
@@ -603,14 +608,14 @@ fn issue_313_fell_mills_three_then_chooses_preexisting_or_new_current_graveyard_
     // consuming the pending resolution.
     assert!(
         engine
-            .apply_command(0, &submit_resolution_choice(vec![milled[0]]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![milled[0]]))
             .is_err(),
         "unrelated same-graveyard land is not selectable"
     );
     assert!(engine.state.pending_resolution.is_some());
     let old_generation = generation(&engine, preexisting);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![preexisting]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![preexisting]))
         .expect("choose pre-existing current graveyard creature");
     assert_eq!(engine.state.objects[&preexisting].zone, Zone::Hand);
     assert!(generation(&engine, preexisting) > old_generation);
@@ -624,7 +629,7 @@ fn issue_313_fell_mills_three_then_chooses_preexisting_or_new_current_graveyard_
     let choice = resolve_fell_to_choice(&mut newly_milled);
     assert_eq!(choice.candidate_object_ids, [milled_spacecraft]);
     newly_milled
-        .apply_command(0, &submit_resolution_choice(vec![milled_spacecraft]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![milled_spacecraft]))
         .expect("choose newly milled Spacecraft");
     assert_eq!(
         newly_milled.state.objects[&milled_spacecraft].zone,
@@ -646,13 +651,13 @@ fn issue_313_fell_keeps_trigger_controller_choice_after_source_leaves() {
     assert!(!choice.candidate_object_ids.contains(&opponent_graveyard));
     assert!(
         engine
-            .apply_command(1, &submit_resolution_choice(vec![selected]))
+            .apply_scenario_command(1, &submit_resolution_choice(vec![selected]))
             .is_err(),
         "only the trigger controller may answer Fell's choice"
     );
     assert!(engine.state.pending_resolution.is_some());
     engine
-        .apply_command(0, &submit_resolution_choice(vec![selected]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
         .expect("trigger controller answers after source leaves");
     assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
     assert_eq!(engine.state.objects[&selected].zone, Zone::Hand);
@@ -683,18 +688,18 @@ fn issue_313_fell_uses_trigger_controller_current_graveyard_and_player_set_repla
         let mut responses = Vec::new();
         responses.push(
             engine
-                .apply_command(0, &canonical_command(pass()))
+                .apply_scenario_command(0, &canonical_command(pass()))
                 .expect("P0 pass")
                 .encode_to_vec(),
         );
         responses.push(
             engine
-                .apply_command(1, &canonical_command(pass()))
+                .apply_scenario_command(1, &canonical_command(pass()))
                 .expect("P1 pass")
                 .encode_to_vec(),
         );
         let batch = engine
-            .apply_command(2, &canonical_command(pass()))
+            .apply_scenario_command(2, &canonical_command(pass()))
             .expect("P2 pass resolves Fell trigger")
             .encode_to_vec();
         let batch = tricerules_proto::ruled::v1::RuledEventBatch::decode(batch.as_slice())
@@ -704,13 +709,13 @@ fn issue_313_fell_uses_trigger_controller_current_graveyard_and_player_set_repla
         assert_eq!(choice.candidate_object_ids, [selected]);
         assert!(
             engine
-                .apply_command(1, &submit_resolution_choice(vec![selected]))
+                .apply_scenario_command(1, &submit_resolution_choice(vec![selected]))
                 .is_err(),
             "stolen source controller cannot answer trigger-controller choice"
         );
         responses.push(
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &canonical_command(submit_resolution_choice(vec![selected])),
                 )

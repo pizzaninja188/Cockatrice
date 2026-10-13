@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::{AttachmentRecipient, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{BlockPair, ChooseTriggerTarget, RuledCommand};
 
@@ -32,7 +33,7 @@ fn cast_and_resolve_aura_spell(engine: &mut GameEngine, creature: u32) -> u32 {
     );
     let slot = hand_index_for_card(engine, 0, "meltstriders_resolve");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(creature)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(creature)))
         .expect("cast Meltstrider's Resolve");
     resolve_entire_stack_two_player(engine);
     battlefield_object_for_card(engine, 0, "meltstriders_resolve")
@@ -40,7 +41,7 @@ fn cast_and_resolve_aura_spell(engine: &mut GameEngine, creature: u32) -> u32 {
 
 fn choose_fight_target(engine: &mut GameEngine, target: Option<u32>) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -62,19 +63,23 @@ fn cast_resolve_and_skip_fight(engine: &mut GameEngine, creature: u32) -> u32 {
 
 fn advance_to_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
-    engine.apply_command(0, &pass()).expect("attacker passes");
-    engine.apply_command(1, &pass()).expect("defender passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("attacker passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("defender passes");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 }
 
 fn pass_to_declare_blockers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("attacker passes after declaration");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes after declaration");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareBlockers);
 }
@@ -95,13 +100,13 @@ fn attached_maximum_blockers_is_public_and_engine_authoritative() {
 
     advance_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare enchanted attacker");
     pass_to_declare_blockers(&mut engine);
 
     let before_index = engine.state.command_index;
     let err = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![
                 BlockPair {
@@ -126,7 +131,7 @@ fn attached_maximum_blockers_is_public_and_engine_authoritative() {
         .is_empty());
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -145,7 +150,7 @@ fn enters_trigger_is_optional_and_only_targets_an_opponents_creature() {
 
     let before_index = engine.state.command_index;
     let err = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -218,7 +223,7 @@ fn maximum_one_blocker_combined_with_menace_means_unblockable() {
 
     advance_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare enchanted menace attacker");
     pass_to_declare_blockers(&mut engine);
 
@@ -240,11 +245,11 @@ fn maximum_one_blocker_combined_with_menace_means_unblockable() {
     ] {
         let before_index = engine.state.command_index;
         assert!(engine
-            .apply_command(1, &declare_blockers(blockers))
+            .apply_scenario_command(1, &declare_blockers(blockers))
             .is_err());
         assert_eq!(engine.state.command_index, before_index);
     }
     engine
-        .apply_command(1, &declare_blockers(Vec::new()))
+        .apply_scenario_command(1, &declare_blockers(Vec::new()))
         .expect("the menace attacker may remain unblocked");
 }

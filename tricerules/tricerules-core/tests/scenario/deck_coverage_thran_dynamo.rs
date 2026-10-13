@@ -3,6 +3,7 @@
 //! Oracle and rulings checked 2026-09-25. CR 605.1a defines its tap ability as a mana ability,
 //! CR 605.3b makes it resolve immediately without using the stack, and CR 106.1b defines the
 //! six mana types, including colorless.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::GameEngine;
@@ -27,7 +28,7 @@ fn thran_dynamo_casts_then_adds_three_colorless_mana_without_using_the_stack() {
 
     let dynamo_in_hand = hand_index_for_card(&engine, 0, "thran_dynamo");
     engine
-        .apply_command(0, &cast_spell(dynamo_in_hand, vec![]))
+        .apply_scenario_command(0, &cast_spell(dynamo_in_hand, vec![]))
         .expect("cast Thran Dynamo for {4}");
     resolve_entire_stack_two_player(&mut engine);
     let dynamo = battlefield_object_for_card(&engine, 0, "thran_dynamo");

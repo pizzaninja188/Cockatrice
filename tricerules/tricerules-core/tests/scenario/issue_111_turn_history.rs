@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
 
 fn ensure_copies_in_hand(engine: &mut GameEngine, player: usize, card_id: &str, count: usize) {
@@ -49,7 +50,7 @@ fn second_committed_cast_triggers_flurry_exactly_once_for_that_player() {
 
     let first = hand_index_for_card(&engine, 0, "life_goes_on");
     engine
-        .apply_command(0, &cast_spell(first, vec![]))
+        .apply_scenario_command(0, &cast_spell(first, vec![]))
         .expect("cast first spell");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -59,7 +60,7 @@ fn second_committed_cast_triggers_flurry_exactly_once_for_that_player() {
 
     let second = hand_index_for_card(&engine, 0, "life_goes_on");
     engine
-        .apply_command(0, &cast_spell(second, vec![]))
+        .apply_scenario_command(0, &cast_spell(second, vec![]))
         .expect("cast second spell");
     // The cast trigger is above Life Goes On, so the first pass cycle resolves flurry through
     // the counter instruction and parks at its trailing scry 1 choice.
@@ -77,12 +78,12 @@ fn second_committed_cast_triggers_flurry_exactly_once_for_that_player() {
     assert_eq!(engine.state.turn_history.current.player(1).spells_cast, 0);
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("keep the scried card on top");
     resolve_entire_stack_two_player(&mut engine);
     let third = hand_index_for_card(&engine, 0, "life_goes_on");
     engine
-        .apply_command(0, &cast_spell(third, vec![]))
+        .apply_scenario_command(0, &cast_spell(third, vec![]))
         .expect("cast third spell");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -124,7 +125,7 @@ fn successful_primitive_draws_are_ordinal_events_but_opening_cards_are_not() {
 
     let divination = hand_index_for_card(&engine, 0, "divination");
     engine
-        .apply_command(0, &cast_spell(divination, vec![]))
+        .apply_scenario_command(0, &cast_spell(divination, vec![]))
         .expect("cast Divination");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -168,7 +169,7 @@ fn erudite_wizard_only_needs_to_observe_the_second_draw() {
 
     let first = hand_index_for_card(&engine, 0, "elvish_visionary");
     engine
-        .apply_command(0, &cast_spell(first, vec![]))
+        .apply_scenario_command(0, &cast_spell(first, vec![]))
         .expect("cast first Visionary");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.turn_history.current.player(0).cards_drawn, 1);
@@ -176,7 +177,7 @@ fn erudite_wizard_only_needs_to_observe_the_second_draw() {
     let wizard = relocate_to_battlefield(&mut engine, 0, "erudite_wizard", false);
     let second = hand_index_for_card(&engine, 0, "elvish_visionary");
     engine
-        .apply_command(0, &cast_spell(second, vec![]))
+        .apply_scenario_command(0, &cast_spell(second, vec![]))
         .expect("cast second Visionary");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -240,7 +241,7 @@ fn failed_empty_library_draw_attempts_do_not_increment_draw_history() {
 
     let divination = hand_index_for_card(&engine, 0, "divination");
     engine
-        .apply_command(0, &cast_spell(divination, vec![]))
+        .apply_scenario_command(0, &cast_spell(divination, vec![]))
         .expect("cast Divination");
     pass_both_players(&mut engine);
 
@@ -262,7 +263,7 @@ fn only_a_committed_nonempty_declaration_sets_the_attack_fact() {
     advance_to_declare_attackers(&mut attacking);
     let attacker = battlefield_object_for_card(&attacking, 0, "grizzly_bears");
     attacking
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     assert!(attacking.state.turn_history.current.player(0).attacked);
     assert!(!attacking.state.turn_history.current.player(1).attacked);
@@ -278,7 +279,7 @@ fn only_a_committed_nonempty_declaration_sets_the_attack_fact() {
     .expect("new");
     advance_to_declare_attackers(&mut empty);
     empty
-        .apply_command(0, &declare_attackers(vec![]))
+        .apply_scenario_command(0, &declare_attackers(vec![]))
         .expect("declare no attackers");
     assert!(!empty.state.turn_history.current.player(0).attacked);
 }
@@ -313,19 +314,19 @@ fn focus_the_mind_reduction_reads_prior_casts_not_the_current_spell() {
 
     let focus = hand_index_for_card(&engine, 0, "focus_the_mind");
     engine
-        .apply_command(0, &cast_spell(focus, vec![]))
+        .apply_scenario_command(0, &cast_spell(focus, vec![]))
         .expect_err("Focus cannot discount itself as the first spell");
     assert_eq!(engine.state.turn_history.current.player(0).spells_cast, 0);
 
     let life = hand_index_for_card(&engine, 0, "life_goes_on");
     engine
-        .apply_command(0, &cast_spell(life, vec![]))
+        .apply_scenario_command(0, &cast_spell(life, vec![]))
         .expect("cast prior spell");
     resolve_entire_stack_two_player(&mut engine);
 
     let focus = hand_index_for_card(&engine, 0, "focus_the_mind");
     engine
-        .apply_command(0, &cast_spell(focus, vec![]))
+        .apply_scenario_command(0, &cast_spell(focus, vec![]))
         .expect("cast discounted Focus");
     assert_eq!(engine.state.turn_history.current.player(0).spells_cast, 2);
 }

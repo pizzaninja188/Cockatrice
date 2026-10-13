@@ -3,9 +3,10 @@
 //! Exact Oracle text and three WotC rulings checked against Scryfall on 2026-09-30.
 //! CR 700.14 governs the once-per-turn expend threshold; CR 115.1d/603.3d and 608.2b
 //! govern choosing and revalidating the optional graveyard target.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ChooseTriggerTarget, TargetRef, TargetRefKind,
 };
@@ -142,12 +143,12 @@ fn trailtracker_scout_returns_a_target_permanent_card_at_expend_eight() {
     assert!(!valid_targets.contains(&opponent_artifact));
 
     let illegal = choose_graveyard_target(own_instant);
-    assert!(engine.apply_command(0, &illegal).is_err());
+    assert!(engine.apply_scenario_command(0, &illegal).is_err());
     let illegal = choose_graveyard_target(opponent_artifact);
-    assert!(engine.apply_command(0, &illegal).is_err());
+    assert!(engine.apply_scenario_command(0, &illegal).is_err());
 
     engine
-        .apply_command(0, &choose_graveyard_target(land))
+        .apply_scenario_command(0, &choose_graveyard_target(land))
         .expect("choose a permanent card from the controller's graveyard");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -174,7 +175,7 @@ fn trailtracker_scout_can_decline_its_optional_target() {
     cast_to_eight_mana_spent(&mut engine);
 
     engine
-        .apply_command(0, &choose_no_trigger_target())
+        .apply_scenario_command(0, &choose_no_trigger_target())
         .expect("choose no target for the up-to-one group");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -202,7 +203,7 @@ fn trailtracker_scout_adds_the_chosen_color_without_using_the_stack() {
         activation.mana_option_index = option as u32;
 
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect("tap Trailtracker Scout and choose a color");
         assert_eq!(mana_pool(&engine), expected_pool, "mana option {option}");
         assert!(engine.state.objects[&scout].tapped);

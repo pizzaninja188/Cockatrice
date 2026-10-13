@@ -4,6 +4,7 @@
 //! CR 205.3i covers its Urza's and Cave land subtypes; CR 602.2 covers activation and costs;
 //! CR 605.1a classifies the colorless mana ability; CR 701.23 and 701.24 cover searching and
 //! shuffling.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -68,9 +69,11 @@ fn urzas_cave_pays_three_sacrifices_and_searches_for_any_land_tapped() {
         "the search ability uses the stack"
     );
 
-    engine.apply_command(0, &pass()).expect("controller passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
     let search_batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and the ability resolves");
     let choice = find_resolution_choice(&search_batch).expect("land search choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
@@ -86,13 +89,13 @@ fn urzas_cave_pays_three_sacrifices_and_searches_for_any_land_tapped() {
     );
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![sol_ring]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![sol_ring]))
         .expect_err("a forged nonland choice must be rejected");
     assert!(engine.state.pending_resolution.is_some());
     assert_eq!(engine.state.objects[&taiga].zone, Zone::Library);
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![taiga]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![taiga]))
         .expect("choose Taiga");
     assert_eq!(engine.state.objects[&taiga].zone, Zone::Battlefield);
     assert!(engine.state.objects[&taiga].tapped);

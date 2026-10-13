@@ -5,6 +5,7 @@
 //! target's predicate at resolution; CR 601.2i and 603.2 govern the cast trigger; CR 404.2 keeps
 //! graveyards public; CR 701 governs the destroy and exile keyword actions; CR 611.2a and 514.2
 //! govern the until-end-of-turn pump and its cleanup expiry; CR 702.7 governs first strike.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -89,7 +90,7 @@ fn three_player_engine(seed: u64) -> GameEngine {
     while engine.state.turn_step != TurnStep::Main1 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("advance three-player turn");
     }
     engine
@@ -103,7 +104,7 @@ fn resolve_three_player(engine: &mut GameEngine) {
             }
             let player = engine.state.priority_player_id();
             engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("three-player priority pass");
         }
     }
@@ -131,12 +132,12 @@ fn issue_316_rip_the_seams_destroys_tapped_creatures_and_fizzles_when_untapped()
 
     assert!(
         engine
-            .apply_command(0, &cast_spell_face(slot, target_object(untapped), 1))
+            .apply_scenario_command(0, &cast_spell_face(slot, target_object(untapped), 1))
             .is_err(),
         "an untapped creature is not a legal Rip the Seams target"
     );
     engine
-        .apply_command(0, &cast_spell_face(slot, target_object(tapped), 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, target_object(tapped), 1))
         .expect("cast Rip the Seams at a tapped creature");
     assert_eq!(
         engine.state.objects[&tapped].zone,
@@ -163,7 +164,7 @@ fn issue_316_rip_the_seams_destroys_tapped_creatures_and_fizzles_when_untapped()
     grant_pool(&mut fizzle, 0);
     let slot = hand_index_for_card(&fizzle, 0, "threadbind_clique_rip_the_seams");
     fizzle
-        .apply_command(0, &cast_spell_face(slot, target_object(target), 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, target_object(target), 1))
         .expect("cast at a tapped creature");
     fizzle
         .state
@@ -212,12 +213,12 @@ fn issue_316_entry_destroy_offers_only_artifacts_and_enchantments_and_may_declin
 
         assert!(
             engine
-                .apply_command(0, &choose_permanent_targets(&[creature]))
+                .apply_scenario_command(0, &choose_permanent_targets(&[creature]))
                 .is_err(),
             "{source_card} must reject a creature target"
         );
         engine
-            .apply_command(0, &choose_permanent_targets(&[enchantment]))
+            .apply_scenario_command(0, &choose_permanent_targets(&[enchantment]))
             .expect("destroy the enchantment");
         resolve_entire_stack_two_player(&mut engine);
         assert_eq!(engine.state.objects[&enchantment].zone, Zone::Graveyard);
@@ -234,7 +235,7 @@ fn issue_316_entry_destroy_offers_only_artifacts_and_enchantments_and_may_declin
     let enchantment = move_ready_to_battlefield(&mut decline, 1, "crusade");
     move_ready_to_battlefield(&mut decline, 0, "chomping_changeling");
     decline
-        .apply_command(0, &choose_permanent_targets(&[]))
+        .apply_scenario_command(0, &choose_permanent_targets(&[]))
         .expect("decline the optional target");
     resolve_entire_stack_two_player(&mut decline);
     assert_eq!(decline.state.objects[&artifact].zone, Zone::Battlefield);
@@ -266,12 +267,12 @@ fn issue_316_griffnaut_tracker_exiles_up_to_two_cards_from_a_single_graveyard() 
 
     assert!(
         engine
-            .apply_command(0, &choose_graveyard_targets(&[own_first, opposing]),)
+            .apply_scenario_command(0, &choose_graveyard_targets(&[own_first, opposing]),)
             .is_err(),
         "two cards from different graveyards are not a legal cohort"
     );
     engine
-        .apply_command(0, &choose_graveyard_targets(&[]))
+        .apply_scenario_command(0, &choose_graveyard_targets(&[]))
         .expect("decline the optional exile");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&own_first].zone, Zone::Graveyard);
@@ -284,7 +285,7 @@ fn issue_316_griffnaut_tracker_exiles_up_to_two_cards_from_a_single_graveyard() 
     let untouched = inject_graveyard_card(&mut exile_two, 0, "forest");
     move_ready_to_battlefield(&mut exile_two, 0, "griffnaut_tracker");
     exile_two
-        .apply_command(0, &choose_graveyard_targets(&[first, second]))
+        .apply_scenario_command(0, &choose_graveyard_targets(&[first, second]))
         .expect("exile two cards from one graveyard");
     resolve_entire_stack_two_player(&mut exile_two);
     assert_eq!(exile_two.state.objects[&first].zone, Zone::Exile);
@@ -295,7 +296,7 @@ fn issue_316_griffnaut_tracker_exiles_up_to_two_cards_from_a_single_graveyard() 
     let single = inject_graveyard_card(&mut exile_one, 0, "grizzly_bears");
     move_ready_to_battlefield(&mut exile_one, 0, "griffnaut_tracker");
     exile_one
-        .apply_command(0, &choose_graveyard_targets(&[single]))
+        .apply_scenario_command(0, &choose_graveyard_targets(&[single]))
         .expect("exile one card");
     resolve_entire_stack_two_player(&mut exile_one);
     assert_eq!(exile_one.state.objects[&single].zone, Zone::Exile);
@@ -314,7 +315,7 @@ fn issue_316_firebrand_archer_pings_each_opponent_once_per_owner_noncreature_cas
     ensure_in_hand(&mut engine, 0, "lightning_bolt");
     let bolt = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(bolt, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(bolt, target_player(1)))
         .expect("cast a noncreature spell");
     assert_eq!(
         engine.state.stack.len(),
@@ -330,7 +331,7 @@ fn issue_316_firebrand_archer_pings_each_opponent_once_per_owner_noncreature_cas
     ensure_in_hand(&mut engine, 0, "grizzly_bears");
     let bear = hand_index_for_card(&engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &cast_spell(bear, vec![]))
+        .apply_scenario_command(0, &cast_spell(bear, vec![]))
         .expect("cast a creature spell");
     assert_eq!(
         engine.state.stack.len(),
@@ -342,11 +343,11 @@ fn issue_316_firebrand_archer_pings_each_opponent_once_per_owner_noncreature_cas
     ensure_in_hand(&mut engine, 1, "lightning_bolt");
     grant_pool(&mut engine, 1);
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass priority to the opponent");
     let opposing_bolt = hand_index_for_card(&engine, 1, "lightning_bolt");
     engine
-        .apply_command(1, &cast_spell(opposing_bolt, target_player(0)))
+        .apply_scenario_command(1, &cast_spell(opposing_bolt, target_player(0)))
         .expect("opponent casts a noncreature spell");
     assert_eq!(
         engine.state.stack.len(),
@@ -362,7 +363,7 @@ fn issue_316_firebrand_archer_pings_each_opponent_once_per_owner_noncreature_cas
     ensure_in_hand(&mut multiplayer, 0, "lightning_bolt");
     let bolt = hand_index_for_card(&multiplayer, 0, "lightning_bolt");
     multiplayer
-        .apply_command(0, &cast_spell(bolt, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(bolt, target_player(1)))
         .expect("cast into a three-player game");
     resolve_three_player(&mut multiplayer);
     assert_eq!(multiplayer.state.players[0].life, 20);
@@ -409,7 +410,7 @@ fn issue_316_first_strike_pumps_add_power_only_and_expire_at_cleanup() {
         give_mana(&mut engine, 0, mana);
         let slot = hand_index_for_card(&engine, 0, card_id);
         engine
-            .apply_command(0, &cast_spell(slot, target_object(bear)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
             .unwrap_or_else(|error| panic!("cast {card_id}: {error}"));
         assert!(
             !engine.effective_has_keyword(bear, Keyword::FirstStrike),
@@ -442,12 +443,12 @@ fn issue_316_petty_revenge_destroys_power_three_but_not_power_four() {
 
     assert!(
         engine
-            .apply_command(0, &cast_spell_face(slot, target_object(four_power), 1))
+            .apply_scenario_command(0, &cast_spell_face(slot, target_object(four_power), 1))
             .is_err(),
         "a power-4 creature is not a legal Petty Revenge target"
     );
     engine
-        .apply_command(0, &cast_spell_face(slot, target_object(three_power), 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, target_object(three_power), 1))
         .expect("cast Petty Revenge at a power-3 creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&three_power].zone, Zone::Graveyard);
@@ -459,7 +460,7 @@ fn issue_316_petty_revenge_destroys_power_three_but_not_power_four() {
     grant_pool(&mut fizzle, 0);
     let slot = hand_index_for_card(&fizzle, 0, "disruptive_stormbrood_petty_revenge");
     fizzle
-        .apply_command(0, &cast_spell_face(slot, target_object(target), 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, target_object(target), 1))
         .expect("cast at a power-3 creature");
     fizzle
         .state

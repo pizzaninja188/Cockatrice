@@ -1,5 +1,6 @@
 //! Triplicate Titan: exact Golem token identities and death controller.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::Keyword;
 use tricerules_core::Zone;
 
@@ -33,7 +34,9 @@ fn cast_creature(engine: &mut GameEngine, card: &str, cost: u32) -> u32 {
         },
     );
     let slot = hand_index_for_card(engine, 0, card);
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_priority_round(engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
@@ -58,7 +61,7 @@ fn resolve_one(engine: &mut GameEngine) -> RuledEventBatch {
         - engine.state.passes_since_stack_change as usize;
     for _ in 0..count {
         let actor = engine.state.priority_player_id();
-        result = engine.apply_command(actor, &pass()).unwrap();
+        result = engine.apply_scenario_command(actor, &pass()).unwrap();
     }
     result
 }
@@ -91,7 +94,7 @@ fn titan_real_death_creates_three_distinct_exact_tokens_for_death_controller() {
     );
     let slot = hand_index_for_card(&engine, 0, "murder");
     engine
-        .apply_command(10, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(10, &cast_spell(slot, target_object(source)))
         .unwrap();
     resolve_one(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
@@ -114,7 +117,7 @@ fn titan_real_death_creates_three_distinct_exact_tokens_for_death_controller() {
     let order = pending.presentation.candidates.clone();
     batch.events.extend(
         engine
-            .apply_command(20, &submit_resolution_choice(order))
+            .apply_scenario_command(20, &submit_resolution_choice(order))
             .unwrap()
             .events,
     );
@@ -188,7 +191,7 @@ fn titan_bounce_exile_and_suppressed_death_do_not_create_tokens() {
         grant_pool(&mut engine, 0);
         let slot = hand_index_for_card(&engine, 0, spell);
         engine
-            .apply_command(0, &cast_spell(slot, target_object(source)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
             .unwrap();
         let batch = resolve_one(&mut engine);
         assert_eq!(engine.state.objects[&source].zone, destination);
@@ -229,7 +232,7 @@ fn titan_heterogeneous_tokens_enter_as_one_simultaneous_cohort() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "murder");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .unwrap();
     resolve_one(&mut engine);
     resolve_one(&mut engine);
@@ -251,7 +254,7 @@ fn titan_replacements_park_the_complete_cohort_and_order_once() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "murder");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .unwrap();
     resolve_one(&mut engine);
     let mut batch = resolve_one(&mut engine);
@@ -272,11 +275,11 @@ fn titan_replacements_park_the_complete_cohort_and_order_once() {
         let application = pending.presentation.candidates[0];
         let before = format!("{:?}", engine.state);
         assert!(engine
-            .apply_command(1, &submit_resolution_choice(vec![application]))
+            .apply_scenario_command(1, &submit_resolution_choice(vec![application]))
             .is_err());
         assert_eq!(format!("{:?}", engine.state), before);
         batch = engine
-            .apply_command(0, &submit_resolution_choice(vec![application]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![application]))
             .unwrap();
     }
     assert!(token_created_events(&batch).is_empty());
@@ -331,7 +334,7 @@ fn titan_replacements_park_the_complete_cohort_and_order_once() {
         .insert(order[0], original_generation + 1);
     let before = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(order.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(order.clone()))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before);
     assert!(!engine
@@ -351,17 +354,17 @@ fn titan_replacements_park_the_complete_cohort_and_order_once() {
     ] {
         let before = format!("{:?}", engine.state);
         assert!(engine
-            .apply_command(0, &submit_resolution_choice(invalid))
+            .apply_scenario_command(0, &submit_resolution_choice(invalid))
             .is_err());
         assert_eq!(format!("{:?}", engine.state), before);
     }
     let before = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(order.clone()))
+        .apply_scenario_command(1, &submit_resolution_choice(order.clone()))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before);
     let committed = engine
-        .apply_command(0, &submit_resolution_choice(order.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(order.clone()))
         .unwrap();
     let created = token_created_events(&committed);
     assert_eq!(
@@ -386,7 +389,7 @@ fn titan_replacements_park_the_complete_cohort_and_order_once() {
     assert!(engine.state.pending_resolution.is_none());
     let before = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(order))
+        .apply_scenario_command(0, &submit_resolution_choice(order))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before);
 }

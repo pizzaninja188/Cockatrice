@@ -9,6 +9,7 @@
 //! one batch omitted" but "does a receiver that follows the contract end up with the truth". The
 //! mirror below is exactly the consumer Servatrice is: apply present, keep absent — then compare
 //! against the engine's own zones after every single command.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_proto::ruled::v1::dev_command::Dev;
@@ -190,7 +191,9 @@ fn priority_pass_omits_both_players_concealed_zones() {
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
-    let b = e.apply_command(0, &pass()).expect("p0 passes in main1");
+    let b = e
+        .apply_scenario_command(0, &pass())
+        .expect("p0 passes in main1");
     let view = last_zone_view(&b);
     assert_omission_is_total(view);
     for player in [0, 1] {
@@ -229,7 +232,7 @@ fn playing_a_land_resends_only_that_player() {
     let idx = hand_index_for_card(&e, 0, "mountain");
 
     let b = e
-        .apply_command(0, &play_land(idx))
+        .apply_scenario_command(0, &play_land(idx))
         .expect("p0 plays a mountain");
 
     let view = last_zone_view(&b);
@@ -284,7 +287,7 @@ fn a_turn_roll_resends_only_the_player_who_drew() {
         p0_hand_before = hand_card_ids(&e, 0);
         p0_library_before = library_card_ids(&e, 0);
         let actor = e.state.priority_player_id();
-        let b = e.apply_command(actor, &pass()).expect("pass");
+        let b = e.apply_scenario_command(actor, &pass()).expect("pass");
         if e.state.active_player_id() == 1 {
             rolled = Some(b);
             break;
@@ -313,7 +316,7 @@ fn a_turn_roll_resends_only_the_player_who_drew() {
     let mut drew = None;
     for _ in 0..10 {
         let actor = e.state.priority_player_id();
-        let b = e.apply_command(actor, &pass()).expect("pass");
+        let b = e.apply_scenario_command(actor, &pass()).expect("pass");
         if e.state.players[1].hand.len() > p1_hand_before {
             drew = Some(b);
             break;
@@ -352,7 +355,8 @@ fn dev_conjure_into_hand_resends_that_player() {
     .expect("new");
     e.enable_dev_commands();
     advance_to_main1_from_game_start(&mut e);
-    e.apply_command(0, &pass()).expect("prime the cache");
+    e.apply_scenario_command(0, &pass())
+        .expect("prime the cache");
 
     let conjure = RuledCommand {
         cmd: Some(Cmd::DevCommand(DevCommand {
@@ -364,7 +368,9 @@ fn dev_conjure_into_hand_resends_that_player() {
             })),
         })),
     };
-    let b = e.apply_command(0, &conjure).expect("conjure into hand");
+    let b = e
+        .apply_scenario_command(0, &conjure)
+        .expect("conjure into hand");
 
     let view = last_zone_view(&b);
     assert_omission_is_total(view);
@@ -411,7 +417,9 @@ fn a_contract_following_receiver_never_drifts_from_the_engine() {
     // would let it drift for reasons that have nothing to do with the omission contract.
     for command in [pass(), pass(), pass(), pass()] {
         let actor = e.state.priority_player_id();
-        let b = e.apply_command(actor, &command).expect("pass to main1");
+        let b = e
+            .apply_scenario_command(actor, &command)
+            .expect("pass to main1");
         mirror.apply_batch(&b);
     }
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
@@ -419,7 +427,7 @@ fn a_contract_following_receiver_never_drifts_from_the_engine() {
 
     let idx = hand_index_for_card(&e, 0, "mountain");
     let b = e
-        .apply_command(0, &play_land(idx))
+        .apply_scenario_command(0, &play_land(idx))
         .expect("p0 plays a mountain");
     mirror.apply_batch(&b);
     mirror.assert_matches(&mut e, "after the land drop");
@@ -439,7 +447,7 @@ fn a_contract_following_receiver_never_drifts_from_the_engine() {
             .state
             .cleanup_discard_player
             .unwrap_or_else(|| e.state.priority_player_id());
-        let b = e.apply_command(actor, &command).expect("command");
+        let b = e.apply_scenario_command(actor, &command).expect("command");
         mirror.apply_batch(&b);
         mirror.assert_matches(&mut e, &format!("after command {step}"));
         drew |= e.state.turn > 1;

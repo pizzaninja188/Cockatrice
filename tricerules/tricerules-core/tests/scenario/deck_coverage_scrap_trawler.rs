@@ -1,6 +1,7 @@
 //! Actual-card coverage for Scrap Trawler's event-object mana-value comparison.
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use crate::helpers::ScenarioCommandExt;
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ChooseTriggerTarget, DevCommand, DevMoveCard, DevZone, RuledCommand,
     TargetRef, TargetRefKind,
@@ -58,7 +59,7 @@ fn cast_wrath_of_god(engine: &mut GameEngine) {
     inject_card_into_hand(engine, 0, "wrath_of_god");
     let slot = hand_index_for_card(engine, 0, "wrath_of_god");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Wrath of God");
     pass_both_players(engine);
 }
@@ -67,7 +68,7 @@ fn dev_move_card(engine: &mut GameEngine, target_player: i32, card_name: &str, z
     engine.enable_dev_commands();
     let actor = engine.state.priority_player_id();
     engine
-        .apply_command(
+        .apply_scenario_command(
             actor,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -197,7 +198,7 @@ fn scrap_trawler_observes_noncreature_artifacts_and_uses_the_event_value() {
     assert!(!candidates.contains(&opponent_artifact));
 
     engine
-        .apply_command(0, &choose_graveyard_target(three_target))
+        .apply_scenario_command(0, &choose_graveyard_target(three_target))
         .expect("choose the artifact below the event object's value");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&three_target].zone, Zone::Hand);
@@ -228,7 +229,7 @@ fn scrap_trawler_tracks_the_controller_of_an_opponent_owned_artifact_event() {
     assert_eq!(candidates, [controller_target]);
     assert!(!candidates.contains(&owner_target));
     engine
-        .apply_command(0, &choose_graveyard_target(controller_target))
+        .apply_scenario_command(0, &choose_graveyard_target(controller_target))
         .expect("the controller chooses a card from their own graveyard");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&controller_target].zone, Zone::Hand);
@@ -299,7 +300,7 @@ fn scrap_trawler_simultaneous_events_keep_three_independent_thresholds() {
                 })
                 .expect("the expected event has an ordering candidate");
             engine
-                .apply_command(
+                .apply_scenario_command(
                     order.deciding_player,
                     &submit_trigger_order(staged.object_id),
                 )
@@ -322,7 +323,7 @@ fn scrap_trawler_simultaneous_events_keep_three_independent_thresholds() {
             &format!("event threshold is {threshold}"),
         );
         engine
-            .apply_command(0, &choose_graveyard_target(selected_target))
+            .apply_scenario_command(0, &choose_graveyard_target(selected_target))
             .expect("choose a target legal for this event only");
     }
 
@@ -345,7 +346,7 @@ fn scrap_trawler_uses_copied_event_value_and_zero_x_graveyard_value_after_reentr
     grant_pool(&mut engine, 0);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(hand_index_for_card(&engine, 0, "cursed_mirror"), Vec::new()),
         )
@@ -358,7 +359,7 @@ fn scrap_trawler_uses_copied_event_value_and_zero_x_graveyard_value_after_reentr
         .unwrap()
         .deciding_player;
     engine
-        .apply_command(
+        .apply_scenario_command(
             deciding_player,
             &submit_resolution_choice(vec![battlesphere]),
         )
@@ -389,7 +390,7 @@ fn scrap_trawler_uses_copied_event_value_and_zero_x_graveyard_value_after_reentr
     );
     assert!(candidates.contains(&x_target), "X is zero in the graveyard");
     engine
-        .apply_command(0, &choose_graveyard_target(lower_than_copy))
+        .apply_scenario_command(0, &choose_graveyard_target(lower_than_copy))
         .expect("choose the card below the copied event value");
 
     dev_move_card(&mut engine, 0, "Cursed Mirror", DevZone::Battlefield);
@@ -400,7 +401,7 @@ fn scrap_trawler_uses_copied_event_value_and_zero_x_graveyard_value_after_reentr
         .unwrap()
         .deciding_player;
     engine
-        .apply_command(
+        .apply_scenario_command(
             deciding_player,
             &submit_resolution_choice(vec![ornithopter]),
         )
@@ -434,7 +435,7 @@ fn scrap_trawler_rechecks_the_exact_target_generation_at_resolution() {
     let key = (u64::from(trawler) << 32) | 1;
     assert!(graveyard_candidates(&mut engine, 0, key).contains(&target));
     engine
-        .apply_command(0, &choose_graveyard_target(target))
+        .apply_scenario_command(0, &choose_graveyard_target(target))
         .expect("choose the legal graveyard card");
 
     dev_move_card(&mut engine, 0, "Sculpting Steel", DevZone::Hand);

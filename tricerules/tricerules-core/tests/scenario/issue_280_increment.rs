@@ -2,6 +2,7 @@
 //! current power or toughness, then rechecks that intervening-if condition on resolution.
 //! CR 601.2i records a completed cast, CR 603.4/608.2a governs intervening-if checks, and
 //! CR 122.1/122.1a governs the +1/+1 counter result.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -42,7 +43,7 @@ fn increment_requires_more_than_either_current_stat() {
     );
     let divination = hand_index_for_card(&engine, 0, "divination");
     engine
-        .apply_command(0, &cast_spell(divination, vec![]))
+        .apply_scenario_command(0, &cast_spell(divination, vec![]))
         .expect("cast three-mana Divination");
     assert_eq!(
         engine.state.stack.len(),
@@ -67,7 +68,7 @@ fn increment_requires_more_than_either_current_stat() {
     );
     let outrage = hand_index_for_card(&engine, 0, "chandras_outrage");
     engine
-        .apply_command(0, &cast_spell(outrage, target_object(opposing)))
+        .apply_scenario_command(0, &cast_spell(outrage, target_object(opposing)))
         .expect("cast four-mana Chandra's Outrage");
     assert_eq!(
         engine.state.stack.len(),
@@ -98,7 +99,7 @@ fn increment_uses_actual_kicked_mana_spent() {
 
     let slot = hand_index_for_card(&engine, 0, "grow_from_the_ashes");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -152,7 +153,7 @@ fn increment_rechecks_current_stats_on_resolution() {
 
     let divination = hand_index_for_card(&engine, 0, "divination");
     engine
-        .apply_command(0, &cast_spell(divination, vec![]))
+        .apply_scenario_command(0, &cast_spell(divination, vec![]))
         .expect("cast three-mana Divination");
     assert_eq!(
         engine.state.stack.len(),
@@ -162,7 +163,7 @@ fn increment_rechecks_current_stats_on_resolution() {
 
     let growth = hand_index_for_card(&engine, 0, "giant_growth");
     engine
-        .apply_command(0, &cast_spell(growth, target_object(cuboid)))
+        .apply_scenario_command(0, &cast_spell(growth, target_object(cuboid)))
         .expect("respond with Giant Growth");
     pass_both_players(&mut engine);
     pass_both_players(&mut engine);

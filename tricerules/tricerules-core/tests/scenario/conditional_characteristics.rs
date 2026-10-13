@@ -1,4 +1,5 @@
 //! Issue #78: dynamic self-static conditions across characteristic and attack-legality layers.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{
@@ -71,7 +72,7 @@ fn issue_engine(seed: u64) -> GameEngine {
 
 fn put(engine: &mut GameEngine, player: i32, card_name: &str, card_id: &str) -> u32 {
     engine
-        .apply_command(player, &put_ready(player, card_name))
+        .apply_scenario_command(player, &put_ready(player, card_name))
         .unwrap_or_else(|error| panic!("put {card_name}: {error:?}"));
     battlefield_object_for_card(engine, player as usize, card_id)
 }
@@ -117,7 +118,7 @@ fn selectable_attackers(engine: &mut GameEngine, player: i32) -> Vec<u32> {
 
 fn enter_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main1 to beginning of combat");
     pass_both_players(engine);
     assert_eq!(
@@ -156,7 +157,7 @@ fn gearsmith_modifiers_track_current_qualifying_permanents() {
     assert_eq!(power(&engine, prodigy), 2, "Guardian is an artifact");
 
     engine
-        .apply_command(0, &move_to_hand(0, "Gearsmith Prodigy"))
+        .apply_scenario_command(0, &move_to_hand(0, "Gearsmith Prodigy"))
         .expect("remove blue creature");
     assert_eq!(power(&engine, guardian), 3);
 
@@ -164,7 +165,7 @@ fn gearsmith_modifiers_track_current_qualifying_permanents() {
     assert_eq!(power(&engine, guardian), 5);
 
     engine
-        .apply_command(0, &move_to_hand(0, "Air Elemental"))
+        .apply_scenario_command(0, &move_to_hand(0, "Air Elemental"))
         .expect("remove blue creature");
     assert_eq!(power(&engine, guardian), 3);
 
@@ -172,12 +173,12 @@ fn gearsmith_modifiers_track_current_qualifying_permanents() {
     assert_eq!(power(&engine, prodigy), 2, "Guardian is an artifact");
 
     engine
-        .apply_command(0, &move_to_hand(0, "Gearsmith Guardian"))
+        .apply_scenario_command(0, &move_to_hand(0, "Gearsmith Guardian"))
         .expect("remove artifact");
     assert_eq!(power(&engine, prodigy), 1);
 
     engine
-        .apply_command(0, &move_to_battlefield(0, "Gearsmith Guardian"))
+        .apply_scenario_command(0, &move_to_battlefield(0, "Gearsmith Guardian"))
         .expect("return artifact to battlefield");
     let returned_guardian = battlefield_object_for_card(&engine, 0, "gearsmith_guardian");
     assert_eq!(returned_guardian, guardian, "the physical object is reused");
@@ -229,10 +230,10 @@ fn drowsing_tyrannodon_uses_current_power_only_when_declaring_attackers() {
     assert!(selectable_attackers(&mut engine, 0).contains(&tyrannodon));
 
     engine
-        .apply_command(0, &declare_attackers(vec![tyrannodon]))
+        .apply_scenario_command(0, &declare_attackers(vec![tyrannodon]))
         .expect("power-four creature lets Tyrannodon attack");
     engine
-        .apply_command(0, &move_to_hand(0, "Air Elemental"))
+        .apply_scenario_command(0, &move_to_hand(0, "Air Elemental"))
         .expect("remove qualifier after declaration");
 
     assert_eq!(
@@ -264,7 +265,7 @@ fn drowsing_tyrannodon_bypasses_only_defender_when_the_condition_holds() {
     enter_declare_attackers(&mut without_power);
     assert!(!selectable_attackers(&mut without_power, 0).contains(&sleeping));
     assert!(without_power
-        .apply_command(0, &declare_attackers(vec![sleeping]))
+        .apply_scenario_command(0, &declare_attackers(vec![sleeping]))
         .is_err());
 
     let mut restricted = issue_engine(78_007);
@@ -299,7 +300,7 @@ fn drowsing_tyrannodon_bypasses_only_defender_when_the_condition_holds() {
     assert!(!selectable_attackers(&mut restricted, 0).contains(&restricted_tyrannodon));
     assert!(
         restricted
-            .apply_command(0, &declare_attackers(vec![restricted_tyrannodon]))
+            .apply_scenario_command(0, &declare_attackers(vec![restricted_tyrannodon]))
             .is_err(),
         "the conditional permission does not override unrelated attack restrictions"
     );
@@ -319,6 +320,6 @@ fn drowsing_tyrannodon_can_qualify_itself_but_still_has_defender() {
 
     enter_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![tyrannodon]))
+        .apply_scenario_command(0, &declare_attackers(vec![tyrannodon]))
         .expect("Tyrannodon's own derived power qualifies it");
 }

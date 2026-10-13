@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, CounterKind, EffectDuration};
 use tricerules_core::{AffectedScope, ContinuousEffect};
@@ -8,7 +9,7 @@ fn advance_to_end_step(engine: &mut GameEngine, player: i32) {
             return;
         }
         engine
-            .apply_command(player, &primitive_yield())
+            .apply_scenario_command(player, &primitive_yield())
             .expect("advance toward end step");
     }
     panic!("did not reach end step");
@@ -34,7 +35,7 @@ fn kav_lander_waits_for_its_controllers_next_turn_end_step() {
     grant_pool(&mut engine, 0);
     let kav = hand_index_for_card(&engine, 0, "kav_landseeker");
     engine
-        .apply_command(0, &cast_spell(kav, vec![]))
+        .apply_scenario_command(0, &cast_spell(kav, vec![]))
         .expect("cast Kav Landseeker");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -50,7 +51,7 @@ fn kav_lander_waits_for_its_controllers_next_turn_end_step() {
     assert!(engine.state.stack.is_empty(), "no early delayed trigger");
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("finish the creation turn");
     advance_to_main1_from_game_start(&mut engine);
     end_active_turn(&mut engine, 1);
@@ -112,7 +113,7 @@ fn waterskin_untaps_at_another_players_untap_boundary_unless_it_lost_the_ability
     let _ = engine.initial_response_batch();
 
     let batch = engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("roll into the opponent's untap step");
 
     assert!(!engine.state.objects[&waterskin].tapped);
@@ -151,7 +152,7 @@ fn kav_delayed_sacrifice_leaves_a_lander_no_longer_controlled_by_its_creator() {
     grant_pool(&mut engine, 0);
     let kav = hand_index_for_card(&engine, 0, "kav_landseeker");
     engine
-        .apply_command(0, &cast_spell(kav, vec![]))
+        .apply_scenario_command(0, &cast_spell(kav, vec![]))
         .expect("cast Kav Landseeker");
     resolve_entire_stack_two_player(&mut engine);
     let lander = battlefield_token_oids(&engine, 0, "lander")[0];
@@ -166,7 +167,7 @@ fn kav_delayed_sacrifice_leaves_a_lander_no_longer_controlled_by_its_creator() {
 
     advance_to_end_step(&mut engine, 0);
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("finish creation turn");
     advance_to_main1_from_game_start(&mut engine);
     end_active_turn(&mut engine, 1);

@@ -234,6 +234,7 @@ impl GameEngine {
                         Self::opening_set_next_actor_after_mulligan(self, idx, &mut events)?;
                         let mut b = RuledEventBatch {
                             payment_preview: None,
+                            resolution_prompt_state: None,
                             events,
                             legal_by_player: Default::default(),
                         };
@@ -302,6 +303,7 @@ impl GameEngine {
         events.push(self.ev_zone_view_sync_tracked());
         let mut b = RuledEventBatch {
             payment_preview: None,
+            resolution_prompt_state: None,
             events,
             legal_by_player: Default::default(),
         };

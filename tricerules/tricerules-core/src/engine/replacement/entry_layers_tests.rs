@@ -398,7 +398,7 @@ fn metamorph_internal_entry_copy_rejects_actual_entrant_leave_return() {
         engine.state.players[0].mana_pool.colorless = 3;
         let slot = engine.state.players[0].hand.len() - 1;
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
@@ -414,7 +414,7 @@ fn metamorph_internal_entry_copy_rejects_actual_entrant_leave_return() {
             .unwrap();
         for actor in [0, 1] {
             engine
-                .apply_command(
+                .apply_scenario_command(
                     actor,
                     &rv1::RuledCommand {
                         cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -457,7 +457,7 @@ fn metamorph_internal_entry_copy_rejects_actual_entrant_leave_return() {
             )),
         };
         assert!(
-            engine.apply_command(0, &answer).is_err(),
+            engine.apply_scenario_command(0, &answer).is_err(),
             "the old prompt cannot bind a new entrant incarnation"
         );
         assert_eq!(format!("{:?}", engine.state), before);
@@ -583,6 +583,7 @@ fn molten_echoes_and_matching_creature_entering_together_wait_for_choice_then_tr
         )
         .expect("the simultaneous entry batch is valid");
     assert!(resumed.is_none(), "the type choice parks the whole batch");
+    engine.publish_resolution_prompt_ids(&mut events).unwrap();
     assert_eq!(engine.state.objects[&bear].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&molten_echoes].zone, Zone::Graveyard);
     let choice = engine
@@ -598,7 +599,7 @@ fn molten_echoes_and_matching_creature_entering_together_wait_for_choice_then_tr
         .position(|creature_type| *creature_type == "Bear")
         .expect("Bear is a canonical creature type") as u32;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &rv1::RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -624,7 +625,7 @@ fn molten_echoes_and_matching_creature_entering_together_wait_for_choice_then_tr
         .clone();
     assert_eq!(timestamp_order.len(), 2);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &rv1::RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -668,7 +669,7 @@ fn molten_echoes_and_matching_creature_entering_together_wait_for_choice_then_tr
     for _ in 0..2 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(
+            .apply_scenario_command(
                 player,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -782,6 +783,7 @@ fn printed_aura_library_entry_parks_before_commit_and_preserves_original_tail() 
                 .is_none(),
             "attachment must be chosen before entry commits"
         );
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
         assert_eq!(engine.state.objects[&aura].zone, Zone::Library);
         assert_eq!(engine.state.players[0].library.front(), Some(&aura));
         assert_eq!(
@@ -820,10 +822,16 @@ fn printed_aura_library_entry_parks_before_commit_and_preserves_original_tail() 
             )),
         };
         let before = format!("{:?}", engine.state);
-        assert!(engine.apply_command(1, &answer(recipient)).is_err());
-        assert!(engine.apply_command(0, &answer(protected)).is_err());
+        assert!(engine
+            .apply_scenario_command(1, &answer(recipient))
+            .is_err());
+        assert!(engine
+            .apply_scenario_command(0, &answer(protected))
+            .is_err());
         assert_eq!(format!("{:?}", engine.state), before);
-        let batch = engine.apply_command(0, &answer(recipient)).unwrap();
+        let batch = engine
+            .apply_scenario_command(0, &answer(recipient))
+            .unwrap();
         assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
         assert_eq!(
             engine.state.objects[&aura].attached_to,
@@ -946,6 +954,7 @@ fn printed_aura_resumed_entry_keeps_deferred_tokens_out_of_library_views_and_rej
                 )
                 .unwrap()
                 .is_none());
+            engine.publish_resolution_prompt_ids(&mut events).unwrap();
             let answer = |chosen| rv1::RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
                     rv1::SubmitResolutionChoice {
@@ -978,7 +987,7 @@ fn printed_aura_resumed_entry_keeps_deferred_tokens_out_of_library_views_and_rej
                     rv1::ChoiceKind::ReplacementEffect
                 );
                 let chosen = pending.presentation.candidates[0];
-                engine.apply_command(0, &answer(chosen)).unwrap();
+                engine.apply_scenario_command(0, &answer(chosen)).unwrap();
             }
             let pending = engine.state.pending_resolution.as_ref().unwrap();
             assert_eq!(
@@ -1043,11 +1052,15 @@ fn printed_aura_resumed_entry_keeps_deferred_tokens_out_of_library_views_and_rej
                     .unwrap();
                 }
                 let before = format!("{:?}", engine.state);
-                assert!(engine.apply_command(0, &answer(recipient)).is_err());
+                assert!(engine
+                    .apply_scenario_command(0, &answer(recipient))
+                    .is_err());
                 assert_eq!(format!("{:?}", engine.state), before);
                 assert_eq!(engine.state.objects[&aura].zone, Zone::Library);
             } else {
-                engine.apply_command(0, &answer(recipient)).unwrap();
+                engine
+                    .apply_scenario_command(0, &answer(recipient))
+                    .unwrap();
                 assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
                 assert_eq!(
                     engine.state.objects[&aura].attached_to,
@@ -1073,7 +1086,7 @@ fn black_vise_internal_entry_without_eligible_opponents_completes_undefined() {
     engine.state.players[0].mana_pool.colorless = 1;
     let slot = engine.state.players[0].hand.len() - 1;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &rv1::RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
@@ -1126,10 +1139,11 @@ fn entry_reveal_pair_internal_hand_cohort_retains_paid_reveals_through_timestamp
                 .position(|oid| *oid == first)
                 .unwrap();
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &rv1::RuledCommand {
                         cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                            resolution_prompt_id: 0,
                             source: Some(rv1::LandSource {
                                 location: Some(rv1::land_source::Location::HandIndex(
                                     hand_index as u32,
@@ -1171,6 +1185,7 @@ fn entry_reveal_pair_internal_hand_cohort_retains_paid_reveals_through_timestamp
                 )
                 .unwrap()
                 .is_none());
+            engine.publish_resolution_prompt_ids(&mut events).unwrap();
             let choose = |ids| rv1::RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
                     rv1::SubmitResolutionChoice {
@@ -1179,7 +1194,9 @@ fn entry_reveal_pair_internal_hand_cohort_retains_paid_reveals_through_timestamp
                     },
                 )),
             };
-            let first_batch = engine.apply_command(0, &choose(vec![forest])).unwrap();
+            let first_batch = engine
+                .apply_scenario_command(0, &choose(vec![forest]))
+                .unwrap();
             assert_eq!(engine.state.objects[&first].zone, Zone::Hand);
             assert_eq!(
                 engine.state.objects[&forest].zone,
@@ -1226,7 +1243,9 @@ fn entry_reveal_pair_internal_hand_cohort_retains_paid_reveals_through_timestamp
                 )
                 .unwrap();
                 let before = format!("{:?}", engine.state);
-                assert!(engine.apply_command(0, &choose(vec![outside])).is_err());
+                assert!(engine
+                    .apply_scenario_command(0, &choose(vec![outside]))
+                    .is_err());
                 assert_eq!(format!("{:?}", engine.state), before);
                 let paid = super::super::reveals::active_reveals(&engine);
                 assert_eq!(paid.len(), 1);
@@ -1239,7 +1258,9 @@ fn entry_reveal_pair_internal_hand_cohort_retains_paid_reveals_through_timestamp
                 }
                 continue;
             }
-            let second_batch = engine.apply_command(0, &choose(vec![forest])).unwrap();
+            let second_batch = engine
+                .apply_scenario_command(0, &choose(vec![forest]))
+                .unwrap();
             let active = super::super::reveals::active_reveals(&engine);
             assert_eq!(
                 active.len(),
@@ -1268,7 +1289,7 @@ fn entry_reveal_pair_internal_hand_cohort_retains_paid_reveals_through_timestamp
                 ResolutionContinuation::SimultaneousEntryOrder { .. }
             ));
             let order = pending.presentation.candidates.clone();
-            engine.apply_command(0, &choose(order)).unwrap();
+            engine.apply_scenario_command(0, &choose(order)).unwrap();
             for oid in ids {
                 assert_eq!(engine.state.objects[&oid].zone, Zone::Battlefield);
                 assert!(!engine.state.objects[&oid].tapped);
@@ -1379,6 +1400,9 @@ fn entry_reveal_pair_internal_token_attachment_retains_ready_and_remaining_recei
     );
     engine.state.pending_observer_return_batch = None;
     engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: 0,
         presentation: PendingResolutionPresentation {
             source_object_id: first,
@@ -1419,10 +1443,11 @@ fn entry_reveal_pair_internal_actual_leave_return_rejects_candidate_and_entrant_
             .position(|oid| *oid == source)
             .unwrap();
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        resolution_prompt_id: 0,
                         source: Some(rv1::LandSource {
                             location: Some(rv1::land_source::Location::HandIndex(slot as u32)),
                             ..Default::default()
@@ -1458,7 +1483,7 @@ fn entry_reveal_pair_internal_actual_leave_return_rejects_candidate_and_entrant_
                 },
             )),
         };
-        assert!(engine.apply_command(0, &answer).is_err());
+        assert!(engine.apply_scenario_command(0, &answer).is_err());
         assert_eq!(format!("{:?}", engine.state), before);
         assert!(
             engine.state.pending_resolution.is_some()

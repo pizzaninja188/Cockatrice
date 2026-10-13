@@ -4,9 +4,10 @@
 //! Oracle and rulings checked 2026-09-11. CR 702.29a defines Cycling as a hand-only activated
 //! ability with mana and discard-self costs followed by a draw. CR 702.29e-f define typecycling
 //! as the corresponding revealed search-to-hand followed by a shuffle.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ruled_event::Ev, AbilitySourceZone, ActivateAbility, RuledCommand,
 };
@@ -61,7 +62,7 @@ fn generated_lightshield_parry_cycles_atomically_from_hand_and_draws() {
 
     let command = hand_ability(&engine, source);
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect_err("insufficient mana rejects the complete cost");
     assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
 
@@ -73,12 +74,14 @@ fn generated_lightshield_parry_cycles_atomically_from_hand_and_draws() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &command).expect("activate Cycling");
+    engine
+        .apply_scenario_command(0, &command)
+        .expect("activate Cycling");
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&drawn].zone, Zone::Hand);
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect_err("the discarded source generation cannot be replayed");
 }
 
@@ -112,11 +115,13 @@ fn generated_bedhead_beastie_searches_exact_mountains_reveals_and_shuffles() {
     );
 
     engine
-        .apply_command(0, &hand_ability(&engine, source))
+        .apply_scenario_command(0, &hand_ability(&engine, source))
         .expect("activate Mountaincycling");
-    engine.apply_command(0, &pass()).expect("controller passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
     let search = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("typecycling resolves to a private search");
     let choice = find_resolution_choice(&search).expect("private library search");
     assert_eq!(choice.deciding_player_id, 0);
@@ -124,7 +129,7 @@ fn generated_bedhead_beastie_searches_exact_mountains_reveals_and_shuffles() {
     assert!(!choice.candidate_object_ids.contains(&forest));
 
     let completed = engine
-        .apply_command(0, &submit_resolution_choice(vec![mountain]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![mountain]))
         .expect("choose Mountain");
     assert_eq!(engine.state.objects[&mountain].zone, Zone::Hand);
     assert!(completed.events.iter().any(|event| matches!(

@@ -1,5 +1,6 @@
 //! Actual Myr Battlesphere: four tokens and a resolution-time optional Myr cohort.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{
     ContinuousEffectKind, ControllerReference, EffectDuration, Keyword, PermanentTypeFilter,
     TypeLineReplacement,
@@ -35,7 +36,9 @@ fn cast_myr_players(players: &[i32]) -> (GameEngine, u32, Vec<u32>) {
         },
     );
     let slot = hand_index_for_card(&engine, 0, "myr_battlesphere");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.stack.len(), 1, "real ETB trigger");
     pass_priority_round(&mut engine);
@@ -72,7 +75,9 @@ fn declare_myr_attack(engine: &mut GameEngine, source: u32, kind: TargetRefKind,
         .get_mut(&source)
         .unwrap()
         .summoning_sick = false;
-    engine.apply_command(0, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(0, &primitive_yield())
+        .unwrap();
     pass_priority_round(engine);
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
     let assignment = engine.initial_response_batch().legal_by_player[&0]
@@ -87,7 +92,7 @@ fn declare_myr_attack(engine: &mut GameEngine, source: u32, kind: TargetRefKind,
         .cloned()
         .expect("engine-published actual Myr attack");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(rv1::DeclareAttackers {
@@ -113,7 +118,7 @@ fn grant(engine: &mut GameEngine, oid: u32, kind: ContinuousEffectKind) {
 fn move_source(engine: &mut GameEngine, zone: rv1::DevZone) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(rv1::DevCommand {
@@ -153,7 +158,7 @@ fn myr_battlesphere_partial_selection_taps_only_chosen_and_counts_once() {
     assert_eq!((pending.presentation.min, pending.presentation.max), (0, 4));
     assert_eq!(pending.presentation.candidates, tokens);
     engine
-        .apply_command(0, &submit_resolution_choice(tokens[..2].to_vec()))
+        .apply_scenario_command(0, &submit_resolution_choice(tokens[..2].to_vec()))
         .unwrap();
     assert!(engine.state.pending_resolution.is_none() && engine.state.stack.is_empty());
     assert_eq!(engine.characteristics(source).unwrap().power, Some(6));
@@ -168,7 +173,7 @@ fn myr_battlesphere_partial_selection_taps_only_chosen_and_counts_once() {
 fn myr_battlesphere_zero_selection_declines_tap_bonus_and_damage() {
     let (mut engine, source, tokens) = pending_attack();
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .unwrap();
     assert_eq!(engine.characteristics(source).unwrap().power, Some(4));
     assert_eq!(engine.state.players[1].life, 20);
@@ -182,7 +187,7 @@ fn myr_battlesphere_prevention_parks_after_one_tap_and_bonus() {
     engine.state.add_damage_prevention_shield(1, 1);
     engine.state.add_damage_prevention_shield(1, 1);
     engine
-        .apply_command(0, &submit_resolution_choice(tokens.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(tokens.clone()))
         .unwrap();
     let pending = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(pending.deciding_player, 1);
@@ -190,7 +195,7 @@ fn myr_battlesphere_prevention_parks_after_one_tap_and_bonus() {
     assert_eq!(engine.state.players[1].life, 20, "damage has not committed");
     let choice = pending.presentation.candidates[0];
     engine
-        .apply_command(1, &submit_resolution_choice(vec![choice]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![choice]))
         .unwrap();
     assert_eq!(
         engine.characteristics(source).unwrap().power,
@@ -243,7 +248,7 @@ fn myr_battlesphere_invalid_and_stale_cohorts_reject_without_mutation() {
         let index = engine.state.command_index;
         assert!(
             engine
-                .apply_command(
+                .apply_scenario_command(
                     if case == 0 { 1 } else { 0 },
                     &submit_resolution_choice(chosen)
                 )
@@ -311,7 +316,7 @@ fn myr_battlesphere_eligible_scope_includes_nontoken_sick_and_noncreature_myr() 
             && !candidates.contains(&other)
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![non_token, noncreature]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![non_token, noncreature]))
         .unwrap();
     assert!(engine.state.objects[&non_token].tapped && engine.state.objects[&noncreature].tapped);
     assert_eq!(engine.characteristics(source).unwrap().power, Some(6));
@@ -339,7 +344,7 @@ fn myr_battlesphere_no_untapped_myr_skips_choice_and_vigilant_source_is_eligible
             assert_eq!(pending.presentation.candidates, vec![source]);
             assert_eq!(pending.presentation.max, 1);
             engine
-                .apply_command(0, &submit_resolution_choice(vec![source]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
                 .unwrap();
             assert!(engine.state.objects[&source].tapped);
             assert_eq!(engine.characteristics(source).unwrap().power, Some(5));
@@ -364,7 +369,7 @@ fn myr_battlesphere_absent_or_returned_source_still_taps_and_damages_without_bon
         }
         pass_priority_round(&mut engine);
         engine
-            .apply_command(0, &submit_resolution_choice(tokens[..2].to_vec()))
+            .apply_scenario_command(0, &submit_resolution_choice(tokens[..2].to_vec()))
             .unwrap();
         assert_eq!(engine.state.players[1].life, 18);
         assert!(tokens[..2].iter().all(|id| engine.state.objects[id].tapped));
@@ -391,7 +396,7 @@ fn myr_battlesphere_noncreature_source_retains_bonus_for_same_incarnation_until_
     );
     pass_priority_round(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(tokens[..2].to_vec()))
+        .apply_scenario_command(0, &submit_resolution_choice(tokens[..2].to_vec()))
         .unwrap();
     assert!(!engine.characteristics(source).unwrap().is_creature());
     engine
@@ -433,7 +438,7 @@ fn myr_battlesphere_frozen_chooser_and_current_damage_source_controller_are_dist
         0
     );
     engine
-        .apply_command(0, &submit_resolution_choice(tokens[..2].to_vec()))
+        .apply_scenario_command(0, &submit_resolution_choice(tokens[..2].to_vec()))
         .unwrap();
     assert_eq!(engine.state.players[0].life, 20);
     assert_eq!(engine.state.players[1].life, 18);
@@ -449,7 +454,7 @@ fn myr_battlesphere_departed_damage_recipient_drains_parked_batch_without_repeat
     engine.state.add_damage_prevention_shield(1, 1);
     engine.state.add_damage_prevention_shield(1, 1);
     engine
-        .apply_command(0, &submit_resolution_choice(tokens.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(tokens.clone()))
         .unwrap();
     assert_eq!(
         engine
@@ -461,7 +466,7 @@ fn myr_battlesphere_departed_damage_recipient_drains_parked_batch_without_repeat
         1
     );
     assert_eq!(engine.characteristics(source).unwrap().power, Some(8));
-    engine.apply_command(1, &concede()).unwrap();
+    engine.apply_scenario_command(1, &concede()).unwrap();
     assert!(engine.state.pending_resolution.is_none() && engine.state.stack.is_empty());
     assert_eq!(engine.characteristics(source).unwrap().power, Some(8));
     assert!(tokens.iter().all(|oid| engine.state.objects[oid].tapped));
@@ -478,8 +483,8 @@ fn myr_battlesphere_accepted_choice_and_damage_resumption_replay_identically() {
     }
     let command = submit_resolution_choice(tokens);
     assert_eq!(
-        engine.apply_command(0, &command).unwrap(),
-        replay.apply_command(0, &command).unwrap()
+        engine.apply_scenario_command(0, &command).unwrap(),
+        replay.apply_scenario_command(0, &command).unwrap()
     );
     let chosen = engine
         .state
@@ -490,8 +495,8 @@ fn myr_battlesphere_accepted_choice_and_damage_resumption_replay_identically() {
         .candidates[0];
     let command = submit_resolution_choice(vec![chosen]);
     assert_eq!(
-        engine.apply_command(1, &command).unwrap(),
-        replay.apply_command(1, &command).unwrap()
+        engine.apply_scenario_command(1, &command).unwrap(),
+        replay.apply_scenario_command(1, &command).unwrap()
     );
     assert_eq!(
         engine.diagnostic_snapshot().unwrap(),
@@ -544,7 +549,7 @@ fn myr_battlesphere_original_planeswalker_generation_and_battle_recipient_are_pr
         }
         pass_priority_round(&mut engine);
         engine
-            .apply_command(0, &submit_resolution_choice(tokens[..2].to_vec()))
+            .apply_scenario_command(0, &submit_resolution_choice(tokens[..2].to_vec()))
             .unwrap();
         assert_eq!(engine.characteristics(source).unwrap().power, Some(6));
         assert_eq!(
@@ -568,11 +573,11 @@ fn myr_battlesphere_surviving_foreign_trigger_retains_damage_after_source_owner_
         ContinuousEffectKind::Layer6AddKeyword(Keyword::Lifelink),
     );
     declare_myr_attack(&mut engine, source, TargetRefKind::Player, 1);
-    engine.apply_command(2, &concede()).unwrap();
+    engine.apply_scenario_command(2, &concede()).unwrap();
     assert!(!engine.state.objects.contains_key(&source));
     pass_priority_round(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(tokens[..2].to_vec()))
+        .apply_scenario_command(0, &submit_resolution_choice(tokens[..2].to_vec()))
         .unwrap();
     assert_eq!(engine.state.players[0].life, 22);
     assert_eq!(engine.state.players[1].life, 18);
@@ -595,7 +600,7 @@ fn myr_battlesphere_parked_damage_retains_departed_source_and_current_prevention
     engine.state.add_damage_prevention_shield(1, 1);
     engine.state.add_damage_prevention_shield(1, 1);
     engine
-        .apply_command(0, &submit_resolution_choice(tokens.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(tokens.clone()))
         .unwrap();
     let choices = engine
         .state
@@ -605,7 +610,7 @@ fn myr_battlesphere_parked_damage_retains_departed_source_and_current_prevention
         .presentation
         .candidates
         .clone();
-    engine.apply_command(2, &concede()).unwrap();
+    engine.apply_scenario_command(2, &concede()).unwrap();
     assert_eq!(
         engine
             .state
@@ -618,7 +623,7 @@ fn myr_battlesphere_parked_damage_retains_departed_source_and_current_prevention
         "unchanged prevention choice preserves published opaque identity"
     );
     engine
-        .apply_command(1, &submit_resolution_choice(vec![choices[0]]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![choices[0]]))
         .unwrap();
     assert_eq!(engine.state.players[1].life, 18);
     assert_eq!(engine.state.players[0].life, 22);

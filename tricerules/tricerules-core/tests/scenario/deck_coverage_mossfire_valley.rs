@@ -3,6 +3,7 @@
 //! Oracle and rulings checked 2026-09-25. CR 605.1a classifies its untargeted mana-producing
 //! activated ability as a mana ability, and CR 605.3b makes it resolve immediately without using
 //! the stack.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::GameEngine;
@@ -23,7 +24,7 @@ fn mossfire_valley_pays_one_generic_and_produces_red_and_green_together() {
     inject_card_into_hand(&mut engine, 0, "mossfire_valley");
     let slot = hand_index_for_card(&engine, 0, "mossfire_valley");
     engine
-        .apply_command(0, &play_land(slot))
+        .apply_scenario_command(0, &play_land(slot))
         .expect("play Mossfire Valley as a land");
     let valley = battlefield_object_for_card(&engine, 0, "mossfire_valley");
     assert!(!engine.state.objects[&valley].tapped);

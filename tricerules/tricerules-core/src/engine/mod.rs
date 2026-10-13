@@ -1929,6 +1929,7 @@ impl GameEngine {
             pending_observer_return_batch: None,
             pending_trigger_order: None,
             pending_resolution: None,
+            next_resolution_prompt_id: BTreeMap::new(),
             pending_replacement_event: None,
             draw_step_progress: None,
             continuous_effects: Vec::new(),
@@ -2474,6 +2475,15 @@ impl GameEngine {
         ) {
             return Err(EngineError::Illegal("preview is not a game command"));
         }
+        match cmd.cmd.as_ref() {
+            Some(Cmd::SubmitResolutionChoice(answer)) => {
+                self.validate_resolution_prompt_id(player, answer.resolution_prompt_id)?;
+            }
+            Some(Cmd::PlayLand(command)) => {
+                self.validate_play_land_prompt_id(player, command)?;
+            }
+            _ => {}
+        }
         // The dev-command gate (see `engine::dev`). Rejecting here rather than inside
         // `dispatch_command` is deliberate: the command never reaches state, `command_index` below
         // is left untouched, and Servatrice — which appends to the replay log only on an ok
@@ -2518,6 +2528,13 @@ impl GameEngine {
                 }
                 return Err(error);
             }
+        }
+        if let Ok(batch) = result.as_mut() {
+            if let Err(error) = self.publish_resolution_prompt_ids(&mut batch.events) {
+                self.restore_numeric_checkpoint(numeric_checkpoint);
+                return Err(error);
+            }
+            self.refresh_resolution_prompt_state(batch);
         }
         // Replay determinism: `command_index` seeds shuffles (mulligan/search) and stamps
         // continuous-effect timestamps (CR 613.7). Only a command that is actually applied may
@@ -3290,5 +3307,58 @@ fn effective_face_from<'a>(
         Some(Cow::Owned(face.prototyped_face()?))
     } else {
         Some(Cow::Borrowed(face))
+    }
+}
+
+/// Fixture adapter for legacy in-crate tests that construct an answer after receiving the
+/// corresponding engine-owned offer. It copies only that active local offer's assigned ID into a
+/// missing field; explicit IDs are preserved. Tests of missing, stale, or foreign correlations
+/// must call `GameEngine::apply_command` directly. Production builds do not include this adapter.
+#[cfg(test)]
+pub(crate) trait ScenarioCommandExt {
+    fn apply_scenario_command(
+        &mut self,
+        player: PlayerId,
+        command: &RuledCommand,
+    ) -> Result<RuledEventBatch, EngineError>;
+}
+
+#[cfg(test)]
+impl ScenarioCommandExt for GameEngine {
+    fn apply_scenario_command(
+        &mut self,
+        player: PlayerId,
+        command: &RuledCommand,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let mut command = command.clone();
+        let active_id = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .filter(|pending| pending.deciding_player == player)
+            .map(|pending| pending.resolution_prompt_id.get())
+            .filter(|id| *id != 0);
+        if let Some(active_id) = active_id {
+            match command.cmd.as_mut() {
+                Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(answer))
+                    if answer.resolution_prompt_id == 0 =>
+                {
+                    answer.resolution_prompt_id = active_id;
+                }
+                Some(rv1::ruled_command::Cmd::PlayLand(answer))
+                    if answer.resolution_prompt_id == 0
+                        && self.state.blocking_choice() == Some(BlockingChoice::Resolution)
+                        && self
+                            .special_cast_permission(player)
+                            .is_some_and(|permission| {
+                                permission.scope == ExilePlayPermissionScope::PlayCard
+                            }) =>
+                {
+                    answer.resolution_prompt_id = active_id;
+                }
+                _ => {}
+            }
+        }
+        self.apply_command(player, &command)
     }
 }

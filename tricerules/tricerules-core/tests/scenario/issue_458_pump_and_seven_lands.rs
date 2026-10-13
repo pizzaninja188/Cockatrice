@@ -11,7 +11,7 @@
 //! effect with a live condition), and CR 109.2 (land is a card type).
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn main1(seed: u64) -> GameEngine {
     semantic::main_phase(seed)

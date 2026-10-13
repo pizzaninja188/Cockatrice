@@ -3,6 +3,7 @@
 //! Oracle and rulings checked 2026-09-11. CR 614.1d and 614.12 govern the entry
 //! replacement, while CR 605.1a and 605.3b make the targetless mana abilities resolve
 //! immediately without using the stack.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
@@ -26,13 +27,13 @@ fn generated_guildgate_enters_tapped_and_cannot_activate_immediately() {
 
     let hand_index = hand_index_for_card(&engine, 0, "rakdos_guildgate");
     engine
-        .apply_command(0, &play_land(hand_index))
+        .apply_scenario_command(0, &play_land(hand_index))
         .expect("play Rakdos Guildgate");
     let guildgate = battlefield_object_for_card(&engine, 0, "rakdos_guildgate");
     assert!(engine.state.objects[&guildgate].tapped);
 
     engine
-        .apply_command(0, &activate_ability_for(&engine, guildgate, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, guildgate, 0, vec![]))
         .expect_err("a tapped land cannot pay its tap cost");
     let pool = &engine.state.players[0].mana_pool;
     assert_eq!((pool.black, pool.red), (0, 0));
@@ -65,7 +66,7 @@ fn generated_two_and_three_color_lands_offer_each_printed_option_in_order() {
         ability.mana_option_index = option;
 
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect("activate selected mana option");
         let pool = &engine.state.players[0].mana_pool;
         assert_eq!(

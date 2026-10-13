@@ -1,7 +1,8 @@
 //! Actual-card coverage for Chimil's controller-scoped counter protection and Discover.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{CardRegistry, ContinuousEffectKind, ControllerReference, EffectDuration};
-use tricerules_core::{AffectedScope, ContinuousEffect, EngineDeck, GameEngine, TurnStep, Zone};
+use tricerules_core::{AffectedScope, ContinuousEffect, EngineDeck, TurnStep, Zone};
 use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::TargetRefKind;
 
@@ -261,12 +262,12 @@ fn discover_commander_observer_engine(
         );
         let slot = hand_index_for_card(&engine, 1, "banishing_light");
         engine
-            .apply_command(1, &cast_spell(slot, Vec::new()))
+            .apply_scenario_command(1, &cast_spell(slot, Vec::new()))
             .expect("P1 casts Banishing Light");
         pass_priority_round(&mut engine);
         assert_eq!(engine.state.pending_triggers.len(), 1);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &RuledCommand {
                     cmd: Some(Cmd::ChooseTriggerTarget(rv1::ChooseTriggerTarget {
@@ -318,7 +319,7 @@ fn discover_commander_observer_engine(
         "Discover retains the exact land prefix and commander hit"
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(rv1::ResolutionChoiceDecision::Decline),
         )
@@ -405,12 +406,12 @@ fn discover_departed_owner_observer_engine(
     );
     let banishing_light_slot = hand_index_for_card(&engine, 1, "banishing_light");
     engine
-        .apply_command(1, &cast_spell(banishing_light_slot, Vec::new()))
+        .apply_scenario_command(1, &cast_spell(banishing_light_slot, Vec::new()))
         .expect("P1 casts Banishing Light");
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(rv1::ChooseTriggerTarget {
@@ -455,7 +456,7 @@ fn discover_departed_owner_observer_engine(
     );
     if stop_on_commander_choice {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &submit_resolution_decision(rv1::ResolutionChoiceDecision::Decline),
             )
@@ -490,7 +491,7 @@ fn advance_to_active_main1(engine: &mut GameEngine, player_id: i32) {
         }
         if let Some(discarding_player) = engine.state.cleanup_discard_player {
             engine
-                .apply_command(discarding_player, &discard_cleanup(0))
+                .apply_scenario_command(discarding_player, &discard_cleanup(0))
                 .expect("discard to hand size while advancing the scenario turn");
             continue;
         }
@@ -535,7 +536,7 @@ fn resolve_discover_observer_returns(
         assert!(pending.presentation.candidates.contains(&chimil));
         observer_batches.push(
             engine
-                .apply_command(
+                .apply_scenario_command(
                     pending.deciding_player,
                     &submit_resolution_choice(vec![chimil]),
                 )
@@ -548,6 +549,7 @@ fn resolve_discover_observer_returns(
 fn submit_discover_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -604,15 +606,15 @@ fn prepared_arcane_denial(seed: u64) -> (GameEngine, u32, u32) {
         .expect("Opt in hand");
     let opt_slot = hand_index_for_card(&engine, 0, "opt");
     engine
-        .apply_command(0, &cast_spell(opt_slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(opt_slot, Vec::new()))
         .expect("cast Opt under Chimil");
     assert_eq!(engine.state.stack.last().unwrap().id, opt);
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("Opt's controller passes");
     let denial_slot = hand_index_for_card(&engine, 1, "arcane_denial");
     engine
-        .apply_command(1, &cast_spell(denial_slot, stack_target(opt)))
+        .apply_scenario_command(1, &cast_spell(denial_slot, stack_target(opt)))
         .expect("counterspell can still target Chimil-protected spell");
     (engine, chimil, opt)
 }
@@ -708,15 +710,15 @@ fn chimil_spell_is_counterable_before_it_reaches_the_battlefield() {
     );
     let chimil_slot = hand_index_for_card(&engine, 0, CHIMIL);
     engine
-        .apply_command(0, &cast_spell(chimil_slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(chimil_slot, Vec::new()))
         .expect("cast Chimil");
     let chimil = engine.state.stack.last().unwrap().id;
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("Chimil's caster passes");
     let counter_slot = hand_index_for_card(&engine, 1, "counterspell");
     engine
-        .apply_command(1, &cast_spell(counter_slot, stack_target(chimil)))
+        .apply_scenario_command(1, &cast_spell(counter_slot, stack_target(chimil)))
         .expect("Chimil on the stack is a legal counter target");
     pass_priority_round(&mut engine);
     assert!(engine.state.stack.is_empty());
@@ -750,7 +752,7 @@ fn chimil_protection_also_stops_its_controller_from_countering_their_spell() {
 
     let opt_slot = hand_index_for_card(&engine, 0, "opt");
     engine
-        .apply_command(0, &cast_spell(opt_slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(opt_slot, Vec::new()))
         .expect("cast Opt under Chimil");
     let opt = engine.state.stack.last().unwrap().id;
     let counterspell = engine.state.players[0]
@@ -761,7 +763,7 @@ fn chimil_protection_also_stops_its_controller_from_countering_their_spell() {
         .expect("Counterspell in hand");
     let counterspell_slot = hand_index_for_card(&engine, 0, "counterspell");
     engine
-        .apply_command(0, &cast_spell(counterspell_slot, stack_target(opt)))
+        .apply_scenario_command(0, &cast_spell(counterspell_slot, stack_target(opt)))
         .expect("cast Counterspell at the protected spell");
     pass_priority_round(&mut engine);
 
@@ -930,10 +932,11 @@ fn discover_caps_every_offered_and_accepted_face_by_stack_mana_value() {
         casting_permission_id: actions[0].casting_permission_id,
         ..Default::default()
     };
-    let rejected = engine.apply_command(
+    let rejected = engine.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                resolution_prompt_id: 0,
                 decision: ResolutionChoiceDecision::CastSpell as i32,
                 cast_spell: Some(illegal_back_face),
                 ..Default::default()
@@ -955,10 +958,11 @@ fn discover_caps_every_offered_and_accepted_face_by_stack_mana_value() {
         ..Default::default()
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: ResolutionChoiceDecision::CastSpell as i32,
                     cast_spell: Some(accepted_front_face),
                     ..Default::default()
@@ -1051,16 +1055,25 @@ fn discover_spell_cast_cancellation_restores_the_exact_offer_and_resumes_cleanup
     let (mut engine, _chimil, land, over_limit, found) = discover_offer(1_197_015);
     let cohort_before = discover_offer_cohort_snapshot(&engine);
     let found_generation = engine.state.zone_change_generation[&found];
+    let parent_prompt_id = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Discover choice")
+        .resolution_prompt_id
+        .get();
+    assert_ne!(parent_prompt_id, 0);
     let announcement = discover_cast_announcement(&mut engine, found, 1);
     let begin = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
             spell_cast_announcement: Some(announcement),
             ..Default::default()
         })),
     };
     engine
-        .apply_command(0, &begin)
+        .apply_scenario_command(0, &begin)
         .expect("begin the Discover cast transaction");
     let transaction_id = engine
         .state
@@ -1069,9 +1082,48 @@ fn discover_spell_cast_cancellation_restores_the_exact_offer_and_resumes_cleanup
         .expect("Discover cast is awaiting payment")
         .transaction_id;
     assert_eq!(engine.state.objects[&found].zone, Zone::Stack);
+    assert!(
+        engine
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .expect("Discover cast is awaiting payment")
+            .resolution_time_offer
+    );
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("parked parent remains suspended")
+            .resolution_prompt_id
+            .get(),
+        0,
+        "the accepted parent offer is retired while child payment is active"
+    );
+    let reconnect = engine.initial_response_batch();
+    assert!(
+        find_resolution_choice(&reconnect).is_none(),
+        "reconnect during child payment does not republish the suspended parent offer"
+    );
 
-    engine
-        .apply_command(
+    let mut stale_parent_answer =
+        submit_resolution_decision(rv1::ResolutionChoiceDecision::Decline);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = stale_parent_answer.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = parent_prompt_id;
+    let state_before_stale_answer = format!("{:?}", engine.state);
+    let command_index_before_stale_answer = engine.state.command_index;
+    assert!(engine.apply_command(0, &stale_parent_answer).is_err());
+    assert_eq!(format!("{:?}", engine.state), state_before_stale_answer);
+    assert_eq!(
+        engine.state.command_index,
+        command_index_before_stale_answer
+    );
+
+    let cancel_batch = engine
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CancelSpellCast(rv1::CancelSpellCast {
@@ -1080,6 +1132,20 @@ fn discover_spell_cast_cancellation_restores_the_exact_offer_and_resumes_cleanup
             },
         )
         .expect("cancel restores the Discover offer");
+
+    let restored_offer = find_resolution_choice(&cancel_batch)
+        .expect("cancel republishes the restored parent offer");
+    assert_ne!(restored_offer.resolution_prompt_id, parent_prompt_id);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("Discover parent restored")
+            .resolution_prompt_id
+            .get(),
+        restored_offer.resolution_prompt_id
+    );
 
     assert!(engine.state.pending_spell_cast.is_none());
     assert!(engine.state.pending_trigger_order.is_none());
@@ -1095,7 +1161,13 @@ fn discover_spell_cast_cancellation_restores_the_exact_offer_and_resumes_cleanup
     engine
         .apply_command(
             0,
-            &submit_resolution_decision(rv1::ResolutionChoiceDecision::Decline),
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: restored_offer.resolution_prompt_id,
+                    decision: rv1::ResolutionChoiceDecision::Decline as i32,
+                    ..Default::default()
+                })),
+            },
         )
         .expect("decline after cancellation and finish Discover");
     assert!(engine.state.pending_resolution.is_none());
@@ -1113,10 +1185,11 @@ fn discover_live_reserved_cast_survives_an_unrelated_concession_and_commits() {
     let found_generation = engine.state.zone_change_generation[&found];
     let announcement = discover_cast_announcement(&mut engine, found, 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
                     spell_cast_announcement: Some(announcement),
                     ..Default::default()
@@ -1144,7 +1217,7 @@ fn discover_live_reserved_cast_survives_an_unrelated_concession_and_commits() {
 
     let survivor_life = engine.state.players[1].life;
     engine
-        .apply_command(2, &concede())
+        .apply_scenario_command(2, &concede())
         .expect("an unrelated player concedes while Discover cast payment is open");
 
     assert!(engine.state.players[2].has_lost);
@@ -1166,7 +1239,7 @@ fn discover_live_reserved_cast_survives_an_unrelated_concession_and_commits() {
         transaction_id: transaction.transaction_id,
         ..Default::default()
     };
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &rv1::PreviewPayment {
             transaction_id: transaction.transaction_id,
@@ -1177,7 +1250,7 @@ fn discover_live_reserved_cast_survives_an_unrelated_concession_and_commits() {
     );
     assert!(preview.valid && preview.complete, "{preview:?}");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitSpellCast(rv1::CommitSpellCast {
@@ -1205,10 +1278,11 @@ fn discover_live_reserved_cast_cancellation_after_concession_restores_the_exact_
     let found_generation = engine.state.zone_change_generation[&found];
     let announcement = discover_cast_announcement(&mut engine, found, 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
                     spell_cast_announcement: Some(announcement),
                     ..Default::default()
@@ -1223,7 +1297,7 @@ fn discover_live_reserved_cast_cancellation_after_concession_restores_the_exact_
         .expect("Discover cast awaits payment")
         .transaction_id;
     engine
-        .apply_command(2, &concede())
+        .apply_scenario_command(2, &concede())
         .expect("an unrelated player concedes while Discover cast payment is open");
 
     assert_eq!(
@@ -1236,7 +1310,7 @@ fn discover_live_reserved_cast_cancellation_after_concession_restores_the_exact_
         "the transaction remains available to cancel"
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CancelSpellCast(rv1::CancelSpellCast {
@@ -1255,7 +1329,7 @@ fn discover_live_reserved_cast_cancellation_after_concession_restores_the_exact_
     assert_eq!(engine.state.objects[&prefix].zone, Zone::Exile);
     assert_eq!(discover_offer_cohort_snapshot(&engine), cohort_before);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(rv1::ResolutionChoiceDecision::Decline),
         )
@@ -1297,10 +1371,11 @@ fn discover_cast_observers_preserve_random_bottom_privacy_and_physical_cohort() 
     let observer_two = inject_permanent_on_battlefield(&mut engine, 0, "firebrand_archer");
     let announcement = discover_cast_announcement(&mut engine, found, 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
                     spell_cast_announcement: Some(announcement),
                     ..Default::default()
@@ -1318,7 +1393,7 @@ fn discover_cast_observers_preserve_random_bottom_privacy_and_physical_cohort() 
         transaction_id,
         ..Default::default()
     };
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &rv1::PreviewPayment {
             transaction_id,
@@ -1329,7 +1404,7 @@ fn discover_cast_observers_preserve_random_bottom_privacy_and_physical_cohort() 
     );
     assert!(preview.valid && preview.complete, "{preview:?}");
     let cast_batch = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitSpellCast(rv1::CommitSpellCast {
@@ -1477,9 +1552,17 @@ fn discover_commander_choice_is_reissued_after_observer_returns_and_reconnects()
     for (return_count, seed) in [(1, 1_197_015), (2, 1_197_016)] {
         let (mut engine, chimil, commander, forest, steels) =
             discover_commander_observer_engine(seed, return_count);
+        let suspended_parent_id = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("Discover commander choice before observer return")
+            .resolution_prompt_id
+            .get();
+        assert_ne!(suspended_parent_id, 0);
 
         engine
-            .apply_command(1, &concede())
+            .apply_scenario_command(1, &concede())
             .expect("P1 concession returns the exiled Sculpting Steels");
         assert!(engine.state.players[1].has_lost);
 
@@ -1504,6 +1587,7 @@ fn discover_commander_choice_is_reissued_after_observer_returns_and_reconnects()
             .rev()
             .find_map(discover_commander_branch_offer)
             .unwrap_or_else(|| panic!("Discover commander choice was not reissued after {return_count} observer returns"));
+        assert_ne!(restored.resolution_prompt_id, suspended_parent_id);
         assert_eq!(restored.deciding_player_id, 0);
         assert_eq!(restored.resolution_branches.len(), 2);
         assert_eq!(restored.resolution_branches[0].label, "Command zone");
@@ -1512,12 +1596,38 @@ fn discover_commander_choice_is_reissued_after_observer_returns_and_reconnects()
         let reconnect = engine.initial_response_batch();
         let replayed = discover_commander_branch_offer(&reconnect)
             .expect("reconnect snapshot republishes the parked Discover commander choice");
+        assert_eq!(
+            replayed.resolution_prompt_id, restored.resolution_prompt_id,
+            "reconnect republishes the same logical offer ID"
+        );
         assert_eq!(replayed.deciding_player_id, restored.deciding_player_id);
         assert_eq!(replayed.source_object_id, restored.source_object_id);
         assert_eq!(replayed.resolution_branches, restored.resolution_branches);
 
+        let stale_answer = RuledCommand {
+            cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                resolution_prompt_id: suspended_parent_id,
+                decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                selected_branch_index: 0,
+                ..Default::default()
+            })),
+        };
+        let state_before_stale_parent = format!("{:?}", engine.state);
+        assert!(engine.apply_command(0, &stale_answer).is_err());
+        assert_eq!(format!("{:?}", engine.state), state_before_stale_parent);
+
         engine
-            .apply_command(0, &submit_discover_branch(0))
+            .apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                        resolution_prompt_id: restored.resolution_prompt_id,
+                        decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                        selected_branch_index: 0,
+                        ..Default::default()
+                    })),
+                },
+            )
             .expect("choose the command-zone replacement after observer returns");
         while let Some((deciding_player, presentation)) = engine
             .state
@@ -1530,7 +1640,7 @@ fn discover_commander_choice_is_reissued_after_observer_returns_and_reconnects()
             }
             assert!(presentation.candidates.contains(&chimil));
             engine
-                .apply_command(deciding_player, &submit_resolution_choice(vec![chimil]))
+                .apply_scenario_command(deciding_player, &submit_resolution_choice(vec![chimil]))
                 .expect("keep the original Chimil after Sculpting Steel copies it");
         }
         assert_eq!(engine.state.objects[&commander].zone, Zone::Command);
@@ -1559,7 +1669,7 @@ fn discover_owner_departure_during_observer_returns_retires_both_choice_stages()
         let p3_life = engine.state.players[3].life;
 
         engine
-            .apply_command(1, &concede())
+            .apply_scenario_command(1, &concede())
             .expect("P1 departure returns P2's exiled Sculpting Steel");
         assert!(engine.state.players[1].has_lost);
         let copy_source = engine
@@ -1575,7 +1685,7 @@ fn discover_owner_departure_during_observer_returns_retires_both_choice_stages()
             .contains(&surviving_artifact));
 
         engine
-            .apply_command(0, &concede())
+            .apply_scenario_command(0, &concede())
             .expect("P0 leaves while P2's return choice is still open");
         assert!(engine.state.players[0].has_lost);
         for object_id in [source, commander, forest] {
@@ -1586,7 +1696,7 @@ fn discover_owner_departure_during_observer_returns_retires_both_choice_stages()
         }
 
         let completed = engine
-            .apply_command(2, &submit_resolution_choice(vec![surviving_artifact]))
+            .apply_scenario_command(2, &submit_resolution_choice(vec![surviving_artifact]))
             .expect("P2 completes the returning Steel's CopySource choice");
         assert_eq!(engine.state.objects[&steel].zone, Zone::Battlefield);
         assert_eq!(engine.state.objects[&steel].card_id, "sculpting_steel");
@@ -1640,7 +1750,7 @@ fn discover_owner_departure_during_active_choice_finishes_parent_tail() {
         ];
 
         let completed = engine
-            .apply_command(0, &concede())
+            .apply_scenario_command(0, &concede())
             .expect("the active Discover choice retires when its owner leaves");
         assert!(engine.state.players[0].has_lost);
         for object_id in [source, commander, forest] {
@@ -1689,7 +1799,7 @@ fn discover_declined_commander_hit_offers_its_owner_the_command_zone_replacement
         0
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(
                 tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,
@@ -1710,7 +1820,7 @@ fn discover_declined_commander_hit_offers_its_owner_the_command_zone_replacement
         .contains("command zone"));
     assert_eq!(engine.state.objects[&commander].zone, Zone::Exile);
     let replacement = engine
-        .apply_command(0, &submit_discover_branch(0))
+        .apply_scenario_command(0, &submit_discover_branch(0))
         .expect("choose the command zone replacement");
     assert_eq!(engine.state.objects[&commander].zone, Zone::Command);
     assert!(engine.state.players[0].command_zone.contains(&commander));
@@ -1749,7 +1859,7 @@ fn discover_bottoming_prefix_commander_can_enter_command_zone_and_remaining_card
     assert_eq!(engine.state.objects[&forest].zone, Zone::Exile);
     assert_eq!(engine.state.objects[&found].zone, Zone::Exile);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(
                 tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,
@@ -1765,7 +1875,7 @@ fn discover_bottoming_prefix_commander_can_enter_command_zone_and_remaining_card
     assert_eq!(pending.deciding_player, 0);
     assert_eq!(engine.state.objects[&commander].zone, Zone::Exile);
     let bottomed = engine
-        .apply_command(0, &submit_discover_branch(0))
+        .apply_scenario_command(0, &submit_discover_branch(0))
         .expect("choose command zone and finish Discover cleanup");
 
     assert_eq!(engine.state.objects[&commander].zone, Zone::Command);
@@ -1804,7 +1914,7 @@ fn discover_exiles_through_first_qualifying_nonland_and_decline_random_bottoms_t
     assert_eq!(engine.state.objects[&found].zone, Zone::Exile);
 
     let declined = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(
                 tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,
@@ -1867,13 +1977,14 @@ fn discover_casts_the_hit_for_free_then_random_bottoms_only_the_remaining_prefix
     };
     let choice = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::CastSpell as i32,
             cast_spell: Some(cast),
             ..Default::default()
         })),
     };
     let cast_batch = engine
-        .apply_command(0, &choice)
+        .apply_scenario_command(0, &choice)
         .expect("cast the Discover hit without paying its mana cost");
     assert_eq!(engine.state.objects[&found].zone, Zone::Stack);
     assert_eq!(engine.state.stack.last().unwrap().id, found);

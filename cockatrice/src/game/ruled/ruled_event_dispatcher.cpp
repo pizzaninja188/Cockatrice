@@ -20,6 +20,33 @@ using RuledCombatPhase = RuledClientState::RuledCombatPhase;
 using RuledOpeningUiKind = RuledClientState::RuledOpeningUiKind;
 using PickZone = RuledClientState::PickZone;
 
+std::string resolutionChoiceSemantics(const ruled::v1::ResolutionChoiceRequired &choice)
+{
+    ruled::v1::ResolutionChoiceRequired semantic = choice;
+    semantic.set_resolution_prompt_id(0);
+    semantic.clear_prompt_text();
+    semantic.clear_candidate_server_card_ids();
+    semantic.clear_public_reveal();
+    if (!semantic.unique_names()) {
+        semantic.clear_candidate_card_ids();
+        semantic.clear_candidate_names();
+    }
+    for (auto &branch : *semantic.mutable_resolution_branches()) {
+        branch.clear_label();
+        branch.clear_cost_text();
+        branch.clear_presentation();
+    }
+    for (auto &slot : *semantic.mutable_selection_slots()) {
+        slot.clear_label();
+        slot.clear_presentation();
+    }
+    for (auto &option : *semantic.mutable_replacement_options()) {
+        option.clear_source_card_name();
+        option.clear_effect_summary();
+    }
+    return semantic.SerializeAsString();
+}
+
 bool parseSelectionAlternatives(const ruled::v1::ResolutionChoiceRequired &rcr,
                                 RuledClientState::RuledPendingChoice &pick)
 {
@@ -557,13 +584,13 @@ bool RuledEventDispatcher::processPayload(const std::string &payload, bool suppr
     if (!batch.ParseFromString(payload)) {
         return false;
     }
-    if (batch.has_payment_preview()) {
-        if (batch.events_size() != 0 || !batch.legal_by_player().empty())
-            return false;
+    if (batch.has_payment_preview() && batch.events_size() == 0 && batch.legal_by_player().empty()) {
         if (state->payment.apply(batch.payment_preview()))
             emit state->paymentPreviewReceived();
         return true;
     }
+    if (batch.has_payment_preview() && state->payment.apply(batch.payment_preview()))
+        emit state->paymentPreviewReceived();
     state->reveals.setWindowsSuppressed(suppressRevealWindows);
     resetPerBatchLegalActions();
     processBatch(batch);
@@ -609,7 +636,6 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
 void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
 {
     BatchContext ctx;
-    bool authoritativeSnapshot = false;
     bool hasCombatPreview = false;
     bool onlyCourtesyEvents = true;
     for (const auto &event : batch.events()) {
@@ -620,6 +646,64 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
                               event.has_exile_object_map();
     }
     const bool preserveCombatCapabilities = batch.legal_by_player().empty() && hasCombatPreview && onlyCourtesyEvents;
+    ctx.resolutionPromptSnapshotValid = batch.has_resolution_prompt_state();
+    if (ctx.resolutionPromptSnapshotValid) {
+        const auto &prompt = batch.resolution_prompt_state();
+        ctx.resolutionPromptActive = prompt.active();
+        ctx.resolutionPromptDeciderPlayerId = prompt.deciding_player_id();
+        const bool localDecider = prompt.deciding_player_id() == host->localPlayerId();
+        if (prompt.active()) {
+            ctx.resolutionPromptSnapshotValid = prompt.deciding_player_id() >= 0 &&
+                                                (localDecider
+                                                     ? prompt.has_resolution_prompt_id() &&
+                                                           prompt.resolution_prompt_id() != 0
+                                                     : !prompt.has_resolution_prompt_id());
+            if (ctx.resolutionPromptSnapshotValid && localDecider)
+                ctx.resolutionPromptId = prompt.resolution_prompt_id();
+        } else {
+            ctx.resolutionPromptSnapshotValid = !prompt.has_resolution_prompt_id();
+        }
+    }
+
+    // Locally synthesized combat previews are courtesy updates, not authoritative snapshots.
+    // They have no resolution-prompt snapshot, so carry forward the last authoritative one while
+    // processing the preview instead of retiring an unrelated parked resolution choice.
+    if (preserveCombatCapabilities && !batch.has_resolution_prompt_state()) {
+        ctx.resolutionPromptSnapshotValid = state->resolutionPromptSnapshotValid;
+        ctx.resolutionPromptActive = state->resolutionPromptActive;
+        ctx.resolutionPromptDeciderPlayerId = state->resolutionPromptDeciderPlayerId;
+        if (state->resolutionPromptSnapshotValid && state->resolutionPromptActive &&
+            state->resolutionPromptDeciderPlayerId == host->localPlayerId()) {
+            ctx.resolutionPromptId = state->resolutionPromptId;
+        }
+    }
+
+    const quint64 previousPromptId = state->resolutionPromptId;
+    const bool hadResolutionPromptStaging = previousPromptId != 0 || !state->resolutionPromptSemantics.empty() ||
+                                            (state->pendingChoice.has_value() &&
+                                             state->pendingChoice->resolutionPromptId != 0);
+    const bool pendingChoiceMatches = state->pendingChoice.has_value() &&
+                                      state->pendingChoice->resolutionPromptId != 0 &&
+                                      state->pendingChoice->resolutionPromptId == ctx.resolutionPromptId;
+    const bool pendingChoiceCanRetainSamePrompt = !state->pendingChoice.has_value() || pendingChoiceMatches;
+    const bool retainSamePrompt = ctx.resolutionPromptSnapshotValid && ctx.resolutionPromptActive &&
+                                  ctx.resolutionPromptId != 0 && ctx.resolutionPromptId == previousPromptId &&
+                                  pendingChoiceCanRetainSamePrompt;
+    if (hadResolutionPromptStaging && !retainSamePrompt) {
+        state->clearResolutionPromptStaging();
+    }
+    if (!retainSamePrompt)
+        state->resolutionPromptSemantics.clear();
+    state->resolutionPromptSnapshotValid = ctx.resolutionPromptSnapshotValid;
+    state->resolutionPromptActive = ctx.resolutionPromptSnapshotValid && ctx.resolutionPromptActive;
+    state->resolutionPromptDeciderPlayerId = state->resolutionPromptActive ? ctx.resolutionPromptDeciderPlayerId : -1;
+    state->resolutionPromptId = state->resolutionPromptActive ? ctx.resolutionPromptId : 0;
+    state->choiceWaitingPlayerId = state->resolutionPromptActive &&
+                                           ctx.resolutionPromptDeciderPlayerId != host->localPlayerId()
+                                       ? ctx.resolutionPromptDeciderPlayerId
+                                       : -1;
+
+    bool authoritativeSnapshot = false;
 
     for (const auto &event : batch.events()) {
         if (event.has_active_public_reveal_snapshot())
@@ -743,6 +827,21 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
                 state->currentPriorityPlayerId = -1;
                 host->setPriorityPlayerId(-1);
             }
+        }
+    }
+    if (ctx.resolutionPromptSnapshotValid && ctx.resolutionPromptActive &&
+        ctx.resolutionPromptDeciderPlayerId == host->localPlayerId() && ctx.resolutionPromptId != 0) {
+        const bool stagedExactChoice = state->pendingChoice.has_value() &&
+                                       state->pendingChoice->resolutionPromptId == ctx.resolutionPromptId;
+        const bool currentEventValidated = ctx.matchingResolutionChoiceSeen &&
+                                           (stagedExactChoice || ctx.resolutionChoiceDialogRequested);
+        const bool retainedWithoutMatchingChoiceEvent =
+            retainSamePrompt && !ctx.matchingResolutionChoiceEventSeen &&
+            (!state->pendingChoice.has_value() || stagedExactChoice);
+        if (!currentEventValidated && !retainedWithoutMatchingChoiceEvent) {
+            state->clearResolutionPromptStaging();
+            state->resolutionPromptId = 0;
+            state->resolutionPromptSemantics.clear();
         }
     }
     if (state->hasPendingTriggerTarget() && state->pendingChoice.has_value() &&
@@ -1100,10 +1199,39 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     using PendingChoice = RuledClientState::RuledPendingChoice;
     using ChoiceKind = RuledClientState::ChoiceKind;
 
-    // Tier-3 custom resolution paused for a player choice (CR 608).
-    ctx.promptFeed += QString::fromStdString(rcr.prompt_text()) + QStringLiteral("\n");
+    // Tier-3 custom resolution paused for a player choice (CR 608). Public reveal information is
+    // processed below for every RCR, but only the exact final prompt in the batch snapshot may
+    // become actionable.
     const bool isDecider = static_cast<int>(rcr.deciding_player_id()) == host->localPlayerId();
     const bool isPublicReveal = rcr.has_public_reveal();
+    const bool matchesActivePrompt = ctx.resolutionPromptSnapshotValid && ctx.resolutionPromptActive &&
+                                     static_cast<int>(rcr.deciding_player_id()) ==
+                                         ctx.resolutionPromptDeciderPlayerId &&
+                                     isDecider && ctx.resolutionPromptId != 0 &&
+                                     rcr.resolution_prompt_id() == ctx.resolutionPromptId;
+    if (matchesActivePrompt) {
+        // Record identity before validating metadata. A malformed exact offer must fail closed
+        // rather than falling back to a previously staged copy of this same prompt.
+        ctx.matchingResolutionChoiceEventSeen = true;
+        ctx.matchingResolutionChoiceSeen = false;
+    }
+    bool promptSemanticsValid = true;
+    if (matchesActivePrompt) {
+        const std::string semantics = resolutionChoiceSemantics(rcr);
+        if (!state->resolutionPromptSemantics.empty() && state->resolutionPromptSemantics != semantics) {
+            qWarning() << "Rejecting changed semantics for an unchanged resolution prompt ID";
+            // The final snapshot remains an authoritative active local prompt. Only this
+            // same-ID offer is invalid, so preserve the blocker while retiring its usable ID.
+            state->resolutionPromptId = 0;
+            state->resolutionPromptSemantics.clear();
+            state->choiceWaitingPlayerId = -1;
+            state->clearResolutionPromptStaging();
+            ctx.resolutionPromptId = 0;
+            promptSemanticsValid = false;
+        } else {
+            state->resolutionPromptSemantics = semantics;
+        }
+    }
     QHash<quint32, QPair<int, quint64>> acceptedSelections;
     bool acceptedSelectionsValid = true;
     for (const auto &selection : rcr.accepted_permanent_selections()) {
@@ -1125,17 +1253,6 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         state->acceptedSacrificeSelectionByOid = std::move(acceptedSelections);
         emit state->acceptedSacrificeSelectionsChanged();
     }
-    // Retire the previous resolution UI before publishing its replacement. A repeated public
-    // reveal marks its pending pick as shared, so this does not close the existing popup.
-    state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPick);
-    if (!(isDecider && state->isResolutionPaymentActive() &&
-          state->pendingChoice->paymentSourceOid == rcr.source_object_id()))
-        state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
-    state->clearPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
-    state->clearPendingChoiceOfKind(ChoiceKind::SpecialCast);
-    state->clearPendingChoiceOfKind(ChoiceKind::ReplacementOption);
-    state->clearPendingChoiceOfKind(ChoiceKind::ReplacementEffect);
-    state->clearPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender);
     if (isPublicReveal) {
         const auto &reveal = rcr.public_reveal();
         const int count = rcr.candidate_names_size();
@@ -1170,10 +1287,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         }
         ctx.publicRevealSeen = true;
     }
-    if (!isDecider) {
-        state->choiceWaitingPlayerId = static_cast<int>(rcr.deciding_player_id());
+    if (!matchesActivePrompt || !promptSemanticsValid)
         return;
-    }
+    ctx.promptFeed += QString::fromStdString(rcr.prompt_text()) + QStringLiteral("\n");
 
     if (!ruledTokenChoiceMetadataValid(rcr) || rcr.min() > rcr.max() ||
         (rcr.selection_alternatives_size() > 0 &&
@@ -1207,6 +1323,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             choice.replacementOptions.append(option);
         }
         state->setPendingChoice(std::move(choice));
+        ctx.matchingResolutionChoiceSeen = true;
         ctx.replacementEffectSeen = true;
         ctx.combatStateDirty = true;
         return;
@@ -1234,6 +1351,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
                 pick.selectableServerCardIds.insert(id);
         }
         state->setPendingChoice(std::move(pick));
+        ctx.matchingResolutionChoiceSeen = true;
         emit state->resolutionHandPickUiChanged(static_cast<int>(rcr.min()), 0);
         emit state->combatStateChanged();
         return;
@@ -1280,6 +1398,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             return;
         }
         state->setPendingChoice(std::move(choice));
+        ctx.matchingResolutionChoiceSeen = true;
         emit state->combatStateChanged();
         return;
     }
@@ -1300,6 +1419,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         payment.paymentCurrentlyLegal = rcr.payment_currently_legal();
         payment.manaCost = QString::fromStdString(rcr.mana_cost());
         state->setPendingChoice(std::move(payment));
+        ctx.matchingResolutionChoiceSeen = true;
         emit state->resolutionPaymentUiChanged(true);
         emit state->combatStateChanged();
         return;
@@ -1322,6 +1442,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             choice.combatDefenderOptions.append(option);
         }
         state->setPendingChoice(std::move(choice));
+        ctx.matchingResolutionChoiceSeen = true;
         emit state->combatStateChanged();
         return;
     }
@@ -1360,6 +1481,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             choice.candidatePlayerIds.append(static_cast<quint32>(playerId));
         }
         state->setPendingChoice(std::move(choice));
+        ctx.matchingResolutionChoiceSeen = true;
         return;
     }
 
@@ -1419,6 +1541,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         }
         const bool isLegendKeep = choice.kind == ChoiceKind::LegendKeep;
         state->setPendingChoice(std::move(choice));
+        ctx.matchingResolutionChoiceSeen = true;
         if (isLegendKeep) {
             emit state->combatStateChanged();
         }
@@ -1464,6 +1587,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         }
         const int required = pick.min;
         state->setPendingChoice(std::move(pick));
+        ctx.matchingResolutionChoiceSeen = true;
         emit state->resolutionHandPickUiChanged(required, 0);
         emit state->combatStateChanged();
         return;
@@ -1483,6 +1607,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             choice.choiceOptions.append(
                 {static_cast<int>(rcr.candidate_object_ids(i)), QString::fromStdString(rcr.candidate_names(i)), true});
         state->setPendingChoice(std::move(choice));
+        ctx.matchingResolutionChoiceSeen = true;
         emit state->combatStateChanged();
         return;
     }
@@ -1538,6 +1663,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         choice.choiceOptions.append({1, actionLabel,
                                     rcr.candidate_selectable_size() == 1 && rcr.candidate_selectable(0)});
         state->setPendingChoice(std::move(choice));
+        ctx.matchingResolutionChoiceSeen = true;
         emit state->combatStateChanged();
         return;
     }
@@ -1677,6 +1803,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         const int required = pick.min;
         const QStringList pickNames = pick.candidateNames;
         state->setPendingChoice(std::move(pick));
+        ctx.matchingResolutionChoiceSeen = true;
         emit state->resolutionHandPickUiChanged(required, 0);
         emit state->librarySearchPickStarted(pickNames, libScids);
         emit state->combatStateChanged();
@@ -1729,6 +1856,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         const int required = pick.min;
         const int maximum = pick.max;
         state->setPendingChoice(std::move(pick));
+        ctx.matchingResolutionChoiceSeen = true;
         emit state->resolutionHandPickUiChanged(required, 0);
         if (!isPublicReveal) {
             emit state->revealedPickChanged(true, names, scids, required, maximum);
@@ -1746,8 +1874,11 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     for (int i = 0; i < rcr.candidate_names_size(); ++i) {
         names.append(QString::fromStdString(rcr.candidate_names(i)));
     }
-    host->requestResolutionChoiceDialog(QString::fromStdString(rcr.prompt_text()), oids, names,
-                                        static_cast<int>(rcr.min()), static_cast<int>(rcr.max()), rcr.ordered(),
+    ctx.matchingResolutionChoiceSeen = true;
+    ctx.resolutionChoiceDialogRequested = true;
+    host->requestResolutionChoiceDialog(QString::fromStdString(rcr.prompt_text()), rcr.resolution_prompt_id(),
+                                        oids, names, static_cast<int>(rcr.min()),
+                                        static_cast<int>(rcr.max()), rcr.ordered(),
                                         rcr.unique_names());
 }
 

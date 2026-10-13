@@ -5,6 +5,7 @@
 //! Every expectation is the reviewed printed Oracle behavior. Governance: CR 107.3 (X), 115
 //! (targets), 119/120 (life and damage), 121.1 (draw), 122.1 (counters), 701.18 (scry), 701.26
 //! (tap), and 400.7 (return to owner's hand).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -123,7 +124,7 @@ fn issue_misc2_blight_rot() {
     inject_card_into_hand(&mut bad, 0, "blight_rot");
     let slot = hand_index_for_card(&bad, 0, "blight_rot");
     assert!(
-        bad.apply_command(0, &cast_spell(slot, target_object(boots)))
+        bad.apply_scenario_command(0, &cast_spell(slot, target_object(boots)))
             .is_err(),
         "an artifact is not a creature"
     );
@@ -156,7 +157,7 @@ fn issue_misc2_bounce_off() {
     inject_card_into_hand(&mut land, 0, "bounce_off");
     let slot = hand_index_for_card(&land, 0, "bounce_off");
     assert!(
-        land.apply_command(0, &cast_spell(slot, target_object(forest)))
+        land.apply_scenario_command(0, &cast_spell(slot, target_object(forest)))
             .is_err(),
         "a land is neither a creature nor a Vehicle"
     );
@@ -170,8 +171,10 @@ fn issue_misc2_plunge_into_winter() {
     let hand_before = e.state.players[0].hand.len();
     let slot = hand_index_for_card(&e, 0, "plunge_into_winter");
     semantic::accepted(&mut e, 0, &cast_spell(slot, target_object(bear)));
-    e.apply_command(0, &pass()).expect("p0 pass");
-    let batch = e.apply_command(1, &pass()).expect("the scry parks");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("the scry parks");
     let choice = find_resolution_choice(&batch).expect("scry choice");
     assert_eq!(
         choice.choice_kind(),
@@ -194,8 +197,12 @@ fn issue_misc2_plunge_into_winter() {
     let hand_before = no_target.state.players[0].hand.len();
     let slot = hand_index_for_card(&no_target, 0, "plunge_into_winter");
     semantic::accepted(&mut no_target, 0, &cast_spell(slot, vec![]));
-    no_target.apply_command(0, &pass()).expect("p0 pass");
-    let batch = no_target.apply_command(1, &pass()).expect("the scry parks");
+    no_target
+        .apply_scenario_command(0, &pass())
+        .expect("p0 pass");
+    let batch = no_target
+        .apply_scenario_command(1, &pass())
+        .expect("the scry parks");
     assert!(find_resolution_choice(&batch).is_some());
     semantic::accepted(&mut no_target, 0, &submit_resolution_choice(Vec::new()));
     assert_eq!(no_target.state.players[0].hand.len(), hand_before - 1 + 1);
@@ -213,8 +220,10 @@ fn issue_misc2_plunge_into_winter() {
     let hand_before = already.state.players[0].hand.len();
     let slot = hand_index_for_card(&already, 0, "plunge_into_winter");
     semantic::accepted(&mut already, 0, &cast_spell(slot, target_object(tapped)));
-    already.apply_command(0, &pass()).expect("p0 pass");
-    let batch = already.apply_command(1, &pass()).expect("the scry parks");
+    already.apply_scenario_command(0, &pass()).expect("p0 pass");
+    let batch = already
+        .apply_scenario_command(1, &pass())
+        .expect("the scry parks");
     assert!(find_resolution_choice(&batch).is_some());
     semantic::accepted(&mut already, 0, &submit_resolution_choice(Vec::new()));
     assert_eq!(already.state.players[0].hand.len(), hand_before - 1 + 1);

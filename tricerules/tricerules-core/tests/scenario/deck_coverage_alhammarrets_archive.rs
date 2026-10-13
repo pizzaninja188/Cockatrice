@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use prost::Message;
 use tricerules_cards::{ContinuousEffectKind, ControllerReference, CounterKind, EffectDuration};
 use tricerules_core::{AffectedScope, ContinuousEffect, EngineError, TurnStep, Zone};
@@ -44,7 +45,9 @@ fn paid(engine: &mut GameEngine, card: &str) -> u32 {
         .iter()
         .position(|id| *id == oid)
         .unwrap();
-    engine.apply_command(4, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(4, &cast_spell(slot, vec![]))
+        .unwrap();
     oid
 }
 
@@ -56,7 +59,12 @@ fn resolve(engine: &mut GameEngine, oid: u32) -> Vec<rv1::RuledEvent> {
         }
         assert!(engine.state.blocking_choice().is_none());
         let actor = engine.state.priority_player_id();
-        events.extend(engine.apply_command(actor, &pass()).unwrap().events);
+        events.extend(
+            engine
+                .apply_scenario_command(actor, &pass())
+                .unwrap()
+                .events,
+        );
     }
     panic!("bounded resolution did not finish");
 }
@@ -148,7 +156,7 @@ fn archive_first_own_draw_exception_later_draws_and_insight_ordering() {
         let mut choice = None;
         for _ in 0..12 {
             let actor = engine.state.priority_player_id();
-            let batch = engine.apply_command(actor, &pass()).unwrap();
+            let batch = engine.apply_scenario_command(actor, &pass()).unwrap();
             if let Some(prompt) = find_resolution_choice(&batch) {
                 choice = Some(prompt.clone());
                 break;
@@ -159,7 +167,7 @@ fn archive_first_own_draw_exception_later_draws_and_insight_ordering() {
         let before = engine.diagnostic_snapshot().unwrap();
         let id = choice.replacement_options[0].application_id;
         assert!(engine
-            .apply_command(9, &submit_resolution_choice(vec![id]))
+            .apply_scenario_command(9, &submit_resolution_choice(vec![id]))
             .is_err());
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
         for _ in 0..40 {
@@ -173,7 +181,7 @@ fn archive_first_own_draw_exception_later_draws_and_insight_ordering() {
                 .unwrap_or(&choice.replacement_options[0])
                 .application_id;
             let batch = engine
-                .apply_command(4, &submit_resolution_choice(vec![id]))
+                .apply_scenario_command(4, &submit_resolution_choice(vec![id]))
                 .unwrap();
             choice = find_resolution_choice(&batch)
                 .expect("Brainstorm put-back follows replacement draws")
@@ -182,7 +190,7 @@ fn archive_first_own_draw_exception_later_draws_and_insight_ordering() {
         assert_eq!(choice.choice_kind(), rv1::ChoiceKind::HandCards);
         assert_eq!(engine.state.players[0].hand.len(), hand + 12);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 4,
                 &submit_resolution_choice(choice.candidate_object_ids[..2].to_vec()),
             )
@@ -215,7 +223,7 @@ fn archive_both_clauses_replay_serialized_accepted_commands_from_identical_fixtu
     let mut log = Vec::new();
     for card in ["alhammarrets_archive", "chaplains_blessing", "divination"] {
         let command = cast_spell(hand_index_for_card(&engine, 0, card), vec![]);
-        engine.apply_command(4, &command).unwrap();
+        engine.apply_scenario_command(4, &command).unwrap();
         log.push((4, command.encode_to_vec()));
         for _ in 0..12 {
             if engine.state.stack.is_empty() {
@@ -223,7 +231,7 @@ fn archive_both_clauses_replay_serialized_accepted_commands_from_identical_fixtu
             }
             let actor = engine.state.priority_player_id();
             let command = pass();
-            engine.apply_command(actor, &command).unwrap();
+            engine.apply_scenario_command(actor, &command).unwrap();
             log.push((actor, command.encode_to_vec()));
         }
         assert!(engine.state.stack.is_empty());
@@ -233,7 +241,7 @@ fn archive_both_clauses_replay_serialized_accepted_commands_from_identical_fixtu
     let mut replay = fixture();
     for (actor, bytes) in log {
         let command = rv1::RuledCommand::decode(bytes.as_slice()).unwrap();
-        replay.apply_command(actor, &command).unwrap();
+        replay.apply_scenario_command(actor, &command).unwrap();
     }
     assert_eq!(
         engine.diagnostic_snapshot().unwrap(),
@@ -275,7 +283,7 @@ fn archive_swords_gain_follows_derived_target_controller_and_overflow_restores_e
         );
         let slot = hand_index_for_card(&engine, 0, "swords_to_plowshares");
         engine
-            .apply_command(
+            .apply_scenario_command(
                 4,
                 &cast_spell(
                     slot,
@@ -289,11 +297,11 @@ fn archive_swords_gain_follows_derived_target_controller_and_overflow_restores_e
             .unwrap();
         for _ in 0..2 {
             let actor = engine.state.priority_player_id();
-            engine.apply_command(actor, &pass()).unwrap();
+            engine.apply_scenario_command(actor, &pass()).unwrap();
         }
         let before = engine.diagnostic_snapshot().unwrap();
         let actor = engine.state.priority_player_id();
-        let result = engine.apply_command(actor, &pass());
+        let result = engine.apply_scenario_command(actor, &pass());
         if overflow {
             assert!(matches!(result, Err(EngineError::LifeNumericRange(_))));
             assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
@@ -331,7 +339,7 @@ fn archive_actual_lifelink_after_prevention_and_overflow_restore_damage_and_shie
         );
         let slot = hand_index_for_card(&engine, 0, "rabid_bite");
         engine
-            .apply_command(
+            .apply_scenario_command(
                 4,
                 &cast_spell(
                     slot,
@@ -354,11 +362,11 @@ fn archive_actual_lifelink_after_prevention_and_overflow_restore_damage_and_shie
             .unwrap();
         for _ in 0..2 {
             let actor = engine.state.priority_player_id();
-            engine.apply_command(actor, &pass()).unwrap();
+            engine.apply_scenario_command(actor, &pass()).unwrap();
         }
         let before = engine.diagnostic_snapshot().unwrap();
         let actor = engine.state.priority_player_id();
-        let result = engine.apply_command(actor, &pass());
+        let result = engine.apply_scenario_command(actor, &pass());
         if overflow {
             assert!(matches!(result, Err(EngineError::LifeNumericRange(_))));
             assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
@@ -396,10 +404,10 @@ fn archive_combat_sources_gain_separately_and_canonical_settlement_rolls_back_ov
         let first = inject_creature_on_battlefield(&mut engine, 0, "vampire_nighthawk");
         let second = inject_creature_on_battlefield(&mut engine, 0, "vampire_nighthawk");
         engine
-            .apply_command(0, &declare_attackers(vec![first, second]))
+            .apply_scenario_command(0, &declare_attackers(vec![first, second]))
             .unwrap();
-        engine.apply_command(0, &pass()).unwrap();
-        engine.apply_command(1, &pass()).unwrap();
+        engine.apply_scenario_command(0, &pass()).unwrap();
+        engine.apply_scenario_command(1, &pass()).unwrap();
         assert_eq!(engine.state.turn_step, TurnStep::DeclareBlockers);
         if overflow {
             engine.state.players[0].life = i32::MAX - 3;
@@ -420,7 +428,7 @@ fn archive_combat_sources_gain_separately_and_canonical_settlement_rolls_back_ov
                     .collect(),
             })),
         };
-        let result = engine.apply_command(0, &command);
+        let result = engine.apply_scenario_command(0, &command);
         if overflow {
             assert!(matches!(result, Err(EngineError::LifeNumericRange(_))));
             assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
@@ -460,9 +468,9 @@ fn archive_targeted_healing_salve_uses_recipient_and_opponent_turn_draws_double(
             .unwrap();
         let command = cast_modal_spell(slot, vec![(0, target_player(recipient))]);
         let before = engine.diagnostic_snapshot().unwrap();
-        assert!(engine.apply_command(9, &command).is_err());
+        assert!(engine.apply_scenario_command(9, &command).is_err());
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
-        engine.apply_command(4, &command).unwrap();
+        engine.apply_scenario_command(4, &command).unwrap();
         resolve(&mut engine, salve);
         assert_eq!(
             engine.state.players[0].life,
@@ -480,7 +488,7 @@ fn archive_targeted_healing_salve_uses_recipient_and_opponent_turn_draws_double(
         let mut prompt = None;
         for _ in 0..12 {
             let actor = engine.state.priority_player_id();
-            let batch = engine.apply_command(actor, &pass()).unwrap();
+            let batch = engine.apply_scenario_command(actor, &pass()).unwrap();
             if let Some(choice) = find_resolution_choice(&batch) {
                 prompt = Some(choice.clone());
                 break;
@@ -490,7 +498,7 @@ fn archive_targeted_healing_salve_uses_recipient_and_opponent_turn_draws_double(
         assert_eq!(prompt.choice_kind(), rv1::ChoiceKind::HandCards);
         assert_eq!(engine.state.players[0].hand.len(), hand + 6);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 4,
                 &submit_resolution_choice(prompt.candidate_object_ids[..2].to_vec()),
             )

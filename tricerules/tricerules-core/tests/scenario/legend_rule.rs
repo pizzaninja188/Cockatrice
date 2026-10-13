@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
 /// CR 704.5j: when a player controls two or more legendary permanents with the same name,
@@ -30,7 +31,7 @@ fn legend_rule_controller_chooses_which_to_keep() {
 
     // Pass priority so SBAs run; the legend rule should pause for a choice.
     let batch = e
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass priority triggers legend SBA");
 
     // The engine must emit a ResolutionChoiceRequired with ChoiceKind::LegendKeep.
@@ -64,7 +65,7 @@ fn legend_rule_controller_chooses_which_to_keep() {
 
     // P0 chooses to keep oid_b.
     let keep_batch = e
-        .apply_command(0, &submit_resolution_choice(vec![oid_b]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![oid_b]))
         .expect("submit legend keep choice");
 
     // oid_a must be in P0's graveyard; oid_b must still be on P0's battlefield.
@@ -113,13 +114,13 @@ fn legend_rule_ltb_trigger_fires_on_removed_legend() {
     let _oid_b = deploy_to_battlefield(&mut e, 0, "kokusho,_the_evening_star", false);
 
     // Pass priority; legend SBA pauses for choice.
-    let batch = e.apply_command(0, &pass()).expect("pass");
+    let batch = e.apply_scenario_command(0, &pass()).expect("pass");
     let req = find_resolution_choice(&batch).expect("ResolutionChoiceRequired expected");
     assert_eq!(req.choice_kind(), ChoiceKind::LegendKeep);
 
     // P0 keeps oid_a; oid_b is sacrificed and its WhenSelfDies trigger must fire.
     let stack_before = e.state.stack.len();
-    e.apply_command(0, &submit_resolution_choice(vec![oid_a]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![oid_a]))
         .expect("submit legend keep");
 
     // Kokusho's death trigger (EachOpponentLosesLifeYouGainEqual) goes straight to the stack
@@ -139,8 +140,8 @@ fn legend_rule_ltb_trigger_fires_on_removed_legend() {
     // Let the trigger resolve: both players pass → P1 (opponent) loses 5, P0 gains 5.
     let p0_life_before = e.state.players[e.state.player_idx(0).unwrap()].life;
     let p1_life_before = e.state.players[e.state.player_idx(1).unwrap()].life;
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
         .expect("p1 pass → trigger resolves");
     let p0_life_after = e.state.players[e.state.player_idx(0).unwrap()].life;
     let p1_life_after = e.state.players[e.state.player_idx(1).unwrap()].life;
@@ -172,7 +173,7 @@ fn legend_rule_reduces_to_one_with_multiple_copies() {
     let oid_c = deploy_to_battlefield(&mut e, 0, "isamaru,_hound_of_konda", false);
 
     // First legend SBA: three copies → pause for first choice (candidates = [a, b, c]).
-    let batch = e.apply_command(0, &pass()).expect("pass");
+    let batch = e.apply_scenario_command(0, &pass()).expect("pass");
     let req = find_resolution_choice(&batch).expect("first ResolutionChoiceRequired");
     assert_eq!(req.candidate_object_ids.len(), 3);
 
@@ -180,7 +181,7 @@ fn legend_rule_reduces_to_one_with_multiple_copies() {
     // "choose one to keep" meaning the rest all go. Let's verify: candidates include all 3,
     // min=max=1 → keep exactly one, the other two go to graveyard.
     let keep_batch = e
-        .apply_command(0, &submit_resolution_choice(vec![oid_c]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![oid_c]))
         .expect("keep oid_c");
     let _ = keep_batch;
 
@@ -236,7 +237,7 @@ fn legend_rule_does_not_apply_to_non_legendary() {
     let _oid_b = deploy_to_battlefield(&mut e, 0, "grizzly_bears", false);
 
     // Passing priority must NOT emit ResolutionChoiceRequired.
-    let batch = e.apply_command(0, &pass()).expect("pass");
+    let batch = e.apply_scenario_command(0, &pass()).expect("pass");
     let req = find_resolution_choice(&batch);
     assert!(
         req.is_none(),

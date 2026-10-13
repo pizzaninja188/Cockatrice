@@ -3,6 +3,7 @@
 //! Target selection and revalidation follow CR 115.1, 115.6, and 608.2b; beginning-of-combat
 //! timing follows CR 506.1 and 603.2b; graveyards are public zones under CR 404.2, while each
 //! zone change creates a new object under CR 400.7.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -144,7 +145,7 @@ fn issue_301_triggers_only_on_controller_beginning_of_combat_and_allows_zero_or_
     let battlefield = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
 
     let batch = engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("enter controller beginning of combat");
     assert_eq!(engine.state.turn_step, TurnStep::BeginCombat);
     let pending = engine
@@ -159,13 +160,13 @@ fn issue_301_triggers_only_on_controller_beginning_of_combat_and_allows_zero_or_
     assert_eq!(group.valid_graveyard_ids, [own, opponent]);
 
     assert!(engine
-        .apply_command(0, &graveyard_targets(&[own, opponent]))
+        .apply_scenario_command(0, &graveyard_targets(&[own, opponent]))
         .is_err());
     assert!(engine
-        .apply_command(0, &graveyard_target(battlefield))
+        .apply_scenario_command(0, &graveyard_target(battlefield))
         .is_err());
     engine
-        .apply_command(0, &choose_zero_trigger_targets())
+        .apply_scenario_command(0, &choose_zero_trigger_targets())
         .expect("zero targets is legal");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&own].zone, Zone::Graveyard);
@@ -174,9 +175,9 @@ fn issue_301_triggers_only_on_controller_beginning_of_combat_and_allows_zero_or_
     let mut one = issue_301_engine(301_002);
     inject_creature_on_battlefield(&mut one, 0, "startled_relic_sloth");
     let target = inject_graveyard_card(&mut one, 1, "island");
-    one.apply_command(0, &primitive_yield())
+    one.apply_scenario_command(0, &primitive_yield())
         .expect("enter beginning of combat");
-    one.apply_command(0, &graveyard_target(target))
+    one.apply_scenario_command(0, &graveyard_target(target))
         .expect("choose one target from either graveyard");
     resolve_entire_stack_two_player(&mut one);
     assert_eq!(one.state.objects[&target].zone, Zone::Exile);
@@ -186,14 +187,14 @@ fn issue_301_triggers_only_on_controller_beginning_of_combat_and_allows_zero_or_
     opponent_turn.state.active_player_idx = 1;
     opponent_turn.state.priority_idx = 1;
     opponent_turn
-        .apply_command(1, &primitive_yield())
+        .apply_scenario_command(1, &primitive_yield())
         .expect("enter opponent beginning of combat");
     assert!(opponent_turn.state.pending_triggers.is_empty());
     assert!(opponent_turn.state.stack.is_empty());
 
     let mut late_source = issue_301_engine(301_004);
     late_source
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("enter beginning of combat without source");
     inject_creature_on_battlefield(&mut late_source, 0, "startled_relic_sloth");
     assert!(late_source.state.pending_triggers.is_empty());
@@ -205,7 +206,7 @@ fn issue_301_triggers_only_on_controller_beginning_of_combat_and_allows_zero_or_
     other_step.state.active_player_idx = 0;
     other_step.state.priority_idx = 0;
     other_step
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("advance a non-combat step");
     assert_eq!(other_step.state.turn_step, TurnStep::Draw);
     assert!(other_step.state.pending_triggers.is_empty());
@@ -218,10 +219,10 @@ fn issue_301_revalidates_zone_and_generation_at_resolution() {
     inject_creature_on_battlefield(&mut removed, 0, "ascendant_dustspeaker");
     let target = inject_graveyard_card(&mut removed, 1, "island");
     removed
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("enter beginning of combat");
     removed
-        .apply_command(0, &graveyard_target(target))
+        .apply_scenario_command(0, &graveyard_target(target))
         .expect("choose graveyard target");
     move_graveyard_to_exile(&mut removed, 1, target);
     resolve_entire_stack_two_player(&mut removed);
@@ -231,10 +232,10 @@ fn issue_301_revalidates_zone_and_generation_at_resolution() {
     inject_creature_on_battlefield(&mut returned, 0, "startled_relic_sloth");
     let target = inject_graveyard_card(&mut returned, 1, "island");
     returned
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("enter beginning of combat");
     returned
-        .apply_command(0, &graveyard_target(target))
+        .apply_scenario_command(0, &graveyard_target(target))
         .expect("choose graveyard target");
     move_graveyard_to_exile(&mut returned, 1, target);
     return_exile_to_graveyard(&mut returned, 1, target);
@@ -249,7 +250,7 @@ fn issue_301_rejects_stale_graveyard_target_at_selection_without_wire_generation
     inject_creature_on_battlefield(&mut engine, 0, "ascendant_dustspeaker");
     let target = inject_graveyard_card(&mut engine, 1, "island");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("enter beginning of combat");
     let old_generation = engine
         .state
@@ -269,7 +270,9 @@ fn issue_301_rejects_stale_graveyard_target_at_selection_without_wire_generation
         "zone move must create a new generation"
     );
     assert!(
-        engine.apply_command(0, &graveyard_target(target)).is_err(),
+        engine
+            .apply_scenario_command(0, &graveyard_target(target))
+            .is_err(),
         "a target that left the graveyard must be rejected before stack placement"
     );
     assert_eq!(engine.state.pending_triggers.len(), 1);
@@ -278,7 +281,7 @@ fn issue_301_rejects_stale_graveyard_target_at_selection_without_wire_generation
     // cannot be expressed by this command and is covered at resolution below.
     return_exile_to_graveyard(&mut engine, 1, target);
     engine
-        .apply_command(0, &graveyard_target(target))
+        .apply_scenario_command(0, &graveyard_target(target))
         .expect("the new graveyard object may be targeted");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
@@ -293,7 +296,7 @@ fn issue_301_stages_and_orders_simultaneous_cohort_triggers_before_targeting() {
     let opponent_target = inject_graveyard_card(&mut engine, 1, "island");
 
     let batch = engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("stage both beginning-of-combat triggers");
     let ordering = engine
         .state
@@ -315,7 +318,7 @@ fn issue_301_stages_and_orders_simultaneous_cohort_triggers_before_targeting() {
 
     let first = ordering.candidates[0].object_id;
     engine
-        .apply_command(0, &submit_trigger_order(first))
+        .apply_scenario_command(0, &submit_trigger_order(first))
         .expect("choose the first trigger to place");
     let first_pending = engine
         .state
@@ -325,7 +328,7 @@ fn issue_301_stages_and_orders_simultaneous_cohort_triggers_before_targeting() {
     assert_eq!(first_pending.object_id, first);
     assert_eq!(first_pending.controller, 0);
     engine
-        .apply_command(0, &graveyard_target(own_target))
+        .apply_scenario_command(0, &graveyard_target(own_target))
         .expect("choose the first trigger target");
     let second_pending = engine
         .state
@@ -334,7 +337,7 @@ fn issue_301_stages_and_orders_simultaneous_cohort_triggers_before_targeting() {
         .expect("the remaining trigger is placed after the first target choice");
     assert_ne!(second_pending.object_id, first);
     engine
-        .apply_command(0, &graveyard_target(opponent_target))
+        .apply_scenario_command(0, &graveyard_target(opponent_target))
         .expect("choose the second trigger target");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&own_target].zone, Zone::Exile);
@@ -347,7 +350,7 @@ fn issue_301_keeps_event_time_controller_after_source_control_changes() {
     let source = inject_creature_on_battlefield(&mut engine, 0, "ascendant_dustspeaker");
     let target = inject_graveyard_card(&mut engine, 1, "island");
     let batch = engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("capture the controller's trigger");
     let pending = engine
         .state
@@ -389,7 +392,7 @@ fn issue_301_keeps_event_time_controller_after_source_control_changes() {
         .valid_targets_by_ability
         .contains_key(&key));
     engine
-        .apply_command(0, &graveyard_target(target))
+        .apply_scenario_command(0, &graveyard_target(target))
         .expect("the event-time controller still answers the trigger");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
@@ -404,18 +407,18 @@ fn issue_301_preserves_dustspeaker_etb_target_restriction_and_counter() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "ascendant_dustspeaker");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Ascendant Dustspeaker");
     pass_both_players(&mut engine);
     assert!(engine
-        .apply_command(0, &permanent_target(opposing))
+        .apply_scenario_command(0, &permanent_target(opposing))
         .is_err());
     let dustspeaker = battlefield_object_for_card(&engine, 0, "ascendant_dustspeaker");
     assert!(engine
-        .apply_command(0, &permanent_target(dustspeaker))
+        .apply_scenario_command(0, &permanent_target(dustspeaker))
         .is_err());
     engine
-        .apply_command(0, &permanent_target(friendly))
+        .apply_scenario_command(0, &permanent_target(friendly))
         .expect("target another creature controlled by Dustspeaker's controller");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -447,7 +450,7 @@ fn issue_301_uses_event_time_controller_and_player_set_generic_graveyards() {
     let target = inject_graveyard_card(&mut engine, 0, "island");
 
     let batch = engine
-        .apply_command(1, &primitive_yield())
+        .apply_scenario_command(1, &primitive_yield())
         .expect("controller enters beginning of combat");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     let pending = engine.state.pending_triggers.front().unwrap();
@@ -463,7 +466,7 @@ fn issue_301_uses_event_time_controller_and_player_set_generic_graveyards() {
         .valid_targets_by_ability
         .contains_key(&key));
     engine
-        .apply_command(1, &graveyard_target(target))
+        .apply_scenario_command(1, &graveyard_target(target))
         .expect("controller may target the other player's graveyard");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&target].zone, Zone::Exile);

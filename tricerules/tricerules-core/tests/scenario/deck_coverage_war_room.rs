@@ -1,7 +1,8 @@
 //! War Room's actual card, frozen commander declaration, and atomic activation payment.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{EngineDeck, GameEngine};
+use tricerules_core::EngineDeck;
 use tricerules_proto::ruled::v1::{self as rv1, PreviewPayment};
 
 fn war_room_engine(commanders: &[&str]) -> (GameEngine, u32) {
@@ -59,7 +60,7 @@ fn info(engine: &mut GameEngine, source: u32) -> rv1::AbilityInfo {
 fn reject(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = engine.diagnostic_snapshot().unwrap();
     engine
-        .apply_command(actor, command)
+        .apply_scenario_command(actor, command)
         .expect_err("illegal activation must reject");
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
 }
@@ -84,7 +85,7 @@ fn preview(engine: &GameEngine, actor: i32, command: &RuledCommand) -> rv1::Paym
         });
     }
     let before = engine.diagnostic_snapshot().unwrap();
-    let result = engine.preview_payment(
+    let result = engine.preview_payment_scenario(
         actor,
         &PreviewPayment {
             transaction_id: 510,
@@ -138,7 +139,7 @@ fn war_room_resolves_zero_through_five_unique_colors_in_labels_and_actual_paymen
         );
         assert_eq!(ability.presentation.unwrap().fallback_text, ability.text);
         engine
-            .apply_command(0, &activate_ability_for(&engine, source, 1, vec![]))
+            .apply_scenario_command(0, &activate_ability_for(&engine, source, 1, vec![]))
             .unwrap();
         assert_eq!(engine.state.players[0].life, 20 - life);
         assert_eq!(
@@ -201,7 +202,7 @@ fn war_room_preview_cancellation_and_normalized_commit_charge_exactly_once() {
         };
         activation.payment = result.selection;
         activation.restricted_mana = result.restricted_mana;
-        engine.apply_command(0, &command).unwrap();
+        engine.apply_scenario_command(0, &command).unwrap();
         assert_eq!(engine.state.players[0].life, 20 - life);
         assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
         assert!(engine.state.objects[&source].tapped);
@@ -293,7 +294,7 @@ fn war_room_uses_current_controller_identity_and_draw_recipient() {
     let hand1 = engine.state.players[1].hand.len();
     let command = activate_ability_for(&engine, source, 1, vec![]);
     reject(&mut engine, 0, &command);
-    engine.apply_command(1, &command).unwrap();
+    engine.apply_scenario_command(1, &command).unwrap();
     assert_eq!(engine.state.players[0].life, 20);
     assert_eq!(engine.state.players[1].life, 19);
     resolve_entire_stack_two_player(&mut engine);
@@ -342,7 +343,7 @@ fn war_room_identity_is_frozen_after_commander_color_changes_and_hidden_zone_mov
     );
     for zone in [rv1::DevZone::Hand, rv1::DevZone::Library] {
         engine
-            .apply_command(0, &dev_move("Atraxa, Praetors' Voice", zone))
+            .apply_scenario_command(0, &dev_move("Atraxa, Praetors' Voice", zone))
             .unwrap();
         assert!(engine.state.players[0].command_zone.is_empty());
         assert!(engine.state.players[0].has_declared_commander);
@@ -358,7 +359,7 @@ fn war_room_identity_is_frozen_after_commander_color_changes_and_hidden_zone_mov
         },
     );
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 1, vec![]))
         .unwrap();
     assert_eq!(engine.state.players[0].life, 16);
 }
@@ -376,11 +377,11 @@ fn war_room_paid_ability_draws_after_source_departure() {
     );
     let top = engine.state.players[0].library[0];
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 1, vec![]))
         .unwrap();
     engine.enable_dev_commands();
     engine
-        .apply_command(0, &dev_move("War Room", rv1::DevZone::Graveyard))
+        .apply_scenario_command(0, &dev_move("War Room", rv1::DevZone::Graveyard))
         .unwrap();
     assert_eq!(
         engine.state.objects[&source].zone,
@@ -405,7 +406,7 @@ fn war_room_exact_life_payment_is_accepted_before_existing_state_based_loss() {
     engine.state.players[0].life = 1;
     assert!(info(&mut engine, source).activatable);
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 1, vec![]))
         .unwrap();
     assert_eq!(engine.state.players[0].life, 0);
     assert!(engine.state.players[0].has_lost);
@@ -423,7 +424,7 @@ fn war_room_replays_accepted_mana_activation_draw_and_pass_commands() {
     let (mut engine, source) = game();
     let mut log = vec![];
     let mut apply = |engine: &mut GameEngine, actor, command: RuledCommand| {
-        let batch = engine.apply_command(actor, &command).unwrap();
+        let batch = engine.apply_scenario_command(actor, &command).unwrap();
         log.push((actor, command, batch, engine.diagnostic_snapshot().unwrap()));
     };
     apply(
@@ -453,7 +454,10 @@ fn war_room_replays_accepted_mana_activation_draw_and_pass_commands() {
     let (mut replay, replay_source) = game();
     assert_eq!(source, replay_source);
     for (actor, command, batch, snapshot) in log {
-        assert_eq!(replay.apply_command(actor, &command).unwrap(), batch);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &command).unwrap(),
+            batch
+        );
         assert_eq!(replay.diagnostic_snapshot().unwrap(), snapshot);
     }
 }
@@ -472,7 +476,7 @@ fn war_room_pays_one_life_taps_and_draws_only_on_resolution() {
     let before_hand = engine.state.players[0].hand.len();
     let top = engine.state.players[0].library[0];
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 1, vec![]))
         .expect("pay three mana, tap, and one life");
     assert_eq!(engine.state.players[0].life, 19);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
@@ -497,11 +501,11 @@ fn war_room_without_commander_rejects_draw_purely_but_produces_colorless_mana() 
     );
     let before = engine.diagnostic_snapshot().unwrap();
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 1, vec![]))
         .expect_err("an absent commander is not a colorless commander");
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 0, vec![]))
         .expect("ordinary colorless mana needs no commander");
     assert_eq!(engine.state.players[0].mana_pool.colorless, 4);
     assert_eq!(engine.state.players[0].life, 20);

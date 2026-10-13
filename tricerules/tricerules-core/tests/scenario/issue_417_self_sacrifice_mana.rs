@@ -7,6 +7,7 @@
 //! the controller's own main phase for the Ice Cream Kitty sorcery-speed activation. CR 509.1b
 //! applies Gingerbrute's "except by creatures with haste" restriction through the shared blocking
 //! legality path, and CR 205.1b / 613.1d / 613.4b layer Tough Cookie's artifact animation.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{
@@ -261,19 +262,23 @@ fn issue_417_gingerbrute_haste_evasion_filters_blockers() {
     resolve_entire_stack_two_player(&mut engine);
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
-    engine.apply_command(0, &pass()).expect("attacker passes");
-    engine.apply_command(1, &pass()).expect("defender passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("attacker passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("defender passes");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
     engine
-        .apply_command(0, &declare_attackers(vec![brute]))
+        .apply_scenario_command(0, &declare_attackers(vec![brute]))
         .expect("declare the hasty attacker");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("attacker passes after declaration");
     let blockers = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes after declaration");
 
     let legal = blockers
@@ -295,7 +300,7 @@ fn issue_417_gingerbrute_haste_evasion_filters_blockers() {
         "a creature without haste is not published as a legal blocker"
     );
     let error = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: brute,
@@ -312,7 +317,7 @@ fn issue_417_ice_cream_kitty_requires_another_creature_or_token() {
     let mut engine = issue_417_engine(417_050, &["ice_cream_kitty"]);
     let kitty = move_ready_to_battlefield(&mut engine, 0, "ice_cream_kitty");
     let batch = engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("publish legal costs");
     let key = u64::from(kitty) << 32;
     let choices = &batch.legal_by_player[&0].cost_choices_by_ability[&key];
@@ -332,7 +337,7 @@ fn issue_417_ice_cream_kitty_requires_another_creature_or_token() {
     let kitty = move_ready_to_battlefield(&mut engine, 0, "ice_cream_kitty");
     let food = inject_permanent_on_battlefield(&mut engine, 0, "food");
     let batch = engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("publish legal costs");
     let key = u64::from(kitty) << 32;
     let choices = &batch.legal_by_player[&0].cost_choices_by_ability[&key];
@@ -354,7 +359,7 @@ fn issue_417_ice_cream_kitty_requires_another_creature_or_token() {
     let friendly = move_ready_to_battlefield(&mut engine, 0, "grizzly_bears");
     let opposing = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let batch = engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("publish legal costs");
     let key = u64::from(kitty) << 32;
     let choices = &batch.legal_by_player[&0].cost_choices_by_ability[&key];
@@ -383,7 +388,7 @@ fn issue_417_ice_cream_kitty_sacrifices_the_chosen_permanent_and_is_sorcery_spee
     );
     let hand_before = engine.state.players[0].hand.len();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &issue_417_activate_with_selection(&engine, kitty, 0, 1, food),
         )
@@ -412,7 +417,7 @@ fn issue_417_ice_cream_kitty_sacrifices_the_chosen_permanent_and_is_sorcery_spee
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &issue_417_activate_with_selection(&engine, kitty, 0, 1, bears),
         )
@@ -422,7 +427,7 @@ fn issue_417_ice_cream_kitty_sacrifices_the_chosen_permanent_and_is_sorcery_spee
 
     // The source itself is rejected atomically.
     let error = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &issue_417_activate_with_selection(&engine, kitty, 0, 1, kitty),
         )
@@ -435,7 +440,7 @@ fn issue_417_ice_cream_kitty_sacrifices_the_chosen_permanent_and_is_sorcery_spee
     let kitty = move_ready_to_battlefield(&mut engine, 0, "ice_cream_kitty");
     let food = inject_permanent_on_battlefield(&mut engine, 0, "food");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     // CR 106.4 empties the pool between steps, so fund the rejected activation after the step.
     give_mana(
@@ -447,7 +452,7 @@ fn issue_417_ice_cream_kitty_sacrifices_the_chosen_permanent_and_is_sorcery_spee
         },
     );
     let error = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &issue_417_activate_with_selection(&engine, kitty, 0, 1, food),
         )

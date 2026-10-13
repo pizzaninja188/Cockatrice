@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
@@ -51,7 +52,7 @@ fn cast_creature(engine: &mut GameEngine, card_id: &str) -> u32 {
     grant_pool(engine, 0);
     let index = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_spell(index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(index, Vec::new()))
         .unwrap_or_else(|error| panic!("cast {card_id}: {error}"));
     pass_both_players(engine);
     object_id
@@ -65,11 +66,11 @@ fn iceridge_serpent_rejects_own_creature_and_bounces_opponents_creature() {
     cast_creature(&mut engine, "iceridge_serpent");
 
     assert!(engine
-        .apply_command(0, &choose_trigger_targets(grouped(&[own])))
+        .apply_scenario_command(0, &choose_trigger_targets(grouped(&[own])))
         .is_err());
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(0, &choose_trigger_targets(grouped(&[opposing])))
+        .apply_scenario_command(0, &choose_trigger_targets(grouped(&[opposing])))
         .expect("choose opponent's creature");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&opposing].zone, Zone::Hand);
@@ -81,7 +82,7 @@ fn apothecary_stomper_supports_targeted_counter_and_untargeted_life_modes() {
     let target = inject_creature_on_battlefield(&mut counters, 0, "grizzly_bears");
     cast_creature(&mut counters, "apothecary_stomper");
     counters
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -103,7 +104,7 @@ fn apothecary_stomper_supports_targeted_counter_and_untargeted_life_modes() {
 
     let mut life = engine(130_011);
     cast_creature(&mut life, "apothecary_stomper");
-    life.apply_command(
+    life.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -125,7 +126,7 @@ fn apothecary_stomper_supports_targeted_counter_and_untargeted_life_modes() {
 fn felidar_savior_accepts_zero_or_two_distinct_other_controlled_targets() {
     let mut zero = engine(130_020);
     cast_creature(&mut zero, "felidar_savior");
-    zero.apply_command(0, &choose_trigger_targets(Vec::new()))
+    zero.apply_scenario_command(0, &choose_trigger_targets(Vec::new()))
         .expect("choose zero targets");
     pass_both_players(&mut zero);
 
@@ -134,12 +135,12 @@ fn felidar_savior_accepts_zero_or_two_distinct_other_controlled_targets() {
     let second = inject_creature_on_battlefield(&mut two, 0, "storm_crow");
     let source = cast_creature(&mut two, "felidar_savior");
     assert!(two
-        .apply_command(0, &choose_trigger_targets(grouped(&[first, first])))
+        .apply_scenario_command(0, &choose_trigger_targets(grouped(&[first, first])))
         .is_err());
     assert!(two
-        .apply_command(0, &choose_trigger_targets(grouped(&[first, source])))
+        .apply_scenario_command(0, &choose_trigger_targets(grouped(&[first, source])))
         .is_err());
-    two.apply_command(0, &choose_trigger_targets(grouped(&[first, second])))
+    two.apply_scenario_command(0, &choose_trigger_targets(grouped(&[first, second])))
         .expect("choose two other controlled creatures");
     pass_both_players(&mut two);
     for object_id in [first, second] {
@@ -154,7 +155,7 @@ fn felidar_savior_accepts_zero_or_two_distinct_other_controlled_targets() {
     let departed = inject_creature_on_battlefield(&mut partial, 0, "storm_crow");
     cast_creature(&mut partial, "felidar_savior");
     partial
-        .apply_command(0, &choose_trigger_targets(grouped(&[legal, departed])))
+        .apply_scenario_command(0, &choose_trigger_targets(grouped(&[legal, departed])))
         .expect("choose two targets before one leaves");
     partial.state.players[0]
         .battlefield
@@ -205,7 +206,7 @@ fn delta_bloodflies_rechecks_the_live_counter_condition() {
         .expect("Bloodflies")
         .set_counter(CounterKind::PlusOnePlusOne, 1);
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -213,7 +214,7 @@ fn delta_bloodflies_rechecks_the_live_counter_condition() {
         tricerules_core::TurnStep::DeclareAttackers
     );
     engine
-        .apply_command(0, &declare_attackers(vec![bloodflies]))
+        .apply_scenario_command(0, &declare_attackers(vec![bloodflies]))
         .expect("attack");
     assert_eq!(engine.state.stack.len(), 1);
     engine
@@ -232,7 +233,7 @@ fn watcher_of_the_wayside_mills_the_chosen_player_then_gains_life() {
     let library_before = engine.state.players[1].library.len();
     cast_creature(&mut engine, "watcher_of_the_wayside");
     engine
-        .apply_command(0, &choose_trigger_targets(target_player(1)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_player(1)))
         .expect("target the opponent");
     pass_both_players(&mut engine);
 
@@ -246,11 +247,11 @@ fn sanguine_syphoner_drains_each_opponent_recipient_when_it_attacks() {
     let mut engine = engine(130_060);
     let syphoner = inject_creature_on_battlefield(&mut engine, 0, "sanguine_syphoner");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![syphoner]))
+        .apply_scenario_command(0, &declare_attackers(vec![syphoner]))
         .expect("attack with Sanguine Syphoner");
     assert_eq!(engine.state.stack.len(), 1);
     pass_both_players(&mut engine);
@@ -266,7 +267,7 @@ fn underfoot_underdogs_revalidates_power_and_publishes_a_resolved_restriction() 
     let target = inject_creature_on_battlefield(&mut stale, 0, "grizzly_bears");
     grant_pool(&mut stale, 0);
     stale
-        .apply_command(0, &activate_ability(underdogs, 0, target_object(target)))
+        .apply_scenario_command(0, &activate_ability(underdogs, 0, target_object(target)))
         .expect("activate on a power-2 creature");
     stale
         .state
@@ -282,7 +283,7 @@ fn underfoot_underdogs_revalidates_power_and_publishes_a_resolved_restriction() 
     let target = inject_creature_on_battlefield(&mut resolved, 0, "grizzly_bears");
     grant_pool(&mut resolved, 0);
     resolved
-        .apply_command(0, &activate_ability(underdogs, 0, target_object(target)))
+        .apply_scenario_command(0, &activate_ability(underdogs, 0, target_object(target)))
         .expect("activate on a power-2 creature");
     pass_both_players(&mut resolved);
     assert_eq!(
@@ -298,7 +299,7 @@ fn elfsworn_giant_landfall_creates_the_new_elf_warrior_token() {
     inject_card_into_hand(&mut engine, 0, "forest");
     let forest = hand_index_for_card(&engine, 0, "forest");
     engine
-        .apply_command(0, &play_land(forest))
+        .apply_scenario_command(0, &play_land(forest))
         .expect("play a Forest");
     assert_eq!(engine.state.stack.len(), 1);
     pass_both_players(&mut engine);

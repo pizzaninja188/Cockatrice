@@ -6,6 +6,7 @@
 //! (intervening-if), CR 603.6a (entry trigger), CR 610.3 (exile until source leaves), CR 611.2c/
 //! 613.4c (P/T and keywords), CR 700.2a/c (modal choice), CR 701.8 (destroy), CR 701.9 (discard),
 //! CR 702.3b (defender exception), CR 702.10 (haste), CR 702.17 (reach), and CR 702.19 (trample).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -16,7 +17,7 @@ use tricerules_proto::ruled::v1::{
 };
 
 fn dev_put_ready(e: &mut GameEngine, player: i32, card_name: &str) {
-    e.apply_command(
+    e.apply_scenario_command(
         player,
         &RuledCommand {
             cmd: Some(tricerules_proto::ruled::v1::ruled_command::Cmd::DevCommand(
@@ -35,7 +36,7 @@ fn dev_put_ready(e: &mut GameEngine, player: i32, card_name: &str) {
 }
 
 fn roll_into_declare_attackers(e: &mut GameEngine, active: i32) {
-    e.apply_command(active, &primitive_yield())
+    e.apply_scenario_command(active, &primitive_yield())
         .expect("main1 to beginning of combat");
     pass_both_players(e);
     assert_eq!(
@@ -127,21 +128,21 @@ fn battlefield_object(e: &GameEngine, player: usize, card_id: &str) -> u32 {
 
 fn advance_to_end_step(engine: &mut GameEngine, active: i32) {
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("main 1 to beginning of combat");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("beginning of combat advance");
     if engine.state.turn_step == tricerules_core::TurnStep::DeclareAttackers {
         engine
-            .apply_command(active, &primitive_yield())
+            .apply_scenario_command(active, &primitive_yield())
             .expect("declare no attackers");
     }
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("end combat to main 2");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("main 2 to end step");
     assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::EndStep);
 }
@@ -163,7 +164,7 @@ fn issue_misc14_bristlepack_sentry_needs_a_power_four_creature_to_attack() {
     dev_put_ready(&mut allowed, 0, "Air Elemental");
     roll_into_declare_attackers(&mut allowed, 0);
     allowed
-        .apply_command(0, &declare_attackers(vec![sentry]))
+        .apply_scenario_command(0, &declare_attackers(vec![sentry]))
         .expect("a power-4 creature unlocks the attack");
     assert!(allowed.state.objects[&sentry].tapped, "the Sentry attacked");
 
@@ -176,7 +177,7 @@ fn issue_misc14_bristlepack_sentry_needs_a_power_four_creature_to_attack() {
     roll_into_declare_attackers(&mut blocked, 0);
     assert!(
         blocked
-            .apply_command(0, &declare_attackers(vec![sentry]))
+            .apply_scenario_command(0, &declare_attackers(vec![sentry]))
             .is_err(),
         "defender stops the attack without a power-4 creature"
     );
@@ -219,7 +220,7 @@ fn issue_misc14_shipwreck_sentry_needs_an_artifact_entry_to_attack() {
     dev_put_ready(&mut allowed, 0, "Grizzly Bears");
     roll_into_declare_attackers(&mut allowed, 0);
     allowed
-        .apply_command(0, &declare_attackers(vec![sentry]))
+        .apply_scenario_command(0, &declare_attackers(vec![sentry]))
         .expect("an artifact entered this turn unlocks the attack");
     assert!(allowed.state.objects[&sentry].tapped);
 
@@ -232,7 +233,7 @@ fn issue_misc14_shipwreck_sentry_needs_an_artifact_entry_to_attack() {
     roll_into_declare_attackers(&mut blocked, 0);
     assert!(
         blocked
-            .apply_command(0, &declare_attackers(vec![sentry]))
+            .apply_scenario_command(0, &declare_attackers(vec![sentry]))
             .is_err(),
         "defender stops the attack without an artifact entry"
     );
@@ -280,7 +281,8 @@ fn issue_misc14_stormcatch_mentor_has_prowess_and_reduces_instants() {
     );
     let slot = hand_index_for_card(&full, 0, "divination");
     assert!(
-        full.apply_command(0, &cast_spell(slot, vec![])).is_err(),
+        full.apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .is_err(),
         "the unreduced {{2}}{{U}} is not castable with {{1}}{{U}}"
     );
 }

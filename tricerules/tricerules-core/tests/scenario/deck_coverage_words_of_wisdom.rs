@@ -3,9 +3,10 @@
 //! Oracle and rulings checked against the physical Odyssey printing on 2026-09-26; Scryfall
 //! returned no rulings. CR 121.1-121.2c govern sequential draws and multiplayer draw order; CR
 //! 121.4 and 704.5b govern an attempted draw from an empty library.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, TurnStep};
+use tricerules_core::TurnStep;
 
 fn pass_all_active_players(engine: &mut GameEngine) {
     let active_players = engine
@@ -18,7 +19,7 @@ fn pass_all_active_players(engine: &mut GameEngine) {
         answer_trigger_order_in_engine_order(engine);
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("active player passes priority");
     }
 }
@@ -36,7 +37,7 @@ fn resolve_four_player_stack(engine: &mut GameEngine) -> Vec<String> {
         answer_trigger_order_in_engine_order(engine);
         let player = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("active player passes priority");
         logs.extend(batch.events.into_iter().filter_map(|event| match event.ev {
             Some(tricerules_proto::ruled::v1::ruled_event::Ev::Log(log)) => Some(log.text),
@@ -108,7 +109,7 @@ fn words_of_wisdom_draws_two_then_each_other_player_draws_one_in_order() {
 
     let hand_index = hand_index_for_card(&engine, 0, "words_of_wisdom");
     engine
-        .apply_command(0, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
         .expect("cast Words of Wisdom");
     let logs = resolve_four_player_stack(&mut engine);
 
@@ -171,7 +172,7 @@ fn words_of_wisdom_rejects_a_cast_without_enough_mana() {
     let command_index_before = engine.state.command_index;
     let hand_index = hand_index_for_card(&engine, 0, "words_of_wisdom");
     let error = engine
-        .apply_command(0, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
         .expect_err("the {1}{U} spell needs both colored and generic mana");
 
     assert!(matches!(error, tricerules_core::EngineError::Illegal(_)));

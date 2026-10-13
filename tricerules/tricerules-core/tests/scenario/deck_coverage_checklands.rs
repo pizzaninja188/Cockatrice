@@ -3,6 +3,7 @@
 //! Oracle text and rulings are pinned to Scryfall. The Rootbound Crag ruling confirms that lands
 //! with the named land type count even when nonbasic, and that simultaneous entrants are not
 //! counted. Conditions use the current battlefield snapshot (CR 305.5–305.6 and 614.12).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::GameEngine;
@@ -145,7 +146,7 @@ fn deck_coverage_checklands_produce_each_color_and_tapped_lands_cannot_activate(
         let source = enter_land(&mut engine, 0, land.card);
         let command_index = engine.state.command_index;
         engine
-            .apply_command(0, &mana_option(&engine, source, 0))
+            .apply_scenario_command(0, &mana_option(&engine, source, 0))
             .expect_err("a tapped entering land cannot pay a tap cost");
         assert_eq!(engine.state.command_index, command_index);
         assert!(engine.state.objects[&source].tapped);

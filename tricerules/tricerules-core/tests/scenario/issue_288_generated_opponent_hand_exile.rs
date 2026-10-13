@@ -4,6 +4,7 @@
 //! resolution revalidation; CR 402.3 and 406.1 govern private hand information and exile; CR
 //! 603.2 governs the ETB trigger; CR 400.7 governs zone-change identity; and CR 102.1-102.3 with
 //! CR 800.1 define opponents and multiplayer context.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -33,9 +34,11 @@ fn resolve_top_stack_two_player(engine: &mut GameEngine) -> RuledEventBatch {
         .map(|player| player.id)
         .find(|player_id| *player_id != first)
         .expect("second player");
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }
 
@@ -45,7 +48,7 @@ fn resolve_top_stack_three_player(engine: &mut GameEngine) -> RuledEventBatch {
         let player = engine.state.priority_player_id();
         resolved = Some(
             engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("player passes priority"),
         );
     }
@@ -119,11 +122,13 @@ fn move_hand_card_through_library(engine: &mut GameEngine, player: usize, object
 fn generated_opponent_hand_exile_succeeds_with_private_affected_player_choice() {
     let (mut engine, _agent, candidate) = stage_agent(288_001);
     assert!(
-        engine.apply_command(0, &choose_target_player(0)).is_err(),
+        engine
+            .apply_scenario_command(0, &choose_target_player(0))
+            .is_err(),
         "the source controller cannot be the opponent target"
     );
     engine
-        .apply_command(0, &choose_target_player(1))
+        .apply_scenario_command(0, &choose_target_player(1))
         .expect("choose target opponent");
 
     let parked = resolve_top_stack_two_player(&mut engine);
@@ -151,12 +156,12 @@ fn generated_opponent_hand_exile_succeeds_with_private_affected_player_choice() 
         .unwrap_or(0);
     assert!(
         engine
-            .apply_command(0, &submit_resolution_choice(vec![candidate]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![candidate]))
             .is_err(),
         "only the affected opponent may submit the private choice"
     );
     engine
-        .apply_command(1, &submit_resolution_choice(vec![candidate]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![candidate]))
         .expect("affected opponent chooses the card");
     assert_eq!(engine.state.objects[&candidate].zone, Zone::Exile);
     assert_eq!(
@@ -171,7 +176,7 @@ fn generated_opponent_hand_exile_is_empty_hand_noop() {
     let (mut engine, _agent, candidate) = stage_agent(288_002);
     engine.state.players[1].hand.clear();
     engine
-        .apply_command(0, &choose_target_player(1))
+        .apply_scenario_command(0, &choose_target_player(1))
         .expect("choose target opponent");
     let resolved = resolve_top_stack_two_player(&mut engine);
 
@@ -186,7 +191,7 @@ fn generated_opponent_hand_exile_rejects_unauthorized_and_noncandidate_objects()
     let wrong_owner = inject_card_into_hand(&mut engine, 0, "forest");
     let wrong_zone = inject_library_card(&mut engine, 1, "forest");
     engine
-        .apply_command(0, &choose_target_player(1))
+        .apply_scenario_command(0, &choose_target_player(1))
         .expect("choose target opponent");
     let parked = resolve_top_stack_two_player(&mut engine);
     let choice = find_resolution_choice(&parked).expect("private hand choice");
@@ -200,14 +205,14 @@ fn generated_opponent_hand_exile_rejects_unauthorized_and_noncandidate_objects()
     ] {
         assert!(
             engine
-                .apply_command(player, &submit_resolution_choice(vec![object_id]))
+                .apply_scenario_command(player, &submit_resolution_choice(vec![object_id]))
                 .is_err(),
             "{description} must be rejected"
         );
         assert!(engine.state.pending_resolution.is_some());
     }
     engine
-        .apply_command(1, &submit_resolution_choice(vec![candidate]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![candidate]))
         .expect("valid affected-player choice");
     assert_eq!(engine.state.objects[&candidate].zone, Zone::Exile);
 }
@@ -216,7 +221,7 @@ fn generated_opponent_hand_exile_rejects_unauthorized_and_noncandidate_objects()
 fn generated_opponent_hand_exile_rejects_stale_zone_change_generation() {
     let (mut engine, _agent, candidate) = stage_agent(288_004);
     engine
-        .apply_command(0, &choose_target_player(1))
+        .apply_scenario_command(0, &choose_target_player(1))
         .expect("choose target opponent");
     let parked = resolve_top_stack_two_player(&mut engine);
     assert!(find_resolution_choice(&parked).is_some());
@@ -234,7 +239,7 @@ fn generated_opponent_hand_exile_rejects_stale_zone_change_generation() {
     );
     assert!(
         engine
-            .apply_command(1, &submit_resolution_choice(vec![candidate]))
+            .apply_scenario_command(1, &submit_resolution_choice(vec![candidate]))
             .is_err(),
         "the choice captured the previous physical card generation"
     );
@@ -248,7 +253,7 @@ fn generated_opponent_hand_exile_targets_a_nondefault_multiplayer_opponent() {
     append_third_player(&mut engine);
     let player_two_card = inject_card_into_hand(&mut engine, 2, "storm_crow");
     engine
-        .apply_command(0, &choose_target_player(2))
+        .apply_scenario_command(0, &choose_target_player(2))
         .expect("choose the non-default opponent target");
 
     let parked = resolve_top_stack_three_player(&mut engine);
@@ -258,12 +263,12 @@ fn generated_opponent_hand_exile_targets_a_nondefault_multiplayer_opponent() {
     assert_eq!(choice.candidate_object_ids, [player_two_card]);
     assert!(
         engine
-            .apply_command(1, &submit_resolution_choice(vec![player_two_card]))
+            .apply_scenario_command(1, &submit_resolution_choice(vec![player_two_card]))
             .is_err(),
         "the non-target opponent cannot submit P2's private choice"
     );
     engine
-        .apply_command(2, &submit_resolution_choice(vec![player_two_card]))
+        .apply_scenario_command(2, &submit_resolution_choice(vec![player_two_card]))
         .expect("targeted opponent chooses the card");
     assert_eq!(engine.state.objects[&player_two_card].zone, Zone::Exile);
     assert_eq!(engine.state.objects[&player_one_card].zone, Zone::Hand);

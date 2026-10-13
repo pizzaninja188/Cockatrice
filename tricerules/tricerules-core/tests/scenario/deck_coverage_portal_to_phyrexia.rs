@@ -1,5 +1,6 @@
 //! Actual Portal to Phyrexia: APNAP sacrifice choices and targeted upkeep reanimation.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1 as rv1;
 
@@ -39,7 +40,7 @@ fn cast_portal(engine: &mut GameEngine) {
     let player = engine.state.players[0].id;
     let slot = hand_index_for_card(engine, 0, "portal_to_phyrexia");
     engine
-        .apply_command(player, &cast_spell(slot, vec![]))
+        .apply_scenario_command(player, &cast_spell(slot, vec![]))
         .expect("cast Portal to Phyrexia");
 }
 
@@ -71,7 +72,7 @@ fn portal_etb_collects_apnap_choices_before_one_simultaneous_sacrifice() {
     for (index, player) in [9, 27, 51].into_iter().enumerate() {
         let picks = creatures[index][..3].to_vec();
         let batch = engine
-            .apply_command(player, &submit_resolution_choice(picks.clone()))
+            .apply_scenario_command(player, &submit_resolution_choice(picks.clone()))
             .unwrap();
         if index < 2 {
             assert!(creatures
@@ -166,7 +167,7 @@ fn portal_auto_selects_all_available_creatures_when_an_opponent_has_fewer_than_t
         .all(|oid| !accepted.iter().any(|selection| selection.object_id == *oid)));
 
     engine
-        .apply_command(51, &submit_resolution_choice(third[..3].to_vec()))
+        .apply_scenario_command(51, &submit_resolution_choice(third[..3].to_vec()))
         .unwrap();
     for oid in first.iter().chain(&second).chain(&third[..3]) {
         assert_eq!(engine.state.objects[oid].zone, Zone::Graveyard);
@@ -192,10 +193,10 @@ fn portal_current_chooser_concession_skips_only_that_players_choice() {
     pass_priority_round(&mut engine);
     pass_priority_round(&mut engine);
     engine
-        .apply_command(9, &submit_resolution_choice(creatures[0][..3].to_vec()))
+        .apply_scenario_command(9, &submit_resolution_choice(creatures[0][..3].to_vec()))
         .unwrap();
 
-    let conceded = engine.apply_command(27, &concede()).unwrap();
+    let conceded = engine.apply_scenario_command(27, &concede()).unwrap();
     assert!(engine.state.players[2].has_lost);
     assert_eq!(
         engine
@@ -227,7 +228,7 @@ fn portal_current_chooser_concession_skips_only_that_players_choice() {
         .is_none_or(|object| object.zone != Zone::Battlefield)));
 
     engine
-        .apply_command(51, &submit_resolution_choice(creatures[2][..3].to_vec()))
+        .apply_scenario_command(51, &submit_resolution_choice(creatures[2][..3].to_vec()))
         .unwrap();
     for oid in creatures[0][..3].iter().chain(&creatures[2][..3]) {
         assert_eq!(engine.state.objects[oid].zone, Zone::Graveyard);
@@ -257,10 +258,10 @@ fn portal_effect_continues_after_its_controller_concedes_mid_choice() {
     pass_priority_round(&mut engine);
     pass_priority_round(&mut engine);
     engine
-        .apply_command(9, &submit_resolution_choice(creatures[0][..3].to_vec()))
+        .apply_scenario_command(9, &submit_resolution_choice(creatures[0][..3].to_vec()))
         .unwrap();
 
-    let after_departure = engine.apply_command(4, &concede()).unwrap();
+    let after_departure = engine.apply_scenario_command(4, &concede()).unwrap();
     assert!(engine.state.players[0].has_lost);
     assert_eq!(
         engine
@@ -283,7 +284,7 @@ fn portal_effect_continues_after_its_controller_concedes_mid_choice() {
     assert_eq!(next_prompt.accepted_permanent_selections.len(), 3);
     for (index, player) in [(1, 27), (2, 51)] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 player,
                 &submit_resolution_choice(creatures[index][..3].to_vec()),
             )
@@ -343,7 +344,7 @@ fn portal_sacrifice_choices_resume_after_concession_triggers_an_aura_return_choi
     pass_priority_round(&mut engine);
     pass_priority_round(&mut engine);
     engine
-        .apply_command(9, &submit_resolution_choice(creatures[0][..3].to_vec()))
+        .apply_scenario_command(9, &submit_resolution_choice(creatures[0][..3].to_vec()))
         .unwrap();
     assert_eq!(
         engine
@@ -355,7 +356,7 @@ fn portal_sacrifice_choices_resume_after_concession_triggers_an_aura_return_choi
         27
     );
 
-    let departure = engine.apply_command(27, &concede()).unwrap();
+    let departure = engine.apply_scenario_command(27, &concede()).unwrap();
     let aura_prompt = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(aura_prompt.deciding_player, 9);
     assert_eq!(
@@ -369,7 +370,7 @@ fn portal_sacrifice_choices_resume_after_concession_triggers_an_aura_return_choi
     )));
 
     engine
-        .apply_command(9, &submit_resolution_choice(vec![creatures[2][0]]))
+        .apply_scenario_command(9, &submit_resolution_choice(vec![creatures[2][0]]))
         .unwrap();
     let resumed = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(resumed.deciding_player, 51);
@@ -449,7 +450,7 @@ fn portal_sacrifice_choices_resume_after_concession_return_batch_timestamp_order
     pass_priority_round(&mut engine);
     pass_priority_round(&mut engine);
     engine
-        .apply_command(9, &submit_resolution_choice(creatures[0][..3].to_vec()))
+        .apply_scenario_command(9, &submit_resolution_choice(creatures[0][..3].to_vec()))
         .unwrap();
     assert_eq!(
         engine
@@ -461,7 +462,7 @@ fn portal_sacrifice_choices_resume_after_concession_return_batch_timestamp_order
         27
     );
 
-    engine.apply_command(27, &concede()).unwrap();
+    engine.apply_scenario_command(27, &concede()).unwrap();
     let order_prompt = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(
         order_prompt.presentation.choice_kind,
@@ -470,7 +471,7 @@ fn portal_sacrifice_choices_resume_after_concession_return_batch_timestamp_order
     assert_eq!(order_prompt.deciding_player, 9);
     assert_eq!(order_prompt.presentation.candidates.len(), 2);
     engine
-        .apply_command(
+        .apply_scenario_command(
             9,
             &submit_resolution_choice(order_prompt.presentation.candidates.clone()),
         )
@@ -488,7 +489,7 @@ fn portal_sacrifice_choices_resume_after_concession_return_batch_timestamp_order
         .any(|selection| selection.object_id == *object_id)));
 
     engine
-        .apply_command(51, &submit_resolution_choice(creatures[2][..3].to_vec()))
+        .apply_scenario_command(51, &submit_resolution_choice(creatures[2][..3].to_vec()))
         .unwrap();
     for chosen in creatures[0][..3].iter().chain(&creatures[2][..3]) {
         assert_eq!(engine.state.objects[chosen].zone, Zone::Graveyard);
@@ -528,7 +529,7 @@ fn portal_upkeep_reanimates_a_target_from_an_opponents_graveyard_as_phyrexian() 
         .copied()
         .unwrap_or_default();
     engine
-        .apply_command(
+        .apply_scenario_command(
             4,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(rv1::ChooseTriggerTarget {

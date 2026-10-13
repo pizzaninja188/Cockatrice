@@ -1,9 +1,10 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{
     primitives::CounterKind, ContinuousEffectKind, EffectDuration, PermanentTypeFilter,
     TypeLineReplacement,
 };
-use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine};
+use tricerules_core::{AffectedScope, ContinuousEffect};
 use tricerules_proto::ruled::v1::{
     cost_selection, AbilitySourceZone, ActivateAbility, ChoiceKind, CostObjectRef, CostObjectRefs,
     CostSelection, PreviewPayment, RuledCommand,
@@ -28,10 +29,14 @@ fn setup_unblocked_kaito(seed: u64) -> (GameEngine, u32, u32) {
     ensure_card_in_hand(&mut engine, 0, "grizzly_bears");
     let attacker = put_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    engine.apply_command(0, &pass()).expect("attacker passes");
-    engine.apply_command(1, &pass()).expect("defender passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("attacker passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("defender passes");
     let kaito =
         engine.state.players[0].hand[hand_index_for_card(&engine, 0, "kaito,_bane_of_nightmares")];
     (engine, attacker, kaito)
@@ -233,7 +238,7 @@ fn kaito_ninjutsu_returns_an_exact_unblocked_attacker_and_reveals_the_source() {
         },
     );
     let batch = engine
-        .apply_command(0, &ninjutsu_command(&engine, kaito, attacker))
+        .apply_scenario_command(0, &ninjutsu_command(&engine, kaito, attacker))
         .expect("activate Ninjutsu");
     assert_eq!(
         engine.state.objects[&attacker].zone,
@@ -270,7 +275,7 @@ fn kaito_ninjutsu_payment_preview_accepts_its_generation_bound_hand_source() {
         panic!("Ninjutsu command must be an activation");
     };
 
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             transaction_id: 203,
@@ -289,7 +294,7 @@ fn kaito_ninjutsu_payment_preview_accepts_its_generation_bound_hand_source() {
         c: 1,
         ..Default::default()
     });
-    let paid = engine.preview_payment(
+    let paid = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             transaction_id: 203,
@@ -321,7 +326,7 @@ fn kaito_ninjutsu_enters_tapped_attacking_the_same_defender() {
         },
     );
     engine
-        .apply_command(0, &ninjutsu_command(&engine, kaito, attacker))
+        .apply_scenario_command(0, &ninjutsu_command(&engine, kaito, attacker))
         .expect("activate Ninjutsu");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -376,7 +381,7 @@ fn kaito_ninjutsu_does_nothing_if_its_source_leaves_hand() {
         },
     );
     engine
-        .apply_command(0, &ninjutsu_command(&engine, kaito, attacker))
+        .apply_scenario_command(0, &ninjutsu_command(&engine, kaito, attacker))
         .expect("activate Ninjutsu");
     engine.state.players[0]
         .hand
@@ -471,13 +476,17 @@ fn kaito_zero_surveils_two_then_draws_for_each_opponent_who_lost_life() {
     let hand_before = engine.state.players[0].hand.len();
 
     apply_ability(&mut engine, 0, kaito, 2, vec![]).expect("activate zero");
-    engine.apply_command(0, &pass()).expect("controller passes");
-    let resolution = engine.apply_command(1, &pass()).expect("opponent passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
+    let resolution = engine
+        .apply_scenario_command(1, &pass())
+        .expect("opponent passes");
     let choice = find_resolution_choice(&resolution).expect("Surveil 2 choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibraryLook);
     assert_eq!(choice.candidate_object_ids.len(), 2);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(choice.candidate_object_ids.clone()),
         )

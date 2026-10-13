@@ -1,6 +1,7 @@
 //! Actual-card scenarios for five pinned Standard token and graveyard identities.
 //! Scryfall Oracle and rulings checked 2026-09-22; no card-specific rulings.
 //! CR 111.2–111.4, 602, 603.6a, and 702.122 govern the selected behavior.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -93,7 +94,7 @@ fn issue_misc28_graveyard_sources_pay_exile_before_tokens_and_enforce_timing() {
     semantic::accepted(&mut late, 0, &primitive_yield());
     grant_pool(&mut late, 0);
     assert!(late
-        .apply_command(0, &activate_graveyard(&late, source))
+        .apply_scenario_command(0, &activate_graveyard(&late, source))
         .is_err());
     assert_eq!(late.state.objects[&source].zone, Zone::Graveyard);
     assert!(battlefield_token_oids(&late, 0, "zombie_b_2_2").is_empty());

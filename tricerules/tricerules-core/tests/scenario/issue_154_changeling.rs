@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::StaticAbilityDef;
 use tricerules_cards::{CharacteristicDefiningAbility, Keyword};
@@ -84,7 +85,7 @@ fn issue_154_changeling_satisfies_a_live_goblin_lord() {
     engine.state.players[0].mana_pool.colorless = 1;
     let chieftain_slot = hand_index_for_card(&engine, 0, "goblin_chieftain");
     engine
-        .apply_command(0, &cast_spell(chieftain_slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(chieftain_slot, vec![]))
         .expect("cast Goblin Chieftain");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -125,7 +126,7 @@ fn issue_154_changeling_can_be_beheld_as_a_dragon_from_hand() {
     let changeling_slot = hand_index_for_card(&engine, 0, "chitinous_graspling");
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 spell_slot,

@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::{ContinuousEffectKind, EffectDuration, Keyword};
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
@@ -37,10 +38,10 @@ fn issue_157_wither_first_strike_changes_later_damage_without_marking_damage() {
                 timestamp: 0,
             });
         }
-        e.apply_command(0, &declare_attackers(vec![attacker]))
+        e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
             .unwrap();
         pass_both_players(&mut e);
-        e.apply_command(
+        e.apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -86,7 +87,7 @@ fn summoning_sick_creature_can_block() {
     )
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin_combat");
     let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     // Defender's creature is summoning-sick but untapped → eligible blocker.
@@ -95,19 +96,21 @@ fn summoning_sick_creature_can_block() {
         obj.summoning_sick = true;
         obj.tapped = false;
     }
-    e.apply_command(0, &pass()).expect("ap pass begin_combat");
-    e.apply_command(1, &pass()).expect("nap pass begin_combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin_combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin_combat");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::DeclareAttackers
     );
 
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("ap pass declare_attackers");
     let b = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("nap pass declare_attackers");
     // Defender has an eligible (summoning-sick) blocker → must get priority in DeclareBlockers.
     assert_eq!(
@@ -146,15 +149,15 @@ fn flying_creature_blocked_by_ground_creature_is_illegal() {
     // P1 has a ground creature and a flying creature; engine won't auto-skip.
     let merfolk = inject_creature_on_battlefield(&mut e, 1, "coral_merfolk");
     let _crow_blk = inject_creature_on_battlefield(&mut e, 1, "storm_crow");
-    e.apply_command(0, &declare_attackers(vec![crow_atk]))
+    e.apply_scenario_command(0, &declare_attackers(vec![crow_atk]))
         .expect("declare storm crow attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
     // P1 tries to block with coral_merfolk (no flying/reach) — must be rejected.
     let err = e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: crow_atk,
@@ -183,13 +186,13 @@ fn flying_creature_can_be_blocked_by_flying_creature() {
     advance_to_declare_attackers(&mut e);
     let crow_atk = inject_creature_on_battlefield(&mut e, 0, "storm_crow");
     let crow_blk = inject_creature_on_battlefield(&mut e, 1, "storm_crow");
-    e.apply_command(0, &declare_attackers(vec![crow_atk]))
+    e.apply_scenario_command(0, &declare_attackers(vec![crow_atk]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: crow_atk,
@@ -214,13 +217,13 @@ fn flying_creature_can_be_blocked_by_reach_creature() {
     advance_to_declare_attackers(&mut e);
     let crow = inject_creature_on_battlefield(&mut e, 0, "storm_crow");
     let spider = inject_creature_on_battlefield(&mut e, 1, "giant_spider");
-    e.apply_command(0, &declare_attackers(vec![crow]))
+    e.apply_scenario_command(0, &declare_attackers(vec![crow]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: crow,
@@ -248,13 +251,13 @@ fn flying_auto_skips_blockers_when_no_reach_or_flyers() {
     let crow = inject_creature_on_battlefield(&mut e, 0, "storm_crow");
     // P1 has only a ground creature — cannot legally block the flying crow.
     let _bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![crow]))
+    e.apply_scenario_command(0, &declare_attackers(vec![crow]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
     // After P1's pass the engine should auto-skip blockers (grizzly_bears can't block flyer).
     let b = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers -> auto-skip");
     assert_eq!(
         e.state.turn_step,
@@ -285,11 +288,11 @@ fn advance_landwalk_attack_to_manual_blocks(e: &mut GameEngine, landwalker_id: &
     advance_to_declare_attackers(e);
     let landwalker = inject_creature_on_battlefield(e, 0, landwalker_id);
     let vanilla_attacker = inject_creature_on_battlefield(e, 0, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![landwalker, vanilla_attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![landwalker, vanilla_attacker]))
         .expect("declare landwalker and vanilla attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass reaches manual blockers");
     assert_eq!(
         e.state.turn_step,
@@ -315,7 +318,7 @@ fn islandwalk_cannot_be_blocked_when_defender_controls_island() {
     let (boa, _) = advance_landwalk_attack_to_manual_blocks(&mut e, "river_boa");
 
     let err = e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: boa,
@@ -343,7 +346,7 @@ fn islandwalk_can_be_blocked_when_defender_controls_no_land() {
     let blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let (boa, _) = advance_landwalk_attack_to_manual_blocks(&mut e, "river_boa");
 
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: boa,
@@ -368,7 +371,7 @@ fn nonmatching_land_subtype_does_not_enable_islandwalk() {
     inject_permanent_on_battlefield(&mut e, 1, "forest");
     let (boa, _) = advance_landwalk_attack_to_manual_blocks(&mut e, "river_boa");
 
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: boa,
@@ -403,7 +406,7 @@ fn inactive_landwalk_still_obeys_flying_restriction() {
         timestamp: e.state.command_index,
     });
 
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: boa,
@@ -429,7 +432,7 @@ fn forestwalk_uses_the_same_land_subtype_evasion() {
     let (dryads, _) = advance_landwalk_attack_to_manual_blocks(&mut e, "shanodin_dryads");
 
     let err = e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: dryads,
@@ -459,7 +462,7 @@ fn landwalk_uses_defending_land_controller_not_owner() {
     e.state.objects.get_mut(&island).unwrap().owner = e.state.players[0].id;
     let (boa, _) = advance_landwalk_attack_to_manual_blocks(&mut e, "river_boa");
 
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: boa,
@@ -484,12 +487,12 @@ fn landwalk_auto_skips_when_every_available_blocker_is_illegal() {
     let boa = inject_creature_on_battlefield(&mut e, 0, "river_boa");
     inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     inject_permanent_on_battlefield(&mut e, 1, "island");
-    e.apply_command(0, &declare_attackers(vec![boa]))
+    e.apply_scenario_command(0, &declare_attackers(vec![boa]))
         .expect("declare islandwalk attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
     let batch = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass auto-skips illegal blockers");
 
     let declared = blockers_declared_in(&batch);
@@ -521,15 +524,15 @@ fn intimidate_blocked_by_different_color_non_artifact_is_illegal() {
     // P1 has Grizzly Bears (Green) AND a black creature so engine won't auto-skip.
     let bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let _corpse = inject_creature_on_battlefield(&mut e, 1, "walking_corpse"); // black — keeps blockers open
-    e.apply_command(0, &declare_attackers(vec![spirit]))
+    e.apply_scenario_command(0, &declare_attackers(vec![spirit]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
     // Grizzly Bears is green, non-artifact — cannot block a black intimidate creature.
     let err = e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: spirit,
@@ -560,13 +563,13 @@ fn intimidate_blocked_by_same_color_creature_is_legal() {
     let spirit = inject_creature_on_battlefield(&mut e, 0, "accursed_spirit");
     // Walking Corpse costs 1B — it is a Black creature, shares color with the Spirit.
     let corpse = inject_creature_on_battlefield(&mut e, 1, "walking_corpse");
-    e.apply_command(0, &declare_attackers(vec![spirit]))
+    e.apply_scenario_command(0, &declare_attackers(vec![spirit]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: spirit,
@@ -593,13 +596,13 @@ fn intimidate_blocked_by_artifact_creature_is_legal() {
     let spirit = inject_creature_on_battlefield(&mut e, 0, "accursed_spirit");
     // Ornithopter is a colorless artifact creature — qualifies despite no shared color.
     let thopter = inject_creature_on_battlefield(&mut e, 1, "ornithopter");
-    e.apply_command(0, &declare_attackers(vec![spirit]))
+    e.apply_scenario_command(0, &declare_attackers(vec![spirit]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: spirit,
@@ -628,7 +631,7 @@ fn vigilance_attacker_does_not_tap() {
     .expect("new");
     advance_to_declare_attackers(&mut e);
     let watchdog = inject_creature_on_battlefield(&mut e, 0, "alpine_watchdog");
-    e.apply_command(0, &declare_attackers(vec![watchdog]))
+    e.apply_scenario_command(0, &declare_attackers(vec![watchdog]))
         .expect("declare vigilance attacker");
     let obj = e.state.objects.get(&watchdog).expect("watchdog object");
     assert!(
@@ -654,7 +657,7 @@ fn non_vigilance_attacker_still_taps() {
     let bears = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     // Need a blocker on P1's side so the engine doesn't auto-skip to end combat.
     let _blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![bears]))
+    e.apply_scenario_command(0, &declare_attackers(vec![bears]))
         .expect("declare normal attacker");
     let obj = e.state.objects.get(&bears).expect("bears object");
     assert!(
@@ -682,10 +685,10 @@ fn issue_175_lethally_damaged_cindermaw_still_prohibits_simultaneous_lifelink() 
     advance_to_declare_attackers(&mut e);
     let attacker = inject_creature_with_stats(&mut e, 0, "giant_cindermaw", 4, 3);
     let blocker = inject_creature_with_stats(&mut e, 1, "vampire_nighthawk", 2, 3);
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .unwrap();
     pass_both_players(&mut e);
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: attacker,
@@ -694,7 +697,7 @@ fn issue_175_lethally_damaged_cindermaw_still_prohibits_simultaneous_lifelink() 
     )
     .unwrap();
     pass_both_players(&mut e);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &assign_combat_damage_cmd_with_player(attacker, vec![(blocker, 3)], 1),
     )
@@ -728,17 +731,17 @@ fn lifelink_unblocked_attacker_gains_life() {
     advance_to_declare_attackers(&mut e);
     let con = inject_creature_on_battlefield(&mut e, 0, "child_of_night");
     // No blockers for P1 → auto-skip.
-    e.apply_command(0, &declare_attackers(vec![con]))
+    e.apply_scenario_command(0, &declare_attackers(vec![con]))
         .expect("declare lifelink attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
     // Auto-empty blockers declared; active player has priority in DeclareBlockers.
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
     let b = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass declare blockers -> combat damage");
     let life = life_changes_in(&b);
     // Expect two events: defender loses 2, attacker controller gains 2.
@@ -777,13 +780,13 @@ fn lifelink_blocked_attacker_still_gains_life() {
     let con = inject_creature_on_battlefield(&mut e, 0, "child_of_night");
     // P1 has a blocker to intercept.
     let blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![con]))
+    e.apply_scenario_command(0, &declare_attackers(vec![con]))
         .expect("declare lifelink attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: con,
@@ -791,10 +794,10 @@ fn lifelink_blocked_attacker_still_gains_life() {
         }]),
     )
     .expect("declare blocker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
     let b = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass declare blockers -> combat damage");
     let life = life_changes_in(&b);
     // Defender player takes no direct damage (blocked).
@@ -832,13 +835,13 @@ fn lifelink_blocker_gains_life() {
     let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     // P1 blocks with Child of Night (Lifelink, 2 power in injected state).
     let con = inject_creature_on_battlefield(&mut e, 1, "child_of_night");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: attacker,
@@ -846,10 +849,10 @@ fn lifelink_blocker_gains_life() {
         }]),
     )
     .expect("declare lifelink blocker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
     let b = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass declare blockers -> combat damage");
     let life = life_changes_in(&b);
     // Defending player takes no direct damage (blocked).
@@ -887,13 +890,13 @@ fn intimidate_auto_skips_blockers_when_no_eligible_creatures() {
     let spirit = inject_creature_on_battlefield(&mut e, 0, "accursed_spirit");
     // P1 has only Grizzly Bears — Green, non-artifact, cannot block Black intimidate.
     let _bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![spirit]))
+    e.apply_scenario_command(0, &declare_attackers(vec![spirit]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
     // After P1's pass the engine detects no eligible blockers and auto-skips.
     let b = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers -> auto-skip");
     assert_eq!(
         e.state.turn_step,
@@ -972,7 +975,7 @@ fn haste_creature_can_attack_same_turn_it_enters() {
     e.state.players[0].battlefield.push(goblin);
 
     // Declare the Goblin as an attacker — must succeed despite summoning_sick = true.
-    e.apply_command(0, &declare_attackers(vec![goblin]))
+    e.apply_scenario_command(0, &declare_attackers(vec![goblin]))
         .expect("haste creature should be allowed to attack same turn it entered");
     assert!(
         e.state.combat.as_ref().unwrap().attacking.contains(&goblin),
@@ -1033,7 +1036,8 @@ fn non_haste_summoning_sick_creature_cannot_attack() {
     e.state.players[0].battlefield.push(bears);
 
     assert!(
-        e.apply_command(0, &declare_attackers(vec![bears])).is_err(),
+        e.apply_scenario_command(0, &declare_attackers(vec![bears]))
+            .is_err(),
         "summoning-sick creature without haste must not be allowed to attack"
     );
 }
@@ -1061,13 +1065,13 @@ fn deathtouch_attacker_kills_blocker_with_higher_toughness() {
     // Walking Corpse: 2/2 — would survive 1 damage without deathtouch.
     let corpse = inject_creature_with_stats(&mut e, 1, "walking_corpse", 2, 2);
 
-    e.apply_command(0, &declare_attackers(vec![chosen]))
+    e.apply_scenario_command(0, &declare_attackers(vec![chosen]))
         .expect("declare deathtouch attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: chosen,
@@ -1075,10 +1079,10 @@ fn deathtouch_attacker_kills_blocker_with_higher_toughness() {
         }]),
     )
     .expect("declare blocker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
     let _ = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass -> combat damage");
 
     // Both should be gone: Chosen takes 2 damage ≥ toughness 1; Corpse takes 1
@@ -1119,13 +1123,13 @@ fn deathtouch_blocker_kills_attacker_with_higher_toughness() {
     let corpse = inject_creature_with_stats(&mut e, 0, "walking_corpse", 2, 2);
     let chosen = inject_creature_with_stats(&mut e, 1, "pharikas_chosen", 1, 1);
 
-    e.apply_command(0, &declare_attackers(vec![corpse]))
+    e.apply_scenario_command(0, &declare_attackers(vec![corpse]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: corpse,
@@ -1133,10 +1137,10 @@ fn deathtouch_blocker_kills_attacker_with_higher_toughness() {
         }]),
     )
     .expect("declare deathtouch blocker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
     let _ = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass -> combat damage");
 
     assert!(
@@ -1175,13 +1179,13 @@ fn non_deathtouch_one_power_does_not_kill_two_toughness_blocker() {
     let goblin = inject_creature_with_stats(&mut e, 0, "raging_goblin", 1, 1);
     let corpse = inject_creature_with_stats(&mut e, 1, "walking_corpse", 2, 2);
 
-    e.apply_command(0, &declare_attackers(vec![goblin]))
+    e.apply_scenario_command(0, &declare_attackers(vec![goblin]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: goblin,
@@ -1189,10 +1193,10 @@ fn non_deathtouch_one_power_does_not_kill_two_toughness_blocker() {
         }]),
     )
     .expect("declare blocker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
     let _ = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass -> combat damage");
 
     // Goblin (1/1) dies to 2 back-damage. Corpse (2/2) takes only 1 non-deathtouch
@@ -1247,16 +1251,16 @@ fn menace_single_blocker_is_illegal() {
     let bears1 = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let _bears2 = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
 
-    e.apply_command(0, &declare_attackers(vec![trailblazer]))
+    e.apply_scenario_command(0, &declare_attackers(vec![trailblazer]))
         .expect("declare menace attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
 
     // One blocker on a menace attacker — must be rejected.
     let err = e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: trailblazer,
@@ -1300,15 +1304,15 @@ fn menace_two_blockers_is_legal() {
     let bears1 = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let bears2 = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
 
-    e.apply_command(0, &declare_attackers(vec![trailblazer]))
+    e.apply_scenario_command(0, &declare_attackers(vec![trailblazer]))
         .expect("declare menace attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
 
     // Two blockers on a menace attacker — must be accepted.
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![
             BlockPair {
@@ -1353,15 +1357,15 @@ fn menace_unblocked_is_legal() {
     let _bears1 = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let _bears2 = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
 
-    e.apply_command(0, &declare_attackers(vec![trailblazer]))
+    e.apply_scenario_command(0, &declare_attackers(vec![trailblazer]))
         .expect("declare menace attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
 
     // Empty blocker declaration — menace creature goes unblocked, which is always fine.
-    e.apply_command(1, &declare_blockers(vec![]))
+    e.apply_scenario_command(1, &declare_blockers(vec![]))
         .expect("empty blockers (menace unblocked) must be legal");
     assert!(
         e.state.combat.as_ref().unwrap().blockers_declared,
@@ -1390,15 +1394,15 @@ fn menace_single_creature_auto_skips_blockers() {
     // Only one defender creature — cannot satisfy menace's 2-blocker requirement alone.
     let _bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
 
-    e.apply_command(0, &declare_attackers(vec![trailblazer]))
+    e.apply_scenario_command(0, &declare_attackers(vec![trailblazer]))
         .expect("declare menace attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
 
     // P1 passes — engine detects no eligible blockers (menace prevents single-blocker block)
     // and must auto-declare empty blockers, just like flying when no reach/flyers exist.
     let b = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass → auto-skip blockers");
 
     assert_eq!(
@@ -1438,7 +1442,7 @@ fn trample_single_blocker_lethal_plus_excess_to_player() {
     let p1_life_before = e.state.players[1].life;
 
     let b = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &assign_combat_damage_cmd_with_player(attacker, vec![(blocker, 2)], 4),
         )
@@ -1501,7 +1505,7 @@ fn trample_rejects_less_than_lethal_to_blocker() {
     // CR 702.19b: must assign >= lethal damage to each blocker before trample to player.
     // Colossal Dreadmaw (6/6) vs Grizzly Bears (2/2): assigning only 1 to blocker (< lethal 2) is illegal.
     let (mut e, attacker, blocker) = setup_trample_single_blocker_assign_phase();
-    let err = e.apply_command(
+    let err = e.apply_scenario_command(
         0,
         &assign_combat_damage_cmd_with_player(attacker, vec![(blocker, 1)], 5),
     );
@@ -1520,7 +1524,7 @@ fn trample_rejects_sum_mismatch() {
     // 2 to blocker + 3 to player = 5 ≠ 6 (power): must be rejected.
     let (mut e, attacker, blocker) = setup_trample_single_blocker_assign_phase();
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &assign_combat_damage_cmd_with_player(attacker, vec![(blocker, 2)], 3),
         )
@@ -1534,7 +1538,7 @@ fn trample_rejects_player_damage_without_trample() {
     // Non-trample multi-blocked attacker (Grizzly Bears 2/2) must not accept defending_player_damage > 0.
     let (mut e, attacker, a, b) = setup_two_blockers_assign_phase(5010);
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &assign_combat_damage_cmd_with_player(attacker, vec![(a, 1), (b, 0)], 1),
         )
@@ -1552,7 +1556,7 @@ fn trample_all_damage_to_blocker_zero_to_player() {
     let p1_life_before = e.state.players[1].life;
 
     let b = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &assign_combat_damage_cmd_with_player(attacker, vec![(blocker, 6)], 0),
         )
@@ -1600,14 +1604,14 @@ fn trample_multi_blocked_excess_to_player() {
     let b1 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let b2 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
 
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass declare attackers");
 
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![
             BlockPair {
@@ -1622,14 +1626,14 @@ fn trample_multi_blocked_excess_to_player() {
     )
     .expect("declare two blockers");
 
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active pass declare blockers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("defender pass → assign phase");
 
     let p1_life_before = e.state.players[1].life;
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &assign_combat_damage_cmd_with_player(attacker, vec![(b1, 2), (b2, 2)], 2),
         )
@@ -1692,11 +1696,11 @@ fn trample_multi_blocked_rejects_less_than_lethal_to_first_blocker() {
     let b1 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let b2 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
 
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare");
-    e.apply_command(0, &pass()).expect("pass");
-    e.apply_command(1, &pass()).expect("pass");
-    e.apply_command(
+    e.apply_scenario_command(0, &pass()).expect("pass");
+    e.apply_scenario_command(1, &pass()).expect("pass");
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![
             BlockPair {
@@ -1710,12 +1714,12 @@ fn trample_multi_blocked_rejects_less_than_lethal_to_first_blocker() {
         ]),
     )
     .expect("declare two blockers");
-    e.apply_command(0, &pass()).expect("pass");
-    e.apply_command(1, &pass()).expect("pass");
+    e.apply_scenario_command(0, &pass()).expect("pass");
+    e.apply_scenario_command(1, &pass()).expect("pass");
 
     // 1 to first blocker < lethal (2): illegal.
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &assign_combat_damage_cmd_with_player(attacker, vec![(b1, 1), (b2, 2)], 3),
         )
@@ -1755,11 +1759,13 @@ fn first_strike_attacker_against_vanilla_blocker_survives_or_dies_per_pt() {
     let goblin = inject_creature_with_stats(&mut e, 0, "goblin_striker", 1, 1);
     let corpse = inject_creature_with_stats(&mut e, 1, "walking_corpse", 2, 2);
 
-    e.apply_command(0, &declare_attackers(vec![goblin]))
+    e.apply_scenario_command(0, &declare_attackers(vec![goblin]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("ap pass dec atk");
-    e.apply_command(1, &pass()).expect("def pass dec atk");
-    e.apply_command(
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass dec atk");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass dec atk");
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: goblin,
@@ -1769,8 +1775,10 @@ fn first_strike_attacker_against_vanilla_blocker_survives_or_dies_per_pt() {
     .expect("declare blocker");
 
     // Both players pass priority in declare blockers → engine enters first-strike substep.
-    e.apply_command(0, &pass()).expect("ap pass dec blk");
-    e.apply_command(1, &pass()).expect("def pass dec blk");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass dec blk");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass dec blk");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::FirstStrikeDamage,
@@ -1792,8 +1800,10 @@ fn first_strike_attacker_against_vanilla_blocker_survives_or_dies_per_pt() {
     );
 
     // Pass priority in first-strike step → engine runs regular combat damage step.
-    e.apply_command(0, &pass()).expect("ap pass fs damage");
-    e.apply_command(1, &pass()).expect("def pass fs damage");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass fs damage");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass fs damage");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::CombatDamage,
@@ -1836,11 +1846,13 @@ fn double_strike_attacker_against_vanilla_blocker_both_die() {
     let ace = inject_creature_with_stats(&mut e, 0, "fencing_ace", 1, 1);
     let bears = inject_creature_with_stats(&mut e, 1, "grizzly_bears", 2, 2);
 
-    e.apply_command(0, &declare_attackers(vec![ace]))
+    e.apply_scenario_command(0, &declare_attackers(vec![ace]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("ap pass dec atk");
-    e.apply_command(1, &pass()).expect("def pass dec atk");
-    e.apply_command(
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass dec atk");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass dec atk");
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: ace,
@@ -1848,8 +1860,10 @@ fn double_strike_attacker_against_vanilla_blocker_both_die() {
         }]),
     )
     .expect("declare blocker");
-    e.apply_command(0, &pass()).expect("ap pass dec blk");
-    e.apply_command(1, &pass()).expect("def pass dec blk");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass dec blk");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass dec blk");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::FirstStrikeDamage,
@@ -1863,8 +1877,10 @@ fn double_strike_attacker_against_vanilla_blocker_both_die() {
         .get(&ace)
         .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield));
 
-    e.apply_command(0, &pass()).expect("ap pass fs damage");
-    e.apply_command(1, &pass()).expect("def pass fs damage");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass fs damage");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass fs damage");
     // Regular step: ace deals another 1 (bears die at 2 damage = toughness), bears deal 2 (ace dies).
     assert!(
         !e.state
@@ -1899,11 +1915,13 @@ fn vanilla_combat_skips_first_strike_step() {
     advance_to_declare_attackers(&mut e);
     let bears = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 2, 2);
     let corpse = inject_creature_with_stats(&mut e, 1, "walking_corpse", 2, 2);
-    e.apply_command(0, &declare_attackers(vec![bears]))
+    e.apply_scenario_command(0, &declare_attackers(vec![bears]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("ap pass dec atk");
-    e.apply_command(1, &pass()).expect("def pass dec atk");
-    e.apply_command(
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass dec atk");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass dec atk");
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: bears,
@@ -1911,8 +1929,10 @@ fn vanilla_combat_skips_first_strike_step() {
         }]),
     )
     .expect("declare blocker");
-    e.apply_command(0, &pass()).expect("ap pass dec blk");
-    e.apply_command(1, &pass()).expect("def pass dec blk");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass dec blk");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass dec blk");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::CombatDamage,
@@ -1946,13 +1966,17 @@ fn first_strike_unblocked_deals_damage_in_first_strike_step() {
     .expect("new");
     advance_to_declare_attackers(&mut e);
     let goblin = inject_creature_with_stats(&mut e, 0, "goblin_striker", 1, 1);
-    e.apply_command(0, &declare_attackers(vec![goblin]))
+    e.apply_scenario_command(0, &declare_attackers(vec![goblin]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("ap pass dec atk");
-    e.apply_command(1, &pass()).expect("def pass dec atk");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass dec atk");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass dec atk");
     // No blockers: engine auto-declares empty blockers then awaits passes.
-    e.apply_command(0, &pass()).expect("ap pass dec blk");
-    e.apply_command(1, &pass()).expect("def pass dec blk");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass dec blk");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass dec blk");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::FirstStrikeDamage,
@@ -1963,8 +1987,10 @@ fn first_strike_unblocked_deals_damage_in_first_strike_step() {
         life_after_fs, 19,
         "defender should take 1 damage in first-strike step"
     );
-    e.apply_command(0, &pass()).expect("ap pass fs damage");
-    e.apply_command(1, &pass()).expect("def pass fs damage");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass fs damage");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass fs damage");
     assert_eq!(
         e.state.players[1].life, 19,
         "regular step deals no extra damage for first strike"
@@ -1986,15 +2012,21 @@ fn double_strike_unblocked_deals_damage_in_both_steps() {
     .expect("new");
     advance_to_declare_attackers(&mut e);
     let ace = inject_creature_with_stats(&mut e, 0, "fencing_ace", 1, 1);
-    e.apply_command(0, &declare_attackers(vec![ace]))
+    e.apply_scenario_command(0, &declare_attackers(vec![ace]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("ap pass dec atk");
-    e.apply_command(1, &pass()).expect("def pass dec atk");
-    e.apply_command(0, &pass()).expect("ap pass dec blk");
-    e.apply_command(1, &pass()).expect("def pass dec blk");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass dec atk");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass dec atk");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass dec blk");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass dec blk");
     assert_eq!(e.state.players[1].life, 19, "first-strike step deals 1");
-    e.apply_command(0, &pass()).expect("ap pass fs damage");
-    e.apply_command(1, &pass()).expect("def pass fs damage");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass fs damage");
+    e.apply_scenario_command(1, &pass())
+        .expect("def pass fs damage");
     assert_eq!(
         e.state.players[1].life, 18,
         "double strike deals damage again in the regular step (total 2)"
@@ -2051,7 +2083,7 @@ fn indestructible_survives_destroy_spell() {
         e.state.objects.get_mut(&oid).unwrap().zone = tricerules_core::Zone::Battlefield;
     }
     let swamp_idx = hand_index_for_card(&e, 0, "swamp");
-    e.apply_command(0, &play_land(swamp_idx))
+    e.apply_scenario_command(0, &play_land(swamp_idx))
         .expect("play swamp");
     give_mana(
         &mut e,
@@ -2064,7 +2096,7 @@ fn indestructible_survives_destroy_spell() {
     );
 
     let murder_idx = hand_index_for_card(&e, 0, "murder");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             murder_idx,
@@ -2078,8 +2110,8 @@ fn indestructible_survives_destroy_spell() {
         ),
     )
     .expect("cast murder");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
 
     // Myr must still be on the battlefield.
     assert_eq!(
@@ -2111,13 +2143,13 @@ fn indestructible_survives_lethal_combat_damage() {
     let attacker = inject_creature_with_stats(&mut e, 0, "colossal_dreadmaw", 6, 6);
     let myr = inject_creature_with_stats(&mut e, 1, "darksteel_myr", 0, 1);
 
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("p0 pass after attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("p1 pass after attackers");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &declare_blockers(vec![BlockPair {
             attacker_id: attacker,
@@ -2125,8 +2157,9 @@ fn indestructible_survives_lethal_combat_damage() {
         }]),
     )
     .expect("declare blocker");
-    e.apply_command(0, &pass()).expect("p0 pass after blockers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(0, &pass())
+        .expect("p0 pass after blockers");
+    e.apply_scenario_command(1, &pass())
         .expect("p1 pass after blockers -> combat damage resolves");
 
     assert_eq!(
@@ -2159,8 +2192,8 @@ fn indestructible_dies_when_toughness_reaches_zero() {
     e.state.objects.get_mut(&myr).unwrap().toughness = Some(0);
 
     // Pass priority — SBAs fire on the next priority check.
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
 
     assert_eq!(
         e.state.objects.get(&myr).expect("myr object").zone,
@@ -2190,9 +2223,9 @@ fn defender_creature_cannot_be_declared_as_attacker() {
     let bears = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
 
     // Main1 -> BeginCombat -> DeclareAttackers (an eligible non-defender attacker exists).
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 -> begin combat");
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("begin combat -> declare attackers");
     assert_eq!(
         e.state.turn_step,
@@ -2200,13 +2233,13 @@ fn defender_creature_cannot_be_declared_as_attacker() {
     );
 
     // CR 702.3b: a creature with defender can't attack.
-    let err = e.apply_command(0, &declare_attackers(vec![wall]));
+    let err = e.apply_scenario_command(0, &declare_attackers(vec![wall]));
     assert!(
         err.is_err(),
         "defender creature must be rejected as an attacker"
     );
     // The rejected declaration mutates nothing: the bears can still be declared.
-    e.apply_command(0, &declare_attackers(vec![bears]))
+    e.apply_scenario_command(0, &declare_attackers(vec![bears]))
         .expect("non-defender attacks");
     assert_eq!(
         e.state.combat.as_ref().expect("combat").attacking,
@@ -2232,9 +2265,9 @@ fn lone_defender_provides_no_eligible_attackers() {
     advance_to_main1_from_game_start(&mut e);
     relocate_to_battlefield(&mut e, 0, "wall_of_stone", false);
 
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 -> begin combat");
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("begin combat advance");
     // With only a defender out, combat never enters the declare-attackers step.
     assert_ne!(
@@ -2275,7 +2308,7 @@ fn flash_creature_castable_at_instant_speed_unlike_flashless() {
 
     // A flashless creature can't be cast at instant speed (CR 601.3a).
     let bears_idx = hand_index_for_card(&e, 0, "grizzly_bears");
-    let err = e.apply_command(0, &cast_spell(bears_idx, vec![]));
+    let err = e.apply_scenario_command(0, &cast_spell(bears_idx, vec![]));
     assert!(
         err.is_err(),
         "flashless creature must be sorcery-speed only"
@@ -2283,7 +2316,7 @@ fn flash_creature_castable_at_instant_speed_unlike_flashless() {
 
     // The flash creature casts in the same window (CR 702.8b).
     let viper_idx = hand_index_for_card(&e, 0, "ambush_viper");
-    e.apply_command(0, &cast_spell(viper_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(viper_idx, vec![]))
         .expect("flash creature casts at instant speed");
     assert_eq!(
         e.state.stack.last().expect("viper on stack").card_id,
@@ -2341,7 +2374,7 @@ fn goblin_chieftain_grants_haste_to_other_goblins() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "goblin_chieftain");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast goblin chieftain");
     resolve_entire_stack_two_player(&mut e);
 
@@ -2387,7 +2420,7 @@ fn goblin_chieftain_haste_grant_allows_sick_goblin_to_attack() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "goblin_chieftain");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast goblin chieftain");
     resolve_entire_stack_two_player(&mut e);
 
@@ -2398,16 +2431,19 @@ fn goblin_chieftain_haste_grant_allows_sick_goblin_to_attack() {
     }
 
     // Advance to DeclareAttackers; the trailblazer should be eligible due to granted haste.
-    e.apply_command(0, &primitive_yield()).expect("main1 yield");
-    e.apply_command(0, &pass()).expect("ap pass begin_combat");
-    e.apply_command(1, &pass()).expect("nap pass begin_combat");
+    e.apply_scenario_command(0, &primitive_yield())
+        .expect("main1 yield");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin_combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin_combat");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::DeclareAttackers
     );
 
     // Goblin Trailblazer (summoning-sick) should be able to attack — Chieftain grants Haste.
-    e.apply_command(0, &declare_attackers(vec![trailblazer]))
+    e.apply_scenario_command(0, &declare_attackers(vec![trailblazer]))
         .expect("summoning-sick goblin attacks due to haste grant from chieftain");
 }
 
@@ -2445,7 +2481,7 @@ fn goblin_chieftain_does_not_grant_haste_to_non_goblins() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "goblin_chieftain");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast goblin chieftain");
     resolve_entire_stack_two_player(&mut e);
 
@@ -2492,7 +2528,7 @@ fn overrun_grants_trample_until_end_of_turn() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "overrun");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast overrun");
     resolve_entire_stack_two_player(&mut e);
 
@@ -2540,7 +2576,7 @@ fn captain_of_the_watch_grants_vigilance_to_soldiers() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "captain_of_the_watch");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast captain of the watch");
     // Captain enters; its ETB trigger (create 3 soldier tokens) is on the stack.
     // Resolve the stack entirely (ETB trigger + spell resolution).

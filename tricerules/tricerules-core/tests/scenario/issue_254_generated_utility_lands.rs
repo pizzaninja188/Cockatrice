@@ -4,6 +4,7 @@
 //! Oracle and rulings checked 2026-09-11. Current CR 115.1d and 603.3d govern triggered
 //! targets, 608.2b revalidates them, 701.22 and 701.25 define scry and surveil, 120.1
 //! preserves the land as damage source, and 605.1a/605.3b govern the mana ability.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{
@@ -34,10 +35,10 @@ fn seat_on_top(engine: &mut GameEngine, player: usize, card_id: &str) -> u32 {
 
 fn resolve_top_two_player(engine: &mut GameEngine) -> RuledEventBatch {
     engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .expect("first pass");
     engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .expect("second pass resolves")
 }
 
@@ -75,7 +76,7 @@ fn generated_lifeland_gains_exactly_once_on_entry() {
     assert!(engine.state.stack.is_empty());
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("ordinary priority pass");
     assert_eq!(engine.state.players[0].life, 21, "entry trigger fires once");
 }
@@ -104,7 +105,7 @@ fn generated_scry_and_surveil_keep_private_exact_library_identity_and_emit_surve
     assert_eq!(choice.deciding_player_id, 0);
     assert_eq!(choice.candidate_object_ids, [scried]);
     assert!(choice.public_reveal.is_none());
-    scry.apply_command(0, &submit_resolution_choice(vec![scried]))
+    scry.apply_scenario_command(0, &submit_resolution_choice(vec![scried]))
         .expect("put the exact card on bottom");
     assert_eq!(scry.state.players[0].library.back(), Some(&scried));
 
@@ -150,7 +151,7 @@ fn generated_scry_and_surveil_keep_private_exact_library_identity_and_emit_surve
     assert_eq!(choice.candidate_object_ids, [surveilled]);
     assert!(choice.public_reveal.is_none());
     surveil
-        .apply_command(0, &submit_resolution_choice(vec![surveilled]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![surveilled]))
         .expect("move exact surveilled card");
     assert_eq!(surveil.state.objects[&surveilled].zone, Zone::Graveyard);
     assert!(surveil
@@ -180,10 +181,10 @@ fn generated_desert_targets_one_chosen_opponent_and_attributes_land_damage() {
     let land = move_ready_to_battlefield(&mut engine, 0, "lonely_arroyo");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(0, &choose_trigger_targets(target_player(0)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_player(0)))
         .expect_err("controller is not an opponent");
     engine
-        .apply_command(0, &choose_trigger_targets(target_player(2)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_player(2)))
         .expect("choose either legal opponent in multiplayer");
     assert_eq!(
         engine.state.stack.last().unwrap().source_permanent_id,
@@ -202,7 +203,7 @@ fn generated_desert_targets_one_chosen_opponent_and_attributes_land_damage() {
     while !engine.state.stack.is_empty() {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("multiplayer pass");
     }
     assert_eq!(
@@ -236,13 +237,13 @@ fn generated_desert_revalidates_a_departed_player_target_before_resolution() {
     add_third_player(&mut engine);
     move_ready_to_battlefield(&mut engine, 0, "jagged_barrens");
     engine
-        .apply_command(0, &choose_trigger_targets(target_player(1)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_player(1)))
         .expect("choose opponent");
     engine.state.players[1].has_lost = true;
     while !engine.state.stack.is_empty() {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("live player pass");
     }
     assert_eq!(
@@ -278,7 +279,7 @@ fn generated_paid_mana_ability_is_atomic_and_offers_exactly_five_outputs() {
         };
         ability.mana_option_index = option;
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect_err("generic mana cost is required");
         assert!(
             !engine.state.objects[&land].tapped,
@@ -294,7 +295,7 @@ fn generated_paid_mana_ability_is_atomic_and_offers_exactly_five_outputs() {
             },
         );
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect("activate paid mana option");
         let pool = &engine.state.players[0].mana_pool;
         assert_eq!(

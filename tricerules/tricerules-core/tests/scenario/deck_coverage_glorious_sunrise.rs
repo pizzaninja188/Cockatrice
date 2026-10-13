@@ -1,9 +1,10 @@
 //! Exact Glorious Sunrise combat modes and resolving condition/lifetime evidence.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{ContinuousEffectKind, EffectDuration, Keyword};
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ruled_event::Ev, ChooseTriggerTarget, SelectedSpellMode,
 };
@@ -33,7 +34,7 @@ fn setup() -> GameEngine {
         },
     );
     let slot = hand_index_for_card(&e, 0, SUNRISE);
-    e.apply_command(10, &cast_spell(slot, vec![]))
+    e.apply_scenario_command(10, &cast_spell(slot, vec![]))
         .expect("actual Sunrise cast with 3GG");
     pass_priority_round(&mut e);
     assert_eq!(e.state.stack.len(), 0);
@@ -45,7 +46,7 @@ fn setup() -> GameEngine {
 fn combat(e: &mut GameEngine) -> tricerules_proto::ruled::v1::TriggerNeedsTarget {
     assert_eq!(e.state.turn_step, TurnStep::Main1);
     let batch = e
-        .apply_command(e.state.active_player_id(), &primitive_yield())
+        .apply_scenario_command(e.state.active_player_id(), &primitive_yield())
         .unwrap();
     assert_eq!(e.state.turn_step, TurnStep::BeginCombat);
     assert_eq!(e.state.pending_triggers.len(), 1);
@@ -102,7 +103,7 @@ fn sunrise_complete_definition_and_actual_life_mode() {
     );
     let mut e = setup();
     combat(&mut e);
-    e.apply_command(10, &mode(3, vec![])).unwrap();
+    e.apply_scenario_command(10, &mode(3, vec![])).unwrap();
     pass_priority_round(&mut e);
     assert_eq!(
         e.state.players.iter().map(|p| p.life).collect::<Vec<_>>(),
@@ -113,7 +114,7 @@ fn sunrise_complete_definition_and_actual_life_mode() {
 
 fn reject(e: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = serde_json::to_vec(&e.state).unwrap();
-    e.apply_command(actor, command)
+    e.apply_scenario_command(actor, command)
         .expect_err("illegal command rejects");
     assert_eq!(serde_json::to_vec(&e.state).unwrap(), before);
 }
@@ -124,7 +125,7 @@ fn priority(e: &mut GameEngine, actor: i32) {
             return;
         }
         let current = e.state.priority_player_id();
-        e.apply_command(current, &pass()).unwrap();
+        e.apply_scenario_command(current, &pass()).unwrap();
     }
     panic!("priority did not reach {actor}");
 }
@@ -144,7 +145,7 @@ fn response(e: &mut GameEngine, seat: usize, card: &str, targets: Vec<TargetRef>
         },
     );
     let slot = hand_index_for_card(e, seat, card);
-    e.apply_command(actor, &cast_spell(slot, targets))
+    e.apply_scenario_command(actor, &cast_spell(slot, targets))
         .expect("actual response card cast");
     pass_priority_round(e);
 }
@@ -225,7 +226,8 @@ fn grant(e: &mut GameEngine, land: u32) {
         "land mode publishes its target group"
     );
     assert!(targets.groups[0].valid_permanent_ids.contains(&land));
-    e.apply_command(10, &mode(1, target_object(land))).unwrap();
+    e.apply_scenario_command(10, &mode(1, target_object(land)))
+        .unwrap();
     pass_priority_round(e);
 }
 
@@ -250,7 +252,7 @@ fn sunrise_pump_snapshots_own_creatures_and_expires_at_cleanup() {
     let own = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let opponent = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     combat(&mut e);
-    e.apply_command(10, &mode(0, vec![])).unwrap();
+    e.apply_scenario_command(10, &mode(0, vec![])).unwrap();
     pass_priority_round(&mut e);
     assert_eq!(
         (e.effective_power(own), e.effective_toughness(own)),
@@ -307,7 +309,7 @@ fn sunrise_land_grant_follows_current_control_and_has_source_independent_lifetim
         assert_eq!(published, index);
         priority(&mut e, actor);
         let before = e.state.players[seat].mana_pool.green;
-        e.apply_command(actor, &activate_ability_for(&e, land, published, vec![]))
+        e.apply_scenario_command(actor, &activate_ability_for(&e, land, published, vec![]))
             .unwrap();
         assert_eq!(e.state.players[seat].mana_pool.green, before + 3);
         assert!(e.state.objects[&land].tapped);
@@ -336,7 +338,8 @@ fn sunrise_land_grant_never_follows_a_new_incarnation() {
             .copied()
             .unwrap_or(0);
         combat(&mut e);
-        e.apply_command(10, &mode(1, target_object(land))).unwrap();
+        e.apply_scenario_command(10, &mode(1, target_object(land)))
+            .unwrap();
         if resolve_before_bounce {
             pass_priority_round(&mut e);
             grant_index(&mut e, 1, land);
@@ -372,7 +375,7 @@ fn sunrise_draw_qualification_is_checked_only_at_resolution() {
             response(&mut e, 1, "giant_growth", target_object(bear));
         }
         combat(&mut e);
-        e.apply_command(10, &mode(2, vec![]))
+        e.apply_scenario_command(10, &mode(2, vec![]))
             .expect("draw mode is legal without a qualifying own creature");
         if branch == 0 {
             response(&mut e, 0, "giant_growth", target_object(bear));
@@ -403,7 +406,9 @@ fn sunrise_life_mode_uses_controller_combat_and_captured_controller() {
     let mut departing = setup();
     let departing_source = battlefield_object_for_card(&departing, 0, SUNRISE);
     combat(&mut departing);
-    departing.apply_command(10, &mode(3, vec![])).unwrap();
+    departing
+        .apply_scenario_command(10, &mode(3, vec![]))
+        .unwrap();
     response(
         &mut departing,
         0,
@@ -420,7 +425,7 @@ fn sunrise_life_mode_uses_controller_combat_and_captured_controller() {
     let source = battlefield_object_for_card(&e, 0, SUNRISE);
     combat(&mut e);
     transfer_control(&mut e, source, 2);
-    e.apply_command(10, &mode(3, vec![])).unwrap();
+    e.apply_scenario_command(10, &mode(3, vec![])).unwrap();
     pass_priority_round(&mut e);
     assert_eq!(
         e.state.players.iter().map(|p| p.life).collect::<Vec<_>>(),
@@ -428,7 +433,7 @@ fn sunrise_life_mode_uses_controller_combat_and_captured_controller() {
     );
     transfer_control(&mut e, source, 0);
     advance_main(&mut e, 20);
-    e.apply_command(20, &primitive_yield()).unwrap();
+    e.apply_scenario_command(20, &primitive_yield()).unwrap();
     assert_eq!(e.state.turn_step, TurnStep::BeginCombat);
     assert!(e.state.pending_triggers.is_empty());
     assert!(e.state.stack.is_empty(), "no opponent-turn combat trigger");
@@ -449,16 +454,17 @@ fn sunrise_multiple_sources_keep_independent_modal_trigger_identities() {
         },
     );
     let slot = hand_index_for_card(&e, 0, SUNRISE);
-    e.apply_command(10, &cast_spell(slot, vec![])).unwrap();
+    e.apply_scenario_command(10, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_priority_round(&mut e);
     assert_ne!(first, second);
-    e.apply_command(10, &primitive_yield()).unwrap();
+    e.apply_scenario_command(10, &primitive_yield()).unwrap();
     let candidates = &e.state.pending_trigger_order.as_ref().unwrap().candidates;
     assert_eq!(candidates.len(), 2);
     assert_ne!(candidates[0].object_id, candidates[1].object_id);
     for _ in 0..2 {
         answer_trigger_order_in_engine_order(&mut e);
-        e.apply_command(10, &mode(3, vec![])).unwrap();
+        e.apply_scenario_command(10, &mode(3, vec![])).unwrap();
     }
     let sources: std::collections::BTreeSet<_> = e
         .state
@@ -509,7 +515,7 @@ fn sunrise_modal_rejections_and_source_suppression_preserve_capture_contract() {
         choice.decline = true;
     }
     reject(&mut e, 10, &decline);
-    e.apply_command(10, &mode(3, vec![])).unwrap();
+    e.apply_scenario_command(10, &mode(3, vec![])).unwrap();
     pass_priority_round(&mut e);
     assert_eq!(e.state.players[0].life, 23);
     for before_capture in [true, false] {
@@ -518,11 +524,11 @@ fn sunrise_modal_rejections_and_source_suppression_preserve_capture_contract() {
         if before_capture {
             suppress(&mut e, source);
         }
-        e.apply_command(10, &primitive_yield()).unwrap();
+        e.apply_scenario_command(10, &primitive_yield()).unwrap();
         assert_eq!(e.state.pending_triggers.len(), usize::from(!before_capture));
         if !before_capture {
             suppress(&mut e, source);
-            e.apply_command(10, &mode(3, vec![])).unwrap();
+            e.apply_scenario_command(10, &mode(3, vec![])).unwrap();
             pass_priority_round(&mut e);
             assert_eq!(e.state.players[0].life, 23);
         }

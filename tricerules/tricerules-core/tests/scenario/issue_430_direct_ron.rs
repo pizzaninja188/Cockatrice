@@ -11,6 +11,7 @@
 //! 608.2b (targeting and revalidation), 701.5 (counter), and 122.1 (counters) govern. The
 //! discard-choice privacy, hand movement, and stale-candidate handling reuse the Ward discard
 //! contracts established by Spectral Snatcher (issue #103) with this card's own definition.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::{EngineError, Zone};
@@ -240,7 +241,9 @@ fn issue_430_ward_private_discard_rejects_a_stale_card_and_moves_the_selected_ph
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     let spell_id = engine.state.players[0].hand[slot];
     semantic::accepted(&mut engine, 0, &cast_spell(slot, target_object(saboteur)));
-    pass_both_players(&mut engine);
+    let published_batch = pass_both_players_with_batch(&mut engine);
+    let published_choice = find_resolution_choice(&published_batch)
+        .expect("the Ward discard offer is published by the resolving pass");
 
     let pending = engine
         .state
@@ -248,16 +251,34 @@ fn issue_430_ward_private_discard_rejects_a_stale_card_and_moves_the_selected_ph
         .as_ref()
         .expect("Ward discard payment");
     assert_eq!(pending.deciding_player, 0, "only the payer is authorized");
+    let current_prompt_id = pending.resolution_prompt_id.get();
+    assert_ne!(
+        current_prompt_id, 0,
+        "the chooser has a published prompt ID"
+    );
+    assert_eq!(published_choice.resolution_prompt_id, current_prompt_id);
+    assert_eq!(published_choice.deciding_player_id, pending.deciding_player);
+    assert!(published_batch
+        .resolution_prompt_state
+        .as_ref()
+        .is_some_and(|state| {
+            state.active && state.resolution_prompt_id == Some(current_prompt_id)
+        }));
     assert!(pending.presentation.candidates.contains(&discard));
     let candidates = pending.presentation.candidates.clone();
 
-    // Only the payer may answer the private choice: another seat's submission is rejected
-    // without clearing it or touching the stack.
+    // Only the payer may answer the private choice: submit the exact current wire ID from another
+    // seat so this negative isolates the foreign-actor guard from missing/stale-ID rejection.
+    let mut unauthorized_choice = submit_resolution_choice(vec![discard]);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = unauthorized_choice.cmd.as_mut() else {
+        unreachable!("choice helper constructs SubmitResolutionChoice");
+    };
+    answer.resolution_prompt_id = published_choice.resolution_prompt_id;
     let unauthorized = engine
-        .apply_command(1, &submit_resolution_choice(vec![discard]))
+        .apply_command(1, &unauthorized_choice)
         .expect_err("only the Ward payer may choose the discard");
     assert!(
-        matches!(&unauthorized, EngineError::Illegal(reason) if reason.contains("not your resolution choice")),
+        matches!(&unauthorized, EngineError::Illegal(reason) if reason.contains("stale or foreign resolution prompt")),
         "expected an authorization rejection, got {unauthorized:?}"
     );
     assert!(engine.state.pending_resolution.is_some());
@@ -273,7 +294,7 @@ fn issue_430_ward_private_discard_rejects_a_stale_card_and_moves_the_selected_ph
         .entry(discard)
         .or_default() += 1;
     let error = engine
-        .apply_command(0, &submit_resolution_choice(vec![discard]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
         .expect_err("stale physical card must be rejected");
     assert!(matches!(error, EngineError::Illegal(_)));
     assert!(engine.state.pending_resolution.is_some());
@@ -304,7 +325,7 @@ fn issue_430_attack_trigger_places_one_counter_on_a_legal_opponent_creature_only
     let unrelated = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
 
     engine
-        .apply_command(0, &declare_attackers(vec![saboteur]))
+        .apply_scenario_command(0, &declare_attackers(vec![saboteur]))
         .expect("declare Sunset Saboteur as an attacker");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     assert!(
@@ -314,18 +335,18 @@ fn issue_430_attack_trigger_places_one_counter_on_a_legal_opponent_creature_only
 
     assert!(
         engine
-            .apply_command(0, &choose_trigger_target(own))
+            .apply_scenario_command(0, &choose_trigger_target(own))
             .is_err(),
         "a creature the controller controls is outside the opponent filter"
     );
     assert!(
         engine
-            .apply_command(0, &choose_trigger_target(saboteur))
+            .apply_scenario_command(0, &choose_trigger_target(saboteur))
             .is_err(),
         "the attacking source is not controlled by an opponent"
     );
     engine
-        .apply_command(0, &choose_trigger_target(opposing))
+        .apply_scenario_command(0, &choose_trigger_target(opposing))
         .expect("choose an opponent-controlled creature");
     assert_eq!(engine.state.pending_triggers.len(), 0);
     assert_eq!(engine.state.stack.len(), 1);
@@ -341,10 +362,10 @@ fn issue_430_attack_trigger_places_one_counter_on_a_legal_opponent_creature_only
     let target = inject_creature_on_battlefield(&mut stale, 1, "grizzly_bears");
     let survivor = inject_creature_on_battlefield(&mut stale, 1, "grizzly_bears");
     stale
-        .apply_command(0, &declare_attackers(vec![saboteur]))
+        .apply_scenario_command(0, &declare_attackers(vec![saboteur]))
         .expect("declare the attacker");
     stale
-        .apply_command(0, &choose_trigger_target(target))
+        .apply_scenario_command(0, &choose_trigger_target(target))
         .expect("choose the initially legal target");
     stale.state.players[1]
         .battlefield

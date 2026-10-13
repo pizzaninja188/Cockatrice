@@ -4,9 +4,10 @@
 //! CR 601.2b-c, 608.2b, and 700.2 govern mode/target announcement, target rechecks, and modal
 //! resolution order. WotC's Austere Command ruling specifies sequential modes; its Decimate ruling
 //! confirms that a permanent with multiple card types can fill multiple target instances.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::TargetRef;
 
 fn engine(seed: u64) -> GameEngine {
@@ -110,7 +111,7 @@ fn austere_command_destroys_artifacts_and_creatures_with_mana_value_three_or_les
 
     let hand_slot = hand_index_for_card(&engine, 0, "austere_command");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(hand_slot, vec![(0, vec![]), (2, vec![])]),
         )
@@ -148,7 +149,7 @@ fn austere_command_destroys_enchantments_and_creatures_with_mana_value_four_or_g
 
     let hand_slot = hand_index_for_card(&engine, 0, "austere_command");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             // Modes resolve in printed order even when the command lists them in reverse.
             &cast_modal_spell(hand_slot, vec![(3, vec![]), (1, vec![])]),
@@ -191,10 +192,10 @@ fn austere_command_rejects_too_few_or_repeated_modes_without_consuming_the_card(
     let hand_slot = hand_index_for_card(&engine, 0, "austere_command");
 
     assert!(engine
-        .apply_command(0, &cast_modal_spell(hand_slot, vec![(0, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(hand_slot, vec![(0, vec![])]))
         .is_err());
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(hand_slot, vec![(0, vec![]), (0, vec![])]),
         )
@@ -220,7 +221,7 @@ fn decimate_rejects_a_wrong_type_then_allows_one_artifact_creature_for_two_targe
         target_in_group(2, enchantment),
     ];
     assert!(engine
-        .apply_command(0, &cast_spell(hand_slot, missing_group_targets))
+        .apply_scenario_command(0, &cast_spell(hand_slot, missing_group_targets))
         .is_err());
     assert_eq!(engine.state.objects[&card].zone, Zone::Hand);
     assert!(engine.state.stack.is_empty());
@@ -232,7 +233,7 @@ fn decimate_rejects_a_wrong_type_then_allows_one_artifact_creature_for_two_targe
         target_in_group(3, land),
     ];
     assert!(engine
-        .apply_command(0, &cast_spell(hand_slot, invalid_targets))
+        .apply_scenario_command(0, &cast_spell(hand_slot, invalid_targets))
         .is_err());
     assert_eq!(engine.state.objects[&card].zone, Zone::Hand);
     assert!(engine.state.stack.is_empty());
@@ -247,7 +248,7 @@ fn decimate_rejects_a_wrong_type_then_allows_one_artifact_creature_for_two_targe
         target_in_group(3, land),
     ];
     engine
-        .apply_command(0, &cast_spell(hand_slot, legal_targets))
+        .apply_scenario_command(0, &cast_spell(hand_slot, legal_targets))
         .expect("artifact creature satisfies Decimate's artifact and creature targets");
     resolve_entire_stack_two_player(&mut engine);
 

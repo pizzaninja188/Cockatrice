@@ -1,5 +1,6 @@
 //! Exact Chasm Skulker: draw, generation-bound counter LKI, death, Squid characteristics/combat.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use prost::Message;
 use tricerules_cards::{
     Color, ContinuousEffectKind, ControllerReference, CounterKind, EffectDuration, Evasion,
@@ -426,7 +427,7 @@ fn chasm_squids_islandwalk_uses_actual_defender_and_rejects_block_atomically() {
         }]);
         if defender_has_island {
             let before = e.diagnostic_snapshot().unwrap();
-            assert!(e.apply_command(20, &command).is_err());
+            assert!(e.apply_scenario_command(20, &command).is_err());
             assert_eq!(e.diagnostic_snapshot().unwrap(), before);
             semantic::accepted(
                 &mut e,
@@ -597,7 +598,7 @@ fn chasm_actual_draw_death_tokens_and_serialized_commands_replay_identically() {
     let mut replay = fresh();
     let replayed: Vec<_> = commands
         .iter()
-        .map(|(actor, command)| replay.apply_command(*actor, command).unwrap())
+        .map(|(actor, command)| replay.apply_scenario_command(*actor, command).unwrap())
         .collect();
     assert_eq!(events, replayed);
     assert_eq!(

@@ -1,5 +1,6 @@
 //! Farewell: paid modal casting, sequential untargeted simultaneous exile instructions.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{ProtectionQuality, ZoneEventCardinality};
 use tricerules_cards::{
     CastTriggerPlayer, Color, ContinuousEffectKind, EffectDuration, Keyword, PermanentTypeFilter,
@@ -30,7 +31,7 @@ fn begin_cast(engine: &mut GameEngine, modes: &[u32]) -> u32 {
     let slot = hand_index_for_card(engine, 0, "farewell");
     let card = engine.state.players[0].hand[slot];
     engine
-        .apply_command(
+        .apply_scenario_command(
             actor,
             &cast_modal_spell(slot, modes.iter().map(|&i| (i, vec![])).collect()),
         )
@@ -42,7 +43,7 @@ fn resolve_one(engine: &mut GameEngine) -> RuledEventBatch {
     let mut result = Default::default();
     for _ in 0..engine.state.players.len() {
         result = engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     result
@@ -418,7 +419,7 @@ fn farewell_illegal_modal_submissions_reject_atomically_before_payment_or_state_
     ] {
         let before = format!("{:?}", engine.state);
         assert!(engine
-            .apply_command(actor, &cast_modal_spell(slot, modes))
+            .apply_scenario_command(actor, &cast_modal_spell(slot, modes))
             .is_err());
         assert_eq!(format!("{:?}", engine.state), before);
     }
@@ -448,14 +449,17 @@ fn farewell_serialized_paid_reverse_modal_command_replays_identically() {
     ];
     let expected: Vec<_> = commands
         .iter()
-        .map(|(actor, command)| engine.apply_command(*actor, command).unwrap())
+        .map(|(actor, command)| engine.apply_scenario_command(*actor, command).unwrap())
         .collect();
     assert_eq!(engine.state.objects[&victim].zone, Zone::Exile);
     let (mut replay, _) = fresh();
     for ((actor, command), batch) in commands.into_iter().zip(expected) {
         let encoded = command.encode_to_vec();
         let decoded = RuledCommand::decode(encoded.as_slice()).unwrap();
-        assert_eq!(replay.apply_command(actor, &decoded).unwrap(), batch);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &decoded).unwrap(),
+            batch
+        );
     }
     assert_eq!(
         engine.diagnostic_snapshot().unwrap(),

@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     cost_selection::Selection, CostChoiceKind, CostObjectRef, CostObjectRefs, CostSelection,
@@ -97,7 +98,7 @@ fn forensic_researcher_publishes_and_pays_mana_value_aggregate() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 researcher,
@@ -114,8 +115,8 @@ fn forensic_researcher_publishes_and_pays_mana_value_aggregate() {
     assert!(engine.state.objects[&researcher].tapped);
     assert_eq!(engine.state.objects[&bolt].zone, Zone::Exile);
     assert_eq!(engine.state.objects[&bear].zone, Zone::Exile);
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     assert!(engine.state.objects[&opposing_bear].tapped);
 }
 
@@ -164,7 +165,7 @@ fn mossbridge_troll_publishes_and_pays_current_power_aggregate() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 troll,
@@ -181,7 +182,7 @@ fn mossbridge_troll_publishes_and_pays_current_power_aggregate() {
     assert!(!engine.state.objects[&troll].tapped);
     assert!(engine.state.objects[&dreadmaw].tapped);
     assert!(engine.state.objects[&angel].tapped);
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     assert_eq!(engine.characteristics(troll).unwrap().power, Some(25));
 }

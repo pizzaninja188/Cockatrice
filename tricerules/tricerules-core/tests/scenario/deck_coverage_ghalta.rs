@@ -1,5 +1,6 @@
 //! Ghalta sums signed current creature powers before locking the total casting cost.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{
     CardRegistry, ContinuousEffectKind, ControllerReference, CounterKind, EffectDuration, Keyword,
     PermanentTypeFilter, TypeLineReplacement,
@@ -47,7 +48,7 @@ fn modify(engine: &mut GameEngine, object: u32, kind: ContinuousEffectKind) {
 
 fn begin(engine: &mut GameEngine) -> u64 {
     let command = begin_command(engine);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     engine
         .state
         .pending_spell_cast
@@ -128,7 +129,7 @@ fn expect_cost(engine: &mut GameEngine, cost: &str) {
         cost
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CancelSpellCast(CancelSpellCast { transaction_id })),
@@ -253,7 +254,7 @@ fn ghalta_discount_preserves_green_and_rejects_bad_actor_stale_or_incomplete_pay
                 ..Default::default()
             })),
         };
-        assert!(engine.apply_command(player, &command).is_err());
+        assert!(engine.apply_scenario_command(player, &command).is_err());
         assert_eq!(format!("{:?}", engine.state), before);
     }
 }
@@ -297,7 +298,7 @@ fn ghalta_locked_sacrifice_mana_payment_paid_cast_and_serialized_replay() {
     let mut apply = |engine: &mut GameEngine, actor: i32, command: RuledCommand| {
         let encoded = command.encode_to_vec();
         let decoded = RuledCommand::decode(encoded.as_slice()).unwrap();
-        batches.push(engine.apply_command(actor, &decoded).unwrap());
+        batches.push(engine.apply_scenario_command(actor, &decoded).unwrap());
         commands.push((actor, decoded));
     };
     let begin = begin_command(&engine);
@@ -317,7 +318,7 @@ fn ghalta_locked_sacrifice_mana_payment_paid_cast_and_serialized_replay() {
             .locked_total_cost,
         "{4}{G}{G}"
     );
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             transaction_id,
@@ -364,7 +365,7 @@ fn ghalta_locked_sacrifice_mana_payment_paid_cast_and_serialized_replay() {
     assert_eq!(replay_contributor, contributor);
     let replayed = commands
         .iter()
-        .map(|(actor, command)| replay.apply_command(*actor, command).unwrap())
+        .map(|(actor, command)| replay.apply_scenario_command(*actor, command).unwrap())
         .collect::<Vec<_>>();
     assert_eq!(batches, replayed);
     assert_eq!(engine.state.command_index, replay.state.command_index);
@@ -410,7 +411,7 @@ fn ghalta_accepts_generator_servant_mana_produced_after_cost_lock() {
         "{6}{G}{G}"
     );
     let activation = activate_ability_for(&engine, servant, 0, vec![]);
-    engine.apply_command(0, &activation).unwrap();
+    engine.apply_scenario_command(0, &activation).unwrap();
     assert_eq!(engine.state.objects[&servant].zone, Zone::Graveyard);
     let group = engine.state.players[0].restricted_mana[0].restriction_group_id;
     assert_eq!(engine.state.players[0].restricted_mana[0].amount.c, 2);
@@ -424,7 +425,7 @@ fn ghalta_accepts_generator_servant_mana_produced_after_cost_lock() {
         "{6}{G}{G}"
     );
 
-    let partial = engine.preview_payment(
+    let partial = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             transaction_id,
@@ -465,7 +466,7 @@ fn ghalta_accepts_generator_servant_mana_produced_after_cost_lock() {
             ..Default::default()
         }],
     };
-    let complete = engine.preview_payment(
+    let complete = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             transaction_id,
@@ -484,7 +485,7 @@ fn ghalta_accepts_generator_servant_mana_produced_after_cost_lock() {
     invalid.restricted_mana[0].restriction_group_id = group + 100;
     let before = format!("{:?}", engine.state);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitSpellCast(invalid)),
@@ -493,7 +494,7 @@ fn ghalta_accepts_generator_servant_mana_produced_after_cost_lock() {
         .unwrap_err();
     assert_eq!(format!("{:?}", engine.state), before);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
@@ -509,7 +510,7 @@ fn ghalta_accepts_generator_servant_mana_produced_after_cost_lock() {
     assert!(engine.state.players[0].restricted_mana.is_empty());
     for _ in 0..3 {
         let actor = engine.state.priority_player_id();
-        engine.apply_command(actor, &pass()).unwrap();
+        engine.apply_scenario_command(actor, &pass()).unwrap();
     }
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     let characteristics = engine.characteristics(source).unwrap();

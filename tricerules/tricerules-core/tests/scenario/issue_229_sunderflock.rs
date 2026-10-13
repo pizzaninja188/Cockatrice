@@ -1,10 +1,13 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::state::Zone;
 
 fn cast_sunderflock(engine: &mut GameEngine) -> u32 {
     let slot = hand_index_for_card(engine, 0, "sunderflock");
     let source = engine.state.players[0].hand[slot];
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     source
 }
 
@@ -14,7 +17,7 @@ fn resolve_top(engine: &mut GameEngine) -> RuledEventBatch {
     for _ in 0..count {
         batch = Some(
             engine
-                .apply_command(engine.state.priority_player_id(), &pass())
+                .apply_scenario_command(engine.state.priority_player_id(), &pass())
                 .unwrap(),
         );
     }
@@ -144,7 +147,7 @@ fn begin_cast_transaction(engine: &mut GameEngine, player: i32, command: RuledCo
         casting_permission_id: cast.casting_permission_id,
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             player,
             &RuledCommand {
                 cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
@@ -217,7 +220,7 @@ fn issue_239_sunderflock_cost_stays_locked_while_activating_mana_abilities() {
         casting_permission_id: cast.casting_permission_id,
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
@@ -231,7 +234,7 @@ fn issue_239_sunderflock_cost_stays_locked_while_activating_mana_abilities() {
     let transaction_id = pending.transaction_id;
 
     engine
-        .apply_command(0, &activate_ability(elemental, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(elemental, 1, vec![]))
         .expect("the Elemental's mana ability resolves during payment");
     assert_eq!(engine.state.objects[&elemental].zone, Zone::Graveyard);
     assert_eq!(engine.state.players[0].mana_pool.blue, 5);
@@ -247,7 +250,7 @@ fn issue_239_sunderflock_cost_stays_locked_while_activating_mana_abilities() {
         }),
         ..Default::default()
     };
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             transaction_id,
@@ -259,7 +262,7 @@ fn issue_239_sunderflock_cost_stays_locked_while_activating_mana_abilities() {
     assert!(preview.valid && preview.complete, "{preview:?}");
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
@@ -294,11 +297,11 @@ fn issue_239_cancel_restores_exact_source_but_keeps_mana_ability_changes() {
     assert_eq!(engine.state.objects[&source].zone, Zone::Stack);
 
     engine
-        .apply_command(0, &activate_ability(elemental, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(elemental, 1, vec![]))
         .expect("mana ability during casting");
     let before_wrong_commit = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &RuledCommand {
                 cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
@@ -311,7 +314,7 @@ fn issue_239_cancel_restores_exact_source_but_keeps_mana_ability_changes() {
     assert_eq!(format!("{:?}", engine.state), before_wrong_commit);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CancelSpellCast(CancelSpellCast { transaction_id })),
@@ -352,11 +355,11 @@ fn issue_239_pending_cast_rejects_unrelated_and_stale_commands_without_mutation(
         },
     ] {
         let before = serde_json::to_value(&engine.state).unwrap();
-        assert!(engine.apply_command(0, &command).is_err());
+        assert!(engine.apply_scenario_command(0, &command).is_err());
         assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     }
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CancelSpellCast(CancelSpellCast { transaction_id })),
@@ -376,12 +379,12 @@ fn issue_239_pending_cast_rejects_nonmana_activation_without_mutation() {
     let transaction_id = begin_cast_transaction(&mut engine, 0, cast_spell(slot, vec![]));
     let before = serde_json::to_value(&engine.state).unwrap();
     let error = engine
-        .apply_command(0, &activate_ability(elemental, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(elemental, 1, vec![]))
         .expect_err("a nonmana ability cannot be activated while paying for a spell");
     assert!(error.to_string().contains("only mana abilities"));
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CancelSpellCast(CancelSpellCast { transaction_id })),
@@ -400,7 +403,7 @@ fn issue_239_incomplete_and_excess_payment_leave_transaction_open_and_unchanged(
     engine.state.players[0].mana_pool.blue = 20;
     let slot = hand_index_for_card(&engine, 0, "sunderflock");
     let transaction_id = begin_cast_transaction(&mut engine, 0, cast_spell(slot, vec![]));
-    let base = engine.preview_payment(
+    let base = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             transaction_id,
@@ -422,7 +425,7 @@ fn issue_239_incomplete_and_excess_payment_leave_transaction_open_and_unchanged(
         });
         let before = serde_json::to_value(&engine.state).unwrap();
         let error = engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
@@ -447,7 +450,7 @@ fn issue_239_incomplete_and_excess_payment_leave_transaction_open_and_unchanged(
     }
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CancelSpellCast(CancelSpellCast { transaction_id })),
@@ -478,7 +481,7 @@ fn issue_239_serialized_begin_mana_cancel_retry_commit_replays_identically() {
     let mut apply = |engine: &mut GameEngine, command: RuledCommand| {
         let encoded = command.encode_to_vec();
         let wire = RuledCommand::decode(encoded.as_slice()).unwrap();
-        let batch = engine.apply_command(0, &wire).unwrap();
+        let batch = engine.apply_scenario_command(0, &wire).unwrap();
         commands.push(wire);
         batches.push(batch);
     };
@@ -506,7 +509,7 @@ fn issue_239_serialized_begin_mana_cancel_retry_commit_replays_identically() {
         .as_ref()
         .unwrap()
         .transaction_id;
-    let preview = original.preview_payment(
+    let preview = original.preview_payment_scenario(
         0,
         &PreviewPayment {
             transaction_id: second_transaction,
@@ -538,7 +541,7 @@ fn issue_239_serialized_begin_mana_cancel_retry_commit_replays_identically() {
     assert_eq!(replay_elemental, elemental);
     let replayed = commands
         .iter()
-        .map(|command| replay.apply_command(0, command).unwrap())
+        .map(|command| replay.apply_scenario_command(0, command).unwrap())
         .collect::<Vec<_>>();
     assert_eq!(replayed, batches);
     assert_eq!(replay.state.command_index, original.state.command_index);
@@ -570,14 +573,14 @@ fn issue_239_mana_ability_triggers_wait_until_cancel_then_stack_in_apnap_order()
     let transaction_id = begin_cast_transaction(&mut engine, 0, cast_spell(slot, vec![]));
 
     engine
-        .apply_command(0, &activate_ability(elemental, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(elemental, 1, vec![]))
         .expect("sacrifice mana ability during payment");
     assert!(engine.state.stack.is_empty());
     assert!(engine.state.pending_triggers.is_empty());
     assert!(engine.state.pending_trigger_order.is_none());
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CancelSpellCast(CancelSpellCast { transaction_id })),
@@ -609,12 +612,12 @@ fn issue_239_state_based_actions_wait_until_cast_cancellation() {
     assert_eq!(engine.state.objects[&lethal].zone, Zone::Battlefield);
 
     engine
-        .apply_command(0, &activate_ability(elemental, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(elemental, 1, vec![]))
         .expect("mana ability cannot open an SBA window mid-cast");
     assert_eq!(engine.state.objects[&lethal].zone, Zone::Battlefield);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CancelSpellCast(CancelSpellCast { transaction_id })),
@@ -635,7 +638,9 @@ fn issue_229_sunderflock_cast_returns_non_elementals_to_owners() {
     let land = inject_permanent_on_battlefield(&mut engine, 0, "island");
     let slot = hand_index_for_card(&engine, 0, "sunderflock");
     let source = engine.state.players[0].hand[slot];
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     assert_eq!(engine.state.stack.len(), 1, "cast-conditioned ETB");
@@ -659,13 +664,15 @@ fn issue_229_sunderflock_reduction_cannot_pay_colored_mana() {
     engine.state.players[0].mana_pool.blue = 1;
     engine.state.players[0].mana_pool.colorless = 10;
     let hand = engine.state.players[0].hand.clone();
-    assert!(engine.apply_command(0, &cast_spell(slot, vec![])).is_err());
+    assert!(engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .is_err());
     assert_eq!(engine.state.players[0].hand, hand);
     assert!(engine.state.stack.is_empty());
     engine.state.players[0].mana_pool.blue = 2;
     engine.state.players[0].mana_pool.colorless = 2;
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("five mana reduction");
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
@@ -682,7 +689,7 @@ fn issue_229_sunderflock_trigger_survives_source_removal() {
     engine.state.players[0].mana_pool.blue = 1;
     let slot = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .unwrap();
     resolve_top(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
@@ -754,7 +761,7 @@ fn issue_229_reanimated_sunderflock_does_not_trigger() {
     engine.state.players[0].mana_pool.black = 1;
     let slot = hand_index_for_card(&engine, 0, "zombify");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .unwrap();
     resolve_top(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
@@ -769,7 +776,9 @@ fn issue_229_cast_clone_retains_caster_through_copy_entry_choice() {
     let bear = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let clone = inject_card_into_hand(&mut engine, 0, "clone");
     let slot = hand_index_for_card(&engine, 0, "clone");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     resolve_top(&mut engine);
     assert_eq!(engine.state.objects[&clone].zone, Zone::Stack);
     assert_eq!(
@@ -783,7 +792,7 @@ fn issue_229_cast_clone_retains_caster_through_copy_entry_choice() {
         ChoiceKind::CopySource
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![model]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![model]))
         .unwrap();
     assert_eq!(engine.state.objects[&clone].zone, Zone::Battlefield);
     assert_eq!(
@@ -813,7 +822,7 @@ fn issue_229_mass_return_preserves_simultaneous_leave_observers() {
             "observer sees both departures"
         );
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -876,7 +885,7 @@ fn issue_229_blink_resets_entry_fact_without_changing_the_old_trigger() {
     engine.enable_dev_commands();
     for zone in [DevZone::Exile, DevZone::Battlefield] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(Cmd::DevCommand(DevCommand {
@@ -961,7 +970,7 @@ fn issue_229_created_token_copy_does_not_copy_cast_history() {
     engine.state.players[0].mana_pool.blue = 3;
     let slot = hand_index_for_card(&engine, 0, "cackling_counterpart");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .unwrap();
     resolve_top(&mut engine);
     assert!(engine.state.stack.is_empty());
@@ -981,9 +990,11 @@ fn issue_229_sunderflock_commands_replay_identically_and_reject_invalid_sources(
                 Some(tricerules_proto::ruled::v1::cast_source::Location::HandIndex(u32::MAX));
         }
         let before = serde_json::to_value(&engine.state).unwrap();
-        assert!(engine.apply_command(0, &command).is_err());
+        assert!(engine.apply_scenario_command(0, &command).is_err());
         assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
-        let cast = engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+        let cast = engine
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .unwrap();
         vec![cast, resolve_top(&mut engine), resolve_top(&mut engine)]
     }
     assert_eq!(run(), run());
@@ -1000,7 +1011,7 @@ fn issue_229_exile_cast_uses_permission_caster_and_rejects_stale_generations() {
     let source = engine.state.players[0].hand[hand_index_for_card(&engine, 0, "sunderflock")];
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -1048,7 +1059,7 @@ fn issue_229_exile_cast_uses_permission_caster_and_rejects_stale_generations() {
     };
     let before = serde_json::to_value(&engine.state).unwrap();
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &RuledCommand {
                 cmd: Some(Cmd::CastSpell(cast.clone()))
@@ -1061,7 +1072,7 @@ fn issue_229_exile_cast_uses_permission_caster_and_rejects_stale_generations() {
         .unwrap()
         .expected_zone_change_generation = Some(generation);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &RuledCommand {
                 cmd: Some(Cmd::CastSpell(cast)),

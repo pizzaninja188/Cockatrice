@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
 use tricerules_core::state::CastCostObjectReceipt;
@@ -37,7 +38,7 @@ fn grow_from_the_ashes_publishes_and_records_kicker_as_part_of_total_cost() {
     ensure_card_in_hand(&mut e, 0, "grow_from_the_ashes");
     let forest = relocate_to_battlefield(&mut e, 0, "forest", false);
     let legal_batch = e
-        .apply_command(0, &activate_ability(forest, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(forest, 0, vec![]))
         .expect("mana ability");
     let action = legal_batch.legal_by_player[&0]
         .hand_actions
@@ -68,7 +69,7 @@ fn grow_from_the_ashes_publishes_and_records_kicker_as_part_of_total_cost() {
     e.state.players[0].mana_pool.colorless = 4;
     let slot = hand_index_for_card(&e, 0, "grow_from_the_ashes");
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(slot, vec![], vec![mana_option(0, 0)]),
         )
@@ -108,9 +109,10 @@ fn grow_from_the_ashes_publishes_and_records_kicker_as_part_of_total_cost() {
 
     let first = e.state.priority_player_id();
     let second = if first == 0 { 1 } else { 0 };
-    e.apply_command(first, &pass()).expect("first pass");
+    e.apply_scenario_command(first, &pass())
+        .expect("first pass");
     let resolving = e
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("resolve kicked Grow");
     let choice = find_resolution_choice(&resolving).expect("kicked search choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
@@ -122,7 +124,7 @@ fn grow_from_the_ashes_publishes_and_records_kicker_as_part_of_total_cost() {
         .take(2)
         .collect::<Vec<_>>();
     assert_eq!(chosen.len(), 2);
-    e.apply_command(0, &submit_resolution_choice(chosen.clone()))
+    e.apply_scenario_command(0, &submit_resolution_choice(chosen.clone()))
         .expect("choose two basic lands");
     assert_eq!(
         e.state
@@ -170,7 +172,7 @@ fn behold_reveals_only_the_selected_dragon_until_the_spell_leaves_the_stack() {
     let dragon_slot = hand_index_for_card(&e, 0, "adult_gold_dragon");
 
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 spell_slot,
@@ -207,7 +209,7 @@ fn behold_reveals_only_the_selected_dragon_until_the_spell_leaves_the_stack() {
 
     resolve_entire_stack_two_player(&mut e);
     let cleared = e
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("next authoritative batch");
     assert!(cleared.events.iter().any(|event| {
         matches!(
@@ -251,7 +253,7 @@ fn stale_behold_permanent_rejects_the_atomic_cast_without_spending_mana() {
     let before_hand = e.state.players[0].hand.clone();
 
     let err = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -294,7 +296,7 @@ fn kicked_gnarlid_colony_enters_with_counters_and_grants_trample() {
     e.state.players[0].mana_pool.colorless = 3;
     let slot = hand_index_for_card(&e, 0, "gnarlid_colony");
     let oid = e.state.players[0].hand[slot];
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_with_cast_cost_groups(slot, vec![], vec![mana_option(0, 0)]),
     )
@@ -328,14 +330,15 @@ fn osseous_exhale_uses_the_behold_receipt_after_the_revealed_card_is_unrelated_t
     let attacker = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
     ensure_card_in_hand(&mut e, 1, "osseous_exhale");
     ensure_card_in_hand(&mut e, 1, "adult_gold_dragon");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("pass to defender");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass to defender");
     e.state.players[1].mana_pool.white = 1;
     e.state.players[1].mana_pool.colorless = 1;
     let spell = hand_index_for_card(&e, 1, "osseous_exhale");
     let dragon = hand_index_for_card(&e, 1, "adult_gold_dragon");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell_with_cast_cost_groups(
             spell,
@@ -351,8 +354,9 @@ fn osseous_exhale_uses_the_behold_receipt_after_the_revealed_card_is_unrelated_t
         ),
     )
     .expect("cast Osseous Exhale with behold");
-    e.apply_command(1, &pass()).expect("defender pass");
-    e.apply_command(0, &pass()).expect("resolve Osseous Exhale");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(0, &pass())
+        .expect("resolve Osseous Exhale");
     assert_eq!(e.state.players[1].life, 22);
     assert_eq!(e.state.objects[&attacker].zone, Zone::Graveyard);
 }
@@ -378,10 +382,10 @@ fn dispelling_exhale_payment_cost(behold: bool, seed: u64) -> u32 {
     e.state.players[0].mana_pool.green = 1;
     e.state.players[0].mana_pool.colorless = 1;
     let creature = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(creature, vec![]))
+    e.apply_scenario_command(0, &cast_spell(creature, vec![]))
         .expect("cast creature spell");
     let target_spell = e.state.stack.last().unwrap().id;
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("pass to counterspell caster");
     e.state.players[1].mana_pool.blue = 1;
     e.state.players[1].mana_pool.colorless = 1;
@@ -399,19 +403,19 @@ fn dispelling_exhale_payment_cost(behold: bool, seed: u64) -> u32 {
     } else {
         vec![]
     };
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell_with_cast_cost_groups(exhale, target_object(target_spell), selections),
     )
     .expect("cast Dispelling Exhale");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("counterspell caster pass");
     let parked = e
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("resolve Dispelling Exhale");
     let choice = find_resolution_choice(&parked).expect("soft-counter payment");
     assert_eq!(choice.choice_kind(), ChoiceKind::ManaPayment);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &submit_resolution_decision(ResolutionChoiceDecision::Decline),
     )

@@ -119,12 +119,13 @@ fn devotion_full_effect_list_bounces_support_then_returns_it_from_hand_without_r
             .unwrap(),
         super::super::super::resolution::ResolutionProgress::Parked
     ));
+    engine.publish_resolution_prompt_ids(&mut events).unwrap();
     assert_eq!(engine.state.objects[&support].zone, Zone::Hand);
     assert!(!engine.characteristics(god).unwrap().is_creature());
     assert!(engine.state.combat.as_ref().unwrap().attacking.is_empty());
     assert!(events.iter().any(|event| matches!(&event.ev, Some(rv1::ruled_event::Ev::RemovedFromCombat(removed)) if removed.object_ids == vec![god])));
     let resumed = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &rv1::RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -164,6 +165,7 @@ fn devotion_nested_transform_return_publishes_removal_before_entry_choice_and_re
             .unwrap(),
         super::super::super::resolution::ResolutionProgress::Parked
     ));
+    engine.publish_resolution_prompt_ids(&mut events).unwrap();
     assert_eq!(engine.state.objects[&support].zone, Zone::Exile);
     assert!(!engine.characteristics(god).unwrap().is_creature());
     assert!(engine.state.combat.as_ref().unwrap().attacking.is_empty());
@@ -171,7 +173,7 @@ fn devotion_nested_transform_return_publishes_removal_before_entry_choice_and_re
     assert!(engine.state.pending_replacement_event.is_some());
     let life = engine.state.players[0].life;
     let resumed = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &rv1::RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(

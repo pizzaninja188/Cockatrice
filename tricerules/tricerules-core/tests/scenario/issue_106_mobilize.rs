@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, CombatDefenderOption, DeclareAttackers, RuledCommand,
@@ -39,7 +40,7 @@ fn setup_mobilize_with_planeswalker(seed: u64) -> (GameEngine, u32, u32) {
         .cloned()
         .expect("Shock Brigade may attack the opponent");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -52,8 +53,12 @@ fn setup_mobilize_with_planeswalker(seed: u64) -> (GameEngine, u32, u32) {
 }
 
 fn resolve_to_defender_choice(engine: &mut GameEngine) -> Vec<CombatDefenderOption> {
-    engine.apply_command(0, &pass()).expect("attacker pass");
-    let batch = engine.apply_command(1, &pass()).expect("Mobilize resolves");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("attacker pass");
+    let batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("Mobilize resolves");
     batch
         .events
         .iter()
@@ -79,6 +84,7 @@ fn resolve_to_defender_choice(engine: &mut GameEngine) -> Vec<CombatDefenderOpti
 fn submit_defender(option: CombatDefenderOption) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_combat_defender: Some(option),
             ..Default::default()
         })),
@@ -102,14 +108,16 @@ fn mobilize_enters_tapped_attacking_chosen_planeswalker_and_sacrifices_next_end_
 
     let mut stale = jace_option;
     stale.defender_zone_change_generation += 1;
-    assert!(engine.apply_command(0, &submit_defender(stale)).is_err());
+    assert!(engine
+        .apply_scenario_command(0, &submit_defender(stale))
+        .is_err());
     assert!(
         engine.state.pending_resolution.is_some(),
         "rejection keeps prompt"
     );
 
     let resolved = engine
-        .apply_command(0, &submit_defender(jace_option))
+        .apply_scenario_command(0, &submit_defender(jace_option))
         .expect("choose Jace for Warrior");
     let tokens = battlefield_token_oids(&engine, 0, "warrior_r_1_1");
     assert_eq!(tokens.len(), 1);
@@ -147,7 +155,7 @@ fn mobilize_enters_tapped_attacking_chosen_planeswalker_and_sacrifices_next_end_
             break;
         }
         engine
-            .apply_command(0, &primitive_yield())
+            .apply_scenario_command(0, &primitive_yield())
             .expect("advance toward end step");
     }
     assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::EndStep);
@@ -175,10 +183,10 @@ fn doubling_season_doubles_mobilize_tokens_with_their_chosen_attacker_properties
         .expect("planeswalker defender option");
 
     engine
-        .apply_command(0, &submit_defender(jace_option))
+        .apply_scenario_command(0, &submit_defender(jace_option))
         .expect("choose Jace for first Warrior");
     let mut resolved = engine
-        .apply_command(0, &submit_defender(jace_option))
+        .apply_scenario_command(0, &submit_defender(jace_option))
         .expect("choose Jace for second Warrior");
 
     let order = engine
@@ -191,7 +199,7 @@ fn doubling_season_doubles_mobilize_tokens_with_their_chosen_attacker_properties
         ChoiceKind::SimultaneousEntryOrder
     );
     let order_batch = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(order.presentation.candidates.clone()),
         )
@@ -255,7 +263,7 @@ fn mobilize_trigger_survives_source_departure() {
         })
         .expect("opponent player option");
     engine
-        .apply_command(0, &submit_defender(player_option))
+        .apply_scenario_command(0, &submit_defender(player_option))
         .expect("resolve source-independent Mobilize trigger");
     assert_eq!(battlefield_token_oids(&engine, 0, "warrior_r_1_1").len(), 1);
 }

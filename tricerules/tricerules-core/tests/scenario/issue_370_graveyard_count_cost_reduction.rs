@@ -6,6 +6,7 @@
 //! Terror counts instant and sorcery cards. Every published reduction and every payment in these
 //! scenarios is computed before the spell changes zones, so the spell's own card can never be
 //! part of its own count.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::GameEngine;
@@ -63,7 +64,7 @@ fn issue_370_chitin_gravestalker_counts_own_artifact_or_creature_cards_only() {
     engine.state.players[0].mana_pool.colorless = 3;
     let gravestalker = hand_index_for_card(&engine, 0, "chitin_gravestalker");
     engine
-        .apply_command(0, &cast_spell(gravestalker, vec![]))
+        .apply_scenario_command(0, &cast_spell(gravestalker, vec![]))
         .expect("Chitin Gravestalker costs {3}{B} with two matching graveyard cards");
     assert_eq!(engine.state.players[0].mana_pool.black, 0);
     assert_eq!(
@@ -106,7 +107,7 @@ fn issue_370_gargantuan_leech_sums_caves_you_control_and_cave_cards_in_graveyard
     engine.state.players[0].mana_pool.colorless = 5;
     let leech = hand_index_for_card(&engine, 0, "gargantuan_leech");
     engine
-        .apply_command(0, &cast_spell(leech, vec![]))
+        .apply_scenario_command(0, &cast_spell(leech, vec![]))
         .expect("Gargantuan Leech costs {5}{B} with two matching Cave quantities");
     assert_eq!(engine.state.players[0].mana_pool.black, 0);
     assert_eq!(
@@ -149,7 +150,7 @@ fn issue_370_tolarian_terror_counts_instant_and_sorcery_cards_and_not_itself() {
     engine.state.players[0].mana_pool.colorless = 4;
     let terror = hand_index_for_card(&engine, 0, "tolarian_terror");
     engine
-        .apply_command(0, &cast_spell(terror, vec![]))
+        .apply_scenario_command(0, &cast_spell(terror, vec![]))
         .expect("Tolarian Terror costs {4}{U}; the spell on the stack is never in a graveyard");
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);
     assert_eq!(

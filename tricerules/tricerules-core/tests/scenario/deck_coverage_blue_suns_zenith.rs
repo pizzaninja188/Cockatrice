@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1 as rv1;
 
@@ -30,7 +31,12 @@ fn resolve_one(engine: &mut GameEngine, oid: u32) -> Vec<rv1::RuledEvent> {
             return events;
         }
         let actor = engine.state.priority_player_id();
-        events.extend(engine.apply_command(actor, &pass()).unwrap().events);
+        events.extend(
+            engine
+                .apply_scenario_command(actor, &pass())
+                .unwrap()
+                .events,
+        );
     }
     panic!("stack object did not resolve");
 }
@@ -57,12 +63,12 @@ fn cast_blue(engine: &mut GameEngine, caster: usize, owner: usize, target: i32, 
             break;
         }
         let priority = engine.state.priority_player_id();
-        engine.apply_command(priority, &pass()).unwrap();
+        engine.apply_scenario_command(priority, &pass()).unwrap();
     }
     assert_eq!(engine.state.priority_player_id(), actor);
     let slot = hand_index_for_card(engine, caster, "blue_suns_zenith");
     engine
-        .apply_command(actor, &cast_spell_x(slot, target_player(target), x))
+        .apply_scenario_command(actor, &cast_spell_x(slot, target_player(target), x))
         .unwrap();
     assert_eq!(engine.state.objects[&oid].zone, Zone::Stack);
     oid
@@ -91,11 +97,11 @@ fn response(engine: &mut GameEngine, seat: usize, card: &str, target: u32) -> u3
             break;
         }
         let priority = engine.state.priority_player_id();
-        engine.apply_command(priority, &pass()).unwrap();
+        engine.apply_scenario_command(priority, &pass()).unwrap();
     }
     let slot = hand_index_for_card(engine, seat, card);
     engine
-        .apply_command(actor, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(actor, &cast_spell(slot, target_object(target)))
         .unwrap();
     engine.state.stack.last().unwrap().id
 }
@@ -112,11 +118,11 @@ fn blue_actual_twincast_copies_x_and_shuffles_only_its_copy_owner() {
     assert!(engine.state.pending_resolution.is_some());
     let before = serde_json::to_vec(&engine.state).unwrap();
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![2]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![2]))
         .is_err());
     assert_eq!(serde_json::to_vec(&engine.state).unwrap(), before);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![2]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![2]))
         .unwrap();
     let copy = engine.state.stack.last().unwrap().clone();
     assert!(copy.is_copy && copy.id != source);
@@ -186,7 +192,7 @@ fn blue_failed_target_and_countered_spell_skip_draw_and_shuffle() {
             let counter = response(&mut engine, 0, "counterspell", source);
             resolve_one(&mut engine, counter)
         } else {
-            engine.apply_command(2, &concede()).unwrap();
+            engine.apply_scenario_command(2, &concede()).unwrap();
             resolve_one(&mut engine, source)
         };
         assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
@@ -234,7 +240,7 @@ fn blue_illegal_commands_are_atomic_and_accepted_draw_shuffle_replays() {
     let slot = hand_index_for_card(&engine, 0, "blue_suns_zenith");
     let cast = cast_spell_x(slot, target_player(2), 2);
     let before = serde_json::to_vec(&engine.state).unwrap();
-    assert!(engine.apply_command(0, &cast).is_err());
+    assert!(engine.apply_scenario_command(0, &cast).is_err());
     assert_eq!(serde_json::to_vec(&engine.state).unwrap(), before);
     give_mana(
         &mut engine,
@@ -251,18 +257,18 @@ fn blue_illegal_commands_are_atomic_and_accepted_draw_shuffle_replays() {
         (0, cast_spell_x(slot, target_player(99), 2)),
         (0, cast_spell_x(slot, vec![], 0)),
     ] {
-        assert!(engine.apply_command(actor, &command).is_err());
+        assert!(engine.apply_scenario_command(actor, &command).is_err());
         assert_eq!(serde_json::to_vec(&engine.state).unwrap(), before);
     }
     let mut commands = vec![(0, cast)];
-    let mut batches = vec![engine.apply_command(0, &commands[0].1).unwrap()];
+    let mut batches = vec![engine.apply_scenario_command(0, &commands[0].1).unwrap()];
     for _ in 0..12 {
         if engine.state.stack.is_empty() {
             break;
         }
         let actor = engine.state.priority_player_id();
         let command = pass();
-        batches.push(engine.apply_command(actor, &command).unwrap());
+        batches.push(engine.apply_scenario_command(actor, &command).unwrap());
         commands.push((actor, command));
     }
     assert!(engine.state.stack.is_empty());
@@ -277,7 +283,10 @@ fn blue_illegal_commands_are_atomic_and_accepted_draw_shuffle_replays() {
         },
     );
     for ((actor, command), batch) in commands.into_iter().zip(batches) {
-        assert_eq!(replay.apply_command(actor, &command).unwrap(), batch);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &command).unwrap(),
+            batch
+        );
     }
     assert_eq!(
         serde_json::to_value(&replay.state).unwrap(),

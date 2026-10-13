@@ -1,7 +1,8 @@
 //! Actual-card coverage for Flameshadow Conjuring's nontoken-creature entry trigger.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ChoiceKind, ChooseTriggerTarget, ResolutionChoiceDecision, RuledCommand,
@@ -19,6 +20,7 @@ fn hand_index_for_object(engine: &GameEngine, player: usize, object_id: u32) -> 
 fn select_branch() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: 0,
             ..Default::default()
@@ -54,7 +56,7 @@ fn pass_until_resolution_choice(engine: &mut GameEngine) {
 fn move_card_to_zone(engine: &mut GameEngine, player_id: i32, card_name: &str, zone: DevZone) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             player_id,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -96,7 +98,7 @@ fn flameshadow_copies_the_entry_object_and_schedules_exact_token_exile() {
     );
     let hand_index = hand_index_for_object(&engine, 0, creature);
     engine
-        .apply_command(4, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(hand_index, vec![]))
         .expect("cast a nontoken creature");
     pass_priority_round(&mut engine);
 
@@ -142,7 +144,7 @@ fn flameshadow_copies_the_entry_object_and_schedules_exact_token_exile() {
         },
     );
     engine
-        .apply_command(4, &select_branch())
+        .apply_scenario_command(4, &select_branch())
         .expect("choose to pay {R} for the token copy");
     submit_mana_resolution_decision(&mut engine, 4, ResolutionChoiceDecision::PayMana)
         .expect("pay {R} while the trigger resolves");
@@ -200,7 +202,7 @@ fn flameshadow_token_copy_follow_up_covers_doubling_season_replacements() {
     );
     let hand_index = hand_index_for_object(&engine, 0, creature);
     engine
-        .apply_command(4, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(hand_index, vec![]))
         .expect("cast a nontoken creature");
     pass_priority_round(&mut engine);
 
@@ -219,7 +221,7 @@ fn flameshadow_token_copy_follow_up_covers_doubling_season_replacements() {
         },
     );
     engine
-        .apply_command(4, &select_branch())
+        .apply_scenario_command(4, &select_branch())
         .expect("choose to pay {R} for the token copy");
     submit_mana_resolution_decision(&mut engine, 4, ResolutionChoiceDecision::PayMana)
         .expect("pay {R} while the trigger resolves");
@@ -277,7 +279,7 @@ fn flameshadow_ignores_tokens_and_noncreature_entries_and_can_decline_the_copy()
     );
     let sol_ring_index = hand_index_for_object(&engine, 0, sol_ring);
     engine
-        .apply_command(4, &cast_spell(sol_ring_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(sol_ring_index, vec![]))
         .expect("cast a noncreature artifact");
     pass_priority_round(&mut engine);
     assert!(engine.state.stack.is_empty());
@@ -295,7 +297,7 @@ fn flameshadow_ignores_tokens_and_noncreature_entries_and_can_decline_the_copy()
     );
     let hand_index = hand_index_for_object(&engine, 0, raise_alarm);
     engine
-        .apply_command(4, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(hand_index, vec![]))
         .expect("cast Raise the Alarm");
     pass_priority_round(&mut engine);
     assert_eq!(
@@ -322,15 +324,16 @@ fn flameshadow_ignores_tokens_and_noncreature_entries_and_can_decline_the_copy()
     );
     let hand_index = hand_index_for_object(&engine, 0, creature);
     engine
-        .apply_command(4, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(hand_index, vec![]))
         .expect("cast a nontoken creature");
     pass_priority_round(&mut engine);
     pass_until_resolution_choice(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             4,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: ResolutionChoiceDecision::Decline as i32,
                     ..Default::default()
                 })),
@@ -377,7 +380,7 @@ fn flameshadow_trigger_uses_source_and_event_object_lki_after_they_leave() {
     );
     let hand_index = hand_index_for_object(&engine, 0, creature);
     engine
-        .apply_command(4, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(hand_index, vec![]))
         .expect("cast a nontoken creature");
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.stack.len(), 1, "entry trigger is on the stack");
@@ -402,7 +405,7 @@ fn flameshadow_trigger_uses_source_and_event_object_lki_after_they_leave() {
     );
     let hand_index = hand_index_for_object(&engine, 0, murder);
     engine
-        .apply_command(4, &cast_spell(hand_index, target_object(creature)))
+        .apply_scenario_command(4, &cast_spell(hand_index, target_object(creature)))
         .expect("cast Murder at the observed creature before the trigger resolves");
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.objects[&creature].zone, Zone::Graveyard);
@@ -417,7 +420,7 @@ fn flameshadow_trigger_uses_source_and_event_object_lki_after_they_leave() {
         },
     );
     engine
-        .apply_command(4, &select_branch())
+        .apply_scenario_command(4, &select_branch())
         .expect("choose the copy branch");
     submit_mana_resolution_decision(&mut engine, 4, ResolutionChoiceDecision::PayMana)
         .expect("pay {R} with the source in the graveyard");
@@ -467,7 +470,7 @@ fn flameshadow_exiles_the_exact_token_at_end_step_after_control_changes() {
     );
     let hand_index = hand_index_for_object(&engine, 0, creature);
     engine
-        .apply_command(4, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(hand_index, vec![]))
         .expect("cast a nontoken creature");
     pass_priority_round(&mut engine);
     pass_until_resolution_choice(&mut engine);
@@ -480,7 +483,7 @@ fn flameshadow_exiles_the_exact_token_at_end_step_after_control_changes() {
         },
     );
     engine
-        .apply_command(4, &select_branch())
+        .apply_scenario_command(4, &select_branch())
         .expect("choose the copy branch");
     submit_mana_resolution_decision(&mut engine, 4, ResolutionChoiceDecision::PayMana)
         .expect("pay {R}");
@@ -499,7 +502,7 @@ fn flameshadow_exiles_the_exact_token_at_end_step_after_control_changes() {
     // Pass priority to P1 during P0's turn. Ray of Command changes control only until cleanup,
     // allowing the next end-step delayed trigger to prove it follows the object identity.
     engine
-        .apply_command(4, &pass())
+        .apply_scenario_command(4, &pass())
         .expect("active player passes priority");
     let ray = inject_card_into_hand(&mut engine, 1, "ray_of_command");
     give_mana(
@@ -513,28 +516,28 @@ fn flameshadow_exiles_the_exact_token_at_end_step_after_control_changes() {
     );
     let ray_index = hand_index_for_object(&engine, 1, ray);
     engine
-        .apply_command(9, &cast_spell(ray_index, target_object(token)))
+        .apply_scenario_command(9, &cast_spell(ray_index, target_object(token)))
         .expect("P1 casts Ray of Command on the token");
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.objects[&token].controller, 9);
     assert_eq!(engine.state.zone_change_generation[&token], generation);
 
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("main one to combat");
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("begin combat");
     if engine.state.turn_step == tricerules_core::TurnStep::DeclareAttackers {
         engine
-            .apply_command(4, &primitive_yield())
+            .apply_scenario_command(4, &primitive_yield())
             .expect("skip attackers");
     }
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("end combat to main two");
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("main two to end step");
     assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::EndStep);
     assert_eq!(
@@ -569,21 +572,21 @@ fn flameshadow_copy_created_during_end_step_waits_for_the_next_turn_end_step() {
     // Reach the real end step first, then create the entrant. Its copy observer is registered
     // after this step's beginning, so the card's delayed ability must wait for a later end step.
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("main one to combat");
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("begin combat");
     if engine.state.turn_step == tricerules_core::TurnStep::DeclareAttackers {
         engine
-            .apply_command(4, &primitive_yield())
+            .apply_scenario_command(4, &primitive_yield())
             .expect("skip attackers");
     }
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("end combat to main two");
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("main two to end step");
     assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::EndStep);
     inject_card_into_hand(&mut engine, 0, "grizzly_bears");
@@ -599,7 +602,7 @@ fn flameshadow_copy_created_during_end_step_waits_for_the_next_turn_end_step() {
         },
     );
     engine
-        .apply_command(4, &select_branch())
+        .apply_scenario_command(4, &select_branch())
         .expect("choose to create the copy during the end step");
     submit_mana_resolution_decision(&mut engine, 4, ResolutionChoiceDecision::PayMana)
         .expect("pay {R} during the end step");
@@ -625,28 +628,28 @@ fn flameshadow_copy_created_during_end_step_waits_for_the_next_turn_end_step() {
     assert!(engine.state.stack.is_empty());
 
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("finish the end step where the copy was created");
     resolve_cleanup_discards_if_any(&mut engine);
     assert_eq!(engine.state.active_player_id(), 9);
     assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
     advance_to_main1_from_game_start(&mut engine);
     engine
-        .apply_command(9, &primitive_yield())
+        .apply_scenario_command(9, &primitive_yield())
         .expect("main one to combat in the next turn");
     engine
-        .apply_command(9, &primitive_yield())
+        .apply_scenario_command(9, &primitive_yield())
         .expect("begin combat in the next turn");
     if engine.state.turn_step == tricerules_core::TurnStep::DeclareAttackers {
         engine
-            .apply_command(9, &primitive_yield())
+            .apply_scenario_command(9, &primitive_yield())
             .expect("skip attackers in the next turn");
     }
     engine
-        .apply_command(9, &primitive_yield())
+        .apply_scenario_command(9, &primitive_yield())
         .expect("end combat to main two in the next turn");
     engine
-        .apply_command(9, &primitive_yield())
+        .apply_scenario_command(9, &primitive_yield())
         .expect("main two to the next turn's end step");
     assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::EndStep);
     assert_eq!(
@@ -688,7 +691,7 @@ fn flameshadow_copy_entry_choice_fixture_resumes_with_the_exact_token_reference(
     );
     let hand_index = hand_index_for_object(&engine, 0, creature);
     engine
-        .apply_command(4, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(hand_index, vec![]))
         .expect("cast a nontoken creature");
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.stack.len(), 1, "entry trigger is on the stack");
@@ -732,7 +735,7 @@ fn flameshadow_copy_entry_choice_fixture_resumes_with_the_exact_token_reference(
         },
     );
     engine
-        .apply_command(4, &select_branch())
+        .apply_scenario_command(4, &select_branch())
         .expect("choose the copy branch");
     submit_mana_resolution_decision(&mut engine, 4, ResolutionChoiceDecision::PayMana)
         .expect("pay {R} for the token copy");
@@ -745,7 +748,7 @@ fn flameshadow_copy_entry_choice_fixture_resumes_with_the_exact_token_reference(
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::CopySource);
     assert!(pending.presentation.candidates.contains(&copy_target));
     engine
-        .apply_command(4, &submit_resolution_choice(vec![copy_target]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![copy_target]))
         .expect("choose Prodigal Sorcerer for the copied token");
 
     let token = engine.state.players[0]
@@ -800,7 +803,7 @@ fn flameshadow_token_and_haste_remain_when_its_delayed_exile_is_countered() {
     );
     let hand_index = hand_index_for_object(&engine, 0, creature);
     engine
-        .apply_command(4, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(hand_index, vec![]))
         .expect("cast a nontoken creature");
     pass_priority_round(&mut engine);
     pass_until_resolution_choice(&mut engine);
@@ -813,7 +816,7 @@ fn flameshadow_token_and_haste_remain_when_its_delayed_exile_is_countered() {
         },
     );
     engine
-        .apply_command(4, &select_branch())
+        .apply_scenario_command(4, &select_branch())
         .expect("choose the copy branch");
     submit_mana_resolution_decision(&mut engine, 4, ResolutionChoiceDecision::PayMana)
         .expect("pay {R}");
@@ -825,27 +828,27 @@ fn flameshadow_token_and_haste_remain_when_its_delayed_exile_is_countered() {
         .expect("Flameshadow's token");
 
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("main one to combat");
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("begin combat");
     if engine.state.turn_step == tricerules_core::TurnStep::DeclareAttackers {
         engine
-            .apply_command(4, &primitive_yield())
+            .apply_scenario_command(4, &primitive_yield())
             .expect("skip attackers");
     }
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("end combat to main two");
     engine
-        .apply_command(4, &primitive_yield())
+        .apply_scenario_command(4, &primitive_yield())
         .expect("main two to end step");
     assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::EndStep);
     let delayed_exile = engine.state.stack.last().expect("delayed exile trigger").id;
 
     engine
-        .apply_command(4, &pass())
+        .apply_scenario_command(4, &pass())
         .expect("pass priority to the opponent");
     let tidebinder = inject_card_into_hand(&mut engine, 1, "tishanas_tidebinder");
     give_mana(
@@ -859,12 +862,12 @@ fn flameshadow_token_and_haste_remain_when_its_delayed_exile_is_countered() {
     );
     let tidebinder_index = hand_index_for_object(&engine, 1, tidebinder);
     engine
-        .apply_command(9, &cast_spell(tidebinder_index, vec![]))
+        .apply_scenario_command(9, &cast_spell(tidebinder_index, vec![]))
         .expect("cast Tidebinder in response to the delayed exile");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             9,
             &choose_trigger_target(delayed_exile, TargetRefKind::Stack),
         )
@@ -913,7 +916,7 @@ fn flameshadow_stages_one_independent_trigger_per_simultaneous_nontoken_creature
     );
     let hand_index = hand_index_for_object(&engine, 0, scrap_mastery);
     engine
-        .apply_command(4, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(hand_index, vec![]))
         .expect("cast Scrap Mastery");
     pass_priority_round(&mut engine);
     answer_simultaneous_entry_order_in_engine_order(&mut engine);
@@ -945,17 +948,18 @@ fn flameshadow_stages_one_independent_trigger_per_simultaneous_nontoken_creature
         },
     );
     engine
-        .apply_command(4, &select_branch())
+        .apply_scenario_command(4, &select_branch())
         .expect("choose one trigger's copy branch");
     submit_mana_resolution_decision(&mut engine, 4, ResolutionChoiceDecision::PayMana)
         .expect("pay for exactly one simultaneous entrant's copy");
 
     pass_until_resolution_choice(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             4,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: ResolutionChoiceDecision::Decline as i32,
                     ..Default::default()
                 })),

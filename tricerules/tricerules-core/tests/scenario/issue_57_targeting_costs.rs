@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 
 #[test]
 fn boreal_elemental_increases_an_opponents_targeting_spell_cost_atomically() {
@@ -31,7 +32,7 @@ fn boreal_elemental_increases_an_opponents_targeting_spell_cost_atomically() {
 
     let original_hand = engine.state.players[0].hand.clone();
     let error = engine
-        .apply_command(0, &cast_spell(unsummon_index, target_object(boreal)))
+        .apply_scenario_command(0, &cast_spell(unsummon_index, target_object(boreal)))
         .expect_err("Boreal Elemental should require two additional generic mana");
     assert!(
         error.to_string().contains("mana"),
@@ -50,7 +51,7 @@ fn boreal_elemental_increases_an_opponents_targeting_spell_cost_atomically() {
         },
     );
     engine
-        .apply_command(0, &cast_spell(unsummon_index, target_object(boreal)))
+        .apply_scenario_command(0, &cast_spell(unsummon_index, target_object(boreal)))
         .expect("paying {2}{U} should cast Unsummon");
     assert_eq!(engine.state.stack.len(), 1);
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);
@@ -97,7 +98,7 @@ fn kopala_applies_once_when_a_spell_targets_multiple_merfolk() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_x(
                 fireball_index,
@@ -157,7 +158,7 @@ fn kopala_adds_mana_to_an_opponents_manaless_activated_ability() {
     );
 
     let error = engine
-        .apply_command(0, &activate_ability(prodigal, 0, target_object(kopala)))
+        .apply_scenario_command(0, &activate_ability(prodigal, 0, target_object(kopala)))
         .expect_err("Kopala should add {2} even when the printed ability has no mana cost");
     assert!(
         error.to_string().contains("mana"),
@@ -175,7 +176,7 @@ fn kopala_adds_mana_to_an_opponents_manaless_activated_ability() {
         },
     );
     engine
-        .apply_command(0, &activate_ability(prodigal, 0, target_object(kopala)))
+        .apply_scenario_command(0, &activate_ability(prodigal, 0, target_object(kopala)))
         .expect("paying {2} should activate the ability");
     assert!(engine.state.objects[&prodigal].tapped);
     assert_eq!(engine.state.stack.len(), 1);
@@ -220,7 +221,7 @@ fn distinct_kopala_sources_stack_but_do_not_tax_their_controller() {
         },
     );
     engine
-        .apply_command(0, &cast_spell(opponent_unsummon, target_object(first)))
+        .apply_scenario_command(0, &cast_spell(opponent_unsummon, target_object(first)))
         .expect_err("two Kopala sources should increase the opposing spell by {4}");
     give_mana(
         &mut engine,
@@ -231,7 +232,7 @@ fn distinct_kopala_sources_stack_but_do_not_tax_their_controller() {
         },
     );
     engine
-        .apply_command(0, &cast_spell(opponent_unsummon, target_object(first)))
+        .apply_scenario_command(0, &cast_spell(opponent_unsummon, target_object(first)))
         .expect("paying both Kopala applications should cast the spell");
 
     // Direct setup leaves the duplicate legendary permanents in place intentionally so this
@@ -262,9 +263,9 @@ fn distinct_kopala_sources_stack_but_do_not_tax_their_controller() {
     );
     let own_unsummon = hand_index_for_card(&own_engine, 1, "unsummon");
     own_engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass priority to Kopala's controller");
     own_engine
-        .apply_command(1, &cast_spell(own_unsummon, target_object(own_kopala)))
+        .apply_scenario_command(1, &cast_spell(own_unsummon, target_object(own_kopala)))
         .expect("Kopala does not tax its controller");
 }

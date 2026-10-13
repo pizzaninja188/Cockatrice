@@ -1,11 +1,12 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::ContinuousEffectKind;
 use tricerules_cards::primitives::{EntersTappedAffected, EntryCost, StaticAbilityDef};
 use tricerules_cards::{AbilityCost, AbilityPresentation, ZoneCardFilter};
 use tricerules_cards::{
     ControllerReference, EffectDuration, PermanentTypeFilter, TypeLineAddition,
 };
-use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine, Zone};
+use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{self as rv1, ruled_command::Cmd};
 
 fn setup(seed: u64) -> GameEngine {
@@ -24,7 +25,7 @@ fn setup(seed: u64) -> GameEngine {
 
 fn illegal(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = format!("{:?}", engine.state);
-    assert!(engine.apply_command(actor, command).is_err());
+    assert!(engine.apply_scenario_command(actor, command).is_err());
     assert_eq!(
         format!("{:?}", engine.state),
         before,
@@ -35,7 +36,7 @@ fn illegal(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
 fn play(engine: &mut GameEngine, card: &str) -> (u32, RuledEventBatch) {
     let oid = inject_card_into_hand(engine, 0, card);
     let command = play_land(hand_index_for_card(engine, 0, card));
-    (oid, engine.apply_command(0, &command).unwrap())
+    (oid, engine.apply_scenario_command(0, &command).unwrap())
 }
 
 #[test]
@@ -132,13 +133,13 @@ fn entry_reveal_pair_printed_subtype_filters_accept_nonbasic_or_and_noncreature_
                 .position(|oid| *oid == source)
                 .unwrap(),
         );
-        let offered = engine.apply_command(0, &command).unwrap();
+        let offered = engine.apply_scenario_command(0, &command).unwrap();
         if eligible {
             let choice = find_resolution_choice(&offered).expect("qualifying printed hand card");
             assert_eq!(choice.candidate_object_ids, vec![candidate]);
             let generation = semantic::generation(&engine, candidate);
             let batch = engine
-                .apply_command(0, &submit_resolution_choice(vec![candidate]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![candidate]))
                 .unwrap();
             let revealed: Vec<_> = batch
                 .events
@@ -160,7 +161,7 @@ fn entry_reveal_pair_printed_subtype_filters_accept_nonbasic_or_and_noncreature_
             assert_eq!((choice.min, choice.max), (0, 1));
             assert!(choice.candidate_object_ids.is_empty());
             engine
-                .apply_command(0, &submit_resolution_choice(vec![]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![]))
                 .unwrap();
             assert!(engine.state.objects[&source].tapped);
         }
@@ -194,7 +195,7 @@ fn entry_reveal_pair_decline_and_empty_hand_match_enter_tapped_without_revealing
             );
             assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
             let final_batch = engine
-                .apply_command(0, &submit_resolution_choice(vec![]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![]))
                 .unwrap();
             assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
             assert!(engine.state.objects[&source].tapped);
@@ -242,7 +243,7 @@ fn entry_reveal_pair_wrong_actor_identity_and_extra_payloads_reject_atomically_t
         }
         illegal(&mut engine, 0, &command);
     }
-    engine.apply_command(0, &valid).unwrap();
+    engine.apply_scenario_command(0, &valid).unwrap();
     assert!(!engine.state.objects[&source].tapped);
     assert_eq!(engine.state.objects[&forest].zone, Zone::Hand);
 }
@@ -307,13 +308,13 @@ fn entry_reveal_pair_forced_tapping_is_never_cleared_in_either_replacement_order
             })
             .unwrap();
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &submit_resolution_choice(vec![order.candidate_object_ids[index]]),
             )
             .unwrap();
         engine
-            .apply_command(0, &submit_resolution_choice(vec![forest]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
             .unwrap();
         assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
         assert!(engine.state.objects[&source].tapped);
@@ -344,7 +345,7 @@ fn entry_reveal_pair_bosk_and_trail_mana_options_are_immediate_and_damage_only_b
             .unwrap()
             .candidate_object_ids[0];
         engine
-            .apply_command(0, &submit_resolution_choice(vec![selected]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
             .unwrap();
         let mut command = activate_ability_for(&engine, source, ability, vec![]);
         let Some(Cmd::ActivateAbility(activation)) = command.cmd.as_mut() else {
@@ -358,7 +359,7 @@ fn entry_reveal_pair_bosk_and_trail_mana_options_are_immediate_and_damage_only_b
         };
         activation.mana_option_index = 99;
         illegal(&mut engine, 0, &invalid);
-        let batch = engine.apply_command(0, &command).unwrap();
+        let batch = engine.apply_scenario_command(0, &command).unwrap();
         let pool = &engine.state.players[0].mana_pool;
         assert_eq!(
             [
@@ -389,11 +390,11 @@ fn entry_reveal_pair_bosk_colored_mana_damage_uses_prevention_pipeline() {
     let treefolk = inject_card_into_hand(&mut engine, 0, "firdoch_core");
     let (source, _) = play(&mut engine, "murmuring_bosk");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![treefolk]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![treefolk]))
         .unwrap();
     engine.state.add_damage_prevention_shield(0, 1);
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 1, vec![]))
         .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.white, 1);
     assert_eq!(engine.state.players[0].life, 20);
@@ -417,7 +418,7 @@ fn entry_reveal_pair_game_trail_reveals_a_forest_without_moving_it() {
     let land = inject_card_into_hand(&mut engine, 0, "game_trail");
     let forest = inject_card_into_hand(&mut engine, 0, "forest");
     let played = engine
-        .apply_command(0, &play_land(hand_index_for_card(&engine, 0, "game_trail")))
+        .apply_scenario_command(0, &play_land(hand_index_for_card(&engine, 0, "game_trail")))
         .unwrap();
     let choice = find_resolution_choice(&played).expect("private entry reveal offer");
     assert_eq!(
@@ -428,7 +429,7 @@ fn entry_reveal_pair_game_trail_reveals_a_forest_without_moving_it() {
     assert_eq!((choice.min, choice.max), (0, 1));
     assert!(choice.public_reveal.is_none());
     engine
-        .apply_command(0, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .unwrap();
     assert_eq!(engine.state.objects[&land].zone, Zone::Battlefield);
     assert!(!engine.state.objects[&land].tapped);
@@ -468,7 +469,7 @@ fn entry_reveal_pair_actual_clone_rechecks_copied_entry_and_does_not_copy_animat
         let generation = semantic::generation(&engine, candidate);
         let (land, _) = play(&mut engine, card);
         engine
-            .apply_command(0, &submit_resolution_choice(vec![]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![]))
             .unwrap();
         for kind in [
             ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
@@ -502,7 +503,7 @@ fn entry_reveal_pair_actual_clone_rechecks_copied_entry_and_does_not_copy_animat
             },
         );
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell(hand_index_for_card(&engine, 0, "clone"), vec![]),
             )
@@ -512,14 +513,14 @@ fn entry_reveal_pair_actual_clone_rechecks_copied_entry_and_does_not_copy_animat
         assert_eq!(copy.presentation.choice_kind, ChoiceKind::CopySource);
         assert!(copy.presentation.candidates.contains(&land));
         let offered = engine
-            .apply_command(0, &submit_resolution_choice(vec![land]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
             .unwrap();
         let reveal = find_resolution_choice(&offered).unwrap();
         assert_eq!(reveal.choice_kind(), ChoiceKind::HandCards);
         assert_eq!(reveal.source_object_id, clone);
         assert_eq!(reveal.candidate_object_ids, vec![candidate]);
         engine
-            .apply_command(0, &submit_resolution_choice(vec![candidate]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![candidate]))
             .unwrap();
         assert_eq!(engine.state.objects[&clone].zone, Zone::Battlefield);
         assert_eq!(engine.state.objects[&clone].copy_revision, 1);
@@ -550,20 +551,20 @@ fn entry_reveal_pair_real_forest_search_parks_bosk_before_entry_and_shuffle() {
                 },
             );
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &cast_spell(hand_index_for_card(&engine, 0, spell), vec![]),
                 )
                 .unwrap();
-            engine.apply_command(0, &pass()).unwrap();
-            let offered = engine.apply_command(1, &pass()).unwrap();
+            engine.apply_scenario_command(0, &pass()).unwrap();
+            let offered = engine.apply_scenario_command(1, &pass()).unwrap();
             let search = find_resolution_choice(&offered).unwrap();
             assert_eq!(search.choice_kind(), ChoiceKind::LibrarySearch);
             assert!(search.candidate_object_ids.contains(&bosk));
             let library = engine.state.players[0].library.clone();
             let generation = semantic::generation(&engine, bosk);
             let parked = engine
-                .apply_command(0, &submit_resolution_choice(vec![bosk]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![bosk]))
                 .unwrap();
             assert_eq!(
                 find_resolution_choice(&parked).unwrap().choice_kind(),
@@ -577,7 +578,7 @@ fn entry_reveal_pair_real_forest_search_parks_bosk_before_entry_and_shuffle() {
             assert!(!parked.events.iter().any(|event| matches!(&event.ev,
                 Some(Ev::Log(log)) if log.text.contains("shuffles their library"))));
             let completion = engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &submit_resolution_choice(if reveal { vec![candidate] } else { vec![] }),
                 )
@@ -626,18 +627,21 @@ fn entry_reveal_pair_serialized_accepted_commands_and_batches_replay_exactly() {
                     .position(|oid| *oid == source)
                     .unwrap(),
             );
-            let batch = engine.apply_command(0, &command).unwrap();
+            let batch = engine.apply_scenario_command(0, &command).unwrap();
             recorded.push((command, batch));
             let command = submit_resolution_choice(if reveal { vec![candidate] } else { vec![] });
             let index = engine.state.command_index;
             illegal(&mut engine, 1, &command);
             assert_eq!(engine.state.command_index, index);
-            let batch = engine.apply_command(0, &command).unwrap();
+            let batch = engine.apply_scenario_command(0, &command).unwrap();
             recorded.push((command, batch));
             let (mut replay, ..) = fresh();
             for (command, expected) in recorded {
                 let decoded = RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
-                assert_eq!(replay.apply_command(0, &decoded).unwrap(), expected);
+                assert_eq!(
+                    replay.apply_scenario_command(0, &decoded).unwrap(),
+                    expected
+                );
             }
             assert_eq!(
                 replay.diagnostic_snapshot().unwrap(),
@@ -670,7 +674,7 @@ fn entry_reveal_pair_four_nonconsecutive_seats_use_chooser_hand_and_current_mana
             resolve_cleanup_discards_if_any(&mut engine);
         } else {
             let actor = engine.state.priority_player_id();
-            engine.apply_command(actor, &pass()).unwrap();
+            engine.apply_scenario_command(actor, &pass()).unwrap();
         }
     }
     assert_eq!(engine.state.active_player_id(), 40);
@@ -684,7 +688,7 @@ fn entry_reveal_pair_four_nonconsecutive_seats_use_chooser_hand_and_current_mana
         .iter()
         .position(|oid| *oid == source)
         .unwrap();
-    let offered = engine.apply_command(40, &play_land(slot)).unwrap();
+    let offered = engine.apply_scenario_command(40, &play_land(slot)).unwrap();
     let choice = find_resolution_choice(&offered).unwrap();
     assert_eq!(choice.deciding_player_id, 40);
     assert_eq!(choice.candidate_object_ids, vec![candidates[3]]);
@@ -692,7 +696,7 @@ fn entry_reveal_pair_four_nonconsecutive_seats_use_chooser_hand_and_current_mana
     for actor in [10, 20, 30] {
         illegal(&mut engine, actor, &answer);
     }
-    engine.apply_command(40, &answer).unwrap();
+    engine.apply_scenario_command(40, &answer).unwrap();
     engine.state.continuous_effects.push(ContinuousEffect {
         trigger_grant_origin: None,
         source_id: None,
@@ -705,10 +709,10 @@ fn entry_reveal_pair_four_nonconsecutive_seats_use_chooser_hand_and_current_mana
         timestamp: engine.state.command_index,
     });
     for actor in [40, 10, 20] {
-        engine.apply_command(actor, &pass()).unwrap();
+        engine.apply_scenario_command(actor, &pass()).unwrap();
     }
     let activation = activate_ability_for(&engine, source, 1, vec![]);
-    engine.apply_command(30, &activation).unwrap();
+    engine.apply_scenario_command(30, &activation).unwrap();
     assert_eq!(engine.state.objects[&source].owner, 40);
     assert_eq!(engine.characteristics(source).unwrap().controller, 30);
     assert_eq!(engine.state.players[2].mana_pool.white, 1);

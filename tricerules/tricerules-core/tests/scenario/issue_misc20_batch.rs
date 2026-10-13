@@ -7,6 +7,7 @@
 //! and keyword grants), CR 701.23 (search, including fail-to-find), CR 702.8 (flash), CR 702.9
 //! (flying), CR 702.12 (indestructible), CR 702.15 (lifelink), CR 702.29 (Swampcycling), and
 //! CR 702.111 (menace).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -156,7 +157,7 @@ fn issue_misc20_fang_guardian_pumps_another_permanent() {
     cast(&mut own, 0, "fang_guardian", vec![]);
     let source = battlefield_object(&own, 0, "fang_guardian");
     assert!(
-        own.apply_command(0, &choose_trigger_target(source))
+        own.apply_scenario_command(0, &choose_trigger_target(source))
             .is_err(),
         "the source is not a legal 'another' target"
     );
@@ -193,7 +194,7 @@ fn issue_misc20_pileated_provisioner_counts_a_nonflyer() {
     cast(&mut flying, 0, "pileated_provisioner", vec![]);
     assert!(
         flying
-            .apply_command(0, &choose_trigger_target(flier))
+            .apply_scenario_command(0, &choose_trigger_target(flier))
             .is_err(),
         "a creature with flying is not a legal target"
     );

@@ -13,11 +13,12 @@
 //! resolution-time target revalidation (CR 603.2/603.3, 608.2b, 113.7a,
 //! 400.7). Rescue Skiff is intentionally not generated or exercised here;
 //! blocker #312 owns its Aura-return attachment-choice surface.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use prost::Message;
 use tricerules_cards::{CounterKind, Keyword};
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{CanonicalGameplayCommand, ChooseTriggerTarget, TargetRef};
 
 fn generation(engine: &GameEngine, object_id: u32) -> u64 {
@@ -122,10 +123,10 @@ fn station_engine(seed: u64, card_id: &str) -> (GameEngine, u32, u32) {
     let source = move_ready_to_battlefield(&mut engine, 0, card_id);
     match card_id {
         "pinnacle_kill-ship" => engine
-            .apply_command(0, &choose_zero_trigger_targets())
+            .apply_scenario_command(0, &choose_zero_trigger_targets())
             .expect("Pinnacle allows no target"),
         "warmaker_gunship" => engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &choose_trigger_targets(vec![trigger_target(
                     warmaker_target.expect("Warmaker target"),
@@ -158,7 +159,7 @@ fn resolve_stack_for_player_set(engine: &mut GameEngine, responses: &mut Vec<Vec
         let player = engine.state.priority_player_id();
         responses.push(
             engine
-                .apply_command(player, &canonical_command(pass()))
+                .apply_scenario_command(player, &canonical_command(pass()))
                 .expect("player-set priority pass")
                 .encode_to_vec(),
         );
@@ -203,7 +204,7 @@ fn issue_311_station_thresholds_are_exact_and_remain_usable_above_them() {
         assert!(at.has_keyword(Keyword::Flying));
 
         engine
-            .apply_command(0, &activate_station(&engine, source, crew))
+            .apply_scenario_command(0, &activate_station(&engine, source, crew))
             .expect("Station remains activated at threshold");
         resolve_entire_stack_two_player(&mut engine);
         assert_eq!(
@@ -216,7 +217,7 @@ fn issue_311_station_thresholds_are_exact_and_remain_usable_above_them() {
         engine.state.turn_step = TurnStep::Upkeep;
         let before = engine.state.objects[&source].counter_count(CounterKind::Charge);
         engine
-            .apply_command(0, &activate_station(&engine, source, crew))
+            .apply_scenario_command(0, &activate_station(&engine, source, crew))
             .expect_err("Station remains sorcery-speed");
         assert_eq!(
             engine.state.objects[&source].counter_count(CounterKind::Charge),
@@ -239,7 +240,7 @@ fn issue_311_station_revalidates_source_and_payment_generations() {
     let command = activate_station(&source_stale, source, crew);
     move_battlefield_to_hand(&mut source_stale, 0, source);
     assert!(generation(&source_stale, source) > source_generation);
-    assert!(source_stale.apply_command(0, &command).is_err());
+    assert!(source_stale.apply_scenario_command(0, &command).is_err());
     assert!(!source_stale.state.objects[&crew].tapped);
 
     let (mut payment_stale, source, crew) = station_engine(311_005, "warmaker_gunship");
@@ -261,7 +262,7 @@ fn issue_311_station_revalidates_source_and_payment_generations() {
         .zone_change_generation
         .entry(crew)
         .or_default() += 1;
-    assert!(payment_stale.apply_command(0, &command).is_err());
+    assert!(payment_stale.apply_scenario_command(0, &command).is_err());
     assert!(!payment_stale.state.objects[&crew].tapped);
     assert_eq!(
         payment_stale.state.objects[&source].counter_count(CounterKind::Charge),
@@ -294,7 +295,7 @@ fn issue_311_station_activation_uses_current_controller_and_payment_power() {
     engine.state.priority_idx = 1;
     let command = activate_station(&engine, source, controller_crew);
     engine
-        .apply_command(1, &command)
+        .apply_scenario_command(1, &command)
         .expect("current controller can activate Station");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -327,7 +328,7 @@ fn issue_311_pinnacle_allows_zero_or_one_creature_and_revalidates_target() {
         &zero.initial_response_batch().legal_by_player[&0].valid_targets_by_ability[&key].groups[0];
     assert_eq!((group.min, group.max), (0, 1));
     assert_eq!(group.valid_permanent_ids, [target]);
-    zero.apply_command(0, &choose_zero_trigger_targets())
+    zero.apply_scenario_command(0, &choose_zero_trigger_targets())
         .expect("zero-target choice is legal");
     resolve_entire_stack_two_player(&mut zero);
     assert_eq!(zero.state.objects[&target].zone, Zone::Battlefield);
@@ -356,12 +357,12 @@ fn issue_311_pinnacle_allows_zero_or_one_creature_and_revalidates_target() {
     );
     let noncreature = inject_permanent_on_battlefield(&mut one, 0, "short_sword");
     assert!(one
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_targets(vec![trigger_target(noncreature, TargetRefKind::Permanent)]),
         )
         .is_err());
-    one.apply_command(
+    one.apply_scenario_command(
         0,
         &choose_trigger_targets(vec![trigger_target(opponent, TargetRefKind::Permanent)]),
     )
@@ -389,7 +390,7 @@ fn issue_311_pinnacle_allows_zero_or_one_creature_and_revalidates_target() {
     let target = inject_creature_on_battlefield(&mut stale, 1, "grizzly_bears");
     let source = move_ready_to_battlefield(&mut stale, 0, "pinnacle_kill-ship");
     stale
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_targets(vec![trigger_target(target, TargetRefKind::Permanent)]),
         )
@@ -417,7 +418,7 @@ fn issue_311_pinnacle_allows_zero_or_one_creature_and_revalidates_target() {
     controlled.state.objects.get_mut(&target).unwrap().toughness = Some(20);
     let source = move_ready_to_battlefield(&mut controlled, 0, "warmaker_gunship");
     controlled
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_targets(vec![trigger_target(target, TargetRefKind::Permanent)]),
         )
@@ -476,7 +477,7 @@ fn issue_311_pinnacle_is_player_set_generic_and_replays_deterministically() {
             [first, second]
         );
         let mut responses = vec![engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &canonical_command(choose_trigger_targets(vec![trigger_target(
                     second,
@@ -533,13 +534,13 @@ fn issue_311_warmaker_counts_controlled_artifacts_on_resolution_and_targets_only
         .groups[0];
     assert_eq!(legal.valid_permanent_ids, [opponent]);
     assert!(increased
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_targets(vec![trigger_target(own_creature, TargetRefKind::Permanent)]),
         )
         .is_err());
     increased
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_targets(vec![trigger_target(opponent, TargetRefKind::Permanent)]),
         )
@@ -577,7 +578,7 @@ fn issue_311_warmaker_counts_controlled_artifacts_on_resolution_and_targets_only
         .toughness = Some(20);
     let source = move_ready_to_battlefield(&mut decreased, 0, "warmaker_gunship");
     decreased
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_targets(vec![trigger_target(opponent, TargetRefKind::Permanent)]),
         )
@@ -611,7 +612,7 @@ fn issue_311_warmaker_counts_controlled_artifacts_on_resolution_and_targets_only
     stale.state.objects.get_mut(&target).unwrap().toughness = Some(20);
     let source = move_ready_to_battlefield(&mut stale, 0, "warmaker_gunship");
     stale
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_targets(vec![trigger_target(target, TargetRefKind::Permanent)]),
         )
@@ -660,21 +661,21 @@ fn issue_311_warmaker_is_player_set_generic_and_replays_deterministically() {
         let mut responses = Vec::new();
         responses.push(
             engine
-                .apply_command(0, &choose)
+                .apply_scenario_command(0, &choose)
                 .expect("choose legal multiplayer target")
                 .encode_to_vec(),
         );
         let priority = engine.state.priority_player_id();
         responses.push(
             engine
-                .apply_command(priority, &canonical_command(pass()))
+                .apply_scenario_command(priority, &canonical_command(pass()))
                 .expect("first pass")
                 .encode_to_vec(),
         );
         let priority = engine.state.priority_player_id();
         responses.push(
             engine
-                .apply_command(priority, &canonical_command(pass()))
+                .apply_scenario_command(priority, &canonical_command(pass()))
                 .expect("second pass")
                 .encode_to_vec(),
         );

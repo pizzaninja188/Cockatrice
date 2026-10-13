@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
@@ -11,6 +12,7 @@ use tricerules_proto::ruled::v1::{
 fn choose_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -37,12 +39,14 @@ fn issue_153_chaos_spewer_requires_blight_after_declining_mana() {
     engine.state.players[0].mana_pool.red = 1;
     engine.state.players[0].mana_pool.colorless = 2;
     let slot = hand_index_for_card(&engine, 0, "chaos_spewer");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     pass_both_players(&mut engine);
     // Already-floating mana must remain available for explicit pip selection in the client.
     engine.state.players[0].mana_pool.colorless = 2;
-    let payment_batch = engine.apply_command(0, &choose_branch(0)).unwrap();
+    let payment_batch = engine.apply_scenario_command(0, &choose_branch(0)).unwrap();
     let payment = payment_batch
         .events
         .iter()
@@ -61,10 +65,11 @@ fn issue_153_chaos_spewer_requires_blight_after_declining_mana() {
     assert!(payment.payment_currently_legal);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 2);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: ResolutionChoiceDecision::Decline as i32,
                     ..Default::default()
                 })),
@@ -82,7 +87,7 @@ fn issue_153_chaos_spewer_requires_blight_after_declining_mana() {
             .choice_kind,
         ChoiceKind::ResolutionBranch
     );
-    engine.apply_command(0, &choose_branch(1)).unwrap();
+    engine.apply_scenario_command(0, &choose_branch(1)).unwrap();
     let pending = engine
         .state
         .pending_resolution
@@ -92,10 +97,10 @@ fn issue_153_chaos_spewer_requires_blight_after_declining_mana() {
     assert_eq!((pending.presentation.min, pending.presentation.max), (1, 1));
     let creature = pending.presentation.candidates[0];
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .is_err());
     engine
-        .apply_command(0, &submit_resolution_choice(vec![creature]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![creature]))
         .unwrap();
     assert_eq!(
         engine.state.objects[&creature].counter_count(CounterKind::MinusOneMinusOne),
@@ -130,10 +135,12 @@ fn issue_153_resolution_blight_parks_before_discard_and_defers_lethal_sba() {
     engine.state.players[0].mana_pool.black = 1;
     engine.state.players[0].mana_pool.colorless = 3;
     let slot = hand_index_for_card(&engine, 0, "dream_seizer");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     pass_both_players(&mut engine);
-    engine.apply_command(0, &choose_branch(0)).unwrap();
+    engine.apply_scenario_command(0, &choose_branch(0)).unwrap();
     let pending = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(
         pending.presentation.choice_kind,
@@ -141,7 +148,7 @@ fn issue_153_resolution_blight_parks_before_discard_and_defers_lethal_sba() {
         "Blight must be paid before the opponent chooses a discard"
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![bear]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![bear]))
         .unwrap();
     assert_eq!(engine.state.objects[&bear].zone, Zone::Battlefield);
     let pending = engine.state.pending_resolution.as_ref().unwrap();
@@ -159,7 +166,7 @@ fn issue_153_resolution_blight_parks_before_discard_and_defers_lethal_sba() {
     );
     let discard = pending.presentation.candidates[0];
     engine
-        .apply_command(1, &submit_resolution_choice(vec![discard]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![discard]))
         .unwrap();
     assert_eq!(engine.state.objects[&bear].zone, Zone::Graveyard);
     assert!(engine.state.pending_resolution.is_none());
@@ -223,7 +230,7 @@ fn issue_153_rejected_blight_is_atomic_and_receipts_bind_the_incarnation() {
         blight_selection(1, source, u64::MAX),
     ] {
         assert!(engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_ability_with_costs(source, 0, vec![], vec![selected])
             )
@@ -237,7 +244,7 @@ fn issue_153_rejected_blight_is_atomic_and_receipts_bind_the_incarnation() {
         assert!(engine.state.stack.is_empty());
     }
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 source,
@@ -274,11 +281,13 @@ fn issue_153_blackthorn_etb_pays_before_drawing_and_losing_life() {
     engine.state.players[0].mana_pool.black = 1;
     engine.state.players[0].mana_pool.colorless = 4;
     let slot = hand_index_for_card(&engine, 0, "blighted_blackthorn");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     pass_both_players(&mut engine);
     let before = engine.state.players[0].hand.len();
-    engine.apply_command(0, &choose_branch(0)).unwrap();
+    engine.apply_scenario_command(0, &choose_branch(0)).unwrap();
     assert_eq!(engine.state.players[0].hand.len(), before);
     let oid = engine
         .state
@@ -288,7 +297,7 @@ fn issue_153_blackthorn_etb_pays_before_drawing_and_losing_life() {
         .presentation
         .candidates[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![oid]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![oid]))
         .unwrap();
     assert_eq!(
         engine.state.objects[&oid].counter_count(CounterKind::MinusOneMinusOne),
@@ -345,7 +354,7 @@ fn issue_153_copied_cinder_inherits_payment_without_blighting_again() {
         .unwrap_or(0);
     let slot = hand_index_for_card(&engine, 0, "cinder_strike");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -356,15 +365,15 @@ fn issue_153_copied_cinder_inherits_payment_without_blighting_again() {
         .unwrap();
     let original = engine.state.stack.last().unwrap().clone();
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass priority to the Twincast player");
     let slot = hand_index_for_card(&engine, 1, "twincast");
     engine
-        .apply_command(1, &cast_spell(slot, target_object(original.id)))
+        .apply_scenario_command(1, &cast_spell(slot, target_object(original.id)))
         .unwrap();
     pass_both_players(&mut engine);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![target]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![target]))
         .unwrap();
     let copy = engine.state.stack.iter().find(|item| item.is_copy).unwrap();
     assert_eq!(copy.blight_receipts, original.blight_receipts);
@@ -401,15 +410,15 @@ fn issue_153_wild_unraveling_requires_exactly_one_additional_payment() {
         engine.state.players[1].mana_pool.colorless = 1;
         let slot = hand_index_for_card(&engine, 0, "lightning_bolt");
         engine
-            .apply_command(0, &cast_spell(slot, target_player(1)))
+            .apply_scenario_command(0, &cast_spell(slot, target_player(1)))
             .unwrap();
         let target = engine.state.stack.last().unwrap().id;
         engine
-            .apply_command(0, &pass())
+            .apply_scenario_command(0, &pass())
             .expect("pass priority to the Wild Unraveling player");
         let slot = hand_index_for_card(&engine, 1, "wild_unraveling");
         assert!(engine
-            .apply_command(1, &cast_spell(slot, target_object(target)))
+            .apply_scenario_command(1, &cast_spell(slot, target_object(target)))
             .is_err());
         assert_eq!(engine.state.players[1].mana_pool.blue, 2);
         let generation = engine
@@ -428,7 +437,7 @@ fn issue_153_wild_unraveling_requires_exactly_one_additional_payment() {
             }
         };
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &cast_spell_with_cast_cost_groups(slot, target_object(target), vec![selection]),
             )
@@ -484,7 +493,7 @@ fn issue_153_cinder_strike_uses_paid_receipt_for_one_damage_instruction() {
         };
         let slot = hand_index_for_card(&engine, 0, "cinder_strike");
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell_with_cast_cost_groups(slot, target_object(target), selections),
             )
@@ -542,7 +551,7 @@ fn issue_153_activation_publishes_one_creature_and_blights_without_targeting() {
     assert!(!choices.choices[0].candidate_ids.contains(&prohibited));
     assert!(!choices.choices[0].candidate_ids.contains(&opponent));
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 source,

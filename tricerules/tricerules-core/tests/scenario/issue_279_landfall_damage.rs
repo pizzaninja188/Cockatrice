@@ -1,6 +1,7 @@
 //! Issue #279 — Landfall damage is controller-scoped and damages each opponent exactly once.
 //! Oracle and rulings were checked 2026-09-14. CR 207.2c, 603.6a, 120.2b, and 120.3a govern
 //! the ability word, land entering triggers, and damage rather than life loss.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::{TurnStep, Zone};
@@ -22,7 +23,7 @@ fn three_player_main1(seed: u64) -> GameEngine {
     while engine.state.turn_step != TurnStep::Main1 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("advance three-player turn");
     }
     engine
@@ -38,7 +39,7 @@ fn resolve_entire_stack_three_player(engine: &mut GameEngine) {
         for _ in 0..player_count {
             let player = engine.state.priority_player_id();
             engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("three-player priority pass");
             if engine.state.stack.is_empty() {
                 break;

@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
 #[test]
@@ -31,7 +32,7 @@ fn issue_173_twincast_retains_x_but_not_the_faerie_bonus() {
             ..Default::default()
         },
     );
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_x(
             hand_index_for_card(&e, 0, "faerie_fencing"),
@@ -41,7 +42,7 @@ fn issue_173_twincast_retains_x_but_not_the_faerie_bonus() {
     )
     .unwrap();
     let original = e.state.stack.last().unwrap().id;
-    e.apply_command(0, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
     give_mana(
         &mut e,
         1,
@@ -50,7 +51,7 @@ fn issue_173_twincast_retains_x_but_not_the_faerie_bonus() {
             ..Default::default()
         },
     );
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             hand_index_for_card(&e, 1, "twincast"),
@@ -58,13 +59,13 @@ fn issue_173_twincast_retains_x_but_not_the_faerie_bonus() {
         ),
     )
     .unwrap();
-    e.apply_command(1, &pass()).unwrap();
-    e.apply_command(0, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
     assert!(e.state.pending_resolution.is_some());
     assert!(e
-        .apply_command(0, &submit_resolution_choice(vec![copy_target]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![copy_target]))
         .is_err());
-    e.apply_command(1, &submit_resolution_choice(vec![copy_target]))
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![copy_target]))
         .unwrap();
     let copy = e.state.stack.last().unwrap();
     assert!(copy.is_copy);
@@ -118,10 +119,11 @@ fn setup_convolute_over_bolt() -> (GameEngine, u32, u32) {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt");
     let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
-    e.apply_command(0, &pass()).expect("pass to opponent");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass to opponent");
 
     give_mana(
         &mut e,
@@ -147,7 +149,7 @@ fn setup_convolute_over_bolt() -> (GameEngine, u32, u32) {
         Cmd::CastSpell(cast) => cast.clone(),
         _ => unreachable!(),
     };
-    let preview = e.preview_payment(
+    let preview = e.preview_payment_scenario(
         1,
         &tricerules_proto::ruled::v1::PreviewPayment {
             transaction_id: 1,
@@ -164,7 +166,8 @@ fn setup_convolute_over_bolt() -> (GameEngine, u32, u32) {
         ..Default::default()
     });
     command.cmd = Some(Cmd::CastSpell(cast));
-    e.apply_command(1, &command).expect("cast Convolute");
+    e.apply_scenario_command(1, &command)
+        .expect("cast Convolute");
     let convolute_oid = e.state.stack.last().expect("Convolute on stack").id;
     (e, bolt_oid, convolute_oid)
 }
@@ -181,10 +184,10 @@ fn convolute_prefloated_payment_parks_resolution_and_preserves_target() {
         },
     );
 
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("Convolute controller passes");
     let parked = e
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("target controller passes to resolve Convolute");
     let choice = find_resolution_choice(&parked).expect("Convolute must request payment");
     assert_eq!(choice.choice_kind, ChoiceKind::ManaPayment as i32);
@@ -235,9 +238,9 @@ fn convolute_commits_the_exact_clicked_mana_colors() {
         },
     );
 
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("Convolute controller passes");
-    e.apply_command(0, &pass()).expect("park payment");
+    e.apply_scenario_command(0, &pass()).expect("park payment");
     let source_generation = e
         .state
         .zone_change_generation
@@ -246,6 +249,7 @@ fn convolute_commits_the_exact_clicked_mana_colors() {
         .unwrap_or(0);
     let answer = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::PayMana as i32,
             payment: Some(tricerules_proto::ruled::v1::PaymentSelection {
                 expected_state_revision: e.state.command_index,
@@ -263,7 +267,7 @@ fn convolute_commits_the_exact_clicked_mana_colors() {
         })),
     };
 
-    e.apply_command(0, &answer)
+    e.apply_scenario_command(0, &answer)
         .expect("the selected four red mana pays Convolute");
     assert_eq!(e.state.players[0].mana_pool.red, 0);
     assert_eq!(e.state.players[0].mana_pool.blue, 4);
@@ -273,14 +277,16 @@ fn convolute_commits_the_exact_clicked_mana_colors() {
 #[test]
 fn convolute_decline_counters_target_to_its_owners_graveyard() {
     let (mut e, bolt_oid, convolute_oid) = setup_convolute_over_bolt();
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("Convolute controller passes");
-    let parked = e.apply_command(0, &pass()).expect("Convolute resolves");
+    let parked = e
+        .apply_scenario_command(0, &pass())
+        .expect("Convolute resolves");
     let choice = find_resolution_choice(&parked).expect("payment choice");
     assert!(!choice.payment_currently_legal);
 
     let result = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(
                 tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,
@@ -311,11 +317,11 @@ fn convolute_allows_mana_abilities_without_priority_and_refreshes_affordability(
         islands.push(island);
     }
 
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("Convolute controller passes");
-    e.apply_command(0, &pass()).expect("park payment");
+    e.apply_scenario_command(0, &pass()).expect("park payment");
     let restricted = e
-        .apply_command(0, &activate_ability(peeper, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(peeper, 0, vec![]))
         .expect("produce Peeper mana during resolution payment");
     assert!(
         !find_resolution_choice(&restricted)
@@ -324,7 +330,7 @@ fn convolute_allows_mana_abilities_without_priority_and_refreshes_affordability(
     );
     for (index, island) in islands.into_iter().enumerate() {
         let batch = e
-            .apply_command(0, &activate_ability(island, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability(island, 0, vec![]))
             .expect("mana ability is legal during resolution");
         let choice = find_resolution_choice(&batch).expect("refreshed payment choice");
         assert_eq!(choice.payment_currently_legal, index == 3);
@@ -348,18 +354,18 @@ fn convolute_payment_mana_can_be_undone_without_priority() {
     let (mut e, _, convolute_oid) = setup_convolute_over_bolt();
     let island = inject_permanent_on_battlefield(&mut e, 0, "island");
 
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("Convolute controller passes");
-    e.apply_command(0, &pass()).expect("park payment");
+    e.apply_scenario_command(0, &pass()).expect("park payment");
     let floated = e
-        .apply_command(0, &activate_ability(island, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(island, 0, vec![]))
         .expect("tap Island during payment");
     assert_eq!(floated.legal_by_player[&0].undoable_mana_abilities, 1);
     assert_eq!(e.state.players[0].mana_pool.blue, 1);
     assert!(e.state.objects[&island].tapped);
 
     let undone = e
-        .apply_command(0, &undo_mana_ability())
+        .apply_scenario_command(0, &undo_mana_ability())
         .expect("Undo is legal for the payment decider without priority");
     assert_eq!(e.state.players[0].mana_pool.blue, 0);
     assert!(!e.state.objects[&island].tapped);
@@ -382,16 +388,16 @@ fn convolute_decline_rewinds_only_mana_abilities_used_during_payment() {
     // This mana predates the prompt and was not produced by a reversible payment-time ability.
     e.state.players[0].mana_pool.colorless = 1;
 
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("Convolute controller passes");
-    e.apply_command(0, &pass()).expect("park payment");
+    e.apply_scenario_command(0, &pass()).expect("park payment");
     for island in islands {
-        e.apply_command(0, &activate_ability(island, 0, vec![]))
+        e.apply_scenario_command(0, &activate_ability(island, 0, vec![]))
             .expect("tap Island during payment");
     }
     assert_eq!(e.state.players[0].mana_pool.blue, 2);
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &submit_resolution_decision(tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline),
     )
@@ -407,13 +413,13 @@ fn convolute_decline_rewinds_only_mana_abilities_used_during_payment() {
 #[test]
 fn convolute_rejects_stale_or_malformed_payment_atomically() {
     let (mut e, bolt_oid, _) = setup_convolute_over_bolt();
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("Convolute controller passes");
-    e.apply_command(0, &pass()).expect("park payment");
+    e.apply_scenario_command(0, &pass()).expect("park payment");
 
     let before_index = e.state.command_index;
     let before_stack = e.state.stack.clone();
-    let wrong_player = e.apply_command(
+    let wrong_player = e.apply_scenario_command(
         1,
         &submit_resolution_decision(tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline),
     );
@@ -422,7 +428,7 @@ fn convolute_rejects_stale_or_malformed_payment_atomically() {
     assert_eq!(e.state.stack.len(), before_stack.len());
     assert!(e.state.pending_resolution.is_some());
 
-    let insufficient = e.apply_command(
+    let insufficient = e.apply_scenario_command(
         0,
         &submit_resolution_decision(tricerules_proto::ruled::v1::ResolutionChoiceDecision::PayMana),
     );
@@ -433,6 +439,7 @@ fn convolute_rejects_stale_or_malformed_payment_atomically() {
 
     let malformed = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: vec![bolt_oid],
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline as i32,
             selected_branch_index: 0,
@@ -444,7 +451,7 @@ fn convolute_rejects_stale_or_malformed_payment_atomically() {
             chosen_player_ids: vec![],
         })),
     };
-    assert!(e.apply_command(0, &malformed).is_err());
+    assert!(e.apply_scenario_command(0, &malformed).is_err());
     assert_eq!(e.state.command_index, before_index);
     assert!(e.state.pending_resolution.is_some());
 }
@@ -487,7 +494,7 @@ fn countered_spell_moves_to_its_owners_graveyard() {
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("p0 play mountain");
 
     for _ in 0..2 {
@@ -510,10 +517,10 @@ fn countered_spell_moves_to_its_owners_graveyard() {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("p0 cast bolt");
     let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("p0 pass to give p1 priority");
 
     give_mana(
@@ -525,7 +532,7 @@ fn countered_spell_moves_to_its_owners_graveyard() {
         },
     );
     let counter_idx = hand_index_for_card(&e, 1, "counterspell");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             counter_idx,
@@ -541,9 +548,9 @@ fn countered_spell_moves_to_its_owners_graveyard() {
     .expect("p1 cast counterspell at bolt");
     let counterspell_oid = e.state.stack.last().expect("counterspell on stack").id;
 
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
     let resolve_batch = e
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("p0 pass resolves counter");
 
     assert!(resolve_batch.events.iter().any(|event| matches!(
@@ -615,7 +622,8 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
     advance_to_main1_from_game_start(&mut e);
 
     let m0 = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(m0)).expect("mountain");
+    e.apply_scenario_command(0, &play_land(m0))
+        .expect("mountain");
 
     give_mana(
         &mut e,
@@ -626,9 +634,9 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("bolt");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("AP pass so NAP can respond");
 
     let bolt_oid = e
@@ -655,7 +663,7 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
         },
     );
     let cs1 = hand_index_for_card(&e, 1, "counterspell");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             cs1,
@@ -679,7 +687,7 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
         },
     );
     let cs2 = hand_index_for_card(&e, 1, "counterspell");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             cs2,
@@ -704,8 +712,8 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
         } else {
             e.state.players[0].id
         };
-        e.apply_command(first, &pass()).expect("pass");
-        let batch = e.apply_command(second, &pass()).expect("resolve");
+        e.apply_scenario_command(first, &pass()).expect("pass");
+        let batch = e.apply_scenario_command(second, &pass()).expect("resolve");
         fizzle_logs += batch
             .events
             .iter()
@@ -751,7 +759,7 @@ fn counterspell_counters_a_spell_on_stack() {
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("play mountain");
 
     for _ in 0..2 {
@@ -774,7 +782,7 @@ fn counterspell_counters_a_spell_on_stack() {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt");
     let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
 
@@ -788,7 +796,7 @@ fn counterspell_counters_a_spell_on_stack() {
     );
     let cs_idx = hand_index_for_card(&e, 0, "counterspell");
     let cs_batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 cs_idx,
@@ -814,8 +822,8 @@ fn counterspell_counters_a_spell_on_stack() {
     assert_eq!(cs_push.targets[0].object_id, bolt_oid);
     let counterspell_oid = e.state.stack.last().expect("counterspell on stack").id;
 
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
 
     assert!(e.state.stack.is_empty(), "counterspell should clear stack");
     assert!(e.state.players[0].graveyard.contains(&counterspell_oid));
@@ -858,7 +866,7 @@ fn three_bolts_stack_lifo_active_sequential_then_non_active_response() {
     advance_to_main1_from_game_start(&mut e);
 
     let m0a = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(m0a))
+    e.apply_scenario_command(0, &play_land(m0a))
         .expect("p0 play mountain");
     let m0b = hand_index_for_card(&e, 0, "mountain");
     let m0b_oid = e.state.players[0].hand.remove(m0b);
@@ -878,7 +886,7 @@ fn three_bolts_stack_lifo_active_sequential_then_non_active_response() {
         },
     );
     let bolt_p0_first = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_p0_first, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_p0_first, target_player(1)))
         .expect("p0 first bolt");
     give_mana(
         &mut e,
@@ -889,7 +897,7 @@ fn three_bolts_stack_lifo_active_sequential_then_non_active_response() {
         },
     );
     let bolt_p0_second = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_p0_second, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_p0_second, target_player(1)))
         .expect("p0 second bolt while holding priority");
     assert_eq!(
         e.state.stack.len(),
@@ -913,7 +921,8 @@ fn three_bolts_stack_lifo_active_sequential_then_non_active_response() {
             .zone = tricerules_core::Zone::Battlefield;
     }
     let bolt_p1 = hand_index_for_card(&e, 1, "lightning_bolt");
-    e.apply_command(0, &pass()).expect("p0 pass to NAP");
+    e.apply_scenario_command(0, &pass())
+        .expect("p0 pass to NAP");
     give_mana(
         &mut e,
         1,
@@ -922,7 +931,7 @@ fn three_bolts_stack_lifo_active_sequential_then_non_active_response() {
             ..Default::default()
         },
     );
-    e.apply_command(1, &cast_spell(bolt_p1, target_player(0)))
+    e.apply_scenario_command(1, &cast_spell(bolt_p1, target_player(0)))
         .expect("p1 bolt on top of stack");
 
     assert_eq!(
@@ -990,7 +999,7 @@ fn five_lightning_bolts_combined_stack_resolves_lifo_two_players() {
     advance_to_main1_from_game_start(&mut e);
 
     let m0a = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(m0a))
+    e.apply_scenario_command(0, &play_land(m0a))
         .expect("p0 play first mountain");
     for _ in 0..2 {
         let mi = hand_index_for_card(&e, 0, "mountain");
@@ -1012,7 +1021,7 @@ fn five_lightning_bolts_combined_stack_resolves_lifo_two_players() {
         },
     );
     let b0 = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(b0, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(b0, target_player(1)))
         .expect("p0 first bolt");
     give_mana(
         &mut e,
@@ -1023,7 +1032,7 @@ fn five_lightning_bolts_combined_stack_resolves_lifo_two_players() {
         },
     );
     let b1 = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(b1, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(b1, target_player(1)))
         .expect("p0 second bolt");
     give_mana(
         &mut e,
@@ -1034,7 +1043,7 @@ fn five_lightning_bolts_combined_stack_resolves_lifo_two_players() {
         },
     );
     let b2 = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(b2, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(b2, target_player(1)))
         .expect("p0 third bolt");
     assert_eq!(
         e.state.stack.len(),
@@ -1043,7 +1052,7 @@ fn five_lightning_bolts_combined_stack_resolves_lifo_two_players() {
     );
     assert_eq!(e.state.priority_player_id(), 0);
 
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("AP pass — priority to NAP");
 
     for _ in 0..2 {
@@ -1065,7 +1074,7 @@ fn five_lightning_bolts_combined_stack_resolves_lifo_two_players() {
         },
     );
     let b3 = hand_index_for_card(&e, 1, "lightning_bolt");
-    e.apply_command(1, &cast_spell(b3, target_player(0)))
+    e.apply_scenario_command(1, &cast_spell(b3, target_player(0)))
         .expect("p1 first bolt");
     give_mana(
         &mut e,
@@ -1076,7 +1085,7 @@ fn five_lightning_bolts_combined_stack_resolves_lifo_two_players() {
         },
     );
     let b4 = hand_index_for_card(&e, 1, "lightning_bolt");
-    e.apply_command(1, &cast_spell(b4, target_player(0)))
+    e.apply_scenario_command(1, &cast_spell(b4, target_player(0)))
         .expect("p1 second bolt while holding priority");
 
     assert_eq!(
@@ -1158,7 +1167,7 @@ fn non_active_holds_priority_two_bolts_on_stack_above_active_bolt() {
     advance_to_main1_from_game_start(&mut e);
 
     let m0 = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(m0))
+    e.apply_scenario_command(0, &play_land(m0))
         .expect("p0 play mountain");
     give_mana(
         &mut e,
@@ -1169,9 +1178,9 @@ fn non_active_holds_priority_two_bolts_on_stack_above_active_bolt() {
         },
     );
     let bolt_ap = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_ap, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_ap, target_player(1)))
         .expect("AP bolt targeting P1");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("AP pass — priority to P1");
 
     for _ in 0..2 {
@@ -1194,7 +1203,7 @@ fn non_active_holds_priority_two_bolts_on_stack_above_active_bolt() {
         },
     );
     let b1 = hand_index_for_card(&e, 1, "lightning_bolt");
-    e.apply_command(1, &cast_spell(b1, target_player(0)))
+    e.apply_scenario_command(1, &cast_spell(b1, target_player(0)))
         .expect("NAP first bolt");
     assert_eq!(e.state.priority_player_id(), 1);
     give_mana(
@@ -1206,7 +1215,7 @@ fn non_active_holds_priority_two_bolts_on_stack_above_active_bolt() {
         },
     );
     let b2 = hand_index_for_card(&e, 1, "lightning_bolt");
-    e.apply_command(1, &cast_spell(b2, target_player(0)))
+    e.apply_scenario_command(1, &cast_spell(b2, target_player(0)))
         .expect("NAP second bolt while holding priority");
     assert_eq!(e.state.stack.len(), 3);
 
@@ -1255,7 +1264,7 @@ fn counterspell_on_top_bolt_fizzles_second_leaves_bottom_bolt() {
     advance_to_main1_from_game_start(&mut e);
 
     let m0a = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(m0a))
+    e.apply_scenario_command(0, &play_land(m0a))
         .expect("p0 play mountain");
     let m0b = hand_index_for_card(&e, 0, "mountain");
     let m0b_oid = e.state.players[0].hand.remove(m0b);
@@ -1275,7 +1284,7 @@ fn counterspell_on_top_bolt_fizzles_second_leaves_bottom_bolt() {
         },
     );
     let bolt_bottom = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_bottom, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_bottom, target_player(1)))
         .expect("first bolt (stack bottom)");
     give_mana(
         &mut e,
@@ -1286,10 +1295,10 @@ fn counterspell_on_top_bolt_fizzles_second_leaves_bottom_bolt() {
         },
     );
     let bolt_top = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_top, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_top, target_player(1)))
         .expect("second bolt while holding priority (stack top before counter)");
     let top_bolt_oid = e.state.stack.last().expect("top bolt").id;
-    e.apply_command(0, &pass()).expect("AP pass");
+    e.apply_scenario_command(0, &pass()).expect("AP pass");
 
     for _ in 0..2 {
         let ii = hand_index_for_card(&e, 1, "island");
@@ -1306,7 +1315,7 @@ fn counterspell_on_top_bolt_fizzles_second_leaves_bottom_bolt() {
         },
     );
     let cs_idx = hand_index_for_card(&e, 1, "counterspell");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             cs_idx,
@@ -1380,7 +1389,7 @@ fn twincast_copies_bolt_both_deal_damage() {
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("p0 play mountain");
 
     // Give P1 two untapped islands on the battlefield to pay {U}{U}.
@@ -1404,10 +1413,11 @@ fn twincast_copies_bolt_both_deal_damage() {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("p0 cast bolt at p1");
     let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
-    e.apply_command(0, &pass()).expect("p0 pass priority to p1");
+    e.apply_scenario_command(0, &pass())
+        .expect("p0 pass priority to p1");
 
     give_mana(
         &mut e,
@@ -1419,7 +1429,7 @@ fn twincast_copies_bolt_both_deal_damage() {
     );
     let twincast_idx = hand_index_for_card(&e, 1, "twincast");
     let cast = e
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_spell(
                 twincast_idx,
@@ -1453,9 +1463,10 @@ fn twincast_copies_bolt_both_deal_damage() {
 
     // Both pass: Twincast resolves and emits ResolutionChoiceRequired (CR 707.10c: copy
     // controller must choose new targets before the copy lands on the stack).
-    e.apply_command(1, &pass()).expect("p1 pass after twincast");
+    e.apply_scenario_command(1, &pass())
+        .expect("p1 pass after twincast");
     let resolve = e
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("p0 pass resolves twincast");
 
     // No StackPushed yet — copy is parked pending target choice.
@@ -1488,7 +1499,7 @@ fn twincast_copies_bolt_both_deal_damage() {
 
     // P1 submits target choice: keep original target (P1 = player id 1).
     let target_batch = e
-        .apply_command(1, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![1]))
         .expect("P1 submits copy target");
 
     let copy_push = target_batch
@@ -1531,8 +1542,9 @@ fn twincast_copies_bolt_both_deal_damage() {
 
     // Copy resolves: 3 damage to P1, and it ceases to exist (no graveyard card).
     let copy_id = copy_item.id;
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass resolves copy");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("p1 pass resolves copy");
     assert_eq!(e.state.players[1].life, 17, "copy dealt 3 to P1");
     assert!(
         !e.state.players[0].graveyard.contains(&copy_id)
@@ -1541,8 +1553,9 @@ fn twincast_copies_bolt_both_deal_damage() {
     );
 
     // Original bolt resolves: another 3 to P1, and the real card goes to P0's graveyard.
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass resolves bolt");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("p1 pass resolves bolt");
     assert!(e.state.stack.is_empty(), "stack empty");
     assert_eq!(e.state.players[1].life, 14, "bolt dealt the remaining 3");
     assert!(
@@ -1606,7 +1619,7 @@ fn twincast_rejects_non_spell_target() {
     );
     let twincast_idx = hand_index_for_card(&e, 0, "twincast");
     let before = e.state.stack.len();
-    let err = e.apply_command(
+    let err = e.apply_scenario_command(
         0,
         &cast_spell(
             twincast_idx,
@@ -1677,10 +1690,10 @@ fn countering_a_spell_copy_removes_it_without_error() {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("p0 cast bolt");
     let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
-    e.apply_command(0, &pass()).expect("p0 pass to p1");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass to p1");
 
     // P1 casts Twincast at the bolt; both pass; Twincast resolves and prompts P1 for new targets.
     give_mana(
@@ -1692,7 +1705,7 @@ fn countering_a_spell_copy_removes_it_without_error() {
         },
     );
     let twincast_idx = hand_index_for_card(&e, 1, "twincast");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             twincast_idx,
@@ -1706,8 +1719,9 @@ fn countering_a_spell_copy_removes_it_without_error() {
         ),
     )
     .expect("p1 cast twincast at the bolt");
-    e.apply_command(1, &pass()).expect("p1 pass after twincast");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(1, &pass())
+        .expect("p1 pass after twincast");
+    e.apply_scenario_command(0, &pass())
         .expect("p0 pass resolves twincast");
 
     // P1 must choose targets for the copy (CR 707.10c) before it lands on the stack.
@@ -1716,7 +1730,7 @@ fn countering_a_spell_copy_removes_it_without_error() {
         "copy target choice is pending"
     );
     // P1 keeps the original target (P1 = player 1).
-    e.apply_command(1, &submit_resolution_choice(vec![1]))
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![1]))
         .expect("P1 submits copy target");
 
     let copy_item = e.state.stack.last().expect("copy on stack");
@@ -1733,7 +1747,7 @@ fn countering_a_spell_copy_removes_it_without_error() {
         },
     );
     let counter_idx = hand_index_for_card(&e, 0, "counterspell");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             counter_idx,
@@ -1747,8 +1761,8 @@ fn countering_a_spell_copy_removes_it_without_error() {
         ),
     )
     .expect("p0 counter the copy");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
         .expect("p1 pass resolves counterspell (must not error on the copy)");
 
     assert!(
@@ -1803,7 +1817,7 @@ fn twincast_copy_controller_chooses_new_target() {
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("p0 play mountain");
 
     for _ in 0..2 {
@@ -1823,10 +1837,10 @@ fn twincast_copy_controller_chooses_new_target() {
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     // P0 bolts P1 (player id 1).
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("p0 cast bolt at p1");
     let bolt_oid = e.state.stack.last().unwrap().id;
-    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
 
     give_mana(
         &mut e,
@@ -1837,7 +1851,7 @@ fn twincast_copy_controller_chooses_new_target() {
         },
     );
     let twincast_idx = hand_index_for_card(&e, 1, "twincast");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             twincast_idx,
@@ -1851,9 +1865,9 @@ fn twincast_copy_controller_chooses_new_target() {
         ),
     )
     .expect("p1 cast twincast");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
     let resolve = e
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("p0 pass resolves twincast");
 
     // ResolutionChoiceRequired must be emitted (CR 707.10c).
@@ -1871,7 +1885,7 @@ fn twincast_copy_controller_chooses_new_target() {
 
     // P1 redirects the copy to hit P0 instead.
     let target_batch = e
-        .apply_command(1, &submit_resolution_choice(vec![0]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![0]))
         .expect("P1 chooses P0 as new target");
 
     let copy_push = target_batch
@@ -1895,14 +1909,15 @@ fn twincast_copy_controller_chooses_new_target() {
     );
 
     // Copy resolves first: 3 to P0.
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass resolves copy");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("p1 pass resolves copy");
     assert_eq!(e.state.players[0].life, 17, "copy dealt 3 to P0");
     assert_eq!(e.state.players[1].life, 20, "P1 untouched so far");
 
     // Original bolt resolves: 3 to P1.
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
         .expect("p1 pass resolves original bolt");
     assert_eq!(e.state.players[0].life, 17, "P0 at 17");
     assert_eq!(e.state.players[1].life, 17, "bolt dealt 3 to P1");
@@ -1944,7 +1959,7 @@ fn twincast_awaiting_copy_target(seed: u64) -> (GameEngine, u32, u32) {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt_idx,
@@ -1959,7 +1974,7 @@ fn twincast_awaiting_copy_target(seed: u64) -> (GameEngine, u32, u32) {
     )
     .expect("p0 bolts its own Bears");
     let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
-    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
 
     ensure_in_hand(&mut e, 1, "twincast");
     give_mana(
@@ -1971,7 +1986,7 @@ fn twincast_awaiting_copy_target(seed: u64) -> (GameEngine, u32, u32) {
         },
     );
     let twincast_idx = hand_index_for_card(&e, 1, "twincast");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             twincast_idx,
@@ -1985,8 +2000,8 @@ fn twincast_awaiting_copy_target(seed: u64) -> (GameEngine, u32, u32) {
         ),
     )
     .expect("p1 casts Twincast at the bolt");
-    e.apply_command(1, &pass()).expect("p1 pass");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass())
         .expect("p0 pass resolves twincast");
     assert!(
         e.state.pending_resolution.is_some(),
@@ -2012,7 +2027,7 @@ fn twincast_copy_may_keep_an_original_target_that_is_now_illegal() {
     yank_from_battlefield(&mut e, 0, original_target);
 
     let batch = e
-        .apply_command(1, &submit_resolution_choice(vec![original_target]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![original_target]))
         .expect("keeping the original target is legal even though it left the battlefield");
 
     let copy_push = batch
@@ -2049,7 +2064,7 @@ fn issue_171_copy_retargeting_does_not_commit_another_crime() {
         "Twincast targeted an opposing spell"
     );
     inject_creature_on_battlefield(&mut e, 1, "raven_of_fell_omens");
-    e.apply_command(1, &submit_resolution_choice(vec![0]))
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![0]))
         .unwrap();
     assert_eq!(e.state.turn_history.current.player(1).crimes_committed, 1);
     assert!(e.state.stack.iter().all(|item| !item.is_triggered));
@@ -2064,7 +2079,7 @@ fn twincast_copy_rejects_an_illegal_new_target_without_losing_the_choice() {
     let (mut e, _, other_creature) = twincast_awaiting_copy_target(1452);
     yank_from_battlefield(&mut e, 1, other_creature);
 
-    let err = e.apply_command(1, &submit_resolution_choice(vec![other_creature]));
+    let err = e.apply_scenario_command(1, &submit_resolution_choice(vec![other_creature]));
     assert!(
         err.is_err(),
         "a newly chosen target must be legal at the time it is chosen"
@@ -2076,7 +2091,7 @@ fn twincast_copy_rejects_an_illegal_new_target_without_losing_the_choice() {
 
     // The player can still complete the choice, and the copy resolves normally.
     let p0_life = e.state.players[0].life;
-    e.apply_command(1, &submit_resolution_choice(vec![0]))
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![0]))
         .expect("retry with a legal target succeeds");
     while !e.state.stack.is_empty() {
         pass_both_players(&mut e);

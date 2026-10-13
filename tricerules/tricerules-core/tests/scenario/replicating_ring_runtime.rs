@@ -1,9 +1,10 @@
 //! Necessary counter contracts before Replicating Ring card admission.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{
     AbilityCost, CastTriggerPlayer, CounterKind, GameCondition, SpellEffectKind, TriggerCondition,
 };
-use tricerules_core::{state::CopiableValues, GameEngine, TurnStep};
+use tricerules_core::{state::CopiableValues, TurnStep};
 use tricerules_proto::ruled::v1::{
     dev_command, ruled_command::Cmd, DevCommand, DevMoveCard, DevZone, RuledCommand,
 };
@@ -51,7 +52,9 @@ fn remove_all_charge_counters_preserves_other_kinds_and_zero_is_noop() {
     for _ in 0..2 {
         engine.state.objects.get_mut(&source).unwrap().tapped = false;
         let command = activate_ability_for(&engine, source, 0, vec![]);
-        engine.apply_command(0, &command).expect("activate removal");
+        engine
+            .apply_scenario_command(0, &command)
+            .expect("activate removal");
         resolve_entire_stack_two_player(&mut engine);
         assert_eq!(
             engine.state.objects[&source].counter_count(CounterKind::Charge),
@@ -112,13 +115,13 @@ fn source_counter_condition_uses_exact_departed_generation_lki() {
     engine.state.active_player_idx = 1;
     engine.state.priority_idx = 1;
     engine.state.turn_step = TurnStep::EndStep;
-    engine.apply_command(1, &pass()).unwrap();
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     assert_eq!(engine.state.stack.len(), 1);
     engine.enable_dev_commands();
     for zone in [DevZone::Graveyard, DevZone::Battlefield] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 engine.state.priority_player_id(),
                 &RuledCommand {
                     cmd: Some(Cmd::DevCommand(DevCommand {

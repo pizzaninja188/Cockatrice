@@ -1,5 +1,6 @@
 //! Actual-card semantics for five pinned Standard spells.
 //! Pinned Oracle and current Scryfall rulings reviewed 2026-09-22.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{primitives::CounterKind, Keyword};
@@ -52,7 +53,7 @@ fn issue_misc32_gravkill_target_union() {
     inject_card_into_hand(&mut artifact, 0, "gravkill");
     let slot = hand_index_for_card(&artifact, 0, "gravkill");
     assert!(artifact
-        .apply_command(0, &cast_spell(slot, target_object(boots)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(boots)))
         .is_err());
 }
 
@@ -148,7 +149,7 @@ fn issue_misc32_stroke_of_midnight_recipient() {
     inject_card_into_hand(&mut illegal, 0, "stroke_of_midnight");
     let slot = hand_index_for_card(&illegal, 0, "stroke_of_midnight");
     assert!(illegal
-        .apply_command(0, &cast_spell(slot, target_object(land)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(land)))
         .is_err());
     assert!(battlefield_token_oids(&illegal, 1, "human_w_1_1").is_empty());
 

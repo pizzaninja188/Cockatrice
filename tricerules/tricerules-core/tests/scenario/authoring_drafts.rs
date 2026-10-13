@@ -1,7 +1,8 @@
 use super::helpers::{advance_to_main1_from_game_start, authoring_rows::run_rows};
 use serde::Deserialize;
 use std::path::PathBuf;
-use tricerules_core::{EngineDeck, GameEngine};
+use tricerules_core::EngineDeck;
+use tricerules_core::GameEngine;
 
 #[test]
 fn draft_constructor_is_explicit_and_preserves_production_registry() {

@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::ContinuousEffectKind;
 use tricerules_proto::ruled::v1::dev_command::Dev;
 use tricerules_proto::ruled::v1::{DevCommand, DevMoveCard, DevPutCardInZone, DevZone};
@@ -66,7 +67,7 @@ fn vampire_soulcaller_cannot_block() {
     let mut engine = dev_engine(119_001);
 
     engine
-        .apply_command(0, &put_ready_on_battlefield(1, "Vampire Soulcaller"))
+        .apply_scenario_command(0, &put_ready_on_battlefield(1, "Vampire Soulcaller"))
         .expect("put Vampire Soulcaller onto the battlefield");
     let soulcaller = battlefield_object_for_card(&engine, 1, "vampire_soulcaller");
     engine
@@ -83,18 +84,22 @@ fn vampire_soulcaller_cannot_block() {
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
-    engine.apply_command(0, &pass()).expect("attacker passes");
-    engine.apply_command(1, &pass()).expect("defender passes");
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &pass())
+        .expect("attacker passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("defender passes");
+    engine
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("attacker passes after declaration");
     let blockers = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes after declaration");
 
     let legal = blockers
@@ -113,7 +118,7 @@ fn vampire_soulcaller_cannot_block() {
         "a prohibition makes the blocking requirement impossible rather than mandatory"
     );
     let err = engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -130,7 +135,7 @@ fn vampire_soulcaller_mandatory_etb_returns_a_creature_card() {
     let bears = inject_graveyard_card(&mut engine, 0, "grizzly_bears");
 
     let entry = engine
-        .apply_command(0, &put_ready_on_battlefield(0, "Vampire Soulcaller"))
+        .apply_scenario_command(0, &put_ready_on_battlefield(0, "Vampire Soulcaller"))
         .expect("put Vampire Soulcaller onto the battlefield");
     let pending = engine
         .state
@@ -145,7 +150,7 @@ fn vampire_soulcaller_mandatory_etb_returns_a_creature_card() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -180,15 +185,15 @@ fn copied_and_controlled_soulcallers_keep_the_self_restriction() {
     engine.enable_dev_commands();
     advance_to_main1_from_game_start(&mut engine);
     engine
-        .apply_command(0, &put_ready_on_battlefield(1, "Vampire Soulcaller"))
+        .apply_scenario_command(0, &put_ready_on_battlefield(1, "Vampire Soulcaller"))
         .expect("put Vampire Soulcaller onto the battlefield");
     let soulcaller = battlefield_object_for_card(&engine, 1, "vampire_soulcaller");
 
     engine
-        .apply_command(0, &put_ready_on_battlefield(0, "Clone"))
+        .apply_scenario_command(0, &put_ready_on_battlefield(0, "Clone"))
         .expect("put Clone and request a copy source");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![soulcaller]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![soulcaller]))
         .expect("copy Vampire Soulcaller");
     let clone = battlefield_object_for_card(&engine, 0, "clone");
     assert_eq!(
@@ -209,7 +214,7 @@ fn copied_and_controlled_soulcallers_keep_the_self_restriction() {
     );
     let mind_control = hand_index_for_card(&engine, 0, "mind_control");
     engine
-        .apply_command(0, &cast_spell(mind_control, target_object(soulcaller)))
+        .apply_scenario_command(0, &cast_spell(mind_control, target_object(soulcaller)))
         .expect("cast Mind Control");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&soulcaller].controller, 0);
@@ -224,19 +229,19 @@ fn copied_and_controlled_soulcallers_keep_the_self_restriction() {
 fn self_restriction_is_removed_on_leave_and_recreated_on_return() {
     let mut engine = dev_engine(119_004);
     engine
-        .apply_command(0, &put_ready_on_battlefield(1, "Vampire Soulcaller"))
+        .apply_scenario_command(0, &put_ready_on_battlefield(1, "Vampire Soulcaller"))
         .expect("put Vampire Soulcaller onto the battlefield");
     let soulcaller = battlefield_object_for_card(&engine, 1, "vampire_soulcaller");
     let generation = engine.state.zone_change_generation[&soulcaller];
     assert_eq!(self_restriction_count(&engine, soulcaller), 1);
 
     engine
-        .apply_command(0, &move_card(1, DevZone::Hand, "Vampire Soulcaller"))
+        .apply_scenario_command(0, &move_card(1, DevZone::Hand, "Vampire Soulcaller"))
         .expect("move Vampire Soulcaller to hand");
     assert_eq!(self_restriction_count(&engine, soulcaller), 0);
 
     engine
-        .apply_command(0, &move_card(1, DevZone::Battlefield, "Vampire Soulcaller"))
+        .apply_scenario_command(0, &move_card(1, DevZone::Battlefield, "Vampire Soulcaller"))
         .expect("return Vampire Soulcaller to the battlefield");
     assert_eq!(
         battlefield_object_for_card(&engine, 1, "vampire_soulcaller"),

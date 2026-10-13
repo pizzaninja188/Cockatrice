@@ -7,6 +7,7 @@
 //! and total cost), 701.16 (discard), 701.9 (sacrifice), 119.3/119.4 (life loss and gain),
 //! 121.1 (draw), 111.10a (Treasure), 608.2c (printed instruction order), 613 layer 6 and 122.1
 //! (keyword grants and counters), 603.6a and 700.2 (entry triggers and player-set recipients).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -101,7 +102,7 @@ fn issue_338_worthy_cost_pays_a_sacrifice_and_exiles_a_creature_or_planeswalker(
     let slot = hand_index_for_card(&engine, 0, "worthy_cost");
     assert!(
         engine
-            .apply_command(0, &cast_spell(slot, target_object(target)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
             .is_err(),
         "the mandatory sacrifice cannot be skipped"
     );
@@ -110,7 +111,7 @@ fn issue_338_worthy_cost_pays_a_sacrifice_and_exiles_a_creature_or_planeswalker(
     let slot = hand_index_for_card(&engine, 0, "worthy_cost");
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell_with_cast_cost_groups(
                     slot,
@@ -124,7 +125,7 @@ fn issue_338_worthy_cost_pays_a_sacrifice_and_exiles_a_creature_or_planeswalker(
 
     let slot = hand_index_for_card(&engine, 0, "worthy_cost");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -172,7 +173,7 @@ fn issue_338_worthy_cost_pays_a_sacrifice_and_exiles_a_creature_or_planeswalker(
     );
     let slot = hand_index_for_card(&walker_engine, 0, "worthy_cost");
     walker_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -216,13 +217,13 @@ fn issue_338_eaten_alive_accepts_either_payment_and_exiles() {
     let slot = hand_index_for_card(&engine, 0, "eaten_alive");
     assert!(
         engine
-            .apply_command(0, &cast_spell(slot, target_object(target)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
             .is_err(),
         "one announced additional cost is mandatory"
     );
     let slot = hand_index_for_card(&engine, 0, "eaten_alive");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -263,7 +264,7 @@ fn issue_338_eaten_alive_accepts_either_payment_and_exiles() {
     );
     let slot = hand_index_for_card(&mana_engine, 0, "eaten_alive");
     mana_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(slot, target_object(target), vec![option(1)]),
         )
@@ -304,7 +305,9 @@ fn issue_338_seize_the_spoils_discards_and_draws_with_a_treasure() {
 
     let slot = hand_index_for_card(&engine, 0, "seize_the_spoils");
     assert!(
-        engine.apply_command(0, &cast_spell(slot, vec![])).is_err(),
+        engine
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .is_err(),
         "the discard additional cost is mandatory"
     );
 
@@ -312,7 +315,7 @@ fn issue_338_seize_the_spoils_discards_and_draws_with_a_treasure() {
     let fodder_slot = hand_index_for_card(&engine, 0, "grizzly_bears");
     let fodder = engine.state.players[0].hand[fodder_slot];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(slot, vec![], vec![discard_option(fodder_slot)]),
         )
@@ -363,13 +366,15 @@ fn issue_338_duty_beyond_death_grants_indestructible_and_a_counter() {
 
     let slot = hand_index_for_card(&engine, 0, "duty_beyond_death");
     assert!(
-        engine.apply_command(0, &cast_spell(slot, vec![])).is_err(),
+        engine
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .is_err(),
         "the mandatory sacrifice cannot be skipped"
     );
 
     let slot = hand_index_for_card(&engine, 0, "duty_beyond_death");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -425,7 +430,7 @@ fn issue_338_arbiter_of_woe_etb_drains_each_opponent() {
 
     let slot = hand_index_for_card(&engine, 0, "arbiter_of_woe");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -443,16 +448,16 @@ fn issue_338_arbiter_of_woe_etb_drains_each_opponent() {
     );
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     let batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve the trigger to the opponent's discard choice");
     let choice = find_resolution_choice(&batch).expect("each-opponent discard choice");
     assert_eq!(choice.deciding_player_id, 1);
     assert!(choice.candidate_object_ids.contains(&opponent_card));
     engine
-        .apply_command(1, &submit_resolution_choice(vec![opponent_card]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![opponent_card]))
         .expect("the opponent discards a card");
 
     assert_eq!(engine.state.objects[&opponent_card].zone, Zone::Graveyard);

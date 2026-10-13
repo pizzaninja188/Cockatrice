@@ -3,6 +3,7 @@
 //! Oracle/rulings verified 2026-08-14 for Chandra's Outrage, Scorch Spitter, Curse of Opulence,
 //! and Curse of Disturbance. Governing rules: CR 111.2, 111.10c, 113.7a, 508.3a-b, 605.1a,
 //! and 608.2b/h. Scorch Spitter's planeswalker recipient remains deferred to issue #72.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_core::{AttachmentRecipient, Zone};
@@ -40,7 +41,7 @@ fn chandras_outrage_damages_the_creature_and_its_controller() {
 
     let spell = hand_index_for_card(&engine, 0, "chandras_outrage");
     engine
-        .apply_command(0, &cast_spell(spell, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(spell, target_object(target)))
         .expect("cast Chandra's Outrage");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -76,7 +77,7 @@ fn chandras_outrage_uses_the_targets_current_controller() {
     );
     let spell = hand_index_for_card(&engine, 0, "chandras_outrage");
     engine
-        .apply_command(0, &cast_spell(spell, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(spell, target_object(target)))
         .expect("cast Chandra's Outrage");
 
     engine.state.players[1]
@@ -120,7 +121,7 @@ fn chandras_outrage_does_no_player_damage_when_its_target_is_illegal() {
     );
     let spell = hand_index_for_card(&engine, 0, "chandras_outrage");
     engine
-        .apply_command(0, &cast_spell(spell, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(spell, target_object(target)))
         .expect("cast Chandra's Outrage");
 
     engine.state.players[1]
@@ -157,7 +158,7 @@ fn scorch_spitter_keeps_the_event_time_defender_after_its_source_leaves() {
     let spitter = relocate_to_battlefield(&mut engine, 0, "scorch_spitter", false);
 
     engine
-        .apply_command(0, &declare_attackers(vec![spitter]))
+        .apply_scenario_command(0, &declare_attackers(vec![spitter]))
         .expect("attack with Scorch Spitter");
     engine.state.players[0]
         .battlefield
@@ -220,7 +221,7 @@ fn curse_of_opulence_triggers_once_for_multiple_attackers_and_gives_both_rewards
     ));
 
     engine
-        .apply_command(0, &declare_attackers(attackers))
+        .apply_scenario_command(0, &declare_attackers(attackers))
         .expect("attack cursed player with two creatures");
     assert_eq!(engine.state.stack.len(), 1, "one attacked-player trigger");
     resolve_entire_stack_two_player(&mut engine);
@@ -254,7 +255,7 @@ fn curse_of_opulence_triggers_once_for_multiple_attackers_and_gives_both_rewards
         })),
     };
     engine
-        .apply_command(0, &make_black)
+        .apply_scenario_command(0, &make_black)
         .expect("sacrifice Gold for black mana");
     assert_eq!(engine.state.players[0].mana_pool.black, 1);
     assert!(
@@ -288,7 +289,7 @@ fn curse_attacking_reward_is_skipped_when_no_attacker_remains() {
         .expect("attacker");
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("attack cursed player");
     engine
         .state
@@ -331,12 +332,12 @@ fn curse_attacking_reward_ignores_attackers_at_a_different_multiplayer_defender(
         inject_creature_on_battlefield(&mut engine, 0, "colossal_dreadmaw");
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("begin combat");
     for _ in 0..3 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("pass combat start");
     }
     assert_eq!(
@@ -357,7 +358,7 @@ fn curse_attacking_reward_ignores_attackers_at_a_different_multiplayer_defender(
             .unwrap_or_else(|| panic!("missing legal attack assignment {attacker} -> {defender}"))
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -373,7 +374,7 @@ fn curse_attacking_reward_ignores_attackers_at_a_different_multiplayer_defender(
 
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             engine.state.priority_player_id(),
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -423,7 +424,7 @@ fn curse_of_disturbance_uses_the_same_two_recipient_rewards() {
         .expect("attacker");
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("attack cursed player");
     resolve_entire_stack_two_player(&mut engine);
 

@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::CounterKind;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
@@ -25,6 +26,7 @@ fn engine(seed: u64) -> GameEngine {
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
@@ -43,7 +45,7 @@ fn cast_endure_creature(engine: &mut GameEngine, card_id: &str) -> u32 {
     grant_pool(engine, 0);
     let index = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_spell(index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(index, Vec::new()))
         .expect("cast Endure creature");
     pass_both_players(engine);
     object_id
@@ -95,7 +97,7 @@ fn endure_one_two_and_three_offer_both_branches_and_apply_the_choice() {
             .expect("Endure branch choice");
         assert_eq!(pending.deciding_player, 0);
         counters_engine
-            .apply_command(0, &select_branch(0))
+            .apply_scenario_command(0, &select_branch(0))
             .expect("choose counters");
         assert_eq!(
             counters_engine
@@ -112,7 +114,7 @@ fn endure_one_two_and_three_offer_both_branches_and_apply_the_choice() {
         cast_endure_creature(&mut token_engine, card_id);
         pass_both_players(&mut token_engine);
         token_engine
-            .apply_command(0, &select_branch(1))
+            .apply_scenario_command(0, &select_branch(1))
             .expect("choose Spirit");
         assert_eq!(battlefield_token_oids(&token_engine, 0, token_id).len(), 1);
     }
@@ -133,7 +135,7 @@ fn removed_source_forces_the_spirit_fallback_without_a_prompt() {
     );
     let bolt = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(bolt, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(bolt, target_object(source)))
         .expect("cast Lightning Bolt over the Endure trigger");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -163,7 +165,7 @@ fn source_controller_chooses_and_receives_the_spirit() {
         1
     );
     engine
-        .apply_command(1, &select_branch(1))
+        .apply_scenario_command(1, &select_branch(1))
         .expect("source controller chooses Spirit");
     assert_eq!(battlefield_token_oids(&engine, 1, "spirit_w_2_2").len(), 1);
     assert!(battlefield_token_oids(&engine, 0, "spirit_w_2_2").is_empty());
@@ -185,7 +187,7 @@ fn source_controller_lki_routes_forced_fallback_after_source_leaves() {
     );
     let bolt = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(bolt, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(bolt, target_object(source)))
         .expect("cast Lightning Bolt");
     pass_both_players(&mut engine);
     pass_both_players(&mut engine);
@@ -216,10 +218,10 @@ fn leave_and_return_generation_forces_fallback_and_stale_counter_choice_is_resto
         .entry(source)
         .or_insert(0) += 2;
 
-    assert!(engine.apply_command(0, &select_branch(0)).is_err());
+    assert!(engine.apply_scenario_command(0, &select_branch(0)).is_err());
     assert!(engine.state.pending_resolution.is_some());
     engine
-        .apply_command(0, &select_branch(1))
+        .apply_scenario_command(0, &select_branch(1))
         .expect("fallback remains legal");
     assert_eq!(battlefield_token_oids(&engine, 0, "spirit_w_1_1").len(), 1);
     assert_eq!(
@@ -240,7 +242,7 @@ fn endure_replay_is_deterministic_for_the_same_seed_and_commands() {
         let source = cast_endure_creature(&mut engine, "dusyut_earthcarver");
         pass_both_players(&mut engine);
         engine
-            .apply_command(0, &select_branch(0))
+            .apply_scenario_command(0, &select_branch(0))
             .expect("choose counters");
         (
             battlefield_token_oids(&engine, 0, "spirit_w_3_3").len(),

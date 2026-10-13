@@ -190,6 +190,7 @@ private:
     [[nodiscard]] bool beginRuledGameplayCommand();
     void finishRuledGameplayCommand(quint64 token);
     void requestResolutionChoiceDialog(const QString &prompt,
+                                       quint64 resolutionPromptId,
                                        const QVector<quint32> &candidateOids,
                                        const QStringList &candidateNames,
                                        int minCount,

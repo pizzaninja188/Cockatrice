@@ -1,5 +1,6 @@
 //! Actual registered Arena; expectations come from its Oracle/rulings, not emitted events.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use prost::Message;
 use tricerules_cards::CounterKind;
 use tricerules_core::Zone;
@@ -82,16 +83,18 @@ fn commit(engine: &GameEngine) -> RuledCommand {
 
 fn pay(engine: &mut GameEngine, source: u32, own: u32, opponent: u32) {
     engine
-        .apply_command(0, &begin(engine, source, own))
+        .apply_scenario_command(0, &begin(engine, source, own))
         .unwrap();
     assert!(engine.state.stack.is_empty());
     assert!(!engine.state.objects[&source].tapped);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 3);
-    engine.apply_command(1, &answer(engine, opponent)).unwrap();
+    engine
+        .apply_scenario_command(1, &answer(engine, opponent))
+        .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.colorless, 3);
     let mut command = commit(engine);
     authoring_actions::pay(engine, 0, &mut command).unwrap();
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert!(engine.state.pending_ability_activation.is_none());
     assert!(engine.state.objects[&source].tapped);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
@@ -100,8 +103,8 @@ fn pay(engine: &mut GameEngine, source: u32, own: u32, opponent: u32) {
 }
 
 fn resolve(engine: &mut GameEngine) {
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     assert!(engine.state.stack.is_empty());
     assert!(engine.state.pending_resolution.is_none());
 }
@@ -177,13 +180,15 @@ fn arena_partial_illegality_taps_the_remaining_target_without_fighting_and_all_i
 fn arena_rejected_payment_and_cancel_do_not_pay_costs_or_lose_the_target_receipts() {
     let (mut engine, source, own, opponent) = fixture(602_405, "grizzly_bears");
     engine
-        .apply_command(0, &begin(&engine, source, own))
+        .apply_scenario_command(0, &begin(&engine, source, own))
         .unwrap();
-    engine.apply_command(1, &answer(&engine, opponent)).unwrap();
+    engine
+        .apply_scenario_command(1, &answer(&engine, opponent))
+        .unwrap();
     engine.state.players[0].mana_pool.colorless = 2;
     let snapshot = format!("{:?}", engine.state);
     engine
-        .apply_command(0, &commit(&engine))
+        .apply_scenario_command(0, &commit(&engine))
         .expect_err("insufficient mana");
     assert_eq!(format!("{:?}", engine.state), snapshot);
     let pending = engine.state.pending_ability_activation.as_ref().unwrap();
@@ -193,7 +198,7 @@ fn arena_rejected_payment_and_cancel_do_not_pay_costs_or_lose_the_target_receipt
             expected_revision: pending.revision,
         })),
     };
-    engine.apply_command(0, &cancel).unwrap();
+    engine.apply_scenario_command(0, &cancel).unwrap();
     assert!(engine.state.pending_ability_activation.is_none());
     assert!(engine.state.stack.is_empty());
     assert!(!engine.state.objects[&source].tapped);
@@ -211,23 +216,26 @@ fn arena_paid_announcement_and_resolution_replay_serialized_commands_identically
     );
     let mut commands = vec![];
     let command = begin(&engine, source, own);
-    let batch = engine.apply_command(0, &command).unwrap();
+    let batch = engine.apply_scenario_command(0, &command).unwrap();
     commands.push((0, command, batch));
     let command = answer(&engine, opponent);
-    let batch = engine.apply_command(1, &command).unwrap();
+    let batch = engine.apply_scenario_command(1, &command).unwrap();
     commands.push((1, command, batch));
     let mut command = commit(&engine);
     authoring_actions::pay(&engine, 0, &mut command).unwrap();
-    let batch = engine.apply_command(0, &command).unwrap();
+    let batch = engine.apply_scenario_command(0, &command).unwrap();
     commands.push((0, command, batch));
     for actor in [0, 1] {
         let command = pass();
-        let batch = engine.apply_command(actor, &command).unwrap();
+        let batch = engine.apply_scenario_command(actor, &command).unwrap();
         commands.push((actor, command, batch));
     }
     for (actor, command, expected) in commands {
         let decoded = RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
-        assert_eq!(replay.apply_command(actor, &decoded).unwrap(), expected);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &decoded).unwrap(),
+            expected
+        );
     }
     assert_eq!(engine.state.objects[&own].zone, Zone::Graveyard);
     assert_eq!(engine.state.command_index, replay.state.command_index);

@@ -1,10 +1,11 @@
 //! Bello's turn-bound animation and combat-damage trigger.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, EffectDuration, PermanentTypeFilter, TypeLineReplacement,
 };
 use tricerules_cards::Keyword;
-use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine, TurnStep, Zone};
+use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
 use tricerules_proto::ruled::v1::dev_command::Dev;
 use tricerules_proto::ruled::v1::{DevCommand, DevPutCardInZone, DevZone};
 
@@ -36,7 +37,7 @@ fn put(engine: &mut GameEngine, player: i32, card_name: &str, card_id: &str) -> 
         }),
     );
     engine
-        .apply_command(player, &command)
+        .apply_scenario_command(player, &command)
         .unwrap_or_else(|error| panic!("put {card_name}: {error:?}"));
     battlefield_object_for_card(engine, player as usize, card_id)
 }
@@ -62,35 +63,35 @@ fn move_to_hand(engine: &mut GameEngine, player: i32, card_name: &str) {
         }),
     );
     engine
-        .apply_command(player, &command)
+        .apply_scenario_command(player, &command)
         .unwrap_or_else(|error| panic!("move {card_name} to hand: {error:?}"));
 }
 
 fn deal_unblocked_combat_damage(engine: &mut GameEngine, attacker: u32) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main one to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("nonactive player passes");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare the Bello-animated artifact as an attacker");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("no blockers are declared");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("combat damage passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("combat damage resolves");
     assert_eq!(engine.state.turn_step, TurnStep::CombatDamage);
 }
@@ -191,10 +192,10 @@ fn bello_damage_trigger_resolves_after_bello_and_recipient_leave() {
     assert_eq!(engine.state.objects[&artifact].zone, Zone::Hand);
     let after_leaves = engine.state.players[0].hand.len();
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes the stacked trigger");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("damage trigger resolves after both sources leave");
     assert_eq!(engine.state.stack.len(), 0);
     assert_eq!(

@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::Keyword;
 use tricerules_proto::ruled::v1::attachment_recipient::Recipient;
@@ -13,7 +14,7 @@ fn cast_and_resolve_aura(e: &mut GameEngine, card_id: &str, target: u32, mana: M
     ensure_card_in_hand(e, 0, card_id);
     give_mana(e, 0, mana);
     let idx = hand_index_for_card(e, 0, card_id);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -40,10 +41,10 @@ fn cast_and_resolve_player_aura(
     ensure_card_in_hand(e, 0, card_id);
     give_mana(e, 0, mana);
     let slot = hand_index_for_card(e, 0, card_id);
-    e.apply_command(0, &cast_spell(slot, target_player(player_id)))
+    e.apply_scenario_command(0, &cast_spell(slot, target_player(player_id)))
         .expect("cast player Aura");
-    e.apply_command(0, &pass()).expect("caster pass");
-    let batch = e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    let batch = e.apply_scenario_command(1, &pass()).expect("opponent pass");
     (battlefield_object_for_card(e, 0, card_id), batch)
 }
 
@@ -88,8 +89,9 @@ fn wingspan_stride_returns_itself_and_removes_its_modifier() {
     );
     apply_ability(&mut e, 0, aura, 0, vec![])
         .expect("activate the untargeted source-return ability");
-    e.apply_command(0, &pass()).expect("controller pass");
-    let resolution = e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass())
+        .expect("controller pass");
+    let resolution = e.apply_scenario_command(1, &pass()).expect("opponent pass");
 
     assert_eq!(e.state.objects[&aura].zone, tricerules_core::Zone::Hand);
     assert!(e.state.players[0].hand.contains(&aura));
@@ -193,14 +195,14 @@ fn wingspan_stride_in_graveyard_is_not_returned_by_its_old_ability() {
     e.state.players[0].graveyard.push(bear);
     e.state.objects.get_mut(&bear).expect("bear").zone = tricerules_core::Zone::Graveyard;
     *e.state.zone_change_generation.entry(bear).or_default() += 1;
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("state-based actions move the orphaned Aura");
     assert_eq!(
         e.state.objects[&aura].zone,
         tricerules_core::Zone::Graveyard
     );
 
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("resolve the old source ability");
     assert_eq!(
         e.state.objects[&aura].zone,
@@ -250,10 +252,10 @@ fn curse_of_disturbance_can_target_a_player() {
     );
 
     let slot = hand_index_for_card(&e, 0, "curse_of_disturbance");
-    e.apply_command(0, &cast_spell(slot, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(slot, target_player(1)))
         .expect("cast Curse of Disturbance targeting opponent");
-    e.apply_command(0, &pass()).expect("caster pass");
-    let resolution = e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    let resolution = e.apply_scenario_command(1, &pass()).expect("opponent pass");
     let curse = battlefield_object_for_card(&e, 0, "curse_of_disturbance");
 
     assert_eq!(
@@ -350,7 +352,7 @@ fn player_aura_rejects_a_forged_permanent_target() {
     );
     let slot = hand_index_for_card(&e, 0, "curse_of_opulence");
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &cast_spell(
                 slot,
@@ -394,7 +396,8 @@ fn player_aura_sba_cleans_up_a_lost_recipient() {
         },
     );
     e.state.players[1].has_lost = true;
-    e.apply_command(0, &pass()).expect("pass applies SBAs");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass applies SBAs");
     assert_eq!(
         e.state.objects[&curse].zone,
         tricerules_core::Zone::Graveyard
@@ -437,14 +440,15 @@ fn player_aura_survives_control_change_and_clears_on_zone_change() {
         .base_controller = 1;
     e.state.players[0].battlefield.retain(|&id| id != curse);
     e.state.players[1].battlefield.push(curse);
-    e.apply_command(0, &pass()).expect("pass applies SBAs");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass applies SBAs");
     assert_eq!(
         e.state.objects[&curse].attached_to,
         Some(AttachmentRecipient::Player(1)),
         "AnyPlayer remains legal after the Aura changes control"
     );
 
-    e.apply_command(0, &dev_move(1, DevZone::Graveyard, "Curse of Disturbance"))
+    e.apply_scenario_command(0, &dev_move(1, DevZone::Graveyard, "Curse of Disturbance"))
         .expect("move Curse to graveyard");
     assert_eq!(
         e.state.objects[&curse].zone,
@@ -493,7 +497,7 @@ fn holy_strength_buffs_enchanted_creature() {
         },
     );
     let hs_idx = hand_index_for_card(&e, 0, "holy_strength");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             hs_idx,
@@ -507,8 +511,8 @@ fn holy_strength_buffs_enchanted_creature() {
         ),
     )
     .expect("cast Holy Strength targeting bear");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
 
     // Bear is now enchanted with Holy Strength.
     assert_eq!(
@@ -568,7 +572,7 @@ fn unholy_strength_buffs_enchanted_creature() {
         },
     );
     let us_idx = hand_index_for_card(&e, 0, "unholy_strength");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             us_idx,
@@ -582,8 +586,8 @@ fn unholy_strength_buffs_enchanted_creature() {
         ),
     )
     .expect("cast Unholy Strength");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
 
     assert_eq!(e.effective_power(corpse), Some(4), "2+2=4 power");
     assert_eq!(e.effective_toughness(corpse), Some(3), "2+1=3 toughness");
@@ -626,7 +630,7 @@ fn aura_pt_buff_removed_when_aura_leaves_battlefield() {
         },
     );
     let hs_idx = hand_index_for_card(&e, 0, "holy_strength");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             hs_idx,
@@ -640,8 +644,8 @@ fn aura_pt_buff_removed_when_aura_leaves_battlefield() {
         ),
     )
     .expect("cast Holy Strength");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
 
     let hs_oid = battlefield_object_for_card(&e, 0, "holy_strength");
     assert_eq!(
@@ -709,7 +713,7 @@ fn aura_dies_when_enchanted_creature_dies_sba() {
         },
     );
     let hs_idx = hand_index_for_card(&e, 0, "holy_strength");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             hs_idx,
@@ -723,8 +727,8 @@ fn aura_dies_when_enchanted_creature_dies_sba() {
         ),
     )
     .expect("cast Holy Strength");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
 
     let hs_oid = battlefield_object_for_card(&e, 0, "holy_strength");
     assert_eq!(
@@ -743,7 +747,8 @@ fn aura_dies_when_enchanted_creature_dies_sba() {
     e.state.players[0].graveyard.push(bear);
 
     // Passing priority triggers SBA check: orphaned aura should be destroyed.
-    e.apply_command(0, &pass()).expect("pass triggers SBA");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass triggers SBA");
 
     assert_eq!(
         e.state.objects.get(&hs_oid).map(|o| o.zone),
@@ -789,7 +794,7 @@ fn aura_spell_fizzles_when_target_leaves_before_resolution() {
         },
     );
     let hs_idx = hand_index_for_card(&e, 0, "holy_strength");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             hs_idx,
@@ -814,8 +819,8 @@ fn aura_spell_fizzles_when_target_leaves_before_resolution() {
     e.state.players[0].graveyard.push(bear);
 
     // Both players pass — aura resolves but target is gone, must go to graveyard.
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
 
     assert_eq!(
         e.state.objects.get(&hs_stack_id).map(|o| o.zone),
@@ -911,10 +916,13 @@ fn pacifism_restriction_overrides_must_attack() {
     );
     let legal_bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
 
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
-    e.apply_command(0, &pass()).expect("ap pass begin combat");
-    let declare_batch = e.apply_command(1, &pass()).expect("nap pass begin combat");
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin combat");
+    let declare_batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("nap pass begin combat");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::DeclareAttackers
@@ -925,11 +933,11 @@ fn pacifism_restriction_overrides_must_attack() {
         .expect("active-player legal actions");
     assert_eq!(legal.selectable_attacker_ids, vec![legal_bear]);
     assert!(
-        e.apply_command(0, &declare_attackers(vec![goblin]))
+        e.apply_scenario_command(0, &declare_attackers(vec![goblin]))
             .is_err(),
         "Pacifism must make its creature an illegal attacker"
     );
-    e.apply_command(0, &declare_attackers(vec![]))
+    e.apply_scenario_command(0, &declare_attackers(vec![]))
         .expect("a Pacified must-attack creature is not able and may be omitted");
 
     e.state.objects.get_mut(&pacifism).expect("Pacifism").zone = tricerules_core::Zone::Graveyard;
@@ -965,15 +973,19 @@ fn pacifism_prevents_blocking() {
         },
     );
 
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
-    e.apply_command(0, &pass()).expect("ap pass begin combat");
-    e.apply_command(1, &pass()).expect("nap pass begin combat");
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &pass())
+        .expect("ap pass begin combat");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap pass begin combat");
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("ap pass after attackers");
-    let blockers_batch = e.apply_command(1, &pass()).expect("nap pass to blockers");
+    let blockers_batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("nap pass to blockers");
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::DeclareBlockers
@@ -989,7 +1001,7 @@ fn pacifism_prevents_blocking() {
         .collect();
     assert_eq!(legal_pairs, [(legal_blocker, attacker)]);
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -999,7 +1011,7 @@ fn pacifism_prevents_blocking() {
         .is_err(),
         "Pacifism must make its creature an illegal blocker"
     );
-    e.apply_command(1, &declare_blockers(vec![]))
+    e.apply_scenario_command(1, &declare_blockers(vec![]))
         .expect("the Pacified creature is not required or allowed to block");
 }
 
@@ -1028,7 +1040,8 @@ fn aura_dies_when_host_stops_matching_enchant_filter() {
     );
 
     e.state.objects.get_mut(&bear).expect("bear").card_id = "plains".into();
-    e.apply_command(0, &pass()).expect("pass triggers SBAs");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass triggers SBAs");
     assert_eq!(
         e.state.objects.get(&flight).map(|object| object.zone),
         Some(tricerules_core::Zone::Graveyard),
@@ -1062,7 +1075,8 @@ fn existing_aura_ignores_shroud_gained_after_resolution() {
 
     e.state.objects.get_mut(&bear).expect("bear").card_id = "argothian_enchantress".into();
     assert!(e.effective_has_keyword(bear, Keyword::Shroud));
-    e.apply_command(0, &pass()).expect("pass triggers SBAs");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass triggers SBAs");
     assert_eq!(
         e.state.objects.get(&flight).map(|object| object.zone),
         Some(tricerules_core::Zone::Battlefield),
@@ -1190,10 +1204,10 @@ fn indestructibility_prevents_destroy_effects() {
             ..Default::default()
         },
     );
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active player passes priority");
     let murder_idx = hand_index_for_card(&e, 1, "murder");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             murder_idx,

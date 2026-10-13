@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
 #[test]
@@ -19,7 +20,7 @@ fn tranquil_cove_enters_tapped_as_initial_entry_state() {
 
     let cove = hand_index_for_card(&engine, 0, "tranquil_cove");
     let played = engine
-        .apply_command(0, &play_land(cove))
+        .apply_scenario_command(0, &play_land(cove))
         .expect("play Tranquil Cove");
 
     let oid = battlefield_object_for_card(&engine, 0, "tranquil_cove");
@@ -68,7 +69,7 @@ fn orb_and_intrinsic_entry_replacement_ask_for_the_next_cr_616_effect() {
     );
     let orb = hand_index_for_card(&engine, 0, "orb_of_dreams");
     engine
-        .apply_command(0, &cast_spell(orb, vec![]))
+        .apply_scenario_command(0, &cast_spell(orb, vec![]))
         .expect("cast Orb of Dreams");
     pass_both_players(&mut engine);
     let orb_oid = battlefield_object_for_card(&engine, 0, "orb_of_dreams");
@@ -87,7 +88,7 @@ fn orb_and_intrinsic_entry_replacement_ask_for_the_next_cr_616_effect() {
     );
     let ghoul = hand_index_for_card(&engine, 0, "diregraf_ghoul");
     engine
-        .apply_command(0, &cast_spell(ghoul, vec![]))
+        .apply_scenario_command(0, &cast_spell(ghoul, vec![]))
         .expect("cast Diregraf Ghoul");
     pass_both_players(&mut engine);
 
@@ -104,15 +105,15 @@ fn orb_and_intrinsic_entry_replacement_ask_for_the_next_cr_616_effect() {
     assert_eq!(pending.presentation.candidates.len(), 2);
     let application = pending.presentation.candidates[0];
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![application]))
         .is_err());
     assert!(engine.state.pending_resolution.is_some());
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![u32::MAX]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![u32::MAX]))
         .is_err());
     assert!(engine.state.pending_resolution.is_some());
     engine
-        .apply_command(0, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![application]))
         .expect("choose the next entry replacement");
 
     let ghoul_oid = battlefield_object_for_card(&engine, 0, "diregraf_ghoul");
@@ -156,7 +157,7 @@ fn reanimation_applies_intrinsic_entry_replacement_before_etb_triggers() {
     );
     let zombify = hand_index_for_card(&engine, 0, "zombify");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 zombify,
@@ -213,7 +214,7 @@ fn token_batch_waits_for_every_replacement_choice_then_enters_simultaneously() {
     );
     let orb = hand_index_for_card(&engine, 0, "orb_of_dreams");
     engine
-        .apply_command(0, &cast_spell(orb, vec![]))
+        .apply_scenario_command(0, &cast_spell(orb, vec![]))
         .expect("cast Orb");
     pass_both_players(&mut engine);
     give_mana(
@@ -226,7 +227,7 @@ fn token_batch_waits_for_every_replacement_choice_then_enters_simultaneously() {
     );
     let second_orb = hand_index_for_card(&engine, 0, "orb_of_dreams");
     engine
-        .apply_command(0, &cast_spell(second_orb, vec![]))
+        .apply_scenario_command(0, &cast_spell(second_orb, vec![]))
         .expect("cast second Orb");
     pass_both_players(&mut engine);
 
@@ -241,7 +242,7 @@ fn token_batch_waits_for_every_replacement_choice_then_enters_simultaneously() {
     );
     let alarm = hand_index_for_card(&engine, 0, "raise_the_alarm");
     engine
-        .apply_command(0, &cast_spell(alarm, vec![]))
+        .apply_scenario_command(0, &cast_spell(alarm, vec![]))
         .expect("cast Raise the Alarm");
     pass_both_players(&mut engine);
 
@@ -270,7 +271,7 @@ fn token_batch_waits_for_every_replacement_choice_then_enters_simultaneously() {
         assert_eq!(pending.presentation.candidates.len(), 2);
         let application = pending.presentation.candidates[0];
         engine
-            .apply_command(0, &submit_resolution_choice(vec![application]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![application]))
             .expect("choose an Orb replacement");
     }
     let pending = engine
@@ -285,7 +286,7 @@ fn token_batch_waits_for_every_replacement_choice_then_enters_simultaneously() {
     assert!(pending.presentation.ordered);
     let entry_order = pending.presentation.candidates.clone();
     engine
-        .apply_command(0, &submit_resolution_choice(entry_order))
+        .apply_scenario_command(0, &submit_resolution_choice(entry_order))
         .expect("choose token timestamp order");
     assert_eq!(soldiers_on_battlefield(&engine), 2);
 
@@ -335,7 +336,7 @@ fn graveyard_owner_orders_replacements_even_when_the_permanent_enters_under_oppo
     );
     let orb = hand_index_for_card(&engine, 0, "orb_of_dreams");
     engine
-        .apply_command(0, &cast_spell(orb, vec![]))
+        .apply_scenario_command(0, &cast_spell(orb, vec![]))
         .expect("cast Orb");
     pass_both_players(&mut engine);
 
@@ -350,7 +351,7 @@ fn graveyard_owner_orders_replacements_even_when_the_permanent_enters_under_oppo
     );
     let reanimate = hand_index_for_card(&engine, 0, "reanimate");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 reanimate,
@@ -377,10 +378,10 @@ fn graveyard_owner_orders_replacements_even_when_the_permanent_enters_under_oppo
     );
     let application = pending.presentation.candidates[0];
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![application]))
         .is_err());
     engine
-        .apply_command(1, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![application]))
         .expect("owner orders the replacement effects");
 
     assert_eq!(engine.state.objects[&ghoul].owner, 1);

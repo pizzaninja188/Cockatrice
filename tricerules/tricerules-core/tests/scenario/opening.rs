@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
 #[test]
@@ -18,7 +19,7 @@ fn opening_choose_first_london_mulligan_then_start() {
     .expect("new");
     let chooser = e.state.opening.as_ref().expect("opening").chooser;
     assert_eq!(chooser, 5);
-    e.apply_command(
+    e.apply_scenario_command(
         chooser,
         &RuledCommand {
             cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
@@ -31,7 +32,7 @@ fn opening_choose_first_london_mulligan_then_start() {
     assert_eq!(e.state.players[1].hand.len(), 7);
     assert_eq!(e.state.turn_history.current.player(5).cards_drawn, 0);
     assert_eq!(e.state.turn_history.current.player(6).cards_drawn, 0);
-    e.apply_command(
+    e.apply_scenario_command(
         5,
         &RuledCommand {
             cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
@@ -45,7 +46,7 @@ fn opening_choose_first_london_mulligan_then_start() {
         Some(6),
         "after a mulligan, the other player is offered a decision while they have not kept"
     );
-    e.apply_command(
+    e.apply_scenario_command(
         6,
         &RuledCommand {
             cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
@@ -58,7 +59,7 @@ fn opening_choose_first_london_mulligan_then_start() {
         Some(5),
         "once the opponent has kept, the mulliganing player acts again"
     );
-    e.apply_command(
+    e.apply_scenario_command(
         5,
         &RuledCommand {
             cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
@@ -66,7 +67,7 @@ fn opening_choose_first_london_mulligan_then_start() {
     )
     .expect("keep to bottom");
     let hi = 0u32;
-    e.apply_command(
+    e.apply_scenario_command(
         5,
         &RuledCommand {
             cmd: Some(Cmd::PutOpeningHandOnBottom(PutOpeningHandOnBottom {
@@ -97,7 +98,7 @@ fn opening_mulligan_to_zero_auto_keeps_and_enters_bottom_phase() {
     )
     .expect("new");
     let chooser = e.state.opening.as_ref().unwrap().chooser;
-    e.apply_command(
+    e.apply_scenario_command(
         chooser,
         &RuledCommand {
             cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
@@ -108,14 +109,14 @@ fn opening_mulligan_to_zero_auto_keeps_and_enters_bottom_phase() {
     .expect("choose first");
 
     // P5 (starting player) mulligans first; P6 keeps on their turn; then P5 mulligans 6 more times.
-    e.apply_command(
+    e.apply_scenario_command(
         5,
         &RuledCommand {
             cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
         },
     )
     .expect("p5 first mulligan");
-    e.apply_command(
+    e.apply_scenario_command(
         6,
         &RuledCommand {
             cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
@@ -124,7 +125,7 @@ fn opening_mulligan_to_zero_auto_keeps_and_enters_bottom_phase() {
     .expect("p6 keep");
     // P5 mulligans 6 more times (7 total → auto-keep at 0).
     for _ in 0..6 {
-        e.apply_command(
+        e.apply_scenario_command(
             5,
             &RuledCommand {
                 cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
@@ -147,7 +148,7 @@ fn opening_mulligan_to_zero_auto_keeps_and_enters_bottom_phase() {
 
     // P5 places all 7 cards on the bottom one by one.
     for _ in 0..7 {
-        e.apply_command(
+        e.apply_scenario_command(
             5,
             &RuledCommand {
                 cmd: Some(Cmd::PutOpeningHandOnBottom(PutOpeningHandOnBottom {
@@ -178,7 +179,7 @@ fn opening_mulligan_to_zero_cannot_mulligan_further() {
     )
     .expect("new");
     let chooser = e.state.opening.as_ref().unwrap().chooser;
-    e.apply_command(
+    e.apply_scenario_command(
         chooser,
         &RuledCommand {
             cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
@@ -189,14 +190,14 @@ fn opening_mulligan_to_zero_cannot_mulligan_further() {
     .expect("choose first");
 
     // P5 mulligans first, then P6 keeps, then P5 mulligans 6 more (7 total → auto-keep).
-    e.apply_command(
+    e.apply_scenario_command(
         5,
         &RuledCommand {
             cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
         },
     )
     .expect("p5 first mulligan");
-    e.apply_command(
+    e.apply_scenario_command(
         6,
         &RuledCommand {
             cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
@@ -204,7 +205,7 @@ fn opening_mulligan_to_zero_cannot_mulligan_further() {
     )
     .expect("p6 keep");
     for _ in 0..6 {
-        e.apply_command(
+        e.apply_scenario_command(
             5,
             &RuledCommand {
                 cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
@@ -214,7 +215,7 @@ fn opening_mulligan_to_zero_cannot_mulligan_further() {
     }
 
     // An 8th Mulligan { keep: false } must be rejected (bottom phase is active, not mulligan phase).
-    let err = e.apply_command(
+    let err = e.apply_scenario_command(
         5,
         &RuledCommand {
             cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
@@ -371,17 +372,17 @@ fn structured_opening_actions_follow_authority_and_remaining_progress() {
         })),
     };
     let before = e.state.command_index;
-    assert!(e.apply_command(other, &choose).is_err());
+    assert!(e.apply_scenario_command(other, &choose).is_err());
     assert_eq!(e.state.command_index, before);
-    e.apply_command(chooser, &choose).unwrap();
-    assert!(e.apply_command(chooser, &choose).is_err());
+    e.apply_scenario_command(chooser, &choose).unwrap();
+    assert!(e.apply_scenario_command(chooser, &choose).is_err());
     let redraw = RuledCommand {
         cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
     };
     let keep = RuledCommand {
         cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
     };
-    let first = e.apply_command(7, &redraw).unwrap();
+    let first = e.apply_scenario_command(7, &redraw).unwrap();
     let waiting = first.legal_by_player[&7].opening.as_ref().unwrap();
     assert_eq!(waiting.mulligans_taken, 1);
     assert!(!waiting.can_keep && !waiting.can_redraw);
@@ -392,22 +393,22 @@ fn structured_opening_actions_follow_authority_and_remaining_progress() {
             .unwrap()
             .can_keep
     );
-    assert!(e.apply_command(7, &redraw).is_err());
-    e.apply_command(19, &keep).unwrap();
-    e.apply_command(7, &redraw).unwrap();
-    let bottom = e.apply_command(7, &keep).unwrap();
+    assert!(e.apply_scenario_command(7, &redraw).is_err());
+    e.apply_scenario_command(19, &keep).unwrap();
+    e.apply_scenario_command(7, &redraw).unwrap();
+    let bottom = e.apply_scenario_command(7, &keep).unwrap();
     let offer = bottom.legal_by_player[&7].opening.as_ref().unwrap();
     assert_eq!(offer.stage(), OpeningStage::Bottom);
     assert_eq!(offer.bottom_cards_remaining, 2);
     assert!(!offer.can_keep && !offer.can_redraw);
-    assert!(e.apply_command(7, &redraw).is_err());
+    assert!(e.apply_scenario_command(7, &redraw).is_err());
     let put = RuledCommand {
         cmd: Some(Cmd::PutOpeningHandOnBottom(PutOpeningHandOnBottom {
             hand_card_index: 0,
         })),
     };
-    assert!(e.apply_command(19, &put).is_err());
-    let partial = e.apply_command(7, &put).unwrap();
+    assert!(e.apply_scenario_command(19, &put).is_err());
+    let partial = e.apply_scenario_command(7, &put).unwrap();
     let refreshed = e.initial_response_batch();
     assert_eq!(
         partial.legal_by_player[&7].opening,
@@ -424,10 +425,10 @@ fn structured_opening_actions_follow_authority_and_remaining_progress() {
             .bottom_cards_remaining,
         0
     );
-    let finished = e.apply_command(7, &put).unwrap();
+    let finished = e.apply_scenario_command(7, &put).unwrap();
     assert!(finished
         .legal_by_player
         .values()
         .all(|a| a.opening.is_none()));
-    assert!(e.apply_command(7, &put).is_err());
+    assert!(e.apply_scenario_command(7, &put).is_err());
 }

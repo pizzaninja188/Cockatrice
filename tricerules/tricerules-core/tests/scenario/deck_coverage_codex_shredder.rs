@@ -4,9 +4,10 @@
 //! recovery target is chosen before costs, so Codex Shredder cannot target itself. CR 701.17a-b
 //! govern milling; CR 602.2b and 601.2c/601.2h govern choosing targets before paying activation
 //! costs; CR 701.21a governs sacrificing the source as a cost.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);
@@ -73,7 +74,7 @@ fn codex_shredder_recovers_any_own_graveyard_card_after_sacrificing() {
 
     for illegal_target in [opponent_card, shredder] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_ability_for(&engine, shredder, 1, graveyard_target(illegal_target)),
             )

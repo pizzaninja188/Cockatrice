@@ -1,5 +1,6 @@
 //! Actual-card semantics for five pinned Standard removal spells.
 //! Oracle and rulings checked 2026-09-22; CR 115.3, 400.7, 608.2b-c.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -90,7 +91,7 @@ fn issue_misc37_zukos_exile() {
     inject_card_into_hand(&mut bad, 0, "zukos_exile");
     let slot = hand_index_for_card(&bad, 0, "zukos_exile");
     assert!(bad
-        .apply_command(0, &cast_spell(slot, target_object(land)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(land)))
         .is_err());
 
     let mut fizzled = engine(837_014);
@@ -119,7 +120,9 @@ fn issue_misc37_shattered_wings() {
         let opposing_library = e.state.players[1].library.clone();
         cast(&mut e, "shattered_wings", target);
         semantic::accepted(&mut e, 0, &pass());
-        let batch = e.apply_command(1, &pass()).expect("surveil choice");
+        let batch = e
+            .apply_scenario_command(1, &pass())
+            .expect("surveil choice");
         let choice = find_resolution_choice(&batch).expect("surveil 1");
         assert_eq!(choice.choice_kind(), ChoiceKind::LibraryLook);
         assert_eq!(choice.deciding_player_id, 0);
@@ -138,7 +141,7 @@ fn issue_misc37_shattered_wings() {
     inject_card_into_hand(&mut bad, 0, "shattered_wings");
     let slot = hand_index_for_card(&bad, 0, "shattered_wings");
     assert!(bad
-        .apply_command(0, &cast_spell(slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
         .is_err());
     let mut fizzled = engine(837_024);
     let artifact = inject_permanent_on_battlefield(&mut fizzled, 1, "swiftfoot_boots");
@@ -172,7 +175,7 @@ fn issue_misc37_devout_decree() {
         let opposing_library = e.state.players[1].library.clone();
         cast(&mut e, "devout_decree", target);
         semantic::accepted(&mut e, 0, &pass());
-        let batch = e.apply_command(1, &pass()).expect("scry choice");
+        let batch = e.apply_scenario_command(1, &pass()).expect("scry choice");
         let choice = find_resolution_choice(&batch).unwrap_or_else(|| {
             panic!(
                 "scry 1 after {card}; target zone {:?}; pending {:?}",
@@ -199,7 +202,7 @@ fn issue_misc37_devout_decree() {
     inject_card_into_hand(&mut bad, 0, "devout_decree");
     let slot = hand_index_for_card(&bad, 0, "devout_decree");
     assert!(bad
-        .apply_command(0, &cast_spell(slot, target_object(green)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(green)))
         .is_err());
     let mut fizzled = engine(837_033);
     let red = inject_creature_on_battlefield(&mut fizzled, 1, "goblin_piker");
@@ -231,7 +234,7 @@ fn issue_misc37_inevitable_defeat() {
     inject_card_into_hand(&mut bad, 0, "inevitable_defeat");
     let slot = hand_index_for_card(&bad, 0, "inevitable_defeat");
     assert!(bad
-        .apply_command(0, &cast_spell(slot, target_object(land)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(land)))
         .is_err());
     let mut fizzled = engine(837_042);
     let bear = inject_creature_on_battlefield(&mut fizzled, 1, "grizzly_bears");

@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_proto::ruled::v1 as rv1;
 
@@ -28,12 +29,12 @@ fn issue_197_megrim_observes_each_discard_after_mind_rot_finishes() {
         },
     );
     let slot = hand_index_for_card(&e, 0, "mind_rot");
-    e.apply_command(0, &cast_spell(slot, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(slot, target_player(1)))
         .unwrap();
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(1, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
     let chosen = e.state.players[1].hand.iter().take(2).copied().collect();
-    e.apply_command(1, &submit_resolution_choice(chosen))
+    e.apply_scenario_command(1, &submit_resolution_choice(chosen))
         .unwrap();
     assert!(
         e.state.pending_trigger_order.is_some(),
@@ -74,18 +75,18 @@ fn issue_197_library_discard_is_private_but_still_triggers_megrim() {
         },
     );
     let slot = hand_index_for_card(&e, 0, "mind_rot");
-    e.apply_command(0, &cast_spell(slot, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(slot, target_player(1)))
         .unwrap();
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(1, &pass()).unwrap();
-    e.apply_command(1, &submit_resolution_choice(vec![creature, land]))
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![creature, land]))
         .unwrap();
     // Opaque destination choices: 0 graveyard, 1 library.
-    e.apply_command(1, &submit_resolution_choice(vec![1]))
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![1]))
         .unwrap();
-    e.apply_command(1, &submit_resolution_choice(vec![1]))
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![1]))
         .unwrap();
-    e.apply_command(1, &submit_resolution_choice(vec![land, creature]))
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![land, creature]))
         .unwrap();
     assert_eq!(e.state.players[1].library.front(), Some(&land));
     assert_eq!(e.state.players[1].library.get(1), Some(&creature));
@@ -134,15 +135,15 @@ fn issue_197_madness_casts_from_exile_during_trigger_resolution() {
         },
     );
     let slot = hand_index_for_card(&e, 0, "mind_rot");
-    e.apply_command(0, &cast_spell(slot, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(slot, target_player(1)))
         .unwrap();
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(1, &pass()).unwrap();
-    e.apply_command(1, &submit_resolution_choice(vec![fiery, land]))
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![fiery, land]))
         .unwrap();
     assert_eq!(e.state.objects[&fiery].zone, tricerules_core::Zone::Exile);
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(1, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
     let offer = e.state.pending_resolution.as_ref().expect("madness offer");
     let offer_id = offer.continuation.stack().unwrap().item.id as u64;
     let mut command = submit_resolution_decision(rv1::ResolutionChoiceDecision::CastSpell);
@@ -158,7 +159,7 @@ fn issue_197_madness_casts_from_exile_during_trigger_resolution() {
             ..Default::default()
         });
     }
-    e.apply_command(1, &command).unwrap();
+    e.apply_scenario_command(1, &command).unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[0].life, 17);
     assert_eq!(
@@ -194,14 +195,14 @@ fn madness_offer(card: &str) -> (GameEngine, u32, rv1::RuledEventBatch) {
         },
     );
     let slot = hand_index_for_card(&e, 0, "mind_rot");
-    e.apply_command(0, &cast_spell(slot, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(slot, target_player(1)))
         .unwrap();
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(1, &pass()).unwrap();
-    e.apply_command(1, &submit_resolution_choice(vec![oid, land]))
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![oid, land]))
         .unwrap();
-    e.apply_command(0, &pass()).unwrap();
-    let batch = e.apply_command(1, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
+    let batch = e.apply_scenario_command(1, &pass()).unwrap();
     (e, oid, batch)
 }
 
@@ -231,6 +232,7 @@ fn accept_madness(cast: rv1::CastSpell) -> rv1::RuledCommand {
     rv1::RuledCommand {
         cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
             rv1::SubmitResolutionChoice {
+                resolution_prompt_id: 0,
                 decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
                 cast_spell: Some(cast),
                 ..Default::default()
@@ -243,6 +245,7 @@ fn accept_madness_transaction(cast: rv1::CastSpell) -> rv1::RuledCommand {
     rv1::RuledCommand {
         cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
             rv1::SubmitResolutionChoice {
+                resolution_prompt_id: 0,
                 decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
                 spell_cast_announcement: Some(rv1::SpellCastAnnouncement {
                     targets: cast.targets,
@@ -270,14 +273,14 @@ fn issue_239_madness_cast_transaction_can_cancel_retry_pay_and_commit() {
     let cast = offered_cast(&e, fiery, target_player(0));
     let announcement = accept_madness_transaction(cast.clone());
 
-    e.apply_command(1, &announcement)
+    e.apply_scenario_command(1, &announcement)
         .expect("begin Madness cast");
     let pending = e.state.pending_spell_cast.as_ref().unwrap();
     assert!(pending.resolution_time_offer);
     assert!(e.state.pending_resolution.is_some());
     assert_eq!(e.state.objects[&fiery].zone, tricerules_core::Zone::Stack);
     let first_transaction = pending.transaction_id;
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &rv1::RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::CancelSpellCast(
@@ -292,11 +295,11 @@ fn issue_239_madness_cast_transaction_can_cancel_retry_pay_and_commit() {
     assert!(e.state.pending_resolution.is_some());
     assert_eq!(e.state.objects[&fiery].zone, tricerules_core::Zone::Exile);
 
-    e.apply_command(1, &announcement)
+    e.apply_scenario_command(1, &announcement)
         .expect("retry Madness cast");
     let transaction_id = e.state.pending_spell_cast.as_ref().unwrap().transaction_id;
     apply_ability(&mut e, 1, mountain, 0, vec![]).expect("float mana during special cast");
-    let preview = e.preview_payment(
+    let preview = e.preview_payment_scenario(
         1,
         &rv1::PreviewPayment {
             transaction_id,
@@ -316,7 +319,7 @@ fn issue_239_madness_cast_transaction_can_cancel_retry_pay_and_commit() {
         },
     );
     assert!(preview.valid && preview.complete, "{preview:?}");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &rv1::RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::CommitSpellCast(
@@ -349,9 +352,12 @@ fn issue_197_madness_publishes_recipient_scoped_targets_and_allows_mana_and_retr
     assert!(e.state.active_exile_play_permissions.is_empty());
     let cast = offered_cast(&e, fiery, target_player(0));
     let before = serde_json::to_value(&e.state).unwrap();
-    assert!(e.apply_command(0, &accept_madness(cast.clone())).is_err());
+    assert!(e
+        .apply_scenario_command(0, &accept_madness(cast.clone()))
+        .is_err());
     assert!(
-        e.apply_command(1, &accept_madness(cast.clone())).is_err(),
+        e.apply_scenario_command(1, &accept_madness(cast.clone()))
+            .is_err(),
         "cannot pay yet"
     );
     assert_eq!(serde_json::to_value(&e.state).unwrap(), before);
@@ -364,20 +370,22 @@ fn issue_197_madness_publishes_recipient_scoped_targets_and_allows_mana_and_retr
             rv1::UndoManaAbility::default(),
         )),
     };
-    e.apply_command(1, &undo).unwrap();
+    e.apply_scenario_command(1, &undo).unwrap();
     assert_eq!(e.state.players[1].mana_pool.red, 0);
     apply_ability(&mut e, 1, mountain, 0, vec![]).unwrap();
     let mut missing_target = cast.clone();
     missing_target.targets.clear();
     let before = format!("{:?}", e.state);
-    assert!(e.apply_command(1, &accept_madness(missing_target)).is_err());
+    assert!(e
+        .apply_scenario_command(1, &accept_madness(missing_target))
+        .is_err());
     let mut stale = cast.clone();
     stale
         .source
         .as_mut()
         .unwrap()
         .expected_zone_change_generation = Some(0);
-    assert!(e.apply_command(1, &accept_madness(stale)).is_err());
+    assert!(e.apply_scenario_command(1, &accept_madness(stale)).is_err());
     assert_eq!(format!("{:?}", e.state), before);
     let mut contaminated = accept_madness(cast.clone());
     if let Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(choice)) = contaminated.cmd.as_mut()
@@ -385,11 +393,11 @@ fn issue_197_madness_publishes_recipient_scoped_targets_and_allows_mana_and_retr
         choice.chosen_object_ids.push(fiery);
     }
     assert!(
-        e.apply_command(1, &contaminated).is_err(),
+        e.apply_scenario_command(1, &contaminated).is_err(),
         "special casts reject unrelated choice data"
     );
     assert_eq!(format!("{:?}", e.state), before);
-    e.apply_command(1, &accept_madness(cast)).unwrap();
+    e.apply_scenario_command(1, &accept_madness(cast)).unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[0].life, 17);
 }
@@ -407,7 +415,7 @@ fn issue_197_madness_creature_cast_ignores_normal_timing_and_decline_is_final() 
         },
     );
     let cast = offered_cast(&e, wurm, vec![]);
-    e.apply_command(1, &accept_madness(cast)).unwrap();
+    e.apply_scenario_command(1, &accept_madness(cast)).unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
         e.state.objects[&wurm].zone,
@@ -417,7 +425,7 @@ fn issue_197_madness_creature_cast_ignores_normal_timing_and_decline_is_final() 
 
     let (mut e, fiery, _) = madness_offer("fiery_temper");
     let cast = offered_cast(&e, fiery, target_player(0));
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &submit_resolution_decision(rv1::ResolutionChoiceDecision::Decline),
     )
@@ -426,7 +434,7 @@ fn issue_197_madness_creature_cast_ignores_normal_timing_and_decline_is_final() 
         e.state.objects[&fiery].zone,
         tricerules_core::Zone::Graveyard
     );
-    assert!(e.apply_command(1, &accept_madness(cast)).is_err());
+    assert!(e.apply_scenario_command(1, &accept_madness(cast)).is_err());
 }
 
 #[test]
@@ -467,7 +475,7 @@ fn issue_197_madness_cost_discard_places_trigger_above_the_paid_spell() {
             hand_index_for_card(&e, 0, "fiery_temper") as u32,
         )],
     );
-    e.apply_command(0, &cast).unwrap();
+    e.apply_scenario_command(0, &cast).unwrap();
     assert_eq!(e.state.objects[&fiery].zone, tricerules_core::Zone::Exile);
     assert!(
         e.state.pending_resolution.is_none(),
@@ -475,9 +483,9 @@ fn issue_197_madness_cost_discard_places_trigger_above_the_paid_spell() {
     );
     assert_eq!(e.state.stack.len(), 2);
     assert!(e.state.stack.last().unwrap().is_triggered);
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(1, &pass()).unwrap();
-    e.apply_command(
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
+    e.apply_scenario_command(
         0,
         &submit_resolution_decision(rv1::ResolutionChoiceDecision::Decline),
     )
@@ -512,19 +520,19 @@ fn issue_197_madness_cleanup_opens_priority_then_requires_another_cleanup() {
     e.state.turn_step = tricerules_core::TurnStep::Cleanup;
     e.state.cleanup_discard_player = Some(0);
     let slot = hand_index_for_card(&e, 0, "fiery_temper") as u32;
-    e.apply_command(0, &discard_cleanup(slot)).unwrap();
+    e.apply_scenario_command(0, &discard_cleanup(slot)).unwrap();
     assert_eq!(e.state.objects[&fiery].zone, tricerules_core::Zone::Exile);
     assert!(e.state.cleanup_priority_active);
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(1, &pass()).unwrap();
-    e.apply_command(
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
+    e.apply_scenario_command(
         0,
         &submit_resolution_decision(rv1::ResolutionChoiceDecision::Decline),
     )
     .unwrap();
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Cleanup);
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(1, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
     assert_eq!(e.state.active_player_id(), 1);
 }
 
@@ -559,11 +567,11 @@ fn issue_197_library_and_madness_compete_before_any_discard_commits() {
             },
         );
         let slot = hand_index_for_card(&e, 0, "mind_rot");
-        e.apply_command(0, &cast_spell(slot, target_player(1)))
+        e.apply_scenario_command(0, &cast_spell(slot, target_player(1)))
             .unwrap();
-        e.apply_command(0, &pass()).unwrap();
-        e.apply_command(1, &pass()).unwrap();
-        e.apply_command(1, &submit_resolution_choice(vec![fiery, land]))
+        e.apply_scenario_command(0, &pass()).unwrap();
+        e.apply_scenario_command(1, &pass()).unwrap();
+        e.apply_scenario_command(1, &submit_resolution_choice(vec![fiery, land]))
             .unwrap();
         assert_eq!(
             e.state
@@ -576,19 +584,19 @@ fn issue_197_library_and_madness_compete_before_any_discard_commits() {
         );
         let before = format!("{:?}", e.state);
         assert!(
-            e.apply_command(1, &submit_resolution_choice(vec![0]))
+            e.apply_scenario_command(1, &submit_resolution_choice(vec![0]))
                 .is_err(),
             "madness cannot discard directly to graveyard"
         );
         assert!(e
-            .apply_command(0, &submit_resolution_choice(vec![1]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![1]))
             .is_err());
         assert_eq!(format!("{:?}", e.state), before);
-        e.apply_command(1, &submit_resolution_choice(vec![destination]))
+        e.apply_scenario_command(1, &submit_resolution_choice(vec![destination]))
             .unwrap();
         assert_eq!(e.state.objects[&fiery].zone, tricerules_core::Zone::Hand);
         assert_eq!(e.state.objects[&land].zone, tricerules_core::Zone::Hand);
-        e.apply_command(1, &submit_resolution_choice(vec![0]))
+        e.apply_scenario_command(1, &submit_resolution_choice(vec![0]))
             .unwrap();
         assert_eq!(
             e.state.objects[&fiery].zone,
@@ -603,7 +611,7 @@ fn issue_197_library_and_madness_compete_before_any_discard_commits() {
         while let Some(order) = e.state.pending_trigger_order.as_ref() {
             let player = order.deciding_player;
             let id = order.candidates[0].object_id;
-            e.apply_command(
+            e.apply_scenario_command(
                 player,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitTriggerOrder(
@@ -617,9 +625,9 @@ fn issue_197_library_and_madness_compete_before_any_discard_commits() {
         }
         if destination == 2 {
             assert_eq!(e.state.stack.last().unwrap().controller, 1);
-            e.apply_command(0, &pass()).unwrap();
-            e.apply_command(1, &pass()).unwrap();
-            e.apply_command(
+            e.apply_scenario_command(0, &pass()).unwrap();
+            e.apply_scenario_command(1, &pass()).unwrap();
+            e.apply_scenario_command(
                 1,
                 &submit_resolution_decision(rv1::ResolutionChoiceDecision::Decline),
             )
@@ -665,12 +673,12 @@ fn issue_197_waste_not_uses_public_discard_types_and_land_mana_uses_the_stack() 
             },
         );
         let slot = hand_index_for_card(&e, 0, "mind_rot");
-        e.apply_command(0, &cast_spell(slot, target_player(1)))
+        e.apply_scenario_command(0, &cast_spell(slot, target_player(1)))
             .unwrap();
-        e.apply_command(0, &pass()).unwrap();
-        e.apply_command(1, &pass()).unwrap();
+        e.apply_scenario_command(0, &pass()).unwrap();
+        e.apply_scenario_command(1, &pass()).unwrap();
         let hand_before = e.state.players[0].hand.len();
-        e.apply_command(1, &submit_resolution_choice(vec![selected, land]))
+        e.apply_scenario_command(1, &submit_resolution_choice(vec![selected, land]))
             .unwrap();
         assert_eq!(
             e.state.players[0].mana_pool.black, 0,
@@ -723,15 +731,15 @@ fn issue_197_library_removal_restores_cleanup_hand_limit() {
                     })),
                 })),
             };
-            e.apply_command(0, &cmd).unwrap();
+            e.apply_scenario_command(0, &cmd).unwrap();
             assert_eq!(
                 e.state.objects[&library].zone,
                 tricerules_core::Zone::Graveyard
             );
         }
         e.state.turn_step = tricerules_core::TurnStep::EndStep;
-        e.apply_command(0, &pass()).unwrap();
-        e.apply_command(1, &pass()).unwrap();
+        e.apply_scenario_command(0, &pass()).unwrap();
+        e.apply_scenario_command(1, &pass()).unwrap();
         assert_eq!(e.state.cleanup_discard_player.is_some(), !keep);
         if keep {
             assert_eq!(e.state.active_player_id(), 1);
@@ -763,11 +771,11 @@ fn issue_197_library_discard_then_draw_returns_the_ordered_top_card() {
         .copied()
         .unwrap_or(0);
     move_ready_to_battlefield(&mut e, 0, "keldon_raider");
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(1, &pass()).unwrap();
-    e.apply_command(0, &submit_resolution_choice(vec![forest]))
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .unwrap();
-    e.apply_command(0, &submit_resolution_choice(vec![1]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![1]))
         .unwrap();
     assert!(e.state.players[0].hand.contains(&forest));
     assert_eq!(e.state.zone_change_generation[&forest], generation + 2);
@@ -811,8 +819,8 @@ fn issue_197_random_library_replacements_replay_with_private_inspection_and_orde
         (1, pass()),
     ] {
         assert_eq!(
-            e.apply_command(actor, &command).unwrap(),
-            replay.apply_command(actor, &command).unwrap()
+            e.apply_scenario_command(actor, &command).unwrap(),
+            replay.apply_scenario_command(actor, &command).unwrap()
         );
     }
     assert_eq!(
@@ -826,8 +834,8 @@ fn issue_197_random_library_replacements_replay_with_private_inspection_and_orde
     );
     for _ in 0..2 {
         let command = submit_resolution_choice(vec![1]);
-        let batch = e.apply_command(1, &command).unwrap();
-        assert_eq!(batch, replay.apply_command(1, &command).unwrap());
+        let batch = e.apply_scenario_command(1, &command).unwrap();
+        assert_eq!(batch, replay.apply_scenario_command(1, &command).unwrap());
         assert!(batch.events.iter().any(|event| matches!(&event.ev,Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) if choice.candidate_names.iter().any(|name|name.contains("Forest")))));
     }
     let mut ordered = e
@@ -841,8 +849,8 @@ fn issue_197_random_library_replacements_replay_with_private_inspection_and_orde
     ordered.reverse();
     let command = submit_resolution_choice(ordered.clone());
     assert_eq!(
-        e.apply_command(1, &command).unwrap(),
-        replay.apply_command(1, &command).unwrap()
+        e.apply_scenario_command(1, &command).unwrap(),
+        replay.apply_scenario_command(1, &command).unwrap()
     );
     assert_eq!(
         e.state.players[1]

@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_proto::ruled::v1::{DevCommand, DevMoveCard, DevZone};
 
@@ -26,7 +27,7 @@ fn special_action_payment_fixture_for_players(
     .expect("new");
     while engine.state.turn_step != tricerules_core::TurnStep::Main1 {
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .expect("advance to main");
     }
     for &player in &players[2..] {
@@ -56,7 +57,7 @@ fn special_action_payment_fixture_for_players(
     };
     engine.state.players[0].mana_pool.colorless = 1;
     engine
-        .apply_command(players[0], &activate_ability(peeper, 0, vec![]))
+        .apply_scenario_command(players[0], &activate_ability(peeper, 0, vec![]))
         .expect("produce restricted blue");
     let group = engine.state.players[0].restricted_mana[0].restriction_group_id;
     let action = ExecutePermanentAction {
@@ -188,7 +189,7 @@ fn special_action_restricted_mana_invalid_selections_are_atomic() {
             let before = special_action_payment_snapshot(&engine);
             assert!(
                 matches!(
-                    engine.apply_command(0, &execute_special_action(action)),
+                    engine.apply_scenario_command(0, &execute_special_action(action)),
                     Err(tricerules_core::EngineError::Illegal(_))
                 ),
                 "case {invalid}"
@@ -208,7 +209,7 @@ fn special_action_restricted_mana_does_not_depend_on_the_mana_source_remaining()
         special_action_payment_fixture(PermanentActionKind::TurnFaceUp);
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -253,7 +254,7 @@ fn special_action_restricted_mana_does_not_expand_spell_or_ability_permissions()
         });
     }
     let before = special_action_payment_snapshot(&engine);
-    assert!(engine.apply_command(0, &command).is_err());
+    assert!(engine.apply_scenario_command(0, &command).is_err());
     assert_eq!(special_action_payment_snapshot(&engine), before);
     let tome = inject_permanent_on_battlefield(&mut engine, 0, "jayemdae_tome");
     let legal = engine.initial_response_batch();
@@ -272,7 +273,7 @@ fn special_action_restricted_mana_does_not_expand_spell_or_ability_permissions()
         });
     }
     let before = special_action_payment_snapshot(&engine);
-    assert!(engine.apply_command(0, &activation).is_err());
+    assert!(engine.apply_scenario_command(0, &activation).is_err());
     assert_eq!(special_action_payment_snapshot(&engine), before);
     let flight = inject_card_into_hand(&mut engine, 0, "flight");
     let mut command = cast_spell(
@@ -291,7 +292,7 @@ fn special_action_restricted_mana_does_not_expand_spell_or_ability_permissions()
         });
     }
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("Peeper mana casts enchantments");
 }
 
@@ -322,7 +323,7 @@ fn special_action_restricted_mana_permissions_are_specific_and_refresh_after_cha
                 .all(|candidate| candidate.eligible_restricted_mana_group_ids.is_empty()));
             let before = special_action_payment_snapshot(&engine);
             assert!(engine
-                .apply_command(0, &execute_special_action(action))
+                .apply_scenario_command(0, &execute_special_action(action))
                 .is_err());
             assert_eq!(special_action_payment_snapshot(&engine), before);
         }
@@ -376,7 +377,7 @@ fn special_action_restricted_mana_obeys_controller_timing_and_action_state() {
             }
             let before = special_action_payment_snapshot(&engine);
             assert!(engine
-                .apply_command(0, &execute_special_action(action))
+                .apply_scenario_command(0, &execute_special_action(action))
                 .is_err());
             assert_eq!(special_action_payment_snapshot(&engine), before);
         }
@@ -405,7 +406,7 @@ fn special_action_restricted_mana_supports_multiplayer_and_owner_controller_dive
             .is_empty());
         let before = special_action_payment_snapshot(&engine);
         assert!(engine
-            .apply_command(2_000_000, &execute_special_action(action.clone()))
+            .apply_scenario_command(2_000_000, &execute_special_action(action.clone()))
             .is_err());
         assert_eq!(special_action_payment_snapshot(&engine), before);
         execute_permanent_action_with_payment(&mut engine, 7, execute_special_action(action))
@@ -422,7 +423,7 @@ fn special_action_restricted_mana_can_pay_the_entire_cost_and_replay_determinist
             special_action_payment_fixture(PermanentActionKind::TurnFaceUp);
         let second = inject_permanent_on_battlefield(&mut engine, 0, "creeping_peeper");
         engine
-            .apply_command(0, &activate_ability(second, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability(second, 0, vec![]))
             .unwrap();
         engine.state.players[0].mana_pool.clear();
         action.restricted_mana[0].u = 2;
@@ -468,7 +469,7 @@ fn mana_ability_taps_land_and_fills_pool() {
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("play mountain");
     let land = *e.state.players[0].battlefield.last().expect("land on bf");
     assert!(!e.state.objects[&land].tapped, "land starts untapped");
@@ -508,7 +509,7 @@ fn mana_ability_taps_land_and_fills_pool() {
 
     // The produced mana actually pays for a spell.
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt off the tapped land's mana");
     assert_eq!(e.state.players[0].mana_pool.red, 0, "pool drained by cast");
 }
@@ -528,11 +529,11 @@ fn cannot_activate_mana_ability_when_already_tapped() {
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let land = inject_permanent_on_battlefield(&mut e, 0, "mountain");
-    e.apply_command(0, &activate_ability(land, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(land, 0, vec![]))
         .expect("first tap produces mana");
     assert_eq!(e.state.players[0].mana_pool.red, 1);
     let err = e
-        .apply_command(0, &activate_ability(land, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(land, 0, vec![]))
         .expect_err("already-tapped land cannot tap again");
     assert!(
         format!("{err:?}").contains("already tapped"),
@@ -563,7 +564,7 @@ fn tap_and_mana_ability_rejected_when_tapped_leaves_pool_intact() {
     e.state.players[0].mana_pool.colorless = 4;
 
     let err = e
-        .apply_command(0, &activate_ability(tome, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(tome, 0, vec![]))
         .expect_err("cannot activate a mana-plus-tap ability on an already-tapped source");
     assert!(
         format!("{err:?}").contains("already tapped"),
@@ -595,7 +596,7 @@ fn composite_mana_tap_sacrifice_cost_is_atomic() {
     e.state.players[0].mana_pool.colorless = 3;
 
     let err = e
-        .apply_command(0, &activate_ability(apparatus, 0, target_player(1)))
+        .apply_scenario_command(0, &activate_ability(apparatus, 0, target_player(1)))
         .expect_err("a tapped Apparatus cannot pay its tap cost");
 
     assert!(format!("{err:?}").contains("already tapped"));
@@ -622,7 +623,7 @@ fn undo_mana_ability_untaps_source_and_removes_float() {
     let land = inject_permanent_on_battlefield(&mut e, 0, "mountain");
 
     let batch = e
-        .apply_command(0, &activate_ability(land, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(land, 0, vec![]))
         .expect("tap mountain for {R}");
     assert_eq!(e.state.players[0].mana_pool.red, 1, "floated {{R}}");
     assert!(
@@ -635,7 +636,7 @@ fn undo_mana_ability_untaps_source_and_removes_float() {
     );
 
     let undo = e
-        .apply_command(0, &undo_mana_ability())
+        .apply_scenario_command(0, &undo_mana_ability())
         .expect("undo the float");
     assert_eq!(e.state.players[0].mana_pool.red, 0, "floated mana removed");
     assert!(
@@ -648,7 +649,7 @@ fn undo_mana_ability_untaps_source_and_removes_float() {
     );
 
     let err = e
-        .apply_command(0, &undo_mana_ability())
+        .apply_scenario_command(0, &undo_mana_ability())
         .expect_err("no float remains to undo");
     assert!(
         format!("{err:?}").contains("no mana ability to undo"),
@@ -680,17 +681,17 @@ fn undo_mana_ability_cleared_once_float_is_spent() {
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("play mountain");
     let land = *e.state.players[0].battlefield.last().expect("land on bf");
     apply_ability(&mut e, 0, land, 0, vec![]).expect("tap mountain for {R}");
 
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt off the floated red");
 
     let err = e
-        .apply_command(0, &undo_mana_ability())
+        .apply_scenario_command(0, &undo_mana_ability())
         .expect_err("float was spent on the bolt; nothing to undo");
     assert!(
         format!("{err:?}").contains("no mana ability to undo"),
@@ -713,13 +714,13 @@ fn undo_mana_ability_cleared_by_passing_priority() {
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let land = inject_permanent_on_battlefield(&mut e, 0, "mountain");
-    e.apply_command(0, &activate_ability(land, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(land, 0, vec![]))
         .expect("tap mountain for {R}");
 
-    e.apply_command(0, &pass()).expect("pass priority");
+    e.apply_scenario_command(0, &pass()).expect("pass priority");
     // Stack cleared by the pass and it is no longer player 0's priority.
     let err = e
-        .apply_command(0, &undo_mana_ability())
+        .apply_scenario_command(0, &undo_mana_ability())
         .expect_err("cannot undo after passing priority");
     assert!(
         format!("{err:?}").contains("not your priority"),
@@ -748,16 +749,16 @@ fn leafkin_druid_uses_live_creature_count_for_mana_output() {
     advance_to_main1_from_game_start(&mut e);
     let leafkin = inject_permanent_on_battlefield(&mut e, 0, "leafkin_druid");
 
-    e.apply_command(0, &activate_ability(leafkin, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(leafkin, 0, vec![]))
         .expect("activate below threshold");
     assert_eq!(e.state.players[0].mana_pool.green, 1);
-    e.apply_command(0, &undo_mana_ability())
+    e.apply_scenario_command(0, &undo_mana_ability())
         .expect("rewind first activation");
 
     for _ in 0..3 {
         inject_permanent_on_battlefield(&mut e, 0, "grizzly_bears");
     }
-    e.apply_command(0, &activate_ability(leafkin, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(leafkin, 0, vec![]))
         .expect("activate at four creatures");
     assert_eq!(e.state.players[0].mana_pool.green, 2);
 }
@@ -780,7 +781,7 @@ fn embercat_restricted_mana_requires_matching_explicit_payment() {
     let embercat = inject_permanent_on_battlefield(&mut e, 0, "chandras_embercat");
 
     let produced = e
-        .apply_command(0, &activate_ability(embercat, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(embercat, 0, vec![]))
         .expect("activate Embercat");
     assert_eq!(e.state.players[0].mana_pool.red, 0, "not unrestricted");
     assert_eq!(e.state.players[0].restricted_mana.len(), 1);
@@ -819,7 +820,7 @@ fn embercat_restricted_mana_requires_matching_explicit_payment() {
         ..Default::default()
     });
     let error = e
-        .apply_command(0, &illegal)
+        .apply_scenario_command(0, &illegal)
         .expect_err("Embercat mana cannot cast Hill Giant");
     assert!(format!("{error:?}").contains("ineligible"));
     assert_eq!(e.state.players[0].mana_pool.colorless, 3);
@@ -837,7 +838,7 @@ fn embercat_restricted_mana_requires_matching_explicit_payment() {
         r: 1,
         ..Default::default()
     });
-    e.apply_command(0, &legal)
+    e.apply_scenario_command(0, &legal)
         .expect("Embercat mana casts an Elemental spell");
     assert!(e.state.players[0].restricted_mana.is_empty());
     assert_eq!(e.state.players[0].mana_pool.red, 0);
@@ -861,7 +862,7 @@ fn vodalian_arcanist_colorless_mana_only_pays_for_instant_or_sorcery_spells() {
     advance_to_main1_from_game_start(&mut e);
     let arcanist = inject_permanent_on_battlefield(&mut e, 0, "vodalian_arcanist");
     let produced = e
-        .apply_command(0, &activate_ability(arcanist, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(arcanist, 0, vec![]))
         .expect("activate Arcanist");
     let group_id = produced
         .events
@@ -889,7 +890,7 @@ fn vodalian_arcanist_colorless_mana_only_pays_for_instant_or_sorcery_spells() {
         c: 1,
         ..Default::default()
     });
-    e.apply_command(0, &illegal)
+    e.apply_scenario_command(0, &illegal)
         .expect_err("Arcanist mana cannot cast a creature");
     assert_eq!(
         e.state.players[0].mana_pool.blue, 1,
@@ -908,7 +909,7 @@ fn vodalian_arcanist_colorless_mana_only_pays_for_instant_or_sorcery_spells() {
         c: 1,
         ..Default::default()
     });
-    e.apply_command(0, &legal)
+    e.apply_scenario_command(0, &legal)
         .expect("Arcanist mana pays the generic part of a sorcery");
     assert!(e.state.players[0].restricted_mana.is_empty());
     assert_eq!(e.state.players[0].mana_pool.blue, 0);
@@ -939,7 +940,8 @@ fn dual_land_produces_chosen_color_option() {
             ..Default::default()
         })),
     };
-    e.apply_command(0, &cmd).expect("produce blue option");
+    e.apply_scenario_command(0, &cmd)
+        .expect("produce blue option");
     assert_eq!(e.state.players[0].mana_pool.blue, 1, "chose {{U}}");
     assert_eq!(e.state.players[0].mana_pool.green, 0, "did not make {{G}}");
 
@@ -953,7 +955,9 @@ fn dual_land_produces_chosen_color_option() {
             ..Default::default()
         })),
     };
-    let err = e.apply_command(0, &bad).expect_err("bad option index");
+    let err = e
+        .apply_scenario_command(0, &bad)
+        .expect_err("bad option index");
     assert!(
         format!("{err:?}").contains("invalid mana option"),
         "unexpected error: {err:?}"
@@ -1009,7 +1013,7 @@ fn cast_1u_creature_pays_from_mana_pool_without_tapping_extra_island() {
         },
     );
     let merfolk_idx = hand_index_for_card(&e, 0, "coral_merfolk");
-    e.apply_command(0, &cast_spell(merfolk_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(merfolk_idx, vec![]))
         .expect("cast");
     let tapped_islands = e.state.players[0]
         .battlefield
@@ -1078,7 +1082,7 @@ fn cast_grizzly_bears_resolves_to_battlefield_and_taps_two_forests() {
 
     // Play the second Forest this turn.
     let forest_to_play_idx = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(forest_to_play_idx))
+    e.apply_scenario_command(0, &play_land(forest_to_play_idx))
         .expect("play second forest");
 
     // Tap both forests to pay for grizzly bears (simulating player tapping lands for mana).
@@ -1097,7 +1101,7 @@ fn cast_grizzly_bears_resolves_to_battlefield_and_taps_two_forests() {
         },
     );
     let bears_idx = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(bears_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(bears_idx, vec![]))
         .expect("cast bears");
     let bears_oid = e.state.stack.first().expect("bears stack item").id;
 
@@ -1108,8 +1112,8 @@ fn cast_grizzly_bears_resolves_to_battlefield_and_taps_two_forests() {
         .count();
     assert_eq!(untapped_before_resolve, 0, "both forests are tapped for 1G");
 
-    e.apply_command(0, &pass()).expect("p0 pass");
-    let resolved = e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    let resolved = e.apply_scenario_command(1, &pass()).expect("p1 pass");
 
     assert!(e.state.players[0].battlefield.contains(&bears_oid));
     assert!(resolved.events.iter().any(|ev| {
@@ -1163,7 +1167,7 @@ fn hybrid_creature_castable_with_either_color() {
         );
 
         let idx = hand_index_for_card(&e, 0, "boros_recruit");
-        e.apply_command(0, &cast_spell(idx, vec![]))
+        e.apply_scenario_command(0, &cast_spell(idx, vec![]))
             .expect("cast Boros Recruit");
         let oid = e.state.stack.last().expect("on stack").id;
         pass_both_players(&mut e);
@@ -1211,7 +1215,7 @@ fn mono_hybrid_flame_javelin_paid_with_generic() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "flame_javelin");
-    e.apply_command(0, &cast_spell(idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(idx, target_player(1)))
         .expect("cast Flame Javelin");
     pass_both_players(&mut e);
     assert_eq!(
@@ -1252,7 +1256,7 @@ fn phyrexian_mutagenic_growth_paid_with_life() {
     let idx = hand_index_for_card(&e, 0, "mutagenic_growth");
     // No mana added: pay the {G/P} pip (pip index 0) with 2 life.
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_flex(
                 idx,

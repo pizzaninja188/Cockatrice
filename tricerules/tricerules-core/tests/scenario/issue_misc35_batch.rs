@@ -1,5 +1,6 @@
 //! Actual-card semantics for four pinned Standard graveyard spells.
 //! Oracle and rulings checked 2026-09-22; CR 115.1, 202.3e, 400.7, 608.2b-c.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -55,7 +56,7 @@ fn issue_misc35_helping_hand_semantics() {
     assert_eq!(legal.groups[0].valid_graveyard_ids, vec![bear]);
     for invalid in [giant, opposing] {
         assert!(e
-            .apply_command(0, &cast_spell(slot, vec![target(invalid)]))
+            .apply_scenario_command(0, &cast_spell(slot, vec![target(invalid)]))
             .is_err());
         assert_eq!(e.state.stack.len(), 0);
     }

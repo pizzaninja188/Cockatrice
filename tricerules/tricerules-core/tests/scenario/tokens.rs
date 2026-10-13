@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
 #[test]
@@ -19,10 +20,12 @@ fn issue_174_fae_court_draws_then_creates_a_restricted_faerie_and_clone_keeps_it
     ensure_in_hand(&mut engine, 0, "into_the_fae_court");
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "into_the_fae_court");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     let before_draw = engine.state.players[0].hand.len();
-    engine.apply_command(0, &pass()).unwrap();
-    let batch = engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let batch = engine.apply_scenario_command(1, &pass()).unwrap();
     assert_eq!(engine.state.players[0].hand.len(), before_draw + 3);
     let created = token_created_events(&batch);
     assert_eq!(created.len(), 1);
@@ -40,10 +43,12 @@ fn issue_174_fae_court_draws_then_creates_a_restricted_faerie_and_clone_keeps_it
     ensure_in_hand(&mut engine, 0, "clone");
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "clone");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![faerie]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![faerie]))
         .unwrap();
     let clone = battlefield_object_for_card(&engine, 0, "clone");
     assert_eq!(
@@ -55,10 +60,12 @@ fn issue_174_fae_court_draws_then_creates_a_restricted_faerie_and_clone_keeps_it
     let flying = inject_creature_on_battlefield(&mut engine, 1, "storm_crow");
     let reach = inject_creature_on_battlefield(&mut engine, 1, "giant_spider");
     let ground = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
-    engine.apply_command(1, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(1, &primitive_yield())
+        .unwrap();
     pass_both_players(&mut engine);
     engine
-        .apply_command(1, &declare_attackers(vec![flying, reach, ground]))
+        .apply_scenario_command(1, &declare_attackers(vec![flying, reach, ground]))
         .unwrap();
     pass_both_players(&mut engine);
     let legal = &engine.initial_response_batch().legal_by_player[&0];
@@ -74,7 +81,7 @@ fn issue_174_fae_court_draws_then_creates_a_restricted_faerie_and_clone_keeps_it
         );
     }
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &declare_blockers(vec![BlockPair {
                 attacker_id: reach,
@@ -83,7 +90,7 @@ fn issue_174_fae_court_draws_then_creates_a_restricted_faerie_and_clone_keeps_it
         )
         .is_err());
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &declare_blockers(vec![BlockPair {
                 attacker_id: flying,
@@ -122,10 +129,10 @@ fn raise_the_alarm_creates_two_soldier_tokens() {
 
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "raise_the_alarm");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast raise the alarm");
-    e.apply_command(0, &pass()).expect("caster pass");
-    let mut resolved = e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    let mut resolved = e.apply_scenario_command(1, &pass()).expect("opponent pass");
     let order = e
         .state
         .pending_resolution
@@ -136,7 +143,7 @@ fn raise_the_alarm_creates_two_soldier_tokens() {
         ChoiceKind::SimultaneousEntryOrder
     );
     let order_batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(order.presentation.candidates.clone()),
         )
@@ -194,10 +201,10 @@ fn call_the_cavalry_token_identity_carries_keywords() {
 
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "call_the_cavalry");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast call the cavalry");
-    e.apply_command(0, &pass()).expect("caster pass");
-    let mut resolved = e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    let mut resolved = e.apply_scenario_command(1, &pass()).expect("opponent pass");
     for (_, _, order_batch) in answer_simultaneous_entry_order_in_engine_order(&mut e) {
         resolved.events.extend(order_batch.events);
     }
@@ -240,10 +247,10 @@ fn goblin_wizardry_tokens_carry_and_trigger_prowess() {
     ensure_in_hand(&mut e, 0, "goblin_wizardry");
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "goblin_wizardry");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Goblin Wizardry");
-    e.apply_command(0, &pass()).expect("caster pass");
-    let mut resolved = e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    let mut resolved = e.apply_scenario_command(1, &pass()).expect("opponent pass");
     for (_, _, order_batch) in answer_simultaneous_entry_order_in_engine_order(&mut e) {
         resolved.events.extend(order_batch.events);
     }
@@ -270,7 +277,7 @@ fn goblin_wizardry_tokens_carry_and_trigger_prowess() {
     ensure_in_hand(&mut e, 0, "lightning_bolt");
     grant_pool(&mut e, 0);
     let bolt = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt, target_player(1)))
         .expect("cast Lightning Bolt");
     let prowess_order = e
         .state
@@ -299,7 +306,7 @@ fn goblin_wizardry_tokens_carry_and_trigger_prowess() {
     ensure_in_hand(&mut e, 0, "grizzly_bears");
     grant_pool(&mut e, 0);
     let bears = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(bears, vec![]))
+    e.apply_scenario_command(0, &cast_spell(bears, vec![]))
         .expect("cast creature spell");
     assert!(
         e.state.pending_triggers.is_empty() && e.state.pending_trigger_order.is_none(),
@@ -337,9 +344,10 @@ fn bestial_menace_creates_three_distinct_tokens() {
 
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "bestial_menace");
-    e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
-    e.apply_command(0, &pass()).expect("pass");
-    e.apply_command(1, &pass()).expect("pass");
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
+        .expect("cast");
+    e.apply_scenario_command(0, &pass()).expect("pass");
+    e.apply_scenario_command(1, &pass()).expect("pass");
     answer_simultaneous_entry_order_in_engine_order(&mut e);
 
     let snake = battlefield_token_oids(&e, 0, "snake_g_1_1");
@@ -397,9 +405,10 @@ fn token_dies_and_ceases_to_exist() {
 
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "raise_the_alarm");
-    e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
-    e.apply_command(0, &pass()).expect("pass");
-    e.apply_command(1, &pass()).expect("pass");
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
+        .expect("cast");
+    e.apply_scenario_command(0, &pass()).expect("pass");
+    e.apply_scenario_command(1, &pass()).expect("pass");
     answer_simultaneous_entry_order_in_engine_order(&mut e);
 
     let soldiers = battlefield_token_oids(&e, 0, "soldier_w_1_1");
@@ -409,7 +418,7 @@ fn token_dies_and_ceases_to_exist() {
 
     grant_pool(&mut e, 0);
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt_idx,
@@ -423,8 +432,8 @@ fn token_dies_and_ceases_to_exist() {
         ),
     )
     .expect("bolt the token");
-    e.apply_command(0, &pass()).expect("pass");
-    e.apply_command(1, &pass()).expect("pass");
+    e.apply_scenario_command(0, &pass()).expect("pass");
+    e.apply_scenario_command(1, &pass()).expect("pass");
 
     // CR 111.7: the dead token object no longer exists in any zone.
     assert!(
@@ -476,9 +485,10 @@ fn bounced_token_ceases_to_exist() {
 
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "raise_the_alarm");
-    e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
-    e.apply_command(0, &pass()).expect("pass");
-    e.apply_command(1, &pass()).expect("pass");
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
+        .expect("cast");
+    e.apply_scenario_command(0, &pass()).expect("pass");
+    e.apply_scenario_command(1, &pass()).expect("pass");
     answer_simultaneous_entry_order_in_engine_order(&mut e);
 
     let victim = battlefield_token_oids(&e, 0, "soldier_w_1_1")[0];
@@ -486,7 +496,7 @@ fn bounced_token_ceases_to_exist() {
 
     grant_pool(&mut e, 0);
     let uns_idx = hand_index_for_card(&e, 0, "unsummon");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             uns_idx,
@@ -500,8 +510,8 @@ fn bounced_token_ceases_to_exist() {
         ),
     )
     .expect("unsummon the token");
-    e.apply_command(0, &pass()).expect("pass");
-    e.apply_command(1, &pass()).expect("pass");
+    e.apply_scenario_command(0, &pass()).expect("pass");
+    e.apply_scenario_command(1, &pass()).expect("pass");
 
     assert!(
         !e.state.objects.contains_key(&victim),
@@ -551,9 +561,10 @@ fn anthem_buffs_token_via_shared_pt_path() {
 
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "raise_the_alarm");
-    e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
-    e.apply_command(0, &pass()).expect("pass");
-    e.apply_command(1, &pass()).expect("pass");
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
+        .expect("cast");
+    e.apply_scenario_command(0, &pass()).expect("pass");
+    e.apply_scenario_command(1, &pass()).expect("pass");
     answer_simultaneous_entry_order_in_engine_order(&mut e);
 
     let token = battlefield_token_oids(&e, 0, "soldier_w_1_1")[0];

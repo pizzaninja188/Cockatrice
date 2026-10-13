@@ -9,9 +9,10 @@
 //! (the announced receipt and copy decisions), 608.2b (target revalidation), 400.3 (owner's
 //! zone), and 121.1-121.2 (draw) govern. The 2020-09-25 ruling confirms an illegal sole target
 //! prevents the kicked draw; the 2024-11-08 ruling confirms a copy of a kicked spell is kicked.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 const CARDS: [(&str, u64); 2] = [("whoosh!", 294_101), ("into_the_roil", 294_102)];
 
@@ -129,7 +130,7 @@ fn issue_294_rejects_land_targets_and_unfunded_kicker_atomically() {
 
         let commands_before = engine.state.command_index;
         engine
-            .apply_command(0, &cast_spell(slot, target_object(land)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(land)))
             .expect_err("a land is not a legal nonland-permanent target");
         assert_eq!(engine.state.command_index, commands_before);
         assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
@@ -147,7 +148,7 @@ fn issue_294_rejects_land_targets_and_unfunded_kicker_atomically() {
         }
         let commands_before = engine.state.command_index;
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell_with_cast_cost_groups(
                     slot,

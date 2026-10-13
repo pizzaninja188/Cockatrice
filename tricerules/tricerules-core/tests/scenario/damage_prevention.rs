@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::CounterKind;
 use tricerules_core::state::{DamagePreventionScope, PendingResolution, ResolutionContinuation};
@@ -43,7 +44,7 @@ fn stomp_bypasses_prevention_shield_without_consuming_it() {
 
     let slot = hand_index_for_card(&engine, 0, "bonecrusher_giant_stomp");
     engine
-        .apply_command(0, &cast_spell_face(slot, target_player(1), 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, target_player(1), 1))
         .expect("cast Stomp");
     pass_both_players(&mut engine);
 
@@ -89,7 +90,7 @@ fn anti_venom_prevents_direct_damage_and_gets_attempted_damage_counters() {
     );
     let slot = hand_index_for_card(&engine, 0, "anti-venom,_horrifying_healer");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Anti-Venom");
     pass_both_players(&mut engine);
     let anti_venom = battlefield_object_for_card(&engine, 0, "anti-venom,_horrifying_healer");
@@ -105,7 +106,7 @@ fn anti_venom_prevents_direct_damage_and_gets_attempted_damage_counters() {
     );
     let bolt = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 bolt,
@@ -152,7 +153,7 @@ fn anti_venom_with_shield_awaiting_five_damage(seed: u64) -> (GameEngine, u32, u
     );
     let slot = hand_index_for_card(&engine, 0, "anti-venom,_horrifying_healer");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Anti-Venom");
     pass_both_players(&mut engine);
     let anti_venom = battlefield_object_for_card(&engine, 0, "anti-venom,_horrifying_healer");
@@ -184,7 +185,7 @@ fn anti_venom_with_shield_awaiting_five_damage(seed: u64) -> (GameEngine, u32, u
     );
     let blaze = hand_index_for_card(&engine, 0, "blaze");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_x(
                 blaze,
@@ -199,8 +200,12 @@ fn anti_venom_with_shield_awaiting_five_damage(seed: u64) -> (GameEngine, u32, u
             ),
         )
         .expect("cast Blaze");
-    engine.apply_command(0, &pass()).expect("first pass");
-    let batch = engine.apply_command(1, &pass()).expect("resolve Blaze");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("first pass");
+    let batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolve Blaze");
     let choice = batch
         .events
         .iter()
@@ -273,7 +278,7 @@ fn anti_venom_then_shield_keeps_the_shield_and_gets_full_counters() {
     let (mut engine, anti_venom, anti_effect, _) =
         anti_venom_with_shield_awaiting_five_damage(4803);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![anti_effect]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![anti_effect]))
         .expect("choose Anti-Venom first");
 
     let object = &engine.state.objects[&anti_venom];
@@ -287,7 +292,7 @@ fn shield_then_anti_venom_consumes_shield_and_counts_only_remaining_damage() {
     let (mut engine, anti_venom, _, shield_effect) =
         anti_venom_with_shield_awaiting_five_damage(4804);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![shield_effect]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![shield_effect]))
         .expect("choose shield first");
 
     let object = &engine.state.objects[&anti_venom];
@@ -312,7 +317,7 @@ fn unpreventable_ordered_damage_applies_every_effect_without_consuming_the_shiel
     );
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![anti_application]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![anti_application]))
         .expect("apply every prevention effect under the prohibition");
 
     assert!(engine.state.pending_resolution.is_none());
@@ -364,7 +369,7 @@ fn finite_prevention_annotation_tracks_remaining_capacity_and_zone_changes() {
     );
     let blaze = hand_index_for_card(&engine, 0, "blaze");
     engine
-        .apply_command(0, &cast_spell_x(blaze, target_object(bears), 1))
+        .apply_scenario_command(0, &cast_spell_x(blaze, target_object(bears), 1))
         .expect("cast Blaze for one");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.remaining_damage_prevention(bears), 2);
@@ -384,7 +389,7 @@ fn finite_prevention_annotation_tracks_remaining_capacity_and_zone_changes() {
     );
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(bears)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(bears)))
         .expect("cast Unsummon");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.remaining_damage_prevention(bears), 0);
@@ -402,7 +407,7 @@ fn three_applications_prompt_again_for_the_next_prevention_effect() {
     engine.state.add_damage_prevention_shield(anti_venom, 1);
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![first_shield_application]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![first_shield_application]))
         .expect("choose the three-point shield first");
 
     let pending = engine
@@ -416,7 +421,7 @@ fn three_applications_prompt_again_for_the_next_prevention_effect() {
         .position(|effect_id| *effect_id != second_shield_effect)
         .expect("Anti-Venom remains a candidate")];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![anti_application]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![anti_application]))
         .expect("choose Anti-Venom next");
 
     assert!(engine.state.pending_resolution.is_none());
@@ -434,17 +439,17 @@ fn invalid_prevention_order_answers_preserve_the_parked_damage() {
         anti_venom_with_shield_awaiting_five_damage(4805);
 
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![anti_effect]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![anti_effect]))
         .is_err());
     assert!(engine.state.pending_resolution.is_some());
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![u32::MAX]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![u32::MAX]))
         .is_err());
     assert!(engine.state.pending_resolution.is_some());
     assert_eq!(engine.state.objects[&anti_venom].damage, 0);
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![anti_effect]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![anti_effect]))
         .expect("valid retry");
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(
@@ -484,7 +489,7 @@ fn lethal_damage_runs_state_based_actions_after_the_ordering_choice() {
     );
     let blaze = hand_index_for_card(&engine, 0, "blaze");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_x(
                 blaze,
@@ -508,7 +513,7 @@ fn lethal_damage_runs_state_based_actions_after_the_ordering_choice() {
         .presentation
         .candidates[0];
     engine
-        .apply_command(1, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![application]))
         .expect("choose either shield first");
 
     assert_eq!(
@@ -544,7 +549,7 @@ fn combat_prevention_choice_parks_and_then_commits_the_entire_damage_batch() {
     );
     let anti_slot = hand_index_for_card(&engine, 0, "anti-venom,_horrifying_healer");
     engine
-        .apply_command(0, &cast_spell(anti_slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(anti_slot, vec![]))
         .expect("cast Anti-Venom");
     pass_both_players(&mut engine);
     let anti_venom = battlefield_object_for_card(&engine, 0, "anti-venom,_horrifying_healer");
@@ -565,15 +570,15 @@ fn combat_prevention_choice_parks_and_then_commits_the_entire_damage_batch() {
         .id;
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase ends");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![anti_venom]))
+        .apply_scenario_command(0, &declare_attackers(vec![anti_venom]))
         .expect("attack");
     pass_both_players(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: anti_venom,
@@ -594,7 +599,7 @@ fn combat_prevention_choice_parks_and_then_commits_the_entire_damage_batch() {
         .expect("Anti-Venom application");
     let anti_application = pending.presentation.candidates[anti_index];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![anti_application]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![anti_application]))
         .expect("choose Anti-Venom first");
 
     assert_eq!(engine.state.objects[&anti_venom].damage, 0);
@@ -639,7 +644,7 @@ fn stomp_damage_still_gives_anti_venom_attempted_damage_counters() {
     );
     let anti_slot = hand_index_for_card(&engine, 0, "anti-venom,_horrifying_healer");
     engine
-        .apply_command(0, &cast_spell(anti_slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(anti_slot, vec![]))
         .expect("cast Anti-Venom");
     pass_both_players(&mut engine);
     let anti_venom = battlefield_object_for_card(&engine, 0, "anti-venom,_horrifying_healer");
@@ -656,7 +661,7 @@ fn stomp_damage_still_gives_anti_venom_attempted_damage_counters() {
     );
     let stomp = hand_index_for_card(&engine, 0, "bonecrusher_giant_stomp");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_face(
                 stomp,
@@ -705,7 +710,7 @@ fn first_strike_damage_grows_anti_venom_before_normal_combat_damage() {
     );
     let anti_slot = hand_index_for_card(&engine, 0, "anti-venom,_horrifying_healer");
     engine
-        .apply_command(0, &cast_spell(anti_slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(anti_slot, vec![]))
         .expect("cast Anti-Venom");
     pass_both_players(&mut engine);
     let anti_venom = battlefield_object_for_card(&engine, 0, "anti-venom,_horrifying_healer");
@@ -717,14 +722,16 @@ fn first_strike_damage_grows_anti_venom_before_normal_combat_damage() {
         .summoning_sick = false;
     let knight = relocate_to_battlefield(&mut engine, 1, "youthful_knight", false);
 
-    engine.apply_command(0, &primitive_yield()).unwrap();
-    pass_both_players(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![anti_venom]))
+        .apply_scenario_command(0, &primitive_yield())
         .unwrap();
     pass_both_players(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(0, &declare_attackers(vec![anti_venom]))
+        .unwrap();
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: anti_venom,
@@ -783,14 +790,14 @@ fn cleanup_clears_stomps_prevention_prohibition() {
     );
     let stomp = hand_index_for_card(&engine, 0, "bonecrusher_giant_stomp");
     engine
-        .apply_command(0, &cast_spell_face(stomp, target_player(1), 1))
+        .apply_scenario_command(0, &cast_spell_face(stomp, target_player(1), 1))
         .expect("cast Stomp");
     pass_both_players(&mut engine);
     assert!(!engine.state.damage_prevention_prohibitions.is_empty());
 
     for _ in 0..5 {
         engine
-            .apply_command(0, &primitive_yield())
+            .apply_scenario_command(0, &primitive_yield())
             .expect("advance toward cleanup");
     }
     assert!(engine.state.damage_prevention_prohibitions.is_empty());
@@ -824,7 +831,7 @@ fn stomp_bypasses_fog_for_later_combat_damage() {
     );
     let stomp = hand_index_for_card(&engine, 0, "bonecrusher_giant_stomp");
     engine
-        .apply_command(0, &cast_spell_face(stomp, target_player(1), 1))
+        .apply_scenario_command(0, &cast_spell_face(stomp, target_player(1), 1))
         .unwrap();
     pass_both_players(&mut engine);
 
@@ -837,19 +844,25 @@ fn stomp_bypasses_fog_for_later_combat_damage() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     let fog = hand_index_for_card(&engine, 1, "fog");
-    engine.apply_command(1, &cast_spell(fog, vec![])).unwrap();
+    engine
+        .apply_scenario_command(1, &cast_spell(fog, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
 
     let attacker = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
-    engine.apply_command(0, &primitive_yield()).unwrap();
-    pass_both_players(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &primitive_yield())
         .unwrap();
     pass_both_players(&mut engine);
-    engine.apply_command(1, &declare_blockers(vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
+        .unwrap();
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(1, &declare_blockers(vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
 
     assert_eq!(engine.state.players[1].life, 16);
@@ -880,15 +893,15 @@ fn fleeting_flight_prevents_combat_damage_to_its_target() {
     ensure_in_hand(&mut engine, 0, "fleeting_flight");
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("advance to combat");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     pass_both_players(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -907,7 +920,7 @@ fn fleeting_flight_prevents_combat_damage_to_its_target() {
     );
     let flight = hand_index_for_card(&engine, 0, "fleeting_flight");
     engine
-        .apply_command(0, &cast_spell(flight, target_object(attacker)))
+        .apply_scenario_command(0, &cast_spell(flight, target_object(attacker)))
         .expect("cast Fleeting Flight after blocks");
     resolve_entire_stack_two_player(&mut engine);
     assert!(zone_view_rules_annotation_labels(&mut engine, 0, attacker)
@@ -959,7 +972,7 @@ fn fleeting_flight_does_not_prevent_noncombat_damage() {
     );
     let flight = hand_index_for_card(&engine, 0, "fleeting_flight");
     engine
-        .apply_command(0, &cast_spell(flight, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(flight, target_object(target)))
         .expect("cast Fleeting Flight");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -972,10 +985,12 @@ fn fleeting_flight_does_not_prevent_noncombat_damage() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &pass()).expect("pass to opponent");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass to opponent");
     let bolt = hand_index_for_card(&engine, 1, "lightning_bolt");
     engine
-        .apply_command(1, &cast_spell(bolt, target_object(target)))
+        .apply_scenario_command(1, &cast_spell(bolt, target_object(target)))
         .expect("cast Lightning Bolt");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -1007,14 +1022,16 @@ fn combat_with_fleeting_flight_and_finite_shield(seed: u64) -> (GameEngine, u32,
     engine.state.add_damage_prevention_shield(attacker, 1);
     ensure_in_hand(&mut engine, 0, "fleeting_flight");
 
-    engine.apply_command(0, &primitive_yield()).unwrap();
-    pass_both_players(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &primitive_yield())
         .unwrap();
     pass_both_players(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
+        .unwrap();
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -1032,7 +1049,7 @@ fn combat_with_fleeting_flight_and_finite_shield(seed: u64) -> (GameEngine, u32,
     );
     let flight = hand_index_for_card(&engine, 0, "fleeting_flight");
     engine
-        .apply_command(0, &cast_spell(flight, target_object(attacker)))
+        .apply_scenario_command(0, &cast_spell(flight, target_object(attacker)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     let combat_effect = engine
@@ -1070,7 +1087,7 @@ fn fleeting_flight_uses_cr_616_ordering_with_finite_shields() {
             .position(|effect_id| *effect_id == chosen_effect)
             .expect("chosen prevention application")];
         engine
-            .apply_command(0, &submit_resolution_choice(vec![chosen]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))
             .expect("choose prevention order");
 
         assert!(engine.state.pending_resolution.is_none());
@@ -1111,7 +1128,7 @@ fn fleeting_flight_scope_does_not_follow_a_returned_object() {
     );
     let flight = hand_index_for_card(&engine, 0, "fleeting_flight");
     engine
-        .apply_command(0, &cast_spell(flight, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(flight, target_object(target)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert!(zone_view_rules_annotation_labels(&mut engine, 0, target)
@@ -1128,7 +1145,7 @@ fn fleeting_flight_scope_does_not_follow_a_returned_object() {
     );
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(target)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     let returned = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
@@ -1172,7 +1189,7 @@ fn fleeting_flight_scope_expires_at_cleanup() {
     );
     let flight = hand_index_for_card(&engine, 0, "fleeting_flight");
     engine
-        .apply_command(0, &cast_spell(flight, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(flight, target_object(target)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert!(zone_view_rules_annotation_labels(&mut engine, 0, target)

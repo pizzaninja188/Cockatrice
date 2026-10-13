@@ -121,6 +121,7 @@ pub(super) fn populate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineErr
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 variable_mana_contribution: false,
                 candidate_player_ids: Vec::new(),
                 waterbend: false,
@@ -148,6 +149,9 @@ pub(super) fn populate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineErr
         )),
     });
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: cx.controller,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
@@ -431,6 +435,7 @@ pub(super) fn create_attacking_tokens(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -463,6 +468,9 @@ pub(super) fn create_attacking_tokens(
         )),
     });
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: controller,
         presentation: PendingResolutionPresentation {
             source_object_id: item.id,

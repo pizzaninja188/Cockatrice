@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use prost::Message;
 use tricerules_cards::CounterKind;
@@ -211,7 +212,7 @@ fn wizard_class_level_three_counters_only_its_controllers_draws() {
     pass_priority_round(&mut engine); // P0 upkeep -> draw step
     assert_eq!(engine.state.pending_triggers.len(), 1);
     assert!(engine
-        .apply_command(0, &trigger_target(opponent_creature))
+        .apply_scenario_command(0, &trigger_target(opponent_creature))
         .is_err());
     assert_eq!(
         engine.state.pending_triggers.len(),
@@ -219,7 +220,7 @@ fn wizard_class_level_three_counters_only_its_controllers_draws() {
         "an illegal opponent target leaves the trigger choice pending"
     );
     engine
-        .apply_command(0, &trigger_target(creature))
+        .apply_scenario_command(0, &trigger_target(creature))
         .expect("choose a creature you control");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.class_level(class), 3);
@@ -245,14 +246,14 @@ fn wizard_class_level_three_counters_only_its_controllers_draws() {
     );
     let divination_index = hand_index_for_card(&engine, 0, "divination");
     engine
-        .apply_command(0, &cast_spell(divination_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(divination_index, vec![]))
         .expect("cast a spell that draws two cards");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     for _ in 0..2 {
         assert_eq!(engine.state.pending_triggers.len(), 1);
         engine
-            .apply_command(0, &trigger_target(creature))
+            .apply_scenario_command(0, &trigger_target(creature))
             .expect("each card draw creates a separate targeted trigger");
     }
     resolve_entire_stack_two_player(&mut engine);
@@ -304,12 +305,12 @@ fn wizard_class_level_up_ability_can_be_countered() {
 
     let tidebinder_index = hand_index_for_card(&engine, 0, "tishanas_tidebinder");
     engine
-        .apply_command(0, &cast_spell(tidebinder_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(tidebinder_index, vec![]))
         .expect("cast Tishana's Tidebinder with flash in response");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(0, &trigger_stack_target(level_up_ability_id))
+        .apply_scenario_command(0, &trigger_stack_target(level_up_ability_id))
         .expect("target the level-up ability with Tishana's Tidebinder");
     pass_both_players(&mut engine);
 
@@ -354,12 +355,12 @@ fn wizard_class_level_assignment_replays_serialized_accepted_commands() {
 
     let mut accepted = Vec::new();
     let command = activate_ability_for(&engine, class, ability_index, vec![]);
-    let batch = engine.apply_command(0, &command).unwrap();
+    let batch = engine.apply_scenario_command(0, &command).unwrap();
     accepted.push((0, command, batch));
     for _ in 0..2 {
         let actor = engine.state.priority_player_id();
         let command = pass();
-        let batch = engine.apply_command(actor, &command).unwrap();
+        let batch = engine.apply_scenario_command(actor, &command).unwrap();
         accepted.push((actor, command, batch));
     }
 
@@ -367,7 +368,7 @@ fn wizard_class_level_assignment_replays_serialized_accepted_commands() {
     for (actor, command, expected_batch) in accepted {
         let decoded = RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
         assert_eq!(
-            replay.apply_command(actor, &decoded).unwrap(),
+            replay.apply_scenario_command(actor, &decoded).unwrap(),
             expected_batch
         );
     }

@@ -1,5 +1,6 @@
 //! All Is Dust: one simultaneous sacrifice with owner-chosen graveyard order.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{Color, ContinuousEffectKind, EffectDuration, Keyword};
 use tricerules_core::state::ActiveDeathReplacement;
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
@@ -25,7 +26,7 @@ fn resolve_one(engine: &mut GameEngine) -> RuledEventBatch {
     let mut batch = Default::default();
     for _ in 0..engine.state.players.len() {
         batch = engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     batch
@@ -36,7 +37,7 @@ fn cast(engine: &mut GameEngine) -> RuledEventBatch {
     engine.state.players[0].mana_pool.colorless = 7;
     let slot = hand_index_for_card(engine, 0, "all_is_dust");
     engine
-        .apply_command(actor, &cast_spell(slot, vec![]))
+        .apply_scenario_command(actor, &cast_spell(slot, vec![]))
         .unwrap();
     resolve_one(engine)
 }
@@ -47,7 +48,7 @@ fn order_all(engine: &mut GameEngine) {
         let mut choices = pending.presentation.candidates.clone();
         choices.reverse();
         engine
-            .apply_command(player, &submit_resolution_choice(choices))
+            .apply_scenario_command(player, &submit_resolution_choice(choices))
             .unwrap();
     }
 }
@@ -67,7 +68,7 @@ fn modify(engine: &mut GameEngine, oid: u32, kind: ContinuousEffectKind) {
 fn reject(engine: &mut GameEngine, actor: i32, ids: Vec<u32>) {
     let before = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(actor, &submit_resolution_choice(ids))
+        .apply_scenario_command(actor, &submit_resolution_choice(ids))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before, "rejection is atomic");
 }
@@ -85,7 +86,9 @@ fn all_is_dust_paid_cast_sacrifices_once_and_orders_each_owners_arrivals() {
     let land = inject_creature_on_battlefield(&mut engine, 0, "forest");
     engine.state.players[0].mana_pool.colorless = 7;
     let slot = hand_index_for_card(&engine, 0, "all_is_dust");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     let first = resolve_one(&mut engine);
     for &oid in victims.iter().flatten() {
@@ -102,7 +105,7 @@ fn all_is_dust_paid_cast_sacrifices_once_and_orders_each_owners_arrivals() {
         assert_eq!(pending.presentation.max, 2);
         let order = vec![cohort[1], cohort[0]];
         engine
-            .apply_command(seat as i32, &submit_resolution_choice(order.clone()))
+            .apply_scenario_command(seat as i32, &submit_resolution_choice(order.clone()))
             .unwrap();
         let graveyard = &engine.state.players[seat].graveyard;
         assert_eq!(
@@ -142,7 +145,7 @@ fn all_is_dust_choice_rejections_preserve_pending_and_older_graveyard_order() {
         .zone_change_generation
         .insert(second, generation);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![second, first]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![second, first]))
         .unwrap();
     assert_eq!(
         &engine.state.players[0].graveyard[..3],
@@ -162,7 +165,9 @@ fn all_is_dust_uses_resolution_colors_deduplicates_multicolor_and_excludes_token
     let artifact = inject_permanent_on_battlefield(&mut engine, 2, "sol_ring");
     engine.state.players[0].mana_pool.colorless = 7;
     let slot = hand_index_for_card(&engine, 0, "all_is_dust");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     modify(
         &mut engine,
         gained,
@@ -262,7 +267,7 @@ fn all_is_dust_nonconsecutive_players_use_owner_not_controller_for_apnap_order()
         10
     );
     engine
-        .apply_command(10, &submit_resolution_choice(vec![active_second, active]))
+        .apply_scenario_command(10, &submit_resolution_choice(vec![active_second, active]))
         .unwrap();
     assert_eq!(
         engine
@@ -275,7 +280,7 @@ fn all_is_dust_nonconsecutive_players_use_owner_not_controller_for_apnap_order()
     );
     assert!(engine.state.players[1].graveyard.is_empty());
     engine
-        .apply_command(70, &submit_resolution_choice(vec![sibling, stolen]))
+        .apply_scenario_command(70, &submit_resolution_choice(vec![sibling, stolen]))
         .unwrap();
     assert_eq!(engine.state.players[2].graveyard, vec![sibling, stolen]);
     assert!(batch.events.iter().any(
@@ -451,7 +456,7 @@ fn all_is_dust_mass_sacrifice_effect_tail_runs_once_after_the_last_owner_order()
         },
     ];
     engine
-        .apply_command(0, &activate_ability(source, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(source, 0, vec![]))
         .unwrap();
     resolve_one(&mut engine);
     for seat in 0..3 {
@@ -463,7 +468,7 @@ fn all_is_dust_mass_sacrifice_effect_tail_runs_once_after_the_last_owner_order()
         assert_eq!(pending.deciding_player, seat);
         let choices = pending.presentation.candidates.clone();
         engine
-            .apply_command(seat, &submit_resolution_choice(choices))
+            .apply_scenario_command(seat, &submit_resolution_choice(choices))
             .unwrap();
     }
     assert_eq!(engine.state.players[0].life, 23);
@@ -486,11 +491,11 @@ fn all_is_dust_paid_cast_and_owner_choices_replay_serialized_commands_identicall
     let mut engine = fresh();
     let slot = hand_index_for_card(&engine, 0, "all_is_dust");
     let mut commands = vec![(0, cast_spell(slot, vec![]))];
-    let mut expected = vec![engine.apply_command(0, &commands[0].1).unwrap()];
+    let mut expected = vec![engine.apply_scenario_command(0, &commands[0].1).unwrap()];
     for _ in 0..3 {
         let actor = engine.state.priority_player_id();
         let command = pass();
-        expected.push(engine.apply_command(actor, &command).unwrap());
+        expected.push(engine.apply_scenario_command(actor, &command).unwrap());
         commands.push((actor, command));
     }
     while let Some(pending) = engine.state.pending_resolution.as_ref() {
@@ -498,14 +503,17 @@ fn all_is_dust_paid_cast_and_owner_choices_replay_serialized_commands_identicall
         let mut ids = pending.presentation.candidates.clone();
         ids.reverse();
         let command = submit_resolution_choice(ids);
-        expected.push(engine.apply_command(actor, &command).unwrap());
+        expected.push(engine.apply_scenario_command(actor, &command).unwrap());
         commands.push((actor, command));
     }
     let mut replay = fresh();
     for ((actor, command), expected) in commands.into_iter().zip(expected) {
         let encoded = command.encode_to_vec();
         let decoded = RuledCommand::decode(encoded.as_slice()).unwrap();
-        assert_eq!(replay.apply_command(actor, &decoded).unwrap(), expected);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &decoded).unwrap(),
+            expected
+        );
     }
     assert_eq!(
         engine.diagnostic_snapshot().unwrap(),
@@ -566,21 +574,21 @@ fn finish_aura_orders(
     );
     assert_eq!(engine.state.objects[&aura].zone, Zone::Exile);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![bear, light]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![bear, light]))
         .unwrap();
     let pending = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::GraveyardCards);
     assert_eq!(pending.deciding_player, 1);
     assert_eq!(engine.state.objects[&aura].zone, Zone::Exile);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![other[1], other[0]]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![other[1], other[0]]))
         .unwrap();
     let pending = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::AuraPermanent);
     assert_eq!(pending.deciding_player, 1);
     assert_eq!(engine.state.objects[&aura].zone, Zone::Exile);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![recipient]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![recipient]))
         .unwrap();
     assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
     assert_eq!(
@@ -665,16 +673,16 @@ fn all_is_dust_immediate_aura_return_preserves_following_effect_tail() {
         },
     ];
     engine
-        .apply_command(0, &activate_ability(source, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(source, 0, vec![]))
         .unwrap();
     resolve_one(&mut engine);
     assert_eq!(engine.state.players[0].life, 20);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![bear, light]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![bear, light]))
         .unwrap();
     assert_eq!(engine.state.players[0].life, 20);
     engine
-        .apply_command(1, &submit_resolution_choice(vec![other[1], other[0]]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![other[1], other[0]]))
         .unwrap();
     assert_eq!(
         engine
@@ -691,7 +699,7 @@ fn all_is_dust_immediate_aura_return_preserves_following_effect_tail() {
         "tail waits for the intervening Aura return choice"
     );
     engine
-        .apply_command(1, &submit_resolution_choice(vec![recipient]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![recipient]))
         .unwrap();
     assert_eq!(engine.state.players[0].life, 23);
     assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);

@@ -4,10 +4,11 @@
 //! CR 510.2-510.3a govern simultaneous combat damage and trigger placement; CR 603.2 and 603.2c
 //! cover each qualifying damage event, CR 613.1f places the granted keyword in layer 6, CR 702.2
 //! defines deathtouch, and CR 113.7a keeps a triggered ability independent of its source.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 
 const OHRAN_FROSTFANG: &str = "ohran_frostfang";
 
@@ -30,7 +31,7 @@ fn cast_ohran_frostfang(engine: &mut GameEngine) -> u32 {
     grant_pool(engine, 0);
     let slot = hand_index_for_card(engine, 0, OHRAN_FROSTFANG);
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Ohran Frostfang");
     resolve_entire_stack_two_player(engine);
     assert_eq!(engine.state.objects[&object].zone, Zone::Battlefield);
@@ -48,7 +49,7 @@ fn cast_ohran_frostfang(engine: &mut GameEngine) -> u32 {
 fn pass_once(engine: &mut GameEngine) {
     let actor = engine.state.priority_player_id();
     engine
-        .apply_command(actor, &pass())
+        .apply_scenario_command(actor, &pass())
         .expect("pass priority toward the requested step");
 }
 
@@ -69,7 +70,7 @@ fn advance_to_step(engine: &mut GameEngine, wanted: TurnStep) {
 
 fn enter_declare_attackers(engine: &mut GameEngine, active_player: i32) {
     engine
-        .apply_command(active_player, &primitive_yield())
+        .apply_scenario_command(active_player, &primitive_yield())
         .expect("yield from main phase to beginning of combat");
     advance_to_step(engine, TurnStep::DeclareAttackers);
 }
@@ -84,7 +85,10 @@ fn advance_to_next_turn(engine: &mut GameEngine) {
             let player_index = engine.state.player_idx(player).expect("cleanup player");
             let excess = engine.state.players[player_index].hand.len() - 7;
             engine
-                .apply_command(player, &discard_cleanup_batch((0..excess as u32).collect()))
+                .apply_scenario_command(
+                    player,
+                    &discard_cleanup_batch((0..excess as u32).collect()),
+                )
                 .expect("discard down to hand size during cleanup");
         } else {
             pass_once(engine);
@@ -102,7 +106,10 @@ fn advance_to_player_main1(engine: &mut GameEngine, player: i32) {
             let player_index = engine.state.player_idx(player).expect("cleanup player");
             let excess = engine.state.players[player_index].hand.len() - 7;
             engine
-                .apply_command(player, &discard_cleanup_batch((0..excess as u32).collect()))
+                .apply_scenario_command(
+                    player,
+                    &discard_cleanup_batch((0..excess as u32).collect()),
+                )
                 .expect("discard down to hand size during cleanup");
         } else {
             pass_once(engine);
@@ -126,7 +133,7 @@ fn attacking_creatures_you_control_gain_deathtouch_and_any_damage_kills_a_blocke
 
     enter_declare_attackers(&mut engine, 0);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare one controlled attacker");
     assert!(engine.effective_has_keyword(attacker, Keyword::Deathtouch));
     assert!(!engine.effective_has_keyword(bystander, Keyword::Deathtouch));
@@ -135,7 +142,7 @@ fn attacking_creatures_you_control_gain_deathtouch_and_any_damage_kills_a_blocke
     pass_round(&mut engine);
     assert_eq!(engine.state.turn_step, TurnStep::DeclareBlockers);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -168,14 +175,14 @@ fn draws_once_per_friendly_combat_damager_but_not_for_damage_to_a_creature() {
 
     enter_declare_attackers(&mut engine, 0);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &declare_attackers(vec![first_unblocked, second_unblocked, blocked_attacker]),
         )
         .expect("declare three controlled attackers");
     pass_round(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: blocked_attacker,
@@ -216,7 +223,7 @@ fn ignores_noncombat_creature_damage_and_opponent_combat_damage() {
 
     let hand_before_noncombat = engine.state.players[0].hand.len();
     engine
-        .apply_command(0, &activate_ability(pinger, 0, target_player(1)))
+        .apply_scenario_command(0, &activate_ability(pinger, 0, target_player(1)))
         .expect("activate Prodigal Sorcerer to deal noncombat damage to a player");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.players[1].life, 19);
@@ -229,12 +236,12 @@ fn ignores_noncombat_creature_damage_and_opponent_combat_damage() {
     let opponent_attacker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     enter_declare_attackers(&mut engine, 1);
     engine
-        .apply_command(1, &declare_attackers(vec![opponent_attacker]))
+        .apply_scenario_command(1, &declare_attackers(vec![opponent_attacker]))
         .expect("the opponent declares an attacker");
     assert!(!engine.effective_has_keyword(opponent_attacker, Keyword::Deathtouch));
     pass_round(&mut engine);
     engine
-        .apply_command(0, &declare_blockers(vec![]))
+        .apply_scenario_command(0, &declare_blockers(vec![]))
         .expect("declare no blockers against the opponent");
     pass_round(&mut engine);
 
@@ -257,7 +264,7 @@ fn qualifying_draw_triggers_survive_simultaneous_lethal_damage_to_ohran() {
 
     enter_declare_attackers(&mut engine, 0);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &declare_attackers(vec![ohran, first_unblocked, second_unblocked]),
         )
@@ -265,7 +272,7 @@ fn qualifying_draw_triggers_survive_simultaneous_lethal_damage_to_ohran() {
     assert!(engine.effective_has_keyword(ohran, Keyword::Deathtouch));
     pass_round(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: ohran,

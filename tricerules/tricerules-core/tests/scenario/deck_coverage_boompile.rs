@@ -1,10 +1,11 @@
 //! Exact Boompile identity and coin-flip destruction behavior.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use rand::{Rng, SeedableRng};
 use tricerules_cards::primitives::{AbilityCost, CounterKind, SpellEffectKind};
 use tricerules_cards::ManaCost;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 const BOOMPILE: &str = "boompile";
 const BOOMPILE_RANDOM_DOMAIN: u64 = 0x424F_4F4D_5049_4C45;
@@ -86,7 +87,7 @@ fn resolve_boompile(seed: u64) -> ResolutionResult {
     );
     let aura_slot = hand_index_for_card(&engine, 0, "indestructibility");
     engine
-        .apply_command(0, &cast_spell(aura_slot, target_object(protected_creature)))
+        .apply_scenario_command(0, &cast_spell(aura_slot, target_object(protected_creature)))
         .expect("cast Indestructibility on an opponent's creature");
     resolve_entire_stack_two_player(&mut engine);
     let aura = battlefield_object_for_card(&engine, 0, "indestructibility");
@@ -107,7 +108,7 @@ fn resolve_boompile(seed: u64) -> ResolutionResult {
 
     let activation = activate_ability_for(&engine, source, 0, vec![]);
     engine
-        .apply_command(0, &activation)
+        .apply_scenario_command(0, &activation)
         .expect("activate Boompile's tap ability");
     assert!(
         engine.state.objects[&source].tapped,
@@ -117,13 +118,13 @@ fn resolve_boompile(seed: u64) -> ResolutionResult {
 
     let first_passer = engine.state.priority_player_id();
     engine
-        .apply_command(first_passer, &pass())
+        .apply_scenario_command(first_passer, &pass())
         .expect("first player passes");
     let resolving_command_index = engine.state.command_index;
     let expected_win = expected_coin_win(seed, resolving_command_index, 0, source);
     let resolving_passer = engine.state.priority_player_id();
     let resolved = engine
-        .apply_command(resolving_passer, &pass())
+        .apply_scenario_command(resolving_passer, &pass())
         .expect("second player passes and resolves Boompile");
 
     let flip_logs = resolved
@@ -249,7 +250,7 @@ fn tapped_boompile_rejects_activation_without_advancing_the_replay_index() {
     engine.state.objects.get_mut(&source).unwrap().tapped = true;
     let command_index = engine.state.command_index;
     assert!(engine
-        .apply_command(0, &activate_ability_for(&engine, source, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 0, vec![]))
         .is_err());
     assert_eq!(engine.state.command_index, command_index);
     assert!(engine.state.stack.is_empty());
@@ -264,9 +265,11 @@ fn boompile_ability_resolves_after_its_source_leaves_the_battlefield() {
         let source = inject_permanent_on_battlefield(&mut engine, 0, BOOMPILE);
         let other_artifact = inject_permanent_on_battlefield(&mut engine, 1, "bonesplitter");
         engine
-            .apply_command(0, &activate_ability_for(&engine, source, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability_for(&engine, source, 0, vec![]))
             .expect("activate Boompile");
-        engine.apply_command(0, &pass()).expect("controller passes");
+        engine
+            .apply_scenario_command(0, &pass())
+            .expect("controller passes");
 
         inject_card_into_hand(&mut engine, 1, "disenchant");
         give_mana(
@@ -280,7 +283,7 @@ fn boompile_ability_resolves_after_its_source_leaves_the_battlefield() {
         );
         let disenchant_slot = hand_index_for_card(&engine, 1, "disenchant");
         engine
-            .apply_command(1, &cast_spell(disenchant_slot, target_object(source)))
+            .apply_scenario_command(1, &cast_spell(disenchant_slot, target_object(source)))
             .expect("destroy Boompile while its ability remains on the stack");
         pass_both_players(&mut engine);
         assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
@@ -288,13 +291,13 @@ fn boompile_ability_resolves_after_its_source_leaves_the_battlefield() {
 
         let first_passer = engine.state.priority_player_id();
         engine
-            .apply_command(first_passer, &pass())
+            .apply_scenario_command(first_passer, &pass())
             .expect("first player passes before Boompile resolves");
         let resolving_command_index = engine.state.command_index;
         let expected_win = expected_coin_win(seed, resolving_command_index, 0, source);
         let second_passer = engine.state.priority_player_id();
         let resolved = engine
-            .apply_command(second_passer, &pass())
+            .apply_scenario_command(second_passer, &pass())
             .expect("resolve the source-independent ability");
         assert!(resolved.events.iter().any(|event| matches!(
             event.ev.as_ref(),

@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
 fn quantity_game(card: &str) -> GameEngine {
@@ -25,7 +26,7 @@ fn quantity_cast(engine: &mut GameEngine, card: &str, targets: Vec<TargetRef>) {
     }
     grant_pool(engine, 0);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(hand_index_for_card(engine, 0, card), targets),
         )
@@ -54,7 +55,7 @@ fn quantity_land(engine: &mut GameEngine, player: usize, subtype: &str) -> u32 {
 
 fn quantity_trigger_target(engine: &mut GameEngine, target: u32) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -87,7 +88,7 @@ fn issue_165_flow_draws_for_islands_then_discards_even_at_zero() {
             .candidates[..2]
             .to_vec();
         engine
-            .apply_command(0, &submit_resolution_choice(choices))
+            .apply_scenario_command(0, &submit_resolution_choice(choices))
             .unwrap();
         assert_eq!(engine.state.players[0].hand.len(), hand + islands - 3);
         assert!(engine.state.pending_resolution.is_none());
@@ -113,7 +114,7 @@ fn issue_165_keepguard_counts_enchantments_at_activation_resolution() {
         "controlled enchantment entry triggers scry"
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .unwrap();
     assert!(engine.state.pending_resolution.is_none());
 }
@@ -142,7 +143,7 @@ fn issue_165_gold_rush_counts_new_treasure_and_respects_optional_target_fizzle()
         let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
         grant_pool(&mut engine, 0);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell(
                     hand_index_for_card(&engine, 0, "gold_rush"),
@@ -194,7 +195,7 @@ fn issue_165_outcaster_searches_and_continuously_counts_deserts() {
         .presentation
         .candidates[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![choice]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![choice]))
         .unwrap();
     assert!(engine.state.players[0].hand.contains(&choice));
     engine
@@ -216,7 +217,9 @@ fn issue_165_brambleguard_uses_power_when_combat_trigger_resolves() {
     quantity_cast(&mut engine, "brambleguard_captain", vec![]);
     let source = battlefield_object_for_card(&engine, 0, "brambleguard_captain");
     let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
-    engine.apply_command(0, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(0, &primitive_yield())
+        .unwrap();
     quantity_trigger_target(&mut engine, target);
     quantity_cast(&mut engine, "giant_growth", target_object(source));
     pass_both_players(&mut engine);
@@ -268,13 +271,13 @@ fn issue_165_cave_in_freezes_whole_damage_batch_across_prevention_choice() {
     );
     let index = engine.state.command_index;
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![choice]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![choice]))
         .is_err());
     assert_eq!(engine.state.command_index, index);
     // State changed after computation must not cause a second quantity evaluation on resume.
     quantity_land(&mut engine, 0, "Cave");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![choice]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![choice]))
         .unwrap();
     assert_eq!(engine.state.objects[&protected].damage, 1);
     assert_eq!(engine.state.objects[&other].damage, 3);
@@ -329,7 +332,7 @@ fn dwarven_priest_counts_controlled_creatures_when_its_trigger_resolves() {
 
     let priest = hand_index_for_card(&engine, 0, "dwarven_priest");
     engine
-        .apply_command(0, &cast_spell(priest, vec![]))
+        .apply_scenario_command(0, &cast_spell(priest, vec![]))
         .expect("cast Dwarven Priest");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.stack.len(), 1, "ETB trigger is waiting");
@@ -374,7 +377,7 @@ fn aerial_assault_counts_derived_flying_after_a_legal_destroy_attempt() {
     );
     let flight = hand_index_for_card(&engine, 0, "flight");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 flight,
@@ -409,7 +412,7 @@ fn aerial_assault_counts_derived_flying_after_a_legal_destroy_attempt() {
     );
     let assault = hand_index_for_card(&engine, 0, "aerial_assault");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 assault,
@@ -470,7 +473,7 @@ fn aerial_assault_fizzles_entirely_when_its_only_target_becomes_illegal() {
     );
     let assault = hand_index_for_card(&engine, 0, "aerial_assault");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 assault,
@@ -535,7 +538,7 @@ fn growth_cycle_counts_only_its_controllers_graveyard_and_locks_the_bonus() {
     );
     let growth = hand_index_for_card(&engine, 0, "growth_cycle");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 growth,
@@ -581,14 +584,16 @@ fn lavakin_brawler_counts_controlled_elementals_when_its_attack_trigger_resolves
     inject_creature_on_battlefield(&mut engine, 1, "air_elemental");
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("move to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player pass");
-    engine.apply_command(1, &pass()).expect("defender pass");
     engine
-        .apply_command(0, &declare_attackers(vec![brawler]))
+        .apply_scenario_command(1, &pass())
+        .expect("defender pass");
+    engine
+        .apply_scenario_command(0, &declare_attackers(vec![brawler]))
         .expect("attack with Lavakin Brawler");
     assert_eq!(engine.state.stack.len(), 1, "attack trigger is waiting");
 
@@ -631,7 +636,7 @@ fn undead_servant_dying_before_its_etb_trigger_resolves_counts_itself() {
     );
     let servant = hand_index_for_card(&engine, 0, "undead_servant");
     engine
-        .apply_command(0, &cast_spell(servant, vec![]))
+        .apply_scenario_command(0, &cast_spell(servant, vec![]))
         .expect("cast Undead Servant");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.stack.len(), 1, "ETB trigger is waiting");
@@ -648,7 +653,7 @@ fn undead_servant_dying_before_its_etb_trigger_resolves_counts_itself() {
     );
     let bolt = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 bolt,
@@ -712,7 +717,7 @@ fn undead_servant_zero_count_resolves_without_creating_or_parking() {
     );
     let servant = hand_index_for_card(&engine, 0, "undead_servant");
     engine
-        .apply_command(0, &cast_spell(servant, vec![]))
+        .apply_scenario_command(0, &cast_spell(servant, vec![]))
         .expect("cast Undead Servant");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.stack.len(), 1, "ETB trigger is waiting");

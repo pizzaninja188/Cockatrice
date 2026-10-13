@@ -3,6 +3,7 @@
 //! Oracle text is pinned to the Scryfall corpus; the shared August 25, 2015 ruling was checked
 //! on the card reference. Expectations follow CR 305.6 and 305.8 (basic land type versus Basic
 //! supertype) and CR 614.1c (enter-tapped replacement).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::GameEngine;
@@ -112,7 +113,7 @@ fn deck_coverage_battlelands_check_basic_lands_controlled_by_the_entering_player
             if controlled_basics < 2 {
                 let command_index = engine.state.command_index;
                 engine
-                    .apply_command(0, &mana_option(&engine, source, 0))
+                    .apply_scenario_command(0, &mana_option(&engine, source, 0))
                     .expect_err("a tapped entering land cannot pay a tap cost");
                 assert_eq!(engine.state.command_index, command_index);
                 assert!(engine.state.objects[&source].tapped);

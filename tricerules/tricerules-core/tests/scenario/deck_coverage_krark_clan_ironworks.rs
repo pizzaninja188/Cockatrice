@@ -3,9 +3,10 @@
 //! Oracle and rulings checked against Scryfall on 2026-09-26; this Oracle identity has no rulings.
 //! CR 602.2b and 701.21a govern paying the artifact sacrifice cost; CR 605.1a and 605.3b classify
 //! and immediately resolve the ability; CR 118.1 governs carrying out the cost.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     BeginSpellCast, CommitSpellCast, PaymentMana, PaymentSelection, PreviewPayment,
     SpellCastAnnouncement,
@@ -70,7 +71,7 @@ fn begin_mind_stone_cast(engine: &mut GameEngine) -> u64 {
         casting_permission_id: cast.casting_permission_id,
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
@@ -91,7 +92,7 @@ fn begin_mind_stone_cast(engine: &mut GameEngine) -> u64 {
 fn ironworks_can_sacrifice_itself_and_immediately_add_two_colorless() {
     let (mut engine, ironworks) = ironworks_engine(20_260_926);
     let batch = engine
-        .apply_command(0, &sacrifice_for_mana(&engine, ironworks, ironworks))
+        .apply_scenario_command(0, &sacrifice_for_mana(&engine, ironworks, ironworks))
         .expect("sacrifice the source as the cost");
 
     assert_eq!(engine.state.objects[&ironworks].zone, Zone::Graveyard);
@@ -117,7 +118,7 @@ fn ironworks_sacrifices_another_artifact_and_rejects_uncontrolled_or_nonartifact
     let own_land = inject_permanent_on_battlefield(&mut engine, 0, "forest");
 
     engine
-        .apply_command(0, &sacrifice_for_mana(&engine, ironworks, own_artifact))
+        .apply_scenario_command(0, &sacrifice_for_mana(&engine, ironworks, own_artifact))
         .expect("sacrifice a different controlled artifact");
     assert_eq!(engine.state.objects[&own_artifact].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&ironworks].zone, Zone::Battlefield);
@@ -128,7 +129,7 @@ fn ironworks_sacrifices_another_artifact_and_rejects_uncontrolled_or_nonartifact
         let before_mana = engine.state.players[0].mana_pool;
         let before_index = engine.state.command_index;
         engine
-            .apply_command(0, &sacrifice_for_mana(&engine, ironworks, invalid))
+            .apply_scenario_command(0, &sacrifice_for_mana(&engine, ironworks, invalid))
             .expect_err("only a controlled artifact can pay the cost");
         assert_eq!(engine.state.players[0].mana_pool, before_mana);
         assert_eq!(engine.state.command_index, before_index);
@@ -143,7 +144,7 @@ fn ironworks_mana_can_pay_for_a_spell_before_priority_returns() {
     assert!(engine.state.pending_spell_cast.is_some());
 
     engine
-        .apply_command(0, &sacrifice_for_mana(&engine, ironworks, ironworks))
+        .apply_scenario_command(0, &sacrifice_for_mana(&engine, ironworks, ironworks))
         .expect("mana ability is available during spell payment");
     assert!(engine.state.pending_spell_cast.is_some());
     assert_eq!(engine.state.objects[&ironworks].zone, Zone::Graveyard);
@@ -164,7 +165,7 @@ fn ironworks_mana_can_pay_for_a_spell_before_priority_returns() {
         }),
         ..Default::default()
     };
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             transaction_id,
@@ -175,7 +176,7 @@ fn ironworks_mana_can_pay_for_a_spell_before_priority_returns() {
     );
     assert!(preview.valid && preview.complete, "{preview:?}");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {

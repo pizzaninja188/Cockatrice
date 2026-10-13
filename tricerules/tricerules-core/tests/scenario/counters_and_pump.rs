@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
 #[test]
@@ -130,7 +131,7 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("p0 play mountain");
 
     for _ in 0..2 {
@@ -156,10 +157,10 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
         },
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("p0 cast bolt");
     let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("p0 pass to give p1 priority");
 
     // Manually tap an island (simulates client-side land tap for mana).
@@ -177,7 +178,7 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
         },
     );
     let counter_idx = hand_index_for_card(&e, 1, "counterspell");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             counter_idx,
@@ -197,9 +198,9 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
     );
     assert_eq!(e.state.stack.len(), 2, "bolt and counterspell on stack");
 
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("p1 pass after casting counter");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("p0 pass resolves counterspell");
     assert!(e.state.stack.is_empty(), "stack empty after counter");
     assert_eq!(e.state.active_player_id(), 0, "AP is P0 in this test");
@@ -254,7 +255,7 @@ fn giant_growth_pump_expires_after_active_turn_ends() {
         },
     );
     let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             growth_idx,
@@ -336,7 +337,7 @@ fn fiery_hellhound_self_firebreathing_pumps_and_expires() {
     );
 
     // First activation: cost paid on activation (pool 2 -> 1), ability on the stack; resolves to +1/+0.
-    e.apply_command(0, &activate_ability(hound, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(hound, 0, vec![]))
         .expect("activate firebreathing #1");
     assert_eq!(
         e.state.players[0].mana_pool.red, 1,
@@ -347,7 +348,7 @@ fn fiery_hellhound_self_firebreathing_pumps_and_expires() {
     assert_eq!(e.effective_toughness(hound), Some(2), "toughness unchanged");
 
     // Second activation stacks another +1/+0.
-    e.apply_command(0, &activate_ability(hound, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(hound, 0, vec![]))
         .expect("activate firebreathing #2");
     assert_eq!(
         e.state.players[0].mana_pool.red, 0,
@@ -412,7 +413,7 @@ fn fiery_hellhound_source_pump_rejects_supplied_target() {
     );
 
     let err = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability(
                 hound,
@@ -481,7 +482,7 @@ fn two_giant_growths_stack_correctly() {
             },
         );
         let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &cast_spell(
                 growth_idx,
@@ -559,7 +560,7 @@ fn battlegrowth_counter_raises_pt_and_persists() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "battlegrowth");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -645,7 +646,7 @@ fn zone_view_reports_counter_annotation() {
         },
     );
     let bg = hand_index_for_card(&e, 0, "battlegrowth");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bg,
@@ -660,10 +661,11 @@ fn zone_view_reports_counter_annotation() {
     )
     .expect("cast battlegrowth");
     let first = e.state.priority_player_id();
-    e.apply_command(first, &pass()).expect("first pass");
+    e.apply_scenario_command(first, &pass())
+        .expect("first pass");
     let second = if first == 0 { 1 } else { 0 };
     let b = e
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves");
 
     let zone_view = b
@@ -741,7 +743,7 @@ fn plus_and_minus_counters_annihilate() {
         },
     );
     let bg = hand_index_for_card(&e, 0, "battlegrowth");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bg,
@@ -771,7 +773,7 @@ fn plus_and_minus_counters_annihilate() {
         },
     );
     let ii = hand_index_for_card(&e, 0, "instill_infection");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             ii,
@@ -842,7 +844,7 @@ fn minus_counter_to_zero_toughness_kills_via_sba() {
         },
     );
     let ii = hand_index_for_card(&e, 0, "instill_infection");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             ii,
@@ -908,7 +910,7 @@ fn marked_damage_clears_at_cleanup() {
         },
     );
     let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             growth_idx,
@@ -989,7 +991,7 @@ fn bounce_clears_counters_and_marked_damage() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "unsummon");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             idx,
@@ -1003,8 +1005,8 @@ fn bounce_clears_counters_and_marked_damage() {
         ),
     )
     .expect("cast unsummon");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
     let returned = e.state.objects.get(&bear).expect("bear");
     assert_eq!(returned.zone, tricerules_core::Zone::Hand);
     assert_eq!(
@@ -1037,7 +1039,7 @@ fn glorious_anthem_buffs_only_controllers_creatures() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "glorious_anthem");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast anthem");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1064,7 +1066,7 @@ fn anthem_scope_is_dynamic_for_creatures_entering_later() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "glorious_anthem");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast anthem");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1164,7 +1166,7 @@ fn issue_476_air_nomad_creates_one_clue_when_it_enters() {
     );
 
     let index = hand_index_for_card(&e, 0, "air_nomad_legacy");
-    e.apply_command(0, &cast_spell(index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(index, vec![]))
         .expect("cast Air Nomad Legacy");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1193,7 +1195,7 @@ fn issue_476_air_nomad_buffs_controlled_flyers_after_layer_six() {
     );
     let legacy_index = hand_index_for_card(&e, 0, "air_nomad_legacy");
     let legacy = e.state.players[0].hand[legacy_index];
-    e.apply_command(0, &cast_spell(legacy_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(legacy_index, vec![]))
         .expect("cast Air Nomad Legacy");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
@@ -1269,7 +1271,7 @@ fn issue_476_empyrean_eagle_buffs_other_controlled_flyers_only() {
     );
     let eagle_index = hand_index_for_card(&e, 0, "empyrean_eagle");
     let eagle = e.state.players[0].hand[eagle_index];
-    e.apply_command(0, &cast_spell(eagle_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(eagle_index, vec![]))
         .expect("cast Empyrean Eagle");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
@@ -1350,7 +1352,7 @@ fn anthem_buff_drains_when_source_leaves_battlefield() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "glorious_anthem");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast anthem");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
@@ -1369,7 +1371,7 @@ fn anthem_buff_drains_when_source_leaves_battlefield() {
         },
     );
     let b_idx = hand_index_for_card(&e, 0, "boomerang");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             b_idx,
@@ -1410,7 +1412,7 @@ fn crusade_buffs_white_creatures_of_either_player() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "crusade");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast crusade");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1449,7 +1451,7 @@ fn captain_of_the_watch_buffs_other_soldiers_you_control() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "captain_of_the_watch");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast captain");
     // Resolve the spell and its ETB token-making trigger to a quiet board.
     while !e.state.stack.is_empty() || !e.state.pending_triggers.is_empty() {
@@ -1495,7 +1497,7 @@ fn glorious_charge_pumps_team_until_cleanup() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "glorious_charge");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast glorious charge");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.effective_power(mine), Some(3), "+1/+1 this turn");
@@ -1549,7 +1551,7 @@ fn issue_75_uncomfortable_chill_snapshots_opponents_and_draws() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "uncomfortable_chill");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Uncomfortable Chill");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1640,7 +1642,7 @@ fn issue_75_make_obsolete_only_kills_opposing_creatures() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "make_obsolete");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Make Obsolete");
     resolve_entire_stack_two_player(&mut e);
 

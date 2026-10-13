@@ -1,8 +1,9 @@
 //! Actual-card semantics for Pongify, checked against its pinned Oracle and ruling.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn pongify_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![
@@ -34,7 +35,7 @@ fn resolve_pongify(engine: &mut GameEngine, target: u32) {
     );
     let slot = hand_index_for_card(engine, 0, "pongify");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Pongify");
     resolve_entire_stack_two_player(engine);
 }
@@ -98,7 +99,7 @@ fn pongify_creates_no_ape_when_target_is_illegal_on_resolution() {
     );
     let slot = hand_index_for_card(&engine, 0, "pongify");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Pongify");
     engine.state.players[1]
         .battlefield

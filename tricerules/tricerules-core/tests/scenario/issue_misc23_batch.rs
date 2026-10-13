@@ -7,6 +7,7 @@
 //! CR 115.4 (target opponent), CR 119/120 (damage), CR 122.1 (+1/+1 counters), CR 701.25 (surveil),
 //! CR 702.2 (deathtouch), CR 702.10 (haste), CR 702.17 (reach), CR 702.19 (trample), and CR 702.110
 //! (menace). Rulings confirm the enter-time power snapshot and the per-permanent trigger count.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -53,8 +54,9 @@ fn kill_with_murder(e: &mut GameEngine, source: u32) {
     inject_card_into_hand(e, 0, "murder");
     let slot = hand_index_for_card(e, 0, "murder");
     semantic::accepted(e, 0, &cast_spell(slot, target_object(source)));
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("murder resolves");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("murder resolves");
 }
 
 #[test]

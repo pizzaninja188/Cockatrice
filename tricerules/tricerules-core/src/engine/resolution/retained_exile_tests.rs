@@ -102,7 +102,7 @@ fn paid(engine: &mut GameEngine, card: &str) -> ObjectId {
     engine.state.players[0].mana_pool.colorless = 3;
     engine.state.players[0].mana_pool.red = 2;
     engine
-        .apply_command(
+        .apply_scenario_command(
             4,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
@@ -118,7 +118,7 @@ fn paid(engine: &mut GameEngine, card: &str) -> ObjectId {
         .unwrap();
     for _ in 0..3 {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 engine.state.priority_player_id(),
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(Default::default())),
@@ -131,7 +131,7 @@ fn paid(engine: &mut GameEngine, card: &str) -> ObjectId {
 
 fn concede(engine: &mut GameEngine, actor: PlayerId) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             actor,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::Concede(Default::default())),
@@ -167,7 +167,9 @@ fn decline_or_order(engine: &mut GameEngine) {
             ),
             _ => panic!("unexpected draft entry choice"),
         };
-        engine.apply_command(actor, &answer(ids, decision)).unwrap();
+        engine
+            .apply_scenario_command(actor, &answer(ids, decision))
+            .unwrap();
     }
     panic!("draft resolution did not complete");
 }
@@ -245,7 +247,7 @@ fn retained_cohort_real_entry_life_payment_is_not_an_intermediate_loss() {
     place(&mut engine, 1, "entry_reveal_probe", Zone::Graveyard);
     paid(&mut engine, "scrap_mastery");
     engine
-        .apply_command(
+        .apply_scenario_command(
             4,
             &answer(vec![], rv1::ResolutionChoiceDecision::SelectBranch),
         )
@@ -283,6 +285,11 @@ fn retained_cohort_concession_abandons_stale_current_entry_in_every_participatin
         let mut engine = fresh();
         place(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
         let entrant = place(&mut engine, 1, card, Zone::Graveyard);
+        if card == "entry_reveal_probe" {
+            // Keep qualifying cards in hand so the transient offer carries real private
+            // candidates when the stale entry offer is retired.
+            place(&mut engine, 1, "mountain", Zone::Hand);
+        }
         let spell = paid(&mut engine, "scrap_mastery");
         assert_eq!(
             engine
@@ -311,7 +318,7 @@ fn retained_cohort_concession_abandons_stale_current_entry_in_every_participatin
             },
         );
         let batch = engine
-            .apply_command(
+            .apply_scenario_command(
                 27,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::Concede(Default::default())),
@@ -327,6 +334,32 @@ fn retained_cohort_concession_abandons_stale_current_entry_in_every_participatin
         assert_eq!(engine.state.zone_change_generation[&entrant], generation);
         assert_eq!(engine.state.objects[&owed].zone, Zone::Battlefield);
         assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
+        let prompt_state = batch
+            .resolution_prompt_state
+            .as_ref()
+            .expect("accepted concession batch publishes prompt status");
+        assert!(!prompt_state.active, "the stale offer is retired");
+        assert_eq!(prompt_state.resolution_prompt_id, None);
+        let transient_choices = batch
+            .events
+            .iter()
+            .filter_map(|event| match event.ev.as_ref()? {
+                rv1::ruled_event::Ev::ResolutionChoiceRequired(choice) => Some(choice),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            !transient_choices.is_empty(),
+            "transient prompt effects remain in the event batch"
+        );
+        assert!(transient_choices
+            .iter()
+            .all(|choice| choice.resolution_prompt_id == 0));
+        if card == "entry_reveal_probe" {
+            assert!(transient_choices
+                .iter()
+                .any(|choice| !choice.candidate_object_ids.is_empty()));
+        }
         assert_eq!(
             batch
                 .events
@@ -397,11 +430,11 @@ fn retained_cohort_opponent_entry_departure_skips_entrant_or_preserves_branch_id
         )),
     };
     assert!(
-        engine.apply_command(9, &branch(1)).is_err(),
+        engine.apply_scenario_command(9, &branch(1)).is_err(),
         "the departed opponent's frozen branch remains invalid"
     );
     assert_eq!(format!("{:?}", engine.state), before);
-    engine.apply_command(9, &branch(0)).unwrap();
+    engine.apply_scenario_command(9, &branch(0)).unwrap();
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&entrant].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
@@ -494,7 +527,7 @@ fn retained_cohort_apnap_is_independent_of_the_caster_in_instant_shape_fixture()
         ));
         assert_eq!(pending.deciding_player, actor);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 actor,
                 &answer(
                     pending.presentation.candidates.clone(),

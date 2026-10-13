@@ -3,10 +3,11 @@
 //! The ability counts committed draws from earlier in the turn and reads its counter amount on
 //! resolution (CR 603.4, 603.3d). Vision Skeins is the target-deck interaction that adds draws
 //! while the targeted Proft trigger waits on the stack.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::{ChooseTriggerTarget, RuledCommand};
 
@@ -35,7 +36,7 @@ fn cast_proft(engine: &mut GameEngine) -> u32 {
     );
     let slot = hand_index_for_card(engine, 0, "profts_eidetic_memory");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Proft's Eidetic Memory");
     resolve_entire_stack_two_player(engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
@@ -44,7 +45,7 @@ fn cast_proft(engine: &mut GameEngine) -> u32 {
 
 fn choose_proft_target(engine: &mut GameEngine, target: u32) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -85,7 +86,7 @@ fn proft_counts_pre_entry_draws_and_reads_x_when_the_trigger_resolves() {
 
     let first_skeins = hand_index_for_card(&engine, 0, "vision_skeins");
     engine
-        .apply_command(0, &cast_spell(first_skeins, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(first_skeins, Vec::new()))
         .expect("cast Vision Skeins before Proft enters");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.turn_history.current.player(0).cards_drawn, 3);
@@ -96,7 +97,7 @@ fn proft_counts_pre_entry_draws_and_reads_x_when_the_trigger_resolves() {
     assert_eq!(engine.state.turn_history.current.player(1).cards_drawn, 2);
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("enter the beginning of combat step");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     assert_eq!(engine.state.pending_triggers[0].controller, 0);
@@ -109,7 +110,7 @@ fn proft_counts_pre_entry_draws_and_reads_x_when_the_trigger_resolves() {
     );
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes priority");
     assert_eq!(engine.state.priority_player_id(), 1);
     let response = hand_index_for_card(&engine, 1, "vision_skeins");
@@ -123,7 +124,7 @@ fn proft_counts_pre_entry_draws_and_reads_x_when_the_trigger_resolves() {
         },
     );
     engine
-        .apply_command(1, &cast_spell(response, Vec::new()))
+        .apply_scenario_command(1, &cast_spell(response, Vec::new()))
         .expect("opponent responds with Vision Skeins");
     pass_both_players(&mut engine);
 
@@ -163,7 +164,7 @@ fn proft_does_not_trigger_after_only_one_draw_this_turn() {
     assert_eq!(engine.state.turn_history.current.player(0).cards_drawn, 1);
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("enter beginning of combat");
     assert!(engine.state.pending_triggers.is_empty());
     assert!(engine.state.stack.is_empty());

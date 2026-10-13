@@ -3,6 +3,7 @@
 //! Oracle/rulings verified 2026-08-14 for Heart-Piercer Bow, Unholy Indenture,
 //! Curse of Opulence, and Curse of Disturbance. Governing rules: CR 113.7a,
 //! 113.8, 400.7, 508.1m, 508.3, 603.3, 603.6, 603.10, 608.2b, and 704.5.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::CounterKind;
@@ -46,18 +47,18 @@ fn issue_63_heart_piercer_bow_targets_only_the_defending_players_creature() {
         Some(AttachmentRecipient::Object(attacker));
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare equipped attacker");
     assert_eq!(engine.state.pending_triggers.len(), 1);
 
     let error = engine
-        .apply_command(0, &choose_trigger_target(attacker))
+        .apply_scenario_command(0, &choose_trigger_target(attacker))
         .expect_err("the attacking player's creature is not controlled by the defender");
     assert!(error.to_string().contains("target"), "unexpected: {error}");
     assert_eq!(engine.state.pending_triggers.len(), 1);
 
     engine
-        .apply_command(0, &choose_trigger_target(defending_creature))
+        .apply_scenario_command(0, &choose_trigger_target(defending_creature))
         .expect("choose defending player's creature");
     engine.state.objects.get_mut(&bow).expect("bow").attached_to = None;
     resolve_entire_stack_two_player(&mut engine);
@@ -95,7 +96,7 @@ fn issue_63_bow_requires_the_event_attachment_and_revalidates_defender_control()
         .expect("attacker");
     relocate_to_battlefield(&mut unattached_engine, 0, "heart-piercer_bow", false);
     unattached_engine
-        .apply_command(0, &declare_attackers(vec![unattached_attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![unattached_attacker]))
         .expect("declare attacker without the Bow");
     assert!(
         unattached_engine.state.pending_triggers.is_empty(),
@@ -127,10 +128,10 @@ fn issue_63_bow_requires_the_event_attachment_and_revalidates_defender_control()
         .unwrap()
         .attached_to = Some(AttachmentRecipient::Object(attacker));
     stale_engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare equipped attacker");
     stale_engine
-        .apply_command(0, &choose_trigger_target(target))
+        .apply_scenario_command(0, &choose_trigger_target(target))
         .expect("target defender's creature");
 
     stale_engine.state.players[1]
@@ -182,7 +183,7 @@ fn issue_63_unholy_indenture_returns_the_exact_card_with_an_entry_counter() {
 
     let priority = engine.state.priority_player_id();
     engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("priority pass applies lethal-damage SBAs");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -241,7 +242,7 @@ fn issue_63_multiple_attachment_triggers_keep_apnap_and_attachment_identity() {
             Some(AttachmentRecipient::Object(attacker));
     }
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker carrying two Bows");
     assert_eq!(
         engine
@@ -286,7 +287,7 @@ fn issue_63_multiple_attachment_triggers_keep_apnap_and_attachment_identity() {
         .damage = 2;
     let priority = death_engine.state.priority_player_id();
     death_engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("apply death SBAs");
     assert_eq!(death_engine.state.stack.len(), 2);
 
@@ -334,7 +335,7 @@ fn issue_63_unholy_indenture_rejects_tokens_and_stale_graveyard_generations() {
     token_engine.state.objects.get_mut(&token).unwrap().damage = 2;
     let priority = token_engine.state.priority_player_id();
     token_engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("token dies");
     resolve_entire_stack_two_player(&mut token_engine);
     assert!(
@@ -360,7 +361,7 @@ fn issue_63_unholy_indenture_rejects_tokens_and_stale_graveyard_generations() {
         .damage = 2;
     let priority = stale_engine.state.priority_player_id();
     stale_engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("creature dies");
 
     stale_engine.state.players[1]

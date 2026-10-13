@@ -1,7 +1,8 @@
 //! Issue #67: intervening-if trigger conditions derived from live battlefield state.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 
 fn remove_from_battlefield(e: &mut GameEngine, player: usize, oid: u32) {
     e.state.players[player]
@@ -15,7 +16,8 @@ fn resolve_stack(e: &mut GameEngine) {
     while !e.state.stack.is_empty() {
         answer_trigger_order_in_engine_order(e);
         let player = e.state.priority_player_id();
-        e.apply_command(player, &pass()).expect("priority pass");
+        e.apply_scenario_command(player, &pass())
+            .expect("priority pass");
     }
 }
 
@@ -39,7 +41,7 @@ fn issue_67_scholar_does_not_draw_when_the_last_artifact_leaves_before_resolutio
     ensure_in_hand(&mut e, 0, "scholar_of_stars");
     grant_pool(&mut e, 0);
     let scholar_index = hand_index_for_card(&e, 0, "scholar_of_stars");
-    e.apply_command(0, &cast_spell(scholar_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(scholar_index, vec![]))
         .expect("cast Scholar of Stars");
     pass_both_players(&mut e);
 
@@ -78,7 +80,7 @@ fn issue_67_scholar_never_triggers_without_an_artifact() {
     ensure_in_hand(&mut e, 0, "scholar_of_stars");
     grant_pool(&mut e, 0);
     let scholar_index = hand_index_for_card(&e, 0, "scholar_of_stars");
-    e.apply_command(0, &cast_spell(scholar_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(scholar_index, vec![]))
         .expect("cast Scholar of Stars");
     pass_both_players(&mut e);
 
@@ -111,7 +113,7 @@ fn issue_67_scholar_may_use_a_different_artifact_at_resolution() {
     ensure_in_hand(&mut e, 0, "scholar_of_stars");
     grant_pool(&mut e, 0);
     let scholar_index = hand_index_for_card(&e, 0, "scholar_of_stars");
-    e.apply_command(0, &cast_spell(scholar_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(scholar_index, vec![]))
         .expect("cast Scholar of Stars");
     pass_both_players(&mut e);
 
@@ -145,11 +147,11 @@ fn issue_67_ornery_dilophosaur_rechecks_derived_power_on_resolution() {
     advance_to_main1_from_game_start(&mut e);
     let dinosaur = relocate_to_battlefield(&mut e, 0, "ornery_dilophosaur", false);
     e.state.objects.get_mut(&dinosaur).expect("dinosaur").power = Some(4);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("move to beginning of combat");
     pass_both_players(&mut e);
     assert_eq!(e.state.turn_step, TurnStep::DeclareAttackers);
-    e.apply_command(0, &declare_attackers(vec![dinosaur]))
+    e.apply_scenario_command(0, &declare_attackers(vec![dinosaur]))
         .expect("declare Ornery Dilophosaur");
 
     assert_eq!(
@@ -181,10 +183,10 @@ fn issue_67_ornery_dilophosaur_locks_its_bonus_after_resolution() {
     advance_to_main1_from_game_start(&mut e);
     let dinosaur = relocate_to_battlefield(&mut e, 0, "ornery_dilophosaur", false);
     let qualifier = relocate_to_battlefield(&mut e, 0, "rumbling_baloth", false);
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("move to beginning of combat");
     pass_both_players(&mut e);
-    e.apply_command(0, &declare_attackers(vec![dinosaur]))
+    e.apply_scenario_command(0, &declare_attackers(vec![dinosaur]))
         .expect("declare Ornery Dilophosaur");
     pass_both_players(&mut e);
     assert_eq!(e.effective_power(dinosaur), Some(4));
@@ -219,7 +221,7 @@ fn issue_67_faerie_miscreant_requires_another_named_creature_at_resolution() {
     ensure_in_hand(&mut e, 0, "faerie_miscreant");
     grant_pool(&mut e, 0);
     let second_index = hand_index_for_card(&e, 0, "faerie_miscreant");
-    e.apply_command(0, &cast_spell(second_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(second_index, vec![]))
         .expect("cast the second Faerie Miscreant");
     pass_both_players(&mut e);
 
@@ -250,10 +252,10 @@ fn issue_67_faerie_miscreant_counts_a_permanent_with_copied_name() {
     ensure_in_hand(&mut e, 0, "clone");
     grant_pool(&mut e, 0);
     let clone_index = hand_index_for_card(&e, 0, "clone");
-    e.apply_command(0, &cast_spell(clone_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(clone_index, vec![]))
         .expect("cast Clone");
     pass_both_players(&mut e);
-    e.apply_command(0, &submit_resolution_choice(vec![faerie]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![faerie]))
         .expect("copy Faerie Miscreant");
 
     assert_eq!(
@@ -286,7 +288,7 @@ fn issue_67_turret_ogre_damages_the_opponent_once() {
     ensure_in_hand(&mut e, 0, "turret_ogre");
     grant_pool(&mut e, 0);
     let ogre_index = hand_index_for_card(&e, 0, "turret_ogre");
-    e.apply_command(0, &cast_spell(ogre_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(ogre_index, vec![]))
         .expect("cast Turret Ogre");
     resolve_stack(&mut e);
 
@@ -314,7 +316,7 @@ fn issue_67_turret_ogre_does_not_count_itself() {
     ensure_in_hand(&mut e, 0, "turret_ogre");
     grant_pool(&mut e, 0);
     let ogre_index = hand_index_for_card(&e, 0, "turret_ogre");
-    e.apply_command(0, &cast_spell(ogre_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(ogre_index, vec![]))
         .expect("cast Turret Ogre");
     pass_both_players(&mut e);
 

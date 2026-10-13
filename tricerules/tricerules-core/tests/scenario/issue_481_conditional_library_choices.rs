@@ -1,5 +1,6 @@
 //! Issue #481 — CR 608.2b/c target revalidation and instruction order, CR 701.22 Scry, and
 //! CR 701.25 Surveil through an existing conditional effect's library-choice continuation.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_core::Zone;
@@ -53,7 +54,7 @@ fn cast_targeted_instant(engine: &mut GameEngine, card_id: &str, target_id: u32)
     };
     give_mana(engine, 0, mana);
     engine
-        .apply_command(0, &cast_spell(hand_index, target_object(target_id)))
+        .apply_scenario_command(0, &cast_spell(hand_index, target_object(target_id)))
         .expect("cast with the chosen target");
     spell_id
 }
@@ -61,9 +62,11 @@ fn cast_targeted_instant(engine: &mut GameEngine, card_id: &str, target_id: u32)
 fn resolve_with_both_passes(
     engine: &mut GameEngine,
 ) -> tricerules_proto::ruled::v1::RuledEventBatch {
-    engine.apply_command(0, &pass()).expect("caster passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and spell resolves")
 }
 
@@ -115,13 +118,13 @@ fn taken_by_nightmares_checks_enchantment_at_resolution_and_resumes_after_scry()
     // battlefield while Scry is parked; answering the existing choice still completes resolution.
     move_battlefield_card_to_graveyard(&mut engine, 0, enchantment);
     let order = engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("keep both cards on top");
     let order_choice = find_resolution_choice(&order).expect("order both cards kept on top");
     assert_eq!(order_choice.choice_kind(), ChoiceKind::LibraryTop);
     assert_eq!((order_choice.min, order_choice.max), (2, 2));
     let completed = engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
         .expect("finish Scry ordering and resume the spell");
     assert!(find_resolution_choice(&completed).is_none());
     assert!(engine.state.pending_resolution.is_none());
@@ -189,7 +192,7 @@ fn failed_fording_checks_desert_at_resolution_then_surveils() {
     ));
 
     let completed = engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .expect("put the surveilled card into the graveyard");
     assert!(find_resolution_choice(&completed).is_none());
     assert!(engine.state.pending_resolution.is_none());

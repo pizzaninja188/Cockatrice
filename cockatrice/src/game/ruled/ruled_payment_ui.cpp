@@ -26,8 +26,12 @@
 RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
 {
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
-    QObject::connect(state, &RuledClientState::specialCastRequested, actions, [this, state](quint32 oid) {
+    QObject::connect(state, &RuledClientState::specialCastRequested, actions,
+                     [this, state](quint32 oid, quint64 promptId) {
         if (!actions->player->getPlayerInfo()->getLocal())
+            return;
+        if (!state->isCurrentResolutionPrompt(promptId) || !state->pendingChoice.has_value() ||
+            state->pendingChoice->resolutionPromptId != promptId)
             return;
         if (!state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast) ||
             !state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast, oid))
@@ -72,16 +76,24 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
 
         if (!selected.has_value())
             return;
+        if (!state->isCurrentResolutionPrompt(promptId) || !state->pendingChoice.has_value() ||
+            state->pendingChoice->resolutionPromptId != promptId ||
+            !state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast, oid))
+            return;
         const auto &offer = selected->face;
         if (!selected->isLand) {
             beginRuledSpellCast(nullptr, static_cast<int>(oid), offer.faceIndex, offer.faceName, offer.manaCost,
                                 offer.genericCostReduction, RuledCastSource::Exile, offer.castMethod,
-                                offer.castingPermissionId, offer.prototyped);
+                                offer.castingPermissionId, offer.prototyped, promptId,
+                                offer.zoneChangeGeneration);
             return;
         }
 
-        if (!state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast) ||
-            !state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast, oid))
+        const auto currentLandOffers = state->zoneLandFaceOptions(oid, RuledCastSource::Exile);
+        if (std::none_of(currentLandOffers.cbegin(), currentLandOffers.cend(), [&offer](const auto &current) {
+                return current.faceIndex == offer.faceIndex &&
+                       current.zoneChangeGeneration == offer.zoneChangeGeneration;
+            }))
             return;
         const RuledClientState::RuledPendingChoice restore = *state->pendingChoice;
         state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast);
@@ -91,6 +103,7 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
         play->mutable_source()->set_exile_object_id(oid);
         play->mutable_source()->set_expected_zone_change_generation(offer.zoneChangeGeneration);
         play->set_face_index(static_cast<quint32>(offer.faceIndex));
+        play->set_resolution_prompt_id(promptId);
         RuledActions::sendRuledCommandExpectingAck(
             actions->player->getGame(), command,
             [clientState = QPointer<RuledClientState>(state), restore, submittedRevision](bool accepted) {
@@ -390,8 +403,14 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildPaymentCommand() con
         case Context::Ability:
             return buildActivationCommand(actions);
         case Context::Resolution: {
+            const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+            if (!state || !state->pendingChoice.has_value() ||
+                !state->isCurrentResolutionPrompt(state->pendingChoice->resolutionPromptId))
+                return std::nullopt;
             ruled::v1::RuledCommand command;
-            command.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+            auto *submission = command.mutable_submit_resolution_choice();
+            submission->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+            submission->set_resolution_prompt_id(state->pendingChoice->resolutionPromptId);
             return command;
         }
         case Context::Attack: {

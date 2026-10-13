@@ -7,6 +7,7 @@
 //! CR 701.8 (discard), CR 502.3 (untap step), CR 603.6a (entry trigger), CR 610.3/608.2b (exile
 //! until source leaves), CR 301.5/702.6 (Equipment and equip), CR 701.22 (scry), CR 702.122
 //! (crew), CR 614.1c/d (enters tapped), CR 702.12b (indestructible), and CR 700.4 ("dies").
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::{TurnStep, Zone};
@@ -143,7 +144,7 @@ fn issue_misc11_thirst_for_identity_draws_three_then_discards_a_creature() {
 
     // An empty selection cannot satisfy the mandatory two-card alternative.
     assert!(e
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .is_err());
 
     // Discarding the single creature satisfies "unless you discard a creature card".
@@ -195,7 +196,7 @@ fn issue_misc11_henchbots_exiles_a_tapped_creature_until_it_leaves() {
     cast(&mut e, 0, "henchbots", vec![]);
     assert_eq!(e.state.pending_triggers.len(), 1, "the entry trigger waits");
     assert!(
-        e.apply_command(0, &choose_trigger_target(untapped))
+        e.apply_scenario_command(0, &choose_trigger_target(untapped))
             .is_err(),
         "an untapped creature is not a legal target"
     );
@@ -232,7 +233,7 @@ fn issue_misc11_well_worn_spatula_gains_life_and_equips() {
     let their_bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let illegal_equip = activate_on(&e, spatula, 0, target_object(their_bear), vec![]);
     assert!(
-        e.apply_command(0, &illegal_equip).is_err(),
+        e.apply_scenario_command(0, &illegal_equip).is_err(),
         "an opponent's creature is not a legal equip target"
     );
 }

@@ -4,6 +4,7 @@
 //! CR 305.6/305.8 govern the Mountain subtype; CR 614.1c the tapped entry; CR 115.1d, 603.3d,
 //! 603.4, 603.5 and 608.2b govern event identity, target timing, intervening-if checks, the
 //! resolution-time may choice, and target legality.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Layout;
@@ -42,7 +43,7 @@ fn move_owned_card(engine: &mut GameEngine, player: usize, card_id: &str, zone: 
     let player_id = engine.state.players[player].id;
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             player_id,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -101,6 +102,7 @@ fn choose_permanent_target(object_id: u32) -> RuledCommand {
 fn resolution_decision(decision: ResolutionChoiceDecision) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: decision as i32,
             selected_branch_index: 0,
             ..Default::default()
@@ -154,7 +156,7 @@ fn valakut_enters_tapped_and_can_tap_for_red() {
     inject_card_into_hand(&mut enters_tapped, 0, VALAKUT);
     let slot = hand_index_for_card(&enters_tapped, 0, VALAKUT);
     enters_tapped
-        .apply_command(0, &play_land(slot))
+        .apply_scenario_command(0, &play_land(slot))
         .expect("play Valakut as a land");
     let valakut = battlefield_object(&enters_tapped, 0, VALAKUT);
     assert!(enters_tapped.state.objects[&valakut].tapped);
@@ -191,7 +193,7 @@ fn valakut_requires_five_other_mountains_and_makes_its_may_choice_on_resolution(
 
     let (mut declined, _) = make_one_valakut_trigger(20_261_014);
     declined
-        .apply_command(0, &choose_player_target(1))
+        .apply_scenario_command(0, &choose_player_target(1))
         .expect("choose target when the trigger is put on the stack");
     assert!(declined.state.pending_resolution.is_none());
     require_resolution_choice(&mut declined);
@@ -206,7 +208,7 @@ fn valakut_requires_five_other_mountains_and_makes_its_may_choice_on_resolution(
 
     let (mut accepted, _) = make_one_valakut_trigger(20_261_015);
     accepted
-        .apply_command(0, &choose_player_target(1))
+        .apply_scenario_command(0, &choose_player_target(1))
         .expect("choose target before the optional resolution choice");
     require_resolution_choice(&mut accepted);
     semantic::accepted(
@@ -242,7 +244,7 @@ fn valakut_counts_two_simultaneous_mountains_as_each_others_fifth_other() {
         tricerules_proto::ruled::v1::ChoiceKind::LibrarySearch
     );
     let mut completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![mountain_a, mountain_b]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![mountain_a, mountain_b]))
         .expect("search for two basic Mountains");
     for (_, _, ordered) in answer_simultaneous_entry_order_in_engine_order(&mut engine) {
         completion.events.extend(ordered.events);
@@ -257,10 +259,10 @@ fn valakut_counts_two_simultaneous_mountains_as_each_others_fifth_other() {
         "the first target choice serializes placement of the second same-controller trigger"
     );
     engine
-        .apply_command(0, &choose_player_target(1))
+        .apply_scenario_command(0, &choose_player_target(1))
         .expect("choose first simultaneous-entry trigger target");
     engine
-        .apply_command(0, &choose_player_target(1))
+        .apply_scenario_command(0, &choose_player_target(1))
         .expect("choose second simultaneous-entry trigger target");
     for _ in 0..2 {
         require_resolution_choice(&mut engine);
@@ -283,7 +285,7 @@ fn valakut_rechecks_other_mountains_when_the_trigger_resolves() {
     }
     let cinder_glade = enter_owned_card(&mut event_leaves, 0, "cinder_glade");
     event_leaves
-        .apply_command(0, &choose_player_target(1))
+        .apply_scenario_command(0, &choose_player_target(1))
         .expect("choose an Any target");
     // The triggering object itself is gone, but the five other Mountains still count.
     move_owned_card(&mut event_leaves, 0, "cinder_glade", DevZone::Graveyard);
@@ -307,7 +309,7 @@ fn valakut_rechecks_other_mountains_when_the_trigger_resolves() {
     enter_owned_card(&mut failed, 0, "cinder_glade");
     enter_owned_card(&mut failed, 0, "cinder_glade");
     failed
-        .apply_command(0, &choose_player_target(1))
+        .apply_scenario_command(0, &choose_player_target(1))
         .expect("choose an Any target");
     move_owned_card(&mut failed, 0, "cinder_glade", DevZone::Graveyard);
     pass_priority_round(&mut failed);
@@ -326,7 +328,7 @@ fn valakut_reentered_mountain_is_a_new_generation_for_the_other_count() {
     let observed = enter_owned_card(&mut engine, 0, "cinder_glade");
     let trigger_generation = engine.state.zone_change_generation[&observed];
     engine
-        .apply_command(0, &choose_player_target(1))
+        .apply_scenario_command(0, &choose_player_target(1))
         .expect("choose target for the original Cinder Glade entry");
     move_owned_card(&mut engine, 0, "mountain", DevZone::Graveyard);
     move_owned_card(&mut engine, 0, "cinder_glade", DevZone::Graveyard);
@@ -354,7 +356,7 @@ fn valakut_source_leaves_but_its_targeted_trigger_still_resolves() {
     }
     enter_mountain(&mut engine);
     engine
-        .apply_command(0, &choose_player_target(1))
+        .apply_scenario_command(0, &choose_player_target(1))
         .expect("choose the target before the source leaves");
 
     move_owned_card(&mut engine, 0, VALAKUT, DevZone::Graveyard);
@@ -381,7 +383,7 @@ fn valakut_fizzles_if_its_only_chosen_permanent_target_leaves() {
     let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     enter_mountain(&mut engine);
     engine
-        .apply_command(0, &choose_permanent_target(target))
+        .apply_scenario_command(0, &choose_permanent_target(target))
         .expect("choose a legal permanent target at stack placement");
     inject_card_into_hand(&mut engine, 0, "unsummon");
     grant_pool(&mut engine, 0);

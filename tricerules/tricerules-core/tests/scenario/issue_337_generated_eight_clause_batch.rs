@@ -7,6 +7,7 @@
 //! grant and its expiry; CR 603.2/701.22a the private scry on becoming tapped; CR 111.10a the
 //! two-Treasure ETB; CR 301.5/701.3 the Equipment entry attach plus untap; and CR 610.3 the
 //! linked exile until the source leaves.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -40,13 +41,13 @@ fn pool_total(engine: &GameEngine, player: usize) -> u32 {
 
 fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes in beginning of combat");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes in beginning of combat");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 }
@@ -95,7 +96,7 @@ fn issue_337_acrobatic_leap_pumps_flying_untaps_and_expires() {
     );
     let slot = hand_index_for_card(&engine, 0, "acrobatic_leap");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
         .expect("cast Acrobatic Leap");
     assert_eq!(
         engine.effective_power(bear),
@@ -142,7 +143,7 @@ fn issue_337_depower_reduces_only_for_an_attacking_target() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("attack with the bearer");
 
     ensure_in_hand(&mut engine, 0, "depower");
@@ -170,7 +171,7 @@ fn issue_337_depower_reduces_only_for_an_attacking_target() {
     let command = cast_spell(slot, target_object(attacker));
     engine.state.players[0].mana_pool.blue = 1;
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("the attacking target reduces the cost to {U}");
     assert_eq!(pool_total(&engine, 0), 0);
     resolve_entire_stack_two_player(&mut engine);
@@ -187,14 +188,14 @@ fn issue_337_depower_reduces_only_for_an_attacking_target() {
     let command = cast_spell(slot, target_object(idle));
     let index = engine.state.command_index;
     assert!(
-        engine.apply_command(0, &command).is_err(),
+        engine.apply_scenario_command(0, &command).is_err(),
         "an unreduced Depower cannot be cast for {{U}}"
     );
     assert_eq!(engine.state.command_index, index);
     engine.state.players[0].mana_pool.blue = 1;
     engine.state.players[0].mana_pool.colorless = 2;
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("the full {2}{U} pays for a nonattacking target");
     assert_eq!(pool_total(&engine, 0), 0);
 }
@@ -220,12 +221,12 @@ fn issue_337_blooming_stinger_grants_deathtouch_to_another_creature_and_expires(
     assert_eq!(engine.state.pending_triggers.len(), 1);
     assert!(
         engine
-            .apply_command(0, &choose_trigger_targets(&[stinger], false))
+            .apply_scenario_command(0, &choose_trigger_targets(&[stinger], false))
             .is_err(),
         "the source is not a legal \"another\" target"
     );
     engine
-        .apply_command(0, &choose_trigger_targets(&[other], false))
+        .apply_scenario_command(0, &choose_trigger_targets(&[other], false))
         .expect("grant deathtouch to another creature");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.effective_has_keyword(other, Keyword::Deathtouch));
@@ -245,7 +246,7 @@ fn issue_337_attentive_sunscribe_scries_when_it_becomes_tapped() {
     let sunscribe = inject_creature_on_battlefield(&mut engine, 0, "attentive_sunscribe");
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![sunscribe]))
+        .apply_scenario_command(0, &declare_attackers(vec![sunscribe]))
         .expect("attack with Attentive Sunscribe");
     assert!(engine.state.objects[&sunscribe].tapped);
     assert_eq!(engine.state.stack.len(), 1, "the becomes-tapped trigger");
@@ -254,7 +255,7 @@ fn issue_337_attentive_sunscribe_scries_when_it_becomes_tapped() {
         .find_map(|_| {
             let player = engine.state.priority_player_id();
             let batch = engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("pass toward the scry resolution");
             find_resolution_choice(&batch)
         })
@@ -267,7 +268,7 @@ fn issue_337_attentive_sunscribe_scries_when_it_becomes_tapped() {
     assert_eq!((choice.min, choice.max), (0, 1));
     assert_eq!(choice.candidate_object_ids.len(), 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(choice.candidate_object_ids.clone()),
         )
@@ -296,7 +297,7 @@ fn issue_337_super_suit_attaches_and_untaps_on_entry() {
     let suit = move_ready_to_battlefield(&mut engine, 0, "super_suit");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(0, &choose_trigger_targets(&[tapped], false))
+        .apply_scenario_command(0, &choose_trigger_targets(&[tapped], false))
         .expect("attach Super Suit to the chosen creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -338,18 +339,18 @@ fn issue_337_super_villain_lockup_linked_exiles_until_it_leaves() {
     );
     let slot = hand_index_for_card(&engine, 0, "super_villain_lockup");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Super Villain Lockup");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     assert!(
         engine
-            .apply_command(0, &choose_trigger_targets(&[untapped], false))
+            .apply_scenario_command(0, &choose_trigger_targets(&[untapped], false))
             .is_err(),
         "an untapped creature is not a legal target"
     );
     engine
-        .apply_command(0, &choose_trigger_targets(&[tapped], false))
+        .apply_scenario_command(0, &choose_trigger_targets(&[tapped], false))
         .expect("target the tapped creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&tapped].zone, Zone::Exile);
@@ -367,11 +368,11 @@ fn issue_337_super_villain_lockup_linked_exiles_until_it_leaves() {
         },
     );
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("P0 passes priority");
     let slot = hand_index_for_card(&engine, 1, "broken_wings");
     engine
-        .apply_command(1, &cast_spell(slot, target_object(lockup)))
+        .apply_scenario_command(1, &cast_spell(slot, target_object(lockup)))
         .expect("destroy the Lockup");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&lockup].zone, Zone::Graveyard);

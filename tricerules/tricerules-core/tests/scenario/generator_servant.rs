@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::Keyword;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{BeginSpellCast, SpellCastAnnouncement};
@@ -66,7 +67,7 @@ fn setup(seed: u64) -> GameEngine {
 fn activate_generator_servant(engine: &mut GameEngine) -> u32 {
     let servant = inject_permanent_on_battlefield(engine, 0, "generator_servant");
     engine
-        .apply_command(0, &activate_ability_for(engine, servant, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(engine, servant, 0, vec![]))
         .expect("activate Generator Servant");
     assert_eq!(engine.state.objects[&servant].zone, Zone::Graveyard);
     let contribution = engine.state.players[0]
@@ -91,7 +92,7 @@ fn cast_with_generator_mana(engine: &mut GameEngine, card_id: &str, group: u32) 
         ..Default::default()
     });
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .unwrap_or_else(|error| panic!("cast {card_id} with Generator Servant mana: {error}"));
     object_id
 }
@@ -120,7 +121,7 @@ fn generator_servant_mana_is_unrestricted_but_only_paid_creature_spells_gain_has
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&mana_creature].zone, Zone::Battlefield);
     engine
-        .apply_command(0, &activate_ability_for(&engine, mana_creature, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, mana_creature, 0, vec![]))
         .expect("creature spell paid with Generator Servant mana has haste");
     assert_eq!(engine.state.players[0].mana_pool.red, 1);
     assert!(engine.state.players[0].restricted_mana.is_empty());
@@ -137,11 +138,11 @@ fn generator_servant_mana_is_unrestricted_but_only_paid_creature_spells_gain_has
     let slot = hand_index_for_card(&engine, 0, "iron_myr");
     let ordinary_myr = engine.state.players[0].hand[slot];
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast creature without Generator Servant mana");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &activate_ability_for(&engine, ordinary_myr, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, ordinary_myr, 0, vec![]))
         .expect_err("a creature not paid with Generator Servant mana remains summoning sick");
 }
 
@@ -162,7 +163,7 @@ fn generator_servant_can_grant_haste_to_two_different_creature_spells() {
         let mana_creature = cast_with_generator_mana(&mut engine, "iron_myr", group);
         pass_both_players(&mut engine);
         engine
-            .apply_command(0, &activate_ability_for(&engine, mana_creature, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability_for(&engine, mana_creature, 0, vec![]))
             .expect("each creature paid with one of the two mana has haste");
     }
 
@@ -178,7 +179,7 @@ fn generator_servant_publishes_menu_and_pending_payment_metadata() {
     assert_eq!(only_tap_cost_flags(&mut engine, forest), [true]);
 
     engine
-        .apply_command(0, &activate_ability_for(&engine, servant, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, servant, 0, vec![]))
         .expect("activate Generator Servant");
     let group = engine.state.players[0]
         .restricted_mana
@@ -188,7 +189,7 @@ fn generator_servant_publishes_menu_and_pending_payment_metadata() {
     inject_card_into_hand(&mut engine, 0, "iron_myr");
     let slot = hand_index_for_card(&engine, 0, "iron_myr");
     let batch = engine
-        .apply_command(0, &begin_cast(cast_spell(slot, vec![])))
+        .apply_scenario_command(0, &begin_cast(cast_spell(slot, vec![])))
         .expect("begin creature cast");
     let pending = batch.legal_by_player[&0]
         .pending_spell_cast

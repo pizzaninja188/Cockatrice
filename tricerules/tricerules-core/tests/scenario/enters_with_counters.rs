@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::CounterKind;
 use tricerules_core::Zone;
@@ -43,7 +44,7 @@ fn endless_one_uses_the_resolving_spells_chosen_x_for_entry_counters() {
 
     let endless_one = hand_index_for_card(&engine, 0, "endless_one");
     engine
-        .apply_command(0, &cast_spell_x(endless_one, vec![], 3))
+        .apply_scenario_command(0, &cast_spell_x(endless_one, vec![], 3))
         .expect("cast Endless One with X=3");
     pass_both_players(&mut engine);
 
@@ -60,7 +61,7 @@ fn zero_count_is_applied_once_before_endless_one_dies_to_state_based_actions() {
     let endless_one = hand_index_for_card(&engine, 0, "endless_one");
     let object_id = engine.state.players[0].hand[endless_one];
     engine
-        .apply_command(0, &cast_spell_x(endless_one, vec![], 0))
+        .apply_scenario_command(0, &cast_spell_x(endless_one, vec![], 0))
         .expect("cast Endless One with X=0");
     pass_both_players(&mut engine);
 
@@ -87,7 +88,7 @@ fn squad_captain_counts_only_other_creatures_its_controller_controls() {
 
     let captain = hand_index_for_card(&engine, 0, "squad_captain");
     engine
-        .apply_command(0, &cast_spell(captain, vec![]))
+        .apply_scenario_command(0, &cast_spell(captain, vec![]))
         .expect("cast Squad Captain");
     pass_both_players(&mut engine);
 
@@ -121,12 +122,12 @@ fn squad_captain_count_is_generic_over_every_seat_in_game_state() {
 
     let captain = hand_index_for_card(&engine, 0, "squad_captain");
     engine
-        .apply_command(0, &cast_spell(captain, vec![]))
+        .apply_scenario_command(0, &cast_spell(captain, vec![]))
         .expect("cast Squad Captain");
     for _ in 0..engine.state.players.len() {
         let priority = engine.state.priority_player_id();
         engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("each seat passes priority");
     }
 
@@ -149,7 +150,7 @@ fn squad_captain_records_a_zero_count_without_reapplying_the_effect() {
 
     let captain = hand_index_for_card(&engine, 0, "squad_captain");
     engine
-        .apply_command(0, &cast_spell(captain, vec![]))
+        .apply_scenario_command(0, &cast_spell(captain, vec![]))
         .expect("cast Squad Captain");
     pass_both_players(&mut engine);
 
@@ -175,7 +176,7 @@ fn bloodcrazed_paladin_uses_the_shared_current_turn_death_count() {
 
     let paladin = hand_index_for_card(&engine, 0, "bloodcrazed_paladin");
     engine
-        .apply_command(0, &cast_spell(paladin, vec![]))
+        .apply_scenario_command(0, &cast_spell(paladin, vec![]))
         .expect("cast Bloodcrazed Paladin");
     pass_both_players(&mut engine);
 
@@ -199,13 +200,13 @@ fn counter_and_tapped_entry_replacements_are_order_independent() {
 
         let orb = hand_index_for_card(&engine, 0, "orb_of_dreams");
         engine
-            .apply_command(0, &cast_spell(orb, vec![]))
+            .apply_scenario_command(0, &cast_spell(orb, vec![]))
             .expect("cast Orb of Dreams");
         pass_both_players(&mut engine);
 
         let endless_one = hand_index_for_card(&engine, 0, "endless_one");
         engine
-            .apply_command(0, &cast_spell_x(endless_one, vec![], 3))
+            .apply_scenario_command(0, &cast_spell_x(endless_one, vec![], 3))
             .expect("cast Endless One");
         pass_both_players(&mut engine);
 
@@ -221,7 +222,7 @@ fn counter_and_tapped_entry_replacements_are_order_independent() {
         assert_eq!(pending.presentation.candidates.len(), 2);
         let application = pending.presentation.candidates[chosen_candidate];
         engine
-            .apply_command(0, &submit_resolution_choice(vec![application]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![application]))
             .expect("choose first entry replacement");
 
         let object_id = battlefield_object_for_card(&engine, 0, "endless_one");

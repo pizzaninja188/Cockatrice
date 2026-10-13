@@ -283,6 +283,7 @@ impl GameEngine {
         let event = rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     variable_mana_contribution: false,
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: player,
@@ -301,6 +302,9 @@ impl GameEngine {
         self.state.pending_replacement_event =
             Some(PendingReplacementEvent::Discard(Box::new(batch)));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+
             deciding_player: player,
             presentation: PendingResolutionPresentation {
                 source_object_id: stack.item.id,
@@ -745,8 +749,8 @@ mod tests {
         let pass = rv1::RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
         };
-        e.apply_command(0, &pass).unwrap();
-        e.apply_command(1, &pass).unwrap();
+        e.apply_scenario_command(0, &pass).unwrap();
+        e.apply_scenario_command(1, &pass).unwrap();
         e.submit_resolution_choice(
             0,
             &rv1::SubmitResolutionChoice {
@@ -819,8 +823,8 @@ mod tests {
                 let pass = rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
                 };
-                e.apply_command(0, &pass).unwrap();
-                e.apply_command(1, &pass).unwrap();
+                e.apply_scenario_command(0, &pass).unwrap();
+                e.apply_scenario_command(1, &pass).unwrap();
             }
             assert!(e.state.pending_resolution.is_none());
             assert!(e.state.stack.is_empty());

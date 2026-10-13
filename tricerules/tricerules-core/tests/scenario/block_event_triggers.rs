@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::BlockPair;
@@ -21,11 +22,11 @@ fn setup_block(attacker_card: &str, blocker_card: &str, seed: u64) -> (GameEngin
     let blocker = relocate_to_battlefield(&mut engine, 1, blocker_card, false);
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     pass_both_players(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -116,11 +117,11 @@ fn gloom_sower_triggers_once_for_each_blocking_creature() {
     let second_blocker = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     pass_both_players(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![
                 BlockPair {

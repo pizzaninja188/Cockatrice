@@ -9,6 +9,7 @@
 //! 702.21a-b (Ward, paid by the targeting spell's controller), 610.3 (linked exile), 508.1c/509.1b
 //! (combat restrictions), 603.6a/603.7 (entry and dies triggers), 106.1/605.1a (mana abilities)
 //! and 608.2c (printed instruction order).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -135,13 +136,15 @@ fn issue_338_fanatical_offering_sacrifices_and_makes_a_map() {
     );
     let slot = hand_index_for_card(&engine, 0, "fanatical_offering");
     assert!(
-        engine.apply_command(0, &cast_spell(slot, vec![])).is_err(),
+        engine
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .is_err(),
         "the sacrifice additional cost is mandatory"
     );
     let slot = hand_index_for_card(&engine, 0, "fanatical_offering");
     let hand_before = engine.state.players[0].hand.len();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -185,7 +188,7 @@ fn issue_338_fanatical_offering_sacrifices_and_makes_a_map() {
     );
     let slot = hand_index_for_card(&creature_engine, 0, "fanatical_offering");
     creature_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -231,13 +234,13 @@ fn issue_338_betrayers_bargain_pays_and_exiles_any_fatal_creature() {
     let slot = hand_index_for_card(&engine, 0, "betrayers_bargain");
     assert!(
         engine
-            .apply_command(0, &cast_spell(slot, target_object(target)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
             .is_err(),
         "one announced additional cost is mandatory"
     );
     let slot = hand_index_for_card(&engine, 0, "betrayers_bargain");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -278,7 +281,7 @@ fn issue_338_betrayers_bargain_pays_and_exiles_any_fatal_creature() {
     );
     let slot = hand_index_for_card(&mana_engine, 0, "betrayers_bargain");
     mana_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(slot, target_object(target), vec![option(1)]),
         )
@@ -321,7 +324,7 @@ fn issue_338_betrayers_bargain_pays_and_exiles_any_fatal_creature() {
     );
     let slot = hand_index_for_card(&later_engine, 0, "betrayers_bargain");
     later_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -335,7 +338,7 @@ fn issue_338_betrayers_bargain_pays_and_exiles_any_fatal_creature() {
     assert_eq!(later_engine.state.objects[&wurm].damage, 5);
     let bolt_slot = hand_index_for_card(&later_engine, 0, "lightning_bolt");
     later_engine
-        .apply_command(0, &cast_spell(bolt_slot, target_object(wurm)))
+        .apply_scenario_command(0, &cast_spell(bolt_slot, target_object(wurm)))
         .expect("Lightning Bolt finishes the Wurm");
     resolve_entire_stack_two_player(&mut later_engine);
     assert_eq!(
@@ -354,7 +357,7 @@ fn issue_338_betrayers_bargain_pays_and_exiles_any_fatal_creature() {
         .expect("bystander")
         .damage = 3;
     later_engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("state-based actions destroy the unrelated creature");
     assert_eq!(later_engine.state.objects[&bystander].zone, Zone::Graveyard);
 
@@ -387,7 +390,7 @@ fn issue_338_betrayers_bargain_pays_and_exiles_any_fatal_creature() {
     );
     let slot = hand_index_for_card(&enchant_engine, 0, "betrayers_bargain");
     enchant_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -433,7 +436,7 @@ fn issue_338_dusk_rose_reliquary_wards_and_exiles_until_it_leaves() {
     );
     let slot = hand_index_for_card(&engine, 0, "dusk_rose_reliquary");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -451,14 +454,14 @@ fn issue_338_dusk_rose_reliquary_wards_and_exiles_until_it_leaves() {
     );
     let reliquary = battlefield_object_for_card(&engine, 0, "dusk_rose_reliquary");
     engine
-        .apply_command(0, &choose_trigger_target(victim))
+        .apply_scenario_command(0, &choose_trigger_target(victim))
         .expect("the entry trigger exiles an opposing creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&victim].zone, Zone::Exile);
 
     // The opponent destroys the Reliquary with Abrade; Ward {2} makes them pay to keep it.
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes priority to the opponent");
     ensure_card_in_hand(&mut engine, 1, "abrade");
     give_mana(
@@ -472,7 +475,7 @@ fn issue_338_dusk_rose_reliquary_wards_and_exiles_until_it_leaves() {
     );
     let abrade_slot = hand_index_for_card(&engine, 1, "abrade");
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_modal_spell(abrade_slot, vec![(1, target_object(reliquary))]),
         )
@@ -524,7 +527,7 @@ fn issue_338_dusk_rose_reliquary_wards_and_exiles_until_it_leaves() {
     );
     let slot = hand_index_for_card(&decline, 0, "dusk_rose_reliquary");
     decline
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -536,11 +539,11 @@ fn issue_338_dusk_rose_reliquary_wards_and_exiles_until_it_leaves() {
     pass_both_players(&mut decline);
     let reliquary = battlefield_object_for_card(&decline, 0, "dusk_rose_reliquary");
     decline
-        .apply_command(0, &choose_trigger_target(victim))
+        .apply_scenario_command(0, &choose_trigger_target(victim))
         .expect("exile the opposing creature");
     resolve_entire_stack_two_player(&mut decline);
     decline
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes priority to the opponent");
     ensure_card_in_hand(&mut decline, 1, "abrade");
     give_mana(
@@ -555,7 +558,7 @@ fn issue_338_dusk_rose_reliquary_wards_and_exiles_until_it_leaves() {
     let abrade_slot = hand_index_for_card(&decline, 1, "abrade");
     let abrade_id = decline.state.players[1].hand[abrade_slot];
     decline
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_modal_spell(abrade_slot, vec![(1, target_object(reliquary))]),
         )
@@ -595,7 +598,7 @@ fn issue_338_dusk_rose_reliquary_wards_and_exiles_until_it_leaves() {
     );
     let slot = hand_index_for_card(&artifact_engine, 0, "dusk_rose_reliquary");
     artifact_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -641,13 +644,15 @@ fn issue_338_mudbutton_cursetosser_beholds_or_pays_and_punishes_on_death() {
     );
     let slot = hand_index_for_card(&engine, 0, "mudbutton_cursetosser");
     assert!(
-        engine.apply_command(0, &cast_spell(slot, vec![])).is_err(),
+        engine
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .is_err(),
         "an announced additional cost is mandatory"
     );
     let slot = hand_index_for_card(&engine, 0, "mudbutton_cursetosser");
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell_with_cast_cost_groups(
                     slot,
@@ -660,7 +665,7 @@ fn issue_338_mudbutton_cursetosser_beholds_or_pays_and_punishes_on_death() {
     );
     let slot = hand_index_for_card(&engine, 0, "mudbutton_cursetosser");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -708,7 +713,7 @@ fn issue_338_mudbutton_cursetosser_beholds_or_pays_and_punishes_on_death() {
     );
     let slot = hand_index_for_card(&mana_engine, 0, "mudbutton_cursetosser");
     mana_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(slot, vec![], vec![option(1)]),
         )
@@ -744,7 +749,7 @@ fn issue_338_mudbutton_cursetosser_beholds_or_pays_and_punishes_on_death() {
     let slot = hand_index_for_card(&hand_engine, 0, "mudbutton_cursetosser");
     let goblin_slot = hand_index_for_card(&hand_engine, 0, "crazed_goblin");
     hand_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(slot, vec![], vec![hand_option(0, goblin_slot)]),
         )
@@ -766,18 +771,18 @@ fn issue_338_mudbutton_cursetosser_beholds_or_pays_and_punishes_on_death() {
         .expect("source")
         .damage = 99;
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("state-based actions destroy the Cursetosser and queue its dies trigger");
     assert_eq!(engine.state.objects[&cursetosser].zone, Zone::Graveyard);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     assert!(
         engine
-            .apply_command(0, &choose_trigger_target(power_three))
+            .apply_scenario_command(0, &choose_trigger_target(power_three))
             .is_err(),
         "a power-3 creature is outside the filter"
     );
     engine
-        .apply_command(0, &choose_trigger_target(power_two))
+        .apply_scenario_command(0, &choose_trigger_target(power_two))
         .expect("choose an opposing creature with power 2 or less");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&power_two].zone, Zone::Graveyard);
@@ -813,7 +818,7 @@ fn issue_338_lys_alana_dignitary_mana_requires_an_elf_in_graveyard() {
     );
     let slot = hand_index_for_card(&engine, 0, "lys_alana_dignitary");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -842,7 +847,7 @@ fn issue_338_lys_alana_dignitary_mana_requires_an_elf_in_graveyard() {
     engine.state.players[0].mana_pool.green = 0;
     assert!(
         engine
-            .apply_command(0, &activate_ability_for(&engine, dignitary, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability_for(&engine, dignitary, 0, vec![]))
             .is_err(),
         "the mana ability requires an Elf card in the graveyard"
     );
@@ -850,7 +855,7 @@ fn issue_338_lys_alana_dignitary_mana_requires_an_elf_in_graveyard() {
     // With one, {T} adds {G}{G} and taps the source.
     inject_graveyard_card(&mut engine, 0, "llanowar_elves");
     engine
-        .apply_command(0, &activate_ability_for(&engine, dignitary, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, dignitary, 0, vec![]))
         .expect("an Elf card in the graveyard enables the mana ability");
     assert_eq!(engine.state.players[0].mana_pool.green, 2);
     assert!(engine.state.objects[&dignitary].tapped);
@@ -882,7 +887,7 @@ fn issue_338_lys_alana_dignitary_mana_requires_an_elf_in_graveyard() {
     );
     let slot = hand_index_for_card(&mana_cast_engine, 0, "lys_alana_dignitary");
     mana_cast_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(slot, vec![], vec![option(1)]),
         )

@@ -402,8 +402,69 @@ protected:
 
     void updatePendingResolutionChoiceCache(const ruled::v1::IpcResponse &response)
     {
+        ruled::v1::IpcResponse fixture = response;
+        if (fixture.has_batch() && !fixture.batch().has_resolution_prompt_state()) {
+            int lastChoiceIndex = -1;
+            bool allChoiceIdsAreUnset = true;
+            for (int i = 0; i < fixture.batch().events_size(); ++i) {
+                const auto &event = fixture.batch().events(i);
+                if (!event.has_resolution_choice_required())
+                    continue;
+                lastChoiceIndex = i;
+                allChoiceIdsAreUnset &= event.resolution_choice_required().resolution_prompt_id() == 0;
+            }
+            if (lastChoiceIndex >= 0 && allChoiceIdsAreUnset) {
+                auto *choice = fixture.mutable_batch()->mutable_events(lastChoiceIndex)->mutable_resolution_choice_required();
+                const quint64 promptId = nextSyntheticResolutionPromptId++;
+                choice->set_resolution_prompt_id(promptId);
+                auto *prompt = fixture.mutable_batch()->mutable_resolution_prompt_state();
+                prompt->set_active(true);
+                prompt->set_deciding_player_id(choice->deciding_player_id());
+                prompt->set_resolution_prompt_id(promptId);
+                for (int i = 0; i < lastChoiceIndex; ++i) {
+                    auto *event = fixture.mutable_batch()->mutable_events(i);
+                    if (event->has_resolution_choice_required())
+                        event->mutable_resolution_choice_required()->set_resolution_prompt_id(0);
+                }
+            }
+        }
+        updatePendingResolutionChoiceCacheRaw(fixture);
+    }
+
+    void updatePendingResolutionChoiceCacheRaw(const ruled::v1::IpcResponse &response)
+    {
         game->ruled()->broadcaster->updatePendingResolutionChoiceCache(response);
     }
+
+    bool hasCachedResolutionChoice() const
+    {
+        return game->ruled()->broadcaster->pendingResolutionChoice.has_value();
+    }
+
+    quint64 cachedResolutionChoiceId() const
+    {
+        return hasCachedResolutionChoice() ? game->ruled()->broadcaster->pendingResolutionChoice->resolution_prompt_id()
+                                           : 0;
+    }
+
+    const std::optional<ruled::v1::ResolutionPromptState> &cachedResolutionPromptState() const
+    {
+        return game->ruled()->broadcaster->currentResolutionPromptState;
+    }
+
+    bool hasCachedPublicReveal() const
+    {
+        return game->ruled()->broadcaster->activePublicRevealSnapshot.has_value();
+    }
+
+    QString cachedPublicRevealId() const
+    {
+        return hasCachedPublicReveal()
+                   ? QString::fromStdString(game->ruled()->broadcaster->activePublicRevealSnapshot->reveals(0).reveal_id())
+                   : QString{};
+    }
+
+    quint64 nextSyntheticResolutionPromptId = 30000;
 
     bool sharedReconnectViewHasNoPrivateLibraryTop() const
     {
@@ -1290,6 +1351,194 @@ TEST_F(RuledBatchTest, ReissuedSpecialCastChoiceReplacesObserverPromptAndReconne
             EXPECT_EQ(restoredChoice->resolution_choice_required().candidate_names_size(), 0);
         }
     }
+}
+
+TEST_F(RuledBatchTest, ResolutionPromptIdIsRedactedForObserversOnLiveAndReconnectBatches)
+{
+    constexpr quint64 promptId = 41001;
+    ruled::v1::IpcResponse response;
+    auto *batch = response.mutable_batch();
+    auto *prompt = batch->mutable_resolution_prompt_state();
+    prompt->set_active(true);
+    prompt->set_deciding_player_id(p1->getPlayerId());
+    prompt->set_resolution_prompt_id(promptId);
+    auto *choice = batch->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    choice->set_resolution_prompt_id(promptId);
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(41002);
+    choice->add_candidate_names("Branch");
+    updatePendingResolutionChoiceCacheRaw(response);
+
+    for (Server_Player *recipient : {p1, p2}) {
+        const auto live = redactFor(response.batch(), recipient);
+        ASSERT_TRUE(live.has_resolution_prompt_state());
+        EXPECT_TRUE(live.resolution_prompt_state().active());
+        EXPECT_EQ(live.resolution_prompt_state().deciding_player_id(), p1->getPlayerId());
+        EXPECT_EQ(live.resolution_prompt_state().has_resolution_prompt_id(), recipient == p1);
+        EXPECT_EQ(live.resolution_prompt_state().resolution_prompt_id(), recipient == p1 ? promptId : 0u);
+        const auto liveChoice = std::find_if(live.events().begin(), live.events().end(), [](const auto &event) {
+            return event.has_resolution_choice_required();
+        });
+        ASSERT_NE(liveChoice, live.events().end());
+        EXPECT_EQ(liveChoice->resolution_choice_required().resolution_prompt_id(), recipient == p1 ? promptId : 0u);
+
+        ResponseContainer reconnect(-1);
+        game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, reconnect);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 1);
+        const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        ASSERT_TRUE(restored.has_resolution_prompt_state());
+        EXPECT_EQ(restored.resolution_prompt_state().active(), recipient == p1 || recipient == p2);
+        EXPECT_EQ(restored.resolution_prompt_state().deciding_player_id(), p1->getPlayerId());
+        EXPECT_EQ(restored.resolution_prompt_state().has_resolution_prompt_id(), recipient == p1);
+        EXPECT_EQ(restored.resolution_prompt_state().resolution_prompt_id(), recipient == p1 ? promptId : 0u);
+        const auto restoredChoice = std::find_if(restored.events().begin(), restored.events().end(), [](const auto &event) {
+            return event.has_resolution_choice_required();
+        });
+        ASSERT_NE(restoredChoice, restored.events().end());
+        EXPECT_EQ(restoredChoice->resolution_choice_required().resolution_prompt_id(), recipient == p1 ? promptId : 0u);
+    }
+}
+
+TEST_F(RuledBatchTest, ResolutionPromptCachePreservesOnlyPurePreviewAndSameIdRefresh)
+{
+    auto publish = [this](quint64 promptId) {
+        ruled::v1::IpcResponse response;
+        auto *batch = response.mutable_batch();
+        auto *prompt = batch->mutable_resolution_prompt_state();
+        prompt->set_active(true);
+        prompt->set_deciding_player_id(p1->getPlayerId());
+        prompt->set_resolution_prompt_id(promptId);
+        auto *choice = batch->add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(p1->getPlayerId());
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+        choice->set_resolution_prompt_id(promptId);
+        choice->set_min(0);
+        choice->set_max(1);
+        choice->add_candidate_object_ids(static_cast<quint32>(promptId + 1));
+        updatePendingResolutionChoiceCacheRaw(response);
+    };
+    publish(42001);
+    ASSERT_TRUE(hasCachedResolutionChoice());
+    EXPECT_EQ(cachedResolutionChoiceId(), 42001u);
+
+    ruled::v1::IpcResponse preview;
+    preview.mutable_batch()->mutable_payment_preview()->set_transaction_id(12);
+    updatePendingResolutionChoiceCacheRaw(preview);
+    ASSERT_TRUE(hasCachedResolutionChoice());
+    EXPECT_EQ(cachedResolutionChoiceId(), 42001u);
+
+    ruled::v1::IpcResponse samePromptRefresh;
+    auto *sameState = samePromptRefresh.mutable_batch()->mutable_resolution_prompt_state();
+    sameState->set_active(true);
+    sameState->set_deciding_player_id(p1->getPlayerId());
+    sameState->set_resolution_prompt_id(42001);
+    updatePendingResolutionChoiceCacheRaw(samePromptRefresh);
+    ASSERT_TRUE(hasCachedResolutionChoice());
+    EXPECT_EQ(cachedResolutionChoiceId(), 42001u);
+    ASSERT_TRUE(cachedResolutionPromptState().has_value());
+    EXPECT_EQ(cachedResolutionPromptState()->resolution_prompt_id(), 42001u);
+    ResponseContainer samePromptReconnect(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, samePromptReconnect);
+    ASSERT_EQ(samePromptReconnect.getPostResponseQueue().size(), 1);
+    const auto *samePromptContainer =
+        dynamic_cast<const GameEventContainer *>(samePromptReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(samePromptContainer, nullptr);
+    ruled::v1::RuledEventBatch samePromptRestored;
+    ASSERT_TRUE(samePromptRestored.ParseFromString(
+        samePromptContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    ASSERT_TRUE(samePromptRestored.has_resolution_prompt_state());
+    EXPECT_EQ(samePromptRestored.resolution_prompt_state().resolution_prompt_id(), 42001u);
+    const auto samePromptChoice =
+        std::find_if(samePromptRestored.events().begin(), samePromptRestored.events().end(), [](const auto &event) {
+            return event.has_resolution_choice_required();
+        });
+    ASSERT_NE(samePromptChoice, samePromptRestored.events().end());
+    EXPECT_EQ(samePromptChoice->resolution_choice_required().resolution_prompt_id(), 42001u);
+
+    ruled::v1::IpcResponse mixedPreview;
+    auto *mixedBatch = mixedPreview.mutable_batch();
+    mixedBatch->mutable_payment_preview()->set_transaction_id(13);
+    mixedBatch->add_events()->mutable_phase_changed()->set_phase_id(ruled::v1::PHASE_ID_MAIN1);
+    auto *newState = mixedBatch->mutable_resolution_prompt_state();
+    newState->set_active(true);
+    newState->set_deciding_player_id(p1->getPlayerId());
+    newState->set_resolution_prompt_id(42002);
+    updatePendingResolutionChoiceCacheRaw(mixedPreview);
+    EXPECT_FALSE(hasCachedResolutionChoice());
+    ASSERT_TRUE(cachedResolutionPromptState().has_value());
+    EXPECT_EQ(cachedResolutionPromptState()->resolution_prompt_id(), 42002u);
+
+    ruled::v1::IpcResponse mismatchedChoice;
+    auto *mismatchedBatch = mismatchedChoice.mutable_batch();
+    auto *mismatchedState = mismatchedBatch->mutable_resolution_prompt_state();
+    mismatchedState->set_active(true);
+    mismatchedState->set_deciding_player_id(p1->getPlayerId());
+    mismatchedState->set_resolution_prompt_id(42003);
+    auto *mismatchedRcr = mismatchedBatch->add_events()->mutable_resolution_choice_required();
+    mismatchedRcr->set_deciding_player_id(p1->getPlayerId());
+    mismatchedRcr->set_choice_kind(ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    mismatchedRcr->set_resolution_prompt_id(42004);
+    mismatchedRcr->set_min(0);
+    mismatchedRcr->set_max(1);
+    updatePendingResolutionChoiceCacheRaw(mismatchedChoice);
+    EXPECT_FALSE(hasCachedResolutionChoice());
+
+    ruled::v1::IpcResponse inactive;
+    inactive.mutable_batch()->mutable_resolution_prompt_state()->set_active(false);
+    inactive.mutable_batch()->mutable_resolution_prompt_state()->set_deciding_player_id(0);
+    updatePendingResolutionChoiceCacheRaw(inactive);
+    EXPECT_FALSE(hasCachedResolutionChoice());
+
+    ResponseContainer reconnect(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, reconnect);
+    ASSERT_EQ(reconnect.getPostResponseQueue().size(), 1);
+    const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(container, nullptr);
+    ruled::v1::RuledEventBatch restored;
+    ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    ASSERT_TRUE(restored.has_resolution_prompt_state());
+    EXPECT_FALSE(restored.resolution_prompt_state().active());
+    EXPECT_FALSE(restored.resolution_prompt_state().has_resolution_prompt_id());
+    EXPECT_EQ(std::count_if(restored.events().begin(), restored.events().end(), [](const auto &event) {
+                  return event.has_resolution_choice_required();
+              }),
+              0);
+}
+
+TEST_F(RuledBatchTest, InactiveTransientResolutionChoiceKeepsPublicRevealButIsNotReconnectAction)
+{
+    ruled::v1::IpcResponse response;
+    auto *batch = response.mutable_batch();
+    batch->mutable_resolution_prompt_state()->set_active(false);
+    batch->mutable_resolution_prompt_state()->set_deciding_player_id(0);
+    auto *choice = batch->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
+    choice->set_resolution_prompt_id(0);
+    choice->add_candidate_object_ids(43002);
+    choice->add_candidate_card_ids("forest");
+    choice->add_candidate_names("Forest");
+    choice->add_candidate_server_card_ids(3);
+    auto *reveal = batch->add_events()->mutable_active_public_reveal_snapshot()->add_reveals();
+    reveal->set_reveal_id("transient:43001");
+    reveal->set_source_object_id(43001);
+    reveal->set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+    reveal->set_zone_owner_player_id(p2->getPlayerId());
+    auto *revealedCard = reveal->add_cards();
+    revealedCard->set_object_id(43002);
+    revealedCard->set_card_id("forest");
+    revealedCard->set_card_name("Forest");
+    updatePendingResolutionChoiceCacheRaw(response);
+
+    EXPECT_FALSE(hasCachedResolutionChoice());
+    ASSERT_TRUE(hasCachedPublicReveal());
+    EXPECT_EQ(cachedPublicRevealId(), QStringLiteral("transient:43001"));
 }
 
 TEST_F(RuledBatchTest, OrdinaryReconnectRestoresCurrentPublicHandAndRevealWithoutPrivateZones)

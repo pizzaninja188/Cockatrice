@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::TurnStep;
 
 fn red_mana(engine: &GameEngine, player: usize) -> (u32, u32) {
@@ -28,7 +29,7 @@ fn issue_427_fire_sages_adds_red_mana_on_attack_and_retains_it_until_end_of_comb
     let sages = relocate_to_battlefield(&mut engine, 0, "fire_sages", false);
 
     engine
-        .apply_command(0, &declare_attackers(vec![sages]))
+        .apply_scenario_command(0, &declare_attackers(vec![sages]))
         .expect("declare Fire Sages");
     assert_eq!(engine.state.stack.len(), 1, "firebending uses the stack");
     assert_eq!(red_mana(&engine, 0), (0, 0), "mana waits for resolution");
@@ -81,7 +82,7 @@ fn issue_427_fire_sages_adds_no_mana_when_it_does_not_attack() {
     let _sages = relocate_to_battlefield(&mut engine, 0, "fire_sages", false);
 
     engine
-        .apply_command(0, &declare_attackers(vec![]))
+        .apply_scenario_command(0, &declare_attackers(vec![]))
         .expect("decline to attack");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.state.stack.is_empty());
@@ -110,7 +111,7 @@ fn issue_427_azula_on_the_hunt_triggers_firebending_two_and_the_clue() {
     let life_before = engine.state.players[0].life;
 
     engine
-        .apply_command(0, &declare_attackers(vec![azula]))
+        .apply_scenario_command(0, &declare_attackers(vec![azula]))
         .expect("declare Azula");
     answer_trigger_order_in_engine_order(&mut engine);
     assert_eq!(engine.state.stack.len(), 2, "both attack triggers stack");
@@ -164,7 +165,7 @@ fn issue_427_zhao_pumps_the_team_after_a_sacrifice() {
 
     let rites = hand_index_for_card(&engine, 0, "village_rites");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_costs(rites, vec![], vec![permanent_cost_selection(0, sacrificed)]),
         )

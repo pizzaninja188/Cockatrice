@@ -1,4 +1,5 @@
 //! Tainted Treats: CR 608.2b/h target legality and battlefield mana value LKI.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::primitives::CounterKind;
@@ -37,10 +38,10 @@ fn cast_and_resolve(engine: &mut GameEngine, target: u32) {
     );
     let slot = hand_index_for_card(engine, 0, "tainted_treats");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap();
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
 }
 
 #[test]
@@ -86,7 +87,7 @@ fn tainted_treats_illegal_target_prevents_food() {
     );
     let slot = hand_index_for_card(&engine, 0, "tainted_treats");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap();
     engine.state.players[1]
         .battlefield
@@ -98,8 +99,8 @@ fn tainted_treats_illegal_target_prevents_food() {
         .zone_change_generation
         .entry(target)
         .or_default() += 1;
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
     assert!(battlefield_token_oids(&engine, 0, "food").is_empty());
 }
@@ -168,7 +169,7 @@ fn tainted_treats_can_destroy_artifact_and_rejects_enchantment() {
     );
     let slot = hand_index_for_card(&engine, 0, "tainted_treats");
     assert!(engine
-        .apply_command(0, &cast_spell(slot, target_object(enchantment)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(enchantment)))
         .is_err());
     assert!(battlefield_token_oids(&engine, 0, "food").is_empty());
 }

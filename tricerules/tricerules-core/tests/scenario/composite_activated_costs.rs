@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::CounterKind;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
@@ -22,7 +23,7 @@ fn apparatus_pays_mana_tap_and_self_sacrifice_before_resolution() {
     e.state.players[0].mana_pool.colorless = 3;
 
     let batch = e
-        .apply_command(0, &activate_ability(apparatus, 0, target_player(1)))
+        .apply_scenario_command(0, &activate_ability(apparatus, 0, target_player(1)))
         .expect("pay all three cost components");
     assert!(batch.events.iter().any(|event| {
         matches!(
@@ -62,7 +63,7 @@ fn portcullis_vine_can_tap_then_sacrifice_itself() {
     e.state.players[0].mana_pool.colorless = 2;
     let hand_before = e.state.players[0].hand.len();
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &activate_ability_with_costs(vine, 0, vec![], vec![permanent_cost_selection(2, vine)]),
     )
@@ -96,7 +97,7 @@ fn invalid_filtered_sacrifice_rolls_back_mana_and_tap() {
     let forest = relocate_to_battlefield(&mut e, 0, "forest", false);
     e.state.players[0].mana_pool.colorless = 2;
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &activate_ability_with_costs(vine, 0, vec![], vec![permanent_cost_selection(2, forest)]),
     )
@@ -134,7 +135,9 @@ fn hungry_ghoul_publishes_only_other_controlled_creatures_as_cost_choices() {
     let friendly = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
     let opposing = relocate_to_battlefield(&mut e, 1, "grizzly_bears", false);
 
-    let batch = e.apply_command(0, &pass()).expect("publish legal costs");
+    let batch = e
+        .apply_scenario_command(0, &pass())
+        .expect("publish legal costs");
     let key = u64::from(ghoul) << 32;
     let choices = &batch.legal_by_player[&0].cost_choices_by_ability[&key];
     let sacrifice = choices
@@ -167,7 +170,9 @@ fn hungry_ghoul_is_not_payable_without_another_creature() {
     advance_to_main1_from_game_start(&mut e);
     let ghoul = relocate_to_battlefield(&mut e, 0, "hungry_ghoul", false);
 
-    let batch = e.apply_command(0, &pass()).expect("publish legal costs");
+    let batch = e
+        .apply_scenario_command(0, &pass())
+        .expect("publish legal costs");
     let key = u64::from(ghoul) << 32;
     let choices = &batch.legal_by_player[&0].cost_choices_by_ability[&key];
     let sacrifice = choices
@@ -200,7 +205,7 @@ fn hungry_ghoul_rejects_its_source_atomically_then_accepts_another_creature() {
     let other = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
     e.state.players[0].mana_pool.colorless = 2;
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &activate_ability_with_costs(ghoul, 0, vec![], vec![permanent_cost_selection(1, ghoul)]),
     )
@@ -217,7 +222,7 @@ fn hungry_ghoul_rejects_its_source_atomically_then_accepts_another_creature() {
     assert!(!e.state.objects[&ghoul].tapped);
     assert!(e.state.stack.is_empty());
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &activate_ability_with_costs(ghoul, 0, vec![], vec![permanent_cost_selection(1, other)]),
     )
@@ -261,7 +266,7 @@ fn discard_cost_uses_authoritative_hand_slot() {
     let discarded = e.state.players[0].hand[discarded_slot];
 
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 constrictor,

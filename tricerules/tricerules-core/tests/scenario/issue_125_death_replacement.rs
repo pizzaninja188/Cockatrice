@@ -1,4 +1,5 @@
 //! Issue #125: turn-scoped replacements that exile one exact permanent if it would die.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
@@ -19,7 +20,7 @@ fn cast_damage_spell(engine: &mut GameEngine, player: i32, card_id: &str, target
     );
     let slot = hand_index_for_card(engine, player as usize, card_id);
     engine
-        .apply_command(player, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(player, &cast_spell(slot, target_object(target)))
         .unwrap_or_else(|error| panic!("cast {card_id}: {error}"));
     pass_both_players(engine);
 }
@@ -81,7 +82,7 @@ fn prevented_damage_still_exiles_a_later_sacrifice_without_a_dies_event() {
     );
     let slot = hand_index_for_card(&engine, 0, "village_rites");
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_costs(slot, vec![], vec![permanent_cost_selection(0, target)]),
         )
@@ -211,7 +212,7 @@ fn zone_change_generation_and_cleanup_each_end_the_replacement() {
     );
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(bounced)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(bounced)))
         .expect("cast Unsummon");
     pass_both_players(&mut engine);
     engine.state.players[1].hand.retain(|oid| *oid != bounced);
@@ -237,7 +238,7 @@ fn zone_change_generation_and_cleanup_each_end_the_replacement() {
             break;
         }
         engine
-            .apply_command(expiring_turn, &primitive_yield())
+            .apply_scenario_command(expiring_turn, &primitive_yield())
             .expect("advance marked target through cleanup");
         resolve_cleanup_discards_if_any(&mut engine);
     }

@@ -1,4 +1,5 @@
 //! Issue #82: effects and continuous restrictions that refer to an attached object.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 
@@ -31,7 +32,7 @@ fn capture_sphere_engine(seed: u64, creature_controller: usize) -> (GameEngine, 
     );
     let hand_index = hand_index_for_card(&engine, 0, "capture_sphere");
     engine
-        .apply_command(0, &cast_spell(hand_index, target_object(creature)))
+        .apply_scenario_command(0, &cast_spell(hand_index, target_object(creature)))
         .expect("cast Capture Sphere");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -56,7 +57,7 @@ fn advance_to_active_player(engine: &mut GameEngine, player: i32) {
             None => (engine.state.priority_player_id(), pass()),
         };
         engine
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("pass through turn");
         if engine.state.active_player_id() == player
             && engine.state.turn_step == tricerules_core::TurnStep::Upkeep

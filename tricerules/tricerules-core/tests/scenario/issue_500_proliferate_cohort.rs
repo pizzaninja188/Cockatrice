@@ -2,6 +2,7 @@
 //! Live Oracle/rulings evidence is linked from the seven card definitions in
 //! `tricerules-cards/data/`.
 //! CR 601.2i / 603.2, 513.1 / 603.2b, 107.4f, and 701.34 govern these scenarios.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{CounterKind, Keyword};
@@ -31,6 +32,7 @@ fn cohort_engine(seed: u64) -> GameEngine {
 fn proliferate_choice(objects: Vec<u32>, players: Vec<i32>) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: objects,
             chosen_player_ids: players,
             decision: ResolutionChoiceDecision::Unspecified as i32,
@@ -43,6 +45,7 @@ fn proliferate_choice(objects: Vec<u32>, players: Vec<i32>) -> RuledCommand {
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -113,7 +116,7 @@ fn evolution_sage_triggers_on_a_land_entry_and_proliferates_each_existing_counte
     ensure_in_hand(&mut engine, 0, "forest");
     let land = hand_index_for_card(&engine, 0, "forest");
     engine
-        .apply_command(0, &play_land(land))
+        .apply_scenario_command(0, &play_land(land))
         .expect("play a land under Evolution Sage");
     assert_eq!(
         engine.state.stack.len(),
@@ -130,7 +133,7 @@ fn evolution_sage_triggers_on_a_land_entry_and_proliferates_each_existing_counte
     assert!(choice.presentation.candidates.contains(&bear));
 
     engine
-        .apply_command(0, &proliferate_choice(vec![bear], vec![1]))
+        .apply_scenario_command(0, &proliferate_choice(vec![bear], vec![1]))
         .expect("choose a permanent and an opponent");
     assert_eq!(
         engine.state.objects[&bear].counters[&CounterKind::PlusOnePlusOne],
@@ -175,7 +178,7 @@ fn atraxa_triggers_at_its_controllers_end_step() {
         }
         let priority_player = engine.state.priority_player_id();
         engine
-            .apply_command(priority_player, &primitive_yield())
+            .apply_scenario_command(priority_player, &primitive_yield())
             .expect("advance toward the end step");
     }
     assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::EndStep);
@@ -197,7 +200,7 @@ fn atraxa_triggers_at_its_controllers_end_step() {
         ChoiceKind::Proliferate
     );
     engine
-        .apply_command(0, &proliferate_choice(vec![], vec![0]))
+        .apply_scenario_command(0, &proliferate_choice(vec![], vec![0]))
         .expect("proliferate the controller's poison counter");
     let controller = engine.state.player_idx(0).unwrap();
     assert_eq!(
@@ -226,7 +229,7 @@ fn inexorable_tide_triggers_on_a_creature_spell_and_resolves_before_it() {
     let bears = hand_index_for_card(&engine, 0, "grizzly_bears");
 
     engine
-        .apply_command(0, &cast_spell(bears, vec![]))
+        .apply_scenario_command(0, &cast_spell(bears, vec![]))
         .expect("cast a creature spell under Inexorable Tide");
     assert_eq!(
         engine.state.stack.len(),
@@ -256,7 +259,7 @@ fn inexorable_tide_triggers_on_a_creature_spell_and_resolves_before_it() {
     );
 
     engine
-        .apply_command(0, &proliferate_choice(vec![countered_creature], vec![]))
+        .apply_scenario_command(0, &proliferate_choice(vec![countered_creature], vec![]))
         .expect("choose the permanent for Inexorable Tide's Proliferate");
     assert_eq!(
         engine.state.objects[&countered_creature].counter_count(CounterKind::PlusOnePlusOne),
@@ -292,7 +295,7 @@ fn flux_channeler_triggers_for_noncreature_spells_but_not_creatures() {
 
     let bolt = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(bolt, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(bolt, target_player(1)))
         .expect("cast a noncreature spell");
     assert_eq!(
         engine.state.stack.len(),
@@ -305,7 +308,7 @@ fn flux_channeler_triggers_for_noncreature_spells_but_not_creatures() {
         1
     );
     engine
-        .apply_command(0, &proliferate_choice(vec![countered_permanent], vec![]))
+        .apply_scenario_command(0, &proliferate_choice(vec![countered_permanent], vec![]))
         .expect("resolve the noncreature-spell trigger");
     assert_eq!(
         engine.state.objects[&countered_permanent].counters[&CounterKind::PlusOnePlusOne],
@@ -319,7 +322,7 @@ fn flux_channeler_triggers_for_noncreature_spells_but_not_creatures() {
 
     let bears = hand_index_for_card(&engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &cast_spell(bears, vec![]))
+        .apply_scenario_command(0, &cast_spell(bears, vec![]))
         .expect("cast a creature spell");
     assert_eq!(
         engine.state.stack.len(),
@@ -340,7 +343,7 @@ fn tezzerets_gambit_draws_before_proliferating_and_accepts_phyrexian_life() {
     let slot = hand_index_for_card(&engine, 0, "tezzerets_gambit");
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_flex(
                 slot,
@@ -370,7 +373,7 @@ fn tezzerets_gambit_draws_before_proliferating_and_accepts_phyrexian_life() {
         "the spell drew two cards before parking at Proliferate"
     );
     engine
-        .apply_command(0, &proliferate_choice(vec![], vec![0]))
+        .apply_scenario_command(0, &proliferate_choice(vec![], vec![0]))
         .expect("choose the player's poison counter");
     let controller = engine.state.player_idx(0).unwrap();
     assert_eq!(
@@ -414,7 +417,7 @@ fn karns_bastion_keeps_its_colorless_mana_and_proliferate_abilities_distinct() {
         ChoiceKind::Proliferate
     );
     engine
-        .apply_command(0, &proliferate_choice(vec![], vec![1]))
+        .apply_scenario_command(0, &proliferate_choice(vec![], vec![1]))
         .expect("proliferate the opponent's poison counter");
     let opponent = engine.state.player_idx(1).unwrap();
     assert_eq!(
@@ -437,7 +440,7 @@ fn proliferate_observes_counter_replacement_and_poison_state_based_loss() {
     apply_ability(&mut engine, 0, bastion, 1, vec![]).expect("activate Karn's Bastion");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &proliferate_choice(vec![bear], vec![1]))
+        .apply_scenario_command(0, &proliferate_choice(vec![bear], vec![1]))
         .expect("double a permanent counter and add the tenth poison counter");
 
     let opponent = engine.state.player_idx(1).unwrap();
@@ -465,7 +468,7 @@ fn ezuri_declining_the_optional_branch_does_not_pay_or_proliferate() {
     let slot = hand_index_for_card(&engine, 0, "ezuri,_stalker_of_spheres");
 
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Ezuri");
     pass_both_players(&mut engine);
     assert!(engine.state.players[0].battlefield.contains(&ezuri));
@@ -482,7 +485,7 @@ fn ezuri_declining_the_optional_branch_does_not_pay_or_proliferate() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -515,7 +518,7 @@ fn ezuri_pays_once_proliferates_twice_without_priority_and_triggers_even_on_zero
     let slot = hand_index_for_card(&engine, 0, "ezuri,_stalker_of_spheres");
 
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Ezuri");
     pass_both_players(&mut engine);
     assert!(engine.state.players[0].battlefield.contains(&ezuri));
@@ -533,7 +536,7 @@ fn ezuri_pays_once_proliferates_twice_without_priority_and_triggers_even_on_zero
     );
 
     engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("pay {3} for two proliferations");
     assert_eq!(
         engine
@@ -558,7 +561,7 @@ fn ezuri_pays_once_proliferates_twice_without_priority_and_triggers_even_on_zero
         ChoiceKind::Proliferate
     );
     engine
-        .apply_command(0, &proliferate_choice(vec![], vec![]))
+        .apply_scenario_command(0, &proliferate_choice(vec![], vec![]))
         .expect("choose zero recipients for the first proliferation");
     assert_eq!(
         engine.state.objects[&bear].counters[&CounterKind::PlusOnePlusOne],
@@ -575,10 +578,10 @@ fn ezuri_pays_once_proliferates_twice_without_priority_and_triggers_even_on_zero
         ChoiceKind::Proliferate,
         "the second action asks for a separate choice without giving priority"
     );
-    assert!(engine.apply_command(1, &pass()).is_err());
+    assert!(engine.apply_scenario_command(1, &pass()).is_err());
 
     engine
-        .apply_command(0, &proliferate_choice(vec![bear], vec![0]))
+        .apply_scenario_command(0, &proliferate_choice(vec![bear], vec![0]))
         .expect("choose a different set for the second proliferation");
     assert_eq!(
         engine.state.objects[&bear].counters[&CounterKind::PlusOnePlusOne],

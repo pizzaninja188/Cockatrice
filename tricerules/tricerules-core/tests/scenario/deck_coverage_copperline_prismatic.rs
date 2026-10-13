@@ -2,6 +2,7 @@
 //!
 //! Oracle and rulings checked 2026-09-25. CR 614.12 governs Copperline Gorge's conditional
 //! entry replacement. CR 605.1a and 605.3a-b govern Prismatic Lens's activated mana abilities.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::GameEngine;
@@ -109,7 +110,7 @@ fn deck_coverage_copperline_gorge_counts_only_its_controllers_other_lands() {
         } else {
             let before = engine.state.command_index;
             engine
-                .apply_command(0, &activate_with_mana_option(&engine, land, 0, 0))
+                .apply_scenario_command(0, &activate_with_mana_option(&engine, land, 0, 0))
                 .expect_err("three other controlled lands make Copperline enter tapped");
             assert_eq!(engine.state.command_index, before);
             assert_eq!(mana_pool(&engine), expected_pool);
@@ -148,7 +149,7 @@ fn deck_coverage_prismatic_lens_pays_one_and_adds_each_color_option() {
         let unfunded = activate_with_mana_option(&engine, lens, 1, option as u32);
         let before = mana_pool(&engine);
         engine
-            .apply_command(0, &unfunded)
+            .apply_scenario_command(0, &unfunded)
             .expect_err("the colored-mana ability requires one generic mana");
         assert_eq!(mana_pool(&engine), before, "failed activation pays nothing");
         assert!(!engine.state.objects[&lens].tapped);

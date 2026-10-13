@@ -188,6 +188,47 @@ fn settled(e: &GameEngine) -> bool {
 fn diagnostic(e: &GameEngine, context: &str, error: impl std::fmt::Display) -> String {
     format!("{context}; seed={SEED}; error={error}; stack={:?}; pending_resolution={:?}; pending_triggers={:?}; pending_order={:?}", e.state.stack, e.state.pending_resolution, e.state.pending_triggers, e.state.pending_trigger_order)
 }
+
+fn active_resolution_choice<'a>(
+    e: &GameEngine,
+    batch: &'a RuledEventBatch,
+) -> Result<&'a ResolutionChoiceRequired, String> {
+    let pending = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .ok_or_else(|| diagnostic(e, "drain", "no active pending resolution"))?;
+    let choice = batch
+        .events
+        .iter()
+        .rev()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+            _ => None,
+        })
+        .ok_or_else(|| diagnostic(e, "drain", "pending resolution omitted published offer"))?;
+    let prompt_state = batch
+        .resolution_prompt_state
+        .as_ref()
+        .ok_or_else(|| diagnostic(e, "drain", "command batch omitted prompt state"))?;
+    if choice.resolution_prompt_id == 0
+        || choice.resolution_prompt_id != pending.resolution_prompt_id.get()
+        || choice.deciding_player_id != pending.deciding_player
+        || choice.source_object_id != pending.presentation.source_object_id
+        || choice.choice_kind != pending.presentation.choice_kind as i32
+        || !prompt_state.active
+        || prompt_state.deciding_player_id != choice.deciding_player_id
+        || prompt_state.resolution_prompt_id != Some(choice.resolution_prompt_id)
+    {
+        return Err(diagnostic(
+            e,
+            "drain",
+            "latest published resolution offer does not match active prompt state",
+        ));
+    }
+    Ok(choice)
+}
+
 fn apply(
     e: &mut GameEngine,
     actor: i32,
@@ -197,6 +238,9 @@ fn apply(
         .map_err(|err| diagnostic(e, &format!("actor={actor}; command={command:?}"), err))
 }
 fn resolution_answer(choice: &ResolutionChoiceRequired) -> Result<RuledCommand, String> {
+    if choice.resolution_prompt_id == 0 {
+        return Err("published resolution choice omitted its prompt ID".into());
+    }
     if !choice.selection_alternatives.is_empty() {
         for alternative in &choice.selection_alternatives {
             if alternative.count == 0
@@ -234,7 +278,10 @@ fn resolution_answer(choice: &ResolutionChoiceRequired) -> Result<RuledCommand, 
         }
         return Err("no satisfiable resolution alternative".into());
     }
-    let mut answer = SubmitResolutionChoice::default();
+    let mut answer = SubmitResolutionChoice {
+        resolution_prompt_id: choice.resolution_prompt_id,
+        ..Default::default()
+    };
     if !choice.resolution_branches.is_empty() {
         let branch = choice
             .resolution_branches
@@ -308,17 +355,7 @@ fn drain(e: &mut GameEngine, mut batch: RuledEventBatch, budget: usize) -> Resul
             return Ok(());
         }
         let (actor, mut command) = if e.state.pending_resolution.is_some() {
-            let choice = batch
-                .events
-                .iter()
-                .rev()
-                .find_map(|event| match &event.ev {
-                    Some(Ev::ResolutionChoiceRequired(c)) => Some(c),
-                    _ => None,
-                })
-                .ok_or_else(|| {
-                    diagnostic(e, "drain", "pending resolution omitted published offer")
-                })?;
+            let choice = active_resolution_choice(e, &batch)?;
             (choice.deciding_player_id, resolution_answer(choice)?)
         } else if let Some(pending) = &e.state.pending_ability_activation {
             let actor = pending.deciding_player_id;
@@ -892,11 +929,15 @@ fn parked_choice_with_empty_stack_is_not_completion_and_rejects_bad_answer() {
     assert!(drain(&mut e, batch.clone(), 0).is_err());
     let invalid = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
-            chosen_object_ids: vec![u32::MAX],
+            resolution_prompt_id: active_resolution_choice(&e, &batch)
+                .expect("published Brainstorm offer")
+                .resolution_prompt_id,
+            chosen_object_ids: vec![u32::MAX, u32::MAX - 1],
             ..Default::default()
         })),
     };
     let error = apply(&mut e, 0, &invalid).unwrap_err();
+    assert!(error.contains("invalid resolution choice"), "{error}");
     for field in [
         "actor=0",
         "SubmitResolutionChoice",

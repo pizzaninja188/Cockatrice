@@ -3,6 +3,7 @@
 //! Oracle text and rulings were checked 2026-09-25 against pinned Scryfall oracle snapshot
 //! 27bf3214-1271-490b-bdfe-c0be6c23d02e. CR 701.23b permits a hidden-zone search to find no card;
 //! CR 701.23e governs whether the found card is revealed; CR 701.24a governs shuffling.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -44,14 +45,16 @@ fn natures_lore_finds_a_nonbasic_forest_and_puts_it_onto_the_battlefield_untappe
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(hand_index_for_card(&engine, 0, "natures_lore"), vec![]),
         )
         .expect("cast Nature's Lore");
-    engine.apply_command(0, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
     let search_batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve Nature's Lore");
     let choice = find_resolution_choice(&search_batch).expect("Forest search choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
@@ -60,7 +63,7 @@ fn natures_lore_finds_a_nonbasic_forest_and_puts_it_onto_the_battlefield_untappe
     assert!(choice.candidate_object_ids.contains(&forest));
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![taiga]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![taiga]))
         .expect("choose Taiga, a nonbasic land with the Forest subtype");
     let object = &engine.state.objects[&taiga];
     assert_eq!(object.zone, Zone::Battlefield);
@@ -117,14 +120,16 @@ fn three_visits_finds_a_nonbasic_forest_and_puts_it_onto_the_battlefield_untappe
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(hand_index_for_card(&engine, 0, "three_visits"), vec![]),
         )
         .expect("cast Three Visits");
-    engine.apply_command(0, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
     let search_batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve Three Visits");
     let choice = find_resolution_choice(&search_batch).expect("Forest search choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
@@ -133,7 +138,7 @@ fn three_visits_finds_a_nonbasic_forest_and_puts_it_onto_the_battlefield_untappe
     assert!(choice.candidate_object_ids.contains(&forest));
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![taiga]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![taiga]))
         .expect("choose Taiga, a nonbasic land with the Forest subtype");
     let object = &engine.state.objects[&taiga];
     assert_eq!(object.zone, Zone::Battlefield);
@@ -186,14 +191,16 @@ fn rampant_growth_rejects_a_nonbasic_land_and_puts_a_basic_onto_the_battlefield_
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(hand_index_for_card(&engine, 0, "rampant_growth"), vec![]),
         )
         .expect("cast Rampant Growth");
-    engine.apply_command(0, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
     let search_batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve Rampant Growth");
     let choice = find_resolution_choice(&search_batch).expect("basic-land search choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
@@ -205,7 +212,7 @@ fn rampant_growth_rejects_a_nonbasic_land_and_puts_a_basic_onto_the_battlefield_
     );
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .expect("choose Forest");
     assert_eq!(engine.state.objects[&forest].zone, Zone::Battlefield);
     assert!(engine.state.objects[&forest].tapped);
@@ -253,13 +260,17 @@ fn farseek_accepts_each_listed_subtype_including_a_nonbasic_land_and_enters_tapp
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(hand_index_for_card(&engine, 0, "farseek"), vec![]),
         )
         .expect("cast Farseek");
-    engine.apply_command(0, &pass()).expect("caster passes");
-    let search_batch = engine.apply_command(1, &pass()).expect("resolve Farseek");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    let search_batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolve Farseek");
     let choice = find_resolution_choice(&search_batch).expect("listed-subtype search choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
     assert_eq!((choice.min, choice.max), (0, 1));
@@ -272,7 +283,7 @@ fn farseek_accepts_each_listed_subtype_including_a_nonbasic_land_and_enters_tapp
     );
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![taiga]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![taiga]))
         .expect("choose Taiga, which has the Mountain subtype");
     assert_eq!(engine.state.objects[&taiga].zone, Zone::Battlefield);
     assert!(engine.state.objects[&taiga].tapped);

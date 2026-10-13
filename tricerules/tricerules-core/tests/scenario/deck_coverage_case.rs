@@ -1,8 +1,9 @@
 //! The Case of the Locked Hothouse coverage and engine capability scenarios.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::registry;
-use tricerules_core::{state::CopiableValues, GameEngine, TurnStep, Zone};
+use tricerules_core::{state::CopiableValues, TurnStep, Zone};
 use tricerules_proto::ruled::v1 as rv1;
 
 const CASE: &str = "case_of_the_locked_hothouse";
@@ -45,7 +46,7 @@ fn begin_case_end_step_with_lands(land_count: usize) -> (GameEngine, u32) {
     );
     let case_slot = hand_index_for_card(&engine, 0, CASE);
     engine
-        .apply_command(0, &cast_spell(case_slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(case_slot, vec![]))
         .expect("cast Case");
     resolve_entire_stack_two_player(&mut engine);
     let case = engine.state.players[0]
@@ -133,7 +134,7 @@ fn case_of_locked_hothouse_grants_its_additional_land_play() {
     );
     let case_slot = hand_index_for_card(&engine, 0, CASE);
     engine
-        .apply_command(0, &cast_spell(case_slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(case_slot, vec![]))
         .expect("cast Case of the Locked Hothouse");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -142,7 +143,7 @@ fn case_of_locked_hothouse_grants_its_additional_land_play() {
 
     let land_slot = hand_index_for_card(&engine, 0, "forest");
     engine
-        .apply_command(0, &play_land(land_slot))
+        .apply_scenario_command(0, &play_land(land_slot))
         .expect("Case's extra land play is available alongside the ordinary play");
     assert_eq!(engine.state.lands_played_this_turn, 2);
 }
@@ -161,7 +162,7 @@ fn case_extra_land_play_stacks_with_another_extra_land_effect() {
     );
     let exploration_slot = hand_index_for_card(&engine, 0, "exploration");
     engine
-        .apply_command(0, &cast_spell(exploration_slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(exploration_slot, vec![]))
         .expect("cast Exploration");
     resolve_entire_stack_two_player(&mut engine);
     engine.state.lands_played_this_turn = 2;
@@ -169,7 +170,7 @@ fn case_extra_land_play_stacks_with_another_extra_land_effect() {
 
     let land_slot = hand_index_for_card(&engine, 0, "forest");
     engine
-        .apply_command(0, &play_land(land_slot))
+        .apply_scenario_command(0, &play_land(land_slot))
         .expect("Case and Exploration each grant an extra land play");
     assert_eq!(engine.state.lands_played_this_turn, 3);
 }
@@ -590,10 +591,11 @@ fn solved_case_offers_and_counts_a_land_play_from_the_library_top() {
         .expect("Case permits playing the exact top land");
     let generation = action.zone_change_generation;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::PlayLand(PlayLand {
+                    resolution_prompt_id: 0,
                     source: Some(LandSource {
                         location: Some(rv1::land_source::Location::LibraryObjectId(top)),
                         expected_zone_change_generation: Some(generation),
@@ -650,10 +652,11 @@ fn solved_case_can_play_the_land_back_face_of_a_modal_dfc() {
         "the modal DFC's back face remains a legal land choice"
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::PlayLand(rv1::PlayLand {
+                    resolution_prompt_id: 0,
                     source: Some(rv1::LandSource {
                         location: Some(rv1::land_source::Location::LibraryObjectId(top)),
                         expected_zone_change_generation: Some(land.zone_change_generation),
@@ -681,7 +684,7 @@ fn stale_non_top_library_identity_cannot_be_cast() {
     engine.state.players[0].library.push_front(new_top);
 
     assert!(engine
-        .apply_command(0, &begin_library_spell_cast(old_top, generation, 0))
+        .apply_scenario_command(0, &begin_library_spell_cast(old_top, generation, 0))
         .is_err());
     assert_eq!(engine.state.players[0].library.front(), Some(&new_top));
     assert!(engine.state.pending_spell_cast.is_none());
@@ -696,7 +699,7 @@ fn library_top_stays_private_during_begin_and_cancel_restores_the_exact_top() {
     let generation = original_generation_entry.unwrap_or(0);
 
     engine
-        .apply_command(0, &begin_library_spell_cast(top, generation, 0))
+        .apply_scenario_command(0, &begin_library_spell_cast(top, generation, 0))
         .expect("begin casting from the current top");
     let transaction_id = engine
         .state
@@ -721,7 +724,7 @@ fn library_top_stays_private_during_begin_and_cancel_restores_the_exact_top() {
 
     let before_rejected_payment = serde_json::to_value(&engine.state).unwrap();
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitSpellCast(rv1::CommitSpellCast {
@@ -739,7 +742,7 @@ fn library_top_stays_private_during_begin_and_cancel_restores_the_exact_top() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CancelSpellCast(rv1::CancelSpellCast {
@@ -804,7 +807,7 @@ fn solved_case_keeps_an_unchanged_library_top_visible_during_a_hand_cast() {
     };
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::BeginSpellCast(rv1::BeginSpellCast {
@@ -843,7 +846,7 @@ fn library_cast_commit_does_not_recheck_a_permission_source_removed_after_begin(
         .copied()
         .unwrap_or(0);
     engine
-        .apply_command(0, &begin_library_spell_cast(top, generation, 0))
+        .apply_scenario_command(0, &begin_library_spell_cast(top, generation, 0))
         .expect("begin the proposed cast while Case permission is active");
     let transaction_id = engine
         .state
@@ -872,7 +875,7 @@ fn library_cast_commit_does_not_recheck_a_permission_source_removed_after_begin(
     let payment_source_generation = engine.state.zone_change_generation[&top];
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitSpellCast(rv1::CommitSpellCast {

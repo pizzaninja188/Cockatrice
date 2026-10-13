@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
 
 use super::helpers::*;
@@ -46,7 +47,7 @@ fn legions_judgment_publishes_derived_power_targets_and_rejects_a_forged_cast() 
     let hand_before = engine.state.players[0].hand.clone();
     let mana_before = engine.state.players[0].mana_pool;
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 slot,
@@ -82,7 +83,7 @@ fn legions_judgment_publishes_derived_power_targets_and_rejects_a_forged_cast() 
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 slot,
@@ -181,10 +182,14 @@ fn run_afoul_targets_only_an_opponent_and_offers_only_their_flyers_to_sacrifice(
     assert!(targets.groups[0].can_target_opponent);
 
     engine
-        .apply_command(0, &cast_spell(slot, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(slot, target_player(1)))
         .expect("target opponent");
-    engine.apply_command(0, &pass()).expect("caster pass");
-    let resolution = engine.apply_command(1, &pass()).expect("opponent pass");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
+    let resolution = engine
+        .apply_scenario_command(1, &pass())
+        .expect("opponent pass");
     let choice = find_resolution_choice(&resolution).expect("sacrifice choice");
     assert_eq!(choice.deciding_player_id, 1);
     assert_eq!(choice.candidate_object_ids, vec![flyer]);

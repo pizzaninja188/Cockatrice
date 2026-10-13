@@ -5,6 +5,7 @@
 //! Every expectation is the reviewed printed Oracle behavior. Governance: CR 115 (targets),
 //! 120 (damage), 119.3 (life gain), 508/509 (attacking/blocking), 701.26 (tap), 122.1 (counters),
 //! and 608.2b (an illegal target at resolution fizzles the whole spell).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -57,8 +58,9 @@ fn kill_with_murder(e: &mut GameEngine, source: u32) {
     inject_card_into_hand(e, 0, "murder");
     let slot = hand_index_for_card(e, 0, "murder");
     semantic::accepted(e, 0, &cast_spell(slot, target_object(source)));
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("murder resolves");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("murder resolves");
 }
 
 fn choose_trigger_target(object_id: u32, kind: TargetRefKind) -> RuledCommand {
@@ -133,7 +135,7 @@ fn issue_dmg2_winters_intervention() {
     inject_card_into_hand(&mut bad, 0, "winters_intervention");
     let slot = hand_index_for_card(&bad, 0, "winters_intervention");
     assert!(
-        bad.apply_command(0, &cast_spell(slot, target_object(boots)))
+        bad.apply_scenario_command(0, &cast_spell(slot, target_object(boots)))
             .is_err(),
         "an artifact is not a creature"
     );
@@ -156,7 +158,7 @@ fn issue_dmg2_deadly_riposte() {
     let slot = hand_index_for_card(&untapped, 0, "deadly_riposte");
     assert!(
         untapped
-            .apply_command(0, &cast_spell(slot, target_object(bear)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
             .is_err(),
         "an untapped creature is not a legal target"
     );
@@ -166,7 +168,7 @@ fn issue_dmg2_deadly_riposte() {
 fn issue_dmg2_cosmium_blast() {
     let mut e = combat_engine(724_004);
     let attacker = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 2, 2);
-    e.apply_command(0, &declare_attackers(vec![attacker]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare the attacker");
     grant_pool(&mut e, 0);
     cast_and_resolve(&mut e, "cosmium_blast", target_object(attacker));
@@ -182,7 +184,7 @@ fn issue_dmg2_cosmium_blast() {
     inject_card_into_hand(&mut idle, 0, "cosmium_blast");
     let slot = hand_index_for_card(&idle, 0, "cosmium_blast");
     assert!(
-        idle.apply_command(0, &cast_spell(slot, target_object(bear)))
+        idle.apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
             .is_err(),
         "an idle creature is not attacking or blocking"
     );
@@ -270,7 +272,7 @@ fn issue_dmg2_fear_of_lost_teeth() {
         1,
         "the dies trigger waits for its target"
     );
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &choose_trigger_target(e.state.players[1].id as u32, TargetRefKind::Player),
     )
@@ -296,7 +298,7 @@ fn issue_dmg2_bile_vial_boggart() {
     let target = inject_creature_with_stats(&mut e, 1, "serra_angel", 4, 4);
     kill_with_murder(&mut e, boggart);
     assert_eq!(e.state.pending_triggers.len(), 1);
-    e.apply_command(0, &choose_trigger_target(target, TargetRefKind::Permanent))
+    e.apply_scenario_command(0, &choose_trigger_target(target, TargetRefKind::Permanent))
         .expect("choose the target creature");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
@@ -320,7 +322,7 @@ fn issue_dmg2_bile_vial_boggart() {
         })),
     };
     decline
-        .apply_command(0, &no_target_cmd)
+        .apply_scenario_command(0, &no_target_cmd)
         .expect("decline the optional target");
     resolve_entire_stack_two_player(&mut decline);
     assert_eq!(

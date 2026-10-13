@@ -4,9 +4,10 @@
 //! back for a dies trigger; CR 115.1d and 603.3d cover choosing its target as it goes on the stack;
 //! CR 400.7e allows a simultaneously deceased artifact to be found; CR 608.2b checks the target
 //! again on resolution.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ChooseTriggerTarget, RuledCommand, TargetRef, TargetRefKind,
 };
@@ -49,7 +50,7 @@ fn cast_wrath_of_god(engine: &mut GameEngine) {
     inject_card_into_hand(engine, 0, "wrath_of_god");
     let slot = hand_index_for_card(engine, 0, "wrath_of_god");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Wrath of God");
     pass_both_players(engine);
 }
@@ -89,7 +90,7 @@ fn myr_retriever_targets_another_artifact_that_dies_at_the_same_time() {
     );
 
     engine
-        .apply_command(0, &choose_graveyard_target(retriever))
+        .apply_scenario_command(0, &choose_graveyard_target(retriever))
         .expect_err("Myr Retriever cannot target its own graveyard incarnation");
     semantic::accepted(&mut engine, 0, &choose_graveyard_target(other_artifact));
     resolve_entire_stack_two_player(&mut engine);
@@ -124,15 +125,15 @@ fn myr_retriever_uses_its_controller_at_death_and_not_its_owner_for_graveyard_ta
     assert!(!candidates.contains(&retriever));
     let pending = format!("{:?}", engine.state.pending_triggers);
     engine
-        .apply_command(0, &choose_graveyard_target(controllers_artifact))
+        .apply_scenario_command(0, &choose_graveyard_target(controllers_artifact))
         .expect_err("only the event-time controller chooses");
     assert_eq!(format!("{:?}", engine.state.pending_triggers), pending);
     engine
-        .apply_command(1, &choose_graveyard_target(owners_artifact))
+        .apply_scenario_command(1, &choose_graveyard_target(owners_artifact))
         .expect_err("source owner's graveyard is not your graveyard");
     assert_eq!(format!("{:?}", engine.state.pending_triggers), pending);
     engine
-        .apply_command(1, &choose_graveyard_target(controllers_artifact))
+        .apply_scenario_command(1, &choose_graveyard_target(controllers_artifact))
         .unwrap();
     assert_eq!(engine.state.stack.last().unwrap().controller, 1);
     resolve_entire_stack_two_player(&mut engine);

@@ -1,5 +1,6 @@
 //! Actual-card semantics for seven pinned Standard damage spells.
 //! Pinned Oracle and current Scryfall rulings reviewed 2026-09-22.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -64,7 +65,7 @@ fn issue_misc33_elspeths_smite_semantics() {
     inject_card_into_hand(&mut e, 0, "elspeths_smite");
     let slot = hand_index_for_card(&e, 0, "elspeths_smite");
     assert!(e
-        .apply_command(0, &cast_spell(slot, target_object(idle)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(idle)))
         .is_err());
     semantic::accepted(&mut e, 0, &declare_attackers(vec![attacker]));
     grant_pool(&mut e, 0);
@@ -90,7 +91,7 @@ fn issue_misc33_obliterating_bolt_semantics() {
     inject_card_into_hand(&mut e, 0, "obliterating_bolt");
     let slot = hand_index_for_card(&e, 0, "obliterating_bolt");
     assert!(e
-        .apply_command(0, &cast_spell(slot, target_object(land)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(land)))
         .is_err());
 }
 

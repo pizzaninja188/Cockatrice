@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
@@ -50,12 +51,12 @@ fn issue_182_cruel_alliance_requires_teamwork_for_the_expanded_target_and_gains_
     let slot = hand_index_for_card(&engine, 0, "cruel_alliance");
 
     assert!(engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .is_err());
     assert!(!engine.state.objects[&teammate].tapped);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -133,9 +134,9 @@ fn issue_182_murdocks_crusade_links_teamwork_to_choosing_both_modes() {
             ..Default::default()
         })),
     };
-    assert!(engine.apply_command(0, &without_teamwork).is_err());
+    assert!(engine.apply_scenario_command(0, &without_teamwork).is_err());
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CastSpell(CastSpell {
@@ -176,7 +177,7 @@ fn issue_182_maria_triggers_only_from_the_teamwork_payment_action() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "cruel_alliance");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 slot,
@@ -219,7 +220,7 @@ fn issue_182_object_kicker_and_required_sacrifice_or_mana_group_are_atomic() {
     grant_pool(&mut engine, 0);
     let stomped = hand_index_for_card(&engine, 0, "stomped_by_the_foot");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 stomped,
@@ -235,11 +236,11 @@ fn issue_182_object_kicker_and_required_sacrifice_or_mana_group_are_atomic() {
     let target = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let stir = hand_index_for_card(&engine, 0, "stir_up_trouble");
     assert!(engine
-        .apply_command(0, &cast_spell(stir, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(stir, target_object(target)))
         .is_err());
     engine.state.priority_idx = 0;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(
                 stir,

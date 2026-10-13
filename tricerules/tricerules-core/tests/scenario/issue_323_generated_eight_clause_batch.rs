@@ -6,6 +6,7 @@
 //! grant and its cleanup expiry; CR 111.10a governs the predefined Treasure and its mana ability;
 //! CR 701.23/614.1d govern the basic-land search onto the battlefield tapped; CR 611.3 governs the
 //! live trample anthem; and CR 509.1b governs the unblockable grant and the single-blocker limit.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -34,23 +35,23 @@ fn deck_engine(seed: u64, own: &[&str], opposing: &[&str]) -> GameEngine {
 
 fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes in beginning of combat");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes in beginning of combat");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 }
 
 fn pass_to_declare_blockers(engine: &mut GameEngine) -> RuledEventBatch {
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes after declaring attackers");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes after attackers are declared")
 }
 
@@ -108,11 +109,13 @@ fn issue_323_day_of_judgment_destroys_all_with_indestructible_and_regeneration_b
 
     let slot = hand_index_for_card(&engine, 0, "day_of_judgment");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Day of Judgment");
-    engine.apply_command(0, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
     let completion = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes into resolution");
 
     let moved = permanents_moved_in(&completion);
@@ -172,10 +175,12 @@ fn issue_323_itll_quench_ya_charges_two_and_counters_on_decline() {
     ensure_in_hand(&mut engine, 0, "lightning_bolt");
     let bolt_slot = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(bolt_slot, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(bolt_slot, target_player(1)))
         .expect("cast Lightning Bolt");
     let bolt = engine.state.stack.last().expect("bolt on stack").id;
-    engine.apply_command(0, &pass()).expect("pass priority");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass priority");
 
     give_mana(
         &mut engine,
@@ -188,12 +193,16 @@ fn issue_323_itll_quench_ya_charges_two_and_counters_on_decline() {
     ensure_in_hand(&mut engine, 1, "itll_quench_ya!");
     let quench_slot = hand_index_for_card(&engine, 1, "itll_quench_ya!");
     engine
-        .apply_command(1, &cast_spell(quench_slot, target_object(bolt)))
+        .apply_scenario_command(1, &cast_spell(quench_slot, target_object(bolt)))
         .expect("cast It'll Quench Ya! at the Bolt");
     let quench = engine.state.stack.last().expect("Quench on stack").id;
 
-    engine.apply_command(1, &pass()).expect("caster passes");
-    let parked = engine.apply_command(0, &pass()).expect("resolution parks");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("caster passes");
+    let parked = engine
+        .apply_scenario_command(0, &pass())
+        .expect("resolution parks");
 
     let choice = find_resolution_choice(&parked).expect("unless-pays choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::ManaPayment);
@@ -204,7 +213,7 @@ fn issue_323_itll_quench_ya_charges_two_and_counters_on_decline() {
     assert_eq!(choice.generic_mana_cost, 2);
 
     let completion = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -248,10 +257,12 @@ fn issue_323_itll_quench_ya_payment_preserves_the_targeted_spell() {
     ensure_in_hand(&mut engine, 0, "lightning_bolt");
     let bolt_slot = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(bolt_slot, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(bolt_slot, target_player(1)))
         .expect("cast Lightning Bolt");
     let bolt = engine.state.stack.last().expect("bolt on stack").id;
-    engine.apply_command(0, &pass()).expect("pass priority");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass priority");
 
     give_mana(
         &mut engine,
@@ -264,11 +275,13 @@ fn issue_323_itll_quench_ya_payment_preserves_the_targeted_spell() {
     ensure_in_hand(&mut engine, 1, "itll_quench_ya!");
     let quench_slot = hand_index_for_card(&engine, 1, "itll_quench_ya!");
     engine
-        .apply_command(1, &cast_spell(quench_slot, target_object(bolt)))
+        .apply_scenario_command(1, &cast_spell(quench_slot, target_object(bolt)))
         .expect("cast soft counter");
-    engine.apply_command(1, &pass()).expect("caster passes");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(1, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
         .expect("resolution parks a payment");
 
     give_mana(
@@ -300,7 +313,7 @@ fn issue_323_twice_the_rage_grants_double_strike_until_end_of_turn() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "two-headed_hunter_twice_the_rage");
     engine
-        .apply_command(0, &cast_spell_face(slot, target_object(target), 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, target_object(target), 1))
         .expect("cast Twice the Rage");
     resolve_entire_stack_two_player(&mut engine);
     assert!(
@@ -327,11 +340,13 @@ fn issue_323_ancestors_aid_pumps_and_creates_a_usable_treasure() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "ancestors_aid");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Ancestors' Aid");
-    engine.apply_command(0, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
     let completion = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes into resolution");
 
     let pumped = engine
@@ -352,7 +367,7 @@ fn issue_323_ancestors_aid_pumps_and_creates_a_usable_treasure() {
     ability.mana_option_index = 3;
     let red_before = engine.state.players[0].mana_pool.red;
     engine
-        .apply_command(0, &activate)
+        .apply_scenario_command(0, &activate)
         .expect("canonical Treasure mana ability");
     assert_eq!(engine.state.players[0].mana_pool.red, red_before + 1);
     assert!(
@@ -392,11 +407,13 @@ fn issue_323_shared_roots_searches_a_tapped_basic_land_and_shuffles() {
     );
     let slot = hand_index_for_card(&engine, 0, "shared_roots");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Shared Roots");
-    engine.apply_command(0, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
     let search_batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes into resolution");
 
     let choice = find_resolution_choice(&search_batch).expect("basic-land search");
@@ -408,7 +425,7 @@ fn issue_323_shared_roots_searches_a_tapped_basic_land_and_shuffles() {
     );
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .expect("choose the basic land");
     let object = &engine.state.objects[&forest];
     assert_eq!(object.zone, Zone::Battlefield);
@@ -464,7 +481,7 @@ fn issue_323_aggressive_mammoth_anthem_is_live_and_excludes_itself() {
     );
     let slot = hand_index_for_card(&engine, 0, "go_for_the_throat");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(mammoth)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(mammoth)))
         .expect("destroy the Mammoth");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&mammoth].zone, Zone::Graveyard);
@@ -504,7 +521,7 @@ fn issue_323_enter_the_enigma_makes_the_target_unblockable_this_turn() {
     );
     let slot = hand_index_for_card(&engine, 0, "enter_the_enigma");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(attacker)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(attacker)))
         .expect("cast Enter the Enigma");
     resolve_entire_stack_two_player(&mut engine);
     assert!(
@@ -516,7 +533,7 @@ fn issue_323_enter_the_enigma_makes_the_target_unblockable_this_turn() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("attack with the enchanted creature");
     pass_to_declare_blockers(&mut engine);
     let legal = &engine.initial_response_batch().legal_by_player[&1];
@@ -529,7 +546,7 @@ fn issue_323_enter_the_enigma_makes_the_target_unblockable_this_turn() {
     );
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &declare_blockers(vec![BlockPair {
                     attacker_id: attacker,
@@ -554,7 +571,7 @@ fn issue_323_enter_the_enigma_makes_the_target_unblockable_this_turn() {
     );
     let slot = hand_index_for_card(&expiry, 0, "enter_the_enigma");
     expiry
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Enter the Enigma");
     resolve_entire_stack_two_player(&mut expiry);
     assert!(zone_view_rules_annotation_labels(&mut expiry, 0, target)
@@ -587,9 +604,11 @@ fn issue_323_professional_wrestler_treasure_and_single_blocker_limit() {
     advance_to_main1_from_game_start(&mut engine);
 
     let wrestler = move_ready_to_battlefield(&mut engine, 0, "professional_wrestler");
-    engine.apply_command(0, &pass()).expect("controller passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
     let completion = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes into the ETB resolution");
     let treasure = battlefield_token_oids(&engine, 0, "treasure");
     assert_eq!(treasure.len(), 1, "the ETB creates one Treasure");
@@ -608,7 +627,7 @@ fn issue_323_professional_wrestler_treasure_and_single_blocker_limit() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![wrestler]))
+        .apply_scenario_command(0, &declare_attackers(vec![wrestler]))
         .expect("attack with Professional Wrestler");
     pass_to_declare_blockers(&mut engine);
     let legal = &engine.initial_response_batch().legal_by_player[&1];
@@ -623,7 +642,7 @@ fn issue_323_professional_wrestler_treasure_and_single_blocker_limit() {
     let command_index = engine.state.command_index;
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &declare_blockers(vec![
                     BlockPair {
@@ -641,7 +660,7 @@ fn issue_323_professional_wrestler_treasure_and_single_blocker_limit() {
     );
     assert_eq!(engine.state.command_index, command_index);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: wrestler,

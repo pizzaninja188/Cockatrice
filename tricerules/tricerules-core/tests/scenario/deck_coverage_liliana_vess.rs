@@ -1,6 +1,7 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::CounterKind;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ruled_event::Ev, ChoiceKind, RuledCommand};
 
 const LILIANA: &str = "liliana_vess";
@@ -58,7 +59,7 @@ fn pass_until_resolution_choice(
     for _ in 0..engine.state.players.len() * 2 {
         let actor = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass priority toward Liliana's resolving ability");
         if engine.state.pending_resolution.is_some() {
             return batch;
@@ -78,10 +79,10 @@ fn apply_logged_to_pair(
     let decoded = RuledCommand::decode(command.encode_to_vec().as_slice())
         .expect("accepted command serializes and decodes");
     let observed = original
-        .apply_command(actor, &command)
+        .apply_scenario_command(actor, &command)
         .expect("original command is accepted");
     let reproduced = replay
-        .apply_command(actor, &decoded)
+        .apply_scenario_command(actor, &decoded)
         .expect("replayed command is accepted");
     assert_eq!(observed, reproduced);
     assert_eq!(
@@ -105,7 +106,7 @@ fn pass_until_returned(
         answer_trigger_order_in_engine_order(engine);
         let actor = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass priority toward Liliana's graveyard return");
         batches.push(batch);
         if object_ids
@@ -151,7 +152,7 @@ fn liliana_vess_plus_one_targeted_player_chooses_the_discard() {
     let retained = inject_card_into_hand(&mut engine, 1, "storm_crow");
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &activate_ability_for(&engine, source, 0, target_player(20)),
         )
@@ -163,10 +164,10 @@ fn liliana_vess_plus_one_targeted_player_chooses_the_discard() {
     assert_eq!((choice.min, choice.max), (1, 1));
     assert!(choice.candidate_object_ids.contains(&discarded));
     assert!(engine
-        .apply_command(10, &submit_resolution_choice(vec![discarded]))
+        .apply_scenario_command(10, &submit_resolution_choice(vec![discarded]))
         .is_err());
     engine
-        .apply_command(20, &submit_resolution_choice(vec![discarded]))
+        .apply_scenario_command(20, &submit_resolution_choice(vec![discarded]))
         .expect("affected player chooses which card to discard");
 
     assert_eq!(engine.state.objects[&discarded].zone, Zone::Graveyard);
@@ -181,7 +182,7 @@ fn liliana_vess_minus_two_shuffles_and_puts_the_private_search_result_on_top() {
     let other = inject_library_card(&mut engine, 0, "storm_crow");
 
     engine
-        .apply_command(10, &activate_ability_for(&engine, source, 1, Vec::new()))
+        .apply_scenario_command(10, &activate_ability_for(&engine, source, 1, Vec::new()))
         .expect("activate Liliana's -2");
     let batch = pass_until_resolution_choice(&mut engine);
     let choice = find_resolution_choice(&batch).expect("private library search");
@@ -190,11 +191,11 @@ fn liliana_vess_minus_two_shuffles_and_puts_the_private_search_result_on_top() {
     assert_eq!((choice.min, choice.max), (1, 1));
     assert!(choice.candidate_object_ids.contains(&chosen));
     assert!(engine
-        .apply_command(20, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(20, &submit_resolution_choice(vec![chosen]))
         .is_err());
 
     let completion = engine
-        .apply_command(10, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(10, &submit_resolution_choice(vec![chosen]))
         .expect("controller chooses a library card");
     assert!(!completion
         .events
@@ -278,7 +279,7 @@ fn liliana_vess_minus_one_skips_a_target_with_an_empty_hand() {
     }
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &activate_ability_for(&engine, source, 0, target_player(20)),
         )
@@ -297,13 +298,13 @@ fn liliana_vess_minus_one_does_nothing_if_its_target_leaves_before_resolution() 
     let target_card = inject_card_into_hand(&mut engine, 1, "grizzly_bears");
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             10,
             &activate_ability_for(&engine, source, 0, target_player(20)),
         )
         .expect("target the second player");
     engine
-        .apply_command(20, &concede())
+        .apply_scenario_command(20, &concede())
         .expect("the targeted player concedes before resolution");
     pass_priority_round(&mut engine);
 
@@ -327,19 +328,19 @@ fn liliana_vess_minus_two_shuffles_an_empty_library_without_a_choice() {
     }
 
     engine
-        .apply_command(10, &activate_ability_for(&engine, source, 1, Vec::new()))
+        .apply_scenario_command(10, &activate_ability_for(&engine, source, 1, Vec::new()))
         .expect("activate Liliana's -2 with an empty library");
     let mut completion = None;
     for _ in 0..engine.state.players.len() * 2 {
         let actor = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass priority toward the empty library search");
         if let Some(pending) = engine.state.pending_resolution.as_ref() {
             let deciding_player = pending.deciding_player;
             completion = Some(
                 engine
-                    .apply_command(deciding_player, &submit_resolution_choice(Vec::new()))
+                    .apply_scenario_command(deciding_player, &submit_resolution_choice(Vec::new()))
                     .expect("decline the empty library search choice"),
             );
             break;
@@ -375,12 +376,12 @@ fn liliana_vess_minus_eight_assigns_cross_owner_entry_choice_to_destination_cont
     let paladin = inject_graveyard_card(&mut engine, 1, "bloodcrazed_paladin");
 
     engine
-        .apply_command(10, &activate_ability_for(&engine, source, 2, Vec::new()))
+        .apply_scenario_command(10, &activate_ability_for(&engine, source, 2, Vec::new()))
         .expect("activate Liliana's -8");
     let choice_batch = loop {
         let actor = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass priority toward the entry replacement choice");
         if engine.state.pending_resolution.is_some() {
             break batch;
@@ -399,7 +400,7 @@ fn liliana_vess_minus_eight_assigns_cross_owner_entry_choice_to_destination_cont
 
     let application = pending.presentation.candidates[0];
     engine
-        .apply_command(10, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(10, &submit_resolution_choice(vec![application]))
         .expect("Liliana's controller chooses the entry replacement order");
     assert_eq!(engine.state.objects[&paladin].owner, 20);
     assert_eq!(engine.state.objects[&paladin].controller, 10);
@@ -425,7 +426,7 @@ fn liliana_vess_minus_eight_returns_the_live_three_player_creature_cohort_togeth
     let spell = inject_graveyard_card(&mut engine, 2, "demonic_tutor");
 
     engine
-        .apply_command(10, &activate_ability_for(&engine, source, 2, Vec::new()))
+        .apply_scenario_command(10, &activate_ability_for(&engine, source, 2, Vec::new()))
         .expect("activate Liliana's -8");
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     assert!(
@@ -491,7 +492,7 @@ fn liliana_vess_minus_eight_finishes_with_an_empty_or_noncreature_only_cohort() 
     let spell = inject_graveyard_card(&mut engine, 2, "demonic_tutor");
 
     engine
-        .apply_command(10, &activate_ability_for(&engine, source, 2, Vec::new()))
+        .apply_scenario_command(10, &activate_ability_for(&engine, source, 2, Vec::new()))
         .expect("activate Liliana's -8");
     pass_priority_round(&mut engine);
 

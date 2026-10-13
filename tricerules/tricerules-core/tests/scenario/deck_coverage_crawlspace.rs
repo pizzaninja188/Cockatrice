@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{AttackLimitAffected, CounterKind, StaticAbilityDef};
 use tricerules_core::state::CopiableValues;
 use tricerules_core::TurnStep;
@@ -57,7 +58,7 @@ fn declare_to(engine: &mut GameEngine, destinations: &[(u32, TargetRefKind, u32)
 
 fn reject_unchanged(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = engine.diagnostic_snapshot().unwrap();
-    assert!(engine.apply_command(actor, command).is_err());
+    assert!(engine.apply_scenario_command(actor, command).is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
 }
 
@@ -122,7 +123,7 @@ fn crawlspace_rejects_three_player_attackers_and_accepts_two_without_partial_mut
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
     let before = engine.diagnostic_snapshot().unwrap();
     engine
-        .apply_command(1, &declare_attackers(attackers.clone()))
+        .apply_scenario_command(1, &declare_attackers(attackers.clone()))
         .expect_err("Crawlspace limits direct attackers to two");
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     semantic::accepted(&mut engine, 1, &declare_attackers(attackers[..2].to_vec()));
@@ -507,7 +508,7 @@ fn attack_limit_does_not_restrict_mobilize_creatures_added_attacking() {
     let command = declare_to(&mut engine, &[(shock, TargetRefKind::Player, 1)]);
     semantic::accepted(&mut engine, 0, &command);
     semantic::accepted(&mut engine, 0, &pass());
-    let batch = engine.apply_command(1, &pass()).unwrap();
+    let batch = engine.apply_scenario_command(1, &pass()).unwrap();
     let choice = batch
         .events
         .iter()
@@ -528,6 +529,7 @@ fn attack_limit_does_not_restrict_mobilize_creatures_added_attacking() {
         .unwrap();
     let command = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_combat_defender: Some(player),
             ..Default::default()
         })),

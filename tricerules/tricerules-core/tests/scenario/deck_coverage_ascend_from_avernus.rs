@@ -1,9 +1,10 @@
 //! Exact Ascend from Avernus card behavior and its X-bound graveyard return.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{CardTypeFilter, SpellEffectKind};
 use tricerules_cards::ManaCost;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ruled_event::Ev, StackResolveDestination};
 
 fn ascend_engine(seed: u64) -> GameEngine {
@@ -69,7 +70,8 @@ fn ascend_is_untargeted_and_rejects_extra_targets_atomically() {
     let hand_index = hand_index_for_card(&engine, 0, "ascend_from_avernus");
     let before = serde_json::to_vec(&engine.state).expect("serializable state");
 
-    let result = engine.apply_command(4, &cast_spell_x(hand_index, target_object(target), 1));
+    let result =
+        engine.apply_scenario_command(4, &cast_spell_x(hand_index, target_object(target), 1));
 
     assert!(result.is_err(), "Ascend has no targets");
     assert_eq!(
@@ -108,7 +110,7 @@ fn ascend_returns_each_eligible_card_at_the_cast_x_then_exiles_the_spell() {
     for _ in 0..2 {
         let actor = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass after Ascend cast");
         saw_exile_exit |= batch.events.iter().any(|event| {
             matches!(
@@ -190,7 +192,7 @@ fn ascend_with_x_zero_returns_only_zero_mana_value_permanents_and_still_exiles()
     for _ in 0..2 {
         let actor = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass after Ascend cast");
         saw_exile_exit |= batch.events.iter().any(|event| {
             matches!(
@@ -300,7 +302,7 @@ fn ascend_copy_uses_its_controllers_graveyard_and_exiles_only_the_copy() {
         }
         let priority = engine.state.priority_player_id();
         engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("pass priority to the Twincast player");
     }
     assert_eq!(engine.state.priority_player_id(), 9);
@@ -328,7 +330,7 @@ fn ascend_copy_uses_its_controllers_graveyard_and_exiles_only_the_copy() {
         let actor = engine.state.priority_player_id();
         copy_events.extend(
             engine
-                .apply_command(actor, &pass())
+                .apply_scenario_command(actor, &pass())
                 .expect("pass to resolve the Ascend copy")
                 .events,
         );
@@ -355,7 +357,7 @@ fn ascend_copy_uses_its_controllers_graveyard_and_exiles_only_the_copy() {
         let actor = engine.state.priority_player_id();
         original_events.extend(
             engine
-                .apply_command(actor, &pass())
+                .apply_scenario_command(actor, &pass())
                 .expect("pass to resolve physical Ascend")
                 .events,
         );

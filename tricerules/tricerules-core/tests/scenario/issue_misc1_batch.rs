@@ -5,6 +5,7 @@
 //! Every expectation is the reviewed printed Oracle behavior. Governance: CR 115 (targets),
 //! 508 (attacking), 602/605 (activated abilities and timing), 611.2c/613 layer 7c, 122.1
 //! (counters), and 701.13 (exile).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -105,7 +106,7 @@ fn issue_misc1_exorcise() {
     let slot = hand_index_for_card(&small, 0, "exorcise");
     assert!(
         small
-            .apply_command(0, &cast_spell(slot, target_object(bear)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
             .is_err(),
         "a 2/2 nonartifact nonenchantment is not a legal target"
     );
@@ -121,7 +122,7 @@ fn issue_misc1_rock_soldiers() {
     semantic::accepted(&mut e, 0, &cast_spell(slot, vec![]));
     pass_both_players(&mut e);
     assert_eq!(e.state.pending_triggers.len(), 1, "the entry trigger waits");
-    e.apply_command(0, &choose_trigger_target(boots, TargetRefKind::Permanent))
+    e.apply_scenario_command(0, &choose_trigger_target(boots, TargetRefKind::Permanent))
         .expect("choose the artifact");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.objects[&boots].zone, Zone::Graveyard);
@@ -136,7 +137,7 @@ fn issue_misc1_rock_soldiers() {
     assert_eq!(creature.state.pending_triggers.len(), 1);
     assert!(
         creature
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &choose_trigger_target(juggernaut, TargetRefKind::Permanent)
             )
@@ -159,7 +160,7 @@ fn issue_misc1_rock_soldiers() {
         })),
     };
     decline
-        .apply_command(0, &no_target)
+        .apply_scenario_command(0, &no_target)
         .expect("choose no target");
     resolve_entire_stack_two_player(&mut decline);
 }
@@ -170,9 +171,10 @@ fn issue_misc1_aetherize() {
     let attacker_a = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let attacker_b = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let idle = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![attacker_a, attacker_b]))
+    e.apply_scenario_command(0, &declare_attackers(vec![attacker_a, attacker_b]))
         .expect("declare attackers");
-    e.apply_command(0, &pass()).expect("pass to the defender");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass to the defender");
     grant_pool(&mut e, 1);
     inject_card_into_hand(&mut e, 1, "aetherize");
     let slot = hand_index_for_card(&e, 1, "aetherize");

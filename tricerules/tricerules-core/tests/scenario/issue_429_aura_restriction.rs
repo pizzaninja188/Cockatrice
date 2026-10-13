@@ -9,6 +9,7 @@
 //! concepts: 608.2b (fizzled Aura), 603.6a (entry triggers), 701.26 (tap), 122.1 (counters),
 //! 111.1 (tokens), 605.1a (granted mana ability), 613.1f/613.7 (layer-6 removal and timestamps),
 //! and 502.3 (untap-step restriction).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -31,7 +32,7 @@ fn advance_to_active_player_upkeep(engine: &mut GameEngine, player: i32) {
             None => (engine.state.priority_player_id(), pass()),
         };
         engine
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("pass through turn");
         if engine.state.active_player_id() == player
             && engine.state.turn_step == tricerules_core::TurnStep::Upkeep
@@ -105,7 +106,7 @@ fn stuck_in_summoners_sanctum_taps_locks_activation_and_untap_until_detached() {
     );
     let slot = hand_index_for_card(&engine, 0, "stuck_in_summoners_sanctum");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(skeletons)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(skeletons)))
         .expect("cast Stuck in Summoner's Sanctum on a creature");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -127,7 +128,7 @@ fn stuck_in_summoners_sanctum_taps_locks_activation_and_untap_until_detached() {
         .iter()
         .any(|label| label == "Activated abilities can't be activated"));
     assert!(matches!(
-        engine.apply_command(1, &activate_ability_for(&engine, skeletons, 0, vec![])),
+        engine.apply_scenario_command(1, &activate_ability_for(&engine, skeletons, 0, vec![])),
         Err(tricerules_core::EngineError::Illegal(_))
     ));
     assert_eq!(
@@ -157,7 +158,7 @@ fn stuck_in_summoners_sanctum_taps_locks_activation_and_untap_until_detached() {
     let priority = engine.state.priority_player_id();
     if priority != 1 {
         engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("pass priority to the enchanted creature's controller");
     }
     give_mana(
@@ -169,7 +170,7 @@ fn stuck_in_summoners_sanctum_taps_locks_activation_and_untap_until_detached() {
         },
     );
     engine
-        .apply_command(1, &activate_ability_for(&engine, skeletons, 0, vec![]))
+        .apply_scenario_command(1, &activate_ability_for(&engine, skeletons, 0, vec![]))
         .expect("the ability can be activated after its Aura no longer applies");
     assert_eq!(
         engine.state.stack.len(),
@@ -217,12 +218,12 @@ fn petrify_prohibits_activated_abilities_and_attacks() {
     );
     let slot = hand_index_for_card(&engine, 0, "petrify");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(petrified)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(petrified)))
         .expect("cast Petrify on a creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(zone_view_ability_flags(&mut engine, 0, petrified), [false]);
     assert!(matches!(
-        engine.apply_command(0, &activate_ability_for(&engine, petrified, 0, vec![])),
+        engine.apply_scenario_command(0, &activate_ability_for(&engine, petrified, 0, vec![])),
         Err(tricerules_core::EngineError::Illegal(_))
     ));
     assert_eq!(
@@ -235,23 +236,23 @@ fn petrify_prohibits_activated_abilities_and_attacks() {
     );
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defending player passes");
     assert_eq!(
         engine.state.turn_step,
         tricerules_core::TurnStep::DeclareAttackers
     );
     assert!(engine
-        .apply_command(0, &declare_attackers(vec![petrified]))
+        .apply_scenario_command(0, &declare_attackers(vec![petrified]))
         .is_err());
     engine
-        .apply_command(0, &declare_attackers(vec![legal_attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![legal_attacker]))
         .expect("an unenchanted creature remains able to attack");
 }
 
@@ -296,7 +297,7 @@ fn petrify_prohibits_blocking_and_accepts_artifact_targets() {
     );
     let first_slot = hand_index_for_card(&engine, 0, "petrify");
     engine
-        .apply_command(0, &cast_spell(first_slot, target_object(petrified_blocker)))
+        .apply_scenario_command(0, &cast_spell(first_slot, target_object(petrified_blocker)))
         .expect("cast Petrify on the creature blocker");
     resolve_entire_stack_two_player(&mut engine);
     let creature_aura = engine.state.players[0]
@@ -318,7 +319,7 @@ fn petrify_prohibits_blocking_and_accepts_artifact_targets() {
         [false]
     );
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &activate_ability_for(&engine, petrified_blocker, 0, vec![])
         )
@@ -327,7 +328,7 @@ fn petrify_prohibits_blocking_and_accepts_artifact_targets() {
     ensure_card_in_hand(&mut engine, 0, "petrify");
     let second_slot = hand_index_for_card(&engine, 0, "petrify");
     engine
-        .apply_command(0, &cast_spell(second_slot, target_object(treasure)))
+        .apply_scenario_command(0, &cast_spell(second_slot, target_object(treasure)))
         .expect("Petrify can enchant an artifact token");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.state.players[0].battlefield.iter().any(|id| {
@@ -338,26 +339,26 @@ fn petrify_prohibits_blocking_and_accepts_artifact_targets() {
     assert_eq!(zone_view_ability_flags(&mut engine, 1, treasure), [false]);
     assert!(engine.state.objects[&treasure].token_origin.is_some());
     assert!(engine
-        .apply_command(1, &activate_ability_for(&engine, treasure, 0, vec![]))
+        .apply_scenario_command(1, &activate_ability_for(&engine, treasure, 0, vec![]))
         .is_err());
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defending player passes");
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare an unenchanted attacker");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("attacking player passes");
     let blockers = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defending player receives blockers");
     let legal = blockers
         .legal_by_player
@@ -373,7 +374,7 @@ fn petrify_prohibits_blocking_and_accepts_artifact_targets() {
         "Petrify removes only its attached creature from legal blockers"
     );
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -418,7 +419,7 @@ fn stop_cold_taps_removes_abilities_and_keeps_a_later_grant() {
     );
     let slot = hand_index_for_card(&engine, 0, "stop_cold");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(farrier)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(farrier)))
         .expect("cast Stop Cold on a creature");
     resolve_entire_stack_two_player(&mut engine);
     assert!(
@@ -443,7 +444,7 @@ fn stop_cold_taps_removes_abilities_and_keeps_a_later_grant() {
     );
     let slot = hand_index_for_card(&engine, 0, "flight");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(farrier)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(farrier)))
         .expect("cast Flight on the same creature");
     resolve_entire_stack_two_player(&mut engine);
     assert!(
@@ -490,13 +491,13 @@ fn flood_the_engine_requires_a_creature_or_vehicle_and_taps_it() {
     let slot = hand_index_for_card(&engine, 0, "flood_the_engine");
     assert!(
         engine
-            .apply_command(0, &cast_spell(slot, target_object(land)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(land)))
             .is_err(),
         "a land is not a legal Enchant creature or Vehicle target"
     );
     let slot = hand_index_for_card(&engine, 0, "flood_the_engine");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
         .expect("cast Flood the Engine on a creature");
     resolve_entire_stack_two_player(&mut engine);
     assert!(
@@ -537,20 +538,22 @@ fn new_horizons_counters_and_grants_two_mana_of_one_color() {
     );
     let slot = hand_index_for_card(&engine, 0, "new_horizons");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(land)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(land)))
         .expect("cast New Horizons on a land");
-    engine.apply_command(0, &pass()).expect("caster passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("New Horizons resolves");
     assert!(
         engine
-            .apply_command(0, &choose_trigger_target(opposing))
+            .apply_scenario_command(0, &choose_trigger_target(opposing))
             .is_err(),
         "the counter trigger targets only a creature you control"
     );
     engine
-        .apply_command(0, &choose_trigger_target(bear))
+        .apply_scenario_command(0, &choose_trigger_target(bear))
         .expect("choose the controlled creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.effective_power(bear), Some(3));
@@ -559,7 +562,7 @@ fn new_horizons_counters_and_grants_two_mana_of_one_color() {
     // The intrinsic Forest mana bundle owns slot 0; the grant appends at slot 1.
     let command = activate_mana_option(&engine, land, 1, 0);
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("activate the granted two-mana ability");
     assert_eq!(engine.state.players[0].mana_pool.white, 2);
     assert!(engine.state.objects[&land].tapped);
@@ -599,7 +602,7 @@ fn new_horizons_cast_with_no_creature_is_legal_and_has_no_counter_target() {
     );
     let slot = hand_index_for_card(&engine, 0, "new_horizons");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(land)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(land)))
         .expect("New Horizons is castable with no creatures you control");
     resolve_entire_stack_two_player(&mut engine);
     let aura = battlefield_object_for_card(&engine, 0, "new_horizons");
@@ -645,7 +648,7 @@ fn new_horizons_fizzles_and_never_triggers_when_its_land_leaves() {
     );
     let slot = hand_index_for_card(&engine, 0, "new_horizons");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(land)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(land)))
         .expect("cast New Horizons");
     let aura_stack_id = engine.state.stack.last().expect("Aura on the stack").id;
     {
@@ -655,9 +658,11 @@ fn new_horizons_fizzles_and_never_triggers_when_its_land_leaves() {
     engine.state.players[0].battlefield.retain(|&id| id != land);
     engine.state.players[0].graveyard.push(land);
 
-    engine.apply_command(0, &pass()).expect("caster passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("fizzled Aura resolves");
     assert_eq!(
         engine.state.objects.get(&aura_stack_id).map(|o| o.zone),
@@ -711,7 +716,7 @@ fn friendly_neighborhood_creates_three_citizens_and_pumps_per_creature() {
     );
     let slot = hand_index_for_card(&engine, 0, "friendly_neighborhood");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(land)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(land)))
         .expect("cast Friendly Neighborhood on a land");
     resolve_entire_stack_two_player(&mut engine);
     let tokens = battlefield_token_oids(&engine, 0, "human_citizen_gw_1_1");

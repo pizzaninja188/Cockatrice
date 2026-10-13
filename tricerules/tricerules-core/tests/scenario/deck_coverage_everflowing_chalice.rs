@@ -1,8 +1,9 @@
 //! Actual-card Multikicker, charge-entry, live colorless mana and zone-history coverage.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use prost::Message;
 use tricerules_cards::CounterKind;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     dev_command::Dev, DevCommand, DevMoveCard, DevPutCardInZone, DevZone,
 };
@@ -101,7 +102,7 @@ fn everflowing_chalice_reads_live_counters_and_rejects_invalid_mana_choice() {
     };
     command.mana_option_index = 1;
     let before = format!("{:?}", e.state);
-    assert!(e.apply_command(0, &invalid).is_err());
+    assert!(e.apply_scenario_command(0, &invalid).is_err());
     assert_eq!(format!("{:?}", e.state), before);
     let command = activate_ability_for(&e, oid, 0, vec![]);
     semantic::accepted(&mut e, 0, &command);
@@ -145,7 +146,7 @@ fn everflowing_chalice_direct_entry_and_leave_return_have_no_cast_payment_histor
 }
 
 fn dev(e: &mut GameEngine, dev: Dev) {
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::DevCommand(DevCommand {
@@ -185,12 +186,12 @@ fn everflowing_chalice_replays_serialized_count_payment_entry_and_mana_identical
         }],
     );
     let mut commands = vec![];
-    let batch = engine.apply_command(0, &cast).unwrap();
+    let batch = engine.apply_scenario_command(0, &cast).unwrap();
     commands.push((0, cast, batch));
     for _ in 0..2 {
         let actor = engine.state.priority_player_id();
         let command = pass();
-        let batch = engine.apply_command(actor, &command).unwrap();
+        let batch = engine.apply_scenario_command(actor, &command).unwrap();
         commands.push((actor, command, batch));
     }
     assert!(engine.state.stack.is_empty());
@@ -199,11 +200,14 @@ fn everflowing_chalice_replays_serialized_count_payment_entry_and_mana_identical
         3
     );
     let command = activate_ability_for(&engine, oid, 0, vec![]);
-    let batch = engine.apply_command(0, &command).unwrap();
+    let batch = engine.apply_scenario_command(0, &command).unwrap();
     commands.push((0, command, batch));
     for (actor, command, expected) in commands {
         let decoded = RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
-        assert_eq!(replay.apply_command(actor, &decoded).unwrap(), expected);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &decoded).unwrap(),
+            expected
+        );
     }
     assert_eq!(engine.state.players[0].mana_pool.colorless, 3);
     assert_eq!(

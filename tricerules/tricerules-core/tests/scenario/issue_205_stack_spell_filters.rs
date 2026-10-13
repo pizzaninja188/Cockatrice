@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 
 fn stack_target(object_id: u32) -> Vec<TargetRef> {
     vec![TargetRef {
@@ -69,9 +70,10 @@ fn issue_205_exact_and_minimum_filters_publish_and_enforce_the_same_targets() {
     );
 
     let hill = hand_index_for_card(&e, 0, "hill_giant");
-    e.apply_command(0, &cast_spell(hill, vec![])).unwrap();
+    e.apply_scenario_command(0, &cast_spell(hill, vec![]))
+        .unwrap();
     let hill_spell = e.state.stack.last().unwrap().id;
-    e.apply_command(0, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
 
     let snare = hand_index_for_card(&e, 1, "spell_snare");
     let stroke = hand_index_for_card(&e, 1, "disdainful_stroke");
@@ -83,7 +85,7 @@ fn issue_205_exact_and_minimum_filters_publish_and_enforce_the_same_targets() {
     let stack_before = e.state.stack.len();
     let revision_before = e.state.command_index;
     assert!(e
-        .apply_command(1, &cast_spell(snare, stack_target(hill_spell)))
+        .apply_scenario_command(1, &cast_spell(snare, stack_target(hill_spell)))
         .is_err());
     assert_eq!(e.state.players[1].hand, hand_before);
     assert_eq!(e.state.players[1].mana_pool, mana_before);
@@ -91,7 +93,7 @@ fn issue_205_exact_and_minimum_filters_publish_and_enforce_the_same_targets() {
     assert_eq!(e.state.command_index, revision_before);
 
     let stroke = hand_index_for_card(&e, 1, "disdainful_stroke");
-    e.apply_command(1, &cast_spell(stroke, stack_target(hill_spell)))
+    e.apply_scenario_command(1, &cast_spell(stroke, stack_target(hill_spell)))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
@@ -104,12 +106,13 @@ fn issue_205_exact_and_minimum_filters_publish_and_enforce_the_same_targets() {
     );
 
     let bear = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(bear, vec![])).unwrap();
+    e.apply_scenario_command(0, &cast_spell(bear, vec![]))
+        .unwrap();
     let bear_spell = e.state.stack.last().unwrap().id;
-    e.apply_command(0, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
     let snare = hand_index_for_card(&e, 1, "spell_snare");
     assert_eq!(valid_stack_targets(&mut e, 1, snare), vec![bear_spell]);
-    e.apply_command(1, &cast_spell(snare, stack_target(bear_spell)))
+    e.apply_scenario_command(1, &cast_spell(snare, stack_target(bear_spell)))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
@@ -171,11 +174,12 @@ fn issue_205_resolution_rejects_a_stale_stack_target_generation() {
         },
     );
     let bear = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(bear, vec![])).unwrap();
+    e.apply_scenario_command(0, &cast_spell(bear, vec![]))
+        .unwrap();
     let bear_spell = e.state.stack.last().unwrap().id;
-    e.apply_command(0, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
     let snare = hand_index_for_card(&e, 1, "spell_snare");
-    e.apply_command(1, &cast_spell(snare, stack_target(bear_spell)))
+    e.apply_scenario_command(1, &cast_spell(snare, stack_target(bear_spell)))
         .unwrap();
 
     *e.state

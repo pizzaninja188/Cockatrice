@@ -4,6 +4,7 @@
 //! entry triggers, 603.10a covers leaves-the-battlefield triggers, 111.7 preserves a token's
 //! departure trigger until it resolves, and 115.4 limits "any target" to creature, player,
 //! planeswalker, or battle targets.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -62,7 +63,7 @@ fn resolve_top_spell(engine: &mut GameEngine) -> tricerules_proto::ruled::v1::Ru
     for _ in 0..engine.state.players.len() {
         let priority = engine.state.priority_player_id();
         batch = engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("pass priority to resolve the spell");
     }
     batch
@@ -93,7 +94,7 @@ fn own_nontoken_artifacts_create_munitions_and_its_any_target_leaves_trigger_sur
     let card = inject_card_into_hand(&mut engine, 0, WEAPONS_MANUFACTURING);
     let slot = hand_index_for_card(&engine, 0, WEAPONS_MANUFACTURING);
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Weapons Manufacturing");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&card].zone, Zone::Battlefield);
@@ -129,7 +130,7 @@ fn own_nontoken_artifacts_create_munitions_and_its_any_target_leaves_trigger_sur
     inject_card_into_hand(&mut engine, 0, "disenchant");
     let disenchant_slot = hand_index_for_card(&engine, 0, "disenchant");
     engine
-        .apply_command(0, &cast_spell(disenchant_slot, target_object(first_token)))
+        .apply_scenario_command(0, &cast_spell(disenchant_slot, target_object(first_token)))
         .expect("Disenchant targets Munitions");
     let destroyed_token_batch = resolve_top_spell(&mut engine);
     assert!(!engine.state.objects.contains_key(&first_token));
@@ -147,7 +148,7 @@ fn own_nontoken_artifacts_create_munitions_and_its_any_target_leaves_trigger_sur
     let before_illegal_target = format!("{:?}", engine.state);
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &choose_trigger_target(TargetRefKind::Permanent, sol_ring),
             )
@@ -157,7 +158,7 @@ fn own_nontoken_artifacts_create_munitions_and_its_any_target_leaves_trigger_sur
     assert_eq!(format!("{:?}", engine.state), before_illegal_target);
 
     engine
-        .apply_command(0, &choose_trigger_target(TargetRefKind::Player, 1))
+        .apply_scenario_command(0, &choose_trigger_target(TargetRefKind::Player, 1))
         .expect("choose the opponent as the any target");
     assert_eq!(
         engine.state.stack.last().unwrap().source_permanent_id,
@@ -171,7 +172,7 @@ fn own_nontoken_artifacts_create_munitions_and_its_any_target_leaves_trigger_sur
     inject_card_into_hand(&mut engine, 0, "farewell");
     let farewell_slot = hand_index_for_card(&engine, 0, "farewell");
     engine
-        .apply_command(0, &cast_modal_spell(farewell_slot, vec![(0, Vec::new())]))
+        .apply_scenario_command(0, &cast_modal_spell(farewell_slot, vec![(0, Vec::new())]))
         .expect("cast Farewell's artifact mode");
     let exiled_token_batch = resolve_top_spell(&mut engine);
     assert!(!engine.state.objects.contains_key(&second_token));
@@ -187,7 +188,7 @@ fn own_nontoken_artifacts_create_munitions_and_its_any_target_leaves_trigger_sur
     assert!(engine.state.players[0].battlefield.contains(&card));
 
     engine
-        .apply_command(0, &choose_trigger_target(TargetRefKind::Player, 1))
+        .apply_scenario_command(0, &choose_trigger_target(TargetRefKind::Player, 1))
         .expect("choose opponent after the token is exiled");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.players[1].life, 16);

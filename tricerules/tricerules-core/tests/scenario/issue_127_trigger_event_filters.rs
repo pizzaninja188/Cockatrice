@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
 };
@@ -6,6 +7,7 @@ use tricerules_proto::ruled::v1::{
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
@@ -49,7 +51,7 @@ fn issue_127_entry_counters_are_included_in_the_trigger_power_check() {
 
     let endless_one = hand_index_for_card(&engine, 0, "endless_one");
     engine
-        .apply_command(0, &cast_spell_x(endless_one, vec![], 3))
+        .apply_scenario_command(0, &cast_spell_x(endless_one, vec![], 3))
         .expect("cast Endless One with X=3");
     pass_both_players(&mut engine);
 
@@ -61,7 +63,7 @@ fn issue_127_entry_counters_are_included_in_the_trigger_power_check() {
     ensure_in_hand(&mut engine, 0, "instill_infection");
     let infection = hand_index_for_card(&engine, 0, "instill_infection");
     engine
-        .apply_command(0, &cast_spell(infection, target_object(too_large)))
+        .apply_scenario_command(0, &cast_spell(infection, target_object(too_large)))
         .expect("cast Instill Infection after entry");
     pass_both_players(&mut engine);
     assert_eq!(engine.effective_power(too_large), Some(2));
@@ -73,7 +75,7 @@ fn issue_127_entry_counters_are_included_in_the_trigger_power_check() {
     ensure_in_hand(&mut engine, 0, "endless_one");
     let endless_one = hand_index_for_card(&engine, 0, "endless_one");
     engine
-        .apply_command(0, &cast_spell_x(endless_one, vec![], 2))
+        .apply_scenario_command(0, &cast_spell_x(endless_one, vec![], 2))
         .expect("cast Endless One with X=2");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.stack.len(), 1, "a 2/2 entrant must trigger");
@@ -108,13 +110,13 @@ fn issue_127_continuous_effects_are_included_in_the_entry_power_check() {
 
     let anthem = hand_index_for_card(&engine, 0, "glorious_anthem");
     engine
-        .apply_command(0, &cast_spell(anthem, vec![]))
+        .apply_scenario_command(0, &cast_spell(anthem, vec![]))
         .expect("cast Glorious Anthem");
     pass_both_players(&mut engine);
 
     let endless_one = hand_index_for_card(&engine, 0, "endless_one");
     engine
-        .apply_command(0, &cast_spell_x(endless_one, vec![], 2))
+        .apply_scenario_command(0, &cast_spell_x(endless_one, vec![], 2))
         .expect("cast Endless One with X=2");
     pass_both_players(&mut engine);
 
@@ -147,7 +149,7 @@ fn issue_127_a_collected_trigger_is_not_rechecked_after_entry() {
 
     let endless_one = hand_index_for_card(&engine, 0, "endless_one");
     engine
-        .apply_command(0, &cast_spell_x(endless_one, vec![], 2))
+        .apply_scenario_command(0, &cast_spell_x(endless_one, vec![], 2))
         .expect("cast Endless One with X=2");
     pass_both_players(&mut engine);
     let entrant = battlefield_object_for_card(&engine, 0, "endless_one");
@@ -155,7 +157,7 @@ fn issue_127_a_collected_trigger_is_not_rechecked_after_entry() {
 
     let growth = hand_index_for_card(&engine, 0, "giant_growth");
     engine
-        .apply_command(0, &cast_spell(growth, target_object(entrant)))
+        .apply_scenario_command(0, &cast_spell(growth, target_object(entrant)))
         .expect("cast Giant Growth over the trigger");
     pass_both_players(&mut engine);
     assert_eq!(engine.effective_power(entrant), Some(5));
@@ -187,7 +189,7 @@ fn issue_127_each_simultaneous_eligible_entrant_triggers_once() {
 
     let alarm = hand_index_for_card(&engine, 0, "raise_the_alarm");
     engine
-        .apply_command(0, &cast_spell(alarm, vec![]))
+        .apply_scenario_command(0, &cast_spell(alarm, vec![]))
         .expect("cast Raise the Alarm");
     pass_both_players(&mut engine);
 
@@ -223,7 +225,7 @@ fn issue_127_another_and_controller_restrictions_are_enforced() {
 
     let clown_index = hand_index_for_card(&engine, 0, "vicious_clown");
     engine
-        .apply_command(0, &cast_spell(clown_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(clown_index, vec![]))
         .expect("cast Vicious Clown");
     pass_both_players(&mut engine);
     assert!(engine.state.stack.is_empty(), "the Clown excludes itself");
@@ -235,7 +237,7 @@ fn issue_127_another_and_controller_restrictions_are_enforced() {
     grant_pool(&mut engine, 1);
     let lion = hand_index_for_card(&engine, 1, "savannah_lions");
     engine
-        .apply_command(1, &cast_spell(lion, vec![]))
+        .apply_scenario_command(1, &cast_spell(lion, vec![]))
         .expect("opponent casts Savannah Lions");
     pass_both_players(&mut engine);
 
@@ -268,14 +270,14 @@ fn issue_127_mentor_optional_payment_draws_exactly_one_card() {
 
     let lion = hand_index_for_card(&engine, 0, "savannah_lions");
     engine
-        .apply_command(0, &cast_spell(lion, vec![]))
+        .apply_scenario_command(0, &cast_spell(lion, vec![]))
         .expect("cast Savannah Lions");
     pass_both_players(&mut engine);
     pass_both_players(&mut engine);
     assert!(engine.state.pending_resolution.is_some());
 
     engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("choose to pay {1}");
     let hand_before = engine.state.players[0].hand.len();
     let library_before = engine.state.players[0].library.len();

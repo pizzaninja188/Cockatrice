@@ -1,4 +1,5 @@
 //! Actual-card semantics for Beast Within, checked against the pinned Oracle and current rulings.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -35,7 +36,7 @@ fn resolve_beast_within(engine: &mut GameEngine, target: u32) {
     );
     let slot = hand_index_for_card(engine, 0, "beast_within");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Beast Within");
     resolve_entire_stack_two_player(engine);
 }
@@ -106,7 +107,7 @@ fn beast_within_creates_no_beast_if_its_target_is_illegal_on_resolution() {
     );
     let slot = hand_index_for_card(&engine, 0, "beast_within");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(land)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(land)))
         .expect("cast Beast Within");
     engine.state.players[1]
         .battlefield

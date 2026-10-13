@@ -6,6 +6,7 @@
 //! the {2}, {T} graveyard exile; CR 603.5/701.14 the optional fight; CR 603.5/404.2 the optional
 //! graveyard return; CR 603.5/701.8 the optional artifact-or-enchantment destroy; and CR 111.10a/603.6
 //! the Equipment entry Treasure.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::{TurnStep, Zone};
@@ -108,7 +109,7 @@ fn issue_336_desperate_parry_pumps_minus_four_zero_and_expires() {
     );
     let slot = hand_index_for_card(&engine, 0, "obyras_attendants_desperate_parry");
     engine
-        .apply_command(0, &cast_spell_face(slot, target_object(bear), 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, target_object(bear), 1))
         .expect("cast the Desperate Parry Adventure face");
     assert_eq!(
         engine.effective_power(bear),
@@ -151,7 +152,9 @@ fn issue_336_arcane_epiphany_reduction_needs_a_controlled_wizard() {
     );
     let slot = hand_index_for_card(&absent, 0, "arcane_epiphany");
     assert!(
-        absent.apply_command(0, &cast_spell(slot, vec![])).is_err(),
+        absent
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .is_err(),
         "four mana cannot pay the unreduced {{3}}{{U}}{{U}}"
     );
 
@@ -175,7 +178,7 @@ fn issue_336_arcane_epiphany_reduction_needs_a_controlled_wizard() {
     let slot = hand_index_for_card(&non_wizard, 0, "arcane_epiphany");
     assert!(
         non_wizard
-            .apply_command(0, &cast_spell(slot, vec![]))
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
             .is_err(),
         "a non-Wizard creature leaves the spell at full cost"
     );
@@ -200,7 +203,7 @@ fn issue_336_arcane_epiphany_reduction_needs_a_controlled_wizard() {
     let hand_before = wizard.state.players[0].hand.len();
     let slot = hand_index_for_card(&wizard, 0, "arcane_epiphany");
     wizard
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("the reduced {2}{U}{U} is payable with four mana");
     assert_eq!(wizard.state.players[0].mana_pool.colorless, 0);
     assert_eq!(wizard.state.players[0].mana_pool.blue, 0);
@@ -228,7 +231,7 @@ fn issue_336_spectral_sailor_activation_draws_one_for_three_and_a_blue() {
     let pool_before = short.state.players[0].mana_pool;
     assert!(
         short
-            .apply_command(0, &activate_ability_for(&short, short_sailor, 0, vec![]),)
+            .apply_scenario_command(0, &activate_ability_for(&short, short_sailor, 0, vec![]),)
             .is_err(),
         "{{3}}{{U}} is not payable with three mana"
     );
@@ -249,7 +252,7 @@ fn issue_336_spectral_sailor_activation_draws_one_for_three_and_a_blue() {
         },
     );
     exact
-        .apply_command(0, &activate_ability_for(&exact, sailor, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&exact, sailor, 0, vec![]))
         .expect("activate {3}{U}: Draw a card.");
     assert_eq!(exact.state.players[0].mana_pool.blue, 0);
     assert_eq!(exact.state.players[0].mana_pool.colorless, 0);
@@ -277,7 +280,7 @@ fn issue_336_magic_pot_exiles_a_target_graveyard_card_for_two_and_tap() {
     );
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_ability_for(&engine, pot, 0, target_object(battlefield_creature)),
             )
@@ -286,7 +289,7 @@ fn issue_336_magic_pot_exiles_a_target_graveyard_card_for_two_and_tap() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&engine, pot, 0, graveyard_target(opposing_card)),
         )
@@ -316,7 +319,7 @@ fn issue_336_affectionate_indrik_may_fight_and_may_decline() {
     assert_eq!(decline.state.pending_triggers.len(), 1);
     assert!(
         decline
-            .apply_command(0, &choose_permanent_targets(&[own], false))
+            .apply_scenario_command(0, &choose_permanent_targets(&[own], false))
             .is_err(),
         "CR 115.1: a creature you control is not a legal fight target"
     );
@@ -326,7 +329,7 @@ fn issue_336_affectionate_indrik_may_fight_and_may_decline() {
         "a rejected target leaves the optional trigger pending"
     );
     decline
-        .apply_command(0, &choose_permanent_targets(&[bear], false))
+        .apply_scenario_command(0, &choose_permanent_targets(&[bear], false))
         .expect("choose the fight target before the resolution-time may choice");
     resolve_entire_stack_two_player(&mut decline);
     answer_optional_triggered_ability_choice(&mut decline, ResolutionChoiceDecision::Decline);
@@ -337,7 +340,7 @@ fn issue_336_affectionate_indrik_may_fight_and_may_decline() {
     let bear = inject_creature_on_battlefield(&mut fight, 1, "grizzly_bears");
     let indrik = move_ready_to_battlefield(&mut fight, 0, "affectionate_indrik");
     fight
-        .apply_command(0, &choose_permanent_targets(&[bear], false))
+        .apply_scenario_command(0, &choose_permanent_targets(&[bear], false))
         .expect("CR 701.14: fight the chosen creature");
     resolve_entire_stack_two_player(&mut fight);
     answer_optional_triggered_ability_choice(&mut fight, ResolutionChoiceDecision::SelectBranch);
@@ -357,12 +360,12 @@ fn issue_336_graveshifter_may_return_a_creature_card_and_may_decline() {
     move_ready_to_battlefield(&mut engine, 0, "graveshifter");
     assert!(
         engine
-            .apply_command(0, &choose_graveyard_targets(&[land_card], false))
+            .apply_scenario_command(0, &choose_graveyard_targets(&[land_card], false))
             .is_err(),
         "a land card is not a legal creature-card target"
     );
     engine
-        .apply_command(0, &choose_graveyard_targets(&[creature_card], false))
+        .apply_scenario_command(0, &choose_graveyard_targets(&[creature_card], false))
         .expect("return the creature card");
     resolve_entire_stack_two_player(&mut engine);
     answer_optional_triggered_ability_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
@@ -373,7 +376,7 @@ fn issue_336_graveshifter_may_return_a_creature_card_and_may_decline() {
     let card = inject_graveyard_card(&mut decline, 0, "grizzly_bears");
     move_ready_to_battlefield(&mut decline, 0, "graveshifter");
     decline
-        .apply_command(0, &choose_graveyard_targets(&[card], false))
+        .apply_scenario_command(0, &choose_graveyard_targets(&[card], false))
         .expect("choose the target before the resolution-time may choice");
     resolve_entire_stack_two_player(&mut decline);
     answer_optional_triggered_ability_choice(&mut decline, ResolutionChoiceDecision::Decline);
@@ -392,12 +395,12 @@ fn issue_336_reclamation_sage_may_destroy_an_artifact_and_may_decline() {
     move_ready_to_battlefield(&mut engine, 0, "reclamation_sage");
     assert!(
         engine
-            .apply_command(0, &choose_permanent_targets(&[creature], false))
+            .apply_scenario_command(0, &choose_permanent_targets(&[creature], false))
             .is_err(),
         "a creature is not an artifact or enchantment"
     );
     engine
-        .apply_command(0, &choose_permanent_targets(&[artifact], false))
+        .apply_scenario_command(0, &choose_permanent_targets(&[artifact], false))
         .expect("destroy the chosen artifact");
     resolve_entire_stack_two_player(&mut engine);
     answer_optional_triggered_ability_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
@@ -408,7 +411,7 @@ fn issue_336_reclamation_sage_may_destroy_an_artifact_and_may_decline() {
     let artifact = inject_permanent_on_battlefield(&mut decline, 1, "bonesplitter");
     move_ready_to_battlefield(&mut decline, 0, "reclamation_sage");
     decline
-        .apply_command(0, &choose_permanent_targets(&[artifact], false))
+        .apply_scenario_command(0, &choose_permanent_targets(&[artifact], false))
         .expect("choose the target before the resolution-time may choice");
     resolve_entire_stack_two_player(&mut decline);
     answer_optional_triggered_ability_choice(&mut decline, ResolutionChoiceDecision::Decline);

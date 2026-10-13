@@ -4,6 +4,7 @@
 //! path. CR 602.1/602.2 and 118.1-118.3 govern activation and atomic mana payment; CR 302.6
 //! governs the creature tap cost and summoning sickness; CR 113.7a makes each ability independent
 //! after activation; CR 608.2b revalidates its target on resolution.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use prost::Message;
@@ -82,7 +83,7 @@ fn three_player_main1(seed: u64) -> GameEngine {
     while engine.state.turn_step != TurnStep::Main1 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("advance three-player turn");
     }
     engine
@@ -96,7 +97,7 @@ fn resolve_three_player(engine: &mut GameEngine) {
             }
             let player = engine.state.priority_player_id();
             engine
-                .apply_command(player, &pass())
+                .apply_scenario_command(player, &pass())
                 .expect("three-player priority pass");
         }
     }
@@ -144,7 +145,7 @@ fn issue_315_each_variant_pays_exact_mana_and_taps_source_then_target() {
         let (mut engine, source, target) = creature_engine(seed, card_id, "grizzly_bears");
         give_mana(&mut engine, 0, mana);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_ability_for(&engine, source, 0, target_object(target)),
             )
@@ -193,7 +194,7 @@ fn issue_315_mana_and_tap_costs_are_atomic_and_cover_summoning_sickness() {
     let pool_before = wrong_color.state.players[0].mana_pool;
     let command_index_before = wrong_color.state.command_index;
     wrong_color
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&wrong_color, source, 0, target_object(target)),
         )
@@ -215,7 +216,7 @@ fn issue_315_mana_and_tap_costs_are_atomic_and_cover_summoning_sickness() {
     );
     let pool_before = short.state.players[0].mana_pool;
     short
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&short, source, 0, target_object(target)),
         )
@@ -237,7 +238,7 @@ fn issue_315_mana_and_tap_costs_are_atomic_and_cover_summoning_sickness() {
     );
     let pool_before = sick.state.players[0].mana_pool;
     let command_index_before = sick.state.command_index;
-    sick.apply_command(
+    sick.apply_scenario_command(
         0,
         &activate_ability_for(&sick, source, 0, target_object(target)),
     )
@@ -260,7 +261,7 @@ fn issue_315_mana_and_tap_costs_are_atomic_and_cover_summoning_sickness() {
     );
     let pool_before = tapped.state.players[0].mana_pool;
     tapped
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&tapped, source, 0, target_object(target)),
         )
@@ -284,7 +285,7 @@ fn issue_315_target_filter_is_checked_at_activation_and_revalidated_on_resolutio
         },
     );
     coeurl
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&coeurl, source, 0, target_object(enchantment_creature)),
         )
@@ -304,7 +305,7 @@ fn issue_315_target_filter_is_checked_at_activation_and_revalidated_on_resolutio
         },
     );
     keykeeper
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&keykeeper, source, 0, target_object(changeling)),
         )
@@ -324,7 +325,7 @@ fn issue_315_target_filter_is_checked_at_activation_and_revalidated_on_resolutio
         },
     );
     frostbridge
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&frostbridge, source, 0, target_object(changeling)),
         )
@@ -356,7 +357,7 @@ fn issue_315_target_filters_cover_real_mount_artifact_creature_and_noncreature()
     );
     let pool_before = keykeeper.state.players[0].mana_pool;
     keykeeper
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&keykeeper, source, 0, target_object(mount)),
         )
@@ -399,7 +400,7 @@ fn issue_315_target_filters_cover_real_mount_artifact_creature_and_noncreature()
         );
         give_mana(&mut engine, 0, mana);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_ability_for(&engine, source, 0, target_object(artifact_creature)),
             )
@@ -448,7 +449,7 @@ fn issue_315_target_filters_cover_real_mount_artifact_creature_and_noncreature()
         let pool_before = engine.state.players[0].mana_pool;
         let command_index_before = engine.state.command_index;
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_ability_for(&engine, source, 0, target_object(noncreature)),
             )
@@ -486,7 +487,7 @@ fn issue_315_unrestricted_target_remains_legal_after_real_control_change() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&engine, source, 0, target_object(target)),
         )
@@ -495,7 +496,7 @@ fn issue_315_unrestricted_target_remains_legal_after_real_control_change() {
     assert!(!engine.state.objects[&target].tapped);
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("activator passes so the opponent can change control");
     give_mana(
         &mut engine,
@@ -508,7 +509,7 @@ fn issue_315_unrestricted_target_remains_legal_after_real_control_change() {
     );
     let ray_of_command = hand_index_for_card(&engine, 1, "ray_of_command");
     engine
-        .apply_command(1, &cast_spell(ray_of_command, target_object(target)))
+        .apply_scenario_command(1, &cast_spell(ray_of_command, target_object(target)))
         .expect("cast Ray of Command on the pending ability target");
     resolve_two_player(&mut engine);
 
@@ -539,7 +540,7 @@ fn issue_315_accepts_already_tapped_targets_and_a_legal_self_target() {
         },
     );
     already_tapped
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&already_tapped, source, 0, target_object(target)),
         )
@@ -558,7 +559,7 @@ fn issue_315_accepts_already_tapped_targets_and_a_legal_self_target() {
         },
     );
     self_target
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&self_target, source, 0, target_object(source)),
         )
@@ -577,7 +578,7 @@ fn issue_315_controller_priority_and_multiplayer_control_are_engine_authoritativ
     let (mut priority, source, target) =
         creature_engine(315_014, "sterling_keykeeper", "grizzly_bears");
     priority
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active controller passes priority");
     assert_eq!(priority.state.priority_player_id(), 1);
     give_mana(
@@ -591,7 +592,7 @@ fn issue_315_controller_priority_and_multiplayer_control_are_engine_authoritativ
     let opponent_pool = priority.state.players[1].mana_pool;
     let command_index_before = priority.state.command_index;
     priority
-        .apply_command(
+        .apply_scenario_command(
             1,
             &activate_ability_for(&priority, source, 0, target_object(target)),
         )
@@ -603,7 +604,7 @@ fn issue_315_controller_priority_and_multiplayer_control_are_engine_authoritativ
     assert_eq!(priority.state.priority_player_id(), 1);
 
     priority
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes priority back");
     give_mana(
         &mut priority,
@@ -614,7 +615,7 @@ fn issue_315_controller_priority_and_multiplayer_control_are_engine_authoritativ
         },
     );
     priority
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&priority, source, 0, target_object(target)),
         )
@@ -628,7 +629,7 @@ fn issue_315_controller_priority_and_multiplayer_control_are_engine_authoritativ
     let target = inject_creature_on_battlefield(&mut multiplayer, 1, "grizzly_bears");
     let owner_pool = multiplayer.state.players[0].mana_pool;
     multiplayer
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&multiplayer, source, 0, target_object(target)),
         )
@@ -637,10 +638,10 @@ fn issue_315_controller_priority_and_multiplayer_control_are_engine_authoritativ
     assert!(multiplayer.state.stack.is_empty());
 
     multiplayer
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     multiplayer
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("next player passes to the controller");
     give_mana(
         &mut multiplayer,
@@ -651,7 +652,7 @@ fn issue_315_controller_priority_and_multiplayer_control_are_engine_authoritativ
         },
     );
     multiplayer
-        .apply_command(
+        .apply_scenario_command(
             2,
             &activate_ability_for(&multiplayer, source, 0, target_object(target)),
         )
@@ -678,14 +679,14 @@ fn issue_315_source_zone_is_battlefield_only_and_actual_zone_changes_keep_summon
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&engine, source, 0, target_object(target)),
         )
         .expect("activate before moving the source");
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(source)))
         .expect("cast Unsummon targeting the ability source");
     resolve_two_player(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
@@ -704,7 +705,7 @@ fn issue_315_source_zone_is_battlefield_only_and_actual_zone_changes_keep_summon
     let pool_before = engine.state.players[0].mana_pool;
     let command_index_before = engine.state.command_index;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&engine, source, 0, target_object(target)),
         )
@@ -725,7 +726,7 @@ fn issue_315_source_zone_is_battlefield_only_and_actual_zone_changes_keep_summon
         },
     );
     engine
-        .apply_command(0, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
         .expect("cast the same physical source from hand");
     resolve_two_player(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
@@ -742,7 +743,7 @@ fn issue_315_source_zone_is_battlefield_only_and_actual_zone_changes_keep_summon
     );
     let pool_before = engine.state.players[0].mana_pool;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&engine, source, 0, target_object(target)),
         )
@@ -768,14 +769,14 @@ fn issue_315_ability_is_independent_after_source_leaves_and_target_revalidation_
         },
     );
     source_leaves
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&source_leaves, source, 0, target_object(target)),
         )
         .expect("activate before the source leaves");
     let unsummon = hand_index_for_card(&source_leaves, 0, "unsummon");
     source_leaves
-        .apply_command(0, &cast_spell(unsummon, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(source)))
         .expect("return the source while its ability is on the stack");
     resolve_two_player(&mut source_leaves);
     assert_eq!(source_leaves.state.objects[&source].zone, Zone::Hand);
@@ -794,13 +795,13 @@ fn issue_315_ability_is_independent_after_source_leaves_and_target_revalidation_
         },
     );
     target_leaves
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&target_leaves, source, 0, target_object(target)),
         )
         .expect("target is legal when the ability is activated");
     target_leaves
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("the activator passes so the target controller can respond");
     let old_generation = target_leaves
         .state
@@ -819,7 +820,7 @@ fn issue_315_ability_is_independent_after_source_leaves_and_target_revalidation_
     );
     let unsummon = hand_index_for_card(&target_leaves, 1, "unsummon");
     target_leaves
-        .apply_command(1, &cast_spell(unsummon, target_object(target)))
+        .apply_scenario_command(1, &cast_spell(unsummon, target_object(target)))
         .expect("move the target to a new real zone generation");
     resolve_two_player(&mut target_leaves);
     assert_eq!(target_leaves.state.objects[&target].zone, Zone::Hand);
@@ -847,7 +848,7 @@ fn issue_315_stale_source_generation_is_rejected_before_payment_after_recast() {
     );
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target_object(source)))
         .expect("cast Unsummon to create the first source zone change");
     resolve_two_player(&mut engine);
     let hand_generation = engine.state.zone_change_generation[&source];
@@ -864,7 +865,7 @@ fn issue_315_stale_source_generation_is_rejected_before_payment_after_recast() {
         },
     );
     engine
-        .apply_command(0, &cast_spell(source_hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(source_hand_index, Vec::new()))
         .expect("cast the same physical source for a new battlefield object generation");
     resolve_two_player(&mut engine);
     let fresh_generation = engine.state.zone_change_generation[&source];
@@ -888,7 +889,7 @@ fn issue_315_stale_source_generation_is_rejected_before_payment_after_recast() {
     let pool_before = engine.state.players[0].mana_pool;
     let command_index_before = engine.state.command_index;
     engine
-        .apply_command(0, &stale_command)
+        .apply_scenario_command(0, &stale_command)
         .expect_err("the old battlefield generation cannot be replayed");
     assert_eq!(engine.state.players[0].mana_pool, pool_before);
     assert_eq!(engine.state.command_index, command_index_before);
@@ -896,7 +897,7 @@ fn issue_315_stale_source_generation_is_rejected_before_payment_after_recast() {
     assert!(engine.state.stack.is_empty());
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&engine, source, 0, target_object(target)),
         )
@@ -938,7 +939,7 @@ fn issue_315_canonical_replay_produces_identical_tap_state_and_responses() {
         for (player, command) in commands {
             responses.push(
                 engine
-                    .apply_command(player, &command)
+                    .apply_scenario_command(player, &command)
                     .expect("replay command accepted")
                     .encode_to_vec(),
             );

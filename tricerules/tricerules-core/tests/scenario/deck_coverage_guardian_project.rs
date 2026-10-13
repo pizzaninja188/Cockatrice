@@ -1,7 +1,8 @@
 //! Guardian Project's creature-name uniqueness condition.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
 
 fn engine_with_cards(seed: u64, player_zero: &[&str], player_one: &[&str]) -> GameEngine {
@@ -30,7 +31,7 @@ fn move_card_to_zone(
 ) -> tricerules_proto::ruled::v1::RuledEventBatch {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             player,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -66,16 +67,18 @@ fn manifest_grizzly_bears(engine: &mut GameEngine) -> (u32, usize) {
     grant_pool(engine, 0);
     let slot = hand_index_for_card(engine, 0, "manifest_dread");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Manifest Dread");
-    engine.apply_command(0, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
     let parked = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("Manifest Dread resolves");
     let choice = find_resolution_choice(&parked).expect("Manifest Dread choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::ManifestDread);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .expect("manifest a Grizzly Bears card face down");
     let hand_before_trigger = engine.state.players[0].hand.len();
     resolve_entire_stack_two_player(engine);
@@ -106,14 +109,14 @@ fn guardian_project_does_not_trigger_for_a_name_already_on_the_battlefield() {
     ensure_in_hand(&mut e, 0, "guardian_project");
     grant_pool(&mut e, 0);
     let guardian_index = hand_index_for_card(&e, 0, "guardian_project");
-    e.apply_command(0, &cast_spell(guardian_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(guardian_index, vec![]))
         .expect("cast Guardian Project");
     pass_both_players(&mut e);
     assert!(e.state.stack.is_empty(), "Guardian Project resolved");
 
     ensure_in_hand(&mut e, 0, "llanowar_elves");
     let creature_index = hand_index_for_card(&e, 0, "llanowar_elves");
-    e.apply_command(0, &cast_spell(creature_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(creature_index, vec![]))
         .expect("cast the duplicate creature");
     pass_both_players(&mut e);
 
@@ -132,7 +135,7 @@ fn guardian_project_does_not_trigger_for_a_name_in_its_controllers_graveyard() {
     grant_pool(&mut e, 0);
     let hand_before_cast = e.state.players[0].hand.len();
     let creature_index = hand_index_for_card(&e, 0, "llanowar_elves");
-    e.apply_command(0, &cast_spell(creature_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(creature_index, vec![]))
         .expect("cast the creature matching a graveyard card");
     pass_both_players(&mut e);
 
@@ -156,7 +159,7 @@ fn guardian_project_draws_for_a_unique_name_even_if_an_opponent_controls_that_na
     ensure_in_hand(&mut e, 0, "grizzly_bears");
     grant_pool(&mut e, 0);
     let creature_index = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(creature_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(creature_index, vec![]))
         .expect("cast the creature");
     pass_both_players(&mut e);
 
@@ -177,7 +180,7 @@ fn guardian_project_rechecks_controlled_creatures_when_its_trigger_resolves() {
     ensure_in_hand(&mut e, 0, "grizzly_bears");
     grant_pool(&mut e, 0);
     let creature_index = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(creature_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(creature_index, vec![]))
         .expect("cast the first creature");
     pass_both_players(&mut e);
     assert_eq!(e.state.stack.len(), 1, "the unique entry created a trigger");
@@ -200,7 +203,7 @@ fn guardian_project_uses_the_departed_name_when_the_creature_is_exiled() {
     ensure_in_hand(&mut e, 0, "grizzly_bears");
     grant_pool(&mut e, 0);
     let creature_index = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(creature_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(creature_index, vec![]))
         .expect("cast the creature");
     pass_both_players(&mut e);
     assert_eq!(e.state.stack.len(), 1, "the unique entry created a trigger");
@@ -232,7 +235,7 @@ fn guardian_project_counts_the_observed_creature_in_its_graveyard() {
     ensure_in_hand(&mut e, 0, "grizzly_bears");
     grant_pool(&mut e, 0);
     let creature_index = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(creature_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(creature_index, vec![]))
         .expect("cast the creature");
     pass_both_players(&mut e);
     assert_eq!(e.state.stack.len(), 1, "the unique entry created a trigger");
@@ -265,7 +268,7 @@ fn guardian_project_uses_the_departed_generation_name_after_a_creature_reenters(
     ensure_in_hand(&mut e, 0, "grizzly_bears");
     grant_pool(&mut e, 0);
     let creature_index = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(creature_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(creature_index, vec![]))
         .expect("cast the creature");
     pass_both_players(&mut e);
     assert_eq!(e.state.stack.len(), 1, "the first entry created a trigger");
@@ -328,10 +331,10 @@ fn guardian_project_uses_a_copied_name_after_the_observed_card_leaves() {
     ensure_in_hand(&mut e, 0, "clone");
     grant_pool(&mut e, 0);
     let clone_index = hand_index_for_card(&e, 0, "clone");
-    e.apply_command(0, &cast_spell(clone_index, vec![]))
+    e.apply_scenario_command(0, &cast_spell(clone_index, vec![]))
         .expect("cast Clone");
     pass_both_players(&mut e);
-    e.apply_command(0, &submit_resolution_choice(vec![opponent_bear]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![opponent_bear]))
         .expect("copy the opponent's Grizzly Bears");
 
     let clone = e.state.players[0]

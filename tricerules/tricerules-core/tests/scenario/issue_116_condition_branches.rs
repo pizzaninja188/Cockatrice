@@ -1,4 +1,5 @@
 //! Issue #116: live conditions on creature cohorts and automatic resolution branches.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{CounterKind, Keyword};
@@ -56,7 +57,7 @@ fn engine(seed: u64) -> GameEngine {
 
 fn put(engine: &mut GameEngine, player: i32, card_name: &str, card_id: &str) -> u32 {
     engine
-        .apply_command(player, &put_ready(player, card_name))
+        .apply_scenario_command(player, &put_ready(player, card_name))
         .unwrap_or_else(|error| panic!("put {card_name}: {error:?}"));
     battlefield_object_for_card(engine, player as usize, card_id)
 }
@@ -66,7 +67,7 @@ fn cast_trade_route_envoy(engine: &mut GameEngine) -> u32 {
     grant_pool(engine, 0);
     let hand_index = hand_index_for_card(engine, 0, "trade_route_envoy");
     engine
-        .apply_command(0, &cast_spell(hand_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(hand_index, Vec::new()))
         .expect("cast Trade Route Envoy");
     pass_both_players(engine);
     assert_eq!(
@@ -99,7 +100,7 @@ fn inspiring_paladin_conditions_its_self_and_countered_creature_first_strike() {
 
     engine.state.active_player_idx = 0;
     engine
-        .apply_command(0, &move_to_hand(0, "Inspiring Paladin"))
+        .apply_scenario_command(0, &move_to_hand(0, "Inspiring Paladin"))
         .expect("remove anthem source");
     assert!(!engine.effective_has_keyword(countered, Keyword::FirstStrike));
 }
@@ -119,7 +120,7 @@ fn inspiring_paladin_grant_changes_the_combat_damage_step() {
         .set_counter(CounterKind::PlusOnePlusOne, 1);
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -127,7 +128,7 @@ fn inspiring_paladin_grant_changes_the_combat_damage_step() {
         tricerules_core::TurnStep::DeclareAttackers
     );
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare countered attacker");
     pass_both_players(&mut engine);
     pass_both_players(&mut engine);

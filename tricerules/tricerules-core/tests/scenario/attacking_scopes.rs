@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
 fn engine_with_card(seed: u64, card_id: &str) -> GameEngine {
@@ -18,7 +19,7 @@ fn engine_with_card(seed: u64, card_id: &str) -> GameEngine {
 
 fn enter_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main1 to beginning of combat");
     pass_both_players(engine);
     assert_eq!(
@@ -31,7 +32,7 @@ fn advance_to_main2(engine: &mut GameEngine) -> RuledEventBatch {
     for _ in 0..20 {
         let actor = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass through combat");
         if engine.state.turn_step == tricerules_core::TurnStep::Main2 {
             return batch;
@@ -52,7 +53,7 @@ fn advance_to_next_turn(engine: &mut GameEngine) {
             None => (engine.state.priority_player_id(), pass()),
         };
         engine
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("pass through the end of the turn");
         if engine.state.turn > starting_turn {
             return;
@@ -96,7 +97,7 @@ fn attacking_scope_trumpet_blast_snapshots_only_current_attackers() {
     let bystander = inject_creature_on_battlefield(&mut engine, 0, "savannah_lions");
     enter_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare one attacker");
 
     give_mana(
@@ -109,7 +110,7 @@ fn attacking_scope_trumpet_blast_snapshots_only_current_attackers() {
     );
     let spell = hand_index_for_card(&engine, 0, "trumpet_blast");
     engine
-        .apply_command(0, &cast_spell(spell, vec![]))
+        .apply_scenario_command(0, &cast_spell(spell, vec![]))
         .expect("cast Trumpet Blast after attackers");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -139,7 +140,7 @@ fn attacking_scope_trumpet_blast_before_attackers_affects_nothing() {
     let mut engine = engine_with_card(76_002, "trumpet_blast");
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main1 to beginning of combat");
 
     give_mana(
@@ -152,7 +153,7 @@ fn attacking_scope_trumpet_blast_before_attackers_affects_nothing() {
     );
     let spell = hand_index_for_card(&engine, 0, "trumpet_blast");
     engine
-        .apply_command(0, &cast_spell(spell, vec![]))
+        .apply_scenario_command(0, &cast_spell(spell, vec![]))
         .expect("cast Trumpet Blast before attackers");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -162,7 +163,7 @@ fn attacking_scope_trumpet_blast_before_attackers_affects_nothing() {
         tricerules_core::TurnStep::DeclareAttackers
     );
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker after Trumpet Blast resolved");
     assert_eq!(
         engine.effective_power(attacker),
@@ -184,7 +185,7 @@ fn attacking_scope_warded_battlements_tracks_current_combat_membership() {
     );
     let battlements = hand_index_for_card(&engine, 0, "warded_battlements");
     engine
-        .apply_command(0, &cast_spell(battlements, vec![]))
+        .apply_scenario_command(0, &cast_spell(battlements, vec![]))
         .expect("cast Warded Battlements");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -193,7 +194,7 @@ fn attacking_scope_warded_battlements_tracks_current_combat_membership() {
     let opponent = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     enter_declare_attackers(&mut engine);
     let declared = engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare one attacker");
 
     assert_eq!(engine.effective_power(attacker), Some(3));
@@ -209,23 +210,23 @@ fn attacking_scope_warded_battlements_tracks_current_combat_membership() {
     assert_eq!(battlefield_power(declared_view, 0, bystander), 2);
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes in declare attackers");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defending player passes in declare attackers");
     assert_eq!(
         engine.state.turn_step,
         tricerules_core::TurnStep::DeclareBlockers
     );
     engine
-        .apply_command(1, &declare_blockers(vec![]))
+        .apply_scenario_command(1, &declare_blockers(vec![]))
         .expect("declare no blockers");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes in declare blockers");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defending player passes in declare blockers");
     assert_eq!(
         engine.state.turn_step,
@@ -257,7 +258,7 @@ fn attacking_scope_one_shot_keyword_grants_do_not_acquire_later_creatures() {
     );
     let overrun = hand_index_for_card(&engine, 0, "overrun");
     engine
-        .apply_command(0, &cast_spell(overrun, vec![]))
+        .apply_scenario_command(0, &cast_spell(overrun, vec![]))
         .expect("cast Overrun");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.effective_has_keyword(existing, tricerules_cards::Keyword::Trample));

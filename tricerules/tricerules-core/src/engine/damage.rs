@@ -1299,6 +1299,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
@@ -1335,6 +1336,8 @@ impl GameEngine {
         self.state.pending_replacement_event =
             Some(super::replacement::PendingReplacementEvent::Damage(batch));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
             deciding_player,
             presentation: PendingResolutionPresentation {
                 source_object_id,
@@ -2034,7 +2037,13 @@ impl GameEngine {
                 resume_resolution, ..
             } => {
                 let mut events = events;
-                if let Some(resume_resolution) = resume_resolution {
+                if let Some(mut resume_resolution) = resume_resolution {
+                    // The parent's answer was suspended while this nested damage choice owned
+                    // input. Resuming it publishes a new offer, even when its visible payload is
+                    // byte-for-byte identical.
+                    resume_resolution.resolution_prompt_id =
+                        crate::state::ResolutionPromptId::UNASSIGNED;
+                    resume_resolution.resolution_prompt_semantics = None;
                     self.state.pending_resolution = Some(*resume_resolution);
                     events.push(
                         self.resolution_payment_choice_event()
@@ -3346,6 +3355,7 @@ mod tests {
             )
             .expect("wither damage reaches counter replacement planning")
             .is_none());
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
 
         let choice = engine
             .state
@@ -3372,10 +3382,9 @@ mod tests {
                 .map(|characteristics| { (characteristics.power, characteristics.toughness) }),
             Some((Some(20), Some(20)))
         );
-
         let chosen = choice.presentation.candidates[0];
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -3462,6 +3471,7 @@ mod tests {
             .copied()
             .unwrap_or(0);
         let item = source_item(source, generation);
+        let mut events = Vec::new();
         assert!(engine
             .process_or_park_damage_batch(
                 &item,
@@ -3476,10 +3486,11 @@ mod tests {
                     source_has_deathtouch: false,
                     source_has_lifelink: false,
                 }],
-                &mut Vec::new(),
+                &mut events,
             )
             .unwrap()
             .is_none());
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
 
         for _ in 0..30 {
             let choice = engine
@@ -3490,7 +3501,7 @@ mod tests {
                 .presentation
                 .candidates[0];
             engine
-                .apply_command(
+                .apply_scenario_command(
                     1,
                     &RuledCommand {
                         cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -3517,7 +3528,7 @@ mod tests {
         let snapshot_before = engine.diagnostic_snapshot().unwrap();
         let choice = pending_before.as_ref().unwrap().presentation.candidates[0];
         assert!(matches!(
-            engine.apply_command(
+            engine.apply_scenario_command(
                 1,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -3699,7 +3710,13 @@ mod tests {
         let mut engine = parked_departure_combat(1, false);
         let original = engine.state.pending_resolution.clone().unwrap();
         let before_id = engine.state.next_replacement_application_id;
-        engine.refresh_damage_departure(&mut Vec::new()).unwrap();
+        let mut refresh_events = Vec::new();
+        engine
+            .refresh_damage_departure(&mut refresh_events)
+            .unwrap();
+        engine
+            .publish_resolution_prompt_ids(&mut refresh_events)
+            .unwrap();
         assert_eq!(
             engine
                 .state
@@ -3731,7 +3748,13 @@ mod tests {
             DamagePreventionScope::Recipient(attacker),
             DamagePreventionAmount::Remaining(3),
         );
-        engine.refresh_damage_departure(&mut Vec::new()).unwrap();
+        let mut changed_offer_events = Vec::new();
+        engine
+            .refresh_damage_departure(&mut changed_offer_events)
+            .unwrap();
+        engine
+            .publish_resolution_prompt_ids(&mut changed_offer_events)
+            .unwrap();
         let Some(super::super::replacement::PendingReplacementEvent::Damage(batch)) =
             engine.state.pending_replacement_event.as_ref()
         else {
@@ -3753,7 +3776,7 @@ mod tests {
                 },
             )),
         };
-        engine.apply_command(0, &command).unwrap();
+        engine.apply_scenario_command(0, &command).unwrap();
         let before_departure = engine
             .state
             .pending_resolution
@@ -3772,7 +3795,7 @@ mod tests {
             1
         );
         engine
-            .apply_command(
+            .apply_scenario_command(
                 2,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
@@ -3798,7 +3821,7 @@ mod tests {
             .presentation
             .candidates[0];
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -3885,13 +3908,15 @@ mod tests {
             first_strike_damage_done: false,
         };
         engine.state.combat = Some(combat.clone());
+        let mut events = Vec::new();
         assert!(engine
             .try_park_ordered_combat_damage(
                 &combat,
                 super::super::combat::DamagePass::Normal,
-                &mut Vec::new()
+                &mut events
             )
             .unwrap());
+        engine.publish_resolution_prompt_ids(&mut events).unwrap();
         assert!(engine.state.pending_resolution.is_some());
         assert_eq!(engine.state.players[unrelated_defender as usize].life, 20);
         engine
@@ -3928,7 +3953,7 @@ mod tests {
         assert_eq!(original.deciding_player, 0);
         assert_eq!(original.presentation.candidates.len(), 4);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 2,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
@@ -3955,7 +3980,7 @@ mod tests {
         for stale in original.presentation.candidates {
             let before = engine.diagnostic_snapshot().unwrap();
             assert!(engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &rv1::RuledCommand {
                         cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -3970,7 +3995,7 @@ mod tests {
             assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
         }
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -4001,7 +4026,7 @@ mod tests {
             .presentation
             .candidates[0];
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
@@ -4023,7 +4048,7 @@ mod tests {
         );
         let before = engine.diagnostic_snapshot().unwrap();
         assert!(engine
-            .apply_command(
+            .apply_scenario_command(
                 2,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -4044,7 +4069,7 @@ mod tests {
             .presentation
             .candidates[0];
         engine
-            .apply_command(
+            .apply_scenario_command(
                 2,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -4078,7 +4103,7 @@ mod tests {
             timestamp: 1,
         });
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
@@ -4111,7 +4136,7 @@ mod tests {
         let command = rv1::RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
         };
-        engine.apply_command(1, &command).unwrap();
+        engine.apply_scenario_command(1, &command).unwrap();
         assert!(
             engine.state.pending_resolution.is_none(),
             "departed chooser cannot strand combat"
@@ -4145,7 +4170,7 @@ mod tests {
         let command = rv1::RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
         };
-        engine.apply_command(2, &command).unwrap();
+        engine.apply_scenario_command(2, &command).unwrap();
         assert_eq!(
             engine.state.players[1].life, 18,
             "combat is not an owned stack resolution that disappears with its presentation source"

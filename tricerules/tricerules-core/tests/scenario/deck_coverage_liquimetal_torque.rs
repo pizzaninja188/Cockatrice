@@ -5,7 +5,7 @@
 //! adding Artifact while retaining other types, and CR 514.2 governs the end-of-turn duration.
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn torque_engine(seed: u64) -> (GameEngine, u32) {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);

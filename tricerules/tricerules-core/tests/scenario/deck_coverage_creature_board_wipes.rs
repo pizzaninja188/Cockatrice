@@ -1,5 +1,6 @@
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use crate::helpers::ScenarioCommandExt;
+use tricerules_core::Zone;
 
 fn two_player_engine(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
@@ -45,7 +46,7 @@ fn both_wipes_count_creatures_on_every_players_battlefield_and_keep_colored_cost
         },
     );
     assert_eq!(generic_cost_reduction(&mut act, "blasphemous_act"), 9);
-    act.apply_command(
+    act.apply_scenario_command(
         0,
         &cast_spell(hand_index_for_card(&act, 0, "blasphemous_act"), vec![]),
     )
@@ -71,7 +72,7 @@ fn both_wipes_count_creatures_on_every_players_battlefield_and_keep_colored_cost
     );
     assert_eq!(generic_cost_reduction(&mut horde, "vanquish_the_horde"), 7);
     horde
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(hand_index_for_card(&horde, 0, "vanquish_the_horde"), vec![]),
         )
@@ -90,7 +91,7 @@ fn blasphemous_act_deals_thirteen_to_each_creature_and_leaves_a_fourteen_toughne
     grant_pool(&mut engine, 0);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(hand_index_for_card(&engine, 0, "blasphemous_act"), vec![]),
         )
@@ -113,7 +114,7 @@ fn vanquish_the_horde_destroys_creatures_controlled_by_both_players_only() {
     grant_pool(&mut engine, 0);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 hand_index_for_card(&engine, 0, "vanquish_the_horde"),

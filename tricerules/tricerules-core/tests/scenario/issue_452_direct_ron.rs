@@ -5,9 +5,10 @@
 //! none of its effects happen. CR 115.1a declares one creature target, CR 608.2b rechecks target
 //! legality on resolution, CR 701.8 destroys, CR 611.2c/613.4 keeps the +1/+1 until end of turn,
 //! and CR 121.1/118.1 cover the draw and life gain.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn spell_engine(seed: u64) -> GameEngine {
     // Explicit land-only decks keep the default grizzly_bears/library fixtures out of the
@@ -53,10 +54,10 @@ fn issue_452_stand_up_for_yourself_destroys_only_power_three_or_greater() {
     // CR 115.1a: a power-two creature and a player are not legal targets.
     let commands_before = engine.state.command_index;
     engine
-        .apply_command(0, &cast_spell(slot, target_object(small)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(small)))
         .expect_err("power two is below the printed bound");
     engine
-        .apply_command(0, &cast_spell(slot, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(slot, target_player(1)))
         .expect_err("players are never legal targets");
     assert_eq!(engine.state.command_index, commands_before);
 
@@ -186,7 +187,7 @@ fn issue_452_oracles_restoration_rejects_opponents_and_fizzles_on_illegal_target
     let slot = prepare_spell(&mut engine, "oracles_restoration");
     let commands_before = engine.state.command_index;
     engine
-        .apply_command(0, &cast_spell(slot, target_object(opponent)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(opponent)))
         .expect_err("only creatures you control are legal targets");
     assert_eq!(engine.state.command_index, commands_before);
 

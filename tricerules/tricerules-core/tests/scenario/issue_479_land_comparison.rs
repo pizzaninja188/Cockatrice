@@ -7,7 +7,7 @@
 //! 611.2a, 514.2). Token events carry public object identity and characteristics (CR 111).
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::TokenCreated;
 
 fn main_phase(seed: u64) -> GameEngine {

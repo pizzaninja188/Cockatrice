@@ -6,9 +6,10 @@
 //! govern the exercised behavior. The five Command identities stay unregistered because their
 //! remaining bullets lack shipped vocabulary; their retained halves are covered by the recipe
 //! catalog tests.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ChoiceKind;
 
 fn modal_engine(seed: u64) -> GameEngine {
@@ -52,13 +53,13 @@ fn issue_428_return_from_the_wilds_searches_for_a_basic_land_and_makes_a_human()
     let sword = inject_library_card(&mut engine, 0, "short_sword");
     let slot = prepare_spell(&mut engine, "return_from_the_wilds");
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, vec![]), (1, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, vec![]), (1, vec![])]))
         .expect("cast the search and Human modes");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("the caster passes priority");
     let parked = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolution parks for the private search");
     let choice = find_resolution_choice(&parked).expect("basic-land search");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
@@ -69,7 +70,7 @@ fn issue_428_return_from_the_wilds_searches_for_a_basic_land_and_makes_a_human()
         "only basic land cards are legal search candidates"
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .expect("find the basic land");
 
     let found = &engine.state.objects[&forest];
@@ -91,17 +92,17 @@ fn issue_428_return_from_the_wilds_searches_then_creates_the_food_token() {
     let forest = inject_library_card(&mut engine, 0, "forest");
     let slot = prepare_spell(&mut engine, "return_from_the_wilds");
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, vec![]), (2, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, vec![]), (2, vec![])]))
         .expect("cast the search and Food modes");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("the caster passes priority");
     let parked = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolution parks for the private search");
     assert!(find_resolution_choice(&parked).is_some());
     engine
-        .apply_command(0, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .expect("find the basic land");
     assert_eq!(engine.state.objects[&forest].zone, Zone::Battlefield);
     assert!(engine.state.objects[&forest].tapped);
@@ -125,7 +126,7 @@ fn issue_428_return_from_the_wilds_creates_both_tokens_without_searching() {
     let mut engine = modal_engine(428_003);
     let slot = prepare_spell(&mut engine, "return_from_the_wilds");
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, vec![]), (2, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, vec![]), (2, vec![])]))
         .expect("cast the Human and Food modes");
     resolve_entire_stack_two_player(&mut engine);
     let human = battlefield_token(&engine, 0, "human_w_1_1");
@@ -151,14 +152,14 @@ fn issue_428_return_from_the_wilds_rejects_illegal_mode_selections() {
     ] {
         assert!(
             engine
-                .apply_command(0, &cast_modal_spell(slot, illegal.clone()))
+                .apply_scenario_command(0, &cast_modal_spell(slot, illegal.clone()))
                 .is_err(),
             "illegal mode selection {illegal:?} must fail closed"
         );
     }
     // The same hand slot still casts the legal reviewed pair after every rejection.
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, vec![]), (2, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, vec![]), (2, vec![])]))
         .expect("the legal pair still casts");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.state.players[0]

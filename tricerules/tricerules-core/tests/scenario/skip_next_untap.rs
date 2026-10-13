@@ -1,5 +1,6 @@
 //! CR 502.3 / Issue #93: one-shot effects that keep a permanent from untapping during its
 //! controller's next untap step.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 
@@ -43,7 +44,7 @@ fn frost_breath_accepts_and_affects_two_distinct_creatures() {
 
     let spell = hand_index_for_card(&engine, 0, "frost_breath");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 spell,
@@ -85,7 +86,7 @@ fn cast_crippling_chill(engine: &mut GameEngine, caster: i32, target_id: u32) {
     );
     let chill = hand_index_for_card(engine, caster as usize, "crippling_chill");
     engine
-        .apply_command(caster, &cast_spell(chill, target(target_id)))
+        .apply_scenario_command(caster, &cast_spell(chill, target(target_id)))
         .expect("cast Crippling Chill");
     resolve_entire_stack_two_player(engine);
 }
@@ -259,7 +260,7 @@ fn leaving_and_returning_clears_the_old_objects_restriction() {
     );
     let unsummon = hand_index_for_card(&engine, 0, "unsummon");
     engine
-        .apply_command(0, &cast_spell(unsummon, target(bear)))
+        .apply_scenario_command(0, &cast_spell(unsummon, target(bear)))
         .expect("cast Unsummon");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.state.skip_next_untap.is_empty());
@@ -305,9 +306,11 @@ fn crippling_chill_fizzles_without_drawing_when_its_target_leaves() {
     );
     let chill = hand_index_for_card(&engine, 0, "crippling_chill");
     engine
-        .apply_command(0, &cast_spell(chill, target(bear)))
+        .apply_scenario_command(0, &cast_spell(chill, target(bear)))
         .expect("cast Crippling Chill");
-    engine.apply_command(0, &pass()).expect("pass priority");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass priority");
 
     give_mana(
         &mut engine,
@@ -319,7 +322,7 @@ fn crippling_chill_fizzles_without_drawing_when_its_target_leaves() {
     );
     let unsummon = hand_index_for_card(&engine, 1, "unsummon");
     engine
-        .apply_command(1, &cast_spell(unsummon, target(bear)))
+        .apply_scenario_command(1, &cast_spell(unsummon, target(bear)))
         .expect("cast Unsummon in response");
     resolve_entire_stack_two_player(&mut engine);
 

@@ -8,6 +8,7 @@
 //! CR 110.4a/608.2b govern the permanent-card graveyard return and its stale-target fizzle;
 //! CR 509.1b/611.2c govern the bounded can't-block restriction; and CR 611.2a/701.22 govern the
 //! shared-target pump + first strike + scry one.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::ContinuousEffectKind;
@@ -56,10 +57,10 @@ fn resolve_to_park(engine: &mut GameEngine) -> RuledEventBatch {
     let first = engine.state.priority_player_id();
     let second = 1 - first;
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first pass on the stack item");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves the stack item")
 }
 
@@ -80,7 +81,7 @@ fn advance_to_active_player_upkeep(engine: &mut GameEngine, player: i32) {
             None => (engine.state.priority_player_id(), pass()),
         };
         engine
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("pass toward the requested upkeep");
         if engine.state.active_player_id() == player && engine.state.turn_step == TurnStep::Upkeep {
             return;
@@ -109,7 +110,7 @@ fn move_graveyard_object_to_exile(engine: &mut GameEngine, player: usize, object
 
 fn choose_graveyard_target(engine: &mut GameEngine, object_id: u32) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -175,15 +176,19 @@ fn issue_328_not_on_my_watch_exiles_attackers_and_fizzles_when_they_leave_combat
         &["grizzly_bears"],
     );
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main 1 to beginning of combat");
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let bystander = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
-    engine.apply_command(0, &pass()).expect("active pass");
-    engine.apply_command(1, &pass()).expect("defender pass");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("active pass");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("defender pass");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare the attacker");
     give_mana(
         &mut engine,
@@ -199,13 +204,13 @@ fn issue_328_not_on_my_watch_exiles_attackers_and_fizzles_when_they_leave_combat
     let slot = hand_index_for_card(&engine, 0, "not_on_my_watch");
     assert!(
         engine
-            .apply_command(0, &cast_spell(slot, target_object(bystander)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(bystander)))
             .is_err(),
         "CR 508.1: a creature that is not attacking is not a legal target"
     );
     let slot = hand_index_for_card(&engine, 0, "not_on_my_watch");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(attacker)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(attacker)))
         .expect("cast at the declared attacker");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&attacker].zone, Zone::Exile);
@@ -218,13 +223,17 @@ fn issue_328_not_on_my_watch_exiles_attackers_and_fizzles_when_they_leave_combat
         &["grizzly_bears"],
     );
     fizzle
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main 1 to beginning of combat");
     let leaving = inject_creature_on_battlefield(&mut fizzle, 0, "grizzly_bears");
-    fizzle.apply_command(0, &pass()).expect("active pass");
-    fizzle.apply_command(1, &pass()).expect("defender pass");
     fizzle
-        .apply_command(0, &declare_attackers(vec![leaving]))
+        .apply_scenario_command(0, &pass())
+        .expect("active pass");
+    fizzle
+        .apply_scenario_command(1, &pass())
+        .expect("defender pass");
+    fizzle
+        .apply_scenario_command(0, &declare_attackers(vec![leaving]))
         .expect("declare the attacker");
     give_mana(
         &mut fizzle,
@@ -238,7 +247,7 @@ fn issue_328_not_on_my_watch_exiles_attackers_and_fizzles_when_they_leave_combat
     ensure_in_hand(&mut fizzle, 0, "not_on_my_watch");
     let slot = hand_index_for_card(&fizzle, 0, "not_on_my_watch");
     fizzle
-        .apply_command(0, &cast_spell(slot, target_object(leaving)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(leaving)))
         .expect("cast at the attacker");
     fizzle
         .state
@@ -316,7 +325,7 @@ fn issue_328_rune_sealed_wall_taps_for_a_private_surveil_one() {
     assert!(choice.public_reveal.is_none(), "surveil stays private");
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .expect("put the surveilled card into the graveyard");
     assert!(engine.state.players[0].graveyard.contains(&top[0]));
     assert_eq!(engine.state.players[0].library.len(), library_before - 1);
@@ -382,7 +391,7 @@ fn issue_328_elvish_regrower_returns_controller_permanent_cards_to_hand() {
     for illegal in [instant_card, opposing_card] {
         assert!(
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &RuledCommand {
                         cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -445,7 +454,7 @@ fn issue_328_beat_a_path_stops_up_to_two_creatures_from_blocking() {
     );
     let slot = hand_index_for_card(&engine, 0, "bellowing_bruiser_beat_a_path");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_face(slot, permanent_targets(&[blocker_a, blocker_b]), 1),
         )
@@ -457,15 +466,23 @@ fn issue_328_beat_a_path_stops_up_to_two_creatures_from_blocking() {
     );
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main 1 to beginning of combat");
-    engine.apply_command(0, &pass()).expect("active pass");
-    engine.apply_command(1, &pass()).expect("defender pass");
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &pass())
+        .expect("active pass");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("defender pass");
+    engine
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare the attacker");
-    engine.apply_command(0, &pass()).expect("active pass");
-    engine.apply_command(1, &pass()).expect("defender pass");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("active pass");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("defender pass");
     let legal = &engine.initial_response_batch().legal_by_player[&1];
     assert!(
         !legal
@@ -476,7 +493,7 @@ fn issue_328_beat_a_path_stops_up_to_two_creatures_from_blocking() {
     );
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &declare_blockers(vec![BlockPair {
                     attacker_id: attacker,
@@ -506,7 +523,7 @@ fn issue_328_beat_a_path_stops_up_to_two_creatures_from_blocking() {
     );
     let slot = hand_index_for_card(&decline, 0, "bellowing_bruiser_beat_a_path");
     decline
-        .apply_command(0, &cast_spell_face(slot, vec![], 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, vec![], 1))
         .expect("declining the optional targets is legal");
     resolve_entire_stack_two_player(&mut decline);
     assert!(
@@ -533,7 +550,7 @@ fn issue_328_beat_a_path_stops_up_to_two_creatures_from_blocking() {
     );
     let slot = hand_index_for_card(&expiry, 0, "bellowing_bruiser_beat_a_path");
     expiry
-        .apply_command(0, &cast_spell_face(slot, permanent_targets(&[target]), 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, permanent_targets(&[target]), 1))
         .expect("cast Beat a Path");
     resolve_entire_stack_two_player(&mut expiry);
     assert!(has_combat_restriction(&expiry));
@@ -562,7 +579,7 @@ fn issue_328_kindled_heroism_pumps_then_scries_after_the_target_is_chosen() {
     );
     let slot = hand_index_for_card(&engine, 0, "kindled_heroism");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
         .expect("cast Kindled Heroism");
     let parked = resolve_to_park(&mut engine);
 
@@ -580,7 +597,7 @@ fn issue_328_kindled_heroism_pumps_then_scries_after_the_target_is_chosen() {
     assert_eq!(choice.candidate_object_ids, vec![top[0]]);
 
     let _completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .expect("bottom the scried card");
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(

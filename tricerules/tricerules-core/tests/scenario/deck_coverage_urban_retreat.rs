@@ -1,4 +1,5 @@
 //! Urban Retreat's hand-activated, exact-source land entry.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{EntersTappedAffected, StaticAbilityDef};
@@ -112,7 +113,7 @@ fn urban_retreat_stages_from_hand_before_tapping_its_mana_creature_cost_candidat
     assert!(choices.choices[0].candidate_objects.is_empty());
 
     let began = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::BeginAbilityActivation(rv1::BeginAbilityActivation {
@@ -150,7 +151,7 @@ fn urban_retreat_stages_from_hand_before_tapping_its_mana_creature_cost_candidat
 
     let mana_generation = engine.state.zone_change_generation[&mana_creature];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ActivateAbility(rv1::ActivateAbility {
@@ -199,7 +200,7 @@ fn urban_retreat_stages_from_hand_before_tapping_its_mana_creature_cost_candidat
     assert_eq!(opponent_reveal[0].reveal_id, initial_reveal[0].reveal_id);
 
     let committed = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitAbilityActivation(rv1::CommitAbilityActivation {
@@ -227,8 +228,8 @@ fn urban_retreat_stages_from_hand_before_tapping_its_mana_creature_cost_candidat
     assert_eq!(committed_reveal.len(), 1);
     assert_eq!(committed_reveal[0].reveal_id, initial_reveal[0].reveal_id);
 
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     assert_eq!(
         engine.state.stack.len(),
         1,
@@ -243,8 +244,8 @@ fn urban_retreat_stages_from_hand_before_tapping_its_mana_creature_cost_candidat
         "Urban Retreat enters tapped"
     );
     assert_eq!(engine.state.players[0].life, 20);
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     assert_eq!(engine.state.stack.len(), 0);
     assert_eq!(engine.state.players[0].life, 21);
     assert_eq!(
@@ -283,7 +284,7 @@ fn urban_retreat_mana_ability_produces_each_printed_color_option() {
         engine.state.objects.get_mut(&land).unwrap().tapped = false;
         let generation = engine.state.zone_change_generation[&land];
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(Cmd::ActivateAbility(rv1::ActivateAbility {
@@ -352,7 +353,7 @@ fn urban_retreat_requires_the_staged_hand_activation_transaction() {
         .copied()
         .unwrap_or_default();
 
-    let direct = engine.apply_command(
+    let direct = engine.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ActivateAbility(rv1::ActivateAbility {
@@ -433,7 +434,7 @@ fn urban_retreat_accepts_a_creature_tapped_by_springleaf_drum_during_payment() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::BeginAbilityActivation(rv1::BeginAbilityActivation {
@@ -449,7 +450,7 @@ fn urban_retreat_accepts_a_creature_tapped_by_springleaf_drum_during_payment() {
 
     let drum_generation = engine.state.zone_change_generation[&drum];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ActivateAbility(rv1::ActivateAbility {
@@ -483,7 +484,7 @@ fn urban_retreat_accepts_a_creature_tapped_by_springleaf_drum_during_payment() {
     assert!(engine.state.objects[&creature].tapped);
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
     let committed = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitAbilityActivation(rv1::CommitAbilityActivation {
@@ -506,8 +507,8 @@ fn urban_retreat_accepts_a_creature_tapped_by_springleaf_drum_during_payment() {
     assert_eq!(engine.state.stack.len(), 1);
     assert_eq!(active_reveals(&committed, source).len(), 1);
 
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     assert_eq!(
         engine.state.objects[&source].zone,
         tricerules_core::Zone::Battlefield
@@ -551,7 +552,7 @@ fn urban_retreat_return_cost_triggers_leaves_ability_above_the_land_activation()
         .copied()
         .unwrap_or(0);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::BeginAbilityActivation(rv1::BeginAbilityActivation {
@@ -572,7 +573,7 @@ fn urban_retreat_return_cost_triggers_leaves_ability_above_the_land_activation()
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitAbilityActivation(rv1::CommitAbilityActivation {
@@ -648,7 +649,7 @@ fn urban_retreat_hand_activation_is_limited_to_the_active_players_main_phase() {
         },
     );
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes priority");
 
     let legal = engine.initial_response_batch();
@@ -665,7 +666,7 @@ fn urban_retreat_hand_activation_is_limited_to_the_active_players_main_phase() {
         .get(&source)
         .copied()
         .unwrap_or(0);
-    let rejected = engine.apply_command(
+    let rejected = engine.apply_scenario_command(
         1,
         &RuledCommand {
             cmd: Some(Cmd::BeginAbilityActivation(rv1::BeginAbilityActivation {
@@ -720,7 +721,7 @@ fn urban_retreat_rejects_missing_and_stale_tapped_creature_receipts() {
         .unwrap()
         .clone();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::BeginAbilityActivation(rv1::BeginAbilityActivation {
@@ -735,7 +736,7 @@ fn urban_retreat_rejects_missing_and_stale_tapped_creature_receipts() {
         .unwrap();
     let mana_generation = engine.state.zone_change_generation[&mana_creature];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ActivateAbility(rv1::ActivateAbility {
@@ -750,7 +751,7 @@ fn urban_retreat_rejects_missing_and_stale_tapped_creature_receipts() {
         .unwrap();
 
     let pending = engine.state.pending_ability_activation.clone().unwrap();
-    let missing = engine.apply_command(
+    let missing = engine.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::CommitAbilityActivation(rv1::CommitAbilityActivation {
@@ -770,7 +771,7 @@ fn urban_retreat_rejects_missing_and_stale_tapped_creature_receipts() {
         object_id: mana_creature,
         zone_change_generation: engine.state.zone_change_generation[&mana_creature] + 1,
     };
-    let stale_result = engine.apply_command(
+    let stale_result = engine.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::CommitAbilityActivation(rv1::CommitAbilityActivation {
@@ -793,7 +794,7 @@ fn urban_retreat_rejects_missing_and_stale_tapped_creature_receipts() {
 
     let valid = pending.return_tapped_creature_candidates[0];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitAbilityActivation(rv1::CommitAbilityActivation {
@@ -836,7 +837,7 @@ fn urban_retreat_cancel_ends_its_temporary_public_reveal() {
         .copied()
         .unwrap_or(0);
     let began = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::BeginAbilityActivation(rv1::BeginAbilityActivation {
@@ -855,7 +856,7 @@ fn urban_retreat_cancel_ends_its_temporary_public_reveal() {
 
     let pending = engine.state.pending_ability_activation.clone().unwrap();
     let canceled = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CancelAbilityActivation(rv1::CancelAbilityActivation {
@@ -873,7 +874,7 @@ fn urban_retreat_cancel_ends_its_temporary_public_reveal() {
     assert!(active_reveals(&canceled, source).is_empty());
 
     let reannounced = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::BeginAbilityActivation(rv1::BeginAbilityActivation {
@@ -922,7 +923,7 @@ fn urban_retreat_does_not_move_a_new_hand_incarnation_when_its_ability_resolves(
     );
     let mana_generation = engine.state.zone_change_generation[&mana_creature];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ActivateAbility(rv1::ActivateAbility {
@@ -942,7 +943,7 @@ fn urban_retreat_does_not_move_a_new_hand_incarnation_when_its_ability_resolves(
         .unwrap()
         .clone();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::BeginAbilityActivation(rv1::BeginAbilityActivation {
@@ -958,7 +959,7 @@ fn urban_retreat_does_not_move_a_new_hand_incarnation_when_its_ability_resolves(
     let pending = engine.state.pending_ability_activation.clone().unwrap();
     let selected = pending.return_tapped_creature_candidates[0];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitAbilityActivation(rv1::CommitAbilityActivation {
@@ -992,8 +993,8 @@ fn urban_retreat_does_not_move_a_new_hand_incarnation_when_its_ability_resolves(
         .zone_change_generation
         .insert(source, original_generation + 2);
 
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     assert!(engine.state.stack.is_empty());
     assert_eq!(
         engine.state.objects[&source].zone,

@@ -38,6 +38,7 @@
 #include <QtGlobal>
 #include <algorithm>
 #include <limits>
+#include <string>
 // For ruled::v1::PhaseId only — the engine's turn-structure position is mirrored verbatim.
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <optional>
@@ -633,6 +634,11 @@ public:
         };
 
         Kind kind = Kind::TriggerTarget;
+        /// Nonzero identity of the exact engine-offered resolution prompt. Zero for other
+        /// client choices and for unactionable/transient resolution events.
+        quint64 resolutionPromptId = 0;
+        /// Answer-semantic RCR fingerprint, normalized to omit private/transient presentation.
+        std::string resolutionPromptSemantics;
         QString promptText;
         bool mayDecline = false;
         /// Click-to-select candidates on the battlefield or player surface.
@@ -812,6 +818,13 @@ public:
     /// Public engine-choice marker on non-deciding clients. It suppresses stale priority
     /// controls while the engine is parked without exposing private candidates or prompt details.
     int choiceWaitingPlayerId = -1;
+    /// Final engine snapshot for the most recent authoritative gameplay batch. Only the local
+    /// decider receives a nonzero ID; observers use the public active/decider pair for waiting.
+    bool resolutionPromptSnapshotValid = false;
+    bool resolutionPromptActive = false;
+    int resolutionPromptDeciderPlayerId = -1;
+    quint64 resolutionPromptId = 0;
+    std::string resolutionPromptSemantics;
     int openingMulliganCount = 0;
     int openingBottomRemaining = 0;
     bool openingCanKeep = false;
@@ -1702,6 +1715,9 @@ public:
     void setPendingChoice(RuledPendingChoice choice);
     /// Drop the parked choice unconditionally.
     void clearPendingChoice();
+    /// Retire only staging owned by a correlated resolution prompt. Other client-side choice
+    /// domains (trigger ordering/targets, opening, combat) keep their existing authority.
+    void clearResolutionPromptStaging();
     /// Authoritative withdrawal of this seat's local action authority, including submitted choices.
     void revokeLocalActionAuthority();
     /// Drop the parked choice only if it is of `kind` — used where the engine's follow-up event
@@ -1721,6 +1737,34 @@ public:
     {
         return hasPendingChoiceOfKind(kind) && pendingChoice->candidateOids.contains(oid);
     }
+    /// True when this permanent is an engine-offered cast-during-resolution candidate. This
+    /// describes the parked choice even if its prompt has since gone stale; callers that authorize
+    /// an action must also capture and validate the exact active prompt ID.
+    [[nodiscard]] bool isPendingSpecialCastCandidate(quint32 oid) const
+    {
+        return isPendingChoiceCandidate(ChoiceKind::SpecialCast, oid);
+    }
+    /// Capture the current authoritative prompt ID for an offered special-cast candidate, or zero
+    /// when the candidate no longer belongs to the local active prompt.
+    [[nodiscard]] quint64 specialCastPromptIdForCandidate(quint32 oid) const
+    {
+        if (!isPendingSpecialCastCandidate(oid) || !pendingChoice.has_value())
+            return 0;
+        const quint64 promptId = pendingChoice->resolutionPromptId;
+        return isCurrentSpecialCastPrompt(promptId, oid) ? promptId : 0;
+    }
+    /// Revalidate a prompt ID captured before a modal interaction against the exact current
+    /// special-cast candidate.
+    [[nodiscard]] bool isCurrentSpecialCastPrompt(quint64 promptId, quint32 oid) const
+    {
+        return promptId != 0 && isCurrentResolutionPrompt(promptId) && pendingChoice.has_value() &&
+               pendingChoice->resolutionPromptId == promptId && isPendingSpecialCastCandidate(oid);
+    }
+    /// True when the final engine snapshot says this local client currently owns a resolution
+    /// prompt, even when no exact local offer was validated for it.
+    [[nodiscard]] bool hasActiveLocalResolutionPrompt() const;
+    /// True only for the currently active, authoritative local resolution prompt.
+    [[nodiscard]] bool isCurrentResolutionPrompt(quint64 promptId) const;
     /// Answer a click-to-select choice with the clicked permanent or player.
     /// For LegendKeep the chosen permanent is the one KEPT (CR 704.5j); the engine sacrifices
     /// the rest. Clears the choice and sends SubmitResolutionChoice.
@@ -1905,6 +1949,30 @@ public:
         std::sort(options.begin(), options.end(),
                   [](const RuledFaceOption &a, const RuledFaceOption &b) { return a.faceIndex < b.faceIndex; });
         return options;
+    }
+    /// Revalidate a public-zone land offer after a menu or other modal interaction. A PlayCard
+    /// special-cast candidate in exile must carry the exact active prompt ID; ordinary graveyard
+    /// and exile land offers must carry no prompt ID. Face and zone-change generation are always
+    /// checked against the current engine offer.
+    [[nodiscard]] bool isCurrentZoneLandPlayOffer(quint32 objectId,
+                                                  RuledCastSource source,
+                                                  int faceIndex,
+                                                  quint64 zoneChangeGeneration,
+                                                  quint64 capturedPromptId) const
+    {
+        if (!isZoneLandActionLegal(objectId, source))
+            return false;
+        const auto options = zoneLandFaceOptions(objectId, source);
+        const bool exactOfferStillLegal = std::any_of(options.cbegin(), options.cend(), [&](const auto &offer) {
+            return offer.faceIndex == faceIndex && offer.zoneChangeGeneration == zoneChangeGeneration;
+        });
+        if (!exactOfferStillLegal)
+            return false;
+        if (source == RuledCastSource::Exile && isPendingSpecialCastCandidate(objectId))
+            return isCurrentSpecialCastPrompt(capturedPromptId, objectId);
+        if (hasActiveLocalResolutionPrompt())
+            return false;
+        return capturedPromptId == 0;
     }
     [[nodiscard]] bool hasPendingZoneScopeChoice() const
     {
@@ -2099,7 +2167,7 @@ public:
 
 signals:
     void replacementEffectUiChanged();
-    void specialCastRequested(quint32 objectId);
+    void specialCastRequested(quint32 objectId, quint64 resolutionPromptId);
     void paymentPreviewReceived();
 
     /// Emitted when ruled game-session state is cleared (game stopped or new game started).
@@ -2195,11 +2263,14 @@ private:
     /// Deliberately does *not* emit resolutionHandPickUiChanged — callers that end a pick for
     /// good emit it themselves; the dispatcher replacing one pick with the next must not.
     void teardownPendingChoice();
-    /// The one SubmitResolutionChoice sender: every non-trigger choice answers this way.
+    /// Shared ID-stamping helper for SubmitResolutionChoice commands built by RuledClientState.
+    [[nodiscard]] bool stampCurrentResolutionPrompt(
+        ruled::v1::SubmitResolutionChoice *submission, quint64 promptId) const;
     void sendResolutionChoice(
         const QVector<quint32> &chosenOids,
         ruled::v1::ResolutionChoiceDecision decision = ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED,
-        const QVector<quint32> &chosenPlayerIds = {});
+        const QVector<quint32> &chosenPlayerIds = {},
+        quint64 promptId = 0);
     void submitResolutionPayment(ruled::v1::ResolutionChoiceDecision decision);
 
     RuledClientHost *host;

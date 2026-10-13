@@ -1,4 +1,5 @@
 //! Darksteel Forge: a live source-bound layer-six keyword grant to artifact permanents.
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, ControllerReference, EffectDuration, PermanentTypeFilter,
@@ -50,7 +51,7 @@ fn effect(engine: &mut GameEngine, object: u32, kind: ContinuousEffectKind, time
 
 fn move_forge_out(engine: &mut GameEngine) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -118,7 +119,7 @@ fn forge_does_not_prevent_sacrifice_or_zero_toughness() {
             .copied()
             .unwrap_or(0);
     }
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 2);
     move_ready_to_battlefield(&mut engine, 0, FORGE);
@@ -134,7 +135,7 @@ fn forge_does_not_prevent_sacrifice_or_zero_toughness() {
         1000,
     );
     engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .unwrap();
     assert_eq!(engine.state.objects[&creature].zone, Zone::Graveyard);
 }
@@ -155,7 +156,9 @@ fn sculpting_steel_copy_of_forge_keeps_its_own_grant_after_donor_departure() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     assert!(engine
         .state
@@ -166,7 +169,7 @@ fn sculpting_steel_copy_of_forge_keeps_its_own_grant_after_donor_departure() {
         .candidates
         .contains(&source));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .unwrap();
     assert_eq!(
         engine.characteristics(copy).unwrap().names,
@@ -210,7 +213,7 @@ fn forge_actual_cast_pays_nine_projects_the_keyword_and_rejects_invented_activat
     );
     let before = serde_json::to_value(&engine.state).unwrap();
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect_err("nine mana required");
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     give_mana(
@@ -221,7 +224,9 @@ fn forge_actual_cast_pays_nine_projects_the_keyword_and_rejects_invented_activat
             ..Default::default()
         },
     );
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
@@ -242,7 +247,7 @@ fn forge_actual_cast_pays_nine_projects_the_keyword_and_rejects_invented_activat
     assert!(projected.activated_abilities.is_empty());
     let before = serde_json::to_value(&engine.state).unwrap();
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 0, vec![]))
         .expect_err("a static grant is not an activated ability");
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
 }
@@ -362,7 +367,7 @@ fn forge_prevents_destroy_and_lethal_damage_but_source_ability_removal_exposes_d
         },
     );
     engine
-        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -371,7 +376,7 @@ fn forge_prevents_destroy_and_lethal_damage_but_source_ability_removal_exposes_d
         "destroy was legal but ineffective"
     );
     engine.state.objects.get_mut(&creature).unwrap().damage = 2;
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     assert_eq!(engine.state.objects[&creature].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&creature].damage, 2);
     // Remove the source's generating ability; the next SBA now sees the still-marked damage.
@@ -381,7 +386,7 @@ fn forge_prevents_destroy_and_lethal_damage_but_source_ability_removal_exposes_d
         ContinuousEffectKind::Layer6RemoveAllAbilities,
         1000,
     );
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     assert_eq!(engine.state.objects[&creature].zone, Zone::Graveyard);
 }
 
@@ -422,7 +427,7 @@ fn witness_protection_started_layer_four_component_keeps_removing_forge_ability_
         },
     );
     engine
-        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);

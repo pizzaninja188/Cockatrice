@@ -5,6 +5,7 @@
 //! CR 115.1d and 608.2b govern trigger targets and resolution revalidation, CR 508.1m and
 //! 510.2 establish the attack/combat-damage boundaries, CR 603 governs triggered abilities,
 //! and CR 701.17/701.25 define mill and Surveil.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -18,9 +19,11 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }
 
@@ -73,7 +76,7 @@ fn generated_boulderborn_dragon_triggers_only_from_its_attack_declaration_and_su
         "being combat-ready is not attacking"
     );
     engine
-        .apply_command(0, &declare_attackers(vec![dragon]))
+        .apply_scenario_command(0, &declare_attackers(vec![dragon]))
         .expect("declare Boulderborn Dragon");
     assert_eq!(
         engine.state.stack.len(),
@@ -87,7 +90,7 @@ fn generated_boulderborn_dragon_triggers_only_from_its_attack_declaration_and_su
     assert_eq!(choice.deciding_player_id, 0);
     assert_eq!(choice.candidate_object_ids, top);
     engine
-        .apply_command(0, &submit_resolution_choice(top.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(top.clone()))
         .expect("move the private Surveil candidate to the graveyard");
     assert_eq!(engine.state.objects[&top[0]].zone, Zone::Graveyard);
 }
@@ -134,7 +137,7 @@ fn generated_cartographers_companion_creates_a_functional_canonical_map() {
         1
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![top]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top]))
         .expect("finish Explore");
 }
 
@@ -228,10 +231,10 @@ fn generated_bounce_restricts_targets_and_revalidates_the_exact_generation() {
     move_ready_to_battlefield(&mut engine, 0, "bigfin_bouncer");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     assert!(engine
-        .apply_command(0, &choose_trigger_target(own_creature))
+        .apply_scenario_command(0, &choose_trigger_target(own_creature))
         .is_err());
     assert!(engine
-        .apply_command(0, &choose_trigger_target(opponent_artifact))
+        .apply_scenario_command(0, &choose_trigger_target(opponent_artifact))
         .is_err());
     let generation_before = engine
         .state
@@ -240,7 +243,7 @@ fn generated_bounce_restricts_targets_and_revalidates_the_exact_generation() {
         .copied()
         .unwrap_or(0);
     engine
-        .apply_command(0, &choose_trigger_target(opponent_creature))
+        .apply_scenario_command(0, &choose_trigger_target(opponent_creature))
         .expect("choose legal opponent creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&opponent_creature].zone, Zone::Hand);
@@ -250,7 +253,7 @@ fn generated_bounce_restricts_targets_and_revalidates_the_exact_generation() {
     let stale_target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     move_ready_to_battlefield(&mut engine, 0, "exclusion_mage");
     engine
-        .apply_command(0, &choose_trigger_target(stale_target))
+        .apply_scenario_command(0, &choose_trigger_target(stale_target))
         .expect("choose second legal target");
     engine.state.players[1]
         .battlefield
@@ -281,21 +284,25 @@ fn generated_eager_trufflesnout_creates_food_only_after_player_combat_damage() {
     .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
     let trufflesnout = relocate_to_battlefield(&mut engine, 0, "eager_trufflesnout", false);
-    engine.apply_command(0, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(0, &primitive_yield())
+        .unwrap();
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![trufflesnout]))
+        .apply_scenario_command(0, &declare_attackers(vec![trufflesnout]))
         .expect("declare attacker");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active pass attackers");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass attackers");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active pass blockers");
-    engine.apply_command(1, &pass()).expect("combat damage");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("combat damage");
     assert_eq!(engine.state.players[1].life, 16);
     assert_eq!(engine.state.stack.len(), 1);
     resolve_entire_stack_two_player(&mut engine);
@@ -333,15 +340,17 @@ fn generated_eager_trufflesnout_creates_food_only_after_player_combat_damage() {
     advance_to_main1_from_game_start(&mut blocked);
     let attacker = relocate_to_battlefield(&mut blocked, 0, "eager_trufflesnout", false);
     let blocker = relocate_to_battlefield(&mut blocked, 1, "giant_spider", false);
-    blocked.apply_command(0, &primitive_yield()).unwrap();
+    blocked
+        .apply_scenario_command(0, &primitive_yield())
+        .unwrap();
     pass_both_players(&mut blocked);
     blocked
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .unwrap();
-    blocked.apply_command(0, &pass()).unwrap();
-    blocked.apply_command(1, &pass()).unwrap();
+    blocked.apply_scenario_command(0, &pass()).unwrap();
+    blocked.apply_scenario_command(1, &pass()).unwrap();
     blocked
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -349,8 +358,8 @@ fn generated_eager_trufflesnout_creates_food_only_after_player_combat_damage() {
             }]),
         )
         .expect("block all trample damage");
-    blocked.apply_command(0, &pass()).unwrap();
-    blocked.apply_command(1, &pass()).unwrap();
+    blocked.apply_scenario_command(0, &pass()).unwrap();
+    blocked.apply_scenario_command(1, &pass()).unwrap();
     assert_eq!(blocked.state.players[1].life, 20);
     assert!(blocked.state.stack.is_empty());
     assert!(battlefield_token_oids(&blocked, 0, "food").is_empty());

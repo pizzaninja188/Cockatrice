@@ -97,7 +97,7 @@ fn cast_object(
 
 fn pass_two(e: &mut GameEngine) {
     for _ in 0..2 {
-        e.apply_command(
+        e.apply_scenario_command(
             e.state.priority_player_id(),
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -127,7 +127,7 @@ fn resolve(e: &mut GameEngine) {
         if e.state.stack.is_empty() {
             return;
         }
-        e.apply_command(
+        e.apply_scenario_command(
             e.state.priority_player_id(),
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
@@ -185,7 +185,7 @@ fn multikicker_cast_entry_and_counter_mana_use_the_announced_count() {
         } else {
             vec![selection(Some(count))]
         };
-        e.apply_command(0, &cast(&e, selections)).unwrap();
+        e.apply_scenario_command(0, &cast(&e, selections)).unwrap();
         assert_eq!(e.state.players[0].mana_pool.colorless, 0);
         let item = e.state.stack.last().unwrap();
         assert_eq!(
@@ -211,7 +211,7 @@ fn multikicker_cast_entry_and_counter_mana_use_the_announced_count() {
             e.state.objects[&oid].counter_count(CounterKind::Charge),
             count
         );
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
@@ -258,7 +258,7 @@ fn multikicker_bad_announcements_are_atomic_before_source_reservation() {
     ] {
         let mut e = engine();
         let before = format!("{:?}", e.state);
-        assert!(e.apply_command(0, &cast(&e, selections)).is_err());
+        assert!(e.apply_scenario_command(0, &cast(&e, selections)).is_err());
         assert_eq!(format!("{:?}", e.state), before);
         assert!(e.pending_spell_cast_internal.is_none());
     }
@@ -329,11 +329,11 @@ fn multikicker_permanent_spell_copy_retains_payment_count_at_a_new_object_id() {
     let mut e = engine();
     e.state.players[0].mana_pool.colorless = 6;
     let original = e.state.players[0].hand[0];
-    e.apply_command(0, &cast(&e, vec![selection(Some(3))]))
+    e.apply_scenario_command(0, &cast(&e, vec![selection(Some(3))]))
         .unwrap();
     let original_receipt = e.state.stack.last().unwrap().cast_cost_receipts.clone();
     let probe = put_hand(&mut e, "Copy Probe");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_object(
             &e,
@@ -380,12 +380,12 @@ fn multikicker_entry_copy_acquires_a_new_link_even_with_the_same_local_ids() {
         });
         e.state.players[0].mana_pool.colorless = 2;
         let model = e.state.players[0].hand[0];
-        e.apply_command(0, &cast(&e, vec![selection(Some(1))]))
+        e.apply_scenario_command(0, &cast(&e, vec![selection(Some(1))]))
             .unwrap();
         resolve(&mut e);
         let entrant = put_hand(&mut e, "Repeated Copy Entry");
         e.state.players[0].mana_pool.colorless = 6;
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &cast_object(&e, entrant, vec![selection(Some(3))], vec![]),
         )
@@ -401,7 +401,7 @@ fn multikicker_entry_copy_acquires_a_new_link_even_with_the_same_local_ids() {
             crate::state::ResolutionContinuation::EntryCopySource { .. }
         ));
         assert_eq!(e.state.objects[&entrant].copy_revision, 0);
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -420,7 +420,7 @@ fn multikicker_entry_copy_acquires_a_new_link_even_with_the_same_local_ids() {
                 pending.presentation.choice_kind,
                 rv1::ChoiceKind::CopySource
             );
-            e.apply_command(
+            e.apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
@@ -507,7 +507,7 @@ fn multikicker_locked_count_survives_failed_payment_and_cancellation_retries() {
             },
         )),
     };
-    e.apply_command(0, &begin).unwrap();
+    e.apply_scenario_command(0, &begin).unwrap();
     let pending = e.state.pending_spell_cast.as_ref().unwrap();
     assert_eq!(pending.locked_total_cost, "{6}");
     assert_eq!(
@@ -524,9 +524,9 @@ fn multikicker_locked_count_survives_failed_payment_and_cancellation_retries() {
         )),
     };
     let before = format!("{:?}", e.state);
-    assert!(e.apply_command(0, &commit).is_err());
+    assert!(e.apply_scenario_command(0, &commit).is_err());
     assert_eq!(format!("{:?}", e.state), before);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::CancelSpellCast(
@@ -542,10 +542,10 @@ fn multikicker_locked_count_survives_failed_payment_and_cancellation_retries() {
         e.state.objects[&source].counter_count(CounterKind::Charge),
         0
     );
-    e.apply_command(0, &begin).unwrap();
+    e.apply_scenario_command(0, &begin).unwrap();
     let retry_id = e.state.pending_spell_cast.as_ref().unwrap().transaction_id;
     e.state.players[0].mana_pool.colorless = 6;
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::CommitSpellCast(
@@ -584,7 +584,7 @@ fn multikicker_stack_presentation_keeps_the_dynamic_count_visible() {
     ));
     e.state.players[0].mana_pool.colorless = 6;
     let batch = e
-        .apply_command(0, &cast(&e, vec![selection(Some(3))]))
+        .apply_scenario_command(0, &cast(&e, vec![selection(Some(3))]))
         .unwrap();
     let pushed = batch
         .events
@@ -607,7 +607,7 @@ fn multikicker_entry_counter_prohibition_keeps_the_paid_count_separate() {
     let mut e = engine_for("prohibited_entry");
     e.state.players[0].mana_pool.colorless = 6;
     let oid = e.state.players[0].hand[0];
-    e.apply_command(0, &cast(&e, vec![selection(Some(3))]))
+    e.apply_scenario_command(0, &cast(&e, vec![selection(Some(3))]))
         .unwrap();
     assert_eq!(
         e.state.stack.last().unwrap().cast_cost_receipts[0]
@@ -626,7 +626,7 @@ fn multikicker_absent_count_is_one_and_ordinary_kicker_rejects_repeat_counts() {
     let mut e = engine();
     e.state.players[0].mana_pool.colorless = 2;
     let source = e.state.players[0].hand[0];
-    e.apply_command(0, &cast(&e, vec![selection(None)]))
+    e.apply_scenario_command(0, &cast(&e, vec![selection(None)]))
         .unwrap();
     assert_eq!(
         e.state.stack.last().unwrap().cast_cost_receipts[0]

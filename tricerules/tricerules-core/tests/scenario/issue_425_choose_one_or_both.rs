@@ -5,9 +5,10 @@
 //! (exile-if-would-die replacement), CR 701.23 (search), CR 701.26 (tap), CR 400.7 (zone
 //! changes and typed graveyard returns), CR 107.1b/613.4c (doubling), CR 701.12 (fight), and
 //! CR 111.1/701.6 (artifact tokens and destruction) govern the exercised behavior.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ChoiceKind, ResolutionChoiceDecision, TargetRef, TargetRefKind};
 
 fn modal_engine(seed: u64) -> GameEngine {
@@ -56,12 +57,12 @@ fn issue_425_amazing_acrobatics_counters_a_spell_and_taps_one_or_two_creatures()
     let mut counter_engine = modal_engine(425_001);
     let bolt_slot = prepare_spell(&mut counter_engine, "lightning_bolt");
     counter_engine
-        .apply_command(0, &cast_spell(bolt_slot, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(bolt_slot, target_player(1)))
         .expect("cast the bolt");
     let bolt = counter_engine.state.stack.last().expect("bolt on stack").id;
     let slot = prepare_spell(&mut counter_engine, "amazing_acrobatics");
     counter_engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, target_object(bolt))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, target_object(bolt))]))
         .expect("counter the bolt");
     resolve_entire_stack_two_player(&mut counter_engine);
     assert!(
@@ -74,7 +75,7 @@ fn issue_425_amazing_acrobatics_counters_a_spell_and_taps_one_or_two_creatures()
     let second = inject_creature_on_battlefield(&mut tap_engine, 1, "storm_crow");
     let slot = prepare_spell(&mut tap_engine, "amazing_acrobatics");
     tap_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(
                 slot,
@@ -99,7 +100,7 @@ fn issue_425_amazing_acrobatics_rejects_three_tap_targets() {
     let slot = prepare_spell(&mut engine, "amazing_acrobatics");
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_modal_spell(
                     slot,
@@ -132,7 +133,7 @@ fn issue_425_avengers_disassembled_sweeps_and_lets_the_land_controller_search() 
         .toughness = Some(5);
     let slot = prepare_spell(&mut sweep_engine, "avengers_disassembled");
     sweep_engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, vec![])]))
         .expect("cast the sweep mode");
     resolve_entire_stack_two_player(&mut sweep_engine);
     assert_eq!(sweep_engine.state.objects[&ours].zone, Zone::Graveyard);
@@ -148,13 +149,13 @@ fn issue_425_avengers_disassembled_sweeps_and_lets_the_land_controller_search() 
     let forest = inject_library_card(&mut land_engine, 1, "forest");
     let slot = prepare_spell(&mut land_engine, "avengers_disassembled");
     land_engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, target_object(land))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, target_object(land))]))
         .expect("cast the land mode");
     land_engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("caster passes");
     let parked = land_engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("land destroyed and its controller is offered the search");
     assert_eq!(land_engine.state.objects[&land].zone, Zone::Graveyard);
     let choice = find_resolution_choice(&parked).expect("optional search branch");
@@ -166,7 +167,7 @@ fn issue_425_avengers_disassembled_sweeps_and_lets_the_land_controller_search() 
     assert_eq!((choice.min, choice.max), (0, 1));
 
     let searching = land_engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -176,7 +177,7 @@ fn issue_425_avengers_disassembled_sweeps_and_lets_the_land_controller_search() 
     assert_eq!(choice.deciding_player_id, 1);
     assert!(choice.candidate_object_ids.contains(&forest));
     land_engine
-        .apply_command(1, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![forest]))
         .expect("find the basic land");
     let found = land_engine.state.objects[&forest].clone();
     assert_eq!(found.zone, Zone::Battlefield);
@@ -195,7 +196,7 @@ fn issue_425_decoy_ploy_returns_only_printed_graveyard_subtypes() {
     let slot = prepare_spell(&mut engine, "decoy_ploy");
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_modal_spell(slot, vec![(0, graveyard_target(plain))])
             )
@@ -203,7 +204,7 @@ fn issue_425_decoy_ploy_returns_only_printed_graveyard_subtypes() {
         "a card without the Villain subtype is not a legal target"
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(0, graveyard_target(villain))]),
         )
@@ -215,7 +216,7 @@ fn issue_425_decoy_ploy_returns_only_printed_graveyard_subtypes() {
     let slot = prepare_spell(&mut engine, "decoy_ploy");
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_modal_spell(slot, vec![(1, graveyard_target(plain))])
             )
@@ -223,7 +224,7 @@ fn issue_425_decoy_ploy_returns_only_printed_graveyard_subtypes() {
         "a card without the Hero subtype is not a legal target"
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(1, graveyard_target(hero))]),
         )
@@ -239,7 +240,7 @@ fn issue_425_epic_fight_doubles_both_characteristics_and_fights() {
     let target = inject_creature_on_battlefield(&mut double_engine, 0, "grizzly_bears");
     let slot = prepare_spell(&mut double_engine, "epic_fight");
     double_engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, target_object(target))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, target_object(target))]))
         .expect("cast the doubling mode");
     resolve_entire_stack_two_player(&mut double_engine);
     assert_eq!(double_engine.effective_power(target), Some(4));
@@ -250,7 +251,7 @@ fn issue_425_epic_fight_doubles_both_characteristics_and_fights() {
     let theirs = inject_creature_on_battlefield(&mut fight_engine, 1, "grizzly_bears");
     let slot = prepare_spell(&mut fight_engine, "epic_fight");
     fight_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(
                 slot,
@@ -272,7 +273,7 @@ fn issue_425_pinecone_strike_exiles_lethal_and_destroys_artifact_tokens() {
     let lethal = inject_creature_on_battlefield(&mut lethal_engine, 1, "grizzly_bears");
     let slot = prepare_spell(&mut lethal_engine, "pinecone_strike");
     lethal_engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, target_object(lethal))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, target_object(lethal))]))
         .expect("cast the damage mode");
     resolve_entire_stack_two_player(&mut lethal_engine);
     assert_eq!(
@@ -287,12 +288,12 @@ fn issue_425_pinecone_strike_exiles_lethal_and_destroys_artifact_tokens() {
     let slot = prepare_spell(&mut token_engine, "pinecone_strike");
     assert!(
         token_engine
-            .apply_command(0, &cast_modal_spell(slot, vec![(1, target_object(sword))]),)
+            .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, target_object(sword))]),)
             .is_err(),
         "a non-token artifact is not a legal artifact-token target"
     );
     token_engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, target_object(token))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, target_object(token))]))
         .expect("destroy the Clue token");
     resolve_entire_stack_two_player(&mut token_engine);
     assert!(
@@ -309,13 +310,13 @@ fn issue_425_scour_for_scrap_searches_and_returns_artifacts() {
     let bear = inject_library_card(&mut search_engine, 0, "grizzly_bears");
     let slot = prepare_spell(&mut search_engine, "scour_for_scrap");
     search_engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(0, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(0, vec![])]))
         .expect("cast the search mode");
     search_engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("caster passes");
     let parked = search_engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("the search parks for the caster");
     let choice = find_resolution_choice(&parked).expect("library search");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
@@ -326,7 +327,7 @@ fn issue_425_scour_for_scrap_searches_and_returns_artifacts() {
         "only artifact cards are candidates"
     );
     let completion = search_engine
-        .apply_command(0, &submit_resolution_choice(vec![sword]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![sword]))
         .expect("find the artifact");
     let reveal = completion
         .events
@@ -345,7 +346,7 @@ fn issue_425_scour_for_scrap_searches_and_returns_artifacts() {
     let slot = prepare_spell(&mut return_engine, "scour_for_scrap");
     assert!(
         return_engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_modal_spell(slot, vec![(1, graveyard_target(creature))]),
             )
@@ -353,7 +354,7 @@ fn issue_425_scour_for_scrap_searches_and_returns_artifacts() {
         "a non-artifact card in the graveyard is not a legal target"
     );
     return_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(1, graveyard_target(artifact))]),
         )
@@ -370,7 +371,7 @@ fn issue_425_choose_both_modes_resolve_in_combination() {
     let hero = inject_graveyard_card(&mut decoy_engine, 0, "amateur_hero");
     let slot = prepare_spell(&mut decoy_engine, "decoy_ploy");
     decoy_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(
                 slot,
@@ -388,16 +389,16 @@ fn issue_425_choose_both_modes_resolve_in_combination() {
     let forest = inject_library_card(&mut avengers_engine, 1, "forest");
     let slot = prepare_spell(&mut avengers_engine, "avengers_disassembled");
     avengers_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(0, vec![]), (1, target_object(land))]),
         )
         .expect("cast both Avengers Disassembled modes");
     avengers_engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("caster passes");
     let parked = avengers_engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("sweep resolves and the search parks");
     // Resolution is suspended at the search, so lethal state-based actions have not run yet;
     // check the applied damage now and the departure after the search completes.
@@ -406,7 +407,7 @@ fn issue_425_choose_both_modes_resolve_in_combination() {
     let choice = find_resolution_choice(&parked).expect("optional search branch");
     assert_eq!(choice.deciding_player_id, 1);
     let searching = avengers_engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &submit_resolution_decision(ResolutionChoiceDecision::SelectBranch),
         )
@@ -414,7 +415,7 @@ fn issue_425_choose_both_modes_resolve_in_combination() {
     let choice = find_resolution_choice(&searching).expect("library search");
     assert!(choice.candidate_object_ids.contains(&forest));
     avengers_engine
-        .apply_command(1, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![forest]))
         .expect("find the basic land");
     assert_eq!(
         avengers_engine.state.objects[&ours].zone,

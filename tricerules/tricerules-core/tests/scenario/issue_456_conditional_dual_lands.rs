@@ -6,9 +6,10 @@
 //! concepts: CR 605.1a / 605.3 (mana abilities at normal timing), CR 602.5 (activation
 //! restrictions), CR 400.7 and 603.6 (source-relative "entered this turn" uses the exact object
 //! generation), and CR 205.4a (only the Basic supertype counts for "a basic land").
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 /// `(w, u, b, r, g, c)`; a named alias keeps the reviewed fixtures readable.
 type ManaOption = (u32, u32, u32, u32, u32, u32);
@@ -157,7 +158,7 @@ fn issue_456_later_turn_without_a_basic_land_rejects_the_pair_but_keeps_colorles
         let pool_before = pool(&engine);
         let command_before = engine.state.command_index;
         engine
-            .apply_command(0, &mana_option(&engine, source, 1, 0))
+            .apply_scenario_command(0, &mana_option(&engine, source, 1, 0))
             .expect_err("the pair ability is restricted while neither branch holds");
         assert!(!engine.state.objects[&source].tapped);
         assert_eq!(pool(&engine), pool_before);

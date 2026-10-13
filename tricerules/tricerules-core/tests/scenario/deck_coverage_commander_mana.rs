@@ -1,8 +1,9 @@
 //! Arcane Signet and Command Tower choose mana from the engine-bound Commander identity.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Color;
-use tricerules_core::{EngineDeck, GameEngine};
+use tricerules_core::EngineDeck;
 
 fn commander_mana_engine() -> GameEngine {
     commander_mana_engine_with_commanders(&["atraxa,_praetors_voice"])
@@ -114,7 +115,7 @@ fn begin_spell_cast_for_path_type_test(
     cast.face_index = face_index;
     cast.targets = targets;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
@@ -162,7 +163,7 @@ fn commit_path_spell_with_mana(
         .expect("spell payment transaction")
         .reserved_object_id;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
@@ -423,7 +424,7 @@ fn path_of_ancestry_triggers_once_for_each_mana_spent_to_cast_the_commander() {
         g: 1,
         ..Default::default()
     });
-    assert!(engine.apply_command(0, &forged).is_err());
+    assert!(engine.apply_scenario_command(0, &forged).is_err());
     assert_eq!(engine.state.command_index, command_index);
     assert_eq!(engine.state.players[0].restricted_mana.len(), 1);
     assert!(path_scry_triggers(&engine).is_empty());
@@ -903,7 +904,7 @@ fn attack_payment_undo_keeps_the_later_path_mana_group_bound_to_its_source() {
     inject_permanent_on_battlefield(&mut engine, 1, "propaganda");
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("Propaganda opens attack payment");
     let transaction_id = engine
         .state
@@ -932,7 +933,7 @@ fn attack_payment_undo_keeps_the_later_path_mana_group_bound_to_its_source() {
         .unwrap_or_else(|| panic!("first Path undo option missing: {undo_options:#?}"))
         .activation_command_index;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::UndoManaAbility(UndoManaAbility {
@@ -959,7 +960,7 @@ fn attack_payment_undo_keeps_the_later_path_mana_group_bound_to_its_source() {
         .expect("pending Propaganda payment")
         .clone();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitAttackDeclaration(CommitAttackDeclaration {
@@ -1001,7 +1002,7 @@ fn attack_payment_undo_keeps_the_later_path_mana_group_bound_to_its_source() {
     let snapshot = engine
         .diagnostic_snapshot()
         .expect("before stale selection");
-    assert!(engine.apply_command(0, &stale).is_err());
+    assert!(engine.apply_scenario_command(0, &stale).is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), snapshot);
     assert_eq!(
         engine.state.objects[&spell].zone,
@@ -1316,7 +1317,7 @@ fn forged_signet_color_choice_is_rejected_without_mutating_game_state() {
     };
     activation.expected_zone_change_generation += 1;
 
-    assert!(engine.apply_command(0, &stale).is_err());
+    assert!(engine.apply_scenario_command(0, &stale).is_err());
     assert!(!engine.state.objects[&signet].tapped);
     assert_eq!(engine.state.players[0].mana_pool, Default::default());
     assert_eq!(engine.state.stack.len(), stack_len);
@@ -1328,7 +1329,7 @@ fn forged_signet_color_choice_is_rejected_without_mutating_game_state() {
     };
     activation.mana_option_index = 4; // Atraxa's WUBG identity has only four legal choices.
 
-    assert!(engine.apply_command(0, &forged).is_err());
+    assert!(engine.apply_scenario_command(0, &forged).is_err());
     assert!(!engine.state.objects[&signet].tapped);
     assert_eq!(engine.state.players[0].mana_pool, Default::default());
     assert_eq!(engine.state.stack.len(), stack_len);

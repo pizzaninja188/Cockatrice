@@ -2,13 +2,14 @@
 //!
 //! CR 115.3, 122.5, 602.5d, 608.2b, and 614.16 govern the target groups, atomic move,
 //! activation timing, target identity, and counter-placement replacement.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{
     primitives::{AbilityCost, ActivationTiming, SpellEffectKind, TargetChooser},
     CounterKind,
 };
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     dev_command, ruled_command::Cmd, DevCommand, DevMoveCard, DevZone, ResolutionChoiceDecision,
     ResolutionChoiceRequired, RuledCommand, SubmitResolutionChoice, TargetRef, TargetRefKind,
@@ -58,7 +59,7 @@ fn pass_until_choice(engine: &mut GameEngine) -> ResolutionChoiceRequired {
     for _ in 0..4 {
         let actor = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("the current priority holder passes");
         if engine.state.pending_resolution.is_some() {
             return find_resolution_choice(&batch)
@@ -114,7 +115,7 @@ fn resolve_without_counter_choice(engine: &mut GameEngine) {
     for _ in 0..4 {
         let actor = engine.state.priority_player_id();
         let batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("the current priority holder passes");
         assert!(
             find_resolution_choice(&batch).is_none(),
@@ -133,7 +134,7 @@ fn move_owned_card(engine: &mut GameEngine, owner: i32, card_id: &str, destinati
         .expect("registered card");
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             owner,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -152,6 +153,7 @@ fn move_owned_card(engine: &mut GameEngine, owner: i32, card_id: &str, destinati
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -189,7 +191,7 @@ fn nesting_grounds_moves_one_selected_counter_between_distinct_player_targets() 
 
     let mana_before = engine.state.players[0].mana_pool.colorless;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&engine, grounds, source, destination),
         )
@@ -231,7 +233,7 @@ fn nesting_grounds_moves_one_selected_counter_between_distinct_player_targets() 
     );
 
     engine
-        .apply_command(0, &select_branch(1))
+        .apply_scenario_command(0, &select_branch(1))
         .expect("select Quest counters");
     assert_eq!(
         engine.state.objects[&source].counter_count(CounterKind::Quest),
@@ -275,7 +277,7 @@ fn nesting_grounds_stages_laezel_and_doubling_season_before_atomic_move() {
         );
 
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &move_counter_command(&engine, grounds, source, destination),
             )
@@ -283,7 +285,7 @@ fn nesting_grounds_stages_laezel_and_doubling_season_before_atomic_move() {
         let counter_kind_choice = pass_until_choice(&mut engine);
         assert_eq!(counter_kind_choice.resolution_branches.len(), 1);
         engine
-            .apply_command(0, &select_branch(0))
+            .apply_scenario_command(0, &select_branch(0))
             .expect("choose the Quest counter");
 
         let replacement_prompt = engine
@@ -310,7 +312,7 @@ fn nesting_grounds_stages_laezel_and_doubling_season_before_atomic_move() {
 
         let selected = replacement_prompt.presentation.candidates[replacement_choice];
         engine
-            .apply_command(0, &submit_resolution_choice(vec![selected]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
             .expect("choose the first counter replacement");
         assert!(engine.state.pending_resolution.is_none());
         assert_eq!(
@@ -348,14 +350,14 @@ fn nesting_grounds_stale_replacement_choice_preserves_both_counter_sets() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&engine, grounds, source, destination),
         )
         .expect("activate Nesting Grounds");
     pass_until_choice(&mut engine);
     engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("choose the Quest counter");
     let replacement_prompt = engine
         .state
@@ -378,7 +380,7 @@ fn nesting_grounds_stale_replacement_choice_preserves_both_counter_sets() {
         .zone_change_generation
         .insert(source, source_generation + 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(vec![replacement_prompt.presentation.candidates[0]]),
         )
@@ -408,7 +410,7 @@ fn nesting_grounds_keeps_its_mana_ability_and_sorcery_speed_costs() {
     let activation = move_counter_command(&engine, grounds, source, destination);
 
     assert!(
-        engine.apply_command(0, &activation).is_err(),
+        engine.apply_scenario_command(0, &activation).is_err(),
         "the {{1}} cost cannot be skipped"
     );
     assert!(!engine.state.objects[&grounds].tapped);
@@ -424,7 +426,7 @@ fn nesting_grounds_keeps_its_mana_ability_and_sorcery_speed_costs() {
     );
     engine.state.turn_step = TurnStep::Upkeep;
     assert!(
-        engine.apply_command(0, &activation).is_err(),
+        engine.apply_scenario_command(0, &activation).is_err(),
         "Activate only as a sorcery is unavailable outside a main phase"
     );
     assert!(!engine.state.objects[&grounds].tapped);
@@ -433,7 +435,7 @@ fn nesting_grounds_keeps_its_mana_ability_and_sorcery_speed_costs() {
 
     engine.state.turn_step = TurnStep::Main1;
     engine
-        .apply_command(0, &activation)
+        .apply_scenario_command(0, &activation)
         .expect("the card's second ability is usable in its controller's main phase");
     assert!(engine.state.objects[&grounds].tapped);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
@@ -445,7 +447,7 @@ fn nesting_grounds_keeps_its_mana_ability_and_sorcery_speed_costs() {
 
     engine.state.objects.get_mut(&grounds).unwrap().tapped = false;
     engine
-        .apply_command(0, &activate_ability_for(&engine, grounds, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, grounds, 0, vec![]))
         .expect("the first ability is a usable mana ability");
     assert!(engine.state.objects[&grounds].tapped);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
@@ -506,7 +508,7 @@ fn nesting_grounds_rejects_same_or_uncontrolled_source_targets_before_payment() 
         ],
     ] {
         let command = activate_ability_for(&engine, grounds, 1, targets);
-        assert!(engine.apply_command(0, &command).is_err());
+        assert!(engine.apply_scenario_command(0, &command).is_err());
         assert!(!engine.state.objects[&grounds].tapped);
         assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
         assert_eq!(
@@ -532,7 +534,7 @@ fn nesting_grounds_does_not_offer_a_choice_without_a_movable_counter() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&engine, grounds, source, destination),
         )
@@ -566,7 +568,7 @@ fn nesting_grounds_does_not_offer_a_choice_without_a_movable_counter() {
         },
     );
     blocked
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&blocked, grounds, source, destination),
         )
@@ -604,7 +606,7 @@ fn nesting_grounds_source_can_leave_without_affecting_its_activated_ability() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&engine, grounds, source, destination),
         )
@@ -615,7 +617,7 @@ fn nesting_grounds_source_can_leave_without_affecting_its_activated_ability() {
     let choice = pass_until_choice(&mut engine);
     assert_eq!(choice.deciding_player_id, 0);
     engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("finish the ability after its source left");
     assert_eq!(
         engine.state.objects[&source].counter_count(CounterKind::Quest),
@@ -649,7 +651,7 @@ fn nesting_grounds_invalidates_either_target_after_a_zone_change_and_return() {
     );
     let generation = source_target_engine.state.zone_change_generation[&source];
     source_target_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&source_target_engine, grounds, source, destination),
         )
@@ -700,7 +702,7 @@ fn nesting_grounds_invalidates_either_target_after_a_zone_change_and_return() {
     );
     let generation = destination_target_engine.state.zone_change_generation[&destination];
     destination_target_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&destination_target_engine, grounds, source, destination),
         )
@@ -752,7 +754,7 @@ fn nesting_grounds_revalidates_the_selected_counter_before_completing_a_parked_c
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&engine, grounds, source, destination),
         )
@@ -767,7 +769,7 @@ fn nesting_grounds_revalidates_the_selected_counter_before_completing_a_parked_c
         .unwrap()
         .set_counter(CounterKind::Quest, 0);
     engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("a now-unavailable valid option completes as a no-op");
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.stack.is_empty());
@@ -799,7 +801,7 @@ fn nesting_grounds_revalidates_the_selected_counter_before_completing_a_parked_c
         },
     );
     stale_target_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&stale_target_engine, grounds, source, destination),
         )
@@ -819,7 +821,7 @@ fn nesting_grounds_revalidates_the_selected_counter_before_completing_a_parked_c
         .zone_change_generation
         .insert(destination, generation + 1);
     stale_target_engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("a formerly valid target completes as a no-op");
     assert!(stale_target_engine.state.pending_resolution.is_none());
     assert!(stale_target_engine.state.stack.is_empty());
@@ -855,7 +857,7 @@ fn nesting_grounds_preserves_doubling_saga_and_siege_counter_paths() {
         },
     );
     doubling
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&doubling, grounds, source, destination),
         )
@@ -866,7 +868,7 @@ fn nesting_grounds_preserves_doubling_saga_and_siege_counter_paths() {
         "Move one quest counter"
     );
     doubling
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("move a quest counter");
     assert_eq!(
         doubling.state.objects[&source].counter_count(CounterKind::Quest),
@@ -896,7 +898,7 @@ fn nesting_grounds_preserves_doubling_saga_and_siege_counter_paths() {
         },
     );
     saga_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&saga_engine, grounds, source, saga),
         )
@@ -904,7 +906,7 @@ fn nesting_grounds_preserves_doubling_saga_and_siege_counter_paths() {
     let choice = pass_until_choice(&mut saga_engine);
     assert_eq!(choice.resolution_branches[0].label, "Move one lore counter");
     saga_engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("move a lore counter");
     assert_eq!(
         saga_engine.state.objects[&saga].counter_count(CounterKind::Lore),
@@ -944,7 +946,7 @@ fn nesting_grounds_preserves_doubling_saga_and_siege_counter_paths() {
         },
     );
     siege_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&siege_engine, grounds, siege, destination),
         )
@@ -955,7 +957,7 @@ fn nesting_grounds_preserves_doubling_saga_and_siege_counter_paths() {
         "Move one defense counter"
     );
     siege_engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("move the final defense counter");
     assert_eq!(
         siege_engine.state.objects[&siege].counter_count(CounterKind::Defense),
@@ -1007,7 +1009,7 @@ fn nesting_grounds_preserves_doubling_saga_and_siege_counter_paths() {
         },
     );
     blocked_siege_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&blocked_siege_engine, grounds, siege, blocked_destination),
         )
@@ -1053,7 +1055,7 @@ fn nesting_grounds_rejects_wrong_decider_malformed_and_unoffered_choices_without
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&engine, grounds, source, destination),
         )
@@ -1062,24 +1064,25 @@ fn nesting_grounds_rejects_wrong_decider_malformed_and_unoffered_choices_without
     assert_eq!(choice.deciding_player_id, 0);
     let pending_before = serde_json::to_value(&engine.state).expect("serializable pending state");
 
-    assert!(engine.apply_command(1, &select_branch(0)).is_err());
+    assert!(engine.apply_scenario_command(1, &select_branch(0)).is_err());
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), pending_before);
 
     let malformed = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: 1,
             chosen_object_ids: vec![source],
             ..Default::default()
         })),
     };
-    assert!(engine.apply_command(0, &malformed).is_err());
+    assert!(engine.apply_scenario_command(0, &malformed).is_err());
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), pending_before);
 
-    assert!(engine.apply_command(0, &select_branch(2)).is_err());
+    assert!(engine.apply_scenario_command(0, &select_branch(2)).is_err());
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), pending_before);
     engine
-        .apply_command(0, &select_branch(1))
+        .apply_scenario_command(0, &select_branch(1))
         .expect("the valid offered index selects Quest");
     assert_eq!(
         engine.state.objects[&source].counter_count(CounterKind::Quest),
@@ -1094,7 +1097,7 @@ fn nesting_grounds_rejects_wrong_decider_malformed_and_unoffered_choices_without
         1
     );
     let before_no_pending = serde_json::to_value(&engine.state).unwrap();
-    assert!(engine.apply_command(0, &select_branch(0)).is_err());
+    assert!(engine.apply_scenario_command(0, &select_branch(0)).is_err());
     assert_eq!(
         serde_json::to_value(&engine.state).unwrap(),
         before_no_pending
@@ -1122,7 +1125,7 @@ fn nesting_grounds_revalidates_first_target_control_during_parked_choice() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &move_counter_command(&engine, grounds, source, destination),
         )
@@ -1142,7 +1145,7 @@ fn nesting_grounds_revalidates_first_target_control_during_parked_choice() {
     assert_eq!(engine.characteristics(source).unwrap().controller, 1);
 
     engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("a valid offered answer completes as a no-op after control changes");
     assert_eq!(
         engine.state.objects[&source].counter_count(CounterKind::Quest),
@@ -1192,7 +1195,7 @@ fn nesting_grounds_ability_and_branch_choice_replay_deterministically() {
     let mut accepted_commands = Vec::new();
     let activation = move_counter_command(&original, grounds, source, destination);
     let batch = original
-        .apply_command(0, &activation)
+        .apply_scenario_command(0, &activation)
         .expect("activate Nesting Grounds");
     accepted_commands.push((0, activation.encode_to_vec(), batch.encode_to_vec()));
 
@@ -1201,7 +1204,7 @@ fn nesting_grounds_ability_and_branch_choice_replay_deterministically() {
         let actor = original.state.priority_player_id();
         let command = pass();
         let batch = original
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("priority pass is accepted");
         accepted_commands.push((actor, command.encode_to_vec(), batch.encode_to_vec()));
         if let Some(choice) = find_resolution_choice(&batch) {
@@ -1215,7 +1218,7 @@ fn nesting_grounds_ability_and_branch_choice_replay_deterministically() {
 
     let answer = select_branch(1);
     let batch = original
-        .apply_command(0, &answer)
+        .apply_scenario_command(0, &answer)
         .expect("select the offered Quest counter branch");
     accepted_commands.push((0, answer.encode_to_vec(), batch.encode_to_vec()));
     assert_eq!(
@@ -1237,7 +1240,7 @@ fn nesting_grounds_ability_and_branch_choice_replay_deterministically() {
     for (actor, encoded_command, expected_batch) in accepted_commands {
         let command = RuledCommand::decode(encoded_command.as_slice()).expect("decode command");
         let batch = replay
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("accepted command replays");
         assert_eq!(batch.encode_to_vec(), expected_batch);
     }

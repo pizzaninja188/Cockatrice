@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::Keyword;
 use tricerules_core::{AttachmentRecipient, Zone};
@@ -51,7 +52,7 @@ fn earthbend_move(engine: &mut GameEngine, name: &str, zone: tricerules_proto::r
     use tricerules_proto::ruled::v1::{dev_command::Dev, DevCommand, DevMoveCard};
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -78,7 +79,7 @@ fn earthbend_return_uses_stack_and_only_the_immediate_destination_generation() {
     ] {
         for stale in [false, true] {
             let (mut e, source, land) = earthbend_fixture();
-            e.apply_command(0, &activate_ability(source, 1, target_object(land)))
+            e.apply_scenario_command(0, &activate_ability(source, 1, target_object(land)))
                 .unwrap();
             resolve_entire_stack_two_player(&mut e);
             let generation = e
@@ -121,13 +122,13 @@ fn earthbend_return_uses_stack_and_only_the_immediate_destination_generation() {
 fn earthbend_source_departure_does_not_cancel_animation_or_return() {
     use tricerules_proto::ruled::v1::DevZone;
     let (mut e, source, land) = earthbend_fixture();
-    e.apply_command(0, &activate_ability(source, 1, target_object(land)))
+    e.apply_scenario_command(0, &activate_ability(source, 1, target_object(land)))
         .unwrap();
     earthbend_move(&mut e, "Grizzly Bears", DevZone::Graveyard);
     resolve_entire_stack_two_player(&mut e);
     assert!(e.characteristics(land).unwrap().is_creature());
     e.state.objects.get_mut(&land).unwrap().damage = 2;
-    e.apply_command(e.state.priority_player_id(), &pass())
+    e.apply_scenario_command(e.state.priority_player_id(), &pass())
         .unwrap();
     assert_eq!(e.state.objects[&land].zone, Zone::Graveyard);
     assert_eq!(e.state.stack.len(), 1);
@@ -139,7 +140,7 @@ fn earthbend_source_departure_does_not_cancel_animation_or_return() {
 fn earthbend_target_leaving_and_returning_before_resolution_is_not_animated() {
     use tricerules_proto::ruled::v1::DevZone;
     let (mut e, source, land) = earthbend_fixture();
-    e.apply_command(0, &activate_ability(source, 1, target_object(land)))
+    e.apply_scenario_command(0, &activate_ability(source, 1, target_object(land)))
         .unwrap();
     earthbend_move(&mut e, "Forest", DevZone::Exile);
     earthbend_move(&mut e, "Forest", DevZone::Battlefield);
@@ -155,12 +156,12 @@ fn earthbend_animates_only_your_land_and_survives_cleanup() {
     for illegal in [source, opposing_land] {
         let command_index = engine.state.command_index;
         assert!(engine
-            .apply_command(0, &activate_ability(source, 1, target_object(illegal)))
+            .apply_scenario_command(0, &activate_ability(source, 1, target_object(illegal)))
             .is_err());
         assert_eq!(engine.state.command_index, command_index);
     }
     engine
-        .apply_command(0, &activate_ability(source, 1, target_object(land)))
+        .apply_scenario_command(0, &activate_ability(source, 1, target_object(land)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     let characteristics = engine.characteristics(land).unwrap();
@@ -177,7 +178,7 @@ fn earthbend_animates_only_your_land_and_survives_cleanup() {
             break;
         }
         let player = engine.state.priority_player_id();
-        engine.apply_command(player, &pass()).unwrap();
+        engine.apply_scenario_command(player, &pass()).unwrap();
     }
     assert_eq!(engine.state.active_player_idx, 1);
     assert!(engine.characteristics(land).unwrap().is_creature());
@@ -188,7 +189,7 @@ fn earthbend_animates_only_your_land_and_survives_cleanup() {
 #[test]
 fn earthbend_zero_creates_its_watcher_before_the_sba_death() {
     let (mut e, source, land) = earthbend_fixture_count(0);
-    e.apply_command(0, &activate_ability(source, 1, target_object(land)))
+    e.apply_scenario_command(0, &activate_ability(source, 1, target_object(land)))
         .unwrap();
     pass_both_players(&mut e);
     assert_eq!(e.state.objects[&land].zone, Zone::Graveyard);
@@ -220,16 +221,16 @@ fn earthbend_preserves_mana_and_haste_but_cannot_return_a_token() {
             room_faces: None,
         });
     e.state.objects.get_mut(&land).unwrap().summoning_sick = true;
-    e.apply_command(0, &activate_ability(source, 1, target_object(land)))
+    e.apply_scenario_command(0, &activate_ability(source, 1, target_object(land)))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     let mana_before = e.state.players[0].mana_pool.green;
-    e.apply_command(0, &activate_ability_for(&e, land, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability_for(&e, land, 0, vec![]))
         .unwrap();
     assert!(e.state.objects[&land].tapped);
     assert_eq!(e.state.players[0].mana_pool.green, mana_before + 1);
     e.state.objects.get_mut(&land).unwrap().damage = 2;
-    e.apply_command(0, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
     assert!(!e.state.objects.contains_key(&land));
     assert_eq!(e.state.stack.len(), 1);
     resolve_entire_stack_two_player(&mut e);
@@ -252,17 +253,17 @@ fn earthbend_rebellious_captives_exhaust_resets_only_on_reentry() {
             ..Default::default()
         },
     );
-    e.apply_command(0, &activate_ability(source, 0, target_object(land)))
+    e.apply_scenario_command(0, &activate_ability(source, 0, target_object(land)))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.effective_power(source), Some(4));
     assert_eq!(e.effective_power(land), Some(2));
     assert!(e
-        .apply_command(0, &activate_ability(source, 0, target_object(land)))
+        .apply_scenario_command(0, &activate_ability(source, 0, target_object(land)))
         .is_err());
     earthbend_move(&mut e, "Rebellious Captives", DevZone::Graveyard);
     earthbend_move(&mut e, "Rebellious Captives", DevZone::Battlefield);
-    e.apply_command(0, &activate_ability_for(&e, source, 0, target_object(land)))
+    e.apply_scenario_command(0, &activate_ability_for(&e, source, 0, target_object(land)))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.effective_power(source), Some(4));
@@ -286,7 +287,8 @@ fn earthbend_badgermole_target_and_counter_filtered_trample() {
         },
     );
     let slot = hand_index_for_card(&e, 0, "badgermole");
-    e.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    e.apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut e);
     assert_eq!(e.state.pending_triggers.len(), 1);
     let choose = |oid| RuledCommand {
@@ -295,8 +297,8 @@ fn earthbend_badgermole_target_and_counter_filtered_trample() {
             ..Default::default()
         })),
     };
-    assert!(e.apply_command(0, &choose(bear)).is_err());
-    e.apply_command(0, &choose(land)).unwrap();
+    assert!(e.apply_scenario_command(0, &choose(bear)).is_err());
+    e.apply_scenario_command(0, &choose(land)).unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.effective_power(land), Some(2));
     assert!(e.effective_has_keyword(land, Keyword::Trample));
@@ -330,7 +332,7 @@ fn earthbend_dai_li_both_modes_and_discard_eligibility() {
             },
         );
         let slot = hand_index_for_card(&e, 0, "dai_li_indoctrination");
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &cast_modal_spell(
                 slot,
@@ -351,12 +353,12 @@ fn earthbend_dai_li_both_modes_and_discard_eligibility() {
         if mode == 0 {
             assert!(e.state.pending_resolution.is_some());
             assert!(e
-                .apply_command(0, &submit_resolution_choice(vec![bolt]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![bolt]))
                 .is_err());
             assert!(e
-                .apply_command(1, &submit_resolution_choice(vec![bear]))
+                .apply_scenario_command(1, &submit_resolution_choice(vec![bear]))
                 .is_err());
-            e.apply_command(0, &submit_resolution_choice(vec![bear]))
+            e.apply_scenario_command(0, &submit_resolution_choice(vec![bear]))
                 .unwrap();
             assert_eq!(e.state.objects[&bear].zone, Zone::Graveyard);
             assert_eq!(e.state.objects[&bolt].zone, Zone::Hand);
@@ -379,7 +381,7 @@ fn earthbend_dai_li_both_modes_and_discard_eligibility() {
 fn earthbend_repeated_animation_and_replaced_death_return_only_once() {
     let (mut e, source, land) = earthbend_fixture();
     for _ in 0..2 {
-        e.apply_command(0, &activate_ability(source, 1, target_object(land)))
+        e.apply_scenario_command(0, &activate_ability(source, 1, target_object(land)))
             .unwrap();
         resolve_entire_stack_two_player(&mut e);
     }
@@ -398,7 +400,7 @@ fn earthbend_repeated_animation_and_replaced_death_return_only_once() {
             zone_change_generation: generation,
         });
     e.state.objects.get_mut(&land).unwrap().damage = 4;
-    e.apply_command(0, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
     assert_eq!(e.state.objects[&land].zone, Zone::Exile);
     answer_trigger_order_in_engine_order(&mut e);
     assert_eq!(e.state.stack.len(), 2);
@@ -421,7 +423,7 @@ fn earthbend_return_keeps_its_controller_after_control_and_ability_changes() {
     let (mut e, source, land) = earthbend_fixture();
     // A foreign-owned land currently controlled by the earthbending player.
     e.state.objects.get_mut(&land).unwrap().owner = 1;
-    e.apply_command(0, &activate_ability(source, 1, target_object(land)))
+    e.apply_scenario_command(0, &activate_ability(source, 1, target_object(land)))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     for kind in [
@@ -440,11 +442,11 @@ fn earthbend_return_keeps_its_controller_after_control_and_ability_changes() {
             timestamp: e.state.command_index + 1,
         });
     }
-    e.apply_command(0, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
     assert_eq!(e.state.objects[&land].controller, 1);
     assert!(!e.effective_has_keyword(land, Keyword::Haste));
     e.state.objects.get_mut(&land).unwrap().damage = 2;
-    e.apply_command(1, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
     assert!(e.state.players[1].graveyard.contains(&land));
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.objects[&land].controller, 0);
@@ -458,7 +460,7 @@ fn earthbend_no_longer_creature_only_returns_from_exile() {
     use tricerules_proto::ruled::v1::DevZone;
     for destination in [DevZone::Graveyard, DevZone::Exile] {
         let (mut e, source, land) = earthbend_fixture();
-        e.apply_command(0, &activate_ability(source, 1, target_object(land)))
+        e.apply_scenario_command(0, &activate_ability(source, 1, target_object(land)))
             .unwrap();
         resolve_entire_stack_two_player(&mut e);
         e.state
@@ -512,7 +514,7 @@ fn dub_adds_knight_without_replacing_printed_types() {
 
     let dub_slot = hand_index_for_card(&engine, 0, "dub");
     engine
-        .apply_command(0, &cast_spell(dub_slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(dub_slot, target_object(bear)))
         .expect("cast Dub");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -563,7 +565,7 @@ fn liquimetal_coating_adds_artifact_until_cleanup_and_updates_legality() {
     ensure_card_in_hand(&mut engine, 1, "go_for_the_throat");
 
     engine
-        .apply_command(0, &activate_ability(coating, 0, target_object(bear)))
+        .apply_scenario_command(0, &activate_ability(coating, 0, target_object(bear)))
         .expect("activate Liquimetal Coating");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -581,25 +583,27 @@ fn liquimetal_coating_adds_artifact_until_cleanup_and_updates_legality() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &pass()).expect("pass priority");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass priority");
     let removal_slot = hand_index_for_card(&engine, 1, "go_for_the_throat");
     engine
-        .apply_command(1, &cast_spell(removal_slot, target_object(bear)))
+        .apply_scenario_command(1, &cast_spell(removal_slot, target_object(bear)))
         .expect_err("an artifact creature is not legal for Go for the Throat");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("finish the main-phase priority round");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("begin combat to end combat");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("end combat to second main");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("second main to end step");
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("end step to cleanup or next upkeep");
     resolve_cleanup_discards_if_any(&mut engine);
     let expired = engine
@@ -620,7 +624,7 @@ fn liquimetal_coating_adds_artifact_until_cleanup_and_updates_legality() {
     );
     let removal_slot = hand_index_for_card(&engine, 1, "go_for_the_throat");
     engine
-        .apply_command(1, &cast_spell(removal_slot, target_object(bear)))
+        .apply_scenario_command(1, &cast_spell(removal_slot, target_object(bear)))
         .expect("Go for the Throat is legal after the type addition expires");
 }
 
@@ -645,7 +649,7 @@ fn liquimetal_coating_type_addition_does_not_follow_a_zone_change() {
     ensure_card_in_hand(&mut engine, 1, "murder");
 
     engine
-        .apply_command(0, &activate_ability(coating, 0, target_object(bear)))
+        .apply_scenario_command(0, &activate_ability(coating, 0, target_object(bear)))
         .expect("activate Liquimetal Coating");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine
@@ -662,10 +666,12 @@ fn liquimetal_coating_type_addition_does_not_follow_a_zone_change() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &pass()).expect("pass priority");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass priority");
     let murder_slot = hand_index_for_card(&engine, 1, "murder");
     engine
-        .apply_command(1, &cast_spell(murder_slot, target_object(bear)))
+        .apply_scenario_command(1, &cast_spell(murder_slot, target_object(bear)))
         .expect("cast Murder");
     resolve_entire_stack_two_player(&mut engine);
 

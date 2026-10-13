@@ -1,5 +1,6 @@
 //! Issue #200: controller-relative combat-damage cohorts and generation-bound
 //! return with a type-setting continuous effect.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_core::state::CopiableValues;
@@ -45,28 +46,28 @@ fn controlled_creatures_each_create_a_combat_damage_draw_trigger() {
     let second = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("advance to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player pass");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("nonactive player pass");
     engine
-        .apply_command(0, &declare_attackers(vec![first, second]))
+        .apply_scenario_command(0, &declare_attackers(vec![first, second]))
         .expect("declare two attackers");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player pass after attackers");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("nonactive player pass after attackers");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player pass after blockers");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("nonactive player pass into combat damage");
 
     assert_eq!(engine.state.players[1].life, 16);
@@ -108,7 +109,7 @@ fn death_return_enters_as_an_enchantment_and_uses_the_next_generation() {
     engine.state.objects.get_mut(&curiosity).unwrap().damage = 4;
     let priority = engine.state.priority_player_id();
     engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("state-based actions move lethal creature to graveyard");
     assert_eq!(engine.state.objects[&curiosity].zone, Zone::Graveyard);
     assert_eq!(engine.state.stack.len(), 1, "return trigger is published");
@@ -144,7 +145,7 @@ fn death_return_enters_as_an_enchantment_and_uses_the_next_generation() {
     engine.enable_dev_commands();
     let priority = engine.state.priority_player_id();
     engine
-        .apply_command(priority, &dev_move_curiosity(DevZone::Graveyard))
+        .apply_scenario_command(priority, &dev_move_curiosity(DevZone::Graveyard))
         .expect("move returned enchantment to graveyard");
     assert_eq!(engine.state.objects[&curiosity].zone, Zone::Graveyard);
     assert!(
@@ -152,7 +153,7 @@ fn death_return_enters_as_an_enchantment_and_uses_the_next_generation() {
         "the noncreature enchantment does not die"
     );
     engine
-        .apply_command(priority, &dev_move_curiosity(DevZone::Hand))
+        .apply_scenario_command(priority, &dev_move_curiosity(DevZone::Hand))
         .expect("move returned card to hand");
     let replayed = move_ready_to_battlefield(&mut engine, 0, "enduring_curiosity");
     assert_eq!(replayed, curiosity);
@@ -187,7 +188,7 @@ fn return_trigger_rejects_tokens_and_stale_graveyard_generations() {
     token_engine.state.objects.get_mut(&token).unwrap().damage = 4;
     let priority = token_engine.state.priority_player_id();
     token_engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("token dies");
     resolve_entire_stack_two_player(&mut token_engine);
     assert!(!token_engine.state.objects.contains_key(&token));
@@ -197,7 +198,7 @@ fn return_trigger_rejects_tokens_and_stale_graveyard_generations() {
     stale_engine.state.objects.get_mut(&stale).unwrap().damage = 4;
     let priority = stale_engine.state.priority_player_id();
     stale_engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("card dies");
     stale_engine.state.players[0]
         .graveyard

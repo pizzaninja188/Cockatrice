@@ -4,6 +4,7 @@
 //! Card-specific ruling and Oracle text: official Marvel Super Heroes Release Notes.
 //! Governed concepts: CR 120.2b/120.4 (damage source), 400.7 (new object after a zone
 //! change), 603.6a (ETB trigger), 608.2b (target revalidation), and 608.2i (historical facts).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -41,7 +42,7 @@ fn choose_trigger_target(object_id: u32) -> RuledCommand {
 
 fn dev_move(engine: &mut GameEngine, actor: i32, owner: i32, zone: DevZone, name: &str) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             actor,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -63,7 +64,7 @@ fn cast_red_guardian_and_park_entry_trigger(engine: &mut GameEngine) -> u32 {
     let slot = hand_index_for_card(engine, 0, RED_GUARDIAN);
     let guardian = engine.state.players[0].hand[slot];
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Red Guardian with flash");
     pass_both_players(engine);
     assert_eq!(engine.state.objects[&guardian].zone, Zone::Battlefield);
@@ -82,7 +83,7 @@ fn red_guardian_destroys_a_damage_source_not_a_damage_recipient() {
     // The opponent's Sorcerer deals positive damage to a creature that then leaves the
     // battlefield. The damage-source history remains attached to the Sorcerer's incarnation.
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass to the opponent");
     apply_ability(
         &mut engine,
@@ -122,7 +123,7 @@ fn red_guardian_destroys_a_damage_source_not_a_damage_recipient() {
     assert!(!published.contains(&own_sorcerer));
 
     engine
-        .apply_command(0, &choose_trigger_target(damage_source))
+        .apply_scenario_command(0, &choose_trigger_target(damage_source))
         .expect("choose the opponent creature that dealt damage");
 
     resolve_entire_stack_two_player(&mut engine);
@@ -146,7 +147,7 @@ fn red_guardian_does_not_offer_a_returned_damage_source_before_targeting() {
     let recipient = inject_creature_with_stats(&mut engine, 0, "grizzly_bears", 1, 1);
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass to the opponent");
     apply_ability(&mut engine, 1, damage_source, 0, target_object(recipient))
         .expect("opponent activates Prodigal Sorcerer");
@@ -163,7 +164,7 @@ fn red_guardian_does_not_offer_a_returned_damage_source_before_targeting() {
     let slot = hand_index_for_card(&engine, 0, RED_GUARDIAN);
     let guardian = engine.state.players[0].hand[slot];
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Red Guardian with flash");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&guardian].zone, Zone::Battlefield);
@@ -192,7 +193,7 @@ fn red_guardian_revalidates_a_selected_source_after_its_generation_changes() {
     let recipient = inject_creature_with_stats(&mut engine, 0, "grizzly_bears", 1, 1);
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass to the opponent");
     apply_ability(&mut engine, 1, damage_source, 0, target_object(recipient))
         .expect("opponent activates Prodigal Sorcerer");
@@ -207,7 +208,7 @@ fn red_guardian_revalidates_a_selected_source_after_its_generation_changes() {
         .valid_permanent_ids;
     assert_eq!(published, &[damage_source]);
     engine
-        .apply_command(0, &choose_trigger_target(damage_source))
+        .apply_scenario_command(0, &choose_trigger_target(damage_source))
         .expect("choose the opponent creature that dealt damage");
 
     // CR 400.7 makes the returned card a new object; CR 608.2b revalidates the chosen target.

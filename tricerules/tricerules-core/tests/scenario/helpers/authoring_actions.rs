@@ -1,4 +1,5 @@
 //! Deterministic choices from engine-authored offers; unsupported shapes remain explicit.
+use super::ScenarioCommandExt;
 use super::{Cmd, Ev, GameEngine};
 use tricerules_cards::mana::{ManaCost, ManaSymbol};
 use tricerules_proto::ruled::v1::*;
@@ -418,7 +419,7 @@ pub(crate) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Res
         }
         q
     }
-    let preview = e.preview_payment(actor, &query(command));
+    let preview = e.preview_payment_scenario(actor, &query(command));
     if !preview.valid {
         return Err(format!("payment preview rejected: {}", preview.error));
     }
@@ -461,7 +462,7 @@ pub(crate) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Res
         Cmd::SubmitResolutionChoice(c) => c.payment = Some(selection),
         _ => return Err("unsupported payment action".into()),
     }
-    let checked = e.preview_payment(actor, &query(command));
+    let checked = e.preview_payment_scenario(actor, &query(command));
     if !checked.valid || !checked.complete {
         return Err(format!("payment not complete: {}", checked.error));
     }

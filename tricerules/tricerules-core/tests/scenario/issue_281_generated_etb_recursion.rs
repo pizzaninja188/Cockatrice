@@ -1,5 +1,6 @@
 //! Issue #281 — the generated creature ETB recursion ability targets only a controller-owned
 //! instant or sorcery card and revalidates that exact graveyard object at resolution.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -24,7 +25,7 @@ fn engine_with_shipwreck(seed: u64) -> GameEngine {
 
 fn choose_graveyard_target(engine: &mut GameEngine, object_id: u32) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -121,7 +122,7 @@ fn issue_281_targets_only_controller_owned_instants_and_sorceries() {
     assert_eq!(candidates, vec![instant, sorcery]);
     for illegal in [artifact, creature, opponent_instant] {
         let error = engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {

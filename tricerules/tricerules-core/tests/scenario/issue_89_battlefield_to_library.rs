@@ -1,6 +1,7 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::CounterKind;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::permanent_moved::Destination;
 
 #[test]
@@ -56,11 +57,13 @@ fn totally_lost_places_nonland_permanent_on_owners_library_top() {
 
     let spell = hand_index_for_card(&engine, 0, "totally_lost");
     engine
-        .apply_command(0, &cast_spell(spell, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(spell, target_object(target)))
         .expect("cast Totally Lost");
-    engine.apply_command(0, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
     let batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and spell resolves");
 
     let object = engine.state.objects.get(&target).expect("target");
@@ -128,7 +131,7 @@ fn totally_lost_rejects_land_targets() {
     let spell = hand_index_for_card(&engine, 0, "totally_lost");
     assert!(
         engine
-            .apply_command(0, &cast_spell(spell, target_object(land)))
+            .apply_scenario_command(0, &cast_spell(spell, target_object(land)))
             .is_err(),
         "Totally Lost cannot target a land"
     );
@@ -175,11 +178,13 @@ fn resolve_deglamer(seed: u64) -> (GameEngine, u32) {
 
     let spell = hand_index_for_card(&engine, 0, "deglamer");
     engine
-        .apply_command(0, &cast_spell(spell, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(spell, target_object(target)))
         .expect("cast Deglamer");
-    engine.apply_command(0, &pass()).expect("caster passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and spell resolves");
     (engine, target)
 }
@@ -235,7 +240,7 @@ fn griptide_fizzles_after_its_target_changes_zones() {
 
     let spell = hand_index_for_card(&engine, 0, "griptide");
     engine
-        .apply_command(0, &cast_spell(spell, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(spell, target_object(target)))
         .expect("cast Griptide");
     engine.state.players[1]
         .battlefield
@@ -248,8 +253,12 @@ fn griptide_fizzles_after_its_target_changes_zones() {
         .entry(target)
         .or_default() += 1;
 
-    engine.apply_command(0, &pass()).expect("caster passes");
-    engine.apply_command(1, &pass()).expect("spell fizzles");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("spell fizzles");
     assert_eq!(
         engine.state.objects.get(&target).expect("target").zone,
         Zone::Graveyard
@@ -292,19 +301,27 @@ fn a_token_put_into_a_library_ceases_to_exist() {
 
     let raise = hand_index_for_card(&engine, 0, "raise_the_alarm");
     engine
-        .apply_command(0, &cast_spell(raise, vec![]))
+        .apply_scenario_command(0, &cast_spell(raise, vec![]))
         .expect("cast Raise the Alarm");
-    engine.apply_command(0, &pass()).expect("caster passes");
-    engine.apply_command(1, &pass()).expect("tokens resolve");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("tokens resolve");
     answer_simultaneous_entry_order_in_engine_order(&mut engine);
     let token = battlefield_token_oids(&engine, 0, "soldier_w_1_1")[0];
 
     let totally_lost = hand_index_for_card(&engine, 0, "totally_lost");
     engine
-        .apply_command(0, &cast_spell(totally_lost, target_object(token)))
+        .apply_scenario_command(0, &cast_spell(totally_lost, target_object(token)))
         .expect("cast Totally Lost targeting the token");
-    engine.apply_command(0, &pass()).expect("caster passes");
-    engine.apply_command(1, &pass()).expect("spell resolves");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("spell resolves");
 
     assert!(!engine.state.objects.contains_key(&token));
     assert!(!engine.state.players[0].library.contains(&token));

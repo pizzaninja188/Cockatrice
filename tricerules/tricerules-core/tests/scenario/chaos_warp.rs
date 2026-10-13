@@ -1,4 +1,5 @@
 //! Actual registered Chaos Warp, plus explicitly private authoring-only tail compositions.
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 #[cfg(feature = "authoring")]
 use tricerules_cards::CardRegistry;
@@ -64,6 +65,7 @@ fn engine_with_draft(seed: u64, decks: Vec<EngineDeck>, draft: &str) -> GameEngi
 fn branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -100,7 +102,7 @@ fn prepare_stolen_commander(mut engine: GameEngine) -> (GameEngine, u32) {
     engine.enable_dev_commands();
     let target = engine.state.players[1].command_zone[0];
     engine
-        .apply_command(
+        .apply_scenario_command(
             4,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -211,7 +213,7 @@ fn aura_choice_engine(seed: u64) -> (GameEngine, u32, u32, u32, u32, Vec<RuledEv
 
 fn assert_atomic_rejection(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = engine.diagnostic_snapshot().unwrap();
-    assert!(engine.apply_command(actor, command).is_err());
+    assert!(engine.apply_scenario_command(actor, command).is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
 }
 
@@ -236,7 +238,7 @@ fn paid_chaos_warp_copied_aura_without_surviving_recipient_restores_original_lib
         tricerules_core::custom::ChoiceKind::CopySource
     );
     engine
-        .apply_command(4, &submit_resolution_choice(vec![aura]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![aura]))
         .unwrap();
     assert_eq!(
         engine
@@ -249,7 +251,7 @@ fn paid_chaos_warp_copied_aura_without_surviving_recipient_restores_original_lib
         [host]
     );
     assert_eq!(engine.state.objects[&copier].copy_revision, 1);
-    engine.apply_command(9, &concede()).unwrap();
+    engine.apply_scenario_command(9, &concede()).unwrap();
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&copier].zone, Zone::Library);
     assert_eq!(engine.state.players[1].library.front(), Some(&copier));
@@ -278,10 +280,10 @@ fn paid_chaos_warp_copied_aura_owner_departure_is_accepted_without_resurrection(
     let copier = inject_library_card(&mut engine, 1, "clever_impersonator");
     let (spell, _) = cast_and_resolve(&mut engine, target);
     engine
-        .apply_command(4, &submit_resolution_choice(vec![aura]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![aura]))
         .unwrap();
     assert_eq!(engine.state.objects[&copier].copy_revision, 1);
-    let completed = engine.apply_command(4, &concede()).unwrap();
+    let completed = engine.apply_scenario_command(4, &concede()).unwrap();
     assert!(engine.state.pending_resolution.is_none());
     assert!(!engine.state.objects.contains_key(&copier));
     assert!(!engine.state.objects.contains_key(&target));
@@ -317,10 +319,10 @@ fn chaos_warp_private_composition_copied_aura_owner_departure_resumes_original_t
     let hand_before = engine.state.players[0].hand.len();
     let (spell, _) = cast_named_and_resolve(&mut engine, "chaos_warp_tail_fixture", target);
     engine
-        .apply_command(4, &submit_resolution_choice(vec![aura]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![aura]))
         .unwrap();
     assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
-    engine.apply_command(4, &concede()).unwrap();
+    engine.apply_scenario_command(4, &concede()).unwrap();
     assert!(engine.state.pending_resolution.is_none());
     assert!(!engine.state.objects.contains_key(&copier));
     assert_eq!(engine.state.players[0].hand.len(), hand_before + 3);
@@ -335,7 +337,7 @@ fn paid_chaos_warp_permanent_foreign_control_departure_keeps_exiled_commander_an
     let generation = engine.state.zone_change_generation[&target];
     let (spell, mut batches) = cast_and_resolve(&mut engine, target);
     assert_eq!(engine.state.objects[&target].base_controller, 9);
-    batches.push(engine.apply_command(9, &concede()).unwrap());
+    batches.push(engine.apply_scenario_command(9, &concede()).unwrap());
     assert!(
         batches.last().is_some_and(|batch| {
             batch.events.iter().any(|event| {
@@ -348,7 +350,7 @@ fn paid_chaos_warp_permanent_foreign_control_departure_keeps_exiled_commander_an
         }),
         "the commander owner receives the CR 704.6d/903.9a choice after it reaches Exile"
     );
-    batches.push(engine.apply_command(4, &branch(1)).unwrap());
+    batches.push(engine.apply_scenario_command(4, &branch(1)).unwrap());
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
     assert_eq!(engine.state.zone_change_generation[&target], generation + 1);
@@ -376,7 +378,7 @@ fn chaos_warp_private_composition_resumes_tail_once_after_foreign_controlled_com
     let hand_before = engine.state.players[0].hand.len();
     let (spell, _) = cast_named_and_resolve(&mut engine, "chaos_warp_tail_fixture", target);
     assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
-    let completed = engine.apply_command(9, &concede()).unwrap();
+    let completed = engine.apply_scenario_command(9, &concede()).unwrap();
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.players[0].hand.len(), hand_before + 3);
     assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
@@ -411,7 +413,7 @@ fn paid_chaos_warp_attachment_recipient_departure_refreshes_survivors_or_skips_w
             .presentation
             .candidates
             .contains(&host));
-        batches.push(engine.apply_command(9, &concede()).unwrap());
+        batches.push(engine.apply_scenario_command(9, &concede()).unwrap());
         assert!(!engine.state.objects.contains_key(&host));
         if let Some(survivor) = survivor {
             let pending = engine.state.pending_resolution.as_ref().unwrap();
@@ -420,7 +422,7 @@ fn paid_chaos_warp_attachment_recipient_departure_refreshes_survivors_or_skips_w
             assert_atomic_rejection(&mut engine, 4, &submit_resolution_choice(vec![host]));
             batches.push(
                 engine
-                    .apply_command(4, &submit_resolution_choice(vec![survivor]))
+                    .apply_scenario_command(4, &submit_resolution_choice(vec![survivor]))
                     .unwrap(),
             );
             assert_eq!(
@@ -474,7 +476,7 @@ fn chaos_warp_private_composition_resumes_tail_once_after_sole_attachment_recipi
     let hand_before = engine.state.players[0].hand.len();
     let (spell, _) = cast_named_and_resolve(&mut engine, "chaos_warp_tail_fixture", target);
     assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
-    let completed = engine.apply_command(9, &concede()).unwrap();
+    let completed = engine.apply_scenario_command(9, &concede()).unwrap();
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.players[0].hand.len(), hand_before + 3);
     assert_eq!(engine.state.objects[&aura].zone, Zone::Library);
@@ -506,7 +508,7 @@ fn paid_chaos_warp_requires_red_mana_and_exactly_one_battlefield_target() {
     duplicate.extend(target_object(target));
     assert_atomic_rejection(&mut engine, 0, &cast_spell(slot, duplicate));
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap();
     assert_eq!(engine.state.objects[&spell].zone, Zone::Stack);
     assert_eq!(engine.state.players[0].mana_pool.red, 0);
@@ -521,30 +523,30 @@ fn paid_chaos_warp_twincast_copy_can_complete_commander_choice_without_a_physica
     engine.state.players[0].mana_pool.colorless = 2;
     let slot = hand_index_for_card(&engine, 0, "chaos_warp");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap();
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     let twin = inject_card_into_hand(&mut engine, 1, "twincast");
     engine.state.players[1].mana_pool.blue = 2;
     let slot = hand_index_for_card(&engine, 1, "twincast");
     engine
-        .apply_command(4, &cast_spell(slot, target_object(original)))
+        .apply_scenario_command(4, &cast_spell(slot, target_object(original)))
         .unwrap();
     for _ in 0..3 {
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     assert!(engine.state.pending_resolution.is_some());
     engine
-        .apply_command(4, &submit_resolution_choice(vec![target]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![target]))
         .unwrap();
     let copy = engine.state.stack.last().unwrap().id;
     assert!(engine.state.stack.last().unwrap().is_copy);
     assert!(!engine.state.objects.contains_key(&copy));
     for _ in 0..3 {
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     assert_eq!(
@@ -556,14 +558,14 @@ fn paid_chaos_warp_twincast_copy_can_complete_commander_choice_without_a_physica
             .deciding_player,
         4
     );
-    engine.apply_command(4, &branch(0)).unwrap();
+    engine.apply_scenario_command(4, &branch(0)).unwrap();
     assert_eq!(engine.state.objects[&target].zone, Zone::Command);
     assert_eq!(engine.state.objects[&twin].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&original].zone, Zone::Stack);
     assert!(!engine.state.stack.iter().any(|item| item.id == copy));
     for _ in 0..3 {
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     assert_eq!(engine.state.objects[&original].zone, Zone::Graveyard);
@@ -609,7 +611,7 @@ fn paid_chaos_warp_replacement_order_then_aura_attachment_preserves_one_public_r
     assert_atomic_rejection(&mut engine, 4, &submit_resolution_choice(vec![application]));
     engine.state.zone_change_generation.insert(aura, generation);
     engine
-        .apply_command(4, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![application]))
         .unwrap();
     assert_eq!(
         engine
@@ -634,7 +636,7 @@ fn paid_chaos_warp_replacement_order_then_aura_attachment_preserves_one_public_r
         .unwrap();
     assert_eq!(active.reveals, [reveal]);
     engine
-        .apply_command(4, &submit_resolution_choice(vec![host]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![host]))
         .unwrap();
     assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
     assert!(engine.state.objects[&aura].tapped);
@@ -689,7 +691,7 @@ fn paid_chaos_warp_aura_attachment_is_not_targeting_but_obeys_protection() {
         );
         assert_atomic_rejection(&mut engine, 4, &submit_resolution_choice(vec![protected]));
         engine
-            .apply_command(4, &submit_resolution_choice(vec![host]))
+            .apply_scenario_command(4, &submit_resolution_choice(vec![host]))
             .unwrap();
         assert_eq!(
             engine.state.objects[&aura].attached_to,
@@ -715,22 +717,25 @@ fn paid_chaos_warp_owner_choice_protobuf_commands_replay_identical_batches_and_i
         let slot = hand_index_for_card(&original, 0, "chaos_warp");
         let mut commands = vec![(0, cast_spell(slot, target_object(target)))];
         let mut batches = vec![original
-            .apply_command(commands[0].0, &commands[0].1)
+            .apply_scenario_command(commands[0].0, &commands[0].1)
             .unwrap()];
         for _ in 0..3 {
             let actor = original.state.priority_player_id();
             let command = pass();
-            batches.push(original.apply_command(actor, &command).unwrap());
+            batches.push(original.apply_scenario_command(actor, &command).unwrap());
             commands.push((actor, command));
         }
         let command = branch(destination);
-        batches.push(original.apply_command(4, &command).unwrap());
+        batches.push(original.apply_scenario_command(4, &command).unwrap());
         commands.push((4, command));
         let (mut replay, replay_target, replay_spell) = create();
         assert_eq!((target, spell), (replay_target, replay_spell));
         for ((actor, command), expected) in commands.iter().zip(batches) {
             let decoded = RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
-            assert_eq!(replay.apply_command(*actor, &decoded).unwrap(), expected);
+            assert_eq!(
+                replay.apply_scenario_command(*actor, &decoded).unwrap(),
+                expected
+            );
         }
         assert_eq!(
             replay.diagnostic_snapshot().unwrap(),
@@ -794,7 +799,7 @@ fn paid_chaos_warp_aura_choice_retains_public_reveal_and_guards_actual_top_gener
     engine.state.objects.get_mut(&aura).unwrap().owner = 9;
     assert_atomic_rejection(&mut engine, 4, &command);
     engine.state.objects.get_mut(&aura).unwrap().owner = 4;
-    let completed = engine.apply_command(4, &command).unwrap();
+    let completed = engine.apply_scenario_command(4, &command).unwrap();
     assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
     assert_eq!(
         engine.state.objects[&aura].attached_to,
@@ -858,7 +863,7 @@ fn paid_chaos_warp_entry_owner_caster_and_unrelated_concessions_settle_without_r
     for departed in [4, 0, 9] {
         let (mut engine, target, aura, host, spell, _) =
             aura_choice_engine(800_410 + departed as u64);
-        engine.apply_command(departed, &concede()).unwrap();
+        engine.apply_scenario_command(departed, &concede()).unwrap();
         if departed == 4 {
             assert!(engine.state.pending_resolution.is_none());
             assert!(!engine.state.objects.contains_key(&aura));
@@ -878,7 +883,7 @@ fn paid_chaos_warp_entry_owner_caster_and_unrelated_concessions_settle_without_r
                 4
             );
             engine
-                .apply_command(4, &submit_resolution_choice(vec![host]))
+                .apply_scenario_command(4, &submit_resolution_choice(vec![host]))
                 .unwrap();
             assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
             assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
@@ -914,7 +919,7 @@ fn paid_chaos_warp_commander_owner_caster_and_unrelated_concessions_clear_only_r
                 timestamp: engine.state.command_index,
             });
         let (spell, _) = cast_and_resolve(&mut engine, target);
-        engine.apply_command(departed, &concede()).unwrap();
+        engine.apply_scenario_command(departed, &concede()).unwrap();
         if departed == 4 {
             assert!(engine.state.pending_resolution.is_none());
             assert!(!engine.state.objects.contains_key(&target));
@@ -933,7 +938,7 @@ fn paid_chaos_warp_commander_owner_caster_and_unrelated_concessions_clear_only_r
                     .deciding_player,
                 4
             );
-            engine.apply_command(4, &branch(0)).unwrap();
+            engine.apply_scenario_command(4, &branch(0)).unwrap();
             assert_eq!(engine.state.objects[&target].zone, Zone::Command);
             assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
         }
@@ -970,7 +975,7 @@ fn paid_chaos_warp_battle_is_a_permanent_and_enters_front_face_with_owner_protec
         tricerules_core::custom::ChoiceKind::BattleProtector
     );
     engine
-        .apply_command(4, &submit_resolution_choice(vec![9]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![9]))
         .unwrap();
     assert_eq!(engine.state.objects[&battle].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&battle].controller, 4);
@@ -1001,7 +1006,7 @@ fn paid_chaos_warp_finishes_owed_creature_return_before_choosing_revealed_aura_r
     assert_eq!(pending.presentation.candidates, [returning]);
     assert_eq!(engine.state.objects[&aura].zone, Zone::Library);
     engine
-        .apply_command(4, &submit_resolution_choice(vec![returning]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![returning]))
         .unwrap();
     assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
     assert_eq!(
@@ -1034,7 +1039,7 @@ fn paid_chaos_warp_preserves_owner_instruction_through_owed_aura_return_choice_w
         .flat_map(|batch| &batch.events)
         .any(|event| matches!(event.ev, Some(Ev::CardsRevealed(_)))));
     let resumed = engine
-        .apply_command(0, &submit_resolution_choice(vec![host]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![host]))
         .unwrap();
     assert_eq!(engine.state.objects[&returning].zone, Zone::Battlefield);
     let pending = engine
@@ -1056,7 +1061,7 @@ fn paid_chaos_warp_preserves_owner_instruction_through_owed_aura_return_choice_w
     assert_eq!(reveal.cards[0].object_id, top_aura);
     assert!(!reveal.reveal_id.is_empty());
     engine
-        .apply_command(4, &submit_resolution_choice(vec![host]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![host]))
         .unwrap();
     assert_eq!(engine.state.objects[&top_aura].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
@@ -1089,7 +1094,7 @@ fn paid_chaos_warp_declared_stolen_commander_owner_chooses_both_destinations_and
             (4, branch(2)),
         ] {
             let before = serde_json::to_string(&engine.state).unwrap();
-            assert!(engine.apply_command(actor, &answer).is_err());
+            assert!(engine.apply_scenario_command(actor, &answer).is_err());
             assert_eq!(serde_json::to_string(&engine.state).unwrap(), before);
         }
         let stack_generation = engine.state.zone_change_generation[&spell];
@@ -1112,13 +1117,19 @@ fn paid_chaos_warp_declared_stolen_commander_owner_chooses_both_destinations_and
             .zone_change_generation
             .insert(target, generation + 1);
         let before = serde_json::to_string(&engine.state).unwrap();
-        assert!(engine.apply_command(4, &branch(destination)).is_err());
+        assert!(engine
+            .apply_scenario_command(4, &branch(destination))
+            .is_err());
         assert_eq!(serde_json::to_string(&engine.state).unwrap(), before);
         engine
             .state
             .zone_change_generation
             .insert(target, generation);
-        batches.push(engine.apply_command(4, &branch(destination)).unwrap());
+        batches.push(
+            engine
+                .apply_scenario_command(4, &branch(destination))
+                .unwrap(),
+        );
         assert!(engine.state.pending_resolution.is_none());
         assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
         assert_eq!(
@@ -1200,13 +1211,13 @@ fn cast_named_and_resolve(
     engine.state.players[0].mana_pool.colorless = 2;
     let slot = hand_index_for_card(engine, 0, card);
     let mut batches = vec![engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap()];
     assert_eq!(engine.state.players[0].mana_pool.red, 0);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     for _ in 0..3 {
         let actor = engine.state.priority_player_id();
-        batches.push(engine.apply_command(actor, &pass()).unwrap());
+        batches.push(engine.apply_scenario_command(actor, &pass()).unwrap());
     }
     (spell, batches)
 }
@@ -1222,10 +1233,10 @@ fn paid_chaos_warp_illegal_sole_target_fizzles_without_shuffle_or_reveal() {
     engine.state.players[0].mana_pool.colorless = 2;
     let slot = hand_index_for_card(&engine, 0, "chaos_warp");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .unwrap();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -1244,7 +1255,7 @@ fn paid_chaos_warp_illegal_sole_target_fizzles_without_shuffle_or_reveal() {
     for _ in 0..3 {
         batches.push(
             engine
-                .apply_command(engine.state.priority_player_id(), &pass())
+                .apply_scenario_command(engine.state.priority_player_id(), &pass())
                 .unwrap(),
         );
     }
@@ -1283,7 +1294,7 @@ fn chaos_warp_private_composition_resumes_original_tail_once_after_commander_ans
             "first instruction executes before owner choice"
         );
         let command = if owner_leaves { concede() } else { branch(0) };
-        batches.push(engine.apply_command(4, &command).unwrap());
+        batches.push(engine.apply_scenario_command(4, &command).unwrap());
         assert!(engine.state.pending_resolution.is_none());
         assert_eq!(
             engine.state.players[0].hand.len(),
@@ -1328,7 +1339,7 @@ fn chaos_warp_private_composition_resumes_tail_once_after_entry_choice_or_owner_
         } else {
             submit_resolution_choice(vec![host])
         };
-        batches.push(engine.apply_command(4, &command).unwrap());
+        batches.push(engine.apply_scenario_command(4, &command).unwrap());
         assert!(engine.state.pending_resolution.is_none());
         assert_eq!(engine.state.players[0].hand.len(), hand_before + 3);
         assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);

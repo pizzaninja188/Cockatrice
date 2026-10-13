@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, EffectDuration, PermanentTypeFilter, TypeLineAddition,
 };
@@ -8,6 +9,7 @@ use tricerules_proto::ruled::v1::{self as rv1, ResolutionChoiceDecision};
 fn branch_choice(decision: ResolutionChoiceDecision) -> rv1::RuledCommand {
     rv1::RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(rv1::SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: decision as i32,
             selected_branch_index: 0,
@@ -46,7 +48,7 @@ fn watery_grave_waits_for_life_payment_before_entering() {
     let object_id = engine.state.players[0].hand[hand_index];
 
     let played = engine
-        .apply_command(0, &play_land(hand_index))
+        .apply_scenario_command(0, &play_land(hand_index))
         .expect("play Watery Grave");
 
     assert_eq!(engine.state.objects[&object_id].zone, Zone::Hand);
@@ -60,7 +62,7 @@ fn watery_grave_waits_for_life_payment_before_entering() {
     assert!(choice.resolution_branches[0].selectable);
 
     let completed = engine
-        .apply_command(0, &branch_choice(ResolutionChoiceDecision::SelectBranch))
+        .apply_scenario_command(0, &branch_choice(ResolutionChoiceDecision::SelectBranch))
         .expect("pay 2 life");
 
     assert_eq!(engine.state.players[0].life, 18);
@@ -80,10 +82,10 @@ fn declining_or_becoming_unable_to_pay_makes_watery_grave_enter_tapped() {
     let hand_index = hand_index_for_card(&declined, 0, "watery_grave");
     let object_id = declined.state.players[0].hand[hand_index];
     declined
-        .apply_command(0, &play_land(hand_index))
+        .apply_scenario_command(0, &play_land(hand_index))
         .expect("offer payment");
     declined
-        .apply_command(0, &branch_choice(ResolutionChoiceDecision::Decline))
+        .apply_scenario_command(0, &branch_choice(ResolutionChoiceDecision::Decline))
         .expect("decline payment");
     assert_eq!(declined.state.players[0].life, 20);
     assert_eq!(declined.state.objects[&object_id].zone, Zone::Battlefield);
@@ -93,17 +95,17 @@ fn declining_or_becoming_unable_to_pay_makes_watery_grave_enter_tapped() {
     let hand_index = hand_index_for_card(&unable, 0, "watery_grave");
     let object_id = unable.state.players[0].hand[hand_index];
     let played = unable
-        .apply_command(0, &play_land(hand_index))
+        .apply_scenario_command(0, &play_land(hand_index))
         .expect("offer unaffordable payment");
     let choice = find_resolution_choice(&played).expect("entry payment choice");
     assert!(!choice.resolution_branches[0].selectable);
     assert!(unable
-        .apply_command(0, &branch_choice(ResolutionChoiceDecision::SelectBranch),)
+        .apply_scenario_command(0, &branch_choice(ResolutionChoiceDecision::SelectBranch),)
         .is_err());
     assert!(unable.state.pending_resolution.is_some());
     assert_eq!(unable.state.objects[&object_id].zone, Zone::Hand);
     unable
-        .apply_command(0, &branch_choice(ResolutionChoiceDecision::Decline))
+        .apply_scenario_command(0, &branch_choice(ResolutionChoiceDecision::Decline))
         .expect("decline unaffordable payment");
     assert_eq!(unable.state.players[0].life, 1);
     assert!(unable.state.objects[&object_id].tapped);
@@ -115,11 +117,11 @@ fn entry_life_payment_revalidates_player_payload_and_current_life() {
     let hand_index = hand_index_for_card(&engine, 0, "watery_grave");
     let object_id = engine.state.players[0].hand[hand_index];
     engine
-        .apply_command(0, &play_land(hand_index))
+        .apply_scenario_command(0, &play_land(hand_index))
         .expect("offer payment");
 
     assert!(engine
-        .apply_command(1, &branch_choice(ResolutionChoiceDecision::SelectBranch),)
+        .apply_scenario_command(1, &branch_choice(ResolutionChoiceDecision::SelectBranch),)
         .is_err());
     assert!(engine.state.pending_resolution.is_some());
 
@@ -128,17 +130,17 @@ fn entry_life_payment_revalidates_player_payload_and_current_life() {
         unreachable!();
     };
     answer.chosen_object_ids.push(object_id);
-    assert!(engine.apply_command(0, &malformed).is_err());
+    assert!(engine.apply_scenario_command(0, &malformed).is_err());
     assert!(engine.state.pending_resolution.is_some());
 
     engine.state.players[0].life = 1;
     assert!(engine
-        .apply_command(0, &branch_choice(ResolutionChoiceDecision::SelectBranch),)
+        .apply_scenario_command(0, &branch_choice(ResolutionChoiceDecision::SelectBranch),)
         .is_err());
     assert!(engine.state.pending_resolution.is_some());
     assert_eq!(engine.state.objects[&object_id].zone, Zone::Hand);
     engine
-        .apply_command(0, &branch_choice(ResolutionChoiceDecision::Decline))
+        .apply_scenario_command(0, &branch_choice(ResolutionChoiceDecision::Decline))
         .expect("decline after affordability changed");
     assert!(engine.state.objects[&object_id].tapped);
 }
@@ -151,7 +153,7 @@ fn paying_never_clears_orb_of_dreams_tapped_entry_in_either_order() {
         let hand_index = hand_index_for_card(&engine, 0, "watery_grave");
         let object_id = engine.state.players[0].hand[hand_index];
         let played = engine
-            .apply_command(0, &play_land(hand_index))
+            .apply_scenario_command(0, &play_land(hand_index))
             .expect("play Watery Grave with Orb present");
         let ordering = find_resolution_choice(&played).expect("CR 616 ordering choice");
         assert_eq!(ordering.choice_kind(), rv1::ChoiceKind::ReplacementEffect);
@@ -167,7 +169,7 @@ fn paying_never_clears_orb_of_dreams_tapped_entry_in_either_order() {
             .position(|name| name.starts_with(wanted))
             .expect("replacement label");
         let payment = engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &submit_resolution_choice(vec![ordering.candidate_object_ids[index]]),
             )
@@ -175,7 +177,7 @@ fn paying_never_clears_orb_of_dreams_tapped_entry_in_either_order() {
         let choice = find_resolution_choice(&payment).expect("life payment choice");
         assert_eq!(choice.choice_kind(), rv1::ChoiceKind::ResolutionBranch);
         engine
-            .apply_command(0, &branch_choice(ResolutionChoiceDecision::SelectBranch))
+            .apply_scenario_command(0, &branch_choice(ResolutionChoiceDecision::SelectBranch))
             .expect("pay life");
 
         assert_eq!(engine.state.players[0].life, 18);
@@ -211,10 +213,10 @@ fn an_entry_copy_rechecks_the_copied_watery_grave_ability() {
 
     let watery_index = hand_index_for_card(&engine, 0, "watery_grave");
     engine
-        .apply_command(0, &play_land(watery_index))
+        .apply_scenario_command(0, &play_land(watery_index))
         .expect("play Watery Grave");
     engine
-        .apply_command(0, &branch_choice(ResolutionChoiceDecision::Decline))
+        .apply_scenario_command(0, &branch_choice(ResolutionChoiceDecision::Decline))
         .expect("decline first payment");
     let watery_grave = battlefield_object_for_card(&engine, 0, "watery_grave");
     engine.state.continuous_effects.push(ContinuousEffect {
@@ -256,7 +258,7 @@ fn an_entry_copy_rechecks_the_copied_watery_grave_ability() {
     );
     let clone_index = hand_index_for_card(&engine, 0, "clone");
     engine
-        .apply_command(0, &cast_spell(clone_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(clone_index, Vec::new()))
         .expect("cast Clone");
     pass_both_players(&mut engine);
     let copy_choice = engine
@@ -270,7 +272,7 @@ fn an_entry_copy_rechecks_the_copied_watery_grave_ability() {
     );
     assert!(copy_choice.presentation.candidates.contains(&watery_grave));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![watery_grave]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![watery_grave]))
         .expect("copy Watery Grave");
 
     let payment = engine
@@ -283,7 +285,7 @@ fn an_entry_copy_rechecks_the_copied_watery_grave_ability() {
         rv1::ChoiceKind::ResolutionBranch
     );
     engine
-        .apply_command(0, &branch_choice(ResolutionChoiceDecision::SelectBranch))
+        .apply_scenario_command(0, &branch_choice(ResolutionChoiceDecision::SelectBranch))
         .expect("pay for copied entry ability");
 
     assert_eq!(engine.state.players[0].life, 18);

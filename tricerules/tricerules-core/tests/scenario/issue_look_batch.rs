@@ -6,6 +6,7 @@
 //! reviewed printed Oracle behavior. Governance: CR 603.6a (entry triggers), 701.18/701.23 (look
 //! and reveal), 121.1 (draw), 119.3 (life gain), 611.2c and 613 layer 6 (until-end-of-turn grants),
 //! 508.1/603.2 (beginning-of-combat triggers), and 305/603.6a (landfall).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -60,8 +61,9 @@ fn cast_creature(e: &mut GameEngine, card: &str) {
 }
 
 fn resolve_to_choice(e: &mut GameEngine) -> tricerules_proto::ruled::v1::RuledEventBatch {
-    e.apply_command(0, &pass()).expect("active passes");
-    e.apply_command(1, &pass()).expect("resolve to a choice")
+    e.apply_scenario_command(0, &pass()).expect("active passes");
+    e.apply_scenario_command(1, &pass())
+        .expect("resolve to a choice")
 }
 
 fn look_choice_candidates(e: &mut GameEngine) -> Vec<u32> {
@@ -86,7 +88,7 @@ fn issue_look_frontier_seeker() {
     cast_creature(&mut illegal, "frontier_seeker");
     let _ = look_choice_candidates(&mut illegal);
     assert!(illegal
-        .apply_command(0, &submit_resolution_choice(vec![unrelated]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![unrelated]))
         .is_err());
 }
 
@@ -101,7 +103,7 @@ fn issue_look_eclipsed_elf() {
     assert!(candidates.contains(&elf));
     assert!(candidates.contains(&forest));
     assert!(
-        e.apply_command(0, &submit_resolution_choice(vec![unrelated]))
+        e.apply_scenario_command(0, &submit_resolution_choice(vec![unrelated]))
             .is_err(),
         "a plain creature card is not an Elf, Swamp, or Forest card"
     );
@@ -120,7 +122,7 @@ fn issue_look_eclipsed_boggart() {
     assert!(candidates.contains(&goblin));
     assert!(candidates.contains(&mountain));
     assert!(
-        e.apply_command(0, &submit_resolution_choice(vec![unrelated]))
+        e.apply_scenario_command(0, &submit_resolution_choice(vec![unrelated]))
             .is_err(),
         "a plain creature card is not a Goblin, Swamp, or Mountain card"
     );
@@ -139,7 +141,7 @@ fn issue_look_eclipsed_merrow() {
     assert!(candidates.contains(&merfolk));
     assert!(candidates.contains(&island));
     assert!(
-        e.apply_command(0, &submit_resolution_choice(vec![unrelated]))
+        e.apply_scenario_command(0, &submit_resolution_choice(vec![unrelated]))
             .is_err(),
         "a plain creature card is not a Merfolk, Plains, or Island card"
     );
@@ -167,7 +169,7 @@ fn issue_look_staunch_crewmate() {
     assert!(candidates.contains(&pirate));
     assert!(
         pirate_engine
-            .apply_command(0, &submit_resolution_choice(vec![unrelated]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![unrelated]))
             .is_err(),
         "a creature with neither the artifact card type nor the Pirate subtype is not legal"
     );
@@ -184,10 +186,10 @@ fn issue_look_wild_pack_squad() {
     let mut e = engine(720_006);
     let squad = inject_creature_on_battlefield(&mut e, 0, "wild_pack_squad");
     let target = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
     assert_eq!(e.state.pending_triggers.len(), 1, "combat trigger waits");
-    e.apply_command(0, &choose_trigger_target(target))
+    e.apply_scenario_command(0, &choose_trigger_target(target))
         .expect("choose the target creature");
     resolve_entire_stack_two_player(&mut e);
     assert!(e.effective_has_keyword(target, Keyword::FirstStrike));
@@ -201,15 +203,15 @@ fn issue_look_might_of_the_ancestors() {
     inject_permanent_on_battlefield(&mut e, 0, "might_of_the_ancestors");
     let own = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let opposing = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
     assert_eq!(e.state.pending_triggers.len(), 1);
     assert!(
-        e.apply_command(0, &choose_trigger_target(opposing))
+        e.apply_scenario_command(0, &choose_trigger_target(opposing))
             .is_err(),
         "only a creature you control is a legal target"
     );
-    e.apply_command(0, &choose_trigger_target(own))
+    e.apply_scenario_command(0, &choose_trigger_target(own))
         .expect("choose a creature you control");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.effective_power(own), Some(4));

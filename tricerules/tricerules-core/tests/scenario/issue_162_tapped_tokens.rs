@@ -1,5 +1,6 @@
 //! Issue #162: ordinary token creation may author tapped initial entry status without a later
 //! tap action. The same simultaneous entry and public TokenCreated path remains authoritative.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 
@@ -35,7 +36,7 @@ fn gravpack_monoist_death_trigger_creates_a_tapped_robot() {
 
     let bolt = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(bolt, target_object(monoist)))
+        .apply_scenario_command(0, &cast_spell(bolt, target_object(monoist)))
         .expect("cast Lightning Bolt");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -44,9 +45,11 @@ fn gravpack_monoist_death_trigger_creates_a_tapped_robot() {
     );
     assert_eq!(engine.state.stack.len(), 1, "death trigger is on the stack");
 
-    engine.apply_command(0, &pass()).expect("controller pass");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller pass");
     let resolved = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve death trigger");
     assert_one_tapped_robot(&engine, &resolved);
 }
@@ -78,7 +81,7 @@ fn melded_moxite_sacrifices_then_creates_a_tapped_robot() {
     );
 
     engine
-        .apply_command(0, &activate_ability(moxite, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(moxite, 0, vec![]))
         .expect("activate Melded Moxite");
     assert_eq!(
         engine.state.objects[&moxite].zone,
@@ -90,9 +93,11 @@ fn melded_moxite_sacrifices_then_creates_a_tapped_robot() {
         "the token waits for the ability to resolve"
     );
 
-    engine.apply_command(0, &pass()).expect("controller pass");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller pass");
     let resolved = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve activation");
     assert_one_tapped_robot(&engine, &resolved);
 }
@@ -116,7 +121,7 @@ fn melded_moxite_cannot_be_sacrificed_when_its_mana_cost_is_unaffordable() {
     let moxite = relocate_to_battlefield(&mut engine, 0, "melded_moxite", false);
 
     engine
-        .apply_command(0, &activate_ability(moxite, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(moxite, 0, vec![]))
         .expect_err("activation must reject an unpaid {3} cost");
     assert_eq!(
         engine.state.objects[&moxite].zone,

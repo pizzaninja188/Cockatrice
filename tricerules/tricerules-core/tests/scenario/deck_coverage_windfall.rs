@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use prost::Message;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1 as rv1;
@@ -30,9 +31,9 @@ fn assert_terminal_draw(engine: &mut GameEngine, batch: &rv1::RuledEventBatch) {
         .map(|p| p.id)
         .collect::<Vec<_>>()
     {
-        assert!(engine.apply_command(actor, &pass()).is_err());
+        assert!(engine.apply_scenario_command(actor, &pass()).is_err());
         assert!(engine
-            .apply_command(actor, &submit_resolution_choice(vec![0]))
+            .apply_scenario_command(actor, &submit_resolution_choice(vec![0]))
             .is_err());
         assert_eq!(engine.diagnostic_snapshot().unwrap(), snapshot);
     }
@@ -235,7 +236,7 @@ fn windfall_four_nonconsecutive_seats_draw_apnap_and_exclude_departed_players() 
         let mut logs = Vec::new();
         for _ in 0..if departed { 3 } else { 4 } {
             let actor = engine.state.priority_player_id();
-            let batch = engine.apply_command(actor, &pass()).unwrap();
+            let batch = engine.apply_scenario_command(actor, &pass()).unwrap();
             logs.extend(batch.events.into_iter().filter_map(|event| match event.ev {
                 Some(rv1::ruled_event::Ev::Log(log))
                     if log.text.ends_with("(Windfall).") && log.text.contains(" draws ") =>
@@ -283,15 +284,15 @@ fn windfall_leng_destinations_and_order_finish_before_every_draw() {
     pass_priority_round(&mut engine);
     let original = engine.diagnostic_snapshot().unwrap();
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![1]))
         .is_err());
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![99]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![99]))
         .is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), original);
     for destination in [1, 1, 0] {
         engine
-            .apply_command(0, &submit_resolution_choice(vec![destination]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![destination]))
             .unwrap();
         for (seat, hand) in hands.iter().enumerate() {
             assert_eq!(
@@ -304,11 +305,11 @@ fn windfall_leng_destinations_and_order_finish_before_every_draw() {
     }
     let before_order = engine.diagnostic_snapshot().unwrap();
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![hands[0][0], hands[0][0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![hands[0][0], hands[0][0]]))
         .is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before_order);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![hands[0][1], hands[0][0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![hands[0][1], hands[0][0]]))
         .unwrap();
     assert_eq!(
         &engine.state.players[0].hand[..2],
@@ -350,7 +351,7 @@ fn windfall_madness_exile_counts_and_offer_waits_until_wheel_finishes() {
     pass_priority_round(&mut engine);
     assert!(engine.state.pending_resolution.is_some());
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(rv1::ResolutionChoiceDecision::Decline),
         )
@@ -369,7 +370,7 @@ fn windfall_early_deckout_waits_for_later_parked_draw_replacement() {
     let mut choice = None;
     for _ in 0..3 {
         let actor = engine.state.priority_player_id();
-        let batch = engine.apply_command(actor, &pass()).unwrap();
+        let batch = engine.apply_scenario_command(actor, &pass()).unwrap();
         choice = find_resolution_choice(&batch).or(choice);
     }
     assert!(engine.state.players[0].pending_library_loss);
@@ -389,11 +390,11 @@ fn windfall_early_deckout_waits_for_later_parked_draw_replacement() {
         let application = current.replacement_options[0].application_id;
         let before = engine.diagnostic_snapshot().unwrap();
         assert!(engine
-            .apply_command(27, &submit_resolution_choice(vec![application]))
+            .apply_scenario_command(27, &submit_resolution_choice(vec![application]))
             .is_err());
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
         let batch = engine
-            .apply_command(9, &submit_resolution_choice(vec![application]))
+            .apply_scenario_command(9, &submit_resolution_choice(vec![application]))
             .unwrap();
         choice = find_resolution_choice(&batch);
     }
@@ -443,7 +444,7 @@ fn windfall_all_remaining_players_deckout_ends_in_draw() {
                 },
             )),
         };
-        let batch = engine.apply_command(actor, &command).unwrap();
+        let batch = engine.apply_scenario_command(actor, &command).unwrap();
         events.extend(batch.events.clone());
         terminal = Some(batch);
     }
@@ -479,7 +480,7 @@ fn risky_shortcut_simultaneous_life_loss_ends_in_draw_after_draw_instruction() {
     let mut terminal = None;
     for _ in 0..3 {
         let actor = engine.state.priority_player_id();
-        let batch = engine.apply_command(actor, &pass()).unwrap();
+        let batch = engine.apply_scenario_command(actor, &pass()).unwrap();
         events.extend(batch.events.clone());
         terminal = Some(batch);
     }
@@ -511,13 +512,16 @@ fn windfall_terminal_draw_replays_exact_accepted_commands_and_batches() {
     for _ in 0..3 {
         let actor = engine.state.priority_player_id();
         let command = pass();
-        let batch = engine.apply_command(actor, &command).unwrap();
+        let batch = engine.apply_scenario_command(actor, &command).unwrap();
         recorded.push((actor, command, batch));
     }
     let mut replay = fresh();
     for (actor, command, batch) in recorded {
         let decoded = rv1::RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
-        assert_eq!(replay.apply_command(actor, &decoded).unwrap(), batch);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &decoded).unwrap(),
+            batch
+        );
     }
     assert_eq!(
         replay.diagnostic_snapshot().unwrap(),

@@ -2,6 +2,7 @@
 //!
 //! Expectations come from the pinned Oracle text and current Comprehensive Rules: CR 614.1c
 //! (enters-tapped replacement) and CR 605.1a/605.3b (activated mana abilities resolve immediately).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::GameEngine;
@@ -85,7 +86,7 @@ fn deck_coverage_tri_lands_enter_tapped_and_produce_each_printed_color() {
             );
             let before = engine.state.command_index;
             engine
-                .apply_command(0, &mana_option(&engine, source, option_index as u32))
+                .apply_scenario_command(0, &mana_option(&engine, source, option_index as u32))
                 .expect_err("a tapped land cannot pay the tap cost of its mana ability");
             assert_eq!(engine.state.command_index, before);
             assert!(engine.state.objects[&source].tapped);

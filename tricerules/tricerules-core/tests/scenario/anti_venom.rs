@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ruled_command::Cmd, ChooseTriggerTarget, RuledCommand};
 
@@ -41,19 +42,19 @@ fn anti_venom_cast_returns_a_creature_from_its_owners_graveyard() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, ANTI_VENOM);
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Anti-Venom");
     pass_both_players(&mut engine);
 
     assert_eq!(engine.state.pending_triggers.len(), 1);
     assert!(
         engine
-            .apply_command(0, &choose_trigger_target(opponent_creature))
+            .apply_scenario_command(0, &choose_trigger_target(opponent_creature))
             .is_err(),
         "Anti-Venom may target only its controller's graveyard"
     );
     engine
-        .apply_command(0, &choose_trigger_target(own_creature))
+        .apply_scenario_command(0, &choose_trigger_target(own_creature))
         .expect("choose own graveyard creature");
     pass_both_players(&mut engine);
 
@@ -73,7 +74,7 @@ fn anti_venom_returned_by_zombify_does_not_trigger_its_cast_ability() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "zombify");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(anti_venom)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(anti_venom)))
         .expect("cast Zombify");
     pass_both_players(&mut engine);
 

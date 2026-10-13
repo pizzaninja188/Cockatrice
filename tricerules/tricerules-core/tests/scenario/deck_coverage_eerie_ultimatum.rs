@@ -1,7 +1,8 @@
 //! Eerie Ultimatum's exact card identity and graveyard return behavior.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn eerie_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("plains", &[]), deck_with("forest", &[])]);
@@ -39,7 +40,7 @@ fn resolve_eerie_to_choice(engine: &mut GameEngine) {
     for _ in 0..2 {
         let actor = engine.state.priority_player_id();
         engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass priority for Eerie Ultimatum");
     }
     assert!(engine.state.pending_resolution.is_some());
@@ -72,7 +73,7 @@ fn eerie_returns_different_named_permanents_and_keeps_simultaneous_aura_in_grave
 
     let pending_before = serde_json::to_value(&engine.state).unwrap();
     let duplicate_result =
-        engine.apply_command(4, &submit_resolution_choice(vec![bear, duplicate_bear]));
+        engine.apply_scenario_command(4, &submit_resolution_choice(vec![bear, duplicate_bear]));
     assert!(
         duplicate_result.is_err(),
         "duplicate card names are illegal"
@@ -80,7 +81,7 @@ fn eerie_returns_different_named_permanents_and_keeps_simultaneous_aura_in_grave
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), pending_before);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             4,
             &submit_resolution_choice(vec![bear, planeswalker, land, artifact, aura]),
         )
@@ -124,7 +125,7 @@ fn eerie_can_choose_zero_and_skips_the_choice_when_no_permanent_card_matches() {
     let source = cast_eerie_ultimatum(&mut with_candidates);
     resolve_eerie_to_choice(&mut with_candidates);
     with_candidates
-        .apply_command(4, &submit_resolution_choice(Vec::new()))
+        .apply_scenario_command(4, &submit_resolution_choice(Vec::new()))
         .expect("zero is a legal number of cards");
     assert_eq!(with_candidates.state.objects[&bear].zone, Zone::Graveyard);
     assert_eq!(with_candidates.state.objects[&source].zone, Zone::Graveyard);
@@ -136,7 +137,7 @@ fn eerie_can_choose_zero_and_skips_the_choice_when_no_permanent_card_matches() {
     for _ in 0..2 {
         let actor = without_candidates.state.priority_player_id();
         without_candidates
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("resolve Eerie Ultimatum with no permanent candidates");
     }
     assert!(without_candidates.state.pending_resolution.is_none());
@@ -160,7 +161,7 @@ fn eerie_rejects_a_graveyard_card_whose_zone_generation_changed_after_the_choice
     *engine.state.zone_change_generation.entry(bear).or_default() += 1;
     let pending_before = serde_json::to_value(&engine.state).unwrap();
 
-    let result = engine.apply_command(4, &submit_resolution_choice(vec![bear]));
+    let result = engine.apply_scenario_command(4, &submit_resolution_choice(vec![bear]));
 
     assert!(
         result.is_err(),
@@ -183,10 +184,10 @@ fn eerie_serialized_resolution_choice_replays_identically() {
             tricerules_proto::ruled::v1::RuledCommand::decode(command.encode_to_vec().as_slice())
                 .expect("serialized ruled command");
         let observed = original
-            .apply_command(actor, &command)
+            .apply_scenario_command(actor, &command)
             .expect("original command");
         let reproduced = replay
-            .apply_command(actor, &decoded)
+            .apply_scenario_command(actor, &decoded)
             .expect("replayed command");
         assert_eq!(observed, reproduced);
         assert_eq!(

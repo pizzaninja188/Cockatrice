@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{ActivationLimit, ContinuousEffectKind, EffectDuration};
 use tricerules_cards::AbilityId;
 use tricerules_core::{AffectedScope, ContinuousEffect};
@@ -52,7 +53,7 @@ fn exhaust_persists_across_turns_and_control_but_resets_for_a_new_object() {
     );
 
     engine
-        .apply_command(0, &activate_ability(source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(source, 1, vec![]))
         .expect("the first Exhaust activation is legal");
     assert_eq!(zone_view_ability_flags(&mut engine, 0, source), [false]);
     assert_eq!(
@@ -69,7 +70,7 @@ fn exhaust_persists_across_turns_and_control_but_resets_for_a_new_object() {
         resolve_cleanup_discards_if_any(&mut engine);
         let priority = engine.state.priority_player_id();
         engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("advance to the next turn");
     }
     assert!(
@@ -131,7 +132,7 @@ fn separate_exhaust_abilities_on_one_object_have_independent_allowances() {
     );
 
     engine
-        .apply_command(0, &activate_ability(source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(source, 1, vec![]))
         .expect("activate the first Exhaust ability");
     assert_eq!(
         zone_view_ability_flags(&mut engine, 0, source),
@@ -139,7 +140,7 @@ fn separate_exhaust_abilities_on_one_object_have_independent_allowances() {
     );
 
     engine
-        .apply_command(0, &activate_ability(source, 2, vec![]))
+        .apply_scenario_command(0, &activate_ability(source, 2, vec![]))
         .expect("the second Exhaust ability remains independent");
     assert_eq!(
         zone_view_ability_flags(&mut engine, 0, source),
@@ -155,7 +156,7 @@ fn failed_and_duplicate_commands_do_not_partially_change_exhaust_state() {
     let command = activate_ability(source, 1, vec![]);
 
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect_err("an unaffordable activation is illegal");
     assert!(engine.state.activation_uses_per_object.is_empty());
     assert_eq!(zone_view_ability_flags(&mut engine, 0, source), [true]);
@@ -169,7 +170,7 @@ fn failed_and_duplicate_commands_do_not_partially_change_exhaust_state() {
         },
     );
     let batch = engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("the funded activation succeeds");
     let key = ((u64::from(source)) << 32) | 1;
     assert!(
@@ -180,7 +181,7 @@ fn failed_and_duplicate_commands_do_not_partially_change_exhaust_state() {
     let mana_before = mana_state(&engine, 0);
     let uses_before = engine.state.activation_uses_per_object.clone();
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect_err("the stale duplicate activation is rejected before payment");
     assert_eq!(mana_state(&engine, 0), mana_before);
     assert_eq!(engine.state.activation_uses_per_object, uses_before);
@@ -228,7 +229,7 @@ fn a_countered_exhaust_ability_remains_spent() {
     engine.initial_response_batch();
 
     engine
-        .apply_command(0, &activate_ability(source, 2, target_object(warded)))
+        .apply_scenario_command(0, &activate_ability(source, 2, target_object(warded)))
         .expect("activate the granted Exhaust ability");
     assert_eq!(
         engine.state.stack.len(),
@@ -237,7 +238,7 @@ fn a_countered_exhaust_ability_remains_spent() {
     );
     pass_both_players(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -279,7 +280,7 @@ fn same_seed_and_commands_replay_the_same_exhaust_state() {
             },
         );
         engine
-            .apply_command(0, &activate_ability(source, 1, vec![]))
+            .apply_scenario_command(0, &activate_ability(source, 1, vec![]))
             .expect("accepted command");
         let (key, count) = engine
             .state

@@ -1,4 +1,5 @@
 //! Test-only typed faces establish the missing cohort runtime contracts before card admission.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{
@@ -8,7 +9,7 @@ use tricerules_cards::{
     },
     ManaCost,
 };
-use tricerules_core::{state::CopiableValues, GameEngine, TurnStep};
+use tricerules_core::{state::CopiableValues, TurnStep};
 use tricerules_proto::ruled::v1::{
     dev_command, ruled_command::Cmd, DevCommand, DevMoveCard, DevZone, RuledCommand,
 };
@@ -64,7 +65,7 @@ fn activated_double_x_cost_pays_twice_and_preserves_chosen_x_for_draw() {
     }
     let revision = engine.state.command_index;
     assert!(
-        engine.apply_command(0, &command).is_err(),
+        engine.apply_scenario_command(0, &command).is_err(),
         "X = 2 needs four mana"
     );
     assert_eq!(engine.state.command_index, revision);
@@ -75,13 +76,13 @@ fn activated_double_x_cost_pays_twice_and_preserves_chosen_x_for_draw() {
         ability.x_value = u32::MAX;
     }
     assert!(
-        engine.apply_command(0, &impossible).is_err(),
+        engine.apply_scenario_command(0, &impossible).is_err(),
         "an impossible chosen X must reject without saturating into a legal cost"
     );
     assert_eq!(engine.state.players[0].mana_pool.colorless, 4);
     assert!(!engine.state.objects[&source].tapped);
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("activate with X = 2");
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     resolve_entire_stack_two_player(&mut engine);
@@ -142,10 +143,10 @@ fn conditional_upkeep_win_uses_the_trigger_controller() {
     engine.state.priority_idx = 1;
     engine.state.turn_step = TurnStep::EndStep;
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes end step");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("controller passes end step");
     assert_eq!(engine.state.active_player_id(), 0);
     assert_eq!(engine.state.turn_step, TurnStep::Upkeep);
@@ -199,10 +200,10 @@ fn source_total_counter_condition_counts_mixed_kinds_at_resolution() {
     engine.state.priority_idx = 1;
     engine.state.turn_step = TurnStep::EndStep;
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes end step");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("controller passes end step");
     assert_eq!(engine.state.stack.len(), 1);
     resolve_entire_stack_two_player(&mut engine);
@@ -260,10 +261,10 @@ fn source_total_counter_condition_uses_departed_generations_last_known_counters(
     engine.state.priority_idx = 1;
     engine.state.turn_step = TurnStep::EndStep;
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes end step");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("controller passes end step");
     assert_eq!(engine.state.stack.len(), 1);
 
@@ -271,7 +272,7 @@ fn source_total_counter_condition_uses_departed_generations_last_known_counters(
     for zone in [DevZone::Graveyard, DevZone::Battlefield] {
         let priority = engine.state.priority_player_id();
         engine
-            .apply_command(
+            .apply_scenario_command(
                 priority,
                 &RuledCommand {
                     cmd: Some(Cmd::DevCommand(DevCommand {
@@ -355,7 +356,7 @@ fn each_opponent_mills_its_own_hand_count_in_three_player_game() {
     for _ in 0..3 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("pass priority to resolve");
     }
     assert_eq!(engine.state.players[0].library.len(), library_before[0]);

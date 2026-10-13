@@ -6,6 +6,7 @@
 //! CR 400.7 governs zone-change identity; CR 508.1m/508.2a govern attack triggers; CR
 //! 603.2/603.3b/603.5 govern staging, APNAP ordering, and optional effects; and CR 701.17
 //! governs mill, including the inability to choose an optional mill larger than the library.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -22,9 +23,11 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }
 
@@ -64,6 +67,7 @@ fn trigger_target(object_id: u32) -> TargetRef {
 fn select_optional_effect() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: 0,
             ..Default::default()
@@ -74,6 +78,7 @@ fn select_optional_effect() -> RuledCommand {
 fn decline_optional_effect() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::Decline as i32,
             ..Default::default()
         })),
@@ -93,7 +98,7 @@ fn advance_to_next_main1(engine: &mut GameEngine, player: i32) {
         resolve_cleanup_discards_if_any(engine);
         let priority = engine.state.priority_player_id();
         engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("advance turn");
     }
     panic!("turn advancement stalled before P{player}'s next main phase");
@@ -133,19 +138,19 @@ fn generated_optional_bounce_restricts_targets_and_revalidates_target_generation
     let savior = move_ready_to_battlefield(&mut engine, 0, "exosuit_savior");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_targets(vec![trigger_target(savior)], false),
         )
         .is_err());
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_targets(vec![trigger_target(opponent_artifact)], false),
         )
         .is_err());
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &choose_trigger_targets(vec![trigger_target(own_artifact)], false),
         )
@@ -166,7 +171,7 @@ fn generated_optional_bounce_restricts_targets_and_revalidates_target_generation
 
     move_ready_to_battlefield(&mut engine, 0, "mischievous_pup");
     engine
-        .apply_command(0, &choose_trigger_targets(Vec::new(), false))
+        .apply_scenario_command(0, &choose_trigger_targets(Vec::new(), false))
         .expect("up to one permits choosing no target without declining a may effect");
     resolve_entire_stack_two_player(&mut engine);
 }
@@ -198,7 +203,7 @@ fn generated_may_mill_can_be_declined_or_move_exactly_two_cards_in_library_order
         ChoiceKind::ResolutionBranch
     );
     engine
-        .apply_command(0, &decline_optional_effect())
+        .apply_scenario_command(0, &decline_optional_effect())
         .expect("decline optional mill");
     assert!(engine.state.stack.is_empty());
 
@@ -212,7 +217,7 @@ fn generated_may_mill_can_be_declined_or_move_exactly_two_cards_in_library_order
         ChoiceKind::ResolutionBranch
     );
     let resolution = engine
-        .apply_command(0, &select_optional_effect())
+        .apply_scenario_command(0, &select_optional_effect())
         .expect("accept optional mill");
     assert!(top
         .iter()
@@ -291,14 +296,14 @@ fn generated_noncreature_cast_triggers_use_ordering_and_exact_source_generations
 
     let creature = hand_index_for_card(&engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &cast_spell(creature, vec![]))
+        .apply_scenario_command(0, &cast_spell(creature, vec![]))
         .expect("cast creature spell");
     assert_eq!(engine.state.stack.len(), 1, "creature casts do not trigger");
     resolve_entire_stack_two_player(&mut engine);
 
     let equipment = hand_index_for_card(&engine, 0, "bonesplitter");
     engine
-        .apply_command(0, &cast_spell(equipment, vec![]))
+        .apply_scenario_command(0, &cast_spell(equipment, vec![]))
         .expect("cast noncreature spell");
     assert!(
         engine.state.pending_trigger_order.is_some(),
@@ -351,7 +356,7 @@ fn generated_second_draw_trigger_fires_once_each_turn_and_resets_next_turn() {
 
     let first = hand_index_for_card(&engine, 0, "divination");
     engine
-        .apply_command(0, &cast_spell(first, vec![]))
+        .apply_scenario_command(0, &cast_spell(first, vec![]))
         .expect("cast first Divination");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -370,7 +375,7 @@ fn generated_second_draw_trigger_fires_once_each_turn_and_resets_next_turn() {
     grant_pool(&mut engine, 0);
     let second = hand_index_for_card(&engine, 0, "divination");
     engine
-        .apply_command(0, &cast_spell(second, vec![]))
+        .apply_scenario_command(0, &cast_spell(second, vec![]))
         .expect("cast second-turn Divination");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -399,7 +404,7 @@ fn generated_attack_triggers_only_stage_for_declared_attackers() {
 
     assert!(engine.state.stack.is_empty());
     engine
-        .apply_command(0, &declare_attackers(vec![herald, phantasm]))
+        .apply_scenario_command(0, &declare_attackers(vec![herald, phantasm]))
         .expect("declare two generated attackers");
     assert!(engine.state.pending_trigger_order.is_some());
     answer_trigger_order_in_engine_order(&mut engine);

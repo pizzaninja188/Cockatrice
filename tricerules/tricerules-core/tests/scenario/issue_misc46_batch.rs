@@ -1,6 +1,7 @@
 //! Four pinned Standard spells reuse established Spree and player-target effects.
 //! CR 702.172, 601.2f-h, 115, 608.2b, 613.4, 701.21, and 701.25 apply.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::Keyword;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
@@ -134,13 +135,13 @@ fn issue_misc46_neutralize_the_guards_scopes_debuff() {
     inject_card_into_hand(&mut e, 0, "neutralize_the_guards");
     let slot = hand_index_for_card(&e, 0, "neutralize_the_guards");
     semantic::accepted(&mut e, 0, &cast_spell(slot, target_player(1)));
-    e.apply_command(e.state.priority_player_id(), &pass())
+    e.apply_scenario_command(e.state.priority_player_id(), &pass())
         .expect("first pass");
     let parked = e
-        .apply_command(e.state.priority_player_id(), &pass())
+        .apply_scenario_command(e.state.priority_player_id(), &pass())
         .expect("resolve into Surveil");
     let choice = find_resolution_choice(&parked).expect("Surveil choice");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &submit_resolution_choice(choice.candidate_object_ids.clone()),
     )

@@ -9,6 +9,7 @@
 //! components, so Gnarlbark Elm is exercised with a mixed-kind pair (one -1/-1 plus one stun) and
 //! Reaping Willow returns only a creature card with mana value 3 or less from its controller's
 //! graveyard.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -209,7 +210,7 @@ fn issue_414_counter_removal_is_paid_before_the_effect_resolves() {
 
     let selection = published_counter_selection(&mut engine, burdened);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_counter_cost(&engine, burdened, target_object(target), selection),
         )
@@ -249,7 +250,7 @@ fn issue_414_activation_is_illegal_with_too_few_counters_and_pays_nothing() {
     );
     let removal = published_counter_selection(&mut engine, moonlit);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_counter_cost(&engine, moonlit, vec![], removal.clone()),
         )
@@ -270,7 +271,7 @@ fn issue_414_activation_is_illegal_with_too_few_counters_and_pays_nothing() {
     );
     let mana_before = engine.state.players[0].mana_pool.white;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_counter_cost(&engine, moonlit, vec![], removal),
         )
@@ -297,12 +298,12 @@ fn issue_414_sorcery_speed_activation_is_rejected_while_the_stack_is_not_empty()
     let selection = published_counter_selection(&mut engine, burdened);
     let slot = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Lightning Bolt");
     assert_eq!(engine.state.stack.len(), 1);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_counter_cost(&engine, burdened, target_object(target), selection),
         )
@@ -330,7 +331,7 @@ fn issue_414_moonlit_lamenter_activation_draws_only_on_resolution() {
     let before = engine.state.players[0].hand.len();
     let selection = published_counter_selection(&mut engine, moonlit);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_counter_cost(&engine, moonlit, vec![], selection),
         )
@@ -363,7 +364,7 @@ fn issue_414_hovel_hurler_excludes_itself_and_pumps_the_other_creature() {
     // paying the cost.
     let selection = published_counter_selection(&mut engine, hovel);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_counter_cost(&engine, hovel, target_object(hovel), selection.clone()),
         )
@@ -376,7 +377,7 @@ fn issue_414_hovel_hurler_excludes_itself_and_pumps_the_other_creature() {
     assert!(engine.state.stack.is_empty());
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_counter_cost(&engine, hovel, target_object(other), selection),
         )
@@ -449,7 +450,7 @@ fn issue_414_gnarlbark_elm_pays_one_minus_one_plus_one_stun_for_minus_two_minus_
         counter_selection_for(&components[1], CounterKind::Stun),
     ];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_counter_costs(&engine, gnarlbark, target_object(target), selections),
         )
@@ -505,7 +506,7 @@ fn issue_414_two_counter_cost_is_atomic_with_too_few_counters() {
         counter_selection_for(&components[1], CounterKind::MinusOneMinusOne),
     ];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_counter_costs(&engine, gnarlbark, target_object(target), selections),
         )
@@ -546,7 +547,7 @@ fn issue_414_reaping_willow_returns_a_small_creature_card_for_two_counters() {
         counter_selection_for(&components[1], CounterKind::MinusOneMinusOne),
     ];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_counter_costs(&engine, reaping, graveyard_object(visionary), selections),
         )
@@ -592,7 +593,7 @@ fn issue_414_reaping_willow_rejects_illegal_graveyard_targets_without_paying() {
             counter_selection_for(&components[1], CounterKind::MinusOneMinusOne),
         ];
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_with_counter_costs(
                     &engine,
@@ -617,7 +618,7 @@ fn issue_414_reaping_willow_rejects_illegal_graveyard_targets_without_paying() {
         counter_selection_for(&components[1], CounterKind::MinusOneMinusOne),
     ];
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_with_counter_costs(&engine, reaping, graveyard_object(small), selections),
         )

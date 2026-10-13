@@ -2,6 +2,7 @@
 //!
 //! Oracle verified 2026-09-03. Governing rules: CR 208.2a, 208.3, 301.7,
 //! 604.3, 613.1d, 613.4a-c, and 702.122.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{
@@ -83,6 +84,7 @@ fn add_effect(engine: &mut GameEngine, oid: u32, kind: ContinuousEffectKind) {
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -100,8 +102,8 @@ fn resolve_top_to_choice(engine: &mut GameEngine) -> tricerules_proto::ruled::v1
         .map(|player| player.id)
         .find(|player| *player != first)
         .unwrap();
-    engine.apply_command(first, &pass()).unwrap();
-    engine.apply_command(second, &pass()).unwrap()
+    engine.apply_scenario_command(first, &pass()).unwrap();
+    engine.apply_scenario_command(second, &pass()).unwrap()
 }
 
 #[test]
@@ -281,13 +283,13 @@ fn crew_reuses_generation_bound_aggregate_tap_payment_and_adds_only_creature() {
     );
 
     assert!(engine
-        .apply_command(0, &activate_crew(&engine, wagon, &[first]),)
+        .apply_scenario_command(0, &activate_crew(&engine, wagon, &[first]),)
         .is_err());
     assert!(!engine.state.objects[&first].tapped);
     assert!(engine.state.stack.is_empty());
 
     engine
-        .apply_command(0, &activate_crew(&engine, wagon, &[first, second]))
+        .apply_scenario_command(0, &activate_crew(&engine, wagon, &[first, second]))
         .expect("summoning-sick creatures may pay Crew 4 together");
     assert!(engine.state.objects[&first].tapped && engine.state.objects[&second].tapped);
     assert!(!engine.state.objects[&wagon].tapped);
@@ -325,12 +327,12 @@ fn crew_effect_does_not_follow_worldwagon_to_a_new_generation() {
     let second = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
 
     engine
-        .apply_command(0, &activate_crew(&engine, wagon, &[first, second]))
+        .apply_scenario_command(0, &activate_crew(&engine, wagon, &[first, second]))
         .expect("activate Crew before the source changes zones");
     let old_generation = generation(&engine, wagon);
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             engine.state.priority_player_id(),
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -364,7 +366,7 @@ fn a_copy_keeps_worldwagons_cda_but_not_its_resolved_crew_effect() {
     let first = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let second = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &activate_crew(&engine, wagon, &[first, second]))
+        .apply_scenario_command(0, &activate_crew(&engine, wagon, &[first, second]))
         .expect("Crew Worldwagon before copying it");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -380,10 +382,10 @@ fn a_copy_keeps_worldwagons_cda_but_not_its_resolved_crew_effect() {
     );
     let slot = hand_index_for_card(&engine, 0, "cackling_counterpart");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(wagon)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(wagon)))
         .expect("copy the currently crewed Worldwagon");
-    engine.apply_command(0, &pass()).unwrap();
-    let copied = engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let copied = engine.apply_scenario_command(1, &pass()).unwrap();
     let token = token_created_events(&copied)[0].object_id;
 
     let printed_copy = engine.characteristics(token).unwrap();
@@ -428,7 +430,7 @@ fn worldwagon_entry_and_attack_each_offer_the_same_optional_basic_search() {
     assert_eq!(branch.choice_kind(), ChoiceKind::ResolutionBranch);
     assert_eq!((branch.min, branch.max), (0, 1));
     let search = engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("choose the entry search branch");
     let choice = find_resolution_choice(&search).expect("basic land search");
     let basic = *choice
@@ -436,7 +438,7 @@ fn worldwagon_entry_and_attack_each_offer_the_same_optional_basic_search() {
         .first()
         .expect("the Forest-filled deck has a basic land");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![basic]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![basic]))
         .expect("put the searched basic land onto the battlefield");
     assert_eq!(
         engine.state.objects[&basic].zone,
@@ -447,15 +449,15 @@ fn worldwagon_entry_and_attack_each_offer_the_same_optional_basic_search() {
     let first = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     let second = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &activate_crew(&engine, wagon, &[first, second]))
+        .apply_scenario_command(0, &activate_crew(&engine, wagon, &[first, second]))
         .expect("Crew before combat");
     resolve_entire_stack_two_player(&mut engine);
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("advance to beginning of combat");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![wagon]))
+        .apply_scenario_command(0, &declare_attackers(vec![wagon]))
         .expect("attack with the crewed Vehicle");
 
     let optional = resolve_top_to_choice(&mut engine);
@@ -463,10 +465,11 @@ fn worldwagon_entry_and_attack_each_offer_the_same_optional_basic_search() {
     assert_eq!(branch.choice_kind(), ChoiceKind::ResolutionBranch);
     assert_eq!((branch.min, branch.max), (0, 1));
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: ResolutionChoiceDecision::Decline as i32,
                     ..Default::default()
                 })),

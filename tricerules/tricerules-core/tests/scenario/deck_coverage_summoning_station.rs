@@ -1,9 +1,10 @@
 //! Actual Summoning Station, exact nonartifact Pincher and artifact-death untap evidence.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{ContinuousEffectKind, CounterKind, EffectDuration};
 use tricerules_core::state::{ActiveDeathReplacement, AffectedScope, ContinuousEffect};
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     dev_command, ruled_command::Cmd, ChoiceKind, DevCommand, DevMoveCard, DevZone,
     ResolutionChoiceDecision, RuledEventBatch,
@@ -34,7 +35,8 @@ fn setup() -> (GameEngine, u32) {
         },
     );
     let slot = hand_index_for_card(&e, 0, STATION);
-    e.apply_command(10, &cast_spell(slot, vec![])).unwrap();
+    e.apply_scenario_command(10, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_priority_round(&mut e);
     assert_eq!(e.state.objects[&station].zone, Zone::Battlefield);
     assert_eq!(e.state.players[0].mana_pool, Default::default());
@@ -57,16 +59,16 @@ fn summoning_station_paid_cast_tap_and_exact_pincher() {
     let (mut e, station) = setup();
     let command = activate_ability_for(&e, station, 0, vec![]);
     let before = serde_json::to_vec(&e.state).unwrap();
-    assert!(e.apply_command(20, &command).is_err());
+    assert!(e.apply_scenario_command(20, &command).is_err());
     assert_eq!(serde_json::to_vec(&e.state).unwrap(), before);
-    e.apply_command(10, &command).unwrap();
+    e.apply_scenario_command(10, &command).unwrap();
     assert!(
         e.state.objects[&station].tapped,
         "noncreature Station can tap immediately"
     );
     assert!(battlefield_token_oids(&e, 0, PINCHER).is_empty());
     let before = serde_json::to_vec(&e.state).unwrap();
-    assert!(e.apply_command(10, &command).is_err());
+    assert!(e.apply_scenario_command(10, &command).is_err());
     assert_eq!(serde_json::to_vec(&e.state).unwrap(), before);
     let batch = resolve_one(&mut e);
     let tokens = battlefield_token_oids(&e, 0, PINCHER);
@@ -117,7 +119,7 @@ fn resolve_one(e: &mut GameEngine) -> RuledEventBatch {
     let mut result = RuledEventBatch::default();
     for _ in 0..count {
         let actor = e.state.priority_player_id();
-        result = e.apply_command(actor, &pass()).unwrap();
+        result = e.apply_scenario_command(actor, &pass()).unwrap();
     }
     result
 }
@@ -125,7 +127,7 @@ fn resolve_one(e: &mut GameEngine) -> RuledEventBatch {
 fn reject(e: &mut GameEngine, actor: i32, command: &RuledCommand) {
     // Pending branches contain non-string map keys, so JSON cannot encode the full state.
     let before = format!("{:?}", e.state);
-    e.apply_command(actor, command)
+    e.apply_scenario_command(actor, command)
         .expect_err("illegal input rejects");
     assert_eq!(format!("{:?}", e.state), before);
 }
@@ -136,7 +138,7 @@ fn priority(e: &mut GameEngine, actor: i32) {
             return;
         }
         let current = e.state.priority_player_id();
-        e.apply_command(current, &pass()).unwrap();
+        e.apply_scenario_command(current, &pass()).unwrap();
     }
     panic!("priority did not reach actor {actor}");
 }
@@ -157,13 +159,14 @@ fn cast(e: &mut GameEngine, card: &str, targets: Vec<TargetRef>) {
         },
     );
     let slot = hand_index_for_card(e, 0, card);
-    e.apply_command(10, &cast_spell(slot, targets)).unwrap();
+    e.apply_scenario_command(10, &cast_spell(slot, targets))
+        .unwrap();
     resolve_one(e);
 }
 
 fn tap_station(e: &mut GameEngine, station: u32, actor: i32) {
     priority(e, actor);
-    e.apply_command(actor, &activate_ability_for(e, station, 0, vec![]))
+    e.apply_scenario_command(actor, &activate_ability_for(e, station, 0, vec![]))
         .unwrap();
     resolve_one(e);
     assert!(e.state.objects[&station].tapped);
@@ -186,7 +189,7 @@ fn optional_untap(e: &mut GameEngine, actor: i32, accept: bool) {
         answer.selected_branch_index = 1;
     }
     reject(e, actor, &invalid);
-    e.apply_command(
+    e.apply_scenario_command(
         actor,
         &submit_resolution_decision(if accept {
             ResolutionChoiceDecision::SelectBranch
@@ -215,7 +218,7 @@ fn sacrifice_gnomes(e: &mut GameEngine, seat: usize, replaced: bool) -> u32 {
             });
     }
     priority(e, actor);
-    e.apply_command(actor, &activate_ability_for(e, gnomes, 0, vec![]))
+    e.apply_scenario_command(actor, &activate_ability_for(e, gnomes, 0, vec![]))
         .unwrap();
     gnomes
 }
@@ -315,7 +318,7 @@ fn summoning_station_only_actual_artifact_battlefield_to_graveyard_counts() {
     // Logged developer relocation is an off-battlefield fixture, not a legal discard producer.
     let hand_artifact = inject_card_into_hand(&mut e, 1, "bottle_gnomes");
     e.enable_dev_commands();
-    e.apply_command(
+    e.apply_scenario_command(
         20,
         &RuledCommand {
             cmd: Some(Cmd::DevCommand(DevCommand {
@@ -348,7 +351,7 @@ fn summoning_station_artifact_token_sacrifice_triggers() {
         },
     );
     priority(&mut e, 20);
-    e.apply_command(20, &activate_ability_for(&e, port, 3, vec![]))
+    e.apply_scenario_command(20, &activate_ability_for(&e, port, 3, vec![]))
         .unwrap();
     resolve_one(&mut e);
     let treasure = battlefield_token_oids(&e, 1, "treasure")[0];
@@ -358,7 +361,7 @@ fn summoning_station_artifact_token_sacrifice_triggers() {
     if let Some(Cmd::ActivateAbility(ability)) = command.cmd.as_mut() {
         ability.mana_option_index = 4;
     }
-    e.apply_command(20, &command).unwrap();
+    e.apply_scenario_command(20, &command).unwrap();
     assert_eq!(e.state.players[1].mana_pool.green, before + 1);
     assert_eq!(
         e.state.stack.len(),
@@ -372,7 +375,7 @@ fn summoning_station_artifact_token_sacrifice_triggers() {
 #[test]
 fn summoning_station_source_departure_and_new_generation_are_distinct() {
     let (mut e, station) = setup();
-    e.apply_command(10, &activate_ability_for(&e, station, 0, vec![]))
+    e.apply_scenario_command(10, &activate_ability_for(&e, station, 0, vec![]))
         .unwrap();
     cast(&mut e, "boomerang", target_object(station));
     assert_eq!(e.state.objects[&station].zone, Zone::Hand);

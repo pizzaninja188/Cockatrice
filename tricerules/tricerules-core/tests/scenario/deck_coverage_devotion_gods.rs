@@ -1,5 +1,6 @@
 //! Actual God definitions through logged dev placement and paid authoritative activations.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{CounterKind, Keyword};
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
@@ -23,7 +24,7 @@ fn setup() -> GameEngine {
 
 fn put(engine: &mut GameEngine, player: i32, name: &str) -> (u32, RuledEventBatch) {
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             engine.state.priority_player_id(),
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -49,7 +50,7 @@ fn put(engine: &mut GameEngine, player: i32, name: &str) -> (u32, RuledEventBatc
 
 fn move_card(engine: &mut GameEngine, player: i32, name: &str, zone: DevZone) -> RuledEventBatch {
     engine
-        .apply_command(
+        .apply_scenario_command(
             engine.state.priority_player_id(),
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -85,7 +86,7 @@ fn paid_activation(engine: &GameEngine, god: u32, targets: Vec<TargetRef>) -> Ru
 
 fn rejected_without_state_change(engine: &mut GameEngine, player: i32, command: &RuledCommand) {
     let before = format!("{:?}", engine.state);
-    assert!(engine.apply_command(player, command).is_err());
+    assert!(engine.apply_scenario_command(player, command).is_err());
     assert_eq!(format!("{:?}", engine.state), before);
 }
 
@@ -112,7 +113,7 @@ fn devotion_gods_cast_as_creature_spells_with_exact_paid_costs_then_enter_as_non
         let mut cast = cast_spell(slot, vec![]);
         authoring_actions::pay(&engine, 0, &mut cast).unwrap();
         rejected_without_state_change(&mut engine, 1, &cast);
-        engine.apply_command(0, &cast).unwrap();
+        engine.apply_scenario_command(0, &cast).unwrap();
         assert_eq!(engine.state.objects[&god].zone, Zone::Stack);
         assert!(engine.characteristics(god).unwrap().is_creature());
         assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
@@ -136,7 +137,7 @@ fn nylea_paid_pump_does_not_rebind_a_target_that_leaves_and_returns() {
     engine.state.players[0].mana_pool.colorless = 3;
     engine.state.players[0].mana_pool.green = 1;
     let command = paid_activation(&engine, god, target_object(target));
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     move_card(&mut engine, 1, "Grizzly Bears", DevZone::Hand);
     move_card(&mut engine, 1, "Grizzly Bears", DevZone::Battlefield);
     settle_stack(&mut engine);
@@ -161,7 +162,7 @@ fn purphoros_five_devotion_team_pump_includes_source_and_excludes_later_entrants
     engine.state.players[0].mana_pool.colorless = 2;
     engine.state.players[0].mana_pool.red = 1;
     let command = paid_activation(&engine, god, vec![]);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     settle_stack(&mut engine);
     assert_eq!(engine.characteristics(god).unwrap().power, Some(7));
     assert!(own
@@ -254,7 +255,7 @@ fn nylea_noncreature_paid_pump_accepts_opponent_and_rejects_illegal_stale_and_un
     engine.state.players[0].mana_pool.green = 0;
     rejected_without_state_change(&mut engine, 0, &command);
     engine.state.players[0].mana_pool.green = 1;
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(engine.state.players[0].mana_pool.green, 0);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     settle_stack(&mut engine);
@@ -322,7 +323,7 @@ fn purphoros_noncreature_paid_team_pump_snapshots_only_own_creatures() {
     engine.state.players[0].mana_pool.red = 0;
     rejected_without_state_change(&mut engine, 0, &command);
     engine.state.players[0].mana_pool.red = 1;
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     settle_stack(&mut engine);
     assert_eq!(engine.characteristics(own).unwrap().power, Some(3));
     assert_eq!(engine.characteristics(opponent).unwrap().power, Some(2));

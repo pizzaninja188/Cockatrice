@@ -5,7 +5,7 @@
 //! classify and immediately resolve the mana ability, and CR 121.1 covers drawing.
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn mind_stone_engine(seed: u64) -> (GameEngine, u32) {
     let decks = Some(vec![deck_with("island", &[]), deck_with("forest", &[])]);

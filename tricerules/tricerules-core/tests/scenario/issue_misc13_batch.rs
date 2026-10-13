@@ -8,6 +8,7 @@
 //! reduction), CR 603.6a (entry trigger), CR 610.3/608.2b (exile until source leaves), CR 614.1c/
 //! 122.6 (enters with X counters), CR 702.8 (flash), CR 702.9 (flying), CR 702.29 (cycling),
 //! CR 702.34 (flashback), and CR 702.122 (crew).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -81,6 +82,7 @@ fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(
             tricerules_proto::ruled::v1::SubmitResolutionChoice {
+                resolution_prompt_id: 0,
                 decision: ResolutionChoiceDecision::SelectBranch as i32,
                 selected_branch_index: index,
                 ..Default::default()
@@ -301,7 +303,7 @@ fn issue_misc13_aurons_inspiration_pumps_attackers_and_flashbacks() {
     advance_to_declare_attackers(&mut e);
     let first = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let second = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-    e.apply_command(0, &declare_attackers(vec![first, second]))
+    e.apply_scenario_command(0, &declare_attackers(vec![first, second]))
         .expect("declare attackers");
     let (p1, p2) = (
         e.effective_power(first).unwrap(),
@@ -378,7 +380,7 @@ fn issue_misc13_rowdy_research_reduces_per_attacker_and_draws_three() {
     let attackers: Vec<u32> = (0..3)
         .map(|_| inject_creature_on_battlefield(&mut e, 0, "grizzly_bears"))
         .collect();
-    e.apply_command(0, &declare_attackers(attackers))
+    e.apply_scenario_command(0, &declare_attackers(attackers))
         .expect("declare attackers");
     inject_card_into_hand(&mut e, 0, "rowdy_research");
     // {6}{U} reduced by three declared attackers costs {3}{U}.
@@ -393,7 +395,8 @@ fn issue_misc13_rowdy_research_reduces_per_attacker_and_draws_three() {
     );
     let slot = hand_index_for_card(&e, 0, "rowdy_research");
     assert!(
-        e.apply_command(0, &cast_spell(slot, vec![])).is_err(),
+        e.apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .is_err(),
         "the spell is not castable without the reduction"
     );
     give_mana(
@@ -458,7 +461,7 @@ fn issue_misc13_eject_cannot_be_countered_and_bounces_a_nonland_permanent() {
     grant_pool(&mut bad, 0);
     let slot = hand_index_for_card(&bad, 0, "eject");
     assert!(
-        bad.apply_command(0, &cast_spell(slot, target_object(forest)))
+        bad.apply_scenario_command(0, &cast_spell(slot, target_object(forest)))
             .is_err(),
         "a land is not a nonland permanent"
     );

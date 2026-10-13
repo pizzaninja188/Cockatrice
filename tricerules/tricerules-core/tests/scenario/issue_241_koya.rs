@@ -1,5 +1,6 @@
 use super::helpers::*;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use crate::helpers::ScenarioCommandExt;
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ChooseTriggerTarget, ResolutionChoiceDecision, RuledCommand,
     SubmitResolutionChoice,
@@ -18,6 +19,7 @@ fn choose_trigger_targets(targets: Vec<TargetRef>) -> RuledCommand {
 fn select_payment_branch() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: 0,
             ..Default::default()
@@ -52,7 +54,7 @@ fn setup(seed: u64) -> (GameEngine, u32) {
     );
     let slot = hand_index_for_card(&engine, 0, "koya,_death_from_above");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Koya");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
@@ -73,7 +75,7 @@ fn koya_id(engine: &GameEngine) -> u32 {
 
 fn resolve_etb(engine: &mut GameEngine, targets: Vec<TargetRef>) {
     engine
-        .apply_command(0, &choose_trigger_targets(targets))
+        .apply_scenario_command(0, &choose_trigger_targets(targets))
         .expect("choose Koya ETB target");
     pass_both_players(engine);
 }
@@ -85,7 +87,7 @@ fn advance_to_next_end_step(engine: &mut GameEngine) {
         }
         let active = engine.state.active_player_id();
         engine
-            .apply_command(active, &primitive_yield())
+            .apply_scenario_command(active, &primitive_yield())
             .expect("advance toward end step");
     }
     assert_eq!(engine.state.turn_step, TurnStep::EndStep);
@@ -107,7 +109,7 @@ fn issue_241_zero_targets_creates_no_delayed_trigger_and_self_is_illegal() {
     let (mut illegal, _) = setup(241_002);
     let source = koya_id(&illegal);
     assert!(illegal
-        .apply_command(0, &choose_trigger_targets(target_object(source)))
+        .apply_scenario_command(0, &choose_trigger_targets(target_object(source)))
         .is_err());
     assert_eq!(illegal.state.pending_triggers.len(), 1);
 }
@@ -134,7 +136,7 @@ fn issue_241_declining_returns_the_exact_card_under_its_owner() {
 
     park_delayed_choice(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -162,7 +164,7 @@ fn issue_241_paying_leaves_the_card_exiled() {
         },
     );
     engine
-        .apply_command(0, &select_payment_branch())
+        .apply_scenario_command(0, &select_payment_branch())
         .expect("choose to pay");
     submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
         .expect("pay {3}{B}");
@@ -178,16 +180,16 @@ fn issue_241_declining_from_payment_rewinds_only_payment_time_mana() {
     let swamp = inject_permanent_on_battlefield(&mut engine, 0, "swamp");
     engine.state.players[0].mana_pool.colorless = 1;
     engine
-        .apply_command(0, &select_payment_branch())
+        .apply_scenario_command(0, &select_payment_branch())
         .expect("enter payment");
     engine
-        .apply_command(0, &activate_ability(swamp, 0, Vec::new()))
+        .apply_scenario_command(0, &activate_ability(swamp, 0, Vec::new()))
         .expect("tap Swamp during payment");
     assert!(engine.state.objects[&swamp].tapped);
     assert_eq!(engine.state.players[0].mana_pool.black, 1);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -224,7 +226,7 @@ fn issue_241_a_later_exile_incarnation_is_not_returned() {
 
     park_delayed_choice(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -242,7 +244,7 @@ fn issue_241_exiled_token_still_creates_the_delayed_payment_choice() {
 
     park_delayed_choice(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -257,7 +259,7 @@ fn issue_241_accepted_commands_replay_deterministically() {
         resolve_etb(&mut engine, target_object(target));
         park_delayed_choice(&mut engine);
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &submit_resolution_decision(ResolutionChoiceDecision::Decline),
             )

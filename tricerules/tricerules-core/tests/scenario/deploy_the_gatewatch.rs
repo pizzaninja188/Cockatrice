@@ -1,5 +1,6 @@
 //! Actual paid Deploy the Gatewatch and its private simultaneous entry contract.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ChoiceKind;
 
@@ -19,7 +20,7 @@ fn actual_deploy_random_bottom_varies_with_seed_without_reordering_untouched_suf
     for seed in 202_610_096..202_610_100 {
         let (mut engine, looked, suffix) = paid_look(seed, &MIXED);
         engine
-            .apply_command(0, &submit_resolution_choice(vec![looked[1], looked[3]]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![looked[1], looked[3]]))
             .unwrap();
         finish_entries(&mut engine);
         let library = engine.state.players[0]
@@ -70,8 +71,8 @@ fn actual_deploy_private_images_have_engine_eligibility_and_constant_waiting_wor
         for &oid in looked.iter().rev() {
             engine.state.players[0].library.push_front(oid);
         }
-        engine.apply_command(0, &pass()).unwrap();
-        let batch = engine.apply_command(1, &pass()).unwrap();
+        engine.apply_scenario_command(0, &pass()).unwrap();
+        let batch = engine.apply_scenario_command(1, &pass()).unwrap();
         let choice = find_resolution_choice(&batch).unwrap();
         assert_eq!(choice.candidate_object_ids, looked);
         assert_eq!(
@@ -127,7 +128,9 @@ fn actual_deploy_requires_two_white_mana_and_rejects_unaffordable_cast_atomicall
         },
     );
     let before = engine.diagnostic_snapshot().unwrap();
-    assert!(engine.apply_command(0, &cast_spell(index, vec![])).is_err());
+    assert!(engine
+        .apply_scenario_command(0, &cast_spell(index, vec![]))
+        .is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     give_mana(
         &mut engine,
@@ -137,7 +140,9 @@ fn actual_deploy_requires_two_white_mana_and_rejects_unaffordable_cast_atomicall
             ..Default::default()
         },
     );
-    engine.apply_command(0, &cast_spell(index, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(index, vec![]))
+        .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.white, 0);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 2);
 }
@@ -147,7 +152,7 @@ fn actual_deploy_is_not_a_library_search_and_does_not_fire_search_observers() {
     let (mut engine, looked, _) = paid_look(202_610_094, &MIXED);
     inject_permanent_on_battlefield(&mut engine, 1, "wan_shi_tong,_librarian");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![looked[1]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![looked[1]]))
         .unwrap();
     finish_entries(&mut engine);
     assert_eq!(engine.state.objects[&looked[1]].zone, Zone::Battlefield);
@@ -172,7 +177,7 @@ fn actual_deploy_twincast_copy_looks_at_its_controller_library_and_original_look
         .retain(|oid| *oid != copy_top);
     engine.state.players[1].library.push_front(copy_top);
     let original_library = engine.state.players[0].library.clone();
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     inject_card_into_hand(&mut engine, 1, "twincast");
     give_mana(
         &mut engine,
@@ -184,7 +189,7 @@ fn actual_deploy_twincast_copy_looks_at_its_controller_library_and_original_look
     );
     let slot = hand_index_for_card(&engine, 1, "twincast");
     engine
-        .apply_command(1, &cast_spell(slot, target_object(original)))
+        .apply_scenario_command(1, &cast_spell(slot, target_object(original)))
         .unwrap();
     pass_priority_round(&mut engine);
     let copy = engine.state.stack.last().unwrap();
@@ -195,7 +200,7 @@ fn actual_deploy_twincast_copy_looks_at_its_controller_library_and_original_look
     assert!(pending.presentation.candidates.contains(&copy_top));
     assert!(!pending.presentation.candidates.contains(&original_top));
     engine
-        .apply_command(1, &submit_resolution_choice(vec![copy_top]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![copy_top]))
         .unwrap();
     finish_entries(&mut engine);
     assert_eq!(engine.state.players[0].library, original_library);
@@ -208,7 +213,7 @@ fn actual_deploy_twincast_copy_looks_at_its_controller_library_and_original_look
     assert_eq!(pending.deciding_player, 0);
     assert!(pending.presentation.candidates.contains(&fresh));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![fresh]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![fresh]))
         .unwrap();
     finish_entries(&mut engine);
     assert_eq!(engine.state.objects[&fresh].zone, Zone::Battlefield);
@@ -231,7 +236,7 @@ fn finish_entries(engine: &mut GameEngine) -> Vec<tricerules_proto::ruled::v1::R
         };
         batches.push(
             engine
-                .apply_command(pending.deciding_player, &submit_resolution_choice(ids))
+                .apply_scenario_command(pending.deciding_player, &submit_resolution_choice(ids))
                 .unwrap(),
         );
     }
@@ -270,7 +275,7 @@ fn actual_deploy_zero_one_and_no_match_keep_suffix_and_bottom_the_full_rest() {
         );
         let generations = engine.state.zone_change_generation.clone();
         engine
-            .apply_command(0, &submit_resolution_choice(selected.clone()))
+            .apply_scenario_command(0, &submit_resolution_choice(selected.clone()))
             .unwrap();
         finish_entries(&mut engine);
         let library = engine.state.players[0]
@@ -319,8 +324,8 @@ fn actual_deploy_short_and_empty_library_complete_without_inventing_cards() {
         let looked = (0..count)
             .map(|_| inject_library_card(&mut engine, 0, "forest"))
             .collect::<Vec<_>>();
-        engine.apply_command(0, &pass()).unwrap();
-        let batch = engine.apply_command(1, &pass()).unwrap();
+        engine.apply_scenario_command(0, &pass()).unwrap();
+        let batch = engine.apply_scenario_command(1, &pass()).unwrap();
         if count == 0 {
             assert!(find_resolution_choice(&batch).is_none());
             assert!(engine.state.pending_resolution.is_none());
@@ -330,7 +335,7 @@ fn actual_deploy_short_and_empty_library_complete_without_inventing_cards() {
             assert_eq!(choice.candidate_selectable, vec![false; count]);
             assert_eq!((choice.min, choice.max), (0, 0));
             engine
-                .apply_command(0, &submit_resolution_choice(vec![]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![]))
                 .unwrap();
         }
         assert_eq!(engine.state.players[0].library.len(), count);
@@ -359,12 +364,12 @@ fn actual_deploy_wrong_actor_three_duplicates_nonplaneswalker_and_unrelated_are_
     ] {
         let before = engine.diagnostic_snapshot().unwrap();
         assert!(engine
-            .apply_command(actor, &submit_resolution_choice(ids))
+            .apply_scenario_command(actor, &submit_resolution_choice(ids))
             .is_err());
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     }
     engine
-        .apply_command(0, &submit_resolution_choice(vec![looked[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![looked[0]]))
         .unwrap();
     finish_entries(&mut engine);
     assert_eq!(engine.state.objects[&looked[0]].zone, Zone::Battlefield);
@@ -385,7 +390,7 @@ fn actual_deploy_stale_looked_top_owner_zone_generation_or_selected_type_is_atom
         }
         let before = engine.diagnostic_snapshot().unwrap();
         assert!(engine
-            .apply_command(0, &submit_resolution_choice(vec![looked[1]]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![looked[1]]))
             .is_err());
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
         assert_eq!(engine.state.objects[&looked[3]].zone, Zone::Library);
@@ -397,7 +402,7 @@ fn actual_deploy_stale_unselected_remainder_during_timestamp_is_rejected_before_
     for kind in 0..4 {
         let (mut engine, looked, _) = paid_look(202_610_086, &MIXED);
         engine
-            .apply_command(0, &submit_resolution_choice(vec![looked[1], looked[3]]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![looked[1], looked[3]]))
             .unwrap();
         match kind {
             0 => engine.state.players[0].library.swap(0, 2),
@@ -409,7 +414,7 @@ fn actual_deploy_stale_unselected_remainder_during_timestamp_is_rejected_before_
         }
         let before = engine.diagnostic_snapshot().unwrap();
         assert!(engine
-            .apply_command(0, &submit_resolution_choice(vec![looked[1], looked[3]]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![looked[1], looked[3]]))
             .is_err());
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
         for oid in [looked[1], looked[3]] {
@@ -425,7 +430,7 @@ fn actual_deploy_replacement_then_timestamp_keeps_whole_library_until_simultaneo
     inject_permanent_on_battlefield(&mut engine, 0, "orb_of_dreams");
     let original = engine.state.players[0].library.clone();
     engine
-        .apply_command(0, &submit_resolution_choice(vec![looked[1], looked[3]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![looked[1], looked[3]]))
         .unwrap();
     let mut replacement_count = 0;
     let mut timestamp_count = 0;
@@ -450,7 +455,7 @@ fn actual_deploy_replacement_then_timestamp_keeps_whole_library_until_simultaneo
             pending.presentation.candidates.clone()
         };
         let batch = engine
-            .apply_command(0, &submit_resolution_choice(ids))
+            .apply_scenario_command(0, &submit_resolution_choice(ids))
             .unwrap();
         bottom_count += batch.events.iter().filter(|event| matches!(&event.ev, Some(Ev::Log(log)) if log.text.contains("in a random order"))).count();
     }
@@ -478,7 +483,7 @@ fn actual_deploy_replacement_rejects_stale_remainder_and_concession_still_succee
     inject_permanent_on_battlefield(&mut engine, 0, "orb_of_dreams");
     inject_permanent_on_battlefield(&mut engine, 0, "orb_of_dreams");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![looked[1], looked[3]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![looked[1], looked[3]]))
         .unwrap();
     let application = engine
         .state
@@ -490,11 +495,11 @@ fn actual_deploy_replacement_rejects_stale_remainder_and_concession_still_succee
     engine.state.zone_change_generation.insert(looked[0], 1);
     let before = engine.diagnostic_snapshot().unwrap();
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![application]))
         .is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     let batch = engine
-        .apply_command(9, &concede())
+        .apply_scenario_command(9, &concede())
         .expect("concession bypasses stale-choice checks and safely abandons");
     assert!(engine.state.pending_resolution.is_none());
     assert!(looked
@@ -516,11 +521,14 @@ fn actual_deploy_three_player_caster_and_unrelated_departure_preserve_correct_wo
             }
             if stage != 0 {
                 engine
-                    .apply_command(0, &submit_resolution_choice(vec![looked[1], looked[3]]))
+                    .apply_scenario_command(
+                        0,
+                        &submit_resolution_choice(vec![looked[1], looked[3]]),
+                    )
                     .unwrap();
             }
             engine
-                .apply_command(if caster { 0 } else { 9 }, &concede())
+                .apply_scenario_command(if caster { 0 } else { 9 }, &concede())
                 .unwrap();
             if caster {
                 assert!(engine.state.pending_resolution.is_none());
@@ -533,7 +541,10 @@ fn actual_deploy_three_player_caster_and_unrelated_departure_preserve_correct_wo
             } else {
                 if stage == 0 {
                     engine
-                        .apply_command(0, &submit_resolution_choice(vec![looked[1], looked[3]]))
+                        .apply_scenario_command(
+                            0,
+                            &submit_resolution_choice(vec![looked[1], looked[3]]),
+                        )
                         .unwrap();
                 }
                 finish_entries(&mut engine);
@@ -560,10 +571,10 @@ fn actual_deploy_duplicate_names_are_distinct_entries_and_legend_choice_follows_
         ],
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![looked[0], looked[1]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![looked[0], looked[1]]))
         .unwrap();
     let done = engine
-        .apply_command(0, &submit_resolution_choice(vec![looked[0], looked[1]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![looked[0], looked[1]]))
         .unwrap();
     assert_eq!(
         engine
@@ -593,7 +604,7 @@ fn actual_deploy_duplicate_names_are_distinct_entries_and_legend_choice_follows_
     assert_eq!(engine.state.objects[&looked[0]].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&looked[1]].zone, Zone::Battlefield);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![looked[1]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![looked[1]]))
         .unwrap();
     assert_eq!(engine.state.objects[&looked[0]].zone, Zone::Graveyard);
     assert_eq!(engine.state.objects[&looked[1]].zone, Zone::Battlefield);
@@ -606,15 +617,15 @@ fn actual_deploy_logged_choices_replay_identically_without_random_order_logs() {
     assert_eq!(looked, same);
     let before = first.diagnostic_snapshot().unwrap();
     assert!(first
-        .apply_command(1, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![]))
         .is_err());
     assert_eq!(first.diagnostic_snapshot().unwrap(), before);
     for selected in [vec![looked[1], looked[3]], vec![looked[3], looked[1]]] {
         let a = first
-            .apply_command(0, &submit_resolution_choice(selected.clone()))
+            .apply_scenario_command(0, &submit_resolution_choice(selected.clone()))
             .unwrap();
         let b = second
-            .apply_command(0, &submit_resolution_choice(selected))
+            .apply_scenario_command(0, &submit_resolution_choice(selected))
             .unwrap();
         assert_eq!(a, b);
         for batch in [&a, &b] {
@@ -664,7 +675,9 @@ fn paid_stack(seed: u64, players: &[i32]) -> GameEngine {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &cast_spell(index, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(index, vec![]))
+        .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.white, 0);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     engine
@@ -684,11 +697,11 @@ fn paid_look_for(seed: u64, players: &[i32], cards: &[&str]) -> (GameEngine, Vec
     engine.state.players[0].library = looked.iter().chain(&suffix).copied().collect();
     for _ in 1..players.len() {
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     let batch = engine
-        .apply_command(engine.state.priority_player_id(), &pass())
+        .apply_scenario_command(engine.state.priority_player_id(), &pass())
         .unwrap();
     let choice = find_resolution_choice(&batch).expect("actual spell parks private look");
     assert_eq!(choice.choice_kind, ChoiceKind::LibraryLook as i32);
@@ -722,7 +735,7 @@ fn actual_deploy_paid_cast_selects_two_planeswalkers_then_random_bottoms_only_th
         ],
     );
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![looked[1], looked[3]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![looked[1], looked[3]]))
         .unwrap();
     let order =
         find_resolution_choice(&batch).expect("simultaneous entry order remains a logged choice");
@@ -739,7 +752,7 @@ fn actual_deploy_paid_cast_selects_two_planeswalkers_then_random_bottoms_only_th
         .iter()
         .all(|oid| engine.state.objects[oid].zone == Zone::Library));
     let done = engine
-        .apply_command(0, &submit_resolution_choice(vec![looked[3], looked[1]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![looked[3], looked[1]]))
         .unwrap();
     for oid in [looked[1], looked[3]] {
         assert_eq!(engine.state.objects[&oid].zone, Zone::Battlefield);

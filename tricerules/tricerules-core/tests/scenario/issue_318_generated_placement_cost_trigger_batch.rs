@@ -5,6 +5,7 @@
 //! CR 601.2f governs the target-matching cost reduction; CR 111.1/701.6 and 509.1b govern the 1/1
 //! black Rat token and its can't-block restriction; CR 611.2a/514.2 govern the until-end-of-turn
 //! flying grant and its expiry; CR 603.2/120.3 govern the self-damage draw trigger.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{Color, Keyword};
@@ -35,6 +36,7 @@ fn deck_engine(seed: u64, own: &[&str], opposing: &[&str]) -> GameEngine {
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -56,23 +58,23 @@ fn pool_total(engine: &GameEngine, player: usize) -> u32 {
 
 fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes in beginning of combat");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes in beginning of combat");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 }
 
 fn pass_to_declare_blockers(engine: &mut GameEngine) -> RuledEventBatch {
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes after declaring attackers");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes after attackers are declared")
 }
 
@@ -86,13 +88,13 @@ fn issue_318_misleading_motes_owner_chooses_top_or_bottom() {
         let slot = hand_index_for_card(&engine, 0, "misleading_motes");
 
         engine
-            .apply_command(0, &cast_spell(slot, target_object(bear)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
             .expect("cast Misleading Motes at the opposing bear");
         engine
-            .apply_command(0, &pass())
+            .apply_scenario_command(0, &pass())
             .expect("caster passes priority");
         let parked = engine
-            .apply_command(1, &pass())
+            .apply_scenario_command(1, &pass())
             .expect("opponent passes priority into resolution");
 
         let choice = find_resolution_choice(&parked).expect("owner placement choice");
@@ -118,11 +120,13 @@ fn issue_318_misleading_motes_owner_chooses_top_or_bottom() {
         assert_eq!(choice.resolution_branches[1].label, "Bottom");
 
         assert!(
-            engine.apply_command(0, &select_branch(branch)).is_err(),
+            engine
+                .apply_scenario_command(0, &select_branch(branch))
+                .is_err(),
             "only the owner may choose the placement"
         );
         let completion = engine
-            .apply_command(1, &select_branch(branch))
+            .apply_scenario_command(1, &select_branch(branch))
             .expect("the owner chooses top or bottom");
 
         assert_eq!(engine.state.objects[&bear].zone, Zone::Library);
@@ -165,7 +169,7 @@ fn issue_318_run_behind_reduces_only_for_an_attacking_target() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker, token_attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker, token_attacker]))
         .expect("attack with a creature and an attacking token");
 
     let slot = hand_index_for_card(&engine, 0, "run_behind");
@@ -200,23 +204,23 @@ fn issue_318_run_behind_reduces_only_for_an_attacking_target() {
     let index = engine.state.command_index;
     engine.state.players[0].mana_pool.blue = 1;
     engine.state.players[0].mana_pool.colorless = 1;
-    assert!(engine.apply_command(0, &command).is_err());
+    assert!(engine.apply_scenario_command(0, &command).is_err());
     assert_eq!(engine.state.command_index, index);
     engine.state.players[0].mana_pool.colorless = 2;
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("the attacking target reduces the cost to {2}{U}");
     assert_eq!(pool_total(&engine, 0), 0);
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("caster passes priority");
     let parked = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes priority into resolution");
     let choice = find_resolution_choice(&parked).expect("owner placement choice");
     assert_eq!(choice.deciding_player_id, 0);
     engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("the owner chooses top");
     assert_eq!(
         engine.state.players[0].library.front().copied(),
@@ -231,13 +235,13 @@ fn issue_318_run_behind_reduces_only_for_an_attacking_target() {
     let command = cast_spell(slot, target_object(tapped));
     let index = engine.state.command_index;
     assert!(
-        engine.apply_command(0, &command).is_err(),
+        engine.apply_scenario_command(0, &command).is_err(),
         "an unreduced Run Behind cannot be cast for {{2}}{{U}}"
     );
     assert_eq!(engine.state.command_index, index);
     engine.state.players[0].mana_pool.colorless = 3;
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("the full {3}{U} pays for a nonattacking target");
     assert_eq!(pool_total(&engine, 0), 0);
 }
@@ -267,7 +271,7 @@ fn issue_318_edgewall_pack_creates_a_blockless_rat_token() {
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("attack with the bear");
     pass_to_declare_blockers(&mut engine);
     let legal = &engine.initial_response_batch().legal_by_player[&1];
@@ -280,7 +284,7 @@ fn issue_318_edgewall_pack_creates_a_blockless_rat_token() {
     );
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &declare_blockers(vec![BlockPair {
                     attacker_id: attacker,
@@ -314,7 +318,7 @@ fn issue_318_stratosoarer_grants_flying_until_end_of_turn() {
         "the chosen creature is a legal target"
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -343,14 +347,14 @@ fn issue_318_thieving_otter_draws_for_combat_and_own_noncombat_damage() {
     let before = engine.state.players[0].hand.len();
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![otter]))
+        .apply_scenario_command(0, &declare_attackers(vec![otter]))
         .expect("attack with the Otter");
     pass_to_declare_blockers(&mut engine);
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes in declare blockers");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes into combat damage");
     assert_eq!(engine.state.players[1].life, 18, "the Otter deals two");
     resolve_entire_stack_two_player(&mut engine);
@@ -368,7 +372,7 @@ fn issue_318_thieving_otter_draws_for_combat_and_own_noncombat_damage() {
     let pinger = inject_creature_on_battlefield(&mut engine, 0, "prodigal_sorcerer");
     let before = engine.state.players[0].hand.len();
     engine
-        .apply_command(0, &activate_ability(pinger, 0, target_player(1)))
+        .apply_scenario_command(0, &activate_ability(pinger, 0, target_player(1)))
         .expect("ping the opponent with another creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -384,7 +388,7 @@ fn issue_318_thieving_otter_draws_for_combat_and_own_noncombat_damage() {
         .expect("pinger")
         .tapped = false;
     engine
-        .apply_command(0, &activate_ability(pinger, 0, target_player(1)))
+        .apply_scenario_command(0, &activate_ability(pinger, 0, target_player(1)))
         .expect("ping the opponent");
     engine
         .state
@@ -404,7 +408,7 @@ fn issue_318_thieving_otter_draws_for_combat_and_own_noncombat_damage() {
     pinger_object.tapped = false;
     pinger_object.card_id = "prodigal_sorcerer".into();
     engine
-        .apply_command(0, &activate_ability(pinger, 0, target_player(0)))
+        .apply_scenario_command(0, &activate_ability(pinger, 0, target_player(0)))
         .expect("ping its own controller");
     engine
         .state

@@ -7,6 +7,7 @@
 //! exclusion; CR 701.9/111.10a the private loot followed by the Treasure; CR 610.3 the artifact
 //! linked exile and its return; CR 404/401 the any-graveyard bottom move; and CR 603.6a/701.3 the
 //! Equipment landfall pump of the attached creature.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -98,7 +99,7 @@ fn issue_343_stingblade_assassin_destroys_only_a_damage_marked_opposing_creature
     );
     let slot = hand_index_for_card(&engine, 0, "stingblade_assassin");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Stingblade Assassin");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -110,13 +111,13 @@ fn issue_343_stingblade_assassin_destroys_only_a_damage_marked_opposing_creature
     for illegal in [undamaged, own] {
         assert!(
             engine
-                .apply_command(0, &choose_trigger_targets(&[illegal], false))
+                .apply_scenario_command(0, &choose_trigger_targets(&[illegal], false))
                 .is_err(),
             "an undamaged or own creature is not a legal target"
         );
     }
     engine
-        .apply_command(0, &choose_trigger_targets(&[marked], false))
+        .apply_scenario_command(0, &choose_trigger_targets(&[marked], false))
         .expect("target the damage-marked opposing creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&marked].zone, Zone::Graveyard);
@@ -140,7 +141,7 @@ fn issue_343_give_in_to_violence_pumps_lifelink_and_expires() {
     );
     let slot = hand_index_for_card(&engine, 0, "give_in_to_violence");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
         .expect("cast Give In to Violence");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.effective_power(bear), Some(4));
@@ -176,7 +177,7 @@ fn issue_343_toadstool_admirer_activation_pays_mana_and_adds_a_counter() {
     );
     assert!(
         engine
-            .apply_command(0, &activate_ability_for(&engine, oid, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability_for(&engine, oid, 0, vec![]))
             .is_err(),
         "{{3}}{{G}} is not payable with two mana"
     );
@@ -195,7 +196,7 @@ fn issue_343_toadstool_admirer_activation_pays_mana_and_adds_a_counter() {
         },
     );
     engine
-        .apply_command(0, &activate_ability_for(&engine, oid, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, oid, 0, vec![]))
         .expect("activate the {3}{G} counter ability");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -234,7 +235,7 @@ fn issue_343_lurking_lizards_counts_only_mana_value_four_or_greater() {
         give_mana(&mut engine, 0, gift);
         let slot = hand_index_for_card(&engine, 0, spell);
         engine
-            .apply_command(0, &cast_spell(slot, vec![]))
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
             .expect("cast the probe spell");
         resolve_entire_stack_two_player(&mut engine);
         assert_eq!(
@@ -262,13 +263,13 @@ fn issue_343_collectors_vault_loots_privately_then_creates_a_treasure() {
     );
 
     engine
-        .apply_command(0, &activate_ability_for(&engine, vault, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, vault, 0, vec![]))
         .expect("activate Collector's Vault");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes on the ability");
     let parked = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("the ability resolves to the discard choice");
 
     let choice = find_resolution_choice(&parked).expect("private discard choice");
@@ -290,7 +291,7 @@ fn issue_343_collectors_vault_loots_privately_then_creates_a_treasure() {
     assert!(choice.candidate_object_ids.contains(&known));
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![known]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![known]))
         .expect("discard the known card");
     assert!(engine.state.players[0].graveyard.contains(&known));
     assert_eq!(
@@ -332,20 +333,20 @@ fn issue_343_white_auracite_linked_exiles_until_it_leaves() {
     );
     let slot = hand_index_for_card(&engine, 0, "white_auracite");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast White Auracite");
     pass_both_players(&mut engine);
     assert_eq!(engine.state.pending_triggers.len(), 1);
     for illegal in [land, own] {
         assert!(
             engine
-                .apply_command(0, &choose_trigger_targets(&[illegal], false))
+                .apply_scenario_command(0, &choose_trigger_targets(&[illegal], false))
                 .is_err(),
             "a land or a permanent you control is not a legal target"
         );
     }
     engine
-        .apply_command(0, &choose_trigger_targets(&[victim], false))
+        .apply_scenario_command(0, &choose_trigger_targets(&[victim], false))
         .expect("exile the opposing nonland permanent");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&victim].zone, Zone::Exile);
@@ -362,11 +363,11 @@ fn issue_343_white_auracite_linked_exiles_until_it_leaves() {
         },
     );
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("P0 passes priority");
     let slot = hand_index_for_card(&engine, 1, "broken_wings");
     engine
-        .apply_command(1, &cast_spell(slot, target_object(auracite)))
+        .apply_scenario_command(1, &cast_spell(slot, target_object(auracite)))
         .expect("destroy White Auracite");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&auracite].zone, Zone::Graveyard);
@@ -397,7 +398,7 @@ fn issue_343_hoverstone_pilgrim_bottoms_a_card_from_any_graveyard() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&engine, pilgrim, 0, graveyard_target(opposing)),
         )
@@ -427,7 +428,7 @@ fn issue_343_adventuring_gear_landfall_pumps_the_equipped_creature() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_for(&engine, gear, 0, target_object(bear)),
         )
@@ -442,7 +443,7 @@ fn issue_343_adventuring_gear_landfall_pumps_the_equipped_creature() {
     ensure_in_hand(&mut engine, 0, "island");
     let slot = hand_index_for_card(&engine, 0, "island");
     engine
-        .apply_command(0, &play_land(slot))
+        .apply_scenario_command(0, &play_land(slot))
         .expect("play a land to trigger landfall");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(

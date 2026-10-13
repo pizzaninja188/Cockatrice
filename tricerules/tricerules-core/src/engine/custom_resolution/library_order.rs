@@ -214,6 +214,7 @@ impl GameEngine {
         ev.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
@@ -665,6 +666,7 @@ impl GameEngine {
         ev.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
@@ -792,6 +794,9 @@ mod into_the_wilds_tests {
                     matched_card_types: vec![CardTypeFilter::BasicLand],
                 });
             engine.state.pending_resolution = Some(PendingResolution {
+                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                resolution_prompt_semantics: None,
+
                 deciding_player: 0,
                 presentation: PendingResolutionPresentation {
                     source_object_id: 90_001,
@@ -1004,6 +1009,9 @@ mod into_the_wilds_tests {
                     matched_card_types: vec![CardTypeFilter::BasicLand],
                 });
             engine.state.pending_resolution = Some(PendingResolution {
+                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                resolution_prompt_semantics: None,
+
                 deciding_player: 0,
                 presentation: PendingResolutionPresentation {
                     source_object_id: 90_001,
@@ -1082,5 +1090,275 @@ mod into_the_wilds_tests {
                 matches!(&event.ev, Some(rv1::ruled_event::Ev::Log(log)) if log.text.contains("shuffles"))));
             assert!(engine.state.stack.is_empty());
         }
+    }
+
+    #[test]
+    fn prompt_ids_retain_only_same_offers_and_refresh_on_new_offer_or_incarnation_change() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            90_211,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let forest = library_card(&mut engine, "forest");
+        let stack = ParkedStackResolution::new(test_stack_item());
+        engine.state.pending_resolution = Some(PendingResolution {
+            deciding_player: 0,
+            presentation: PendingResolutionPresentation {
+                source_object_id: stack.item.id,
+                candidates: Vec::new(),
+                min: 0,
+                max: 0,
+                ordered: false,
+                unique_names: false,
+                prompt: "Choose zero or more cards.".into(),
+                choice_kind: custom::ChoiceKind::LibraryLook,
+            },
+            continuation: ResolutionContinuation::LibraryLook {
+                stack,
+                stage: PendingLibraryLookStage::IntoTheWilds,
+                candidates: Vec::new(),
+            },
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+        });
+
+        let make_events = |candidate_object_ids: Vec<ObjectId>, max: u32| {
+            vec![RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                    rv1::ResolutionChoiceRequired {
+                        deciding_player_id: 0,
+                        source_object_id: 90_001,
+                        prompt_text: "Choose zero or more cards.".into(),
+                        choice_kind: rv1::ChoiceKind::LibraryLook as i32,
+                        candidate_object_ids,
+                        min: 0,
+                        max,
+                        ..Default::default()
+                    },
+                )),
+            }]
+        };
+        let prompt_id = |events: &[RuledEvent]| match events[0].ev.as_ref().unwrap() {
+            rv1::ruled_event::Ev::ResolutionChoiceRequired(choice) => choice.resolution_prompt_id,
+            _ => unreachable!(),
+        };
+
+        let mut first_offer = make_events(Vec::new(), 0);
+        engine
+            .publish_resolution_prompt_ids(&mut first_offer)
+            .unwrap();
+        let first_id = prompt_id(&first_offer);
+        assert_ne!(first_id, 0);
+
+        let mut same_offer = make_events(Vec::new(), 0);
+        engine
+            .publish_resolution_prompt_ids(&mut same_offer)
+            .unwrap();
+        assert_eq!(prompt_id(&same_offer), first_id);
+
+        let pending = engine.state.pending_resolution.as_mut().unwrap();
+        pending.resolution_prompt_id = crate::state::ResolutionPromptId::UNASSIGNED;
+        pending.resolution_prompt_semantics = None;
+        let mut identical_new_offer = make_events(Vec::new(), 0);
+        engine
+            .publish_resolution_prompt_ids(&mut identical_new_offer)
+            .unwrap();
+        let second_id = prompt_id(&identical_new_offer);
+        assert!(
+            second_id > first_id,
+            "new identical prompt receives a fresh ID"
+        );
+
+        let candidate_generation = engine
+            .state
+            .zone_change_generation
+            .get(&forest)
+            .copied()
+            .unwrap_or(0);
+        let pending = engine.state.pending_resolution.as_mut().unwrap();
+        pending.presentation.candidates = vec![forest];
+        pending.presentation.max = 1;
+        let ResolutionContinuation::LibraryLook { candidates, .. } = &mut pending.continuation
+        else {
+            unreachable!()
+        };
+        *candidates = vec![(forest, candidate_generation)];
+        pending.resolution_prompt_id = crate::state::ResolutionPromptId::UNASSIGNED;
+        pending.resolution_prompt_semantics = None;
+
+        let mut candidate_offer = make_events(vec![forest], 1);
+        engine
+            .publish_resolution_prompt_ids(&mut candidate_offer)
+            .unwrap();
+        let candidate_id = prompt_id(&candidate_offer);
+        *engine
+            .state
+            .zone_change_generation
+            .entry(forest)
+            .or_default() += 1;
+        let mut changed_incarnation = make_events(vec![forest], 1);
+        engine
+            .publish_resolution_prompt_ids(&mut changed_incarnation)
+            .unwrap();
+        assert!(
+            prompt_id(&changed_incarnation) > candidate_id,
+            "a changed candidate incarnation receives a fresh ID"
+        );
+
+        engine.state.next_resolution_prompt_id.insert(0, u64::MAX);
+        *engine
+            .state
+            .zone_change_generation
+            .entry(forest)
+            .or_default() += 1;
+        let changed_state_before_publish = format!("{:?}", engine.state);
+        let mut overflow_offer = make_events(vec![forest], 1);
+        assert!(engine
+            .publish_resolution_prompt_ids(&mut overflow_offer)
+            .is_err());
+        assert_eq!(format!("{:?}", engine.state), changed_state_before_publish);
+    }
+
+    #[test]
+    fn retiring_a_transient_offer_preserves_its_public_reveal_payload() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            90_213,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .unwrap();
+        let reveal = rv1::CardsRevealed {
+            zone_owner_player_id: 1,
+            source_zone: rv1::ChoiceCandidateSourceZone::Hand as i32,
+            cards: vec![rv1::RevealedCard {
+                object_id: 12,
+                zone_change_generation: 3,
+                card_id: "island".into(),
+                card_name: "Island".into(),
+            }],
+            reveal_id: "event:7:2".into(),
+            source_object_id: 90_001,
+            source_description: "Transient public choice".into(),
+        };
+        let mut events = vec![RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 17,
+                    public_reveal: Some(reveal.clone()),
+                    ..Default::default()
+                },
+            )),
+        }];
+
+        engine
+            .publish_resolution_prompt_ids(&mut events)
+            .expect("a transient offer can be retired without an active continuation");
+
+        let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) = events[0].ev.as_ref()
+        else {
+            panic!("publisher preserves the transient choice event");
+        };
+        assert_eq!(choice.resolution_prompt_id, 0);
+        assert_eq!(choice.public_reveal.as_ref(), Some(&reveal));
+    }
+
+    #[test]
+    fn prompt_id_overflow_rolls_back_the_whole_resolving_command() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            90_212,
+            &[0, 1],
+            20,
+            Some(vec![
+                vec!["brainstorm".into(); 30],
+                vec!["forest".into(); 30],
+            ]),
+            true,
+        )
+        .unwrap();
+        for _ in 0..4 {
+            let player = engine.state.priority_player_id();
+            engine
+                .apply_scenario_command(
+                    player,
+                    &RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::PassPriority(
+                            rv1::PassPriority::default(),
+                        )),
+                    },
+                )
+                .unwrap();
+        }
+        assert_eq!(engine.state.turn_step, TurnStep::Main1);
+        assert_eq!(engine.state.active_player_id(), 0);
+        engine.state.players[0].mana_pool.blue = 1;
+        let spell_index = engine.state.players[0]
+            .hand
+            .iter()
+            .position(|object_id| engine.state.objects[object_id].card_id == "brainstorm")
+            .expect("Brainstorm in opening hand");
+        engine
+            .apply_scenario_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
+                        cast_method: rv1::CastMethod::Normal as i32,
+                        source: Some(rv1::CastSource {
+                            location: Some(rv1::cast_source::Location::HandIndex(
+                                spell_index as u32,
+                            )),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    })),
+                },
+            )
+            .expect("cast Brainstorm");
+        let first_pass = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(
+                first_pass,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(
+                        rv1::PassPriority::default(),
+                    )),
+                },
+            )
+            .expect("first player passes");
+        engine.state.next_resolution_prompt_id.insert(0, u64::MAX);
+
+        let resolving_player = engine.state.priority_player_id();
+        let before_rejected_resolution = format!("{:?}", engine.state);
+        let allocator_before_rejection = engine.state.next_resolution_prompt_id.clone();
+        let command_index_before_rejection = engine.state.command_index;
+        let error = engine
+            .apply_scenario_command(
+                resolving_player,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(
+                        rv1::PassPriority::default(),
+                    )),
+                },
+            )
+            .expect_err("the resolving offer cannot allocate beyond u64::MAX");
+        assert!(matches!(
+            error,
+            EngineError::ProgramInvariant("resolution prompt ID space exhausted")
+        ));
+        assert_eq!(format!("{:?}", engine.state), before_rejected_resolution);
+        assert_eq!(
+            engine.state.next_resolution_prompt_id,
+            allocator_before_rejection
+        );
+        assert_eq!(engine.state.command_index, command_index_before_rejection);
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.stack.len(), 1);
     }
 }

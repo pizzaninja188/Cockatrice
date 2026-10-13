@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
 #[test]
@@ -34,7 +35,8 @@ fn play_land_moves_card_from_hand_to_battlefield() {
     let hand_before = e.state.players[0].hand.len();
     let battlefield_before = e.state.players[0].battlefield.len();
 
-    e.apply_command(0, &play_land(0)).expect("play land");
+    e.apply_scenario_command(0, &play_land(0))
+        .expect("play land");
 
     assert_eq!(e.state.players[0].hand.len(), hand_before - 1);
     assert_eq!(e.state.players[0].battlefield.len(), battlefield_before + 1);
@@ -79,7 +81,7 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("play mountain");
 
     give_mana(
@@ -92,7 +94,7 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     let pushed = e
-        .apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt");
     let bolt_oid = e.state.stack.last().expect("spell on stack").id;
     let stack_push = pushed
@@ -111,8 +113,8 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
     // A non-X spell carries no X annotation (the client overlays nothing).
     assert!(stack_push.ability_annotation.is_empty());
 
-    e.apply_command(0, &pass()).expect("caster pass");
-    let resolved = e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    let resolved = e.apply_scenario_command(1, &pass()).expect("opponent pass");
     assert!(e.state.stack.is_empty());
     assert!(e.state.players[0].graveyard.contains(&bolt_oid));
     assert!(resolved.events.iter().any(|ev| {
@@ -154,7 +156,7 @@ fn blaze_deals_chosen_x_damage_to_target() {
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("play mountain");
     // {X}{R} with X=3 needs 4 mana; the {R} is paid red, the 3 generic from the rest.
     give_mana(
@@ -168,7 +170,7 @@ fn blaze_deals_chosen_x_damage_to_target() {
 
     let blaze_idx = hand_index_for_card(&e, 0, "blaze");
     let cast = e
-        .apply_command(0, &cast_spell_x(blaze_idx, target_player(1), 3))
+        .apply_scenario_command(0, &cast_spell_x(blaze_idx, target_player(1), 3))
         .expect("cast blaze with X=3");
     let blaze_oid = e.state.stack.last().expect("spell on stack").id;
     assert_eq!(e.state.stack.last().unwrap().chosen_x, 3);
@@ -188,8 +190,8 @@ fn blaze_deals_chosen_x_damage_to_target() {
         "spell carries its engine card id"
     );
 
-    e.apply_command(0, &pass()).expect("caster pass");
-    e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    e.apply_scenario_command(1, &pass()).expect("opponent pass");
     assert!(e.state.stack.is_empty());
     assert!(e.state.players[0].graveyard.contains(&blaze_oid));
     assert_eq!(e.state.players[1].life, 17, "X=3 dealt 3 damage");
@@ -222,7 +224,7 @@ fn blaze_x_zero_deals_no_damage() {
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("play mountain");
     give_mana(
         &mut e,
@@ -235,7 +237,7 @@ fn blaze_x_zero_deals_no_damage() {
 
     let blaze_idx = hand_index_for_card(&e, 0, "blaze");
     let cast = e
-        .apply_command(0, &cast_spell_x(blaze_idx, target_player(1), 0))
+        .apply_scenario_command(0, &cast_spell_x(blaze_idx, target_player(1), 0))
         .expect("cast blaze with X=0");
     // X=0 is still an X spell, so the stack card is annotated "X = 0".
     let blaze_push = cast
@@ -247,8 +249,8 @@ fn blaze_x_zero_deals_no_damage() {
         })
         .expect("blaze stack pushed");
     assert_eq!(blaze_push.ability_annotation, "X = 0");
-    e.apply_command(0, &pass()).expect("caster pass");
-    e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    e.apply_scenario_command(1, &pass()).expect("opponent pass");
     assert!(e.state.stack.is_empty());
     assert_eq!(e.state.players[1].life, 20, "X=0 dealt no damage");
 }
@@ -280,7 +282,7 @@ fn x_value_on_non_x_spell_rejected() {
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("play mountain");
     give_mana(
         &mut e,
@@ -292,7 +294,7 @@ fn x_value_on_non_x_spell_rejected() {
     );
 
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    let err = e.apply_command(0, &cast_spell_x(bolt_idx, target_player(1), 5));
+    let err = e.apply_scenario_command(0, &cast_spell_x(bolt_idx, target_player(1), 5));
     assert!(err.is_err(), "x_value on a non-X spell must be rejected");
     // The bolt stays in hand; nothing was paid or pushed.
     assert!(e.state.stack.is_empty());
@@ -331,7 +333,7 @@ fn casting_spell_keeps_priority_with_caster() {
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx))
+    e.apply_scenario_command(0, &play_land(mountain_idx))
         .expect("play mountain");
     give_mana(
         &mut e,
@@ -343,7 +345,7 @@ fn casting_spell_keeps_priority_with_caster() {
     );
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     let pushed = e
-        .apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt");
     assert!(
         priority_changes_in(&pushed).contains(&0),
@@ -385,7 +387,7 @@ fn caster_can_cast_second_spell_before_passing_priority() {
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_a = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_a))
+    e.apply_scenario_command(0, &play_land(mountain_a))
         .expect("play first mountain");
     // Seed a second untapped mountain to allow casting another bolt while holding priority.
     let mountain_b = hand_index_for_card(&e, 0, "mountain");
@@ -406,7 +408,7 @@ fn caster_can_cast_second_spell_before_passing_priority() {
         },
     );
     let bolt_one = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_one, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_one, target_player(1)))
         .expect("cast first bolt");
     assert_eq!(
         e.state.priority_player_id(),
@@ -423,7 +425,7 @@ fn caster_can_cast_second_spell_before_passing_priority() {
         },
     );
     let bolt_two = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_two, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(bolt_two, target_player(1)))
         .expect("cast second bolt while holding priority");
     assert_eq!(
         e.state.stack.len(),
@@ -445,11 +447,11 @@ fn nonactive_player_cannot_play_land_in_opponents_main() {
     )
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
-    e.apply_command(0, &pass()).expect("active passes");
+    e.apply_scenario_command(0, &pass()).expect("active passes");
     assert_eq!(e.state.priority_player_id(), 1);
     let forest_idx = hand_index_for_card(&e, 1, "forest");
     let err = e
-        .apply_command(1, &play_land(forest_idx))
+        .apply_scenario_command(1, &play_land(forest_idx))
         .expect_err("NAP cannot play land during AP main");
     assert!(
         err.to_string().contains("sorcery speed"),
@@ -500,7 +502,7 @@ fn can_cast_new_vanilla_creature_with_swamp() {
         .zone = tricerules_core::Zone::Battlefield;
 
     let swamp_to_play_idx = hand_index_for_card(&e, 0, "swamp");
-    e.apply_command(0, &play_land(swamp_to_play_idx))
+    e.apply_scenario_command(0, &play_land(swamp_to_play_idx))
         .expect("play second swamp");
 
     give_mana(
@@ -513,11 +515,11 @@ fn can_cast_new_vanilla_creature_with_swamp() {
         },
     );
     let corpse_idx = hand_index_for_card(&e, 0, "walking_corpse");
-    e.apply_command(0, &cast_spell(corpse_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(corpse_idx, vec![]))
         .expect("cast walking corpse");
     let corpse_oid = e.state.stack.first().expect("corpse on stack").id;
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_scenario_command(0, &pass()).expect("p0 pass");
+    e.apply_scenario_command(1, &pass()).expect("p1 pass");
 
     assert!(e.state.players[0].battlefield.contains(&corpse_oid));
 }
@@ -562,7 +564,7 @@ fn exploration_allows_second_land_per_turn() {
         },
     );
     let exp_idx = hand_index_for_card(&e, 0, "exploration");
-    e.apply_command(0, &cast_spell(exp_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(exp_idx, vec![]))
         .expect("cast exploration");
     resolve_entire_stack_two_player(&mut e);
     assert!(
@@ -577,19 +579,19 @@ fn exploration_allows_second_land_per_turn() {
 
     // First land: allowed normally.
     let f1 = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(f1))
+    e.apply_scenario_command(0, &play_land(f1))
         .expect("play first forest");
     assert_eq!(e.state.lands_played_this_turn, 1);
 
     // Second land: allowed because Exploration grants +1 land play.
     let f2 = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(f2))
+    e.apply_scenario_command(0, &play_land(f2))
         .expect("play second forest with Exploration");
     assert_eq!(e.state.lands_played_this_turn, 2);
 
     // Third land: rejected — max is 2 (1 base + 1 from Exploration).
     let f3 = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(f3))
+    e.apply_scenario_command(0, &play_land(f3))
         .expect_err("third land must be rejected even with Exploration");
 }
 
@@ -609,11 +611,11 @@ fn without_exploration_second_land_is_rejected() {
     advance_to_main1_from_game_start(&mut e);
 
     let f1 = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(f1))
+    e.apply_scenario_command(0, &play_land(f1))
         .expect("play first forest");
 
     let f2 = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(f2))
+    e.apply_scenario_command(0, &play_land(f2))
         .expect_err("second land without Exploration must be rejected");
 }
 
@@ -656,13 +658,13 @@ fn exploration_leaving_revokes_extra_land_play() {
         },
     );
     let exp_idx = hand_index_for_card(&e, 0, "exploration");
-    e.apply_command(0, &cast_spell(exp_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(exp_idx, vec![]))
         .expect("cast exploration");
     resolve_entire_stack_two_player(&mut e);
 
     // Play first land.
     let f1 = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(f1))
+    e.apply_scenario_command(0, &play_land(f1))
         .expect("play first forest");
     assert_eq!(e.state.lands_played_this_turn, 1);
 
@@ -677,7 +679,7 @@ fn exploration_leaving_revokes_extra_land_play() {
         },
     );
     let boom_idx = hand_index_for_card(&e, 0, "boomerang");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             boom_idx,
@@ -710,7 +712,7 @@ fn exploration_leaving_revokes_extra_land_play() {
 
     // Second land play is now rejected (max is 1 again).
     let f2 = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(f2))
+    e.apply_scenario_command(0, &play_land(f2))
         .expect_err("second land must be rejected after Exploration leaves");
 }
 
@@ -750,30 +752,30 @@ fn two_explorations_allow_three_lands_per_turn() {
         },
     );
     let exp1_idx = hand_index_for_card(&e, 0, "exploration");
-    e.apply_command(0, &cast_spell(exp1_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(exp1_idx, vec![]))
         .expect("cast first exploration");
     resolve_entire_stack_two_player(&mut e);
 
     let exp2_idx = hand_index_for_card(&e, 0, "exploration");
-    e.apply_command(0, &cast_spell(exp2_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(exp2_idx, vec![]))
         .expect("cast second exploration");
     resolve_entire_stack_two_player(&mut e);
 
     // Play three lands — all allowed.
     let f1 = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(f1))
+    e.apply_scenario_command(0, &play_land(f1))
         .expect("play land 1 of 3");
     let f2 = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(f2))
+    e.apply_scenario_command(0, &play_land(f2))
         .expect("play land 2 of 3");
     let f3 = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(f3))
+    e.apply_scenario_command(0, &play_land(f3))
         .expect("play land 3 of 3");
     assert_eq!(e.state.lands_played_this_turn, 3);
 
     // Fourth land is rejected (max is 3).
     let f4 = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(f4))
+    e.apply_scenario_command(0, &play_land(f4))
         .expect_err("fourth land must be rejected with two Explorations");
 }
 
@@ -809,7 +811,7 @@ fn noncreature_artifact_can_tap_the_turn_it_resolves() {
         },
     );
     let tome_idx = hand_index_for_card(&e, 0, "jayemdae_tome");
-    e.apply_command(0, &cast_spell(tome_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(tome_idx, vec![]))
         .expect("cast Jayemdae Tome");
     resolve_entire_stack_two_player(&mut e);
 
@@ -864,7 +866,7 @@ fn tap_ability_activatability_tracks_the_tap_cost() {
         },
     );
     let tome_idx = hand_index_for_card(&e, 0, "jayemdae_tome");
-    e.apply_command(0, &cast_spell(tome_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(tome_idx, vec![]))
         .expect("cast Jayemdae Tome");
     resolve_entire_stack_two_player(&mut e);
     let tome = battlefield_object_for_card(&e, 0, "jayemdae_tome");

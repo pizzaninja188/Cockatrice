@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::{
     cost_selection::Selection, ruled_command::Cmd, CostChoiceKind, CostObjectRef, CostObjectRefs,
@@ -23,13 +24,13 @@ fn waterbend_vinebender_all_mana_activation_adds_one_counter() {
     let source = relocate_to_battlefield(&mut engine, 0, "foggy_swamp_vinebender", false);
     engine.state.players[0].mana_pool.colorless = 5;
     engine
-        .apply_command(0, &activate_ability_with_costs(source, 0, vec![], vec![]))
+        .apply_scenario_command(0, &activate_ability_with_costs(source, 0, vec![], vec![]))
         .expect("Waterbend can be paid entirely with mana");
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert!(!engine.state.objects[&source].tapped);
     assert_eq!(engine.state.stack.len(), 1);
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     assert_eq!(engine.characteristics(source).unwrap().power, Some(5));
     assert_eq!(engine.state.stack.len(), 0);
 }
@@ -52,6 +53,7 @@ fn tap_selection(cost_index: u32, objects: &[(u32, u64)]) -> CostSelection {
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -90,7 +92,7 @@ fn waterbend_payload_cannot_be_silently_ignored_by_a_mana_ability() {
     };
     activation.payment = Some(rv1::PaymentSelection::default());
     let before = format!("{:?}", engine.state);
-    assert!(engine.apply_command(0, &command).is_err());
+    assert!(engine.apply_scenario_command(0, &command).is_err());
     assert_eq!(format!("{:?}", engine.state), before);
 }
 
@@ -131,7 +133,7 @@ fn waterbend_own_turn_timing_and_serialized_replay_ignore_preview_queries() {
         engine.state.active_player_idx = 1;
         let before = format!("{:?}", engine.state);
         assert!(engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(Cmd::ActivateAbility(command.clone()))
@@ -143,7 +145,7 @@ fn waterbend_own_turn_timing_and_serialized_replay_ignore_preview_queries() {
         engine.state.turn_step = tricerules_core::TurnStep::BeginCombat;
         if previews {
             for _ in 0..3 {
-                let response = engine.preview_payment(
+                let response = engine.preview_payment_scenario(
                     0,
                     &rv1::PreviewPayment {
                         activate_ability: Some(command.clone()),
@@ -160,9 +162,9 @@ fn waterbend_own_turn_timing_and_serialized_replay_ignore_preview_queries() {
         .encode_to_vec();
         let replayed = RuledCommand::decode(encoded.as_slice()).unwrap();
         let batches = vec![
-            engine.apply_command(0, &replayed).unwrap(),
-            engine.apply_command(0, &pass()).unwrap(),
-            engine.apply_command(1, &pass()).unwrap(),
+            engine.apply_scenario_command(0, &replayed).unwrap(),
+            engine.apply_scenario_command(0, &pass()).unwrap(),
+            engine.apply_scenario_command(1, &pass()).unwrap(),
         ];
         assert_eq!(engine.characteristics(source).unwrap().power, Some(5));
         // Debug maps are not ordered; compare stable public batches and the serialized command.
@@ -194,12 +196,14 @@ fn waterbend_lesson_draws_before_payment_and_resumes_once() {
         ensure_in_hand(&mut engine, 0, "waterbending_lesson");
         engine.state.players[0].mana_pool.blue = 4;
         let slot = hand_index_for_card(&engine, 0, "waterbending_lesson");
-        engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+        engine
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .unwrap();
         let before_draw = engine.state.players[0].hand.len();
-        engine.apply_command(0, &pass()).unwrap();
-        engine.apply_command(1, &pass()).unwrap();
+        engine.apply_scenario_command(0, &pass()).unwrap();
+        engine.apply_scenario_command(1, &pass()).unwrap();
         assert_eq!(engine.state.players[0].hand.len(), before_draw + 3);
-        engine.apply_command(0, &select_branch(0)).unwrap();
+        engine.apply_scenario_command(0, &select_branch(0)).unwrap();
         assert!(
             engine
                 .state
@@ -213,6 +217,7 @@ fn waterbend_lesson_draws_before_payment_and_resumes_once() {
         );
         engine.state.players[0].mana_pool.blue = 2;
         let mut answer = rv1::SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: rv1::ResolutionChoiceDecision::PayMana as i32,
             payment: Some(rv1::PaymentSelection {
                 waterbend: objects[..taps]
@@ -228,7 +233,7 @@ fn waterbend_lesson_draws_before_payment_and_resumes_once() {
             ..Default::default()
         };
         let before = format!("{:?}", engine.state);
-        let preview = engine.preview_payment(
+        let preview = engine.preview_payment_scenario(
             0,
             &rv1::PreviewPayment {
                 resolution_choice: Some(answer.clone()),
@@ -241,7 +246,7 @@ fn waterbend_lesson_draws_before_payment_and_resumes_once() {
         let mut stale = answer.clone();
         stale.payment.as_mut().unwrap().expected_state_revision += 1;
         assert!(engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &RuledCommand {
                     cmd: Some(Cmd::SubmitResolutionChoice(stale))
@@ -256,11 +261,11 @@ fn waterbend_lesson_draws_before_payment_and_resumes_once() {
         let command = RuledCommand {
             cmd: Some(Cmd::SubmitResolutionChoice(answer)),
         };
-        engine.apply_command(0, &command).unwrap();
+        engine.apply_scenario_command(0, &command).unwrap();
         assert_eq!(engine.state.players[0].hand.len(), before_draw + 3);
         assert!(engine.state.pending_resolution.is_none());
         assert!(engine.state.stack.is_empty());
-        assert!(engine.apply_command(0, &command).is_err());
+        assert!(engine.apply_scenario_command(0, &command).is_err());
     }
 }
 
@@ -283,23 +288,26 @@ fn waterbend_lesson_decline_restores_branch_without_drawing_again() {
     ensure_in_hand(&mut engine, 0, "waterbending_lesson");
     engine.state.players[0].mana_pool.blue = 4;
     let slot = hand_index_for_card(&engine, 0, "waterbending_lesson");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
-    let before_draw = engine.state.players[0].hand.len();
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap();
-    engine.apply_command(0, &select_branch(0)).unwrap();
     engine
-        .apply_command(0, &activate_ability_with_costs(island, 0, vec![], vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
+    let before_draw = engine.state.players[0].hand.len();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &select_branch(0)).unwrap();
+    engine
+        .apply_scenario_command(0, &activate_ability_with_costs(island, 0, vec![], vec![]))
         .unwrap();
     assert!(engine.state.objects[&island].tapped);
     assert_eq!(engine.state.players[0].mana_pool.blue, 1);
     let decline = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(rv1::SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: rv1::ResolutionChoiceDecision::Decline as i32,
             ..Default::default()
         })),
     };
-    let branch = engine.apply_command(0, &decline).unwrap();
+    let branch = engine.apply_scenario_command(0, &decline).unwrap();
     let branch = find_resolution_choice(&branch).unwrap();
     assert_eq!(branch.choice_kind(), rv1::ChoiceKind::ResolutionBranch);
     assert_eq!(branch.resolution_branches.len(), 2);
@@ -320,12 +328,12 @@ fn waterbend_lesson_decline_restores_branch_without_drawing_again() {
     assert!(!engine.state.objects[&island].tapped);
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);
     assert_eq!(engine.state.players[0].hand.len(), before_draw + 3);
-    let discard = engine.apply_command(0, &select_branch(1)).unwrap();
+    let discard = engine.apply_scenario_command(0, &select_branch(1)).unwrap();
     let choice = find_resolution_choice(&discard).unwrap();
     assert_eq!(choice.choice_kind(), rv1::ChoiceKind::HandCards);
     let chosen = choice.candidate_object_ids[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))
         .unwrap();
     assert_eq!(engine.state.players[0].hand.len(), before_draw + 2);
     assert!(engine.state.pending_resolution.is_none());
@@ -374,7 +382,7 @@ fn waterbend_preview_and_commit_share_exact_mixed_payment_and_reject_stale_input
             ..Default::default()
         };
         let before = format!("{:?}", engine.state);
-        let preview = engine.preview_payment(
+        let preview = engine.preview_payment_scenario(
             0,
             &rv1::PreviewPayment {
                 activate_ability: Some(activation.clone()),
@@ -419,7 +427,7 @@ fn waterbend_preview_and_commit_share_exact_mixed_payment_and_reject_stale_input
                 }
             }
             assert!(engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &RuledCommand {
                         cmd: Some(Cmd::ActivateAbility(invalid))
@@ -428,7 +436,7 @@ fn waterbend_preview_and_commit_share_exact_mixed_payment_and_reject_stale_input
                 .is_err());
             assert_eq!(format!("{:?}", engine.state), before);
         }
-        engine.apply_command(0, &valid).unwrap();
+        engine.apply_scenario_command(0, &valid).unwrap();
         for (index, oid) in objects.into_iter().enumerate() {
             assert_eq!(engine.state.objects[&oid].tapped, index < tap_count);
         }
@@ -438,8 +446,8 @@ fn waterbend_preview_and_commit_share_exact_mixed_payment_and_reject_stale_input
         );
         assert!(!engine.state.objects[&opponent].tapped);
         assert_eq!(engine.state.stack.len(), 1);
-        engine.apply_command(0, &pass()).unwrap();
-        engine.apply_command(1, &pass()).unwrap();
+        engine.apply_scenario_command(0, &pass()).unwrap();
+        engine.apply_scenario_command(1, &pass()).unwrap();
         assert_eq!(engine.characteristics(source).unwrap().power, Some(5));
     }
 }
@@ -486,7 +494,7 @@ fn gene_pollinator_publishes_and_atomically_pays_another_untapped_permanent() {
     assert_eq!(candidate.zone_change_generation, generation);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 gene,
@@ -538,7 +546,7 @@ fn stale_or_duplicate_tap_selection_rejects_without_partial_taps() {
         vec![tap_selection(1, &[(bear, generation + 1)])],
     );
     engine
-        .apply_command(0, &stale)
+        .apply_scenario_command(0, &stale)
         .expect_err("stale generation must fail");
     assert!(!engine.state.objects[&gene].tapped);
     assert!(!engine.state.objects[&bear].tapped);
@@ -550,7 +558,7 @@ fn stale_or_duplicate_tap_selection_rejects_without_partial_taps() {
         vec![tap_selection(1, &[(bear, generation), (bear, generation)])],
     );
     engine
-        .apply_command(0, &duplicate)
+        .apply_scenario_command(0, &duplicate)
         .expect_err("duplicate object must fail");
     assert!(!engine.state.objects[&gene].tapped);
     assert!(!engine.state.objects[&bear].tapped);
@@ -582,15 +590,23 @@ fn gravelgill_scoundrel_uses_a_private_generation_bound_resolution_payment() {
         .summoning_sick = false;
     engine.state.objects.get_mut(&bear).unwrap().summoning_sick = true;
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
-    engine.apply_command(0, &pass()).expect("attacker passes");
-    engine.apply_command(1, &pass()).expect("defender passes");
     engine
-        .apply_command(0, &declare_attackers(vec![scoundrel]))
+        .apply_scenario_command(0, &pass())
+        .expect("attacker passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("defender passes");
+    engine
+        .apply_scenario_command(0, &declare_attackers(vec![scoundrel]))
         .expect("attack and stage trigger");
-    engine.apply_command(0, &pass()).expect("attacker passes");
-    let branch_batch = engine.apply_command(1, &pass()).expect("trigger resolves");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("attacker passes");
+    let branch_batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("trigger resolves");
     let branch = find_resolution_choice(&branch_batch).expect("resolution branch");
     assert_eq!(
         branch.choice_kind(),
@@ -598,7 +614,7 @@ fn gravelgill_scoundrel_uses_a_private_generation_bound_resolution_payment() {
     );
 
     let payment_batch = engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("select tap-payment branch");
     let payment = find_resolution_choice(&payment_batch).expect("tap payment");
     assert_eq!(
@@ -611,7 +627,7 @@ fn gravelgill_scoundrel_uses_a_private_generation_bound_resolution_payment() {
     assert!(payment.prompt_text.contains("or decline"));
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![bear]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![bear]))
         .expect("tap the other creature and resume");
     assert!(engine.state.objects[&bear].tapped);
     assert!(
@@ -642,22 +658,26 @@ fn command_bridge_taps_a_physical_permanent_or_sacrifices_itself() {
     let slot = hand_index_for_card(&engine, 0, "command_bridge");
     let bridge = engine.state.players[0].hand[slot];
     engine
-        .apply_command(0, &play_land(slot))
+        .apply_scenario_command(0, &play_land(slot))
         .expect("play Command Bridge");
     assert!(engine.state.objects[&bridge].tapped);
-    engine.apply_command(0, &pass()).expect("controller passes");
-    let branch_batch = engine.apply_command(1, &pass()).expect("ETB resolves");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
+    let branch_batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("ETB resolves");
     let branch = find_resolution_choice(&branch_batch).expect("tap or sacrifice branch");
     assert_eq!(branch.resolution_branches.len(), 2);
     let payment_batch = engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("choose tap payment");
     let payment = find_resolution_choice(&payment_batch).expect("tap candidate prompt");
     assert_eq!(payment.candidate_object_ids, [bear]);
     assert_eq!(payment.min, 1);
     assert!(!payment.prompt_text.contains("decline"));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![bear]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![bear]))
         .expect("tap creature");
     assert!(engine.state.objects[&bear].tapped);
     assert_eq!(
@@ -683,13 +703,13 @@ fn command_bridge_taps_a_physical_permanent_or_sacrifices_itself() {
     let slot = hand_index_for_card(&fallback, 0, "command_bridge");
     let bridge = fallback.state.players[0].hand[slot];
     fallback
-        .apply_command(0, &play_land(slot))
+        .apply_scenario_command(0, &play_land(slot))
         .expect("play Command Bridge");
     fallback
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("controller passes");
     fallback
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("fallback sacrifices Bridge");
     assert_eq!(
         fallback.state.objects[&bridge].zone,
@@ -719,23 +739,25 @@ fn untapped_command_bridge_can_pay_for_itself_or_remain_untapped() {
         let slot = hand_index_for_card(&engine, 0, "command_bridge");
         let bridge = engine.state.players[0].hand[slot];
         engine
-            .apply_command(0, &play_land(slot))
+            .apply_scenario_command(0, &play_land(slot))
             .expect("play Bridge");
         // Model an untap before the entry trigger resolves. Its text does not say "another".
         engine.state.objects.get_mut(&bridge).unwrap().tapped = false;
-        engine.apply_command(0, &pass()).expect("controller passes");
         engine
-            .apply_command(1, &pass())
+            .apply_scenario_command(0, &pass())
+            .expect("controller passes");
+        engine
+            .apply_scenario_command(1, &pass())
             .expect("entry trigger resolves");
         let payment_batch = engine
-            .apply_command(0, &select_branch(0))
+            .apply_scenario_command(0, &select_branch(0))
             .expect("tap branch");
         let payment = find_resolution_choice(&payment_batch).expect("payment choice");
         assert!(payment.candidate_object_ids.contains(&bridge));
         assert!(payment.candidate_object_ids.contains(&bear));
         let chosen = if choose_bridge { bridge } else { bear };
         engine
-            .apply_command(0, &submit_resolution_choice(vec![chosen]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))
             .expect("pay only the chosen tap cost");
         assert_eq!(
             engine.state.objects[&bridge].zone,

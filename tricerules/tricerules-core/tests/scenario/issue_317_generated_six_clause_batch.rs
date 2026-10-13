@@ -6,6 +6,7 @@
 //! graveyard-card target groups; CR 508.1/603.2 govern attack triggers; CR 509.1b/208 govern the
 //! power-bounded blocking restriction; CR 601.2h/605 govern the tap-creature mana cost and mana
 //! ability resolution; CR 608.2c-f govern printed-order spell instructions.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::AbilitySourceZone;
@@ -56,23 +57,23 @@ fn object_cost_selection(cost_index: u32, engine: &GameEngine, object_id: u32) -
 
 fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes in beginning of combat");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes in beginning of combat");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 }
 
 fn pass_to_declare_blockers(engine: &mut GameEngine) -> RuledEventBatch {
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes after declaring attackers");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes after attackers are declared")
 }
 
@@ -103,7 +104,7 @@ fn issue_317_careening_mine_cart_creates_one_treasure_only_for_its_own_attack() 
     };
     activation.cost_selections = vec![object_cost_selection(0, &engine, crewmate)];
     engine
-        .apply_command(0, &crew)
+        .apply_scenario_command(0, &crew)
         .expect("crew the Vehicle with the untapped bear");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.characteristics(cart).unwrap().is_creature());
@@ -111,7 +112,7 @@ fn issue_317_careening_mine_cart_creates_one_treasure_only_for_its_own_attack() 
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker, cart]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker, cart]))
         .expect("attack with the crewing Vehicle and the bear");
     assert!(
         battlefield_token_oids(&engine, 0, "treasure").is_empty(),
@@ -157,14 +158,14 @@ fn issue_317_fight_on_returns_up_to_two_own_creature_cards() {
     for illegal in [noncreature, opposing] {
         assert!(
             engine
-                .apply_command(0, &cast_spell(slot, vec![graveyard_target(illegal)]))
+                .apply_scenario_command(0, &cast_spell(slot, vec![graveyard_target(illegal)]))
                 .is_err(),
             "a noncreature or opposing-graveyard card is not a legal target"
         );
     }
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &cast_spell(
                     slot,
@@ -180,7 +181,7 @@ fn issue_317_fight_on_returns_up_to_two_own_creature_cards() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 slot,
@@ -201,7 +202,7 @@ fn issue_317_fight_on_returns_up_to_two_own_creature_cards() {
     grant_pool(&mut decline, 0);
     let slot = hand_index_for_card(&decline, 0, "fight_on!");
     decline
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("decline every optional target");
     resolve_entire_stack_two_player(&mut decline);
     assert_eq!(decline.state.objects[&untouched].zone, Zone::Graveyard);
@@ -250,7 +251,7 @@ fn issue_317_springleaf_drum_requires_an_untapped_creature_you_control() {
     activation.cost_selections = vec![object_cost_selection(1, &engine, own)];
     activation.mana_option_index = 2; // black
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("tap the creature for one black mana");
     assert!(engine.state.objects[&drum].tapped);
     assert!(engine.state.objects[&own].tapped);
@@ -273,7 +274,7 @@ fn issue_317_stormkeld_vanguard_is_unblockable_only_by_small_creatures() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![vanguard, attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![vanguard, attacker]))
         .expect("attack with the Vanguard and an ordinary creature");
     let legal = pass_to_declare_blockers(&mut engine);
     let pairs = &legal.legal_by_player[&1].legal_block_pairs;
@@ -301,7 +302,7 @@ fn issue_317_stormkeld_vanguard_is_unblockable_only_by_small_creatures() {
 
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &declare_blockers(vec![BlockPair {
                     attacker_id: vanguard,
@@ -312,7 +313,7 @@ fn issue_317_stormkeld_vanguard_is_unblockable_only_by_small_creatures() {
         "a declared power-2 block is rejected"
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![
                 BlockPair {
@@ -336,7 +337,7 @@ fn issue_317_cunning_maneuver_pumps_then_creates_a_functional_clue() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "cunning_maneuver");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast at the bear");
     assert_eq!(
         engine.effective_power(target),
@@ -418,7 +419,7 @@ fn issue_317_project_deathlok_soldier_activates_only_from_the_graveyard() {
         })),
     };
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("activate from the graveyard");
     assert_eq!(
         pool_total(&engine, 0),

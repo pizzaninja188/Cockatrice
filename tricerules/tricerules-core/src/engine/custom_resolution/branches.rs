@@ -3,6 +3,14 @@ use super::*;
 
 impl GameEngine {
     pub(in crate::engine) fn resolution_payment_choice_event(&self) -> Option<rv1::RuledEvent> {
+        if self
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .is_some_and(|pending| pending.resolution_time_offer)
+        {
+            return None;
+        }
         if let Some(pending) = self.state.pending_resolution.as_ref() {
             if let ResolutionContinuation::SpecialCast {
                 exiled, face_index, ..
@@ -34,6 +42,7 @@ impl GameEngine {
                 return Some(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            resolution_prompt_id: pending.resolution_prompt_id.get(),
                             candidate_player_ids: Vec::new(),
                             deciding_player_id: pending.deciding_player,
                             source_object_id: pending.presentation.source_object_id,
@@ -57,6 +66,7 @@ impl GameEngine {
         Some(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: pending.resolution_prompt_id.get(),
                     accepted_permanent_selections: Vec::new(),
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
@@ -543,6 +553,7 @@ impl GameEngine {
                 ev.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            resolution_prompt_id: 0,
                             accepted_permanent_selections: Vec::new(),
                             variable_mana_contribution: false,
                             candidate_token_identities: Vec::new(),

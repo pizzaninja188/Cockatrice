@@ -436,9 +436,77 @@ void RuledClientState::teardownPendingChoice()
 
 void RuledClientState::setPendingChoice(RuledPendingChoice choice)
 {
-    if (!(pendingAbilityActivation && pendingAbilityActivation->stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT) &&
-        !(isResolutionPaymentActive() && choice.kind == ChoiceKind::ResolutionPayment &&
-          choice.paymentSourceOid == pendingChoice->paymentSourceOid))
+    const bool isResolutionChoice = choice.kind != ChoiceKind::TriggerTarget && choice.kind != ChoiceKind::TriggerMode &&
+                                    choice.kind != ChoiceKind::TriggerOrder;
+    if (isResolutionChoice && resolutionPromptSnapshotValid && resolutionPromptActive && resolutionPromptId != 0 &&
+        resolutionPromptDeciderPlayerId == host->localPlayerId()) {
+        choice.resolutionPromptId = resolutionPromptId;
+        choice.resolutionPromptSemantics = resolutionPromptSemantics;
+    }
+    const bool sameResolutionOffer = pendingChoice.has_value() && choice.resolutionPromptId != 0 &&
+                                     pendingChoice->resolutionPromptId == choice.resolutionPromptId &&
+                                     pendingChoice->resolutionPromptSemantics == choice.resolutionPromptSemantics;
+    const bool abilityPaymentInProgress = pendingAbilityActivation &&
+                                          pendingAbilityActivation->stage() ==
+                                              ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT;
+    if (sameResolutionOffer) {
+        const auto &previous = *pendingChoice;
+        if (choice.kind == previous.kind) {
+            if (choice.kind == ChoiceKind::ResolutionPick) {
+                QList<int> rebasedSelections;
+                bool canRebase = true;
+                for (const int previousServerId : previous.selectedServerCardIds) {
+                    const auto previousOid = previous.serverCardIdToOid.constFind(previousServerId);
+                    if (previousOid == previous.serverCardIdToOid.cend()) {
+                        canRebase = false;
+                        break;
+                    }
+                    int replacementServerId = -1;
+                    for (auto candidate = choice.serverCardIdToOid.cbegin(); candidate != choice.serverCardIdToOid.cend();
+                         ++candidate) {
+                        if (candidate.value() != previousOid.value())
+                            continue;
+                        if (replacementServerId >= 0) {
+                            canRebase = false;
+                            break;
+                        }
+                        replacementServerId = candidate.key();
+                    }
+                    if (!canRebase || replacementServerId < 0 ||
+                        (choice.hasSelectableRestriction && !choice.selectableServerCardIds.contains(replacementServerId))) {
+                        canRebase = false;
+                        break;
+                    }
+                    rebasedSelections.append(replacementServerId);
+                }
+                if (canRebase && rebasedSelections.size() <= choice.max)
+                    choice.selectedServerCardIds = std::move(rebasedSelections);
+            } else if (choice.kind == ChoiceKind::PermanentChoice || choice.kind == ChoiceKind::CostObjects ||
+                       choice.kind == ChoiceKind::Proliferate) {
+                for (const quint32 oid : previous.selectedObjectOids) {
+                    if (choice.candidateOids.contains(oid))
+                        choice.selectedObjectOids.append(oid);
+                }
+                for (const quint32 playerId : previous.selectedPlayerIds) {
+                    if (choice.candidatePlayerIds.contains(playerId))
+                        choice.selectedPlayerIds.append(playerId);
+                }
+                choice.permanentChoiceSubmitting = previous.permanentChoiceSubmitting;
+            } else if (choice.kind == ChoiceKind::ReplacementEffect) {
+                choice.replacementSubmitting = previous.replacementSubmitting;
+            }
+        }
+        // The engine has re-published the same semantic offer. Keep the picker and async
+        // callbacks bound to this occurrence, while refreshing its transient server handles.
+        pendingChoice = std::move(choice);
+        if (pendingChoice->kind == ChoiceKind::CostObjects || pendingChoice->kind == ChoiceKind::Proliferate ||
+            hasPermanentChoiceCohort()) {
+            emit resolutionCostSelectionChanged();
+            emit combatStateChanged();
+        }
+        return;
+    }
+    if (!abilityPaymentInProgress)
         payment.clear();
     teardownPendingChoice();
     if (choice.kind == ChoiceKind::TriggerTarget && choice.selectedTriggerTargetsByGroup.isEmpty()) {
@@ -458,6 +526,30 @@ void RuledClientState::setPendingChoice(RuledPendingChoice choice)
 void RuledClientState::clearPendingChoice()
 {
     teardownPendingChoice();
+}
+
+void RuledClientState::clearResolutionPromptStaging()
+{
+    const quint64 previousRevision = pendingChoiceRevision;
+    if (pendingChoice.has_value() && pendingChoice->resolutionPromptId != 0)
+        clearPendingChoice();
+    // A submitted choice has already emptied the holder, but its asynchronous ACK is still tied
+    // to this prompt. Retiring the prompt must expire that callback even when there is no holder
+    // left to tear down.
+    if (pendingChoiceRevision == previousRevision)
+        ++pendingChoiceRevision;
+    const bool paymentOwnedByAbilityActivation = pendingAbilityActivation &&
+                                                 pendingAbilityActivation->stage() ==
+                                                     ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT;
+    if (!paymentOwnedByAbilityActivation) {
+        payment.takeAllOptimisticManaCounterIds();
+        payment.clear();
+    }
+    emit resolutionHandPickUiChanged(-1, -1);
+    emit resolutionPaymentUiChanged(false);
+    emit replacementEffectUiChanged();
+    emit resolutionCostSelectionChanged();
+    emit combatStateChanged();
 }
 
 void RuledClientState::revokeLocalActionAuthority()
@@ -507,9 +599,14 @@ void RuledClientState::submitReplacementEffect(int tileIndex, quint64 choiceRevi
     if (!hasPendingReplacementEffect() || pendingChoiceRevision != choiceRevision ||
         pendingChoice->replacementSubmitting || tileIndex < 0 || tileIndex >= pendingChoice->replacementOptions.size())
         return;
+    const quint64 promptId = pendingChoice->resolutionPromptId;
+    if (!isCurrentResolutionPrompt(promptId))
+        return;
     ruled::v1::RuledCommand command;
-    command.mutable_submit_resolution_choice()->add_chosen_object_ids(
-        pendingChoice->replacementOptions.at(tileIndex).application_id());
+    auto *submission = command.mutable_submit_resolution_choice();
+    submission->add_chosen_object_ids(pendingChoice->replacementOptions.at(tileIndex).application_id());
+    if (!stampCurrentResolutionPrompt(submission, promptId))
+        return;
     pendingChoice->replacementSubmitting = true;
     emit replacementEffectUiChanged();
     host->sendRuledCommandExpectingAck(command, [self = QPointer<RuledClientState>(this),
@@ -522,12 +619,24 @@ void RuledClientState::submitReplacementEffect(int tileIndex, quint64 choiceRevi
     });
 }
 
+bool RuledClientState::stampCurrentResolutionPrompt(ruled::v1::SubmitResolutionChoice *submission,
+                                                     quint64 promptId) const
+{
+    if (!submission || !isCurrentResolutionPrompt(promptId))
+        return false;
+    submission->set_resolution_prompt_id(promptId);
+    return true;
+}
+
 void RuledClientState::sendResolutionChoice(const QVector<quint32> &chosenOids,
                                             ruled::v1::ResolutionChoiceDecision decision,
-                                            const QVector<quint32> &chosenPlayerIds)
+                                            const QVector<quint32> &chosenPlayerIds,
+                                            quint64 promptId)
 {
     ruled::v1::RuledCommand cmd;
     auto *sub = cmd.mutable_submit_resolution_choice();
+    if (!stampCurrentResolutionPrompt(sub, promptId))
+        return;
     for (const quint32 oid : chosenOids) {
         sub->add_chosen_object_ids(oid);
     }
@@ -557,6 +666,9 @@ void RuledClientState::submitResolutionPayment(ruled::v1::ResolutionChoiceDecisi
     if (!isResolutionPaymentActive()) {
         return;
     }
+    const quint64 promptId = pendingChoice->resolutionPromptId;
+    if (!isCurrentResolutionPrompt(promptId))
+        return;
     if (decision == ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA &&
         pendingChoice->variableManaContribution && !payment.beginSubmission()) {
         return;
@@ -564,7 +676,10 @@ void RuledClientState::submitResolutionPayment(ruled::v1::ResolutionChoiceDecisi
     const RuledPendingChoice restore = *pendingChoice;
     const auto restorePayment = payment;
     ruled::v1::RuledCommand command;
-    command.mutable_submit_resolution_choice()->set_decision(decision);
+    auto *submission = command.mutable_submit_resolution_choice();
+    submission->set_decision(decision);
+    if (!stampCurrentResolutionPrompt(submission, promptId))
+        return;
     if (decision == ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA)
         payment.writePayment(command);
     clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
@@ -594,6 +709,8 @@ void RuledClientState::submitResolutionPayment(ruled::v1::ResolutionChoiceDecisi
 
 void RuledClientState::submitPendingChoiceObject(quint32 oid)
 {
+    if (!pendingChoice.has_value() || !isCurrentResolutionPrompt(pendingChoice->resolutionPromptId))
+        return;
     if (hasPermanentChoiceCohort()) {
         if (pendingChoice->permanentChoiceSubmitting || !pendingChoice->candidateOids.contains(oid))
             return;
@@ -608,13 +725,17 @@ void RuledClientState::submitPendingChoiceObject(quint32 oid)
         emit combatStateChanged();
         return;
     }
+    const quint64 promptId = pendingChoice->resolutionPromptId;
     clearPendingChoice();
-    sendResolutionChoice({oid});
+    sendResolutionChoice({oid}, ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED, {}, promptId);
 }
 
 void RuledClientState::submitPermanentChoiceObjects()
 {
     if (!hasPermanentChoiceCohort() || pendingChoice->permanentChoiceSubmitting)
+        return;
+    const quint64 promptId = pendingChoice->resolutionPromptId;
+    if (!isCurrentResolutionPrompt(promptId))
         return;
     const int count = pendingChoice->selectedObjectOids.size();
     if (count < pendingChoice->min || count > pendingChoice->max)
@@ -622,6 +743,8 @@ void RuledClientState::submitPermanentChoiceObjects()
     const quint64 revision = pendingChoiceRevision;
     ruled::v1::RuledCommand command;
     auto *choice = command.mutable_submit_resolution_choice();
+    if (!stampCurrentResolutionPrompt(choice, promptId))
+        return;
     for (quint32 oid : pendingChoice->selectedObjectOids)
         choice->add_chosen_object_ids(oid);
     pendingChoice->permanentChoiceSubmitting = true;
@@ -661,13 +784,16 @@ void RuledClientState::submitResolutionCostObjects()
     if (!hasPendingChoiceOfKind(ChoiceKind::CostObjects)) {
         return;
     }
+    const quint64 promptId = pendingChoice->resolutionPromptId;
+    if (!isCurrentResolutionPrompt(promptId))
+        return;
     const int count = pendingChoice->selectedObjectOids.size();
     if (count < pendingChoice->min || count > pendingChoice->max) {
         return;
     }
     const auto chosen = pendingChoice->selectedObjectOids;
     clearPendingChoiceOfKind(ChoiceKind::CostObjects);
-    sendResolutionChoice(chosen);
+    sendResolutionChoice(chosen, ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED, {}, promptId);
 }
 
 void RuledClientState::toggleProliferateObject(quint32 oid)
@@ -709,6 +835,9 @@ void RuledClientState::submitProliferateChoice()
     if (!hasPendingChoiceOfKind(ChoiceKind::Proliferate)) {
         return;
     }
+    const quint64 promptId = pendingChoice->resolutionPromptId;
+    if (!isCurrentResolutionPrompt(promptId))
+        return;
     const int count = proliferateSelectionSelectedCount();
     if (count < pendingChoice->min || count > pendingChoice->max) {
         return;
@@ -716,7 +845,7 @@ void RuledClientState::submitProliferateChoice()
     const auto chosenObjects = pendingChoice->selectedObjectOids;
     const auto chosenPlayers = pendingChoice->selectedPlayerIds;
     clearPendingChoiceOfKind(ChoiceKind::Proliferate);
-    sendResolutionChoice(chosenObjects, ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED, chosenPlayers);
+    sendResolutionChoice(chosenObjects, ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED, chosenPlayers, promptId);
 }
 
 void RuledClientState::declinePendingClickChoice()
@@ -725,6 +854,10 @@ void RuledClientState::declinePendingClickChoice()
         return;
     }
     const ChoiceKind kind = pendingChoice->kind;
+    const quint64 promptId = pendingChoice->resolutionPromptId;
+    if (kind != ChoiceKind::TriggerTarget && kind != ChoiceKind::TriggerMode &&
+        !isCurrentResolutionPrompt(promptId))
+        return;
     if (hasPermanentChoiceCohort()) {
         if (!pendingChoice->permanentChoiceSubmitting) {
             pendingChoice->selectedObjectOids.clear();
@@ -741,14 +874,17 @@ void RuledClientState::declinePendingClickChoice()
         kind == ChoiceKind::CostObjects || kind == ChoiceKind::PermanentChoice || kind == ChoiceKind::AuraPermanent ||
         kind == ChoiceKind::AuraPlayer || kind == ChoiceKind::Proliferate) {
         clearPendingChoiceOfKind(kind);
-        sendResolutionChoice({});
+        sendResolutionChoice({}, ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED, {}, promptId);
         return;
     }
     if (kind == ChoiceKind::ResolutionBranch) {
         const RuledPendingChoice restore = *pendingChoice;
         clearPendingChoiceOfKind(kind);
         ruled::v1::RuledCommand command;
-        command.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
+        auto *submission = command.mutable_submit_resolution_choice();
+        submission->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
+        if (!stampCurrentResolutionPrompt(submission, promptId))
+            return;
         const auto submittedRevision = pendingChoiceRevision;
         host->sendRuledCommandExpectingAck(
             command, [self = QPointer<RuledClientState>(this), restore, submittedRevision](bool accepted) {
@@ -781,6 +917,9 @@ void RuledClientState::submitPendingChoiceOption(int optionIndex)
     if (!hasPendingChoiceOptions()) {
         return;
     }
+    const quint64 capturedPromptId = pendingChoice->resolutionPromptId;
+    if (pendingChoice->kind != ChoiceKind::TriggerMode && !isCurrentResolutionPrompt(capturedPromptId))
+        return;
     const auto it =
         std::find_if(pendingChoice->choiceOptions.cbegin(), pendingChoice->choiceOptions.cend(),
                      [optionIndex](const RuledChoiceOption &option) { return option.index == optionIndex; });
@@ -813,13 +952,17 @@ void RuledClientState::submitPendingChoiceOption(int optionIndex)
     if (pendingChoice->kind == ChoiceKind::SpecialCast) {
         if (optionIndex != 0) {
             // Local targeting/payment can be cancelled without declining the engine offer.
-            emit specialCastRequested(pendingChoice->candidateOids.constFirst());
+            emit specialCastRequested(pendingChoice->candidateOids.constFirst(), capturedPromptId);
             return;
         }
         const RuledPendingChoice restore = *pendingChoice;
+        const quint64 promptId = pendingChoice->resolutionPromptId;
         clearPendingChoiceOfKind(ChoiceKind::SpecialCast);
         ruled::v1::RuledCommand command;
-        command.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
+        auto *submission = command.mutable_submit_resolution_choice();
+        submission->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
+        if (!stampCurrentResolutionPrompt(submission, promptId))
+            return;
         const auto submittedRevision = pendingChoiceRevision;
         host->sendRuledCommandExpectingAck(
             command, [self = QPointer<RuledClientState>(this), restore, submittedRevision](bool accepted) {
@@ -834,9 +977,13 @@ void RuledClientState::submitPendingChoiceOption(int optionIndex)
 
     if (pendingChoice->kind == ChoiceKind::ReplacementOption) {
         const RuledPendingChoice restore = *pendingChoice;
+        const quint64 promptId = pendingChoice->resolutionPromptId;
         clearPendingChoiceOfKind(ChoiceKind::ReplacementOption);
         ruled::v1::RuledCommand command;
-        command.mutable_submit_resolution_choice()->add_chosen_object_ids(static_cast<quint32>(optionIndex));
+        auto *submission = command.mutable_submit_resolution_choice();
+        submission->add_chosen_object_ids(static_cast<quint32>(optionIndex));
+        if (!stampCurrentResolutionPrompt(submission, promptId))
+            return;
         const auto submittedRevision = pendingChoiceRevision;
         host->sendRuledCommandExpectingAck(
             command, [self = QPointer<RuledClientState>(this), restore, submittedRevision](bool accepted) {
@@ -849,11 +996,14 @@ void RuledClientState::submitPendingChoiceOption(int optionIndex)
     }
 
     const RuledPendingChoice restore = *pendingChoice;
+    const quint64 promptId = pendingChoice->resolutionPromptId;
     clearPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
     ruled::v1::RuledCommand command;
     auto *submission = command.mutable_submit_resolution_choice();
     submission->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
     submission->set_selected_branch_index(static_cast<quint32>(optionIndex));
+    if (!stampCurrentResolutionPrompt(submission, promptId))
+        return;
     const auto submittedRevision = pendingChoiceRevision;
     host->sendRuledCommandExpectingAck(command, [self = QPointer<RuledClientState>(this), restore,
                                                  submittedRevision](bool accepted) {
@@ -1265,6 +1415,9 @@ void RuledClientState::submitResolutionHandPick()
     if (!resolutionHandPickConfirmable()) {
         return;
     }
+    const quint64 promptId = pendingChoice->resolutionPromptId;
+    if (!isCurrentResolutionPrompt(promptId))
+        return;
     const int n = pendingChoice->selectedServerCardIds.size();
     QVector<quint32> chosen;
     chosen.reserve(n);
@@ -1283,10 +1436,13 @@ void RuledClientState::submitResolutionHandPick()
     emit resolutionPaymentUiChanged(false);
     emit combatStateChanged();
     ruled::v1::RuledCommand command;
+    auto *submission = command.mutable_submit_resolution_choice();
+    if (!stampCurrentResolutionPrompt(submission, promptId))
+        return;
     for (const quint32 oid : chosen)
-        command.mutable_submit_resolution_choice()->add_chosen_object_ids(oid);
+        submission->add_chosen_object_ids(oid);
     // An empty selection is a valid decline for optional engine-authored card cohorts.
-    command.mutable_submit_resolution_choice();
+    // Keep the empty submission explicit for an optional engine-authored cohort.
     const auto submittedRevision = pendingChoiceRevision;
     host->sendRuledCommandExpectingAck(command, [self = QPointer<RuledClientState>(this), restore,
                                                  submittedRevision](bool accepted) {
@@ -1560,11 +1716,17 @@ void RuledClientState::submitAttackingTokenDefender(const ruled::v1::CombatDefen
     if (!hasPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender)) {
         return;
     }
+    const quint64 promptId = pendingChoice->resolutionPromptId;
+    if (!isCurrentResolutionPrompt(promptId))
+        return;
     const RuledPendingChoice restore = *pendingChoice;
     clearPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender);
     emit combatStateChanged();
     ruled::v1::RuledCommand command;
-    *command.mutable_submit_resolution_choice()->mutable_chosen_combat_defender() = option;
+    auto *submission = command.mutable_submit_resolution_choice();
+    *submission->mutable_chosen_combat_defender() = option;
+    if (!stampCurrentResolutionPrompt(submission, promptId))
+        return;
     const auto submittedRevision = pendingChoiceRevision;
     host->sendRuledCommandExpectingAck(command, [self = QPointer<RuledClientState>(this), restore,
                                                  submittedRevision](bool accepted) {
@@ -2205,6 +2367,11 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     // for the answer. Not a leak risk either way — resetPerBatchLegalActions() rebuilds all of
     // it at the head of every payload.
     if (scope == RuledSessionResetScope::All) {
+        resolutionPromptSnapshotValid = false;
+        resolutionPromptActive = false;
+        resolutionPromptDeciderPlayerId = -1;
+        resolutionPromptId = 0;
+        resolutionPromptSemantics.clear();
         activatedAbilitiesByOid.clear();
         privateFaceDownNameByOwnedCard.clear();
         privateFaceDownGenerationByOid.clear();

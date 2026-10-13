@@ -3,9 +3,10 @@
 //! CR 510.2 and 603.2c put simultaneous combat damage and its grouped triggers in one damage-step
 //! event. First-strike and regular combat damage remain separate events. Nature's Will's
 //! "that player" is the damaged player; Enduring Curiosity remains one trigger per creature.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, TurnStep};
+use tricerules_core::TurnStep;
 use tricerules_proto::ruled::v1::{AttackAssignment, DeclareAttackers};
 
 const NATURES_WILL: &str = "natures_will";
@@ -79,7 +80,7 @@ fn groups_by_damaged_player_and_resets_between_first_and_regular_damage_steps() 
     engine.state.objects.get_mut(&p0_land).unwrap().tapped = true;
 
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("begin combat");
     advance_to_step(&mut engine, TurnStep::DeclareAttackers);
     let legal = engine.initial_response_batch().legal_by_player[&0]
@@ -97,7 +98,7 @@ fn groups_by_damaged_player_and_resets_between_first_and_regular_damage_steps() 
         })
         .collect::<Vec<AttackAssignment>>();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers { assignments })),

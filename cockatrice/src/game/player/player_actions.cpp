@@ -369,9 +369,20 @@ void PlayerActions::resumePendingRuledPaymentAfterEngineCommand()
 bool PlayerActions::sendRuledPlayLand(int sourceIndex,
                                      int faceIndex,
                                      RuledCastSource source,
-                                     quint64 zoneChangeGeneration)
+                                     quint64 zoneChangeGeneration,
+                                     quint64 resolutionPromptId)
 {
-    if (RuledActions::gameplayInputLocked(player->getGame())) {
+    AbstractGame *const game = player ? player->getGame() : nullptr;
+    RuledClientState *const state = RuledActions::stateFor(game);
+    if (!game || !state || RuledActions::gameplayInputLocked(game)) {
+        return false;
+    }
+    const quint32 sourceOid = static_cast<quint32>(sourceIndex);
+    if (source != RuledCastSource::Hand &&
+        !state->isCurrentZoneLandPlayOffer(sourceOid, source, faceIndex, zoneChangeGeneration, resolutionPromptId)) {
+        return false;
+    }
+    if (source == RuledCastSource::Hand && resolutionPromptId != 0) {
         return false;
     }
     ruled::v1::RuledCommand ruledCommand;
@@ -387,6 +398,8 @@ bool PlayerActions::sendRuledPlayLand(int sourceIndex,
     }
     // CR 712: which face of an MDFC land enters the battlefield (0 = front; default for single-face).
     pl->set_face_index(static_cast<quint32>(faceIndex));
+    if (resolutionPromptId != 0)
+        pl->set_resolution_prompt_id(resolutionPromptId);
     std::string payload;
     if (!ruledCommand.SerializeToString(&payload)) {
         return false;
@@ -418,6 +431,8 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
     }
 
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
+    if (!geh)
+        return false;
     const RuledCastSource publicSource = fromGraveyard ? RuledCastSource::Graveyard : RuledCastSource::Exile;
     const int sourceIndex = fromHand
                                 ? RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_PLAY_LAND, card)
@@ -428,6 +443,11 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
           !geh->isZoneLandActionLegal(static_cast<quint32>(sourceIndex), publicSource)))) {
         return false; // engine does not offer this card as a land play right now
     }
+    const quint32 sourceOid = static_cast<quint32>(sourceIndex);
+    const bool hasSpecialCastOffer = !fromHand && fromExile && geh->isPendingSpecialCastCandidate(sourceOid);
+    const quint64 resolutionPromptId = hasSpecialCastOffer ? geh->specialCastPromptIdForCandidate(sourceOid) : 0;
+    if (hasSpecialCastOffer && resolutionPromptId == 0)
+        return true;
 
     // CR 712: an MDFC land (a pathway) shows up in the engine's legal actions as more than one
     // playable face for the same hand slot — front and back. Present a side-picker so the player
@@ -472,12 +492,13 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
             const PublicZoneFaceChoice &choice = choices.at(selected);
             if (choice.isLand) {
                 return sendRuledPlayLand(sourceIndex, choice.face.faceIndex, publicSource,
-                                         choice.face.zoneChangeGeneration);
+                                         choice.face.zoneChangeGeneration, resolutionPromptId);
             }
             return beginRuledSpellCast(card, sourceIndex, choice.face.faceIndex, choice.face.faceName,
                                        choice.face.manaCost, choice.face.genericCostReduction,
                                        publicSource, choice.face.castMethod,
-                                       choice.face.castingPermissionId);
+                                       choice.face.castingPermissionId, choice.face.prototyped,
+                                       resolutionPromptId, choice.face.zoneChangeGeneration);
         }
     }
     if (faces.size() > 1) {
@@ -485,7 +506,7 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
     }
     return sendRuledPlayLand(sourceIndex, faces.isEmpty() ? 0 : faces.first().faceIndex,
                              fromHand ? RuledCastSource::Hand : publicSource,
-                             faces.isEmpty() ? 0 : faces.first().zoneChangeGeneration);
+                             faces.isEmpty() ? 0 : faces.first().zoneChangeGeneration, resolutionPromptId);
 }
 
 bool PlayerActions::tryRuledLandPlayFaceMenu(CardItem *card)
@@ -522,6 +543,11 @@ bool PlayerActions::tryRuledLandPlayFaceMenu(CardItem *card)
           !geh->isZoneLandActionLegal(static_cast<quint32>(sourceIndex), publicSource)))) {
         return false;
     }
+    const quint32 sourceOid = static_cast<quint32>(sourceIndex);
+    const bool hasSpecialCastOffer = !fromHand && fromExile && geh->isPendingSpecialCastCandidate(sourceOid);
+    const quint64 resolutionPromptId = hasSpecialCastOffer ? geh->specialCastPromptIdForCandidate(sourceOid) : 0;
+    if (hasSpecialCastOffer && resolutionPromptId == 0)
+        return true;
     // CR 712: only offer the picker when the engine exposes more than one playable face for this
     // slot (an MDFC land). A single-face land keeps its direct click-to-play and falls through so a
     // right-click still opens the normal card menu.
@@ -548,7 +574,7 @@ bool PlayerActions::tryRuledLandPlayFaceMenu(CardItem *card)
     }
     return sendRuledPlayLand(sourceIndex, faces.at(sel).faceIndex,
                              fromHand ? RuledCastSource::Hand : publicSource,
-                             faces.at(sel).zoneChangeGeneration);
+                             faces.at(sel).zoneChangeGeneration, resolutionPromptId);
 }
 
 bool PlayerActions::tryRuledOpeningBottomCard(CardItem *card)
@@ -705,10 +731,31 @@ bool PlayerActions::beginRuledSpellCast(CardItem *card,
                                         int genericCostReduction,
                                         RuledCastSource source,
                                         ruled::v1::CastMethod castMethod,
-                                        quint64 castingPermissionId)
+                                        quint64 castingPermissionId,
+                                        bool prototyped,
+                                        quint64 resolutionPromptId,
+                                        quint64 expectedZoneChangeGeneration)
 {
+    RuledClientState *const state = RuledActions::stateFor(player ? player->getGame() : nullptr);
+    const quint32 sourceOid = static_cast<quint32>(ruledHandIndex);
+    const bool pendingSpecialCastCandidate =
+        source == RuledCastSource::Exile && state && state->isPendingSpecialCastCandidate(sourceOid);
+    if (resolutionPromptId != 0 || pendingSpecialCastCandidate) {
+        if (source != RuledCastSource::Exile ||
+            !state || !state->isCurrentSpecialCastPrompt(resolutionPromptId, sourceOid))
+            return false;
+        const auto offers = state->zoneActionFaceOptions(sourceOid, source);
+        const bool exactOfferStillLegal = std::any_of(offers.cbegin(), offers.cend(), [&](const auto &offer) {
+            return offer.faceIndex == faceIndex && offer.castMethod == castMethod &&
+                   offer.castingPermissionId == castingPermissionId && offer.prototyped == prototyped &&
+                   offer.zoneChangeGeneration == expectedZoneChangeGeneration;
+        });
+        if (!exactOfferStillLegal)
+            return false;
+    }
     return ruledPayment->beginRuledSpellCast(card, ruledHandIndex, faceIndex, castName, castCost, genericCostReduction,
-                                             source, castMethod, castingPermissionId);
+                                             source, castMethod, castingPermissionId, prototyped,
+                                             resolutionPromptId, expectedZoneChangeGeneration);
 }
 
 bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)

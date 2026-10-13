@@ -1,4 +1,5 @@
 //! Issue #83: resolving effects over the Aura/Equipment cohort attached to one target.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration, Keyword};
@@ -26,7 +27,7 @@ fn cast_turn_to_slag(engine: &mut GameEngine, target: u32) {
     );
     let spell = hand_index_for_card(engine, 0, "turn_to_slag");
     engine
-        .apply_command(0, &cast_spell(spell, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(spell, target_object(target)))
         .expect("cast Turn to Slag");
 }
 
@@ -60,8 +61,12 @@ fn turn_to_slag_destroys_equipment_but_not_auras_attached_to_its_target() {
 
     cast_turn_to_slag(&mut engine, target);
     let batch = {
-        engine.apply_command(0, &pass()).expect("caster pass");
-        engine.apply_command(1, &pass()).expect("opponent pass")
+        engine
+            .apply_scenario_command(0, &pass())
+            .expect("caster pass");
+        engine
+            .apply_scenario_command(1, &pass())
+            .expect("opponent pass")
     };
 
     assert_eq!(engine.state.objects[&target].damage, 5);

@@ -2,6 +2,7 @@
 //! Seeker of Skybreak (`{T}: Untap target creature`) and Vitalize (untap all creatures you
 //! control). The mirror image of the `Tap` / `TapAll` coverage in
 //! `spell_effects.rs`.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::MassPlayerSet;
@@ -37,7 +38,8 @@ fn advance_to_active_player_upkeep(e: &mut GameEngine, player: i32) {
             }
             None => (e.state.priority_player_id(), pass()),
         };
-        e.apply_command(actor, &command).expect("pass through turn");
+        e.apply_scenario_command(actor, &command)
+            .expect("pass through turn");
         if e.state.active_player_id() == player
             && e.state.turn_step == tricerules_core::TurnStep::Upkeep
         {
@@ -73,7 +75,7 @@ fn seeker_of_skybreak_untaps_a_tapped_creature_and_taps_itself() {
     let (mut e, seeker, bear) = seeker_engine(9101, true);
     assert!(is_tapped(&e, bear), "setup: the bear starts tapped");
 
-    e.apply_command(0, &activate_ability(seeker, 0, target(bear)))
+    e.apply_scenario_command(0, &activate_ability(seeker, 0, target(bear)))
         .expect("activate the untap ability");
     // CR 118.12: the {T} cost is paid on activation, before the ability resolves.
     assert!(is_tapped(&e, seeker), "the {{T}} cost taps the Seeker");
@@ -97,7 +99,7 @@ fn untap_target_may_target_an_already_untapped_creature_and_does_nothing() {
     let (mut e, seeker, bear) = seeker_engine(9102, false);
     assert!(!is_tapped(&e, bear), "setup: the bear starts untapped");
 
-    e.apply_command(0, &activate_ability(seeker, 0, target(bear)))
+    e.apply_scenario_command(0, &activate_ability(seeker, 0, target(bear)))
         .expect("an untapped creature is a legal target");
     resolve_entire_stack_two_player(&mut e);
     assert!(!is_tapped(&e, bear), "still untapped, no crash, no-op");
@@ -126,8 +128,14 @@ fn resolve_stack_collecting_batches(e: &mut GameEngine) -> Vec<RuledEventBatch> 
         } else {
             e.state.players[0].id
         };
-        batches.push(e.apply_command(first, &pass()).expect("first pass"));
-        batches.push(e.apply_command(second, &pass()).expect("second pass"));
+        batches.push(
+            e.apply_scenario_command(first, &pass())
+                .expect("first pass"),
+        );
+        batches.push(
+            e.apply_scenario_command(second, &pass())
+                .expect("second pass"),
+        );
     }
     batches
 }
@@ -139,7 +147,7 @@ fn untap_effect_reports_the_becomes_untapped_edge_to_servatrice() {
     let (mut e, seeker, bear) = seeker_engine(9105, true);
 
     let activation = e
-        .apply_command(0, &activate_ability(seeker, 0, target(bear)))
+        .apply_scenario_command(0, &activate_ability(seeker, 0, target(bear)))
         .expect("activate");
     assert!(
         untapped_oids(&activation).is_empty(),
@@ -160,7 +168,7 @@ fn a_no_op_untap_reports_no_edge() {
     // target that produces no edge, so the relay is never asked to push a redundant untap.
     let (mut e, seeker, bear) = seeker_engine(9106, false);
 
-    e.apply_command(0, &activate_ability(seeker, 0, target(bear)))
+    e.apply_scenario_command(0, &activate_ability(seeker, 0, target(bear)))
         .expect("activate");
     let resolution = resolve_stack_collecting_batches(&mut e);
     assert!(
@@ -180,7 +188,7 @@ fn stun_counter_replaces_untap_without_emitting_an_untap_edge() {
         .expect("bear")
         .set_counter(CounterKind::Stun, 1);
 
-    e.apply_command(0, &activate_ability(seeker, 0, target(bear)))
+    e.apply_scenario_command(0, &activate_ability(seeker, 0, target(bear)))
         .expect("activate");
     let resolution = resolve_stack_collecting_batches(&mut e);
 
@@ -218,7 +226,7 @@ fn stun_counters_are_removed_one_per_attempt_and_not_from_an_untapped_permanent(
 
     for expected in [1, 0] {
         set_tapped(&mut e, seeker, false);
-        e.apply_command(0, &activate_ability(seeker, 0, target(bear)))
+        e.apply_scenario_command(0, &activate_ability(seeker, 0, target(bear)))
             .expect("activate");
         resolve_entire_stack_two_player(&mut e);
         assert!(is_tapped(&e, bear));
@@ -239,7 +247,7 @@ fn stun_counters_are_removed_one_per_attempt_and_not_from_an_untapped_permanent(
         .expect("bear")
         .set_counter(CounterKind::Stun, 1);
     set_tapped(&mut e, seeker, false);
-    e.apply_command(0, &activate_ability(seeker, 0, target(bear)))
+    e.apply_scenario_command(0, &activate_ability(seeker, 0, target(bear)))
         .expect("activate an already-untapped target");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
@@ -261,7 +269,7 @@ fn untap_target_rejects_a_target_outside_its_filter() {
     set_tapped(&mut e, forest, true);
 
     let err = e
-        .apply_command(0, &activate_ability(seeker, 0, target(forest)))
+        .apply_scenario_command(0, &activate_ability(seeker, 0, target(forest)))
         .expect_err("a land is not a creature");
     assert!(
         matches!(err, tricerules_core::EngineError::Illegal(_)),
@@ -482,7 +490,7 @@ fn zealous_display_pumps_and_untaps_on_opponent_turn() {
     let opponent_creature = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     set_tapped(&mut e, opponent_creature, true);
 
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("active player passes priority");
     assert_eq!(e.state.priority_player_id(), 0);
     let resolution = cast_instant_and_resolve(

@@ -1,5 +1,6 @@
 //! Duplicant's entry-linked exile and copiable characteristic continuous effect.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, EffectDuration, PermanentTypeFilter, TypeLineAddition,
 };
@@ -49,11 +50,11 @@ fn cast_duplicant_with_decision(
     let duplicant = inject_card_into_hand(engine, 0, "duplicant");
     let slot = hand_index_for_card(engine, 0, "duplicant");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Duplicant");
     pass_both_players(engine);
     engine
-        .apply_command(0, &choose_trigger_target(target))
+        .apply_scenario_command(0, &choose_trigger_target(target))
         .expect("choose Duplicant's optional ETB target");
     pass_both_players(engine);
     answer_optional_triggered_ability_choice(engine, decision);
@@ -69,7 +70,7 @@ fn move_owned_card(
 ) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             actor,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -260,7 +261,7 @@ fn duplicant_rejects_a_token_target_without_consuming_the_trigger() {
     let duplicant = inject_card_into_hand(&mut engine, 0, "duplicant");
     let slot = hand_index_for_card(&engine, 0, "duplicant");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Duplicant");
     pass_both_players(&mut engine);
 
@@ -271,7 +272,7 @@ fn duplicant_rejects_a_token_target_without_consuming_the_trigger() {
         .expect("Duplicant trigger awaits target selection")
         .object_id;
     let revision_before_rejection = engine.state.command_index;
-    let rejected = engine.apply_command(0, &choose_trigger_target(Some(token)));
+    let rejected = engine.apply_scenario_command(0, &choose_trigger_target(Some(token)));
     assert!(rejected.is_err(), "a token is not a legal Duplicant target");
     assert_eq!(engine.state.command_index, revision_before_rejection);
     assert_eq!(
@@ -286,7 +287,7 @@ fn duplicant_rejects_a_token_target_without_consuming_the_trigger() {
     assert_eq!(engine.state.objects[&token].zone, Zone::Battlefield);
 
     engine
-        .apply_command(0, &choose_trigger_target(Some(legal_target)))
+        .apply_scenario_command(0, &choose_trigger_target(Some(legal_target)))
         .expect("select the legal nontoken creature after the rejected answer");
     pass_both_players(&mut engine);
     answer_optional_triggered_ability_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
@@ -366,11 +367,12 @@ fn duplicant_link_tracks_commander_acceptance_and_decline() {
             .expect("commander state-based-action choice");
         assert_eq!(pending.deciding_player, 1);
         let result = engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &RuledCommand {
                     cmd: Some(Cmd::SubmitResolutionChoice(
                         tricerules_proto::ruled::v1::SubmitResolutionChoice {
+                            resolution_prompt_id: 0,
                             decision: ResolutionChoiceDecision::SelectBranch as i32,
                             selected_branch_index: branch,
                             ..Default::default()
@@ -400,7 +402,7 @@ fn duplicant_link_tracks_commander_acceptance_and_decline() {
             assert_eq!((after.power, after.toughness), (Some(5), Some(5)));
             let next_actor = engine.state.priority_player_id();
             let batch = engine
-                .apply_command(next_actor, &pass())
+                .apply_scenario_command(next_actor, &pass())
                 .expect("the declined zone-change generation does not prompt again");
             assert!(!batch.events.iter().any(|event| matches!(
                 event.ev.as_ref(),
@@ -424,11 +426,11 @@ fn duplicant_does_not_exile_a_new_zone_incarnation_of_its_target() {
     let duplicant = inject_card_into_hand(&mut engine, 0, "duplicant");
     let slot = hand_index_for_card(&engine, 0, "duplicant");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Duplicant");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &choose_trigger_target(Some(target)))
+        .apply_scenario_command(0, &choose_trigger_target(Some(target)))
         .expect("choose Hill Giant as the ETB target");
 
     move_owned_card(&mut engine, 0, 0, "Hill Giant", DevZone::Hand);
@@ -463,11 +465,11 @@ fn duplicant_new_incarnation_cannot_read_an_older_etb_pair() {
     let duplicant = inject_card_into_hand(&mut engine, 0, "duplicant");
     let slot = hand_index_for_card(&engine, 0, "duplicant");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Duplicant");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &choose_trigger_target(Some(target)))
+        .apply_scenario_command(0, &choose_trigger_target(Some(target)))
         .expect("choose Hill Giant as the ETB target");
     let triggering_generation = engine.state.zone_change_generation[&duplicant];
 
@@ -505,7 +507,7 @@ fn copied_duplicant_gets_its_own_linked_exile_pair() {
     let clone = inject_card_into_hand(&mut engine, 0, "clone");
     let clone_slot = hand_index_for_card(&engine, 0, "clone");
     engine
-        .apply_command(0, &cast_spell(clone_slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(clone_slot, Vec::new()))
         .expect("cast Clone");
     pass_both_players(&mut engine);
     assert!(engine
@@ -517,10 +519,10 @@ fn copied_duplicant_gets_its_own_linked_exile_pair() {
         .candidates
         .contains(&first_duplicant));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![first_duplicant]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![first_duplicant]))
         .expect("enter as a copy of Duplicant");
     engine
-        .apply_command(0, &choose_trigger_target(Some(second_target)))
+        .apply_scenario_command(0, &choose_trigger_target(Some(second_target)))
         .expect("choose the second creature for the copied trigger");
     pass_both_players(&mut engine);
     answer_optional_triggered_ability_choice(&mut engine, ResolutionChoiceDecision::SelectBranch);
@@ -665,7 +667,7 @@ fn duplicant_refreshes_linked_hand_count_and_public_view_snapshot() {
     inject_library_card(&mut engine, 0, "island");
     engine.initial_response_batch();
     let batch = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {

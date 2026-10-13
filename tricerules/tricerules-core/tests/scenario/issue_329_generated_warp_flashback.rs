@@ -4,6 +4,7 @@
 //! authoritative command path. CR 702.185 governs Warp's hand alternative cost and its delayed
 //! end-step exile plus owner recast permission; CR 702.34 governs Flashback's graveyard
 //! alternative cost and exile-on-resolution; CR 601.2 / 202.3 govern the printed-cost normal cast.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::{TurnStep, Zone};
@@ -51,7 +52,7 @@ fn issue_329_bygone_colossus_warp_pays_the_alternative_cost_and_exiles_then_reca
     );
 
     let slot = hand_index_for_card(&e, 0, "bygone_colossus");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::CastSpell(CastSpell {
@@ -84,7 +85,7 @@ fn issue_329_bygone_colossus_warp_pays_the_alternative_cost_and_exiles_then_reca
     e.state.turn_step = TurnStep::Main1;
     e.state.priority_idx = 0;
     grant_pool(&mut e, 0);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::CastSpell(CastSpell {
@@ -113,7 +114,7 @@ fn issue_329_think_twice_normal_cast_then_flashback_exiles_on_resolution() {
     );
 
     let slot = hand_index_for_card(&e, 0, "think_twice");
-    e.apply_command(0, &cast_spell(slot, vec![]))
+    e.apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("normal cast from hand");
     let hand_before = e.state.players[0].hand.len();
     resolve_entire_stack_two_player(&mut e);
@@ -128,7 +129,7 @@ fn issue_329_think_twice_normal_cast_then_flashback_exiles_on_resolution() {
     grant_pool(&mut e, 0);
     let generation = e.state.zone_change_generation[&twice];
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CastSpell(CastSpell {

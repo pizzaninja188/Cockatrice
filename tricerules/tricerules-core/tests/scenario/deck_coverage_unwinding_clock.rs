@@ -1,4 +1,5 @@
 //! Unwinding Clock: simultaneous, mandatory controlled-artifact untap on other players' turns.
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
 use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
@@ -37,7 +38,9 @@ fn clock_actual_cast_untaps_only_its_controllers_artifacts_on_another_players_tu
         },
     );
     let before = serde_json::to_value(&engine.state).unwrap();
-    assert!(engine.apply_command(0, &cast_spell(slot, vec![])).is_err());
+    assert!(engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .is_err());
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     engine.state.players[0].mana_pool.colorless = 0;
     give_mana(
@@ -48,7 +51,9 @@ fn clock_actual_cast_untaps_only_its_controllers_artifacts_on_another_players_tu
             ..Default::default()
         },
     );
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     let projected = engine.initial_response_batch();
@@ -67,7 +72,7 @@ fn clock_actual_cast_untaps_only_its_controllers_artifacts_on_another_players_tu
     assert!(clock_view.activated_abilities.is_empty());
     let before = serde_json::to_value(&engine.state).unwrap();
     assert!(engine
-        .apply_command(0, &activate_ability_for(&engine, source, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 0, vec![]))
         .is_err());
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     for oid in [source, ring, bear, other_ring] {
@@ -78,7 +83,9 @@ fn clock_actual_cast_untaps_only_its_controllers_artifacts_on_another_players_tu
     engine.state.priority_idx = 0;
     engine.state.passes_since_stack_change = 0;
     let _ = engine.initial_response_batch();
-    let batch = engine.apply_command(0, &primitive_yield()).unwrap();
+    let batch = engine
+        .apply_scenario_command(0, &primitive_yield())
+        .unwrap();
     assert_eq!(engine.state.active_player_id(), 1);
     assert!(!engine.state.objects[&source].tapped);
     assert!(!engine.state.objects[&ring].tapped);
@@ -134,13 +141,15 @@ fn next_turn_edges(engine: &mut GameEngine) -> Vec<u32> {
     engine.state.passes_since_stack_change = 0;
     let _ = engine.initial_response_batch();
     let actor = engine.state.active_player_id();
-    let mut batch = engine.apply_command(actor, &primitive_yield()).unwrap();
+    let mut batch = engine
+        .apply_scenario_command(actor, &primitive_yield())
+        .unwrap();
     if let Some(player) = engine.state.cleanup_discard_player {
         let index = engine.state.player_idx(player).unwrap();
         // This fixture has no hand-size modifiers; finish its ordinary seven-card cleanup.
         let excess = engine.state.players[index].hand.len() - 7;
         let cleanup = engine
-            .apply_command(player, &discard_cleanup_batch((0..excess as u32).collect()))
+            .apply_scenario_command(player, &discard_cleanup_batch((0..excess as u32).collect()))
             .unwrap();
         batch.events.extend(cleanup.events);
     }
@@ -193,7 +202,7 @@ fn suppress(engine: &mut GameEngine, source: u32, duration: EffectDuration) {
 fn move_clock_out(engine: &mut GameEngine) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -287,10 +296,12 @@ fn sculpting_steel_copy_of_clock_survives_donor_departure_and_owns_its_hook() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![clock]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![clock]))
         .unwrap();
     assert_eq!(
         engine.characteristics(copy).unwrap().names,
@@ -332,7 +343,7 @@ fn clock_logged_real_mana_activation_and_turn_boundary_replay_identically() {
         actor: i32,
         command: RuledCommand,
     ) {
-        let batch = engine.apply_command(actor, &command).unwrap();
+        let batch = engine.apply_scenario_command(actor, &command).unwrap();
         log.push((actor, command, batch));
     }
     let mut engine = fresh();
@@ -396,7 +407,10 @@ fn clock_logged_real_mana_activation_and_turn_boundary_replay_identically() {
     );
     let mut replay = fresh();
     for (actor, command, expected) in &log {
-        assert_eq!(&replay.apply_command(*actor, command).unwrap(), expected);
+        assert_eq!(
+            &replay.apply_scenario_command(*actor, command).unwrap(),
+            expected
+        );
     }
     assert_eq!(
         replay.initial_response_batch(),

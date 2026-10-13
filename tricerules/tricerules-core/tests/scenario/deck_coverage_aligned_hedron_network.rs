@@ -1,4 +1,5 @@
 //! Actual-card coverage for Aligned Hedron Network's paired mass exile.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{
@@ -9,7 +10,7 @@ use tricerules_core::state::{
     ActiveEventObserver, DelayedTriggerPayload, EventObserverMatcher, EventObserverPayload,
     TriggerObjectRef,
 };
-use tricerules_core::{AffectedScope, AttachmentRecipient, ContinuousEffect, GameEngine, Zone};
+use tricerules_core::{AffectedScope, AttachmentRecipient, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
 use tricerules_proto::ruled::v1::{ruled_command::Cmd, RuledCommand};
 
@@ -47,7 +48,7 @@ fn cast_network(engine: &mut GameEngine) -> u32 {
     engine.state.players[0].mana_pool.colorless = 4;
     let hand_index = hand_index_for_card(engine, 0, "aligned_hedron_network");
     engine
-        .apply_command(4, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(hand_index, vec![]))
         .expect("cast the actual Aligned Hedron Network");
     pass_priority_round(engine);
     assert_eq!(engine.state.objects[&network].zone, Zone::Battlefield);
@@ -67,7 +68,7 @@ fn move_network_to_zone(
 ) -> Vec<tricerules_proto::ruled::v1::RuledEvent> {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             player_id,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -387,7 +388,9 @@ fn aligned_hedron_network_owner_concession_returns_survivors_before_publication(
             })),
         });
 
-    let concession = engine.apply_command(4, &concede()).expect("owner concedes");
+    let concession = engine
+        .apply_scenario_command(4, &concede())
+        .expect("owner concedes");
 
     assert!(!engine.state.objects.contains_key(&departing_owner_creature));
     assert_eq!(
@@ -451,7 +454,9 @@ fn aligned_hedron_network_owner_concession_preserves_returning_aura_choice() {
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.objects[&aura].zone, Zone::Exile);
 
-    let concession = engine.apply_command(4, &concede()).expect("owner concedes");
+    let concession = engine
+        .apply_scenario_command(4, &concede())
+        .expect("owner concedes");
 
     assert!(!engine.state.objects.contains_key(&network));
     assert_eq!(engine.state.objects[&aura].zone, Zone::Exile);

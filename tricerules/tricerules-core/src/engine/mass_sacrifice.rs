@@ -298,6 +298,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     deciding_player_id: choice.player,
                     source_object_id: stack.item.id,
                     prompt_text: prompt.clone(),
@@ -315,6 +316,9 @@ impl GameEngine {
         });
         events.push(super::events::ev_log(prompt.clone()));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+
             deciding_player: choice.player,
             presentation: PendingResolutionPresentation {
                 source_object_id: stack.item.id,
@@ -507,6 +511,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     variable_mana_contribution: false,
                     deciding_player_id: owner,
                     source_object_id,
@@ -533,6 +538,9 @@ impl GameEngine {
             )),
         });
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+
             deciding_player: owner,
             presentation: PendingResolutionPresentation {
                 source_object_id,

@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{SpellEffectKind, TargetController};
 use tricerules_cards::{CardFace, CardRegistry};
@@ -164,7 +165,7 @@ fn cast_entry_copy(engine: &mut GameEngine) -> u32 {
         .expect("copy card in hand");
     let slot = hand_index_for_card(engine, 0, "entry_copy_fixture");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast entry-copy card");
     pass_both_players(engine);
     copy
@@ -195,7 +196,7 @@ fn entry_copy_of_an_aura_asks_for_and_attaches_to_a_legal_permanent() {
     );
     let copy = cast_entry_copy(&mut engine);
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("choose Aura copy source");
     let pending = engine
         .state
@@ -227,7 +228,7 @@ fn entry_copy_of_an_aura_asks_for_and_attaches_to_a_legal_permanent() {
         "Face-down creature"
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![host]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![host]))
         .expect("choose legal Aura recipient");
     assert_eq!(engine.state.objects[&copy].zone, Zone::Battlefield);
     assert_eq!(
@@ -255,7 +256,7 @@ fn entry_copy_of_a_player_aura_uses_the_existing_player_recipient_choice() {
     let source = source_copy_object(&mut engine, 1, aura, AttachmentRecipient::Player(1));
     let copy = cast_entry_copy(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("choose Aura copy source");
     let pending = engine
         .state
@@ -265,7 +266,7 @@ fn entry_copy_of_a_player_aura_uses_the_existing_player_recipient_choice() {
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::AuraPlayer);
     assert_eq!(pending.presentation.candidates, vec![0, 1]);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![1]))
         .expect("choose enchanted player");
     assert_eq!(engine.state.objects[&copy].zone, Zone::Battlefield);
     assert_eq!(
@@ -291,7 +292,7 @@ fn entry_copy_of_an_aura_with_no_legal_recipient_goes_from_stack_to_graveyard() 
     );
     let copy = cast_entry_copy(&mut engine);
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("select Aura without a legal creature recipient");
     assert_eq!(engine.state.objects[&copy].zone, Zone::Graveyard);
     assert!(engine.state.players[0]
@@ -333,7 +334,7 @@ fn entry_copy_rejects_an_aura_recipient_from_an_old_zone_generation() {
     );
     let copy = cast_entry_copy(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("choose Aura copy source");
 
     let generation = engine
@@ -347,7 +348,7 @@ fn entry_copy_rejects_an_aura_recipient_from_an_old_zone_generation() {
         .zone_change_generation
         .insert(host, generation + 1);
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![host]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![host]))
         .is_err());
     assert_eq!(
         engine
@@ -370,7 +371,7 @@ fn entry_copy_rejects_an_aura_recipient_from_an_old_zone_generation() {
     );
     engine.state.zone_change_generation.insert(host, generation);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![host]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![host]))
         .expect("choose the recipient after restoring the test generation");
     assert_eq!(engine.state.objects[&copy].zone, Zone::Battlefield);
     assert_eq!(
@@ -393,7 +394,7 @@ fn copied_non_aura_does_not_keep_the_printed_auras_cast_target() {
         .expect("Aura copy in hand");
     let slot = hand_index_for_card(&engine, 0, "entry_copy_aura_spell");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 slot,
@@ -408,7 +409,7 @@ fn copied_non_aura_does_not_keep_the_printed_auras_cast_target() {
         .expect("cast Aura spell targeting a legal creature");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("choose a non-Aura permanent to copy");
 
     assert_eq!(engine.state.objects[&copy].zone, Zone::Battlefield);
@@ -424,7 +425,7 @@ fn resolve_aura_copy_token_spell(
     engine.state.players[0].mana_pool.blue = 1;
     engine.state.players[0].mana_pool.colorless = 2;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 slot,
@@ -444,10 +445,10 @@ fn resolve_aura_copy_token_spell(
         engine.state.players[0].id
     };
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first player passes");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second player resolves the token-copy spell")
 }
 
@@ -495,7 +496,7 @@ fn copied_aura_token_requires_and_uses_a_legal_attachment_recipient() {
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::AuraPermanent);
     assert_eq!(pending.presentation.candidates, vec![recipient]);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![recipient]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![recipient]))
         .expect("choose legal recipient for copied Aura token");
 
     let token = engine

@@ -1,5 +1,6 @@
 //! Exact Into the Wilds upkeep, private look and optional land entry contract.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::ChoiceKind;
 
@@ -79,7 +80,7 @@ fn actual_into_the_wilds_accepts_resolution_time_top_without_using_land_play() {
     assert_eq!(pending.presentation.candidates, vec![top]);
     assert_eq!(pending.presentation.max, 1);
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![top]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top]))
         .unwrap();
     assert_eq!(engine.state.objects[&top].zone, Zone::Battlefield);
     assert!(!engine.state.objects[&top].tapped);
@@ -110,7 +111,7 @@ fn actual_into_the_wilds_decline_and_nonland_acknowledgement_keep_exact_next_dra
             max
         );
         engine
-            .apply_command(0, &submit_resolution_choice(vec![]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![]))
             .unwrap();
         assert_eq!(engine.state.players[0].library, order);
         assert_eq!(engine.state.zone_change_generation, generations);
@@ -129,12 +130,12 @@ fn actual_into_the_wilds_wrong_actor_and_duplicate_answer_are_atomic() {
     for (actor, selected) in [(1, vec![top]), (0, vec![top, top]), (0, vec![999_999])] {
         let before = engine.diagnostic_snapshot().unwrap();
         assert!(engine
-            .apply_command(actor, &submit_resolution_choice(selected))
+            .apply_scenario_command(actor, &submit_resolution_choice(selected))
             .is_err());
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     }
     engine
-        .apply_command(0, &submit_resolution_choice(vec![top]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top]))
         .unwrap();
     assert_eq!(engine.state.objects[&top].zone, Zone::Battlefield);
 }
@@ -187,14 +188,14 @@ fn actual_into_the_wilds_stale_top_generation_zone_owner_and_land_type_are_atomi
         let before = engine.diagnostic_snapshot().unwrap();
         assert!(
             engine
-                .apply_command(0, &submit_resolution_choice(vec![top]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![top]))
                 .is_err(),
             "case {case}"
         );
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before, "case {case}");
         if case == 4 {
             engine
-                .apply_command(0, &submit_resolution_choice(vec![]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![]))
                 .expect("changed land can still be declined");
             assert_eq!(engine.state.players[0].library.front(), Some(&top));
         }
@@ -208,11 +209,11 @@ fn actual_into_the_wilds_nonland_cannot_be_accepted_but_can_be_acknowledged() {
     resolve_look(&mut engine);
     let before = engine.diagnostic_snapshot().unwrap();
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![top]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top]))
         .is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .unwrap();
     assert_eq!(engine.state.players[0].library.front(), Some(&top));
 }
@@ -235,7 +236,7 @@ fn actual_into_the_wilds_source_departure_preserves_frozen_trigger_controller() 
     let top = set_current_top(&mut engine, "forest");
     resolve_look(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![top]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top]))
         .unwrap();
     assert_eq!(engine.state.objects[&top].controller, 0);
     assert_eq!(engine.state.objects[&top].zone, Zone::Battlefield);
@@ -248,7 +249,7 @@ fn actual_into_the_wilds_ordinary_tapped_entry_and_etb_are_preserved() {
     let top = set_current_top(&mut engine, "jungle_hollow");
     resolve_look(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![top]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top]))
         .unwrap();
     assert_eq!(engine.state.objects[&top].zone, Zone::Battlefield);
     assert!(engine.state.objects[&top].tapped);
@@ -264,7 +265,7 @@ fn actual_into_the_wilds_ordinary_tapped_entry_and_etb_are_preserved() {
     pass_both_players(&mut engine); // draw to main
     let hand = hand_index_for_card(&engine, 0, "forest");
     engine
-        .apply_command(0, &play_land(hand))
+        .apply_scenario_command(0, &play_land(hand))
         .expect("ordinary land play remains available");
     assert_eq!(engine.state.lands_played_this_turn, 1);
 }
@@ -274,7 +275,7 @@ fn actual_into_the_wilds_controller_departure_clears_the_private_picker() {
     let mut engine = own_upkeep_for(202_610_075, &[0, 4, 9]);
     set_current_top(&mut engine, "forest");
     resolve_look(&mut engine);
-    engine.apply_command(0, &concede()).unwrap();
+    engine.apply_scenario_command(0, &concede()).unwrap();
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.stack.is_empty());
 }
@@ -288,7 +289,7 @@ fn actual_into_the_wilds_replacement_pause_and_controller_departure_are_safe() {
         let top = set_current_top(&mut engine, "forest");
         resolve_look(&mut engine);
         engine
-            .apply_command(0, &submit_resolution_choice(vec![top]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![top]))
             .unwrap();
         let pending = engine
             .state
@@ -301,7 +302,7 @@ fn actual_into_the_wilds_replacement_pause_and_controller_departure_are_safe() {
         );
         assert_eq!(engine.state.objects[&top].zone, Zone::Library);
         if leave {
-            engine.apply_command(0, &concede()).unwrap();
+            engine.apply_scenario_command(0, &concede()).unwrap();
             assert!(engine.state.pending_resolution.is_none());
             assert!(
                 engine.diagnostic_snapshot().unwrap()["state"]["pending_replacement_event"]
@@ -310,7 +311,7 @@ fn actual_into_the_wilds_replacement_pause_and_controller_departure_are_safe() {
         } else {
             let order = pending.presentation.candidates[0];
             engine
-                .apply_command(0, &submit_resolution_choice(vec![order]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![order]))
                 .unwrap();
             assert_eq!(engine.state.objects[&top].zone, Zone::Battlefield);
             assert!(engine.state.objects[&top].tapped);
@@ -330,8 +331,8 @@ fn actual_into_the_wilds_logged_choice_replays_identically() {
     resolve_look(&mut second);
     let command = submit_resolution_choice(vec![top]);
     assert_eq!(
-        first.apply_command(0, &command).unwrap(),
-        second.apply_command(0, &command).unwrap()
+        first.apply_scenario_command(0, &command).unwrap(),
+        second.apply_scenario_command(0, &command).unwrap()
     );
     assert_eq!(
         first.diagnostic_snapshot().unwrap(),
@@ -365,7 +366,9 @@ fn actual_into_the_wilds_real_cast_pays_exact_green_cost() {
         },
     );
     let before = engine.diagnostic_snapshot().unwrap();
-    assert!(engine.apply_command(0, &cast_spell(index, vec![])).is_err());
+    assert!(engine
+        .apply_scenario_command(0, &cast_spell(index, vec![]))
+        .is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     give_mana(
         &mut engine,
@@ -375,7 +378,9 @@ fn actual_into_the_wilds_real_cast_pays_exact_green_cost() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &cast_spell(index, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(index, vec![]))
+        .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.players[0].mana_pool.green, 0);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
@@ -397,9 +402,9 @@ fn actual_into_the_wilds_private_image_and_public_wording_do_not_leak_land_eligi
         let mut engine = own_upkeep(202_610_079);
         let top = set_current_top(&mut engine, card);
         let first = engine.state.priority_player_id();
-        engine.apply_command(first, &pass()).unwrap();
+        engine.apply_scenario_command(first, &pass()).unwrap();
         let batch = engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
         let choice = find_resolution_choice(&batch).unwrap();
         assert_eq!(choice.candidate_object_ids, [top]);

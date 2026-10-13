@@ -3,9 +3,10 @@
 //! Oracle and rulings checked against the physical Tempest printing on 2026-09-26; Scryfall
 //! returned no rulings. CR 105.4/106.1a define the color choice, CR 107.5 and 701.21a govern its
 //! tap and sacrifice costs, and CR 605.1a and 605.3a-b govern its immediate mana-ability resolution.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 
 type ManaPool = (u32, u32, u32, u32, u32, u32);
@@ -61,7 +62,7 @@ fn lotus_petal_sacrifices_and_adds_the_chosen_color_without_the_stack() {
         let (mut engine, petal) = lotus_petal_engine(20_260_926 + option as u64);
         let command = activate_with_mana_option(&engine, petal, option as u32);
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect("pay the tap and self-sacrifice costs and choose one color");
 
         assert_eq!(mana_pool(&engine), expected_pool, "mana option {option}");
@@ -81,7 +82,7 @@ fn lotus_petal_rejects_an_out_of_range_color_without_paying_its_costs() {
     let invalid = activate_with_mana_option(&engine, petal, 5);
 
     let error = engine
-        .apply_command(0, &invalid)
+        .apply_scenario_command(0, &invalid)
         .expect_err("the ability offers only the five colors");
     assert!(matches!(
         error,

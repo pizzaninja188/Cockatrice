@@ -316,6 +316,7 @@ impl GameEngine {
                 false,
             )
         } else if let Some(command) = &request.resolution_choice {
+            self.validate_resolution_prompt_id(player, command.resolution_prompt_id)?;
             let pending = self
                 .state
                 .pending_resolution

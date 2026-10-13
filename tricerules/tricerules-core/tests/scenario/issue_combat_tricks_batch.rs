@@ -6,6 +6,7 @@
 //! reviewed printed Oracle behavior. Governance: CR 115.1/608.2b (targeting and revalidation),
 //! 701.7 (destroy), 119.3 (life loss/gain), 611.2c and 613 layer 6 (until-end-of-turn keyword
 //! grants), and 122.1 (+1/+1 counters).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -55,7 +56,7 @@ fn issue_combat_tricks_mortify() {
     inject_card_into_hand(&mut land, 0, "mortify");
     let slot = hand_index_for_card(&land, 0, "mortify");
     assert!(
-        land.apply_command(0, &cast_spell(slot, target_object(forest)))
+        land.apply_scenario_command(0, &cast_spell(slot, target_object(forest)))
             .is_err(),
         "a land is not a creature or enchantment"
     );
@@ -156,7 +157,7 @@ fn issue_combat_tricks_blossoming_defense() {
     let slot = hand_index_for_card(&illegal, 0, "blossoming_defense");
     assert!(
         illegal
-            .apply_command(0, &cast_spell(slot, target_object(opposing2)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(opposing2)))
             .is_err(),
         "an opponent's creature is not a legal target"
     );
@@ -173,16 +174,16 @@ fn deck_coverage_rangers_guile() {
     inject_card_into_hand(&mut engine, 1, "moment_of_triumph");
     let removal_slot = hand_index_for_card(&engine, 1, "moment_of_triumph");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     assert!(
         engine
-            .apply_command(1, &cast_spell(removal_slot, target_object(own)))
+            .apply_scenario_command(1, &cast_spell(removal_slot, target_object(own)))
             .is_err(),
         "the opponent can't target the creature after Hexproof resolves"
     );
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent returns priority to the active player");
 
     end_active_turn(&mut engine, 0);
@@ -195,7 +196,7 @@ fn deck_coverage_rangers_guile() {
     let slot = hand_index_for_card(&illegal, 0, "rangers_guile");
     assert!(
         illegal
-            .apply_command(0, &cast_spell(slot, target_object(opposing)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(opposing)))
             .is_err(),
         "an opponent's creature isn't a legal target"
     );
@@ -219,7 +220,7 @@ fn issue_combat_tricks_snakeskin_veil() {
     let slot = hand_index_for_card(&illegal, 0, "snakeskin_veil");
     assert!(
         illegal
-            .apply_command(0, &cast_spell(slot, target_object(opposing)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(opposing)))
             .is_err(),
         "an opponent's creature is not a legal target"
     );
@@ -282,7 +283,7 @@ fn issue_combat_tricks_overprotect() {
     let slot = hand_index_for_card(&illegal, 0, "overprotect");
     assert!(
         illegal
-            .apply_command(0, &cast_spell(slot, target_object(opposing)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(opposing)))
             .is_err(),
         "an opponent's creature is not a legal target"
     );

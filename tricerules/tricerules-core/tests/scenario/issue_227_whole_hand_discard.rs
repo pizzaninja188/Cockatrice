@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1 as rv1;
@@ -40,7 +41,7 @@ fn cast_stoke(e: &mut GameEngine) -> u32 {
         },
     );
     let slot = hand_index_for_card(e, 0, HEARTH);
-    e.apply_command(0, &cast_spell_face(slot, vec![], 1))
+    e.apply_scenario_command(0, &cast_spell_face(slot, vec![], 1))
         .expect("cast Stoke Genius");
     oid
 }
@@ -54,8 +55,8 @@ fn issue_227_stoke_discards_the_entire_hand_without_a_selection_then_draws() {
             .collect();
         let expected_draws: Vec<_> = e.state.players[0].library.iter().take(2).copied().collect();
         let adventure = cast_stoke(&mut e);
-        e.apply_command(0, &pass()).unwrap();
-        let batch = e.apply_command(1, &pass()).unwrap();
+        e.apply_scenario_command(0, &pass()).unwrap();
+        let batch = e.apply_scenario_command(1, &pass()).unwrap();
         assert!(
             e.state.pending_resolution.is_none(),
             "no choice for a forced complete hand"
@@ -83,26 +84,26 @@ fn issue_227_library_replacements_finish_before_the_two_draws_and_adventure_exit
     pass_both_players(&mut e);
     let before = format!("{:?}", e.state);
     assert!(e
-        .apply_command(1, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![1]))
         .is_err());
     assert!(e
-        .apply_command(0, &submit_resolution_choice(vec![99]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![99]))
         .is_err());
     assert_eq!(format!("{:?}", e.state), before);
-    e.apply_command(0, &submit_resolution_choice(vec![1]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![1]))
         .unwrap();
-    e.apply_command(0, &submit_resolution_choice(vec![1]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![1]))
         .unwrap();
-    e.apply_command(0, &submit_resolution_choice(vec![0]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![0]))
         .unwrap();
     assert_eq!(e.state.players[0].hand, [first, second, discarded]);
     assert_eq!(e.state.objects[&adventure].zone, Zone::Stack);
     let before_order = format!("{:?}", e.state);
     assert!(e
-        .apply_command(0, &submit_resolution_choice(vec![first, first]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![first, first]))
         .is_err());
     assert_eq!(format!("{:?}", e.state), before_order);
-    e.apply_command(0, &submit_resolution_choice(vec![second, first]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![second, first]))
         .unwrap();
     assert_eq!(
         e.state.players[0].hand,
@@ -124,13 +125,13 @@ fn issue_227_stale_whole_hand_replacement_rejects_without_partial_discard() {
     let stale = inject_card_into_hand(&mut e, 0, "grizzly_bears");
     cast_stoke(&mut e);
     pass_both_players(&mut e);
-    e.apply_command(0, &submit_resolution_choice(vec![0]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![0]))
         .unwrap();
     // Simulate the same OID leaving and returning while its original incarnation is retained.
     *e.state.zone_change_generation.entry(stale).or_default() += 2;
     let before = format!("{:?}", e.state);
     assert!(e
-        .apply_command(0, &submit_resolution_choice(vec![0]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![0]))
         .is_err());
     assert_eq!(format!("{:?}", e.state), before);
     assert_eq!(e.state.players[0].hand, [first, stale]);
@@ -154,7 +155,7 @@ fn issue_227_multiple_madness_triggers_wait_until_stoke_finishes() {
     assert!(e.state.pending_trigger_order.is_some());
     while let Some(order) = e.state.pending_trigger_order.as_ref() {
         let source = order.candidates[0].object_id;
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitTriggerOrder(rv1::SubmitTriggerOrder {
@@ -167,7 +168,7 @@ fn issue_227_multiple_madness_triggers_wait_until_stoke_finishes() {
     for _ in 0..2 {
         pass_both_players(&mut e);
         assert!(e.state.pending_resolution.is_some());
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &submit_resolution_decision(rv1::ResolutionChoiceDecision::Decline),
         )
@@ -199,19 +200,22 @@ fn issue_227_hearth_cost_counts_the_graveyard_union_once_and_preserves_red() {
         let generic = 5u32.saturating_sub(count);
         e.state.players[0].mana_pool.colorless = generic + 1;
         assert!(
-            e.apply_command(0, &cast_spell(slot, vec![])).is_err(),
+            e.apply_scenario_command(0, &cast_spell(slot, vec![]))
+                .is_err(),
             "red is never reduced"
         );
         e.state.players[0].mana_pool.red = 1;
         e.state.players[0].mana_pool.colorless = generic.saturating_sub(1);
         if generic > 0 {
             assert!(
-                e.apply_command(0, &cast_spell(slot, vec![])).is_err(),
+                e.apply_scenario_command(0, &cast_spell(slot, vec![]))
+                    .is_err(),
                 "one mana short at {count} qualifying cards"
             );
         }
         e.state.players[0].mana_pool.colorless = generic;
-        e.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+        e.apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .unwrap();
         assert_eq!(e.state.players[0].mana_pool.red, 0);
         assert_eq!(e.state.players[0].mana_pool.colorless, 0);
         pass_both_players(&mut e);
@@ -259,7 +263,7 @@ fn issue_227_resolved_adventure_can_cast_hearth_at_its_reduced_cost() {
             ..Default::default()
         })),
     };
-    e.apply_command(0, &command).unwrap();
+    e.apply_scenario_command(0, &command).unwrap();
     pass_both_players(&mut e);
     assert_eq!(e.state.objects[&oid].zone, Zone::Battlefield);
     assert!(e
@@ -274,7 +278,7 @@ fn issue_227_countered_stoke_neither_discards_nor_grants_exile_permission() {
     let mut e = game();
     let retained = inject_card_into_hand(&mut e, 0, "grizzly_bears");
     let oid = cast_stoke(&mut e);
-    e.apply_command(0, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
     inject_card_into_hand(&mut e, 1, "counterspell");
     give_mana(
         &mut e,
@@ -285,7 +289,7 @@ fn issue_227_countered_stoke_neither_discards_nor_grants_exile_permission() {
         },
     );
     let slot = hand_index_for_card(&e, 1, "counterspell");
-    e.apply_command(1, &cast_spell(slot, target_object(oid)))
+    e.apply_scenario_command(1, &cast_spell(slot, target_object(oid)))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[0].hand, [retained]);

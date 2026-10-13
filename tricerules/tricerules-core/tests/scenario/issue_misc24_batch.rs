@@ -1,6 +1,7 @@
 //! Actual-card semantic checks for five Standard life-gain identities.
 //! Oracle and rulings endpoints checked 2026-09-22; no card-specific rulings.
 //! CR 119.3, 121.1, 508.3a, 510.2, 603.2/603.6a, 602.5, and 605.1a govern the behavior.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -35,7 +36,7 @@ fn issue_misc24_potioners_trove_requires_own_instant_or_sorcery_for_life() {
     let mut e = engine(824_001);
     let trove = inject_permanent_on_battlefield(&mut e, 0, "potioners_trove");
     assert!(e
-        .apply_command(0, &activate_ability(trove, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(trove, 1, vec![]))
         .is_err());
     assert!(
         !e.state.objects[&trove].tapped,
@@ -44,7 +45,7 @@ fn issue_misc24_potioners_trove_requires_own_instant_or_sorcery_for_life() {
 
     cast(&mut e, 0, "grizzly_bears");
     assert!(
-        e.apply_command(0, &activate_ability(trove, 1, vec![]))
+        e.apply_scenario_command(0, &activate_ability(trove, 1, vec![]))
             .is_err(),
         "an own creature spell does not meet the instant-or-sorcery condition"
     );
@@ -55,7 +56,7 @@ fn issue_misc24_potioners_trove_requires_own_instant_or_sorcery_for_life() {
     semantic::accepted(&mut e, 1, &cast_spell(opponent_slot, target_player(0)));
     resolve_entire_stack_two_player(&mut e);
     assert!(
-        e.apply_command(0, &activate_ability(trove, 1, vec![]))
+        e.apply_scenario_command(0, &activate_ability(trove, 1, vec![]))
             .is_err(),
         "an opponent's instant does not meet the controller-relative condition"
     );

@@ -6,9 +6,10 @@
 //! CR 603.6a (entry triggers), CR 115.1 (targets and controller scope), CR 608.2b (target
 //! revalidation), CR 611.2c/613.4c (until-end-of-turn P/T modifiers), and CR 704.5f (lethal
 //! toughness state-based action).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn main1(seed: u64) -> GameEngine {
     semantic::main_phase(seed)
@@ -138,7 +139,7 @@ fn issue_455_etb_pump_rejects_non_opponent_targets() {
     for illegal in [choose_trigger_object(own), choose_trigger_player(1)] {
         let before = engine.state.command_index;
         engine
-            .apply_command(0, &illegal)
+            .apply_scenario_command(0, &illegal)
             .expect_err("the entry trigger only accepts a creature an opponent controls");
         assert_eq!(engine.state.command_index, before);
         assert_eq!(

@@ -1,4 +1,5 @@
 //! Issue #98: CR 701.40 / 708 face-down permanent characteristics and lifecycle.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
@@ -164,7 +165,7 @@ fn controller_gets_generation_bound_turn_face_up_action_and_keeps_priority() {
     );
     let pool_before = engine.state.players[0].mana_pool;
     let tampered = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ExecutePermanentAction(ExecutePermanentAction {
@@ -326,10 +327,12 @@ fn manifest_dread_completes_with_one_or_zero_cards_without_a_choice() {
         );
         let slot = hand_index_for_card(&engine, 0, "manifest_dread");
         engine
-            .apply_command(0, &cast_spell(slot, vec![]))
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
             .expect("cast");
-        engine.apply_command(0, &pass()).expect("caster pass");
-        let completed = engine.apply_command(1, &pass()).expect("resolve");
+        engine
+            .apply_scenario_command(0, &pass())
+            .expect("caster pass");
+        let completed = engine.apply_scenario_command(1, &pass()).expect("resolve");
 
         assert!(find_resolution_choice(&completed).is_none());
         assert!(engine.state.pending_resolution.is_none());
@@ -381,7 +384,7 @@ fn leaving_the_battlefield_resets_face_down_and_changes_generation() {
     );
     let slot = hand_index_for_card(&engine, 0, "murder");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(angel)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(angel)))
         .expect("cast Murder");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -412,7 +415,7 @@ fn stale_or_noncreature_turn_face_up_action_is_not_legal() {
         .permanent_actions
         .is_empty());
     let err = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ExecutePermanentAction(ExecutePermanentAction {
@@ -461,10 +464,14 @@ fn manifest_dread_privately_chooses_one_top_card_and_moves_both_exact_objects() 
 
     let slot = hand_index_for_card(&engine, 0, "manifest_dread");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Manifest Dread");
-    engine.apply_command(0, &pass()).expect("caster pass");
-    let parked = engine.apply_command(1, &pass()).expect("resolve to choice");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
+    let parked = engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolve to choice");
     let choice = find_resolution_choice(&parked).expect("private top-two choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::ManifestDread);
     assert_eq!(choice.candidate_object_ids, top);
@@ -480,7 +487,7 @@ fn manifest_dread_privately_chooses_one_top_card_and_moves_both_exact_objects() 
     ));
 
     let completed = engine
-        .apply_command(0, &submit_resolution_choice(vec![top[1]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[1]]))
         .expect("choose second card to manifest");
     assert_eq!(
         engine.state.objects[&top[1]].zone,
@@ -546,7 +553,7 @@ fn unable_to_scream_applies_layers_and_prohibits_turn_face_up_until_it_leaves() 
 
     let slot = hand_index_for_card(&engine, 0, "unable_to_scream");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(angel)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(angel)))
         .expect("cast Unable to Scream");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -604,7 +611,7 @@ fn turn_inside_out_watches_the_exact_generation_once() {
     );
     let pump_slot = hand_index_for_card(&engine, 0, "turn_inside_out");
     engine
-        .apply_command(0, &cast_spell(pump_slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(pump_slot, target_object(bear)))
         .expect("cast Turn Inside Out");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.effective_power(bear), Some(5));
@@ -623,7 +630,7 @@ fn turn_inside_out_watches_the_exact_generation_once() {
     );
     let murder_slot = hand_index_for_card(&engine, 0, "murder");
     engine
-        .apply_command(0, &cast_spell(murder_slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(murder_slot, target_object(bear)))
         .expect("cast Murder");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -633,10 +640,10 @@ fn turn_inside_out_watches_the_exact_generation_once() {
     );
     let parked = {
         engine
-            .apply_command(0, &pass())
+            .apply_scenario_command(0, &pass())
             .expect("trigger controller pass");
         engine
-            .apply_command(1, &pass())
+            .apply_scenario_command(1, &pass())
             .expect("resolve delayed trigger")
     };
     let choice = find_resolution_choice(&parked).expect("manifest-dread choice");
@@ -677,14 +684,14 @@ fn bashful_beastie_and_innocuous_rat_death_triggers_manifest_dread() {
         );
         let slot = hand_index_for_card(&engine, 0, "murder");
         engine
-            .apply_command(0, &cast_spell(slot, target_object(creature)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(creature)))
             .expect("cast Murder");
         pass_both_players(&mut engine);
         engine
-            .apply_command(0, &pass())
+            .apply_scenario_command(0, &pass())
             .expect("trigger controller pass");
         let parked = engine
-            .apply_command(1, &pass())
+            .apply_scenario_command(1, &pass())
             .expect("resolve death trigger");
 
         assert_eq!(
@@ -733,13 +740,15 @@ fn twist_reality_supports_both_counter_and_manifest_modes() {
     );
     let bolt_slot = hand_index_for_card(&engine, 0, "lightning_bolt");
     engine
-        .apply_command(0, &cast_spell(bolt_slot, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(bolt_slot, target_player(1)))
         .expect("cast Bolt");
     let bolt = engine.state.stack.last().expect("Bolt on stack").id;
-    engine.apply_command(0, &pass()).expect("caster pass");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
     let twist_slot = hand_index_for_card(&engine, 1, "twist_reality");
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_modal_spell(twist_slot, vec![(0, target_object(bolt))]),
         )
@@ -775,11 +784,13 @@ fn twist_reality_supports_both_counter_and_manifest_modes() {
     );
     let slot = hand_index_for_card(&engine, 0, "twist_reality");
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, vec![])]))
         .expect("cast manifest mode");
-    engine.apply_command(0, &pass()).expect("caster pass");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
     let parked = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve manifest mode");
     assert_eq!(
         find_resolution_choice(&parked)

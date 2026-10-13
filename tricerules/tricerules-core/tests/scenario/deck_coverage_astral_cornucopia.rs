@@ -4,6 +4,7 @@
 //! confirms X=1 costs three mana and enters with one Charge counter, X=2 costs six and enters
 //! with two, and the last ability is a mana ability that uses no stack. CR 107.3m and 122.6 govern
 //! its entry counters; CR 605.1a, 605.2, and 605.3b govern its mana ability.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{EntersWithCountersAffected, StaticAbilityDef};
@@ -11,7 +12,7 @@ use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CounterKind, Layout, ManaAmount,
     SpellEffectKind,
 };
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 
 type ManaPool = (u32, u32, u32, u32, u32, u32);
@@ -298,7 +299,7 @@ fn astral_cornucopia_rejects_invalid_mana_option_without_mutation() {
     let invalid = activate_with_mana_option(&engine, source, 5);
 
     let error = engine
-        .apply_command(0, &invalid)
+        .apply_scenario_command(0, &invalid)
         .expect_err("only the five color options are available");
     assert!(matches!(
         error,

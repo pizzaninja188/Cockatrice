@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{
     Amount, CardResultAction, CardResultFilter, CardResultSource, CountExpression, DiscardQuantity,
@@ -26,10 +27,11 @@ fn choose_branch(
     index: u32,
 ) -> tricerules_proto::ruled::v1::RuledEventBatch {
     engine
-        .apply_command(
+        .apply_scenario_command(
             player,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: ResolutionChoiceDecision::SelectBranch as i32,
                     selected_branch_index: index,
                     ..Default::default()
@@ -127,13 +129,15 @@ fn flux_uses_each_players_committed_discard_count() {
     );
     let slot = hand_index_for_card(&engine, 0, "flux");
     engine
-        .apply_command(player_ids[0], &cast_spell(slot, vec![]))
+        .apply_scenario_command(player_ids[0], &cast_spell(slot, vec![]))
         .expect("cast Flux");
 
     let mut batch = Default::default();
     for _ in 0..player_ids.len() {
         let actor = engine.state.priority_player_id();
-        batch = engine.apply_command(actor, &pass()).expect("pass for Flux");
+        batch = engine
+            .apply_scenario_command(actor, &pass())
+            .expect("pass for Flux");
     }
 
     let discard_counts = [1, 0, 2];
@@ -145,7 +149,7 @@ fn flux_uses_each_players_committed_discard_count() {
         let selected = choice.candidate_object_ids[..expected_count].to_vec();
         discarded_by_player[player] = selected.clone();
         batch = engine
-            .apply_command(player_ids[player], &submit_resolution_choice(selected))
+            .apply_scenario_command(player_ids[player], &submit_resolution_choice(selected))
             .expect("submit Flux discard choice");
     }
 
@@ -210,20 +214,22 @@ fn flux_draws_interact_with_abundance_one_draw_at_a_time() {
     );
     let slot = hand_index_for_card(&engine, 0, "flux");
     engine
-        .apply_command(player_ids[0], &cast_spell(slot, vec![]))
+        .apply_scenario_command(player_ids[0], &cast_spell(slot, vec![]))
         .expect("cast Flux");
 
     let mut batch = Default::default();
     for _ in 0..player_ids.len() {
         let actor = engine.state.priority_player_id();
-        batch = engine.apply_command(actor, &pass()).expect("pass for Flux");
+        batch = engine
+            .apply_scenario_command(actor, &pass())
+            .expect("pass for Flux");
     }
     for (player, expected_count) in [(0, 1), (1, 0), (2, 0)] {
         let choice = find_resolution_choice(&batch).expect("Flux discard choice");
         assert_eq!(choice.deciding_player_id, player_ids[player]);
         let selected = choice.candidate_object_ids[..expected_count].to_vec();
         batch = engine
-            .apply_command(player_ids[player], &submit_resolution_choice(selected))
+            .apply_scenario_command(player_ids[player], &submit_resolution_choice(selected))
             .expect("submit Flux discard choice");
     }
 
@@ -257,7 +263,7 @@ fn flux_draws_interact_with_abundance_one_draw_at_a_time() {
     assert!(order_choice.public_reveal.is_none());
     assert_eq!(order_choice.candidate_object_ids, top[..3]);
     batch = engine
-        .apply_command(
+        .apply_scenario_command(
             player_ids[0],
             &submit_resolution_choice(vec![top[2], top[1], top[0]]),
         )

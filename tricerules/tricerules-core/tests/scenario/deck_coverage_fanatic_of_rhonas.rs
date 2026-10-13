@@ -1,6 +1,7 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{Color, CounterKind};
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use tricerules_core::{TurnStep, Zone};
 
 const FANATIC: &str = "fanatic_of_rhonas";
 const TOKEN: &str = "fanatic_of_rhonas_b_4_4_zombie_eternalized";
@@ -33,7 +34,7 @@ fn cast(e: &mut GameEngine, name: &str, targets: Vec<TargetRef>) -> u32 {
     let id = inject_card_into_hand(e, 0, name);
     grant_pool(e, 0);
     let slot = hand_index_for_card(e, 0, name);
-    e.apply_command(0, &cast_spell(slot, targets))
+    e.apply_scenario_command(0, &cast_spell(slot, targets))
         .expect("cast exact registered card");
     resolve_entire_stack_two_player(e);
     e.state.players[0].mana_pool = Default::default();
@@ -42,7 +43,7 @@ fn cast(e: &mut GameEngine, name: &str, targets: Vec<TargetRef>) -> u32 {
 
 fn reject(e: &mut GameEngine, actor: i32, cmd: &RuledCommand) {
     let before = format!("{:?}", e.state);
-    e.apply_command(actor, cmd)
+    e.apply_scenario_command(actor, cmd)
         .expect_err("illegal activation rejects");
     assert_eq!(format!("{:?}", e.state), before);
 }
@@ -71,7 +72,8 @@ fn dead(e: &mut GameEngine) -> (u32, RuledCommand) {
 
 fn eternalize(e: &mut GameEngine, source: u32) -> u32 {
     pay_eternalize(e);
-    e.apply_command(0, &eternalize_command(e, source)).unwrap();
+    e.apply_scenario_command(0, &eternalize_command(e, source))
+        .unwrap();
     assert_eq!(e.state.objects[&source].zone, Zone::Exile);
     assert_eq!(e.state.players[0].mana_pool, Default::default());
     assert!(battlefield_token_oids(e, 0, TOKEN).is_empty());
@@ -141,7 +143,7 @@ fn both_mana_abilities_respect_summoning_sickness_and_tap_costs() {
         e.state.objects.get_mut(&source).unwrap().tapped = false;
         e.state.players[0].mana_pool = Default::default();
         let cmd = activate_ability_for(&e, source, ability, vec![]);
-        e.apply_command(0, &cmd).unwrap();
+        e.apply_scenario_command(0, &cmd).unwrap();
         assert_eq!(e.state.players[0].mana_pool.green, amount);
         assert!(e.state.objects[&source].tapped);
         assert!(e.state.stack.is_empty());
@@ -164,7 +166,7 @@ fn ferocious_requires_current_derived_power_of_a_controlled_creature() {
         .unwrap()
         .set_counter(CounterKind::PlusOnePlusOne, 1);
     assert_eq!(e.effective_power(own), Some(4));
-    e.apply_command(0, &cmd).unwrap();
+    e.apply_scenario_command(0, &cmd).unwrap();
     assert_eq!(e.state.players[0].mana_pool.green, 4);
     e.state.objects.get_mut(&source).unwrap().tapped = false;
     e.state
@@ -189,7 +191,7 @@ fn eternalize_exiles_immediately_and_creates_exact_printed_value_token_on_resolu
     advance_to_main1_from_game_start(&mut e);
     end_active_turn(&mut e, 1);
     advance_to_main1_from_game_start(&mut e);
-    e.apply_command(0, &cmd).unwrap();
+    e.apply_scenario_command(0, &cmd).unwrap();
     assert_eq!(
         e.state.players[0].mana_pool.green, 4,
         "token alone qualifies itself for ferocious"
@@ -209,7 +211,7 @@ fn eternalize_rejects_wrong_actor_stale_generation_and_insufficient_colored_paym
     pay_eternalize(&mut e);
     reject(&mut e, 1, &cmd);
     reject(&mut e, 0, &stale);
-    e.apply_command(0, &cmd).unwrap();
+    e.apply_scenario_command(0, &cmd).unwrap();
     assert_eq!(e.state.objects[&source].zone, Zone::Exile);
     reject(&mut e, 0, &cmd);
     resolve_entire_stack_two_player(&mut e);
@@ -223,7 +225,8 @@ fn eternalize_requires_own_main_priority_and_empty_stack() {
     inject_card_into_hand(&mut e, 0, "sol_ring");
     e.state.players[0].mana_pool.colorless = 1;
     let slot = hand_index_for_card(&e, 0, "sol_ring");
-    e.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    e.apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pay_eternalize(&mut e);
     let cmd = eternalize_command(&e, source);
     reject(&mut e, 0, &cmd);
@@ -236,7 +239,7 @@ fn eternalize_requires_own_main_priority_and_empty_stack() {
         if e.state.active_player_id() != 0 {
             break;
         }
-        e.apply_command(0, &primitive_yield()).unwrap();
+        e.apply_scenario_command(0, &primitive_yield()).unwrap();
     }
     advance_to_main1_from_game_start(&mut e);
     pay_eternalize(&mut e);
@@ -251,9 +254,10 @@ fn clone_copies_all_eternalized_values_and_abilities_but_remains_a_physical_card
     let clone = inject_card_into_hand(&mut e, 0, "clone");
     grant_pool(&mut e, 0);
     let slot = hand_index_for_card(&e, 0, "clone");
-    e.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    e.apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut e);
-    e.apply_command(0, &submit_resolution_choice(vec![token]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![token]))
         .unwrap();
     assert_eq!(e.state.objects[&clone].zone, Zone::Battlefield);
     assert!(!e.state.objects[&clone].is_token());

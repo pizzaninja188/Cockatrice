@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
 use tricerules_core::state::CopiableValues;
 use tricerules_core::Zone;
@@ -59,7 +60,7 @@ fn ability_targets(engine: &mut GameEngine, source: u32) -> Vec<u32> {
 
 fn dev_move(engine: &mut GameEngine, player: i32, card_name: &str, zone: DevZone) {
     engine
-        .apply_command(
+        .apply_scenario_command(
             engine.state.priority_player_id(),
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -82,9 +83,11 @@ fn resolve_top(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves")
 }
 
@@ -199,7 +202,7 @@ fn issue_201_departed_or_returned_source_uses_captured_owner_without_moving_new_
         if returns {
             dev_move(&mut engine, 0, "Floodpits Drowner", DevZone::Battlefield);
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &RuledCommand {
                         cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {

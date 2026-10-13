@@ -1,5 +1,6 @@
 use super::helpers::*;
-use tricerules_core::{GameEngine, TurnStep, Zone};
+use crate::helpers::ScenarioCommandExt;
+use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::{ruled_command::Cmd, AbilitySourceZone};
 
 #[test]
@@ -29,10 +30,10 @@ fn graveyard_activation_carries_source_zone_and_generation() {
     assert_eq!(ability.expected_zone_change_generation, 7);
     e.state.zone_change_generation.insert(source, 8);
     let before = format!("{:?}", e.state);
-    assert!(e.apply_command(0, &command).is_err());
+    assert!(e.apply_scenario_command(0, &command).is_err());
     assert_eq!(format!("{:?}", e.state), before);
     let command = authoring_actions::activation(&mut e, 0, source, 2).unwrap();
-    e.apply_command(0, &command).unwrap();
+    e.apply_scenario_command(0, &command).unwrap();
     assert_eq!(e.state.objects[&source].zone, Zone::Exile);
     assert_eq!(e.state.players[0].mana_pool, Default::default());
     resolve_entire_stack_two_player(&mut e);
@@ -71,7 +72,7 @@ fn priority_round_finishes_existing_passes_without_crossing_next_window() {
         true,
     )
     .unwrap();
-    e.apply_command(10, &pass()).unwrap();
+    e.apply_scenario_command(10, &pass()).unwrap();
     assert_eq!(e.state.turn_step, TurnStep::Upkeep);
     pass_priority_round(&mut e);
     assert_eq!(e.state.turn_step, TurnStep::Draw);
@@ -90,7 +91,7 @@ fn offered_mana_activation_rejects_wrong_actor_and_tapped_source() {
     assert!(authoring_actions::activation(&mut e, 10, source, 99).is_err());
     assert_eq!(format!("{:?}", e.state), before);
     let command = authoring_actions::activation(&mut e, 10, source, 0).unwrap();
-    e.apply_command(10, &command).unwrap();
+    e.apply_scenario_command(10, &command).unwrap();
     assert_eq!(e.state.players[0].mana_pool.colorless, 2);
     assert!(e.state.objects[&source].tapped);
     assert!(e.state.stack.is_empty());
@@ -111,7 +112,7 @@ fn shared_ferocious_resources_enable_exact_four_green() {
     let source = authoring_fixture::ability_source(&mut e, 0, "fanatic_of_rhonas", 0, 1);
     e.state.players[0].mana_pool = Default::default();
     let command = authoring_actions::activation(&mut e, 0, source, 1).unwrap();
-    e.apply_command(0, &command).unwrap();
+    e.apply_scenario_command(0, &command).unwrap();
     assert_eq!(e.state.players[0].mana_pool.green, 4);
     assert!(e.state.objects[&source].tapped);
     assert!(e.state.stack.is_empty());
@@ -134,7 +135,7 @@ fn offered_draw_activation_pays_exact_mana_and_sacrifices_source() {
         .copied()
         .unwrap_or(0);
     let command = authoring_actions::activation(&mut e, 0, source, 1).unwrap();
-    e.apply_command(0, &command).unwrap();
+    e.apply_scenario_command(0, &command).unwrap();
     assert_eq!(e.state.players[0].mana_pool, Default::default());
     assert_eq!(e.state.objects[&source].zone, Zone::Graveyard);
     assert_eq!(e.state.zone_change_generation[&source], generation + 1);
@@ -163,7 +164,7 @@ fn shared_conformance_setup_seeds_search_recovery_and_loyalty_resources() {
     let mut e = authoring_fixture::game(710, &[0, 1], "chandra,_novice_pyromancer", Some(2));
     let source = authoring_fixture::ability_source(&mut e, 0, "chandra,_novice_pyromancer", 0, 2);
     let command = authoring_actions::activation(&mut e, 0, source, 2).unwrap();
-    e.apply_command(0, &command).unwrap();
+    e.apply_scenario_command(0, &command).unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
         e.state.objects[&source].counter_count(tricerules_cards::CounterKind::Loyalty),

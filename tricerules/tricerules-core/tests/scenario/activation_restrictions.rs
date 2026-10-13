@@ -1,6 +1,7 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{ContinuousEffectKind, EffectDuration, Keyword};
-use tricerules_core::{AffectedScope, AttachmentRecipient, ContinuousEffect, GameEngine};
+use tricerules_core::{AffectedScope, AttachmentRecipient, ContinuousEffect};
 use tricerules_proto::ruled::v1::{ruled_event::Ev, TargetRef};
 
 fn activation_engine(seed: u64) -> GameEngine {
@@ -25,7 +26,7 @@ fn celestial_enforcer_requires_a_flying_creature_controlled_by_its_controller() 
 
     assert_eq!(zone_view_ability_flags(&mut e, 0, enforcer), [false]);
     let err = e
-        .apply_command(0, &activate_ability(enforcer, 0, target(target_creature)))
+        .apply_scenario_command(0, &activate_ability(enforcer, 0, target(target_creature)))
         .expect_err("the engine must reject activation while its condition is false");
     assert!(matches!(err, tricerules_core::EngineError::Illegal(_)));
 
@@ -46,7 +47,7 @@ fn celestial_enforcer_requires_a_flying_creature_controlled_by_its_controller() 
             ..Default::default()
         },
     );
-    e.apply_command(0, &activate_ability(enforcer, 0, target(target_creature)))
+    e.apply_scenario_command(0, &activate_ability(enforcer, 0, target(target_creature)))
         .expect("the activation becomes legal after its condition is true");
     assert!(e.state.objects.get(&enforcer).expect("enforcer").tapped);
 }
@@ -67,7 +68,7 @@ fn goblin_bird_grabber_uses_the_same_condition_and_never_opens_target_selection(
             ..Default::default()
         },
     );
-    e.apply_command(0, &activate_ability(goblin, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(goblin, 0, vec![]))
         .expect("source-bound keyword grants take no targets");
     resolve_entire_stack_two_player(&mut e);
     assert!(
@@ -85,7 +86,7 @@ fn caged_zombie_tracks_committed_creature_deaths_for_ui_and_command_legality() {
     let gnomes = inject_creature_on_battlefield(&mut e, 0, "bottle_gnomes");
     assert_eq!(zone_view_ability_flags(&mut e, 0, zombie), [false]);
 
-    e.apply_command(0, &activate_ability(gnomes, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(gnomes, 0, vec![]))
         .expect("sacrifice Bottle Gnomes");
     assert_eq!(e.state.turn_history.current.creatures_died, 1);
     assert_eq!(zone_view_ability_flags(&mut e, 0, zombie), [true]);
@@ -99,7 +100,7 @@ fn caged_zombie_tracks_committed_creature_deaths_for_ui_and_command_legality() {
             ..Default::default()
         },
     );
-    e.apply_command(0, &activate_ability(zombie, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(zombie, 0, vec![]))
         .expect("Caged Zombie is legal after a committed creature death");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[1].life, 18);
@@ -148,14 +149,14 @@ fn attached_activation_prohibition_keeps_abilities_but_rejects_commands_and_foll
         .rules_annotation_labels
         .contains(&"Activated abilities can't be activated".to_string()));
     let err = e
-        .apply_command(0, &activate_ability(elves, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(elves, 0, vec![]))
         .expect_err("the engine must reject a submitted prohibited activation");
     assert!(matches!(err, tricerules_core::EngineError::Illegal(_)));
     assert!(!e.state.objects[&elves].tapped);
 
     e.state.objects.get_mut(&aura).expect("Aura").attached_to = None;
     assert_eq!(zone_view_ability_flags(&mut e, 0, elves), [true]);
-    e.apply_command(0, &activate_ability(elves, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(elves, 0, vec![]))
         .expect("the activated ability works again after it is no longer enchanted");
     assert!(e.state.objects[&elves].tapped);
 }
@@ -190,7 +191,7 @@ fn attached_activation_prohibition_preserves_keywords_static_and_triggered_abili
             ..Default::default()
         },
     );
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &activate_ability_for(&e, equipment, 0, target(equipped_creature)),
     )
@@ -255,7 +256,7 @@ fn attached_activation_prohibition_preserves_keywords_static_and_triggered_abili
         .characteristics(equipment)
         .is_some_and(|characteristics| characteristics.has_keyword(Keyword::Flying)));
     let err = e
-        .apply_command(0, &activate_ability_for(&e, equipment, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&e, equipment, 1, vec![]))
         .expect_err("an activated ability granted after attachment is also prohibited");
     assert!(matches!(err, tricerules_core::EngineError::Illegal(_)));
 
@@ -290,7 +291,7 @@ fn activation_history_changes_invalidate_the_battlefield_view_cache() {
     // command must still publish fresh ability flags instead of claiming the battlefield view is
     // unchanged.
     e.state.turn_history.current.creatures_died = 1;
-    let batch = e.apply_command(0, &pass()).expect("pass priority");
+    let batch = e.apply_scenario_command(0, &pass()).expect("pass priority");
     let view = batch
         .events
         .iter()

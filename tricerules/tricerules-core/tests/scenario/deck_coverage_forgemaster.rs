@@ -1,5 +1,6 @@
 //! Exact three-artifact activation payments for Kuldotha Forgemaster.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 
 fn game(seed: u64) -> GameEngine {
@@ -32,7 +33,9 @@ fn cast_creature(engine: &mut GameEngine, card: &str, cost: u32) -> u32 {
         },
     );
     let slot = hand_index_for_card(engine, 0, card);
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_priority_round(engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
@@ -54,7 +57,7 @@ fn forgemaster_actual_cast_has_exact_three_five() {
 
 fn rejected_unchanged(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = format!("{:?}", engine.state);
-    assert!(engine.apply_command(actor, command).is_err());
+    assert!(engine.apply_scenario_command(actor, command).is_err());
     assert_eq!(format!("{:?}", engine.state), before);
 }
 
@@ -64,7 +67,7 @@ fn resolve_one(engine: &mut GameEngine) -> RuledEventBatch {
         - engine.state.passes_since_stack_change as usize;
     for _ in 0..count {
         let actor = engine.state.priority_player_id();
-        result = engine.apply_command(actor, &pass()).unwrap();
+        result = engine.apply_scenario_command(actor, &pass()).unwrap();
     }
     result
 }
@@ -177,7 +180,7 @@ fn forgemaster_three_artifact_cohort_includes_source_then_search_and_shuffle() {
     engine.state.objects.get_mut(&source).unwrap().tapped = true;
     rejected_unchanged(&mut engine, 0, &command);
     engine.state.objects.get_mut(&source).unwrap().tapped = false;
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     for oid in [source, a, b] {
         assert_eq!(engine.state.objects[&oid].zone, Zone::Graveyard);
         assert!(engine.state.players[0].graveyard.contains(&oid));
@@ -202,7 +205,7 @@ fn forgemaster_three_artifact_cohort_includes_source_then_search_and_shuffle() {
         rejected_unchanged(&mut engine, actor, &submit_resolution_choice(objects));
     }
     let completed = engine
-        .apply_command(0, &submit_resolution_choice(vec![hit]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![hit]))
         .unwrap();
     assert_eq!(engine.state.objects[&hit].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&hit].controller, 0);
@@ -253,7 +256,7 @@ fn forgemaster_single_three_artifact_cost_has_one_simultaneous_departure_group()
             timestamp: 1,
         });
     let command = forge_command(&engine, source, &[source, artist, gnomes]);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     let captured = engine.state.pending_triggers.len()
         + engine
             .state
@@ -282,10 +285,10 @@ fn forgemaster_fewer_artifacts_unpayable_and_failure_to_find_still_shuffles() {
     // Hidden qualified searches may fail to find even an existing eligible card.
     let hit = inject_library_card(&mut engine, 0, "sol_ring");
     let command = forge_command(&engine, source, &[source, a, b]);
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     resolve_one(&mut engine);
     let completed = engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .unwrap();
     assert_eq!(engine.state.objects[&hit].zone, Zone::Library);
     assert_eq!(shuffle_count(&completed), 1);
@@ -341,7 +344,7 @@ fn forgemaster_departing_observer_distinguishes_each_object_from_one_or_more() {
             });
         let command = forge_command(&engine, source, &[source, a, b]);
         rejected_unchanged(&mut engine, 20, &command);
-        engine.apply_command(10, &command).unwrap();
+        engine.apply_scenario_command(10, &command).unwrap();
         let captured = engine.state.pending_triggers.len()
             + engine
                 .state

@@ -1,4 +1,5 @@
 //! Exact deck-corpus coverage for Skarrg, the Rage Pits.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -24,7 +25,7 @@ fn play_skarrg(engine: &mut GameEngine) -> u32 {
     inject_card_into_hand(engine, 0, SKARRG);
     let slot = hand_index_for_card(engine, 0, SKARRG);
     engine
-        .apply_command(0, &play_land(slot))
+        .apply_scenario_command(0, &play_land(slot))
         .expect("play Skarrg as a land");
     battlefield_object_for_card(engine, 0, SKARRG)
 }

@@ -4,6 +4,7 @@
 //! (additional costs), 700.2 (mode announcement), 608.2b (target revalidation), 400.3
 //! (owner/library movement), 613.4 (base P/T), 613.4c (power/toughness modifiers), and
 //! 603.2/611.2c (granted death trigger).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -56,6 +57,7 @@ fn cast_tier(
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -83,16 +85,17 @@ fn ice_magic_blizzara_requires_the_creature_owner_to_choose_placement() {
     let slot = hand_index_for_card(&e, 0, "ice_magic");
 
     semantic::accepted(&mut e, 0, &cast_tier(slot, 1, 1, target_object(bear)));
-    e.apply_command(0, &pass()).expect("caster passes priority");
+    e.apply_scenario_command(0, &pass())
+        .expect("caster passes priority");
     let parked = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("spell resolves to owner choice");
     let choice = find_resolution_choice(&parked).expect("top or bottom choice");
     assert_eq!(choice.deciding_player_id, 1);
     assert_eq!(choice.resolution_branches[0].label, "Top");
     assert_eq!(choice.resolution_branches[1].label, "Bottom");
-    assert!(e.apply_command(0, &select_branch(1)).is_err());
-    e.apply_command(1, &select_branch(1))
+    assert!(e.apply_scenario_command(0, &select_branch(1)).is_err());
+    e.apply_scenario_command(1, &select_branch(1))
         .expect("owner chooses bottom");
     assert_eq!(e.state.objects[&bear].zone, Zone::Library);
     assert_eq!(e.state.players[1].library.back(), Some(&bear));
@@ -137,15 +140,18 @@ fn restoration_magic_cura_does_not_gain_life_when_its_target_becomes_illegal() {
         0,
         &cast_tier(cura_slot, 1, 1, target_object(creature)),
     );
-    e.apply_command(0, &pass()).expect("Cura caster passes");
+    e.apply_scenario_command(0, &pass())
+        .expect("Cura caster passes");
 
     let murder_slot = hand_index_for_card(&e, 1, "murder");
     semantic::accepted(&mut e, 1, &cast_spell(murder_slot, target_object(creature)));
-    e.apply_command(1, &pass()).expect("Murder caster passes");
-    e.apply_command(0, &pass()).expect("Murder resolves");
+    e.apply_scenario_command(1, &pass())
+        .expect("Murder caster passes");
+    e.apply_scenario_command(0, &pass())
+        .expect("Murder resolves");
     assert_eq!(e.state.objects[&creature].zone, Zone::Graveyard);
 
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("Cura caster passes again");
     semantic::accepted(&mut e, 1, &pass());
     assert_eq!(e.state.players[0].life, 20);

@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{Color, ContinuousEffectKind, EffectDuration};
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
 use tricerules_core::Zone;
@@ -45,16 +46,17 @@ fn setup(counter: &str, spell: &str) -> (GameEngine, u32, usize) {
     fund(&mut e, 0);
     fund(&mut e, 1);
     let slot = hand_index_for_card(&e, 0, spell);
-    e.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    e.apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     let target = e.state.stack.last().unwrap().id;
-    e.apply_command(0, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
     let counter_slot = hand_index_for_card(&e, 1, counter);
     (e, target, counter_slot)
 }
 
 fn assert_rejected_without_mutation(e: &mut GameEngine, player: i32, command: RuledCommand) {
     let before = serde_json::to_value(&e.state).unwrap();
-    assert!(e.apply_command(player, &command).is_err());
+    assert!(e.apply_scenario_command(player, &command).is_err());
     assert_eq!(serde_json::to_value(&e.state).unwrap(), before);
 }
 
@@ -100,7 +102,7 @@ fn issue_231_counter_offers_submission_and_resolution_agree() {
             cast_spell(slot, stack_target(target))
         };
         if legal {
-            e.apply_command(1, &command).unwrap();
+            e.apply_scenario_command(1, &command).unwrap();
             resolve_entire_stack_two_player(&mut e);
             assert_eq!(
                 e.state.objects[&target].zone,
@@ -129,7 +131,7 @@ fn set_colors(e: &mut GameEngine, oid: u32, colors: Vec<Color>) {
 fn issue_231_flashfreeze_rechecks_color_and_exact_stack_generation() {
     for change_generation in [false, true] {
         let (mut e, target, slot) = setup("flashfreeze", "hill_giant");
-        e.apply_command(1, &cast_spell(slot, stack_target(target)))
+        e.apply_scenario_command(1, &cast_spell(slot, stack_target(target)))
             .unwrap();
         if change_generation {
             *e.state.zone_change_generation.entry(target).or_default() += 1;
@@ -152,7 +154,7 @@ fn issue_231_flashfreeze_rechecks_color_and_exact_stack_generation() {
             .valid_stack_ids
             .contains(&target)
     );
-    e.apply_command(1, &cast_spell(slot, stack_target(target)))
+    e.apply_scenario_command(1, &cast_spell(slot, stack_target(target)))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.objects[&target].zone, Zone::Graveyard);
@@ -210,7 +212,7 @@ fn issue_231_get_out_returns_one_or_two_owned_permanents_under_either_controller
         } else {
             vec![own, stolen]
         };
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(1, return_targets(&targets))]),
         )
@@ -250,7 +252,7 @@ fn issue_231_get_out_rechecks_types_and_generations_for_each_target() {
         for generation_change in [false, true] {
             let (mut e, own, stolen, _) = get_out_setup();
             let slot = hand_index_for_card(&e, 0, "get_out");
-            e.apply_command(
+            e.apply_scenario_command(
                 0,
                 &cast_modal_spell(slot, vec![(1, return_targets(&[own, stolen]))]),
             )
@@ -297,7 +299,7 @@ fn issue_231_get_out_uses_one_snapshot_for_simultaneous_leave_triggers() {
     let recipient = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let slot = hand_index_for_card(&e, 0, "get_out");
     // Put the observer first: sequential snapshots would lose its observation of the bear.
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_modal_spell(slot, vec![(1, return_targets(&[scribe, bear]))]),
     )
@@ -311,7 +313,7 @@ fn issue_231_get_out_uses_one_snapshot_for_simultaneous_leave_triggers() {
             !e.state.pending_triggers.is_empty(),
             "Scribe observes both departures"
         );
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -345,7 +347,7 @@ fn issue_231_flashfreeze_can_counter_a_virtual_spell_copy_without_touching_origi
             .valid_stack_ids
             .contains(&copied)
     );
-    e.apply_command(1, &cast_spell(slot, stack_target(copied)))
+    e.apply_scenario_command(1, &cast_spell(slot, stack_target(copied)))
         .unwrap();
     pass_both_players(&mut e);
     assert_eq!(e.state.stack.len(), 1);

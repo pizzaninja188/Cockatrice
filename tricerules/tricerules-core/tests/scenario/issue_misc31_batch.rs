@@ -1,5 +1,6 @@
 //! Actual-card semantics for five pinned Standard token cards.
 //! Exact Scryfall Oracle and rulings checked 2026-09-22.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{Color, Keyword};
@@ -198,7 +199,7 @@ fn issue_misc31_fountainport_four_abilities() {
     let bad =
         activate_ability_with_costs(land, 1, vec![], vec![permanent_cost_selection(2, nontoken)]);
     assert!(
-        draw.apply_command(0, &bad).is_err(),
+        draw.apply_scenario_command(0, &bad).is_err(),
         "a card cannot pay the token sacrifice"
     );
     assert!(!draw.state.objects[&land].tapped);
@@ -248,7 +249,7 @@ fn issue_misc31_baxter_combat_target() {
     let ordinary = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     semantic::accepted(&mut e, 0, &primitive_yield());
     assert!(
-        e.apply_command(0, &choose_trigger(target_object(ordinary)))
+        e.apply_scenario_command(0, &choose_trigger(target_object(ordinary)))
             .is_err(),
         "a nonartifact creature is illegal"
     );

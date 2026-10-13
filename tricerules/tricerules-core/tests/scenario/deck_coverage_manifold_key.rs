@@ -3,9 +3,10 @@
 //! Oracle text and its Scryfall ruling were checked 2026-09-26. CR 602.2a-b and 115.1c cover
 //! activation and target choice; CR 509.1b preserves an already-declared legal block, and CR 608.2b
 //! rechecks targets on resolution.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, TurnStep};
+use tricerules_core::TurnStep;
 use tricerules_proto::ruled::v1::BlockPair;
 
 const MANIFOLD_KEY: &str = "manifold_key";
@@ -27,13 +28,13 @@ fn main1_engine(seed: u64) -> GameEngine {
 
 fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("advance to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defending player passes");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 }
@@ -56,7 +57,7 @@ fn manifold_key_untaps_another_artifact_and_rejects_illegal_targets() {
 
     for illegal_target in [key, nonartifact] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_ability_for(&engine, key, 0, target_object(illegal_target)),
             )
@@ -99,13 +100,13 @@ fn manifold_key_makes_a_target_unblockable_and_cannot_unblock_a_blocked_creature
 
     advance_main1_to_declare_attackers(&mut before_blocks);
     before_blocks
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("attack with the target creature");
     before_blocks
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes after attackers");
     before_blocks
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defending player passes to declare blockers");
     assert_eq!(before_blocks.state.turn_step, TurnStep::DeclareBlockers);
     let legal_pairs = before_blocks.initial_response_batch().legal_by_player[&1]
@@ -113,7 +114,7 @@ fn manifold_key_makes_a_target_unblockable_and_cannot_unblock_a_blocked_creature
         .clone();
     assert!(legal_pairs.iter().all(|pair| pair.attacker_id != attacker));
     before_blocks
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,
@@ -128,17 +129,17 @@ fn manifold_key_makes_a_target_unblockable_and_cannot_unblock_a_blocked_creature
     let blocker = inject_creature_on_battlefield(&mut after_blocks, 1, "grizzly_bears");
     advance_main1_to_declare_attackers(&mut after_blocks);
     after_blocks
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("attack before activating the evasion ability");
     after_blocks
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes after attackers");
     after_blocks
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defending player passes to declare blockers");
     assert_eq!(after_blocks.state.turn_step, TurnStep::DeclareBlockers);
     after_blocks
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: attacker,

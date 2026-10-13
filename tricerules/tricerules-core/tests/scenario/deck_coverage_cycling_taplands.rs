@@ -3,9 +3,10 @@
 //! Expectations come from the pinned Oracle text and the current Comprehensive Rules: CR 614.1c
 //! (enters-tapped replacement), CR 605.1a/605.3b (mana abilities resolve immediately), and
 //! CR 702.29a (hand-only cycling, with discard as a cost and a draw on resolution).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::AbilitySourceZone;
 
 type ManaOption = (u32, u32, u32, u32, u32, u32);
@@ -122,7 +123,7 @@ fn deck_coverage_cycling_taplands_enter_tapped_and_produce_each_printed_color() 
             );
             let before = engine.state.command_index;
             engine
-                .apply_command(0, &mana_option(&engine, source, option_index as u32))
+                .apply_scenario_command(0, &mana_option(&engine, source, option_index as u32))
                 .expect_err("a land entering tapped cannot pay its mana ability's tap cost");
             assert_eq!(engine.state.command_index, before);
             assert!(engine.state.objects[&source].tapped);
@@ -168,7 +169,7 @@ fn deck_coverage_cycling_taplands_pay_the_printed_cost_discard_and_draw() {
         let command = hand_cycling(&engine, source);
         let command_index = engine.state.command_index;
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect_err("Cycling requires its printed mana cost");
         assert_eq!(engine.state.command_index, command_index);
         assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
@@ -196,7 +197,7 @@ fn deck_coverage_cycling_taplands_pay_the_printed_cost_discard_and_draw() {
         assert_eq!(engine.state.objects[&drawn].zone, Zone::Hand);
         assert_eq!(engine.state.players[1].hand, opponent_hand);
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect_err("the spent Cycling card is no longer in hand");
     }
 }

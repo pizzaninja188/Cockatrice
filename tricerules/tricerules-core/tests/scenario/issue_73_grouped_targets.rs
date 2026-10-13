@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 
 fn grouped(object_ids: &[u32]) -> Vec<TargetRef> {
@@ -47,7 +48,7 @@ fn ghostform_accepts_zero_and_applies_to_two_targets() {
 
     let zero = hand_index_for_card(&engine, 0, "ghostform");
     engine
-        .apply_command(0, &cast_spell(zero, vec![]))
+        .apply_scenario_command(0, &cast_spell(zero, vec![]))
         .expect("cast Ghostform with zero targets");
     resolve_entire_stack_two_player(&mut engine);
     assert!(zone_view_rules_annotation_labels(&mut engine, 0, first).is_empty());
@@ -55,7 +56,7 @@ fn ghostform_accepts_zero_and_applies_to_two_targets() {
     ensure_in_hand(&mut engine, 0, "ghostform");
     let two = hand_index_for_card(&engine, 0, "ghostform");
     engine
-        .apply_command(0, &cast_spell(two, grouped(&[first, second])))
+        .apply_scenario_command(0, &cast_spell(two, grouped(&[first, second])))
         .expect("cast Ghostform with two targets");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -99,7 +100,7 @@ fn soul_salvage_returns_zero_one_or_two_creatures_in_selection_order() {
         let spell = hand_index_for_card(&engine, 0, "soul_salvage");
         let selected = [second, first].into_iter().take(count).collect::<Vec<_>>();
         engine
-            .apply_command(0, &cast_spell(spell, grouped(&selected)))
+            .apply_scenario_command(0, &cast_spell(spell, grouped(&selected)))
             .expect("cast Soul Salvage");
         resolve_entire_stack_two_player(&mut engine);
 
@@ -171,7 +172,7 @@ fn grouped_submission_rejects_duplicates_overfill_and_wrong_zone_before_costs() 
 
     for invalid in [grouped(&[first, first]), grouped(&[first, second, third])] {
         assert!(engine
-            .apply_command(0, &cast_spell(spell, invalid))
+            .apply_scenario_command(0, &cast_spell(spell, invalid))
             .is_err());
         assert_eq!(engine.state.players[0].hand, hand_before);
         assert_eq!(engine.state.players[0].mana_pool.blue, mana_before);
@@ -183,7 +184,7 @@ fn grouped_submission_rejects_duplicates_overfill_and_wrong_zone_before_costs() 
     engine.state.players[1].graveyard.push(first);
     engine.state.objects.get_mut(&first).expect("first").zone = tricerules_core::Zone::Graveyard;
     assert!(engine
-        .apply_command(0, &cast_spell(spell, grouped(&[first])))
+        .apply_scenario_command(0, &cast_spell(spell, grouped(&[first])))
         .is_err());
     assert_eq!(engine.state.players[0].hand, hand_before);
     assert_eq!(engine.state.players[0].mana_pool.blue, mana_before);
@@ -222,7 +223,7 @@ fn frost_breath_partially_resolves_when_one_target_leaves() {
         target.kind = TargetRefKind::Permanent as i32;
     }
     let cast_batch = engine
-        .apply_command(0, &cast_spell(spell, targets))
+        .apply_scenario_command(0, &cast_spell(spell, targets))
         .expect("cast Frost Breath");
     let pushed = cast_batch
         .events
@@ -278,7 +279,7 @@ fn frost_breath_fizzles_when_every_chosen_target_is_illegal() {
     );
     let spell = hand_index_for_card(&engine, 0, "frost_breath");
     engine
-        .apply_command(0, &cast_spell(spell, grouped(&[first, second])))
+        .apply_scenario_command(0, &cast_spell(spell, grouped(&[first, second])))
         .expect("cast Frost Breath");
     for stale in [first, second] {
         engine.state.players[1]

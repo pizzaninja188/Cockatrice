@@ -1,7 +1,8 @@
 //! Skitterbeam Battalion's Prototype cast choice and cast-gated token copies.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{CardRegistry, Color};
-use tricerules_core::{state::CopiableValues, GameEngine, Zone};
+use tricerules_core::{state::CopiableValues, Zone};
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::{
     dev_command, DevCommand, DevMoveCard, DevZone, TargetRef, TargetRefKind,
@@ -72,7 +73,7 @@ fn cast_and_resolve(prototyped: bool, seed: u64) -> (GameEngine, u32) {
     };
     cast.prototyped = prototyped;
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("cast the selected Skitterbeam mode");
 
     pass_priority_round(&mut engine); // resolve the creature and put its ETB trigger on the stack
@@ -196,7 +197,7 @@ fn skitterbeam_entering_without_being_cast_does_not_create_tokens() {
     let source = inject_card_into_hand(&mut engine, 0, SKITTERBEAM);
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -266,7 +267,7 @@ fn copied_prototype_creature_spell_resolves_as_a_prototyped_token_without_cast_t
     };
     cast.prototyped = true;
     let cast_batch = engine
-        .apply_command(0, &cast_source)
+        .apply_scenario_command(0, &cast_source)
         .expect("cast Skitterbeam as a prototyped spell");
     let source_push = cast_batch
         .events
@@ -283,7 +284,7 @@ fn copied_prototype_creature_spell_resolves_as_a_prototyped_token_without_cast_t
     assert!(source_push.prototyped);
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     let copier = inject_card_into_hand(&mut engine, 1, "prototype_copy_any_spell_fixture");
     give_mana(
@@ -297,7 +298,7 @@ fn copied_prototype_creature_spell_resolves_as_a_prototyped_token_without_cast_t
     );
     let copier_slot = hand_index_for_card(&engine, 1, "prototype_copy_any_spell_fixture");
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_spell(
                 copier_slot,
@@ -314,7 +315,7 @@ fn copied_prototype_creature_spell_resolves_as_a_prototyped_token_without_cast_t
     for _ in 0..2 {
         let actor = engine.state.priority_player_id();
         copy_batch = engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass to resolve the fixture copy spell");
     }
     let copy_push = copy_batch

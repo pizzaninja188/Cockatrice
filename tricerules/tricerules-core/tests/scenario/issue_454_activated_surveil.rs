@@ -5,9 +5,10 @@
 //! snapshot `27bf3214-1271-490b-bdfe-c0be6c23d02e`; none returned a ruling. Governing CR
 //! concepts: CR 701.25 (surveil), CR 602.2b (activated-ability costs), CR 605 (mana abilities),
 //! CR 614.1c (enters tapped), and CR 601.2h (paying a cost before the ability resolves).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 /// `(w, u, b, r, g, c)`; a named alias keeps the reviewed fixtures readable.
 type ManaOption = (u32, u32, u32, u32, u32, u32);
@@ -199,7 +200,7 @@ fn issue_454_activation_is_rejected_without_mana_and_when_already_tapped() {
         let before = no_mana.state.command_index;
         let activation = activate_ability_for(&no_mana, source, case.ability_index, vec![]);
         no_mana
-            .apply_command(0, &activation)
+            .apply_scenario_command(0, &activation)
             .expect_err("the exact mana cost must be paid");
         assert_eq!(no_mana.state.command_index, before);
         assert!(!no_mana.state.objects[&source].tapped);
@@ -220,7 +221,7 @@ fn issue_454_activation_is_rejected_without_mana_and_when_already_tapped() {
         let before = tapped.state.command_index;
         let activation = activate_ability_for(&tapped, source, case.ability_index, vec![]);
         tapped
-            .apply_command(0, &activation)
+            .apply_scenario_command(0, &activation)
             .expect_err("a tapped source cannot pay the tap cost");
         assert_eq!(tapped.state.command_index, before);
         assert!(tapped.state.stack.is_empty());

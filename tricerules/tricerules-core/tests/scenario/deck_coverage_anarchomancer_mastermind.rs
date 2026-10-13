@@ -1,5 +1,6 @@
 //! Exact-card cost reductions and opponent draw ordinals.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{AbilityPresentation, Keyword, Layout};
 use tricerules_core::TurnStep;
 
@@ -7,7 +8,7 @@ fn pass_round(engine: &mut GameEngine) {
     for _ in 0..engine.state.players.len() {
         answer_trigger_order_in_engine_order(engine);
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
 }
@@ -105,14 +106,16 @@ fn anarchomancer_matches_each_color_once_only_for_its_controller_and_preserves_p
     );
     let index = hand_index_for_card(&engine, 0, "raging_kavu");
     engine
-        .apply_command(0, &cast_spell(index, vec![]))
+        .apply_scenario_command(0, &cast_spell(index, vec![]))
         .expect("both colored pips are still paid");
     assert_eq!(engine.state.players[0].mana_pool.red, 0);
     assert_eq!(engine.state.players[0].mana_pool.green, 0);
     resolve_entire_stack_two_player(&mut engine);
     let index = hand_index_for_card(&engine, 0, "raging_goblin");
     assert!(
-        engine.apply_command(0, &cast_spell(index, vec![])).is_err(),
+        engine
+            .apply_scenario_command(0, &cast_spell(index, vec![]))
+            .is_err(),
         "reduction cannot remove red pip at generic zero"
     );
     give_mana(
@@ -124,10 +127,10 @@ fn anarchomancer_matches_each_color_once_only_for_its_controller_and_preserves_p
         },
     );
     engine
-        .apply_command(0, &cast_spell(index, vec![]))
+        .apply_scenario_command(0, &cast_spell(index, vec![]))
         .expect("generic floor zero with red paid");
     inject_card_into_hand(&mut engine, 1, "raging_kavu");
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     assert_eq!(
         reduction(&mut engine, 1, "raging_kavu"),
         0,
@@ -250,7 +253,7 @@ fn mastermind_flash_casts_on_opponent_turn_and_draw_history_resets() {
     end_active_turn(&mut engine, 0);
     pass_both_players(&mut engine); // normal turn draw is opponent's first draw
     pass_both_players(&mut engine); // opponent main1
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     let faerie = inject_card_into_hand(&mut engine, 0, "faerie_mastermind");
     give_mana(
         &mut engine,
@@ -263,7 +266,7 @@ fn mastermind_flash_casts_on_opponent_turn_and_draw_history_resets() {
     );
     let index = hand_index_for_card(&engine, 0, "faerie_mastermind");
     engine
-        .apply_command(0, &cast_spell(index, vec![]))
+        .apply_scenario_command(0, &cast_spell(index, vec![]))
         .expect("Flash permits opponent-turn cast");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -271,7 +274,7 @@ fn mastermind_flash_casts_on_opponent_turn_and_draw_history_resets() {
         tricerules_core::Zone::Battlefield
     );
     // Active opponent passes so controller can activate at normal timing.
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     give_mana(
         &mut engine,
         0,

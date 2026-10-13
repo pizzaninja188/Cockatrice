@@ -1,4 +1,5 @@
 //! CR 513.1-2 / 603.4 beginning-of-end-step triggers and their intervening-if conditions.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::CounterKind;
@@ -73,10 +74,10 @@ fn issue_167_canonized_targeting_and_sacrifice_activation_are_authoritative() {
     };
     let history = engine.state.turn_history.clone();
     let index = engine.state.command_index;
-    assert!(engine.apply_command(0, &choose(theirs)).is_err());
+    assert!(engine.apply_scenario_command(0, &choose(theirs)).is_err());
     assert_eq!(engine.state.command_index, index);
     assert_eq!(engine.state.turn_history, history);
-    engine.apply_command(0, &choose(ours)).unwrap();
+    engine.apply_scenario_command(0, &choose(ours)).unwrap();
     resolve_stack_collecting_batches(&mut engine);
     assert_eq!(
         engine.state.objects[&ours].counter_count(CounterKind::PlusOnePlusOne),
@@ -84,7 +85,7 @@ fn issue_167_canonized_targeting_and_sacrifice_activation_are_authoritative() {
     );
     let command = activate_ability_for(&engine, enchantment, 0, vec![]);
     assert!(
-        engine.apply_command(0, &command).is_err(),
+        engine.apply_scenario_command(0, &command).is_err(),
         "insufficient mana cannot sacrifice the source"
     );
     assert_eq!(engine.state.turn_history, history);
@@ -100,7 +101,7 @@ fn issue_167_canonized_targeting_and_sacrifice_activation_are_authoritative() {
             ..Default::default()
         },
     );
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(
         engine
             .state
@@ -151,7 +152,9 @@ fn issue_167_descending_during_the_end_step_does_not_create_a_retroactive_trigge
         engine.state.objects[&skulltaker].counter_count(CounterKind::PlusOnePlusOne),
         0
     );
-    engine.apply_command(0, &primitive_yield()).unwrap();
+    engine
+        .apply_scenario_command(0, &primitive_yield())
+        .unwrap();
     resolve_cleanup_discards_if_any(&mut engine);
     assert!(engine
         .state
@@ -178,21 +181,21 @@ fn end_step_engine(seed: u64) -> GameEngine {
 
 fn advance_to_end_step(engine: &mut GameEngine, active: i32) {
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("main 1 to beginning of combat");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("beginning of combat advance");
     if engine.state.turn_step == tricerules_core::TurnStep::DeclareAttackers {
         engine
-            .apply_command(active, &primitive_yield())
+            .apply_scenario_command(active, &primitive_yield())
             .expect("declare no attackers");
     }
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("end combat to main 2");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("main 2 to end step");
     assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::EndStep);
 }
@@ -209,12 +212,12 @@ fn resolve_stack_collecting_batches(engine: &mut GameEngine) -> Vec<RuledEventBa
         };
         batches.push(
             engine
-                .apply_command(first, &pass())
+                .apply_scenario_command(first, &pass())
                 .expect("first priority pass"),
         );
         batches.push(
             engine
-                .apply_command(second, &pass())
+                .apply_scenario_command(second, &pass())
                 .expect("second priority pass"),
         );
     }
@@ -288,7 +291,7 @@ fn twinblade_assassins_draws_once_when_a_creature_died() {
     grant_pool(&mut engine, 0);
     let murder = hand_index_for_card(&engine, 0, "murder");
     engine
-        .apply_command(0, &cast_spell(murder, targets_with_damage(vec![(bear, 0)])))
+        .apply_scenario_command(0, &cast_spell(murder, targets_with_damage(vec![(bear, 0)])))
         .expect("cast Murder");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.turn_history.current.creatures_died, 1);
@@ -413,12 +416,12 @@ fn source_that_changes_object_generation_gets_neither_mauler_effect() {
     assert_eq!(engine.state.stack.len(), 1);
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     grant_pool(&mut engine, 1);
     let boomerang = hand_index_for_card(&engine, 1, "boomerang");
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_spell(boomerang, targets_with_damage(vec![(mauler, 0)])),
         )

@@ -3,6 +3,7 @@
 //! Oracle and rulings checked 2026-09-30. CR 303.4a governs the Aura spell's creature target;
 //! CR 608.2b governs an illegal target at resolution. CR 613.1d-g govern the attached type,
 //! color, ability-removal, and base power/toughness effects.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::{Color, CounterKind, Keyword};
@@ -63,7 +64,7 @@ fn kenrith_transformation_draws_and_sets_the_enchanted_creature_characteristics(
     for target in [legendary, artifact] {
         let slot = hand_index_for_card(&engine, 0, TRANSFORMATION);
         engine
-            .apply_command(0, &cast_spell(slot, target_object(target)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
             .expect("cast Kenrith's Transformation at a creature");
         resolve_entire_stack_two_player(&mut engine);
     }
@@ -128,7 +129,7 @@ fn kenrith_transformation_draws_and_sets_the_enchanted_creature_characteristics(
     );
     let flight_slot = hand_index_for_card(&engine, 0, "flight");
     engine
-        .apply_command(0, &cast_spell(flight_slot, target_object(legendary)))
+        .apply_scenario_command(0, &cast_spell(flight_slot, target_object(legendary)))
         .expect("grant an ability after Kenrith's Transformation");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.effective_has_keyword(legendary, Keyword::Flying));
@@ -152,7 +153,7 @@ fn kenrith_transformation_does_not_enter_or_draw_if_its_target_becomes_illegal()
     let hand_before = engine.state.players[0].hand.len();
     let slot = hand_index_for_card(&engine, 0, TRANSFORMATION);
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Kenrith's Transformation at a legal creature");
     engine.state.players[0]
         .battlefield
@@ -196,7 +197,7 @@ fn kenrith_transformation_rejects_a_noncreature_spell_target() {
     let slot = hand_index_for_card(&engine, 0, TRANSFORMATION);
 
     engine
-        .apply_command(0, &cast_spell(slot, target_object(land)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(land)))
         .expect_err("a land is not a legal Enchant creature target");
 
     assert_eq!(engine.state.objects[&land].zone, Zone::Battlefield);

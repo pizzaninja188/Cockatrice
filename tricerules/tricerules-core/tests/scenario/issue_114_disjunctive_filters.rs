@@ -1,5 +1,6 @@
 //! Issue #114: recursive OR filters use the same authoritative predicates at publication,
 //! submission, and resolution.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{
@@ -46,7 +47,9 @@ fn issue_176_enter(engine: &mut GameEngine, card: &str, targets: Vec<TargetRef>)
     );
     let slot = hand_index_for_card(engine, 0, card);
     let oid = engine.state.players[0].hand[slot];
-    engine.apply_command(0, &cast_spell(slot, targets)).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, targets))
+        .unwrap();
     pass_both_players(engine);
     assert_eq!(engine.state.objects[&oid].zone, Zone::Battlefield);
     oid
@@ -88,11 +91,11 @@ fn issue_176_kraul_whipcracker_targets_only_opponents_tokens() {
     );
     for illegal in [own, nontoken] {
         assert!(engine
-            .apply_command(0, &issue_176_choose(None, issue_176_target(illegal)))
+            .apply_scenario_command(0, &issue_176_choose(None, issue_176_target(illegal)))
             .is_err());
     }
     engine
-        .apply_command(0, &issue_176_choose(None, issue_176_target(token)))
+        .apply_scenario_command(0, &issue_176_choose(None, issue_176_target(token)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert!(!engine.state.objects.contains_key(&token));
@@ -108,10 +111,10 @@ fn issue_176_due_diligence_rechecks_enchanted_creature_on_resolution() {
         let aura = issue_176_enter(&mut engine, "due_diligence", issue_176_target(first));
         assert_eq!(engine.effective_power(first), Some(4));
         assert!(engine
-            .apply_command(0, &issue_176_choose(None, issue_176_target(first)))
+            .apply_scenario_command(0, &issue_176_choose(None, issue_176_target(first)))
             .is_err());
         engine
-            .apply_command(0, &issue_176_choose(None, issue_176_target(second)))
+            .apply_scenario_command(0, &issue_176_choose(None, issue_176_target(second)))
             .unwrap();
         if retarget {
             engine.state.objects.get_mut(&aura).unwrap().attached_to =
@@ -137,12 +140,15 @@ fn issue_176_hivespine_wolverine_modes_use_their_own_filters() {
         let wolverine = issue_176_enter(&mut engine, "hivespine_wolverine", vec![]);
         if mode == 1 {
             assert!(engine
-                .apply_command(0, &issue_176_choose(Some(mode), issue_176_target(creature)))
+                .apply_scenario_command(
+                    0,
+                    &issue_176_choose(Some(mode), issue_176_target(creature))
+                )
                 .is_err());
         }
         let chosen = [creature, token, artifact][mode as usize];
         engine
-            .apply_command(0, &issue_176_choose(Some(mode), issue_176_target(chosen)))
+            .apply_scenario_command(0, &issue_176_choose(Some(mode), issue_176_target(chosen)))
             .unwrap();
         resolve_entire_stack_two_player(&mut engine);
         match mode {
@@ -180,7 +186,7 @@ fn issue_176_rooftop_and_downwind_use_positive_damage_history() {
         );
         let slot = hand_index_for_card(&engine, 0, "shock");
         engine
-            .apply_command(0, &cast_spell(slot, issue_176_target(damaged)))
+            .apply_scenario_command(0, &cast_spell(slot, issue_176_target(damaged)))
             .unwrap();
         resolve_entire_stack_two_player(&mut engine);
         // History is independent of remaining marked damage.
@@ -188,12 +194,12 @@ fn issue_176_rooftop_and_downwind_use_positive_damage_history() {
         issue_176_enter(&mut engine, card, vec![]);
         if mode != Some(0) {
             assert!(engine
-                .apply_command(0, &issue_176_choose(mode, issue_176_target(untouched)))
+                .apply_scenario_command(0, &issue_176_choose(mode, issue_176_target(untouched)))
                 .is_err());
         }
         let chosen = if mode == Some(0) { untouched } else { damaged };
         engine
-            .apply_command(0, &issue_176_choose(mode, issue_176_target(chosen)))
+            .apply_scenario_command(0, &issue_176_choose(mode, issue_176_target(chosen)))
             .unwrap();
         resolve_entire_stack_two_player(&mut engine);
         if mode == Some(0) {
@@ -228,7 +234,7 @@ fn issue_176_hoarding_recluse_excludes_its_death_incarnation() {
         );
         let slot = hand_index_for_card(&engine, 0, "murder");
         engine
-            .apply_command(0, &cast_spell(slot, issue_176_target(recluse)))
+            .apply_scenario_command(0, &cast_spell(slot, issue_176_target(recluse)))
             .unwrap();
         pass_both_players(&mut engine);
         let batch = engine.initial_response_batch();
@@ -246,10 +252,10 @@ fn issue_176_hoarding_recluse_excludes_its_death_incarnation() {
             }]
         };
         assert!(engine
-            .apply_command(0, &issue_176_choose(None, grave(recluse)))
+            .apply_scenario_command(0, &issue_176_choose(None, grave(recluse)))
             .is_err());
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &issue_176_choose(None, if skip { vec![] } else { grave(other) }),
             )
@@ -292,9 +298,9 @@ fn issue_176_druid_counts_any_owned_token_and_tycoon_can_sacrifice_it() {
     let wrong_owner = command(opponent_token);
     let nontoken = command(druid);
     let valid = command(mercenaries[0]);
-    assert!(engine.apply_command(0, &wrong_owner).is_err());
-    assert!(engine.apply_command(0, &nontoken).is_err());
-    engine.apply_command(0, &valid).unwrap();
+    assert!(engine.apply_scenario_command(0, &wrong_owner).is_err());
+    assert!(engine.apply_scenario_command(0, &nontoken).is_err());
+    engine.apply_scenario_command(0, &valid).unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.effective_has_keyword(tycoon, tricerules_cards::Keyword::Indestructible));
     assert_eq!(engine.effective_power(druid), Some(2));
@@ -326,7 +332,7 @@ fn issue_176_feed_checks_resolution_turn_and_sole_target_legality() {
         );
         let slot = hand_index_for_card(&engine, 0, "feed_the_cauldron");
         engine
-            .apply_command(0, &cast_spell(slot, issue_176_target(target)))
+            .apply_scenario_command(0, &cast_spell(slot, issue_176_target(target)))
             .unwrap();
         if leaves {
             engine.state.players[1]
@@ -379,11 +385,11 @@ fn issue_176_feed_the_cauldron_checks_mana_value_and_creates_food() {
     let slot = hand_index_for_card(&engine, 0, "feed_the_cauldron");
     let index = engine.state.command_index;
     assert!(engine
-        .apply_command(0, &cast_spell(slot, issue_176_target(large)))
+        .apply_scenario_command(0, &cast_spell(slot, issue_176_target(large)))
         .is_err());
     assert_eq!(engine.state.command_index, index);
     engine
-        .apply_command(0, &cast_spell(slot, issue_176_target(small)))
+        .apply_scenario_command(0, &cast_spell(slot, issue_176_target(small)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&small].zone, Zone::Graveyard);
@@ -564,18 +570,20 @@ fn issue_198_shared_predicate_publishes_and_resolves_searches_and_graveyard_targ
             );
             for illegal in [wrong_type, wrong_owner] {
                 assert!(engine
-                    .apply_command(0, &issue_176_choose(None, target_object(illegal)))
+                    .apply_scenario_command(0, &issue_176_choose(None, target_object(illegal)))
                     .is_err());
             }
         }
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &issue_176_choose(None, if search { vec![] } else { target_object(giant) }),
             )
             .expect("announce the engine-offered trigger");
-        engine.apply_command(0, &pass()).unwrap();
-        let batch = engine.apply_command(1, &pass()).expect("resolve trigger");
+        engine.apply_scenario_command(0, &pass()).unwrap();
+        let batch = engine
+            .apply_scenario_command(1, &pass())
+            .expect("resolve trigger");
         if search {
             let choice =
                 find_resolution_choice(&batch).expect("search is parked for an engine choice");
@@ -584,14 +592,14 @@ fn issue_198_shared_predicate_publishes_and_resolves_searches_and_graveyard_targ
             assert!(choice.public_reveal.is_none());
             for illegal in [wrong_type, wrong_owner] {
                 assert!(engine
-                    .apply_command(0, &submit_resolution_choice(vec![illegal]))
+                    .apply_scenario_command(0, &submit_resolution_choice(vec![illegal]))
                     .is_err());
             }
             assert!(engine
-                .apply_command(1, &submit_resolution_choice(vec![giant]))
+                .apply_scenario_command(1, &submit_resolution_choice(vec![giant]))
                 .is_err());
             engine
-                .apply_command(0, &submit_resolution_choice(vec![giant]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![giant]))
                 .expect("take the offered card");
         }
         assert!(engine.state.players[0].hand.contains(&giant));
@@ -714,7 +722,7 @@ fn forged_nonmatching_target_is_rejected_before_mana_or_card_movement() {
     let mana_before = engine.state.players[0].mana_pool;
 
     assert!(engine
-        .apply_command(0, &cast_spell(slot, target_object(illegal)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(illegal)))
         .is_err());
     assert_eq!(engine.state.players[0].hand, hand_before);
     let mana_after = engine.state.players[0].mana_pool;
@@ -775,7 +783,7 @@ fn power_branch_is_revalidated_against_current_derived_power() {
     );
     let slot = hand_index_for_card(&engine, 0, "make_your_move");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast at a derived power-four creature");
     engine
         .state
@@ -857,7 +865,7 @@ fn graveyard_or_and_exclusion_fixtures_publish_and_revalidate_exact_candidates()
     assert_eq!(candidates, vec![artifact, instant]);
 
     messenger_engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -909,7 +917,7 @@ fn battlefield_target_generation_is_revalidated_through_the_recursive_filter() {
     );
     let slot = hand_index_for_card(&engine, 0, "broken_wings");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Broken Wings");
     *engine
         .state

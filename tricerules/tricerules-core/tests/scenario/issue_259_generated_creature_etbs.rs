@@ -5,6 +5,7 @@
 //! 608.2b govern triggered-ability targets and revalidation, CR 121 and 701.9 govern the
 //! ordered draw and discard, CR 400.7 and 406 govern exile identity and visibility, CR 603
 //! governs trigger staging/APNAP order, and CR 701.18 governs playing cards.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -19,9 +20,11 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     } else {
         engine.state.players[0].id
     };
-    engine.apply_command(first, &pass()).expect("first pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves stack item")
 }
 
@@ -55,7 +58,7 @@ fn advance_to_turn_instance(engine: &mut GameEngine, target: u64) {
         resolve_cleanup_discards_if_any(engine);
         let priority = engine.state.priority_player_id();
         engine
-            .apply_command(priority, &pass())
+            .apply_scenario_command(priority, &pass())
             .expect("advance turn");
         commands += 1;
         assert!(commands < 200, "turn advancement stalled");
@@ -143,10 +146,10 @@ fn generated_counter_etb_publishes_legal_creatures_and_revalidates_generation() 
     move_ready_to_battlefield(&mut engine, 0, "ironpaw_aspirant");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     assert!(engine
-        .apply_command(0, &choose_trigger_target(artifact))
+        .apply_scenario_command(0, &choose_trigger_target(artifact))
         .is_err());
     engine
-        .apply_command(0, &choose_trigger_target(creature))
+        .apply_scenario_command(0, &choose_trigger_target(creature))
         .expect("choose published creature target");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -157,7 +160,7 @@ fn generated_counter_etb_publishes_legal_creatures_and_revalidates_generation() 
     let stale = inject_creature_on_battlefield(&mut engine, 1, "storm_crow");
     move_ready_to_battlefield(&mut engine, 0, "jeong_jeongs_deserters");
     engine
-        .apply_command(0, &choose_trigger_target(stale))
+        .apply_scenario_command(0, &choose_trigger_target(stale))
         .expect("choose initially legal target");
     engine.state.players[1]
         .battlefield
@@ -238,10 +241,10 @@ fn generated_bellowing_crier_draws_before_its_mandatory_private_discard() {
     assert_eq!(engine.state.objects[&drawn].zone, Zone::Hand);
 
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![drawn]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![drawn]))
         .is_err());
     engine
-        .apply_command(0, &submit_resolution_choice(vec![drawn]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![drawn]))
         .expect("controller makes private discard choice");
     assert_eq!(engine.state.objects[&drawn].zone, Zone::Graveyard);
     assert_eq!(engine.state.players[0].hand.len(), hand_before);

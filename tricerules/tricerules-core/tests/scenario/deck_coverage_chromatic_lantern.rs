@@ -1,5 +1,6 @@
 //! Exact Lantern: paid cast, dynamic granted mana, stable slots and recipient identity.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::*;
 use tricerules_cards::{AbilityPresentation, Layout};
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
@@ -35,7 +36,9 @@ fn setup() -> (GameEngine, u32) {
         },
     );
     let slot = hand_index_for_card(&engine, 0, LANTERN);
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert_eq!(engine.state.objects[&source].zone, Zone::Stack);
     resolve_entire_stack_two_player(&mut engine);
@@ -83,7 +86,7 @@ fn mana(engine: &GameEngine, source: u32, slot: u32, option: u32) -> RuledComman
 
 fn reject(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = engine.diagnostic_snapshot().unwrap();
-    assert!(engine.apply_command(actor, command).is_err());
+    assert!(engine.apply_scenario_command(actor, command).is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
 }
 
@@ -94,7 +97,7 @@ fn move_source(engine: &mut GameEngine, source: u32, zone: DevZone) {
         .name
         .clone();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -165,7 +168,7 @@ fn lantern_own_and_granted_basic_nonbasic_mana_have_five_immediate_single_output
                 granted_slot(&mut engine, source)
             };
             engine
-                .apply_command(0, &mana(&engine, source, slot, option))
+                .apply_scenario_command(0, &mana(&engine, source, slot, option))
                 .unwrap();
             assert!(engine.state.stack.is_empty());
             assert!(engine.state.objects[&source].tapped);
@@ -177,7 +180,9 @@ fn lantern_own_and_granted_basic_nonbasic_mana_have_five_immediate_single_output
             assert_eq!(pool.colorless, 0);
             let already_tapped = mana(&engine, source, slot, option);
             reject(&mut engine, 0, &already_tapped);
-            engine.apply_command(0, &undo_mana_ability()).unwrap();
+            engine
+                .apply_scenario_command(0, &undo_mana_ability())
+                .unwrap();
             assert!(!engine.state.objects[&source].tapped);
             let pool = &engine.state.players[0].mana_pool;
             assert_eq!(
@@ -206,7 +211,9 @@ fn lantern_dynamic_scope_preserves_native_types_and_abilities_and_excludes_oppon
             && types.has_keyword(Keyword::Indestructible)
     );
     assert!(!types.has_type("Forest"));
-    engine.apply_command(0, &mana(&engine, land, 0, 0)).unwrap();
+    engine
+        .apply_scenario_command(0, &mana(&engine, land, 0, 0))
+        .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
     assert_eq!(engine.state.players[0].mana_pool.green, 0);
 }
@@ -226,7 +233,9 @@ fn lantern_second_grant_survives_first_departure_without_rebinding_and_new_incar
         },
     );
     let hand = hand_index_for_card(&engine, 0, LANTERN);
-    engine.apply_command(0, &cast_spell(hand, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(hand, vec![]))
+        .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&second].zone, Zone::Battlefield);
     let slots = catalog(&mut engine, land)
@@ -246,9 +255,11 @@ fn lantern_second_grant_survives_first_departure_without_rebinding_and_new_incar
     );
     reject(&mut engine, 0, &stale);
     reject(&mut engine, 1, &survivor);
-    engine.apply_command(0, &survivor).unwrap();
+    engine.apply_scenario_command(0, &survivor).unwrap();
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
-    engine.apply_command(0, &undo_mana_ability()).unwrap();
+    engine
+        .apply_scenario_command(0, &undo_mana_ability())
+        .unwrap();
     move_source(&mut engine, first, DevZone::Battlefield);
     assert_eq!(
         catalog(&mut engine, land)
@@ -306,7 +317,7 @@ fn lantern_source_suppression_works_before_or_after_grant_and_restores_the_same_
         });
         assert_eq!(granted_slot(&mut engine, land), slot);
         engine
-            .apply_command(0, &mana(&engine, land, slot, 0))
+            .apply_scenario_command(0, &mana(&engine, land, slot, 0))
             .unwrap();
         assert_eq!(engine.state.players[0].mana_pool.white, 1);
     }
@@ -324,7 +335,7 @@ fn lantern_new_noncreature_land_can_tap_but_sick_creature_land_requires_haste() 
         .summoning_sick = true;
     let forest_slot = granted_slot(&mut engine, forest);
     engine
-        .apply_command(0, &mana(&engine, forest, forest_slot, 1))
+        .apply_scenario_command(0, &mana(&engine, forest, forest_slot, 1))
         .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.blue, 1);
     let arbor = inject_permanent_on_battlefield(&mut engine, 0, "dryad_arbor");
@@ -352,7 +363,7 @@ fn lantern_new_noncreature_land_can_tap_but_sick_creature_land_requires_haste() 
             .unwrap()
             .activatable
     );
-    engine.apply_command(0, &command).unwrap();
+    engine.apply_scenario_command(0, &command).unwrap();
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
 }
 
@@ -385,7 +396,7 @@ fn lantern_invalid_option_targets_slot_generation_and_actor_are_atomic() {
     };
     ability.expected_zone_change_generation += 1;
     reject(&mut engine, 0, &stale_generation);
-    engine.apply_command(0, &valid).unwrap();
+    engine.apply_scenario_command(0, &valid).unwrap();
     assert_eq!(engine.state.players[0].mana_pool.white, 1);
 }
 
@@ -397,7 +408,7 @@ fn lantern_granted_mana_can_pay_casts_and_parked_resolution_payments_with_undo()
             unreachable!()
         };
         let before = engine.diagnostic_snapshot().unwrap();
-        let preview = engine.preview_payment(
+        let preview = engine.preview_payment_scenario(
             0,
             &PreviewPayment {
                 activate_ability: Some(activation.clone()),
@@ -418,10 +429,10 @@ fn lantern_granted_mana_can_pay_casts_and_parked_resolution_payments_with_undo()
             activate_ability: Some(activation.clone()),
             ..Default::default()
         };
-        let wrong_actor = engine.preview_payment(1, &proposal);
+        let wrong_actor = engine.preview_payment_scenario(1, &proposal);
         assert!(!wrong_actor.valid, "{wrong_actor:?}");
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
-        let preview = engine.preview_payment(0, &proposal);
+        let preview = engine.preview_payment_scenario(0, &proposal);
         assert!(preview.valid && preview.complete, "{preview:?}");
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
         activation.payment = preview.selection;
@@ -439,14 +450,16 @@ fn lantern_granted_mana_can_pay_casts_and_parked_resolution_payments_with_undo()
     let cast = cast_spell(hand, target_object(target));
     reject(&mut engine, 0, &cast);
     engine
-        .apply_command(0, &mana(&engine, land, slot, 1))
+        .apply_scenario_command(0, &mana(&engine, land, slot, 1))
         .unwrap();
-    engine.apply_command(0, &undo_mana_ability()).unwrap();
+    engine
+        .apply_scenario_command(0, &undo_mana_ability())
+        .unwrap();
     reject(&mut engine, 0, &cast);
     engine
-        .apply_command(0, &mana(&engine, land, slot, 1))
+        .apply_scenario_command(0, &mana(&engine, land, slot, 1))
         .unwrap();
-    engine.apply_command(0, &cast).unwrap();
+    engine.apply_scenario_command(0, &cast).unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&target].zone, Zone::Hand);
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);
@@ -475,7 +488,7 @@ fn lantern_granted_mana_can_pay_casts_and_parked_resolution_payments_with_undo()
         );
         let hand = hand_index_for_card(&engine, 0, "unsummon");
         engine
-            .apply_command(0, &cast_spell(hand, target_object(warded)))
+            .apply_scenario_command(0, &cast_spell(hand, target_object(warded)))
             .unwrap();
         pass_both_players(&mut engine);
         assert!(engine.state.pending_resolution.is_some());
@@ -483,13 +496,15 @@ fn lantern_granted_mana_can_pay_casts_and_parked_resolution_payments_with_undo()
         reject_preview(&engine, &nonmana);
         reject(&mut engine, 0, &nonmana);
         let activation = previewed_activation(&engine, mana(&engine, first, first_slot, 4));
-        engine.apply_command(0, &activation).unwrap();
-        engine.apply_command(0, &undo_mana_ability()).unwrap();
+        engine.apply_scenario_command(0, &activation).unwrap();
+        engine
+            .apply_scenario_command(0, &undo_mana_ability())
+            .unwrap();
         assert!(!engine.state.objects[&first].tapped);
         let activation = previewed_activation(&engine, mana(&engine, first, first_slot, 4));
-        engine.apply_command(0, &activation).unwrap();
+        engine.apply_scenario_command(0, &activation).unwrap();
         let activation = previewed_activation(&engine, mana(&engine, second, second_slot, 1));
-        engine.apply_command(0, &activation).unwrap();
+        engine.apply_scenario_command(0, &activation).unwrap();
         submit_mana_resolution_decision(
             &mut engine,
             0,
@@ -560,7 +575,7 @@ fn lantern_replays_paid_cast_grants_undo_and_new_source_incarnation() {
         actor: i32,
         command: RuledCommand,
     ) {
-        let batch = engine.apply_command(actor, &command).unwrap();
+        let batch = engine.apply_scenario_command(actor, &command).unwrap();
         log.push((actor, command, batch, engine.diagnostic_snapshot().unwrap()));
     }
     let mut engine = game();
@@ -639,7 +654,10 @@ fn lantern_replays_paid_cast_grants_undo_and_new_source_incarnation() {
     assert_eq!(engine.state.players[0].mana_pool.red, 1);
     let mut replay = game();
     for (actor, command, batch, snapshot) in log {
-        assert_eq!(replay.apply_command(actor, &command).unwrap(), batch);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &command).unwrap(),
+            batch
+        );
         assert_eq!(replay.diagnostic_snapshot().unwrap(), snapshot);
     }
 }
@@ -661,7 +679,7 @@ fn lantern_granted_mana_pays_an_open_spell_transaction_with_preview_and_undo() {
         unreachable!()
     };
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
@@ -692,7 +710,7 @@ fn lantern_granted_mana_pays_an_open_spell_transaction_with_preview_and_undo() {
         unreachable!()
     };
     let before = engine.diagnostic_snapshot().unwrap();
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             activate_ability: Some(nonmana_activation.clone()),
@@ -726,7 +744,7 @@ fn lantern_granted_mana_pays_an_open_spell_transaction_with_preview_and_undo() {
         unreachable!()
     };
     let before = engine.diagnostic_snapshot().unwrap();
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             activate_ability: Some(ability.clone()),
@@ -737,7 +755,7 @@ fn lantern_granted_mana_pays_an_open_spell_transaction_with_preview_and_undo() {
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     ability.payment = preview.selection;
     ability.restricted_mana = preview.restricted_mana;
-    engine.apply_command(0, &activation).unwrap();
+    engine.apply_scenario_command(0, &activation).unwrap();
     assert_eq!(
         engine
             .state
@@ -751,7 +769,7 @@ fn lantern_granted_mana_pays_an_open_spell_transaction_with_preview_and_undo() {
     assert!(engine.state.objects[&land].tapped);
     assert!(engine.state.stack.is_empty());
     let before = engine.diagnostic_snapshot().unwrap();
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             transaction_id,
@@ -762,7 +780,9 @@ fn lantern_granted_mana_pays_an_open_spell_transaction_with_preview_and_undo() {
     );
     assert!(preview.valid && preview.complete, "{preview:?}");
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
-    engine.apply_command(0, &undo_mana_ability()).unwrap();
+    engine
+        .apply_scenario_command(0, &undo_mana_ability())
+        .unwrap();
     assert!(!engine.state.objects[&land].tapped);
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);
     assert_eq!(
@@ -777,11 +797,11 @@ fn lantern_granted_mana_pays_an_open_spell_transaction_with_preview_and_undo() {
     reject(&mut engine, 0, &commit);
     assert_eq!(granted_slot(&mut engine, land), slot);
     engine
-        .apply_command(0, &mana(&engine, land, slot, 1))
+        .apply_scenario_command(0, &mana(&engine, land, slot, 1))
         .unwrap();
     // Undo and the retry changed the revision; use a fresh engine-normalized selection.
     let before = engine.diagnostic_snapshot().unwrap();
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             transaction_id,
@@ -793,7 +813,7 @@ fn lantern_granted_mana_pays_an_open_spell_transaction_with_preview_and_undo() {
     assert!(preview.valid && preview.complete, "{preview:?}");
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
@@ -839,7 +859,7 @@ fn lantern_recipient_scope_loss_rejects_the_old_slot_and_restoration_reuses_it()
             .continuous_effects
             .retain(|effect| effect.kind != kind);
         assert_eq!(granted_slot(&mut engine, land), slot);
-        engine.apply_command(0, &stale).unwrap();
+        engine.apply_scenario_command(0, &stale).unwrap();
         assert_eq!(engine.state.players[0].mana_pool.blue, 1);
         assert!(engine.state.objects[&land].tapped);
     }
@@ -894,9 +914,11 @@ fn lantern_recipient_removal_respects_timestamp_and_equal_timestamp_insertion() 
         );
         let command = mana(&engine, land, slot, 0);
         if expected_grant {
-            engine.apply_command(0, &command).unwrap();
+            engine.apply_scenario_command(0, &command).unwrap();
             assert_eq!(engine.state.players[0].mana_pool.white, 1);
-            engine.apply_command(0, &undo_mana_ability()).unwrap();
+            engine
+                .apply_scenario_command(0, &undo_mana_ability())
+                .unwrap();
         } else {
             reject(&mut engine, 0, &command);
         }

@@ -6,6 +6,7 @@
 //! the new recipe emits as an inline fixture face. The fixture face is attached through the
 //! engine's ordinary copiable-value channel, and the land is played through the real land-play
 //! command, exercising the shipped entry-replacement path rather than a card-specific dispatch.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{
@@ -113,7 +114,7 @@ fn play_fixture_land(engine: &mut GameEngine, land: u32) -> Vec<RuledEventBatch>
         .position(|object_id| *object_id == land)
         .expect("fixture land is in hand");
     let batch = engine
-        .apply_command(engine.state.players[0].id, &play_land(index))
+        .apply_scenario_command(engine.state.players[0].id, &play_land(index))
         .expect("fixture land play");
     assert_eq!(engine.state.objects[&land].zone, Zone::Battlefield);
     vec![batch]

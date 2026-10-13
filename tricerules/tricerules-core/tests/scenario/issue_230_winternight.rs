@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_core::Zone;
 
@@ -36,7 +37,9 @@ fn cast_stories(engine: &mut GameEngine) -> u32 {
         },
     );
     let slot = hand_index_for_card(engine, 0, "winternight_stories");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(engine);
     spell
 }
@@ -62,7 +65,7 @@ fn issue_230_draws_three_then_accepts_one_creature_or_any_two_cards() {
         let before = format!("{:?}", engine.state);
         for invalid in [vec![], vec![land], vec![creature, creature]] {
             assert!(engine
-                .apply_command(0, &submit_resolution_choice(invalid))
+                .apply_scenario_command(0, &submit_resolution_choice(invalid))
                 .is_err());
             assert_eq!(format!("{:?}", engine.state), before);
         }
@@ -72,7 +75,7 @@ fn issue_230_draws_three_then_accepts_one_creature_or_any_two_cards() {
             _ => vec![land, draws[0]],
         };
         engine
-            .apply_command(0, &submit_resolution_choice(chosen))
+            .apply_scenario_command(0, &submit_resolution_choice(chosen))
             .unwrap();
         assert_eq!(
             engine.state.objects[&creature].zone,
@@ -100,10 +103,10 @@ fn issue_230_rejects_foreign_stale_and_nonmatching_cards_atomically() {
     cast_stories(&mut engine);
     let before = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![creature]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![creature]))
         .is_err());
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![foreign]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![foreign]))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before);
     *engine
@@ -113,7 +116,7 @@ fn issue_230_rejects_foreign_stale_and_nonmatching_cards_atomically() {
         .or_default() += 2;
     let before = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![creature]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![creature]))
         .is_err());
     assert_eq!(format!("{:?}", engine.state), before);
 }
@@ -125,7 +128,7 @@ fn issue_230_creature_alternative_is_a_cost_and_madness_waits_for_resolution() {
     let wurm = inject_card_into_hand(&mut engine, 0, "arrogant_wurm");
     let spell = cast_stories(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![wurm]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![wurm]))
         .unwrap();
     assert!(
         engine.state.pending_resolution.is_none(),
@@ -140,7 +143,7 @@ fn issue_230_creature_alternative_is_a_cost_and_madness_waits_for_resolution() {
     );
     pass_both_players(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(
                 tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,
@@ -159,10 +162,10 @@ fn issue_230_two_card_instruction_retains_library_of_leng_replacements() {
     let land = inject_card_into_hand(&mut engine, 0, "island");
     let spell = cast_stories(&mut engine);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![bear, land]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![bear, land]))
         .unwrap();
     engine
-        .apply_command(0, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![1]))
         .unwrap();
     assert_eq!(
         engine.state.objects[&bear].zone,
@@ -170,7 +173,7 @@ fn issue_230_two_card_instruction_retains_library_of_leng_replacements() {
         "batch waits for both destinations"
     );
     engine
-        .apply_command(0, &submit_resolution_choice(vec![0]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![0]))
         .unwrap();
     assert_eq!(engine.state.players[0].library.front(), Some(&bear));
     assert_eq!(engine.state.objects[&land].zone, Zone::Graveyard);
@@ -216,7 +219,7 @@ fn issue_230_harmonize_reuses_reduction_and_exiles_on_resolution_or_countering()
                 vec![]
             };
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &RuledCommand {
                         cmd: Some(Cmd::CastSpell(rv1::CastSpell {
@@ -240,7 +243,7 @@ fn issue_230_harmonize_reuses_reduction_and_exiles_on_resolution_or_countering()
             assert_eq!(engine.state.players[0].mana_pool.blue, 0);
             assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
             if countered {
-                engine.apply_command(0, &pass()).unwrap();
+                engine.apply_scenario_command(0, &pass()).unwrap();
                 inject_card_into_hand(&mut engine, 1, "counterspell");
                 give_mana(
                     &mut engine,
@@ -252,14 +255,14 @@ fn issue_230_harmonize_reuses_reduction_and_exiles_on_resolution_or_countering()
                 );
                 let slot = hand_index_for_card(&engine, 1, "counterspell");
                 engine
-                    .apply_command(1, &cast_spell(slot, target_object(spell)))
+                    .apply_scenario_command(1, &cast_spell(slot, target_object(spell)))
                     .unwrap();
                 resolve_entire_stack_two_player(&mut engine);
                 assert_eq!(engine.state.players[0].hand, [discard]);
             } else {
                 pass_both_players(&mut engine);
                 engine
-                    .apply_command(0, &submit_resolution_choice(vec![discard]))
+                    .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
                     .unwrap();
                 assert_eq!(engine.state.players[0].hand.len(), 3);
             }
@@ -278,12 +281,12 @@ fn issue_230_rejected_selection_does_not_change_accepted_command_replay() {
         cast_stories(&mut engine);
         if reject {
             assert!(engine
-                .apply_command(0, &submit_resolution_choice(vec![land]))
+                .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
                 .is_err());
         }
         let encoded = submit_resolution_choice(vec![creature]).encode_to_vec();
         let batch = engine
-            .apply_command(0, &RuledCommand::decode(encoded.as_slice()).unwrap())
+            .apply_scenario_command(0, &RuledCommand::decode(encoded.as_slice()).unwrap())
             .unwrap();
         (
             batch,

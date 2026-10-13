@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, EffectDuration, ProtectionCardType, ProtectionQuality,
@@ -98,12 +99,16 @@ fn cast_vow_and_reach_choice(
     );
     let slot = hand_index_for_card(engine, 0, "vow_to_erebor");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .expect("cast Vow to Erebor");
     let first = engine.state.priority_player_id();
     let second = if first == 0 { 1 } else { 0 };
-    engine.apply_command(first, &pass()).expect("first pass");
-    engine.apply_command(second, &pass()).expect("second pass")
+    engine
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    engine
+        .apply_scenario_command(second, &pass())
+        .expect("second pass")
 }
 
 #[test]
@@ -183,7 +188,7 @@ fn issue_188_vow_chooses_and_attaches_one_legal_equipment_to_a_dwarf() {
     assert_eq!(engine.effective_toughness(dwarf), Some(6));
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![equipment]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![equipment]))
         .expect("attach Bonesplitter");
     assert_eq!(
         engine.state.objects[&equipment].attached_to,
@@ -216,7 +221,7 @@ fn issue_188_vow_may_decline_the_equipment_choice() {
     let resolving = cast_vow_and_reach_choice(&mut engine, dwarf);
     assert!(find_resolution_choice(&resolving).is_some());
     engine
-        .apply_command(0, &submit_resolution_choice(Vec::new()))
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
         .expect("decline Vow's optional choice");
 
     assert_eq!(engine.state.objects[&equipment].attached_to, None);
@@ -327,11 +332,11 @@ fn issue_188_swordsman_shape_attaches_optional_equipment_to_required_creature() 
     );
     let slot = hand_index_for_card(&engine, 0, "a.i.m._bot");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast entering Villain");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &choose_swordsman_targets(Some(equipment), recipient))
+        .apply_scenario_command(0, &choose_swordsman_targets(Some(equipment), recipient))
         .expect("choose optional Equipment and required creature");
     pass_both_players(&mut engine);
 
@@ -373,11 +378,11 @@ fn issue_188_swordsman_shape_allows_omitting_the_optional_equipment() {
     );
     let slot = hand_index_for_card(&engine, 0, "a.i.m._bot");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast entering Villain");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &choose_swordsman_targets(None, recipient))
+        .apply_scenario_command(0, &choose_swordsman_targets(None, recipient))
         .expect("choose only the required creature");
     pass_both_players(&mut engine);
 
@@ -416,11 +421,11 @@ fn issue_188_swordsman_shape_ignores_a_stale_equipment_target() {
     );
     let slot = hand_index_for_card(&engine, 0, "a.i.m._bot");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast entering Villain");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &choose_swordsman_targets(Some(equipment), recipient))
+        .apply_scenario_command(0, &choose_swordsman_targets(Some(equipment), recipient))
         .expect("choose both targets");
     *engine
         .state
@@ -464,11 +469,11 @@ fn issue_188_swordsman_shape_rechecks_attachment_protection_on_resolution() {
     );
     let slot = hand_index_for_card(&engine, 0, "a.i.m._bot");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast entering Villain");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &choose_swordsman_targets(Some(equipment), recipient))
+        .apply_scenario_command(0, &choose_swordsman_targets(Some(equipment), recipient))
         .expect("choose both targets");
     engine.state.continuous_effects.push(ContinuousEffect {
         trigger_grant_origin: None,

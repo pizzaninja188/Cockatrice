@@ -1,9 +1,10 @@
 //! #444 exact Command semantics from the pinned Oracle IDs. Targets are selected through real
 //! cast commands; mass effects snapshot current controllers only as their instructions resolve.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn game(seed: u64) -> GameEngine {
     let decks = Some(vec![
@@ -43,7 +44,7 @@ fn issue_444_sygg_grants_lifelink_only_to_chosen_players_current_creatures() {
     let slot = prepare(&mut engine, "syggs_command");
     let hand_before = engine.state.players[0].hand.len();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(1, target_player(1)), (2, target_player(0))]),
         )
@@ -69,7 +70,7 @@ fn issue_444_trystan_pumps_and_untaps_only_target_players_creatures() {
     engine.state.objects.get_mut(&theirs).unwrap().tapped = true;
     let slot = prepare(&mut engine, "trystans_command");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(
                 slot,
@@ -102,13 +103,13 @@ fn issue_444_player_target_rejects_absent_player_and_wrong_mode_count() {
     let mut engine = game(444_003);
     let slot = prepare(&mut engine, "syggs_command");
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(1, target_player(999)), (2, target_player(0))])
         )
         .is_err());
     assert!(engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(1, target_player(0))]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(1, target_player(0))]))
         .is_err());
 }
 
@@ -119,7 +120,7 @@ fn issue_444_sygg_copy_and_stun_modes_preserve_distinct_targets() {
     let victim = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     let slot = prepare(&mut engine, "syggs_command");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(
                 slot,
@@ -157,7 +158,7 @@ fn issue_444_trystan_copy_and_bounded_return_move_each_selected_permanent_card()
     cards.extend(target_object(creature));
     let slot = prepare(&mut engine, "trystans_command");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(slot, vec![(0, target_object(elf)), (1, cards)]),
         )

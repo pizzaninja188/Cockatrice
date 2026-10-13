@@ -1,5 +1,6 @@
 //! Actual-card coverage for Lavabrink Floodgates' upkeep choice and reflexive damage.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use prost::Message;
 use tricerules_cards::primitives::*;
 use tricerules_cards::{AbilityPresentation, ControllerReference, Layout};
@@ -54,7 +55,7 @@ fn start_upkeep(engine: &mut GameEngine, player: i32) {
     let active_players = engine.state.players.iter().filter(|p| !p.has_lost).count();
     for _ in 0..active_players {
         let actor = engine.state.priority_player_id();
-        engine.apply_command(actor, &pass()).unwrap();
+        engine.apply_scenario_command(actor, &pass()).unwrap();
     }
     assert_eq!(engine.state.active_player_id(), player, "next turn player");
     assert_eq!(engine.state.turn_step, TurnStep::Upkeep);
@@ -72,7 +73,7 @@ fn select_branch(branch: u32) -> RuledCommand {
 
 fn reject(engine: &mut GameEngine, actor: i32, command: &RuledCommand) {
     let before = engine.diagnostic_snapshot().unwrap();
-    assert!(engine.apply_command(actor, command).is_err());
+    assert!(engine.apply_scenario_command(actor, command).is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
 }
 
@@ -108,7 +109,7 @@ fn dev_move_source(engine: &mut GameEngine, zone: DevZone) {
     engine.enable_dev_commands();
     let actor = engine.state.priority_player_id();
     engine
-        .apply_command(
+        .apply_scenario_command(
             actor,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -200,7 +201,7 @@ fn lavabrink_floodgates_uses_the_upkeep_players_choice_and_rejects_invalid_answe
     reject(&mut engine, 1, &select_branch(1));
     reject(&mut engine, 2, &select_branch(9));
 
-    let batch = engine.apply_command(2, &select_branch(1)).unwrap();
+    let batch = engine.apply_scenario_command(2, &select_branch(1)).unwrap();
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     assert_eq!(
         engine.state.objects[&source].counter_count(CounterKind::Doom),
@@ -255,7 +256,7 @@ fn lavabrink_floodgates_add_to_threshold_sacrifices_and_deals_six_to_all_creatur
             .deciding_player,
         2
     );
-    engine.apply_command(2, &select_branch(0)).unwrap();
+    engine.apply_scenario_command(2, &select_branch(0)).unwrap();
 
     assert_eq!(engine.state.objects[&source].zone, Zone::Exile);
     assert_eq!(
@@ -305,10 +306,12 @@ fn lavabrink_floodgates_add_remove_and_decline_check_the_threshold_afterward() {
         start_upkeep(&mut engine, 0);
         pass_priority_round(&mut engine);
         if let Some(branch) = branch {
-            engine.apply_command(0, &select_branch(branch)).unwrap();
+            engine
+                .apply_scenario_command(0, &select_branch(branch))
+                .unwrap();
         } else {
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &submit_resolution_decision(ResolutionChoiceDecision::Decline),
                 )
@@ -346,7 +349,7 @@ fn lavabrink_floodgates_reflexive_damage_respects_prevention_and_damage_triggers
     start_upkeep(&mut engine, 3);
     pass_priority_round(&mut engine);
     engine.state.add_damage_prevention_shield(creatures[1], 6);
-    engine.apply_command(3, &select_branch(0)).unwrap();
+    engine.apply_scenario_command(3, &select_branch(0)).unwrap();
     resolve_all_players_pass(&mut engine);
 
     assert_eq!(engine.state.objects[&creatures[0]].damage, 6);
@@ -387,8 +390,8 @@ fn lavabrink_floodgates_logged_upkeep_branch_replays_to_the_same_state() {
     let encoded = command.encode_to_vec();
     let decoded = tricerules_proto::ruled::v1::RuledCommand::decode(encoded.as_slice()).unwrap();
     assert_eq!(
-        engine.apply_command(0, &decoded).unwrap(),
-        replay.apply_command(0, &decoded).unwrap()
+        engine.apply_scenario_command(0, &decoded).unwrap(),
+        replay.apply_scenario_command(0, &decoded).unwrap()
     );
     resolve_all_players_pass(&mut engine);
     resolve_all_players_pass(&mut replay);
@@ -403,7 +406,7 @@ fn lavabrink_floodgates_logged_upkeep_branch_replays_to_the_same_state() {
 fn lavabrink_floodgates_mana_ability_adds_two_red_without_using_the_stack() {
     let (mut engine, source) = setup(&[0, 1]);
     let activation = activate_ability_for(&engine, source, 0, vec![]);
-    engine.apply_command(0, &activation).unwrap();
+    engine.apply_scenario_command(0, &activation).unwrap();
     assert_eq!(engine.state.players[0].mana_pool.red, 2);
     assert!(engine.state.objects[&source].tapped);
     assert!(engine.state.stack.is_empty());
@@ -428,7 +431,7 @@ fn lavabrink_floodgates_cannot_sacrifice_a_source_it_no_longer_controls() {
         0
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -503,7 +506,7 @@ fn lavabrink_floodgates_delegates_a_parked_upkeep_choice_after_the_upkeep_player
         2
     );
 
-    engine.apply_command(2, &concede()).unwrap();
+    engine.apply_scenario_command(2, &concede()).unwrap();
     let pending = engine.state.pending_resolution.as_ref().unwrap();
     assert_eq!(
         pending.deciding_player, 0,
@@ -517,7 +520,7 @@ fn lavabrink_floodgates_delegates_a_parked_upkeep_choice_after_the_upkeep_player
     };
     assert_eq!(candidates, &[Some(1), Some(3)]);
 
-    engine.apply_command(0, &select_branch(0)).unwrap();
+    engine.apply_scenario_command(0, &select_branch(0)).unwrap();
     assert_eq!(
         engine
             .state
@@ -527,7 +530,7 @@ fn lavabrink_floodgates_delegates_a_parked_upkeep_choice_after_the_upkeep_player
             .deciding_player,
         1
     );
-    engine.apply_command(1, &select_branch(0)).unwrap();
+    engine.apply_scenario_command(1, &select_branch(0)).unwrap();
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     resolve_all_players_pass(&mut engine);
     assert!(engine.state.stack.is_empty());

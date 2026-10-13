@@ -1,5 +1,6 @@
 //! Actual-card semantics for six pinned Standard combat spells.
 //! Pinned Oracle and published rulings reviewed 2026-09-22.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -258,7 +259,7 @@ fn issue_misc39_dual_sun_technique() {
     inject_card_into_hand(&mut opponent, 0, "dual-sun_technique");
     let slot = hand_index_for_card(&opponent, 0, "dual-sun_technique");
     assert!(opponent
-        .apply_command(0, &cast_spell(slot, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
         .is_err());
 }
 

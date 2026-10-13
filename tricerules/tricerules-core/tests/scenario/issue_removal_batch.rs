@@ -5,6 +5,7 @@
 //! Exact Scryfall records and `rulings_uri` were fetched 2026-09-21 against the pinned snapshot.
 //! Every expectation is the reviewed printed Oracle behavior. Governance: CR 115 (targets),
 //! 120 (damage), 701.8 (destroy), 701.13 (exile), 105.2 (color), 202.3 (mana value), and 119.3.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -100,7 +101,7 @@ fn issue_removal_deathmark() {
     inject_card_into_hand(&mut blue, 0, "deathmark");
     let slot = hand_index_for_card(&blue, 0, "deathmark");
     assert!(
-        blue.apply_command(0, &cast_spell(slot, target_object(merfolk)))
+        blue.apply_scenario_command(0, &cast_spell(slot, target_object(merfolk)))
             .is_err(),
         "a blue creature is not green or white"
     );
@@ -120,7 +121,7 @@ fn issue_removal_death_in_the_family() {
     inject_card_into_hand(&mut big, 0, "death_in_the_family");
     let slot = hand_index_for_card(&big, 0, "death_in_the_family");
     assert!(
-        big.apply_command(0, &cast_spell(slot, target_object(giant)))
+        big.apply_scenario_command(0, &cast_spell(slot, target_object(giant)))
             .is_err(),
         "mana value 4 exceeds the 3-or-less bound"
     );
@@ -141,7 +142,7 @@ fn issue_removal_epic_downfall() {
     let slot = hand_index_for_card(&small, 0, "epic_downfall");
     assert!(
         small
-            .apply_command(0, &cast_spell(slot, target_object(bear)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
             .is_err(),
         "mana value 2 is below the 3-or-greater bound"
     );
@@ -167,7 +168,7 @@ fn issue_removal_repel_calamity() {
     inject_card_into_hand(&mut mid, 0, "repel_calamity");
     let slot = hand_index_for_card(&mid, 0, "repel_calamity");
     assert!(
-        mid.apply_command(0, &cast_spell(slot, target_object(bear)))
+        mid.apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
             .is_err(),
         "3/3 is neither power nor toughness 4"
     );
@@ -194,7 +195,7 @@ fn issue_removal_eriettes_lullaby() {
     let slot = hand_index_for_card(&untapped, 0, "eriettes_lullaby");
     assert!(
         untapped
-            .apply_command(0, &cast_spell(slot, target_object(bear)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
             .is_err(),
         "an untapped creature is not a legal target"
     );
@@ -222,7 +223,7 @@ fn issue_removal_grapple_with_death() {
     inject_card_into_hand(&mut land, 0, "grapple_with_death");
     let slot = hand_index_for_card(&land, 0, "grapple_with_death");
     assert!(
-        land.apply_command(0, &cast_spell(slot, target_object(forest)))
+        land.apply_scenario_command(0, &cast_spell(slot, target_object(forest)))
             .is_err(),
         "a land is neither an artifact nor a creature"
     );

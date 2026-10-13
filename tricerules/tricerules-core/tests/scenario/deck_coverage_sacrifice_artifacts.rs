@@ -4,10 +4,11 @@
 //! Phyrexia's Core's immediate colorless mana ability. CR 602.2b and 701.21a govern artifact
 //! sacrifice as an activation cost; CR 608.2b governs a target sacrificed to pay that cost.
 //! CR 702.12b and 514.2 govern Slobad's temporary indestructible effect and marked-damage cleanup.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ruled_command::Cmd, RuledCommand};
 
 fn sacrifice_artifact_engine(seed: u64) -> GameEngine {
@@ -87,7 +88,7 @@ fn deck_coverage_phyrexias_core_adds_colorless_mana_without_the_stack() {
 
     let mana_before = engine.state.players[0].mana_pool.colorless;
     engine
-        .apply_command(0, &activate_ability_for(&engine, core, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, core, 0, vec![]))
         .expect_err("a tapped Core cannot activate its mana ability again");
     assert_eq!(engine.state.players[0].mana_pool.colorless, mana_before);
     assert!(engine.state.stack.is_empty());
@@ -146,7 +147,7 @@ fn deck_coverage_phyrexias_core_rejects_nonartifact_and_opponent_costs_atomicall
         let command =
             ability_with_permanent_cost(&engine, core, 1, vec![], invalid_cost_permanent, 2);
         engine
-            .apply_command(0, &command)
+            .apply_scenario_command(0, &command)
             .expect_err("only an artifact controlled by the activator can be sacrificed");
         assert_eq!(engine.state.command_index, before_command);
         assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
@@ -182,13 +183,13 @@ fn deck_coverage_slobad_saves_an_artifact_creature_and_clears_damage_at_cleanup(
     );
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes priority");
     let shock_slot = hand_index_for_card(&engine, 1, "shock");
     semantic::accepted(&mut engine, 1, &cast_spell(shock_slot, target_object(myr)));
     assert_eq!(engine.state.stack.len(), 1);
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes with Shock on the stack");
 
     let activation =
@@ -243,7 +244,7 @@ fn deck_coverage_slobad_rejects_an_invalid_target_or_sacrifice_choice_atomically
     let invalid_target =
         ability_with_permanent_cost(&engine, slobad, 0, target_object(creature), artifact, 0);
     engine
-        .apply_command(0, &invalid_target)
+        .apply_scenario_command(0, &invalid_target)
         .expect_err("Slobad can target only an artifact");
     assert_eq!(engine.state.objects[&artifact].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&creature].zone, Zone::Battlefield);
@@ -259,7 +260,7 @@ fn deck_coverage_slobad_rejects_an_invalid_target_or_sacrifice_choice_atomically
         0,
     );
     engine
-        .apply_command(0, &invalid_cost)
+        .apply_scenario_command(0, &invalid_cost)
         .expect_err("Slobad can sacrifice only an artifact it controls");
     assert_eq!(engine.state.objects[&artifact].zone, Zone::Battlefield);
     assert_eq!(

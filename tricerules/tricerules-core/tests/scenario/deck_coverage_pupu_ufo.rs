@@ -1,10 +1,11 @@
 //! Exact PuPu UFO identity and its two activated abilities.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, CounterKind, Keyword, Layout, ManaCost,
 };
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn pupu_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("forest", &[]), deck_with("forest", &[])]);
@@ -133,7 +134,7 @@ fn pupu_ufo_may_put_a_private_land_choice_onto_the_battlefield_without_playing_i
 
     let revision = engine.state.command_index;
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![nonland]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![nonland]))
         .is_err());
     assert_eq!(engine.state.command_index, revision);
     assert!(engine.state.pending_resolution.is_some());

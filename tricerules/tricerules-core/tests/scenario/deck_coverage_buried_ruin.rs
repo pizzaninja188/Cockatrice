@@ -3,9 +3,10 @@
 //! Oracle and rulings were checked against Scryfall on 2026-09-26; no rulings are published.
 //! CR 605.1a/605.3b cover the mana ability, 602.2a-b and 701.21a cover activation costs and sacrifice,
 //! and 115.1c/608.2b cover its target.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{TargetRef, TargetRefKind};
 
 const BURIED_RUIN: &str = "buried_ruin";
@@ -62,7 +63,7 @@ fn buried_ruin_taps_for_colorless_and_recovers_an_artifact_after_sacrificing() {
     );
     for illegal_target in [own_nonartifact, opponent_artifact] {
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &activate_ability_for(
                     &engine,
@@ -125,14 +126,14 @@ fn buried_ruin_uses_its_ability_controllers_graveyard_and_returns_the_source_to_
     let invalid = activate_ability_for(&engine, ruin, 1, graveyard_target(owners_artifact));
     let command_index = engine.state.command_index;
     engine
-        .apply_command(1, &invalid)
+        .apply_scenario_command(1, &invalid)
         .expect_err("source owner is not the ability controller");
     assert_eq!(engine.state.command_index, command_index);
     assert_eq!(engine.state.players[1].mana_pool.colorless, 2);
     assert!(!engine.state.objects[&ruin].tapped);
     assert_eq!(engine.state.objects[&ruin].zone, Zone::Battlefield);
     let activation = activate_ability_for(&engine, ruin, 1, graveyard_target(controllers_artifact));
-    engine.apply_command(1, &activation).unwrap();
+    engine.apply_scenario_command(1, &activation).unwrap();
     assert_eq!(engine.state.players[1].mana_pool.colorless, 0);
     assert_eq!(engine.state.objects[&ruin].zone, Zone::Graveyard);
     assert!(engine.state.players[0].graveyard.contains(&ruin));

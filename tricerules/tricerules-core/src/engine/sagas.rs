@@ -204,6 +204,7 @@ mod tests {
         assert_eq!(engine.saga_final_chapter(second), Some(4));
         let mut out = Vec::new();
         engine.perform_precombat_saga_lore_action(&mut out).unwrap();
+        engine.publish_resolution_prompt_ids(&mut out).unwrap();
 
         let mut choices = 0;
         while let Some(pending) = engine.state.pending_resolution.as_ref() {
@@ -224,7 +225,7 @@ mod tests {
             );
             let candidate = pending.presentation.candidates[0];
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &rv1::RuledCommand {
                         cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(

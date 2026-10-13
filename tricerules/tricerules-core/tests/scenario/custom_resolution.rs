@@ -1,4 +1,6 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
+use prost::Message;
 
 #[test]
 fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
@@ -45,6 +47,22 @@ fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
         .pending_resolution
         .as_ref()
         .expect("parked Brainstorm");
+    let internal_prompt_id = pending.resolution_prompt_id.get();
+    assert_ne!(
+        internal_prompt_id, 0,
+        "pending offer has a nonzero prompt ID"
+    );
+    assert_eq!(
+        req.resolution_prompt_id, internal_prompt_id,
+        "the published choice and installed pending offer share one ID"
+    );
+    let prompt_state = batch
+        .resolution_prompt_state
+        .as_ref()
+        .expect("gameplay batch publishes its final prompt state");
+    assert!(prompt_state.active);
+    assert_eq!(prompt_state.deciding_player_id, 0);
+    assert_eq!(prompt_state.resolution_prompt_id, Some(internal_prompt_id));
     assert!(
         !matches!(
             &pending.continuation,
@@ -64,14 +82,380 @@ fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
     // Put two specific hand cards on top: last chosen = top (intuitive "place A, then B on top").
     let chosen: Vec<u32> = e.state.players[0].hand.iter().take(2).copied().collect();
     let (first, second) = (chosen[0], chosen[1]);
-    e.apply_command(0, &submit_resolution_choice(chosen))
+    let completed = e
+        .apply_scenario_command(0, &submit_resolution_choice(chosen))
         .expect("submit brainstorm choice");
 
+    let prompt_state = completed
+        .resolution_prompt_state
+        .as_ref()
+        .expect("completed gameplay batch publishes prompt retirement");
+    assert!(!prompt_state.active);
+    assert_eq!(prompt_state.resolution_prompt_id, None);
     assert!(e.state.pending_resolution.is_none(), "resolution completed");
     assert_eq!(e.state.players[0].library[0], second, "last chosen on top");
     assert_eq!(e.state.players[0].library[1], first, "first chosen below");
     assert_eq!(e.state.players[0].hand.len(), hand_before - 1 + 3 - 2);
     assert_eq!(count_card_id_in_graveyard(&e, 0, "brainstorm"), 1);
+}
+
+#[test]
+fn resolution_answers_require_the_exact_active_prompt_before_any_mutation() {
+    let decks = Some(vec![
+        {
+            let mut deck = vec!["brainstorm".to_string(), "brainstorm".to_string()];
+            deck.extend(std::iter::repeat_n("island".to_string(), 28));
+            deck
+        },
+        vec!["forest".into(); 30],
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        42_001,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("new");
+    advance_to_main1_from_game_start(&mut engine);
+    let first_batch = cast_instant_and_resolve(
+        &mut engine,
+        0,
+        "brainstorm",
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    assert!(find_resolution_choice(&first_batch).is_some());
+
+    let first_id = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("first Brainstorm choice")
+        .resolution_prompt_id
+        .get();
+    assert_ne!(first_id, 0);
+    let chosen: Vec<u32> = engine.state.players[0]
+        .hand
+        .iter()
+        .take(2)
+        .copied()
+        .collect();
+    let mut missing_id = submit_resolution_choice(chosen.clone());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = missing_id.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = 0;
+    let state_before_rejections = format!("{:?}", engine.state);
+    let command_index_before_rejections = engine.state.command_index;
+    assert!(
+        engine.apply_command(0, &missing_id).is_err(),
+        "missing ID rejected"
+    );
+    assert_eq!(format!("{:?}", engine.state), state_before_rejections);
+    assert_eq!(engine.state.command_index, command_index_before_rejections);
+
+    let mut foreign_actor = submit_resolution_choice(chosen.clone());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = foreign_actor.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = first_id;
+    assert!(
+        engine.apply_command(1, &foreign_actor).is_err(),
+        "the correct ID from the wrong actor is rejected"
+    );
+    assert_eq!(format!("{:?}", engine.state), state_before_rejections);
+    assert_eq!(engine.state.command_index, command_index_before_rejections);
+
+    let mut stale_id = submit_resolution_choice(chosen.clone());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = stale_id.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = first_id + 99;
+    assert!(
+        engine.apply_command(0, &stale_id).is_err(),
+        "stale ID rejected"
+    );
+    assert_eq!(format!("{:?}", engine.state), state_before_rejections);
+    assert_eq!(engine.state.command_index, command_index_before_rejections);
+
+    let stale_preview = engine.preview_payment(
+        0,
+        &tricerules_proto::ruled::v1::PreviewPayment {
+            resolution_choice: match stale_id.cmd {
+                Some(Cmd::SubmitResolutionChoice(answer)) => Some(answer),
+                _ => unreachable!(),
+            },
+            ..Default::default()
+        },
+    );
+    assert!(!stale_preview.valid, "stale resolution preview is rejected");
+    assert_eq!(format!("{:?}", engine.state), state_before_rejections);
+    assert_eq!(engine.state.command_index, command_index_before_rejections);
+
+    let first_answer = RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: first_id,
+            chosen_object_ids: chosen,
+            ..Default::default()
+        })),
+    };
+    engine
+        .apply_command(0, &first_answer)
+        .expect("exact current ID accepts the answer");
+
+    let second_batch = cast_instant_and_resolve(
+        &mut engine,
+        0,
+        "brainstorm",
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    assert!(find_resolution_choice(&second_batch).is_some());
+    let second_id = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("second Brainstorm choice")
+        .resolution_prompt_id
+        .get();
+    assert!(
+        second_id > first_id,
+        "new logical offer receives a fresh ID"
+    );
+}
+
+#[test]
+fn identical_consecutive_authored_offers_get_fresh_ids_and_replay_from_wire() {
+    let program = r#"(
+        id: "identical_optional_choice_program",
+        name: "Identical Optional Choice Program",
+        face_id: "identical_optional_choice_program",
+        mana_cost: "{U}",
+        types: ["Instant"],
+        spell_program: Some((body: (
+            steps: [
+                (id: "first_choice", bind: ["first"], kind: Perform(ChoosePermanents(
+                    chooser: Controller,
+                    filter: (kind: AnyPermanent, permanent_types: [Land]),
+                    min: 0,
+                    max: 1,
+                ))),
+                (id: "second_choice", bind: ["second"], kind: Perform(ChoosePermanents(
+                    chooser: Controller,
+                    filter: (kind: AnyPermanent, permanent_types: [Land]),
+                    min: 0,
+                    max: 1,
+                ))),
+            ],
+            yields: [],
+        ))),
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                program,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("identical-choice fixture registry validates"),
+    ));
+    let make_prompt = || {
+        let mut engine = GameEngine::new(
+            registry,
+            42_002,
+            &[0, 1],
+            20,
+            Some(vec![vec!["island".into(); 30], vec!["forest".into(); 30]]),
+            true,
+        )
+        .expect("new identical-choice fixture game");
+        advance_to_main1_from_game_start(&mut engine);
+        inject_permanent_on_battlefield(&mut engine, 0, "island");
+        inject_card_into_hand(&mut engine, 0, "identical_optional_choice_program");
+        let batch = cast_instant_and_resolve(
+            &mut engine,
+            0,
+            "identical_optional_choice_program",
+            ManaGift {
+                u: 1,
+                ..Default::default()
+            },
+        );
+        let choice = find_resolution_choice(&batch).expect("first optional choice");
+        (engine, batch, choice)
+    };
+
+    let (mut original, original_batch, first_offer) = make_prompt();
+    let (mut replay, replay_batch, replay_first_offer) = make_prompt();
+    assert_eq!(original_batch, replay_batch);
+    assert_eq!(first_offer, replay_first_offer);
+    assert_eq!(first_offer.min, 0);
+    assert_eq!(first_offer.max, 1);
+    let first_id = first_offer.resolution_prompt_id;
+    assert_ne!(first_id, 0);
+    let first_state = original_batch
+        .resolution_prompt_state
+        .as_ref()
+        .expect("first prompt has final state");
+    assert!(first_state.active);
+    assert_eq!(first_state.resolution_prompt_id, Some(first_id));
+
+    let mut accepted_answer = submit_resolution_choice(Vec::new());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = accepted_answer.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = first_id;
+    let serialized_command = accepted_answer.encode_to_vec();
+    let decoded_command = RuledCommand::decode(serialized_command.as_slice())
+        .expect("correlated answer decodes from the accepted command log");
+    assert_eq!(decoded_command, accepted_answer);
+    let original_second_batch = original
+        .apply_command(0, &decoded_command)
+        .expect("raw protobuf answer advances the first logical offer");
+    let replay_second_batch = replay
+        .apply_command(0, &decoded_command)
+        .expect("same raw protobuf answer replays deterministically");
+    assert_eq!(original_second_batch, replay_second_batch);
+    let second_offer = find_resolution_choice(&original_second_batch)
+        .expect("the identical second optional choice is installed");
+    let replay_second_offer = find_resolution_choice(&replay_second_batch).unwrap();
+    assert_eq!(second_offer, replay_second_offer);
+    assert_ne!(second_offer.resolution_prompt_id, first_id);
+    let second_state = original_second_batch
+        .resolution_prompt_state
+        .as_ref()
+        .expect("second prompt has final state");
+    assert!(second_state.active);
+    assert_eq!(
+        second_state.resolution_prompt_id,
+        Some(second_offer.resolution_prompt_id)
+    );
+    let mut normalized_first = first_offer.clone();
+    normalized_first.resolution_prompt_id = 0;
+    let mut normalized_second = second_offer.clone();
+    normalized_second.resolution_prompt_id = 0;
+    assert_eq!(
+        normalized_first, normalized_second,
+        "the production path emits byte-identical answer semantics for both instructions"
+    );
+
+    let mut duplicate_answer = decoded_command.clone();
+    let Some(Cmd::SubmitResolutionChoice(answer)) = duplicate_answer.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = first_id;
+    let state_before_duplicate = format!("{:?}", original.state);
+    let command_index_before_duplicate = original.state.command_index;
+    assert!(original.apply_command(0, &duplicate_answer).is_err());
+    assert_eq!(format!("{:?}", original.state), state_before_duplicate);
+    assert_eq!(original.state.command_index, command_index_before_duplicate);
+
+    let mut second_answer = submit_resolution_choice(Vec::new());
+    let Some(Cmd::SubmitResolutionChoice(answer)) = second_answer.cmd.as_mut() else {
+        unreachable!()
+    };
+    answer.resolution_prompt_id = second_offer.resolution_prompt_id;
+    let serialized_second = second_answer.encode_to_vec();
+    let decoded_second = RuledCommand::decode(serialized_second.as_slice()).unwrap();
+    let original_final_batch = original.apply_command(0, &decoded_second).unwrap();
+    let replay_final_batch = replay.apply_command(0, &decoded_second).unwrap();
+    assert_eq!(original_final_batch, replay_final_batch);
+    assert_eq!(
+        serde_json::to_value(&original.state).unwrap(),
+        serde_json::to_value(&replay.state).unwrap(),
+        "the serialized final diagnostics agree across same-seed raw replay"
+    );
+    assert!(
+        !original_final_batch
+            .resolution_prompt_state
+            .as_ref()
+            .expect("completed replay batch has final state")
+            .active
+    );
+}
+
+#[test]
+fn prompt_state_survives_a_no_offer_concession_and_reconnect() {
+    let decks = Some(vec![
+        {
+            let mut deck = vec!["brainstorm".to_string()];
+            deck.extend(std::iter::repeat_n("island".to_string(), 29));
+            deck
+        },
+        vec!["forest".into(); 30],
+        vec!["forest".into(); 30],
+    ]);
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        42_003,
+        &[0, 1, 2],
+        20,
+        decks,
+        true,
+    )
+    .expect("new three-player game");
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_in_hand(&mut engine, 0, "brainstorm");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let brainstorm_index = hand_index_for_card(&engine, 0, "brainstorm");
+    engine
+        .apply_scenario_command(0, &cast_spell(brainstorm_index, vec![]))
+        .expect("cast Brainstorm");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("second player passes");
+    let prompt_batch = engine
+        .apply_scenario_command(2, &pass())
+        .expect("third player passes and resolves Brainstorm");
+    let active_id = find_resolution_choice(&prompt_batch)
+        .expect("Brainstorm offer")
+        .resolution_prompt_id;
+    assert_ne!(active_id, 0);
+
+    let concession = engine
+        .apply_command(
+            2,
+            &RuledCommand {
+                cmd: Some(Cmd::Concede(Default::default())),
+            },
+        )
+        .expect("unrelated player may concede while the offer remains active");
+    assert!(find_resolution_choice(&concession).is_none());
+    let state = concession
+        .resolution_prompt_state
+        .as_ref()
+        .expect("concession batch carries final prompt state");
+    assert!(state.active);
+    assert_eq!(state.deciding_player_id, 0);
+    assert_eq!(state.resolution_prompt_id, Some(active_id));
+
+    let reconnect = engine.initial_response_batch();
+    assert!(find_resolution_choice(&reconnect).is_none());
+    let state = reconnect
+        .resolution_prompt_state
+        .as_ref()
+        .expect("reconnect response carries prompt snapshot");
+    assert!(state.active);
+    assert_eq!(state.deciding_player_id, 0);
+    assert_eq!(state.resolution_prompt_id, Some(active_id));
 }
 
 #[test]
@@ -116,10 +500,12 @@ fn twincast_copy_and_original_brainstorm_own_independent_private_programs() {
     );
     let slot = hand_index_for_card(&engine, 0, "brainstorm");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast original Brainstorm");
     let original_generation = engine.state.zone_change_generation[&original];
-    engine.apply_command(0, &pass()).expect("give P1 priority");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("give P1 priority");
     give_mana(
         &mut engine,
         1,
@@ -130,7 +516,7 @@ fn twincast_copy_and_original_brainstorm_own_independent_private_programs() {
     );
     let slot = hand_index_for_card(&engine, 1, "twincast");
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_spell(
                 slot,
@@ -185,14 +571,14 @@ fn twincast_copy_and_original_brainstorm_own_independent_private_programs() {
         .collect();
     let before_wrong_actor = serde_json::to_value(&engine.state).unwrap();
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(copy_selected.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(copy_selected.clone()))
         .is_err());
     assert_eq!(
         serde_json::to_value(&engine.state).unwrap(),
         before_wrong_actor
     );
     engine
-        .apply_command(1, &submit_resolution_choice(copy_selected.clone()))
+        .apply_scenario_command(1, &submit_resolution_choice(copy_selected.clone()))
         .expect("finish copy");
     assert_eq!(engine.state.players[1].library[0], copy_selected[1]);
     assert_eq!(engine.state.players[1].library[1], copy_selected[0]);
@@ -251,7 +637,7 @@ fn twincast_copy_and_original_brainstorm_own_independent_private_programs() {
         .copied()
         .collect();
     engine
-        .apply_command(0, &submit_resolution_choice(original_selected.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(original_selected.clone()))
         .expect("finish original");
     assert_eq!(engine.state.players[0].library[0], original_selected[1]);
     assert_eq!(engine.state.players[0].library[1], original_selected[0]);
@@ -367,7 +753,7 @@ fn nested_program_keeps_entered_if_and_parent_tail_across_private_child_choices(
         .expect("one card is available to discard");
 
     let replacement = engine
-        .apply_command(0, &submit_resolution_choice(vec![selected]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![selected]))
         .expect("answer private child hand choice");
     let replacement_choice = find_resolution_choice(&replacement)
         .expect("Library of Leng replacement choice remains inside the child instruction");
@@ -378,7 +764,7 @@ fn nested_program_keeps_entered_if_and_parent_tail_across_private_child_choices(
     assert_eq!((replacement_choice.min, replacement_choice.max), (1, 1));
 
     let completed = engine
-        .apply_command(0, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![1]))
         .expect("put the discarded card on top of the library");
     assert!(find_resolution_choice(&completed).is_none());
     assert!(engine.state.pending_resolution.is_none());
@@ -468,7 +854,7 @@ fn authored_permanent_choice_refreshes_after_candidate_owner_concedes() {
     );
     let slot = hand_index_for_card(&engine, 0, "departed_choice_program");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast targetless choice program");
     pass_priority_round(&mut engine);
 
@@ -493,7 +879,9 @@ fn authored_permanent_choice_refreshes_after_candidate_owner_concedes() {
     );
     let stack_generation = engine.state.zone_change_generation[&spell];
 
-    engine.apply_command(1, &concede()).expect("P1 concedes");
+    engine
+        .apply_scenario_command(1, &concede())
+        .expect("P1 concedes");
     assert!(!engine.state.objects.contains_key(&departed_land));
     let refreshed = engine
         .state
@@ -508,7 +896,7 @@ fn authored_permanent_choice_refreshes_after_candidate_owner_concedes() {
 
     let before_stale_answer = engine.diagnostic_snapshot().expect("diagnostic snapshot");
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![departed_land]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![departed_land]))
         .is_err());
     assert_eq!(
         engine.diagnostic_snapshot().expect("diagnostic snapshot"),
@@ -517,7 +905,7 @@ fn authored_permanent_choice_refreshes_after_candidate_owner_concedes() {
     );
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![surviving_land]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![surviving_land]))
         .expect("choose P2's surviving land");
     assert!(!engine.state.objects[&surviving_land].tapped);
     assert!(engine.state.objects[&unselected_land].tapped);
@@ -589,7 +977,7 @@ fn brainstorm_put_back_emits_no_public_move_event() {
         .map(|oid| e.state.objects[oid].card_id.clone())
         .collect();
     let batch = e
-        .apply_command(0, &submit_resolution_choice(chosen.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(chosen.clone()))
         .expect("submit brainstorm choice");
 
     for moved in permanents_moved_in(&batch) {
@@ -645,7 +1033,7 @@ fn brainstorm_rejects_card_not_in_hand_without_mutating() {
     // One legal hand card + one library card (not a legal candidate) -> rejected, no mutation.
     let legal = e.state.players[0].hand[0];
     let library_card = e.state.players[0].library[0];
-    let res = e.apply_command(0, &submit_resolution_choice(vec![legal, library_card]));
+    let res = e.apply_scenario_command(0, &submit_resolution_choice(vec![legal, library_card]));
     assert!(res.is_err(), "returning a card not in hand is illegal");
 
     assert!(e.state.pending_resolution.is_some(), "still parked");
@@ -662,13 +1050,13 @@ fn brainstorm_rejects_card_not_in_hand_without_mutating() {
 
     // Wrong count is also rejected.
     assert!(
-        e.apply_command(0, &submit_resolution_choice(vec![legal]))
+        e.apply_scenario_command(0, &submit_resolution_choice(vec![legal]))
             .is_err(),
         "must choose exactly two"
     );
     // The opponent cannot answer the controller's choice.
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             1,
             &submit_resolution_choice(vec![legal, e.state.players[0].hand[1]])
         )
@@ -717,7 +1105,7 @@ fn brainstorm_resolution_is_deterministic() {
         );
         // Same choice command (indices into hand) on both runs.
         let chosen: Vec<u32> = e.state.players[0].hand.iter().take(2).copied().collect();
-        e.apply_command(0, &submit_resolution_choice(chosen))
+        e.apply_scenario_command(0, &submit_resolution_choice(chosen))
             .unwrap();
         e.state.players[0]
             .library
@@ -789,7 +1177,7 @@ fn gifts_ungiven_opponent_chooses_the_split() {
     }
 
     let batch2 = e
-        .apply_command(0, &submit_resolution_choice(found.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(found.clone()))
         .expect("search submit");
 
     // Second interrupt: the OPPONENT chooses which two go to the controller's graveyard.
@@ -819,11 +1207,11 @@ fn gifts_ungiven_opponent_chooses_the_split() {
     let to_hand: Vec<u32> = found.iter().skip(2).copied().collect();
     // The controller cannot make the opponent's choice.
     assert!(
-        e.apply_command(0, &submit_resolution_choice(to_grave.clone()))
+        e.apply_scenario_command(0, &submit_resolution_choice(to_grave.clone()))
             .is_err(),
         "only the deciding (opponent) player may submit"
     );
-    e.apply_command(1, &submit_resolution_choice(to_grave.clone()))
+    e.apply_scenario_command(1, &submit_resolution_choice(to_grave.clone()))
         .expect("opponent submits split");
 
     assert!(e.state.pending_resolution.is_none(), "resolution completed");
@@ -903,7 +1291,7 @@ fn gifts_ungiven_rejects_same_name_in_search() {
     // Illegal: two cards with the same name (both Lightning Bolts) plus one other.
     let bad_choice = vec![bolt1_id, bolt2_id, div_id];
     let err = e
-        .apply_command(0, &submit_resolution_choice(bad_choice))
+        .apply_scenario_command(0, &submit_resolution_choice(bad_choice))
         .expect_err("same-name cards must be rejected");
     assert!(
         matches!(err, tricerules_core::EngineError::Illegal(_)),
@@ -919,7 +1307,7 @@ fn gifts_ungiven_rejects_same_name_in_search() {
     // Happy path: submit 4 cards with all different names — should succeed.
     // bolt1 (Lightning Bolt) + divination + counterspell + murder
     let good_choice = vec![bolt1_id, div_id, ctsp_id, murd_id];
-    e.apply_command(0, &submit_resolution_choice(good_choice))
+    e.apply_scenario_command(0, &submit_resolution_choice(good_choice))
         .expect("four different-name cards must be accepted");
 
     // Resolution now needs the opponent to choose which 2 go to graveyard.
@@ -1042,7 +1430,7 @@ fn recast_bounced_creature_is_summoning_sick() {
         },
     );
     let unsummon_idx = hand_index_for_card(&e, 0, "unsummon");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             unsummon_idx,
@@ -1074,7 +1462,7 @@ fn recast_bounced_creature_is_summoning_sick() {
         },
     );
     let grizzly_idx = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(grizzly_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(grizzly_idx, vec![]))
         .expect("recast grizzly");
     resolve_entire_stack_two_player(&mut e);
 

@@ -1,13 +1,15 @@
 //! Wash Out chooses a color during resolution, then simultaneously returns that cohort.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::ProtectionQuality;
 use tricerules_cards::{Color, ContinuousEffectKind, EffectDuration, Keyword};
-use tricerules_core::{AffectedScope, ContinuousEffect, GameEngine, Zone};
+use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{ChoiceKind, ResolutionChoiceDecision, SubmitResolutionChoice};
 
 fn branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -42,7 +44,9 @@ fn cast(engine: &mut GameEngine) -> RuledEventBatch {
         },
     );
     let slot = hand_index_for_card(engine, 0, "wash_out");
-    engine.apply_command(10, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(10, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(engine.state.stack.len(), 1);
     assert_eq!(engine.state.stack[0].card_id, "wash_out");
     assert!(engine.state.stack[0].targets.is_empty());
@@ -51,7 +55,7 @@ fn cast(engine: &mut GameEngine) -> RuledEventBatch {
     let mut batch = RuledEventBatch::default();
     for _ in 0..engine.state.players.len() {
         batch = engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     batch
@@ -87,7 +91,9 @@ fn wash_out_each_color_returns_only_matching_permanents_across_all_players() {
             .collect::<Vec<_>>();
         let colorless = inject_permanent_on_battlefield(&mut engine, 2, "sol_ring");
         cast(&mut engine);
-        engine.apply_command(10, &branch(selected as u32)).unwrap();
+        engine
+            .apply_scenario_command(10, &branch(selected as u32))
+            .unwrap();
         for (index, oid) in objects.into_iter().enumerate() {
             assert_eq!(
                 engine.state.objects[&oid].zone,
@@ -143,7 +149,7 @@ fn wash_out_uses_current_colors_and_returns_untargetable_borrowed_and_token_coho
         token,
         ContinuousEffectKind::Layer5SetColors(vec![Color::Blue]),
     );
-    let batch = engine.apply_command(10, &branch(1)).unwrap();
+    let batch = engine.apply_scenario_command(10, &branch(1)).unwrap();
     for (oid, owner) in [(own, 10), (protected, 20), (borrowed, 30), (multicolor, 30)] {
         assert_eq!(engine.state.objects[&oid].zone, Zone::Hand);
         assert!(engine
@@ -196,7 +202,7 @@ fn wash_out_snapshots_the_color_cohort_before_any_departure_changes_colors() {
         timestamp: engine.state.command_index,
     });
     cast(&mut engine);
-    engine.apply_command(10, &branch(1)).unwrap();
+    engine.apply_scenario_command(10, &branch(1)).unwrap();
     for (index, oid) in [(0, source), (1, affected)] {
         assert_eq!(engine.state.objects[&oid].zone, Zone::Hand);
         assert!(engine.state.players[index].hand.contains(&oid));
@@ -211,7 +217,7 @@ fn wash_out_paid_cast_and_color_choice_replay_deterministically() {
         inject_creature_on_battlefield(&mut engine, 1, "merfolk_of_the_pearl_trident");
         inject_permanent_on_battlefield(&mut engine, 2, "sol_ring");
         let first = cast(&mut engine);
-        let second = engine.apply_command(10, &branch(1)).unwrap();
+        let second = engine.apply_scenario_command(10, &branch(1)).unwrap();
         assert!(engine.state.stack.is_empty());
         // GameState has tuple-keyed LKI maps, so JSON cannot serialize it as an object.
         // Compare public responses plus every player/object and the identity/history state.
@@ -270,6 +276,7 @@ fn wash_out_paid_cast_offers_all_five_colors_even_when_no_permanents_match() {
             10,
             RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: ResolutionChoiceDecision::Decline as i32,
                     ..Default::default()
                 })),
@@ -277,10 +284,10 @@ fn wash_out_paid_cast_offers_all_five_colors_even_when_no_permanents_match() {
         ),
     ] {
         let before = format!("{:?}", engine.state);
-        assert!(engine.apply_command(actor, &command).is_err());
+        assert!(engine.apply_scenario_command(actor, &command).is_err());
         assert_eq!(format!("{:?}", engine.state), before);
     }
-    engine.apply_command(10, &branch(0)).unwrap();
+    engine.apply_scenario_command(10, &branch(0)).unwrap();
     assert_eq!(engine.state.objects[&land].zone, Zone::Battlefield);
     assert!(engine.state.stack.is_empty());
     assert!(engine.state.pending_resolution.is_none());

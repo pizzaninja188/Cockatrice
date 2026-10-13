@@ -4,6 +4,7 @@
 //! Oracle/rulings checked 2026-09-14. CR 301.5, 508.1b/508.1m, 603.2c/603.3d, 608.2b, 609.3,
 //! and 701.26 govern Equipment attachment, event-time defending-player context, target
 //! publication/revalidation, and tapping.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::state::CombatDefenderTarget;
@@ -49,7 +50,7 @@ fn resolve_entire_stack_three_player(engine: &mut GameEngine) {
             }
             let priority = engine.state.priority_player_id();
             engine
-                .apply_command(priority, &pass())
+                .apply_scenario_command(priority, &pass())
                 .expect("all seats pass priority");
         }
     }
@@ -79,7 +80,7 @@ fn stage_equipment_attack_trigger(seed: u64) -> (GameEngine, u32, u32, u32, u32)
         .attached_to = Some(AttachmentRecipient::Object(attacker));
 
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare equipped attacker");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     assert_eq!(
@@ -177,18 +178,18 @@ fn issue_286_only_event_time_defender_creatures_are_legal_and_tap() {
 
     assert!(
         engine
-            .apply_command(0, &choose_trigger_target(attacker))
+            .apply_scenario_command(0, &choose_trigger_target(attacker))
             .is_err(),
         "the attacking creature cannot satisfy DefendingPlayer"
     );
     assert!(
         engine
-            .apply_command(0, &choose_trigger_target(different_opponent))
+            .apply_scenario_command(0, &choose_trigger_target(different_opponent))
             .is_err(),
         "a different opponent cannot satisfy the event-time defender"
     );
     engine
-        .apply_command(0, &choose_trigger_target(defending_creature))
+        .apply_scenario_command(0, &choose_trigger_target(defending_creature))
         .expect("choose the event-time defender's creature");
     assert_eq!(engine.state.stack.len(), 1);
     assert_eq!(engine.state.pending_triggers.len(), 0);
@@ -231,7 +232,7 @@ fn issue_286_already_tapped_defender_remains_legal_and_tapped() {
     );
 
     engine
-        .apply_command(0, &choose_trigger_target(defending_creature))
+        .apply_scenario_command(0, &choose_trigger_target(defending_creature))
         .expect("choose the already-tapped defending creature");
     resolve_entire_stack_three_player(&mut engine);
     assert!(
@@ -245,7 +246,7 @@ fn issue_286_removed_target_is_rejected_at_resolution() {
     let (mut engine, _equipment, _attacker, defending_creature, _different_opponent) =
         stage_equipment_attack_trigger(286_002);
     engine
-        .apply_command(0, &choose_trigger_target(defending_creature))
+        .apply_scenario_command(0, &choose_trigger_target(defending_creature))
         .expect("choose initially legal defender creature");
     move_to_hand_and_advance_generation(&mut engine, 1, defending_creature);
 
@@ -259,7 +260,7 @@ fn issue_286_same_object_new_generation_is_rejected_at_resolution() {
     let (mut engine, _equipment, _attacker, defending_creature, _different_opponent) =
         stage_equipment_attack_trigger(286_003);
     engine
-        .apply_command(0, &choose_trigger_target(defending_creature))
+        .apply_scenario_command(0, &choose_trigger_target(defending_creature))
         .expect("choose initially legal defender creature");
     move_to_hand_and_advance_generation(&mut engine, 1, defending_creature);
     move_hand_object_back_to_battlefield(&mut engine, 1, defending_creature);

@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::state::Zone;
 
 fn game(card: &str) -> GameEngine {
@@ -35,12 +36,12 @@ fn spellementals_damage_spells_reject_lands_and_damage_creatures() {
         let creature = move_ready_to_battlefield(&mut e, 1, "grizzly_bears");
         let slot = hand_index_for_card(&e, 0, card);
         assert!(
-            e.apply_command(0, &cast_spell_x(slot, target_object(land), 2))
+            e.apply_scenario_command(0, &cast_spell_x(slot, target_object(land), 2))
                 .is_err(),
             "{card}"
         );
         let x = if card == "traumatic_critique" { 2 } else { 0 };
-        e.apply_command(0, &cast_spell_x(slot, target_object(creature), x))
+        e.apply_scenario_command(0, &cast_spell_x(slot, target_object(creature), x))
             .expect("legal creature");
         pass_both_players(&mut e);
         assert_eq!(
@@ -49,7 +50,7 @@ fn spellementals_damage_spells_reject_lands_and_damage_creatures() {
         );
         if e.state.pending_resolution.is_some() {
             let discard = e.state.players[0].hand[0];
-            e.apply_command(0, &submit_resolution_choice(vec![discard]))
+            e.apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
                 .expect("discard");
         }
         assert_eq!(
@@ -65,23 +66,25 @@ fn spellementals_riverpyre_restriction_and_steam_vents_entry_payment() {
     let mut e = game("riverpyre_verge");
     let verge = move_ready_to_battlefield(&mut e, 0, "riverpyre_verge");
     assert!(e
-        .apply_command(0, &activate_ability_for(&e, verge, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&e, verge, 1, vec![]))
         .is_err());
     move_ready_to_battlefield(&mut e, 0, "island");
     let blue = e.state.players[0].mana_pool.blue;
-    e.apply_command(0, &activate_ability_for(&e, verge, 1, vec![]))
+    e.apply_scenario_command(0, &activate_ability_for(&e, verge, 1, vec![]))
         .expect("Island enables blue");
     assert_eq!(e.state.players[0].mana_pool.blue, blue + 1);
     for pay in [false, true] {
         let mut e = game("steam_vents");
         let slot = hand_index_for_card(&e, 0, "steam_vents");
         let object = e.state.players[0].hand[slot];
-        e.apply_command(0, &play_land(slot)).expect("entry choice");
+        e.apply_scenario_command(0, &play_land(slot))
+            .expect("entry choice");
         use tricerules_proto::ruled::v1::{ResolutionChoiceDecision, SubmitResolutionChoice};
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: if pay {
                         ResolutionChoiceDecision::SelectBranch
                     } else {
@@ -101,7 +104,7 @@ fn spellementals_riverpyre_restriction_and_steam_vents_entry_payment() {
 fn spellementals_impractical_joke_can_resolve_without_a_target() {
     let mut e = game("impractical_joke");
     let slot = hand_index_for_card(&e, 0, "impractical_joke");
-    e.apply_command(0, &cast_spell(slot, vec![]))
+    e.apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("zero targets");
     pass_both_players(&mut e);
     assert!(!e.state.damage_prevention_prohibitions.is_empty());
@@ -117,13 +120,14 @@ fn spellementals_crab_reduces_generic_cost_and_taps_two_creatures() {
     e.state.players[0].mana_pool.blue = 1;
     let slot = hand_index_for_card(&e, 0, "eddymurk_crab");
     assert!(
-        e.apply_command(0, &cast_spell(slot, vec![])).is_err(),
+        e.apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .is_err(),
         "reduction cannot pay blue pips"
     );
     e.state.players[0].mana_pool.blue = 2;
     let first = move_ready_to_battlefield(&mut e, 1, "grizzly_bears");
     let second = move_ready_to_battlefield(&mut e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(slot, vec![]))
+    e.apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("five-card reduction");
     pass_both_players(&mut e);
     let crab = battlefield_object_for_card(&e, 0, "eddymurk_crab");
@@ -136,7 +140,8 @@ fn spellementals_crab_reduces_generic_cost_and_taps_two_creatures() {
     };
     let mut targets = target_object(first);
     targets.extend(target_object(second));
-    e.apply_command(0, &choose(targets)).expect("two targets");
+    e.apply_scenario_command(0, &choose(targets))
+        .expect("two targets");
     pass_both_players(&mut e);
     assert!(e.state.objects[&first].tapped);
     assert!(e.state.objects[&second].tapped);
@@ -148,12 +153,12 @@ fn spellementals_crab_flashes_in_tapped_on_an_opponents_turn() {
     e.state.active_player_idx = 1;
     e.state.priority_idx = 0;
     let slot = hand_index_for_card(&e, 0, "eddymurk_crab");
-    e.apply_command(0, &cast_spell(slot, vec![]))
+    e.apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("flash on opponent's turn");
     pass_both_players(&mut e);
     let crab = battlefield_object_for_card(&e, 0, "eddymurk_crab");
     assert!(e.state.objects[&crab].tapped);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget::default())),
@@ -178,7 +183,7 @@ fn spellementals_burst_lightning_kicker_changes_damage() {
         } else {
             vec![]
         };
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &cast_spell_with_cast_cost_groups(slot, target_player(1), selections),
         )
@@ -193,7 +198,7 @@ fn spellementals_critique_illegal_target_prevents_draw_and_discard() {
     let mut e = game("traumatic_critique");
     let creature = move_ready_to_battlefield(&mut e, 1, "grizzly_bears");
     let slot = hand_index_for_card(&e, 0, "traumatic_critique");
-    e.apply_command(0, &cast_spell_x(slot, target_object(creature), 2))
+    e.apply_scenario_command(0, &cast_spell_x(slot, target_object(creature), 2))
         .expect("cast");
     let hand = e.state.players[0].hand.clone();
     // Simulate removal while the spell is on the stack; the original target is no longer legal.
@@ -218,7 +223,8 @@ fn spellementals_fast_and_slow_lands_check_other_lands() {
             move_ready_to_battlefield(&mut e, 0, "island");
         }
         let slot = hand_index_for_card(&e, 0, card);
-        e.apply_command(0, &play_land(slot)).expect("land play");
+        e.apply_scenario_command(0, &play_land(slot))
+            .expect("land play");
         let object = e
             .state
             .objects

@@ -1,5 +1,6 @@
 //! Deepglow Skate: resolution-time counter bags, additional counter placement, optional targets.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CardRegistry;
 use tricerules_cards::CounterKind;
 use tricerules_core::state::CopiableValues;
@@ -34,7 +35,9 @@ fn cast(engine: &mut GameEngine) -> u32 {
         },
     );
     let slot = hand_index_for_card(engine, 0, "deepglow_skate");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);
     pass_both_players(engine);
@@ -97,7 +100,7 @@ fn deepglow_skate_paid_cast_doubles_each_current_kind_on_own_and_opposing_target
         .insert(CounterKind::Charge, 4);
     let skate = cast(&mut engine);
     engine
-        .apply_command(0, &choose(&[own, other, empty]))
+        .apply_scenario_command(0, &choose(&[own, other, empty]))
         .unwrap();
     // Information is read on resolution rather than on entry or target selection.
     engine
@@ -136,7 +139,7 @@ fn deepglow_skate_can_choose_zero_targets_and_finishes_without_placing_counters(
         .counters
         .insert(CounterKind::Quest, 2);
     cast(&mut engine);
-    engine.apply_command(0, &choose(&[])).unwrap();
+    engine.apply_scenario_command(0, &choose(&[])).unwrap();
     pass_both_players(&mut engine);
     assert_eq!(
         engine.state.objects[&target].counters[&CounterKind::Quest],
@@ -164,10 +167,12 @@ fn deepglow_skate_rejects_wrong_actor_duplicate_foreign_and_player_targets_atomi
         (0, player),
     ] {
         let before = format!("{:?}", engine.state);
-        assert!(engine.apply_command(actor, &command).is_err());
+        assert!(engine.apply_scenario_command(actor, &command).is_err());
         assert_eq!(format!("{:?}", engine.state), before);
     }
-    engine.apply_command(0, &choose(&[target])).unwrap();
+    engine
+        .apply_scenario_command(0, &choose(&[target]))
+        .unwrap();
     pass_both_players(&mut engine);
     assert!(engine.state.stack.is_empty());
 }
@@ -175,7 +180,7 @@ fn deepglow_skate_rejects_wrong_actor_duplicate_foreign_and_player_targets_atomi
 fn move_card(engine: &mut GameEngine, name: &str, seat: i32, zone: DevZone) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -211,7 +216,9 @@ fn deepglow_skate_partial_illegal_target_and_departed_source_leave_other_target_
         .counters
         .insert(CounterKind::Charge, 3);
     let source = cast(&mut engine);
-    engine.apply_command(0, &choose(&[own, other])).unwrap();
+    engine
+        .apply_scenario_command(0, &choose(&[own, other]))
+        .unwrap();
     move_card(&mut engine, "Grizzly Bears", 0, DevZone::Graveyard);
     move_card(&mut engine, "Deepglow Skate", 0, DevZone::Graveyard);
     pass_both_players(&mut engine);
@@ -237,7 +244,7 @@ fn deepglow_skate_all_illegal_blinked_target_does_not_receive_counters_as_new_in
         .counters
         .insert(CounterKind::Quest, 2);
     cast(&mut engine);
-    engine.apply_command(0, &choose(&[own])).unwrap();
+    engine.apply_scenario_command(0, &choose(&[own])).unwrap();
     move_card(&mut engine, "Grizzly Bears", 0, DevZone::Graveyard);
     move_card(&mut engine, "Grizzly Bears", 0, DevZone::Battlefield);
     engine
@@ -305,7 +312,7 @@ fn deepglow_skate_uses_effect_placement_replacement_and_prohibition_for_each_kin
     }
     cast(&mut engine);
     engine
-        .apply_command(0, &choose(&[own, other, prohibited]))
+        .apply_scenario_command(0, &choose(&[own, other, prohibited]))
         .unwrap();
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&own].counters[&CounterKind::Quest], 6);
@@ -363,7 +370,7 @@ fn deepglow_skate_paid_cast_and_target_command_replay_identically() {
     ];
     let mut expected = Vec::new();
     for (actor, command) in &commands {
-        expected.push(engine.apply_command(*actor, command).unwrap());
+        expected.push(engine.apply_scenario_command(*actor, command).unwrap());
     }
     assert_eq!(
         engine.state.objects[&target].counters[&CounterKind::Quest],
@@ -373,7 +380,10 @@ fn deepglow_skate_paid_cast_and_target_command_replay_identically() {
     for ((actor, command), batch) in commands.into_iter().zip(expected) {
         let encoded = command.encode_to_vec();
         let decoded = RuledCommand::decode(encoded.as_slice()).unwrap();
-        assert_eq!(replay.apply_command(actor, &decoded).unwrap(), batch);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &decoded).unwrap(),
+            batch
+        );
     }
     assert_eq!(
         engine.diagnostic_snapshot().unwrap(),
@@ -416,16 +426,20 @@ fn deepglow_skate_three_nonconsecutive_players_use_published_permanent_ids() {
         },
     );
     let slot = hand_index_for_card(&engine, 0, "deepglow_skate");
-    engine.apply_command(4, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(4, &cast_spell(slot, vec![]))
+        .unwrap();
     for _ in 0..3 {
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
-    engine.apply_command(4, &choose(&[own, other])).unwrap();
+    engine
+        .apply_scenario_command(4, &choose(&[own, other]))
+        .unwrap();
     for _ in 0..3 {
         engine
-            .apply_command(engine.state.priority_player_id(), &pass())
+            .apply_scenario_command(engine.state.priority_player_id(), &pass())
             .unwrap();
     }
     for oid in [own, other] {

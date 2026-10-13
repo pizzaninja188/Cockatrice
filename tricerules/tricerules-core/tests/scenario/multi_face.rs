@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::dev_command::Dev;
@@ -43,7 +44,7 @@ fn fire_ice_fire_half_deals_two_and_shows_face_name() {
     let idx = hand_index_for_card(&e, 0, "fire_ice");
     // Fire is a DamageTargets effect; damage_amount must be specified (all 2 to player 1).
     let pushed = e
-        .apply_command(0, &cast_spell_face(idx, target_player_damage(1, 2), 0))
+        .apply_scenario_command(0, &cast_spell_face(idx, target_player_damage(1, 2), 0))
         .expect("cast Fire");
     let spell_oid = e.state.stack.last().expect("spell on stack").id;
     let push = pushed
@@ -61,8 +62,8 @@ fn fire_ice_fire_half_deals_two_and_shows_face_name() {
     // sees which half resolves (the physical card still shows "Fire // Ice").
     assert_eq!(push.ability_annotation, "Fire");
 
-    e.apply_command(0, &pass()).expect("caster pass");
-    e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    e.apply_scenario_command(1, &pass()).expect("opponent pass");
     assert!(e.state.stack.is_empty());
     assert_eq!(e.state.players[1].life, 18, "Fire deals 2 to the player");
     // An instant half resolves to its owner's graveyard, not the battlefield.
@@ -109,7 +110,7 @@ fn fire_ice_ice_half_taps_and_draws() {
 
     let lib_before = e.state.players[0].library.len();
     let pushed = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell_face(
                 idx,
@@ -135,8 +136,8 @@ fn fire_ice_ice_half_taps_and_draws() {
     assert_eq!(push.description, "Ice");
     assert_eq!(push.ability_annotation, "Ice");
 
-    e.apply_command(0, &pass()).expect("caster pass");
-    e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    e.apply_scenario_command(1, &pass()).expect("opponent pass");
     assert!(e.state.stack.is_empty());
     assert!(
         e.state.objects.get(&land_oid).unwrap().tapped,
@@ -180,7 +181,7 @@ fn mdfc_pathway_enter_as_face_0_taps_for_red() {
         .position(|&o| o == card_oid)
         .expect("pathway in hand");
 
-    e.apply_command(0, &play_land_face(idx, 0))
+    e.apply_scenario_command(0, &play_land_face(idx, 0))
         .expect("play as Cragcrown (face 0)");
     let land_oid = *e.state.players[0]
         .battlefield
@@ -227,7 +228,7 @@ fn mdfc_pathway_enter_as_face_1_taps_for_green() {
         .position(|&o| o == card_oid)
         .expect("pathway in hand");
 
-    e.apply_command(0, &play_land_face(idx, 1))
+    e.apply_scenario_command(0, &play_land_face(idx, 1))
         .expect("play as Timbercrown (face 1)");
     let land_oid = *e.state.players[0]
         .battlefield
@@ -460,10 +461,10 @@ fn stomp_resolves_to_exile() {
         },
     );
 
-    e.apply_command(0, &cast_spell_face(hand_index, target_player(1), 1))
+    e.apply_scenario_command(0, &cast_spell_face(hand_index, target_player(1), 1))
         .expect("cast Stomp");
-    e.apply_command(0, &pass()).expect("caster pass");
-    e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    e.apply_scenario_command(1, &pass()).expect("opponent pass");
 
     assert!(
         e.state.players[0].exile.contains(&card_oid),
@@ -506,7 +507,7 @@ fn bonecrusher_giant_casts_normally_from_hand() {
         },
     );
     let pushed = e
-        .apply_command(0, &cast_spell_face(slot, vec![], 0))
+        .apply_scenario_command(0, &cast_spell_face(slot, vec![], 0))
         .expect("cast Bonecrusher Giant from hand");
     let stack_push = pushed
         .events
@@ -572,7 +573,7 @@ fn temporarily_sole_hand_adventure_face_identifies_combined_display() {
     );
 
     let pushed = e
-        .apply_command(0, &cast_spell_face(slot, target_player(1), 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, target_player(1), 1))
         .expect("cast the only currently available face");
     let stack_push = pushed
         .events
@@ -617,10 +618,10 @@ fn bonecrusher_giant_casts_once_from_adventure_exile() {
             ..Default::default()
         },
     );
-    e.apply_command(0, &cast_spell_face(hand_index, target_player(1), 1))
+    e.apply_scenario_command(0, &cast_spell_face(hand_index, target_player(1), 1))
         .expect("cast Stomp");
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(1, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
 
     let legal = e.initial_response_batch();
     let actions = &legal.legal_by_player[&0].zone_cast_actions;
@@ -641,7 +642,9 @@ fn bonecrusher_giant_casts_once_from_adventure_exile() {
             ..Default::default()
         })),
     };
-    let pushed = e.apply_command(0, &cast).expect("cast creature from exile");
+    let pushed = e
+        .apply_scenario_command(0, &cast)
+        .expect("cast creature from exile");
     let stack_push = pushed
         .events
         .iter()
@@ -660,8 +663,8 @@ fn bonecrusher_giant_casts_once_from_adventure_exile() {
         .active_exile_play_permissions
         .iter()
         .any(|permission| permission.object_id == oid));
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(1, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
     assert_eq!(
         e.state.objects[&oid].zone,
         tricerules_core::Zone::Battlefield
@@ -702,7 +705,7 @@ fn adventure_exile_permission_rejects_wrong_source_player_face_and_unpaid_cost()
             ..Default::default()
         },
     );
-    e.apply_command(0, &cast_spell_face(slot, target_player(1), 1))
+    e.apply_scenario_command(0, &cast_spell_face(slot, target_player(1), 1))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert!(e
@@ -728,11 +731,13 @@ fn adventure_exile_permission_rejects_wrong_source_player_face_and_unpaid_cost()
             ..Default::default()
         })),
     };
-    assert!(e.apply_command(0, &exile_cast(oid, 1)).is_err());
-    assert!(e.apply_command(1, &exile_cast(oid, 0)).is_err());
-    assert!(e.apply_command(0, &exile_cast(u32::MAX, 0)).is_err());
+    assert!(e.apply_scenario_command(0, &exile_cast(oid, 1)).is_err());
+    assert!(e.apply_scenario_command(1, &exile_cast(oid, 0)).is_err());
     assert!(e
-        .apply_command(
+        .apply_scenario_command(0, &exile_cast(u32::MAX, 0))
+        .is_err());
+    assert!(e
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CastSpell(CastSpell {
@@ -745,7 +750,7 @@ fn adventure_exile_permission_rejects_wrong_source_player_face_and_unpaid_cost()
         )
         .is_err());
     assert!(
-        e.apply_command(0, &exile_cast(oid, 0)).is_err(),
+        e.apply_scenario_command(0, &exile_cast(oid, 0)).is_err(),
         "ordinary mana payment is still required"
     );
     e.state.turn_step = tricerules_core::TurnStep::Upkeep;
@@ -753,7 +758,7 @@ fn adventure_exile_permission_rejects_wrong_source_player_face_and_unpaid_cost()
         .zone_cast_actions
         .is_empty());
     assert!(
-        e.apply_command(0, &exile_cast(oid, 0)).is_err(),
+        e.apply_scenario_command(0, &exile_cast(oid, 0)).is_err(),
         "the permanent face keeps its ordinary sorcery timing"
     );
     assert_eq!(e.state.objects[&oid].zone, tricerules_core::Zone::Exile);
@@ -797,7 +802,7 @@ fn adventure_permission_does_not_return_when_the_card_leaves_and_reenters_exile(
             ..Default::default()
         },
     );
-    e.apply_command(0, &cast_spell_face(slot, target_player(1), 1))
+    e.apply_scenario_command(0, &cast_spell_face(slot, target_player(1), 1))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
 
@@ -811,13 +816,15 @@ fn adventure_permission_does_not_return_when_the_card_leaves_and_reenters_exile(
             })),
         })),
     };
-    e.apply_command(0, &move_to(DevZone::Hand)).unwrap();
+    e.apply_scenario_command(0, &move_to(DevZone::Hand))
+        .unwrap();
     assert!(!e
         .state
         .active_exile_play_permissions
         .iter()
         .any(|permission| permission.object_id == oid));
-    e.apply_command(0, &move_to(DevZone::Exile)).unwrap();
+    e.apply_scenario_command(0, &move_to(DevZone::Exile))
+        .unwrap();
     assert_eq!(e.state.objects[&oid].zone, tricerules_core::Zone::Exile);
     assert!(!e
         .state
@@ -864,7 +871,7 @@ fn stomp_with_no_legal_target_goes_to_graveyard_without_permission() {
             ..Default::default()
         },
     );
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell_face(
             slot,
@@ -880,7 +887,7 @@ fn stomp_with_no_legal_target_goes_to_graveyard_without_permission() {
     )
     .unwrap();
     let bolt = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt,
@@ -954,11 +961,11 @@ fn countered_stomp_goes_to_graveyard_without_permission() {
             ..Default::default()
         },
     );
-    e.apply_command(0, &cast_spell_face(slot, target_player(1), 1))
+    e.apply_scenario_command(0, &cast_spell_face(slot, target_player(1), 1))
         .unwrap();
     let stomp_on_stack = e.state.stack.last().unwrap().id;
     let counter = hand_index_for_card(&e, 0, "counterspell");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             counter,
@@ -1033,7 +1040,7 @@ fn transform_and_flip_back_faces_cannot_be_cast_from_hand() {
 
         let stack_len = e.state.stack.len();
         let error = e
-            .apply_command(0, &cast_spell_face(slot, vec![], 1))
+            .apply_scenario_command(0, &cast_spell_face(slot, vec![], 1))
             .expect_err("the alternate permanent face is not castable from hand");
         assert!(matches!(error, tricerules_core::EngineError::Illegal(_)));
         assert_eq!(e.state.stack.len(), stack_len);
@@ -1086,7 +1093,7 @@ fn sole_transform_front_cast_has_no_redundant_face_annotation() {
     );
 
     let pushed = e
-        .apply_command(0, &cast_spell_face(slot, vec![], 0))
+        .apply_scenario_command(0, &cast_spell_face(slot, vec![], 0))
         .expect("cast Reckless Waif");
     let stack_push = pushed
         .events
@@ -1136,7 +1143,8 @@ fn reckless_waif_transforms_after_a_spell_free_turn() {
         } else {
             pass()
         };
-        e.apply_command(priority, &command).expect("advance turn");
+        e.apply_scenario_command(priority, &command)
+            .expect("advance turn");
     }
     assert!(
         !e.state.stack.is_empty(),
@@ -1175,7 +1183,7 @@ fn advance_to_next_upkeep_trigger(e: &mut GameEngine) {
         } else {
             pass()
         };
-        e.apply_command(priority, &command)
+        e.apply_scenario_command(priority, &command)
             .expect("advance to upkeep");
     }
     panic!("did not reach next upkeep");
@@ -1330,11 +1338,12 @@ fn akki_lavarunner_flips_after_damaging_an_opponent() {
     let akki = inject_permanent_on_battlefield(&mut e, 0, "akki_lavarunner_tok-tok,_volcano_born");
     e.state.objects.get_mut(&akki).unwrap().summoning_sick = false;
 
-    e.apply_command(0, &declare_attackers(vec![akki])).unwrap();
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(1, &pass()).unwrap();
-    e.apply_command(0, &pass()).unwrap();
-    e.apply_command(1, &pass()).unwrap();
+    e.apply_scenario_command(0, &declare_attackers(vec![akki]))
+        .unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
+    e.apply_scenario_command(0, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
     assert!(
         !e.state.stack.is_empty(),
         "damage trigger reached the stack"

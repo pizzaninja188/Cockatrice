@@ -3,9 +3,10 @@
 //! Oracle and rulings checked 2026-09-25. CR 121.2c orders each player's draws active-player first.
 //! Mikokoro's {T}: Add {C} ability is a mana ability under CR 605.1a/605.3b; its draw ability uses
 //! the stack under CR 602.2.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 fn two_player_engine(seed: u64) -> GameEngine {
     let mut engine = GameEngine::new(
@@ -25,7 +26,7 @@ fn play_mikokoro(engine: &mut GameEngine) -> u32 {
     let source = inject_card_into_hand(engine, 0, "mikokoro,_center_of_the_sea");
     let slot = hand_index_for_card(engine, 0, "mikokoro,_center_of_the_sea");
     engine
-        .apply_command(0, &play_land(slot))
+        .apply_scenario_command(0, &play_land(slot))
         .expect("play Mikokoro as a land");
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
     source
@@ -54,7 +55,7 @@ fn vision_skeins_makes_each_player_draw_two_cards() {
     let slot = hand_index_for_card(&engine, 0, "vision_skeins");
 
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Vision Skeins for {1}{U}");
     resolve_entire_stack_two_player(&mut engine);
 

@@ -8,6 +8,7 @@
 //! 602.2/701.9/701.21 the discard-and-sacrifice draw; CR 602.2/701.9/702.12/701.26 the
 //! discard-to-grant-indestructible-and-tap activation; CR 603.6a/611.2a the Alliance
 //! source-excluding pump; and CR 614.1c/122.6 the conditional entry counter.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::{CounterKind, Keyword};
@@ -34,13 +35,13 @@ fn main1_engine(seed: u64, own: &[&str], opposing: &[&str]) -> GameEngine {
 
 fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main phase to beginning of combat");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes in beginning of combat");
     engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender passes in beginning of combat");
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
 }
@@ -60,7 +61,7 @@ fn issue_352_interjection_pumps_first_strike_and_expires() {
     );
     let slot = hand_index_for_card(&engine, 0, "interjection");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
         .expect("cast Interjection");
     assert_eq!(
         engine.effective_power(bear),
@@ -98,14 +99,14 @@ fn issue_352_spin_out_destroys_a_creature_and_a_vehicle_but_not_an_artifact() {
     let slot = hand_index_for_card(&engine, 0, "spin_out");
     assert!(
         engine
-            .apply_command(0, &cast_spell(slot, target_object(prism)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(prism)))
             .is_err(),
         "CR 115.1: an artifact that is not a Vehicle is not a legal target"
     );
 
     // A Vehicle permanent is.
     engine
-        .apply_command(0, &cast_spell(slot, target_object(wagon)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(wagon)))
         .expect("cast Spin Out at the Vehicle");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -118,7 +119,7 @@ fn issue_352_spin_out_destroys_a_creature_and_a_vehicle_but_not_an_artifact() {
     ensure_in_hand(&mut engine, 0, "spin_out");
     let slot = hand_index_for_card(&engine, 0, "spin_out");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
         .expect("cast Spin Out at the creature");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&bear].zone, Zone::Graveyard);
@@ -167,7 +168,7 @@ fn issue_352_elvenkings_harper_forbids_declaring_a_blocker() {
 
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![small]))
+        .apply_scenario_command(0, &declare_attackers(vec![small]))
         .expect("attack with the unblockable creature");
     let legal = engine.initial_response_batch().legal_by_player[&1]
         .legal_block_pairs
@@ -178,7 +179,7 @@ fn issue_352_elvenkings_harper_forbids_declaring_a_blocker() {
     );
     assert!(
         engine
-            .apply_command(
+            .apply_scenario_command(
                 1,
                 &declare_blockers(vec![BlockPair {
                     attacker_id: small,
@@ -197,7 +198,7 @@ fn issue_352_moonrise_cleric_gains_life_on_attack() {
     assert_eq!(engine.state.players[0].life, 20);
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![cleric]))
+        .apply_scenario_command(0, &declare_attackers(vec![cleric]))
         .expect("attack with Moonrise Cleric");
     assert_eq!(
         engine.state.stack.len(),
@@ -221,7 +222,7 @@ fn issue_352_masked_meower_discards_and_sacrifices_to_draw() {
     let library_before = engine.state.players[0].library.len();
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 meower,
@@ -260,7 +261,7 @@ fn issue_352_iron_shield_elf_discards_for_indestructible_and_taps() {
     assert!(!engine.state.objects[&elf].tapped);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 elf,
@@ -353,7 +354,7 @@ fn issue_352_cackling_slasher_enters_with_a_counter_only_after_a_death() {
     grant_pool(&mut with_death, 0);
     let murder = hand_index_for_card(&with_death, 0, "murder");
     with_death
-        .apply_command(0, &cast_spell(murder, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(murder, target_object(bear)))
         .expect("cast Murder");
     resolve_entire_stack_two_player(&mut with_death);
     assert_eq!(with_death.state.turn_history.current.creatures_died, 1);

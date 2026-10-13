@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::CounterKind;
 use tricerules_core::Zone;
@@ -53,7 +54,7 @@ fn issue_143_aggressive_negotiations_publicly_reveals_the_hand() {
 
     let spell = hand_index_for_card(&engine, 0, "aggressive_negotiations");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 spell,
@@ -61,9 +62,11 @@ fn issue_143_aggressive_negotiations_publicly_reveals_the_hand() {
             ),
         )
         .expect("cast Aggressive Negotiations");
-    engine.apply_command(0, &pass()).expect("caster passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
     let parked = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes and resolution parks");
 
     let choice = find_resolution_choice(&parked).expect("opponent-hand choice");
@@ -108,7 +111,7 @@ fn issue_143_aggressive_negotiations_publicly_reveals_the_hand() {
         .copied()
         .unwrap_or(0);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![chosen_nonland]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![chosen_nonland]))
         .expect("choose the nonland card");
 
     assert_eq!(engine.state.objects[&chosen_nonland].zone, Zone::Exile);
@@ -153,15 +156,19 @@ fn aggressive_negotiations_allows_omitting_the_creature_target() {
 
     let spell = hand_index_for_card(&engine, 0, "aggressive_negotiations");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(spell, aggressive_negotiations_targets(1, None)),
         )
         .expect("cast without the optional target");
-    engine.apply_command(0, &pass()).expect("caster passes");
-    engine.apply_command(1, &pass()).expect("resolution parks");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolution parks");
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))
         .expect("choose the nonland card");
 
     assert_eq!(engine.state.objects[&chosen].zone, Zone::Exile);
@@ -197,7 +204,7 @@ fn aggressive_negotiations_all_land_hand_skips_the_choice_and_resumes_the_tail()
 
     let spell = hand_index_for_card(&engine, 0, "aggressive_negotiations");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 spell,
@@ -205,8 +212,12 @@ fn aggressive_negotiations_all_land_hand_skips_the_choice_and_resumes_the_tail()
             ),
         )
         .expect("cast Aggressive Negotiations");
-    engine.apply_command(0, &pass()).expect("caster passes");
-    let resolved = engine.apply_command(1, &pass()).expect("spell resolves");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    let resolved = engine
+        .apply_scenario_command(1, &pass())
+        .expect("spell resolves");
 
     assert!(find_resolution_choice(&resolved).is_none());
     assert!(engine.state.pending_resolution.is_none());
@@ -247,7 +258,7 @@ fn aggressive_negotiations_keeps_the_hand_effect_when_the_optional_target_is_ill
 
     let spell = hand_index_for_card(&engine, 0, "aggressive_negotiations");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(spell, aggressive_negotiations_targets(1, Some(departed))),
         )
@@ -268,10 +279,14 @@ fn aggressive_negotiations_keeps_the_hand_effect_when_the_optional_target_is_ill
         .entry(departed)
         .or_default() += 1;
 
-    engine.apply_command(0, &pass()).expect("caster passes");
-    engine.apply_command(1, &pass()).expect("resolution parks");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolution parks");
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))
         .expect("hand effect still resolves");
 
     assert_eq!(engine.state.objects[&chosen].zone, Zone::Exile);
@@ -311,13 +326,17 @@ fn aggressive_negotiations_rejects_ineligible_and_stale_choices_atomically() {
     );
     let spell = hand_index_for_card(&engine, 0, "aggressive_negotiations");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(spell, aggressive_negotiations_targets(1, None)),
         )
         .expect("cast Aggressive Negotiations");
-    engine.apply_command(0, &pass()).expect("caster passes");
-    engine.apply_command(1, &pass()).expect("resolution parks");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster passes");
+    engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolution parks");
 
     let hand_before = engine.state.players[1].hand.clone();
     let wrong_owner = *engine.state.players[0]
@@ -325,7 +344,7 @@ fn aggressive_negotiations_rejects_ineligible_and_stale_choices_atomically() {
         .first()
         .expect("caster still has a hand card");
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![wrong_owner]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![wrong_owner]))
         .is_err());
     assert_eq!(engine.state.players[1].hand, hand_before);
     assert!(engine.state.pending_resolution.is_some());
@@ -340,7 +359,7 @@ fn aggressive_negotiations_rejects_ineligible_and_stale_choices_atomically() {
         pending.presentation.max = 2;
     }
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![chosen, chosen]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![chosen, chosen]))
         .is_err());
     assert_eq!(engine.state.players[1].hand, hand_before);
     assert_eq!(engine.state.objects[&chosen].zone, Zone::Hand);
@@ -355,7 +374,7 @@ fn aggressive_negotiations_rejects_ineligible_and_stale_choices_atomically() {
     }
 
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![land]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
         .is_err());
     assert_eq!(engine.state.players[1].hand, hand_before);
     assert_eq!(engine.state.objects[&chosen].zone, Zone::Hand);
@@ -367,7 +386,7 @@ fn aggressive_negotiations_rejects_ineligible_and_stale_choices_atomically() {
         .entry(chosen)
         .or_default() += 1;
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![chosen]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![chosen]))
         .is_err());
     assert_eq!(engine.state.players[1].hand, hand_before);
     assert_eq!(engine.state.objects[&chosen].zone, Zone::Hand);

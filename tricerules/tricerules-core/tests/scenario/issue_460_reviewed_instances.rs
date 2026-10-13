@@ -12,9 +12,10 @@
 //! CR 704.5f (lethal-toughness state-based action), CR 603.6a (entry triggers), CR 602.2b
 //! (activated-ability costs), CR 118.3 (life loss), CR 601.2f (static cost reductions), and
 //! CR 601.2a / 700.2 (spells cast this turn).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 #[track_caller]
 fn hand_action_reduction(engine: &mut GameEngine, card_id: &str) -> u32 {
@@ -216,7 +217,7 @@ fn issue_460_panicked_altisaur_taps_for_two_to_each_opponent() {
     let before = engine.state.command_index;
     let stale = activate_ability_for(&engine, source, 0, vec![]);
     engine
-        .apply_command(0, &stale)
+        .apply_scenario_command(0, &stale)
         .expect_err("a tapped source cannot pay the tap cost");
     assert_eq!(engine.state.command_index, before);
     assert_eq!(engine.state.players[1].life, 18);
@@ -245,7 +246,7 @@ fn issue_460_uthros_reduces_only_the_second_spell_and_never_its_mana_value() {
     let first_command = cast_spell(first, vec![]);
     let before = engine.state.command_index;
     engine
-        .apply_command(0, &first_command)
+        .apply_scenario_command(0, &first_command)
         .expect_err("the first spell is not reduced");
     assert_eq!(engine.state.command_index, before);
     give_mana(
@@ -310,7 +311,7 @@ fn issue_460_uthros_reduces_only_the_second_spell_and_never_its_mana_value() {
     let third_command = cast_spell(third, vec![]);
     let before = engine.state.command_index;
     engine
-        .apply_command(0, &third_command)
+        .apply_scenario_command(0, &third_command)
         .expect_err("the third spell is not reduced");
     assert_eq!(engine.state.command_index, before);
     give_mana(

@@ -44,6 +44,7 @@ class ManaPoolUpdated;
 class PhaseChanged;
 class ResolutionChoiceRequired;
 class ResolutionChoiceProgress;
+class ResolutionPromptState;
 class RuledEventBatch;
 class StackPushed;
 class StackResolved;
@@ -86,6 +87,14 @@ private:
         bool reconcilePublicReveal = true;
         bool publicRevealSeen = false;
         bool replacementEffectSeen = false;
+        bool resolutionPromptSnapshotValid = false;
+        bool resolutionPromptActive = false;
+        int resolutionPromptDeciderPlayerId = -1;
+        quint64 resolutionPromptId = 0;
+        bool matchingResolutionChoiceEventSeen = false;
+        // True only after an exact current-prompt event validates and stages a picker or modal.
+        bool matchingResolutionChoiceSeen = false;
+        bool resolutionChoiceDialogRequested = false;
         /// CR 603.3b: the ordering prompt changed somewhere in this batch. Emitted once at the end
         /// from the final state rather than per event, because a single batch both places the
         /// trigger just picked (which ends the old prompt) and raises the next one — emitting on

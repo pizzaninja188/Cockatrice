@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::CounterKind;
 use tricerules_core::state::PlayerState;
@@ -50,13 +51,13 @@ fn replacement_images_identify_each_duplicate_source() {
     let mut engine = engine_with_p0_cards(220_001, &["mountain"]);
     engine.enable_dev_commands();
     engine
-        .apply_command(0, &dev_put(0, "Dragonstorm Globe"))
+        .apply_scenario_command(0, &dev_put(0, "Dragonstorm Globe"))
         .unwrap();
     engine
-        .apply_command(0, &dev_put(0, "Dragonstorm Globe"))
+        .apply_scenario_command(0, &dev_put(0, "Dragonstorm Globe"))
         .unwrap();
     let batch = engine
-        .apply_command(0, &dev_put(0, "Sparktongue Dragon"))
+        .apply_scenario_command(0, &dev_put(0, "Sparktongue Dragon"))
         .unwrap();
     let choice = batch
         .events
@@ -97,7 +98,7 @@ fn threshold_land_uses_every_players_life_total() {
 
         let land = hand_index_for_card(&engine, 0, "razortrap_gorge");
         engine
-            .apply_command(0, &play_land(land))
+            .apply_scenario_command(0, &play_land(land))
             .expect("play Razortrap Gorge");
 
         let object_id = battlefield_object_for_card(&engine, 0, "razortrap_gorge");
@@ -131,14 +132,14 @@ fn multiple_globes_use_the_existing_replacement_order_prompt() {
     for _ in 0..2 {
         let globe = hand_index_for_card(&engine, 0, "dragonstorm_globe");
         engine
-            .apply_command(0, &cast_spell(globe, vec![]))
+            .apply_scenario_command(0, &cast_spell(globe, vec![]))
             .expect("cast Dragonstorm Globe");
         pass_both_players(&mut engine);
     }
 
     let dragon = hand_index_for_card(&engine, 0, "sparktongue_dragon");
     engine
-        .apply_command(0, &cast_spell(dragon, vec![]))
+        .apply_scenario_command(0, &cast_spell(dragon, vec![]))
         .expect("cast Sparktongue Dragon");
     pass_both_players(&mut engine);
 
@@ -160,20 +161,20 @@ fn multiple_globes_use_the_existing_replacement_order_prompt() {
     let application = pending.presentation.candidates[0];
 
     assert!(engine
-        .apply_command(1, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![application]))
         .is_err());
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![u32::MAX]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![u32::MAX]))
         .is_err());
     engine
-        .apply_command(0, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![application]))
         .expect("choose the first Globe replacement");
 
     let object_id = battlefield_object_for_card(&engine, 0, "sparktongue_dragon");
     assert_eq!(plus_one_counters(&engine, object_id), 2);
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![application]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![application]))
         .is_err());
     assert_eq!(plus_one_counters(&engine, object_id), 2);
 }
@@ -183,23 +184,23 @@ fn globe_only_affects_dragons_its_controller_controls() {
     let mut engine = engine_with_p0_cards(97_004, &[]);
     engine.enable_dev_commands();
     engine
-        .apply_command(0, &dev_put(0, "Dragonstorm Globe"))
+        .apply_scenario_command(0, &dev_put(0, "Dragonstorm Globe"))
         .expect("put Globe");
 
     engine
-        .apply_command(0, &dev_put(1, "Sparktongue Dragon"))
+        .apply_scenario_command(0, &dev_put(1, "Sparktongue Dragon"))
         .expect("put opponent's Dragon");
     let opposing_dragon = battlefield_object_for_card(&engine, 1, "sparktongue_dragon");
     assert_eq!(plus_one_counters(&engine, opposing_dragon), 0);
 
     engine
-        .apply_command(0, &dev_put(0, "Grizzly Bears"))
+        .apply_scenario_command(0, &dev_put(0, "Grizzly Bears"))
         .expect("put controlled non-Dragon");
     let bear = battlefield_object_for_card(&engine, 0, "grizzly_bears");
     assert_eq!(plus_one_counters(&engine, bear), 0);
 
     engine
-        .apply_command(0, &dev_put(0, "Sparktongue Dragon"))
+        .apply_scenario_command(0, &dev_put(0, "Sparktongue Dragon"))
         .expect("put controlled Dragon");
     let controlled_dragon = battlefield_object_for_card(&engine, 0, "sparktongue_dragon");
     assert_eq!(plus_one_counters(&engine, controlled_dragon), 1);
@@ -228,14 +229,14 @@ fn copy_first_rechecks_the_globe_dragon_predicate() {
         );
         let globe = hand_index_for_card(&engine, 0, "dragonstorm_globe");
         engine
-            .apply_command(0, &cast_spell(globe, vec![]))
+            .apply_scenario_command(0, &cast_spell(globe, vec![]))
             .expect("cast Globe");
         pass_both_players(&mut engine);
 
         let source = inject_creature_on_battlefield(&mut engine, 1, copy_source_card);
         let clone = hand_index_for_card(&engine, 0, "clone");
         engine
-            .apply_command(0, &cast_spell(clone, vec![]))
+            .apply_scenario_command(0, &cast_spell(clone, vec![]))
             .expect("cast Clone");
         pass_both_players(&mut engine);
         assert_eq!(
@@ -249,7 +250,7 @@ fn copy_first_rechecks_the_globe_dragon_predicate() {
             ChoiceKind::CopySource
         );
         engine
-            .apply_command(0, &submit_resolution_choice(vec![source]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
             .expect("choose copy source");
 
         let clone_id = battlefield_object_for_card(&engine, 0, "clone");

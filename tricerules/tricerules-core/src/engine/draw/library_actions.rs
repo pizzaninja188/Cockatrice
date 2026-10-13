@@ -8,6 +8,7 @@ impl GameEngine {
     ) -> rv1::ResolutionChoiceRequired {
         let action = work.action.as_ref().expect("draw library action");
         let mut choice = rv1::ResolutionChoiceRequired {
+            resolution_prompt_id: 0,
             deciding_player_id: match &action.stage {
                 DrawLibraryStage::ZurPayment { payers, cursor, .. } => payers
                     .get(*cursor)
@@ -110,6 +111,9 @@ impl GameEngine {
         let choice = self.draw_library_choice(&work);
         let stack = work.completion.stack().cloned();
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+
             deciding_player: choice.deciding_player_id,
             presentation: PendingResolutionPresentation {
                 source_object_id: choice.source_object_id,

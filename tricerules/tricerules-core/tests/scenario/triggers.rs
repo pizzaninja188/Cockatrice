@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration, TypeLineAddition};
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
@@ -42,10 +43,10 @@ fn issue_171_crime_is_committed_only_after_a_successful_cast() {
         hand_index_for_card(&e, 0, "lightning_bolt"),
         trigger_targets(1),
     );
-    assert!(e.apply_command(0, &command).is_err());
+    assert!(e.apply_scenario_command(0, &command).is_err());
     assert!(e.state.stack.is_empty());
     grant_pool(&mut e, 0);
-    e.apply_command(0, &command).unwrap();
+    e.apply_scenario_command(0, &command).unwrap();
     assert_eq!(e.state.stack.len(), 2, "one Crime trigger above the spell");
     assert!(e.state.stack.last().unwrap().is_triggered);
     resolve_entire_stack_two_player(&mut e);
@@ -70,7 +71,7 @@ fn issue_171_engine() -> GameEngine {
 fn issue_171_bolt(e: &mut GameEngine, target: Vec<TargetRef>) -> RuledEventBatch {
     inject_card_into_hand(e, 0, "lightning_bolt");
     grant_pool(e, 0);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(hand_index_for_card(e, 0, "lightning_bolt"), target),
     )
@@ -100,7 +101,7 @@ fn issue_171_raven_drains_once_per_turn_and_history_counts_every_crime() {
     end_active_turn(&mut e, 0);
     assert!(e.state.turn_instance > turn);
     assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 0);
-    e.apply_command(1, &pass()).unwrap();
+    e.apply_scenario_command(1, &pass()).unwrap();
     issue_171_bolt(&mut e, target_player(1));
     assert_eq!(
         e.state.stack.len(),
@@ -138,9 +139,9 @@ fn issue_171_sphinx_surveils_two_cards_with_existing_private_choice() {
     let candidates = pending.presentation.candidates.clone();
     assert_eq!(candidates.len(), 2);
     assert!(e
-        .apply_command(1, &submit_resolution_choice(candidates.clone()))
+        .apply_scenario_command(1, &submit_resolution_choice(candidates.clone()))
         .is_err());
-    e.apply_command(0, &submit_resolution_choice(candidates.clone()))
+    e.apply_scenario_command(0, &submit_resolution_choice(candidates.clone()))
         .unwrap();
     assert!(candidates
         .iter()
@@ -188,7 +189,7 @@ fn issue_171_activated_and_targeted_triggered_abilities_commit_at_completion() {
     let grave = inject_graveyard_card(&mut e, 1, "hill_giant");
     inject_card_into_hand(&mut e, 0, "soul-shackled_zombie");
     grant_pool(&mut e, 0);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(hand_index_for_card(&e, 0, "soul-shackled_zombie"), vec![]),
     )
@@ -207,8 +208,8 @@ fn issue_171_activated_and_targeted_triggered_abilities_commit_at_completion() {
             selected_modes: vec![],
         })),
     };
-    assert!(e.apply_command(1, &choose).is_err());
-    e.apply_command(0, &choose).unwrap();
+    assert!(e.apply_scenario_command(1, &choose).is_err());
+    e.apply_scenario_command(0, &choose).unwrap();
     assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 2);
     assert!(e.state.pending_triggers.is_empty());
 }
@@ -224,7 +225,7 @@ fn issue_171_raven_uses_all_opponents_but_gains_only_one_life() {
     issue_171_bolt(&mut e, target_player(2));
     while !e.state.stack.is_empty() {
         let player = e.state.priority_player_id();
-        e.apply_command(player, &pass()).unwrap();
+        e.apply_scenario_command(player, &pass()).unwrap();
     }
     assert_eq!(
         e.state.players.iter().map(|p| p.life).collect::<Vec<_>>(),
@@ -246,13 +247,13 @@ fn issue_171_rejected_commands_preserve_accepted_replay() {
         .encode_to_vec();
         let command = RuledCommand::decode(bytes.as_slice()).unwrap();
         if reject {
-            assert!(e.apply_command(0, &command).is_err());
+            assert!(e.apply_scenario_command(0, &command).is_err());
         }
         grant_pool(&mut e, 0);
-        let mut batches = vec![e.apply_command(0, &command).unwrap()];
+        let mut batches = vec![e.apply_scenario_command(0, &command).unwrap()];
         while !e.state.stack.is_empty() {
             let player = e.state.priority_player_id();
-            batches.push(e.apply_command(player, &pass()).unwrap());
+            batches.push(e.apply_scenario_command(player, &pass()).unwrap());
         }
         (batches, e.state.turn_history.clone())
     }
@@ -280,7 +281,7 @@ fn issue_171_ward_is_not_a_targeted_crime_and_countering_preserves_history() {
             .choice_kind,
         ChoiceKind::ManaPayment
     );
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &submit_resolution_decision(tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline),
     )
@@ -300,10 +301,12 @@ fn issue_171_unknown_target_kind_cannot_bypass_crime_accounting() {
         kind: 999,
         ..Default::default()
     }];
-    assert!(e.apply_command(0, &cast_spell(index, malformed)).is_err());
+    assert!(e
+        .apply_scenario_command(0, &cast_spell(index, malformed))
+        .is_err());
     assert!(e.state.stack.is_empty());
     assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 0);
-    e.apply_command(0, &cast_spell(index, target_player(1)))
+    e.apply_scenario_command(0, &cast_spell(index, target_player(1)))
         .unwrap();
     assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 1);
 }
@@ -352,21 +355,23 @@ fn combat_damage_trigger_lands_on_stack_and_requires_priority() {
     let p0_hand_before = e.state.players[0].hand.len();
 
     // Enter combat and attack with Scroll Thief.
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
-    e.apply_command(0, &pass()).expect("ap begin combat pass");
-    e.apply_command(1, &pass()).expect("nap begin combat pass");
-    e.apply_command(0, &declare_attackers(vec![thief_oid]))
+    e.apply_scenario_command(0, &pass())
+        .expect("ap begin combat pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap begin combat pass");
+    e.apply_scenario_command(0, &declare_attackers(vec![thief_oid]))
         .expect("declare attackers");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("ap pass declare attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("nap pass declare attackers");
     // P1 has no blockers; engine auto-declares empty blockers.
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("ap pass declare blockers");
     let b = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("nap pass declare blockers -> combat damage");
 
     // After both players pass in DeclareBlockers, combat damage resolves and Scroll Thief's
@@ -486,20 +491,22 @@ fn simultaneous_combat_damage_triggers_both_fire() {
     let p0_hand_before = e.state.players[0].hand.len();
 
     // Enter combat and attack with both Scroll Thieves.
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("main1 to begin combat");
-    e.apply_command(0, &pass()).expect("ap begin combat pass");
-    e.apply_command(1, &pass()).expect("nap begin combat pass");
-    e.apply_command(0, &declare_attackers(vec![thief1_oid, thief2_oid]))
+    e.apply_scenario_command(0, &pass())
+        .expect("ap begin combat pass");
+    e.apply_scenario_command(1, &pass())
+        .expect("nap begin combat pass");
+    e.apply_scenario_command(0, &declare_attackers(vec![thief1_oid, thief2_oid]))
         .expect("declare attackers");
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("ap pass after attackers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("nap pass after attackers");
     // P1 has no creatures; engine auto-declares empty blockers.
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("ap pass declare blockers");
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("nap pass declare blockers -> combat damage");
 
     // Both Scroll Thieves dealt combat damage simultaneously, so their controller must order the
@@ -609,7 +616,7 @@ fn targeted_trigger_resolves_after_target_chosen() {
 
     // Cast Flametongue Kavu (no target at cast time for its ETB trigger — target chosen later).
     let ftk_idx = hand_index_for_card(&e, 0, "flametongue_kavu");
-    e.apply_command(0, &cast_spell(ftk_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(ftk_idx, vec![]))
         .expect("cast FTK");
 
     // Let it resolve (both players pass).
@@ -623,7 +630,7 @@ fn targeted_trigger_resolves_after_target_chosen() {
     );
 
     // P0 chooses Grizzly Bears as the target.
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -679,7 +686,7 @@ fn argothian_enchantress_triggers_on_enchantment_cast() {
 
     // Play a Forest for mana.
     let forest_idx = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(forest_idx))
+    e.apply_scenario_command(0, &play_land(forest_idx))
         .expect("play forest");
     give_mana(
         &mut e,
@@ -702,7 +709,7 @@ fn argothian_enchantress_triggers_on_enchantment_cast() {
     let hand_before = e.state.players[0].hand.len();
 
     let expl_idx = hand_index_for_card(&e, 0, "exploration");
-    e.apply_command(0, &cast_spell(expl_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(expl_idx, vec![]))
         .expect("cast Exploration");
 
     // Both Exploration and the enchantress draw trigger must be on the stack.
@@ -754,7 +761,7 @@ fn soul_warden_gains_life_when_another_creature_enters() {
         },
     );
     let warden_idx = hand_index_for_card(&e, 0, "soul_warden");
-    e.apply_command(0, &cast_spell(warden_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(warden_idx, vec![]))
         .expect("cast soul warden");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
@@ -772,7 +779,7 @@ fn soul_warden_gains_life_when_another_creature_enters() {
         },
     );
     let bears_idx = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(bears_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(bears_idx, vec![]))
         .expect("cast grizzly bears");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
@@ -814,7 +821,7 @@ fn mass_etb_triggers_are_collected_as_one_simultaneous_group() {
     );
 
     let alarm_idx = hand_index_for_card(&e, 0, "raise_the_alarm");
-    e.apply_command(0, &cast_spell(alarm_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(alarm_idx, vec![]))
         .expect("cast Raise the Alarm");
     pass_both_players(&mut e);
 
@@ -873,7 +880,9 @@ fn blood_artist_triggers_on_opponent_creature_dying() {
     e.state.objects.get_mut(&bears_oid).expect("bears").damage = 2;
 
     // Pass priority — SBA runs, Bears die, Blood Artist trigger fires (needs target).
-    let batch = e.apply_command(0, &pass()).expect("pass triggers SBA");
+    let batch = e
+        .apply_scenario_command(0, &pass())
+        .expect("pass triggers SBA");
     let _ = batch; // SBA fires and pending_trigger is queued
 
     assert_eq!(
@@ -889,7 +898,7 @@ fn blood_artist_triggers_on_opponent_creature_dying() {
 
     // P0 (Blood Artist controller) chooses P1 as the drain target.
     let p1_id = e.state.players[1].id;
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -950,7 +959,8 @@ fn blood_artist_triggers_on_own_death() {
     e.state.objects.get_mut(&artist_oid).expect("artist").damage = 1;
 
     // Pass priority triggers SBA → Blood Artist dies.
-    e.apply_command(0, &pass()).expect("pass triggers SBA");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass triggers SBA");
 
     assert_eq!(
         e.state.objects.get(&artist_oid).expect("artist").zone,
@@ -966,7 +976,7 @@ fn blood_artist_triggers_on_own_death() {
 
     // P0 chooses P1 as drain target.
     let p1_id = e.state.players[1].id;
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -1020,7 +1030,7 @@ fn blood_artist_triggers_on_own_creature_dying() {
     // Grizzly Bears (2/2) takes 2 lethal damage.
     e.state.objects.get_mut(&bears_oid).expect("bears").damage = 2;
 
-    e.apply_command(0, &pass()).expect("SBA pass");
+    e.apply_scenario_command(0, &pass()).expect("SBA pass");
 
     assert_eq!(
         e.state.pending_triggers.len(),
@@ -1029,7 +1039,7 @@ fn blood_artist_triggers_on_own_creature_dying() {
     );
 
     let p1_id = e.state.players[1].id;
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -1074,7 +1084,7 @@ fn two_blood_artists_both_trigger_on_one_death() {
 
     e.state.objects.get_mut(&bears_oid).expect("bears").damage = 2;
 
-    e.apply_command(0, &pass()).expect("SBA pass");
+    e.apply_scenario_command(0, &pass()).expect("SBA pass");
 
     // CR 603.3b: one player controls both triggers, so they choose the order before either is put
     // on the stack. Targets (CR 603.3d) are only asked for afterwards, one trigger at a time as
@@ -1099,7 +1109,7 @@ fn two_blood_artists_both_trigger_on_one_death() {
 
     let p1_id = e.state.players[1].id;
     // Choose target for the first pending trigger.
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -1111,7 +1121,7 @@ fn two_blood_artists_both_trigger_on_one_death() {
     )
     .expect("target 1st trigger");
     // Choose target for the second pending trigger.
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -1151,10 +1161,12 @@ fn issue_175_prohibited_gain_does_not_change_life_or_trigger_pridemate() {
     let life_before = e.state.players[0].life;
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "angels_mercy");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("gain spells remain legal");
-    e.apply_command(0, &pass()).expect("caster passes");
-    let batch = e.apply_command(1, &pass()).expect("resolve Angel's Mercy");
+    e.apply_scenario_command(0, &pass()).expect("caster passes");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("resolve Angel's Mercy");
 
     assert_eq!(
         e.state.players[0].life, life_before,
@@ -1174,7 +1186,7 @@ fn issue_175_ferocidon_damages_the_entering_creatures_controller() {
         inject_creature_on_battlefield(&mut e, source_controller, "rampaging_ferocidon");
         grant_pool(&mut e, 0);
         let idx = hand_index_for_card(&e, 0, "grizzly_bears");
-        e.apply_command(0, &cast_spell(idx, vec![]))
+        e.apply_scenario_command(0, &cast_spell(idx, vec![]))
             .expect("cast creature");
         resolve_entire_stack_two_player(&mut e);
         assert_eq!(
@@ -1202,7 +1214,7 @@ fn issue_175_swords_checks_the_prohibition_after_exiling_its_target() {
         }
         grant_pool(&mut e, 0);
         let idx = hand_index_for_card(&e, 0, "swords_to_plowshares");
-        e.apply_command(0, &cast_spell(idx, trigger_targets(target)))
+        e.apply_scenario_command(0, &cast_spell(idx, trigger_targets(target)))
             .unwrap();
         resolve_entire_stack_two_player(&mut e);
         assert_eq!(e.state.objects[&target].zone, tricerules_core::Zone::Exile);
@@ -1215,11 +1227,11 @@ fn issue_175_activated_triggered_and_targeted_gains_use_the_prohibition() {
     let mut e = anthem_engine(175_004, "dawning_angel");
     inject_creature_on_battlefield(&mut e, 1, "giant_cindermaw");
     let gnomes = inject_creature_on_battlefield(&mut e, 0, "bottle_gnomes");
-    e.apply_command(0, &activate_ability(gnomes, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(gnomes, 0, vec![]))
         .unwrap();
     let command_index = e.state.command_index;
     assert!(
-        e.apply_command(0, &activate_ability(gnomes, 0, vec![]))
+        e.apply_scenario_command(0, &activate_ability(gnomes, 0, vec![]))
             .is_err(),
         "the sacrificed source cannot activate twice"
     );
@@ -1235,7 +1247,8 @@ fn issue_175_activated_triggered_and_targeted_gains_use_the_prohibition() {
     );
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "dawning_angel");
-    e.apply_command(0, &cast_spell(idx, vec![])).unwrap();
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
+        .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[0].life, 20, "ETB gain is prohibited");
 
@@ -1243,7 +1256,7 @@ fn issue_175_activated_triggered_and_targeted_gains_use_the_prohibition() {
     inject_creature_on_battlefield(&mut e, 1, "giant_cindermaw");
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "healing_salve");
-    e.apply_command(0, &cast_modal_spell(idx, vec![(0, target_player(1))]))
+    e.apply_scenario_command(0, &cast_modal_spell(idx, vec![(0, target_player(1))]))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
@@ -1262,13 +1275,16 @@ fn issue_175_rejected_cast_does_not_change_accepted_command_replay() {
         let encoded = cast_spell(idx, vec![]).encode_to_vec();
         let command = RuledCommand::decode(encoded.as_slice()).unwrap();
         if reject_first {
-            assert!(e.apply_command(0, &command).is_err(), "no mana to pay yet");
+            assert!(
+                e.apply_scenario_command(0, &command).is_err(),
+                "no mana to pay yet"
+            );
         }
         grant_pool(&mut e, 0);
         let batches = vec![
-            e.apply_command(0, &command).unwrap(),
-            e.apply_command(0, &pass()).unwrap(),
-            e.apply_command(1, &pass()).unwrap(),
+            e.apply_scenario_command(0, &command).unwrap(),
+            e.apply_scenario_command(0, &pass()).unwrap(),
+            e.apply_scenario_command(1, &pass()).unwrap(),
         ];
         assert_eq!(e.state.players[0].life, 20);
         batches
@@ -1286,7 +1302,8 @@ fn pridemate_grows_on_spell_life_gain() {
 
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "angels_mercy");
-    e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
+        .expect("cast");
     resolve_entire_stack_two_player(&mut e); // the spell, then its trigger
 
     assert_eq!(e.state.players[0].life, life_before + 7, "Angel's Mercy");
@@ -1317,7 +1334,8 @@ fn two_life_gain_events_trigger_separately() {
         grant_pool(&mut e, 0);
         ensure_in_hand(&mut e, 0, "angels_mercy");
         let idx = hand_index_for_card(&e, 0, "angels_mercy");
-        e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
+        e.apply_scenario_command(0, &cast_spell(idx, vec![]))
+            .expect("cast");
         resolve_entire_stack_two_player(&mut e);
     }
 
@@ -1342,7 +1360,7 @@ fn issue_477_prior_gain_before_cat_collector_enters_suppresses_later_trigger() {
     advance_to_main1_from_game_start(&mut e);
     grant_pool(&mut e, 0);
     ensure_in_hand(&mut e, 0, "angels_mercy");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(hand_index_for_card(&e, 0, "angels_mercy"), vec![]),
     )
@@ -1353,7 +1371,7 @@ fn issue_477_prior_gain_before_cat_collector_enters_suppresses_later_trigger() {
     assert_eq!(e.state.objects[&cat].card_id, "cat_collector");
     grant_pool(&mut e, 0);
     ensure_in_hand(&mut e, 0, "angels_mercy");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(hand_index_for_card(&e, 0, "angels_mercy"), vec![]),
     )
@@ -1382,7 +1400,7 @@ fn issue_477_token_count(e: &GameEngine, card_id: &str) -> usize {
 fn issue_477_cast_mercy(e: &mut GameEngine) {
     grant_pool(e, 0);
     inject_card_into_hand(e, 0, "angels_mercy");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(hand_index_for_card(e, 0, "angels_mercy"), vec![]),
     )
@@ -1408,7 +1426,7 @@ fn issue_477_complete_cat_collector_etb_and_first_own_turn_gain() {
     advance_to_main1_from_game_start(&mut e);
     grant_pool(&mut e, 0);
     ensure_in_hand(&mut e, 0, "cat_collector");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(hand_index_for_card(&e, 0, "cat_collector"), vec![]),
     )
@@ -1422,7 +1440,7 @@ fn issue_477_complete_cat_collector_etb_and_first_own_turn_gain() {
     assert_eq!(issue_477_token_count(&e, "cat_w_1_1"), 1, "second gain");
 
     pass_turn_to_next_upkeep(&mut e, 0);
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("opponent passes upkeep priority");
     issue_477_cast_mercy(&mut e);
     assert_eq!(issue_477_token_count(&e, "cat_w_1_1"), 1, "opponent's turn");
@@ -1450,7 +1468,7 @@ fn issue_477_simultaneous_lifelink_gains_create_only_one_cat() {
     inject_creature_on_battlefield(&mut e, 0, "cat_collector");
     let vamp_a = inject_creature_on_battlefield(&mut e, 0, "child_of_night");
     let vamp_b = inject_creature_on_battlefield(&mut e, 0, "child_of_night");
-    e.apply_command(0, &declare_attackers(vec![vamp_a, vamp_b]))
+    e.apply_scenario_command(0, &declare_attackers(vec![vamp_a, vamp_b]))
         .expect("declare attackers");
     pass_both_players(&mut e);
     pass_both_players(&mut e);
@@ -1501,7 +1519,7 @@ fn issue_477_zero_and_prohibited_gains_do_not_consume_first_event() {
     inject_creature_on_battlefield(&mut e, 0, "cat_collector");
     let wall = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 0, 4);
     grant_pool(&mut e, 0);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             hand_index_for_card(&e, 0, "swords_to_plowshares"),
@@ -1545,7 +1563,7 @@ fn pridemate_grows_once_per_lifelink_creature() {
     let vamp_b = inject_creature_on_battlefield(&mut e, 0, "child_of_night");
     let life_before = e.state.players[0].life;
 
-    e.apply_command(0, &declare_attackers(vec![vamp_a, vamp_b]))
+    e.apply_scenario_command(0, &declare_attackers(vec![vamp_a, vamp_b]))
         .expect("declare attackers");
     pass_both_players(&mut e); // declare attackers -> declare blockers
     pass_both_players(&mut e); // no blockers -> combat damage
@@ -1576,7 +1594,7 @@ fn zero_life_gain_does_not_trigger() {
 
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "swords_to_plowshares");
-    e.apply_command(0, &cast_spell(idx, targets_with_damage(vec![(wall, 0)])))
+    e.apply_scenario_command(0, &cast_spell(idx, targets_with_damage(vec![(wall, 0)])))
         .expect("cast swords");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1595,7 +1613,8 @@ fn opponents_pridemate_does_not_grow_on_your_life_gain() {
 
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "angels_mercy");
-    e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
+        .expect("cast");
     resolve_entire_stack_two_player(&mut e);
 
     assert_eq!(
@@ -1835,7 +1854,7 @@ fn howling_mine_bounced_while_untapped_still_draws() {
 
     grant_pool(&mut e, 1);
     let idx = hand_index_for_card(&e, 1, "boomerang");
-    e.apply_command(1, &cast_spell(idx, targets_with_damage(vec![(mine, 0)])))
+    e.apply_scenario_command(1, &cast_spell(idx, targets_with_damage(vec![(mine, 0)])))
         .expect("bounce the Mine in response");
     resolve_entire_stack_two_player(&mut e);
 
@@ -1883,7 +1902,7 @@ fn howling_mine_bounced_while_tapped_does_nothing() {
     e.state.objects.get_mut(&mine).expect("mine").tapped = true;
     grant_pool(&mut e, 1);
     let idx = hand_index_for_card(&e, 1, "boomerang");
-    e.apply_command(1, &cast_spell(idx, targets_with_damage(vec![(mine, 0)])))
+    e.apply_scenario_command(1, &cast_spell(idx, targets_with_damage(vec![(mine, 0)])))
         .expect("bounce the tapped Mine in response");
     resolve_entire_stack_two_player(&mut e);
 
@@ -2058,7 +2077,7 @@ fn first_picked_trigger_is_placed_first_and_resolves_last() {
         let first = offered[usize::from(pick_second_first)];
         let second = offered[usize::from(!pick_second_first)];
 
-        e.apply_command(0, &submit_trigger_order(first))
+        e.apply_scenario_command(0, &submit_trigger_order(first))
             .expect("pick the first trigger");
         // With one candidate left there is nothing to choose, so the engine places it itself
         // rather than asking a question with one answer.
@@ -2106,7 +2125,7 @@ fn the_ordering_prompt_reoffers_only_the_remaining_triggers() {
         .collect();
     assert_eq!(offered.len(), 3);
 
-    e.apply_command(0, &submit_trigger_order(offered[1]))
+    e.apply_scenario_command(0, &submit_trigger_order(offered[1]))
         .expect("pick the middle trigger");
     let remaining: Vec<u32> = e
         .state
@@ -2123,7 +2142,7 @@ fn the_ordering_prompt_reoffers_only_the_remaining_triggers() {
         "the picked trigger is gone and the rest keep their order"
     );
 
-    e.apply_command(0, &submit_trigger_order(offered[2]))
+    e.apply_scenario_command(0, &submit_trigger_order(offered[2]))
         .expect("pick another");
     assert!(
         e.state.pending_trigger_order.is_none(),
@@ -2210,17 +2229,20 @@ fn an_outstanding_trigger_order_blocks_every_other_command() {
     pass_turn_to_next_upkeep(&mut e, 1); // P0's upkeep
     assert!(e.state.pending_trigger_order.is_some());
 
-    assert!(e.apply_command(0, &pass()).is_err(), "cannot pass priority");
     assert!(
-        e.apply_command(1, &pass()).is_err(),
+        e.apply_scenario_command(0, &pass()).is_err(),
+        "cannot pass priority"
+    );
+    assert!(
+        e.apply_scenario_command(1, &pass()).is_err(),
         "nor can the opponent act"
     );
     assert!(
-        e.apply_command(0, &cast_spell(0, vec![])).is_err(),
+        e.apply_scenario_command(0, &cast_spell(0, vec![])).is_err(),
         "cannot cast"
     );
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
@@ -2260,7 +2282,8 @@ fn illegal_trigger_order_picks_are_rejected_and_leave_the_prompt_intact() {
     // An id that was never offered, and one that is a real object but not a waiting trigger.
     for (why, oid) in [("unknown id", 999_999), ("zero", 0)] {
         assert!(
-            e.apply_command(0, &submit_trigger_order(oid)).is_err(),
+            e.apply_scenario_command(0, &submit_trigger_order(oid))
+                .is_err(),
             "{why} must be rejected"
         );
         assert!(
@@ -2271,20 +2294,22 @@ fn illegal_trigger_order_picks_are_rejected_and_leave_the_prompt_intact() {
 
     // Wrong player, with an otherwise perfectly valid pick.
     assert!(
-        e.apply_command(1, &submit_trigger_order(ids[0])).is_err(),
+        e.apply_scenario_command(1, &submit_trigger_order(ids[0]))
+            .is_err(),
         "the opponent cannot order someone else's triggers"
     );
     assert!(e.state.pending_trigger_order.is_some());
 
     // And the valid pick still works afterwards.
-    e.apply_command(0, &submit_trigger_order(ids[0]))
+    e.apply_scenario_command(0, &submit_trigger_order(ids[0]))
         .expect("valid pick after the rejections");
     assert!(e.state.pending_trigger_order.is_none());
     assert_eq!(e.state.stack.len(), 2);
 
     // Nothing is waiting now, so a further pick has no prompt to answer.
     assert!(
-        e.apply_command(0, &submit_trigger_order(ids[1])).is_err(),
+        e.apply_scenario_command(0, &submit_trigger_order(ids[1]))
+            .is_err(),
         "no outstanding prompt means nothing to pick"
     );
 }
@@ -2341,7 +2366,7 @@ fn each_picked_trigger_is_targeted_before_the_next_is_chosen() {
     relocate_to_battlefield(&mut e, 0, "blood_artist", false);
     let bears_oid = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     e.state.objects.get_mut(&bears_oid).expect("bears").damage = 2;
-    e.apply_command(0, &pass()).expect("SBA pass");
+    e.apply_scenario_command(0, &pass()).expect("SBA pass");
 
     let ids: Vec<u32> = e
         .state
@@ -2361,7 +2386,7 @@ fn each_picked_trigger_is_targeted_before_the_next_is_chosen() {
     let chosen = [ids[1], ids[0]];
     let p1_id = e.state.players[1].id;
 
-    e.apply_command(0, &submit_trigger_order(chosen[0]))
+    e.apply_scenario_command(0, &submit_trigger_order(chosen[0]))
         .expect("pick the first trigger");
     assert_eq!(
         e.state.pending_triggers.len(),
@@ -2372,12 +2397,12 @@ fn each_picked_trigger_is_targeted_before_the_next_is_chosen() {
     // And that target choice outranks the ordering prompt, so the next pick is refused until it
     // is answered — which is exactly what lets the UI target right after choosing.
     assert!(
-        e.apply_command(0, &submit_trigger_order(chosen[1]))
+        e.apply_scenario_command(0, &submit_trigger_order(chosen[1]))
             .is_err(),
         "the picked trigger must be targeted before the next one is chosen"
     );
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -2393,7 +2418,7 @@ fn each_picked_trigger_is_targeted_before_the_next_is_chosen() {
     assert!(e.state.pending_trigger_order.is_none());
     assert_eq!(e.state.pending_triggers.len(), 1);
     assert_eq!(e.state.pending_triggers[0].object_id, chosen[1]);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -2495,7 +2520,7 @@ fn upkeep_trigger_on_the_stack_blocks_sorcery_speed_actions() {
         .iter()
         .position(|oid| e.state.objects[oid].card_id == "island")
         .expect("P1 holds an island");
-    let err = e.apply_command(1, &play_land(land_slot));
+    let err = e.apply_scenario_command(1, &play_land(land_slot));
     assert!(
         err.is_err(),
         "no land drops while a trigger is on the upkeep stack"
@@ -2512,9 +2537,10 @@ fn sulfuric_vortex_upkeep_damage_can_kill() {
     pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep
     let first = e.state.priority_player_id();
     let second = if first == 0 { 1 } else { 0 };
-    e.apply_command(first, &pass()).expect("first player pass");
+    e.apply_scenario_command(first, &pass())
+        .expect("first player pass");
     let terminal_batch = e
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second player pass resolves lethal upkeep trigger");
 
     assert!(
@@ -2566,7 +2592,8 @@ fn dies_trigger_uses_last_controller_not_owner() {
     let borrowed = inject_creature_under_foreign_control(&mut e, 1, 0, "grizzly_bears");
     e.state.objects.get_mut(&borrowed).expect("borrowed").damage = 99;
 
-    e.apply_command(0, &pass()).expect("pass triggers SBA");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass triggers SBA");
 
     assert_eq!(
         e.state.objects.get(&borrowed).expect("borrowed").zone,
@@ -2608,7 +2635,7 @@ fn sacrifice_cost_fires_dies_triggers() {
     relocate_to_battlefield(&mut e, 0, "blood_artist", false);
     let gnomes = relocate_to_battlefield(&mut e, 0, "bottle_gnomes", false);
 
-    e.apply_command(0, &activate_ability(gnomes, 0, vec![]))
+    e.apply_scenario_command(0, &activate_ability(gnomes, 0, vec![]))
         .expect("sacrifice Bottle Gnomes for its ability");
 
     assert_eq!(
@@ -2662,7 +2689,7 @@ fn blood_artist_dying_in_a_wipe_still_sees_the_other_deaths() {
             ..Default::default()
         },
     );
-    e.apply_command(0, &cast_spell(wrath_idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(wrath_idx, vec![]))
         .expect("cast Wrath of God");
     pass_both_players(&mut e);
 
@@ -2711,7 +2738,7 @@ fn sacrifice_cost_trigger_prompt_follows_the_ability_on_the_stack() {
     let gnomes = relocate_to_battlefield(&mut e, 0, "bottle_gnomes", false);
 
     let batch = e
-        .apply_command(0, &activate_ability(gnomes, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(gnomes, 0, vec![]))
         .expect("sacrifice Bottle Gnomes");
 
     let order: Vec<&str> = batch
@@ -2758,7 +2785,7 @@ fn stack_pushed_distinguishes_triggered_from_activated_abilities() {
     let gnomes = relocate_to_battlefield(&mut e, 0, "bottle_gnomes", false);
 
     let batch = e
-        .apply_command(0, &activate_ability(gnomes, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(gnomes, 0, vec![]))
         .expect("sacrifice Bottle Gnomes");
     let pushed: Vec<bool> = batch
         .events
@@ -2777,7 +2804,7 @@ fn stack_pushed_distinguishes_triggered_from_activated_abilities() {
     // Answering the trigger puts the triggered ability on the stack, flagged.
     let p1_id = e.state.players[1].id;
     let batch = e
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -2832,7 +2859,7 @@ fn rejected_trigger_target_leaves_the_trigger_pending() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "gravedigger");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Gravedigger");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
@@ -2843,7 +2870,7 @@ fn rejected_trigger_target_leaves_the_trigger_pending() {
 
     // A permanent on the battlefield is not a creature *card in a graveyard*.
     let on_battlefield = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-    let err = e.apply_command(
+    let err = e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -2862,7 +2889,7 @@ fn rejected_trigger_target_leaves_the_trigger_pending() {
 
     // A rejected target preserves the prompt. The legal target is chosen first, then the
     // optional effect can be declined only when it resolves.
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -2912,12 +2939,12 @@ fn trigger_target_can_be_retried_after_a_rejection() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "gravedigger");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Gravedigger");
     resolve_entire_stack_two_player(&mut e);
 
     let on_battlefield = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-    let _ = e.apply_command(
+    let _ = e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -2927,7 +2954,7 @@ fn trigger_target_can_be_retried_after_a_rejection() {
             })),
         },
     );
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -2967,9 +2994,10 @@ fn issue_47_bonecrusher_target_trigger_is_above_spell() {
     ensure_in_hand(&mut e, 1, "lightning_bolt");
     grant_pool(&mut e, 1);
 
-    e.apply_command(0, &pass()).expect("P0 passes priority");
+    e.apply_scenario_command(0, &pass())
+        .expect("P0 passes priority");
     let bolt = hand_index_for_card(&e, 1, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             bolt,
@@ -3022,9 +3050,10 @@ fn issue_47_bonecrusher_trigger_resolves_after_targeting_spell_is_countered() {
     grant_pool(&mut e, 0);
     grant_pool(&mut e, 1);
 
-    e.apply_command(0, &pass()).expect("P0 passes priority");
+    e.apply_scenario_command(0, &pass())
+        .expect("P0 passes priority");
     let bolt = hand_index_for_card(&e, 1, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             bolt,
@@ -3040,10 +3069,10 @@ fn issue_47_bonecrusher_trigger_resolves_after_targeting_spell_is_countered() {
     .expect("P1 casts Lightning Bolt targeting Bonecrusher Giant");
     let bolt_id = e.state.stack[0].id;
 
-    e.apply_command(1, &pass())
+    e.apply_scenario_command(1, &pass())
         .expect("P1 passes priority to P0");
     let counterspell = hand_index_for_card(&e, 0, "counterspell");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             counterspell,
@@ -3086,11 +3115,12 @@ fn issue_47_invalid_or_different_spell_target_emits_no_bonecrusher_trigger() {
     let forest = relocate_to_battlefield(&mut e, 1, "forest", false);
     ensure_in_hand(&mut e, 1, "lightning_bolt");
     grant_pool(&mut e, 1);
-    e.apply_command(0, &pass()).expect("P0 passes priority");
+    e.apply_scenario_command(0, &pass())
+        .expect("P0 passes priority");
 
     let bolt = hand_index_for_card(&e, 1, "lightning_bolt");
     assert!(
-        e.apply_command(
+        e.apply_scenario_command(
             1,
             &cast_spell(
                 bolt,
@@ -3110,7 +3140,7 @@ fn issue_47_invalid_or_different_spell_target_emits_no_bonecrusher_trigger() {
     assert!(e.state.staged_trigger_groups.is_empty());
 
     let bolt = hand_index_for_card(&e, 1, "lightning_bolt");
-    e.apply_command(1, &cast_spell(bolt, target_player(0)))
+    e.apply_scenario_command(1, &cast_spell(bolt, target_player(0)))
         .expect("cast Lightning Bolt at P0");
     assert_eq!(
         e.state.stack.len(),
@@ -3138,8 +3168,9 @@ fn issue_47_ability_target_does_not_match_bonecrushers_spell_filter() {
 
     let giant = relocate_to_battlefield(&mut e, 0, "bonecrusher_giant_stomp", false);
     let pyromancer = relocate_to_battlefield(&mut e, 1, "prodigal_pyromancer", false);
-    e.apply_command(0, &pass()).expect("P0 passes priority");
-    e.apply_command(
+    e.apply_scenario_command(0, &pass())
+        .expect("P0 passes priority");
+    e.apply_scenario_command(
         1,
         &activate_ability(
             pyromancer,
@@ -3183,12 +3214,12 @@ fn issue_47_targeted_trigger_preserves_existing_placement_flow() {
     ensure_in_hand(&mut e, 0, "cavalry_drillmaster");
     grant_pool(&mut e, 0);
     let drillmaster = hand_index_for_card(&e, 0, "cavalry_drillmaster");
-    e.apply_command(0, &cast_spell(drillmaster, vec![]))
+    e.apply_scenario_command(0, &cast_spell(drillmaster, vec![]))
         .expect("cast Cavalry Drillmaster");
     pass_both_players(&mut e);
     assert_eq!(e.state.pending_triggers.len(), 1);
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -3233,7 +3264,7 @@ fn issue_47_spell_copy_targeting_bonecrusher_creates_a_new_trigger() {
     grant_pool(&mut e, 1);
 
     let bolt = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             bolt,
@@ -3251,9 +3282,10 @@ fn issue_47_spell_copy_targeting_bonecrusher_creates_a_new_trigger() {
     assert_eq!(e.state.stack.len(), 1, "the original Bolt remains");
     let bolt_id = e.state.stack[0].id;
 
-    e.apply_command(0, &pass()).expect("P0 passes priority");
+    e.apply_scenario_command(0, &pass())
+        .expect("P0 passes priority");
     let twincast = hand_index_for_card(&e, 1, "twincast");
-    e.apply_command(
+    e.apply_scenario_command(
         1,
         &cast_spell(
             twincast,
@@ -3270,7 +3302,7 @@ fn issue_47_spell_copy_targeting_bonecrusher_creates_a_new_trigger() {
     pass_both_players(&mut e);
     assert!(e.state.pending_resolution.is_some());
 
-    e.apply_command(1, &submit_resolution_choice(vec![giant]))
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![giant]))
         .expect("P1 keeps Bonecrusher Giant as the copy's target");
 
     assert_eq!(
@@ -3325,7 +3357,7 @@ fn issue_49_spellgorger_trigger_resolves_above_only_noncreature_spells() {
     grant_pool(&mut e, 0);
 
     let equipment = hand_index_for_card(&e, 0, "bonesplitter");
-    e.apply_command(0, &cast_spell(equipment, vec![]))
+    e.apply_scenario_command(0, &cast_spell(equipment, vec![]))
         .expect("cast noncreature spell");
     assert_eq!(e.state.stack.len(), 2, "trigger is above Bonesplitter");
     assert!(
@@ -3348,7 +3380,7 @@ fn issue_49_spellgorger_trigger_resolves_above_only_noncreature_spells() {
     pass_both_players(&mut e);
 
     let creature = hand_index_for_card(&e, 0, "grizzly_bears");
-    e.apply_command(0, &cast_spell(creature, vec![]))
+    e.apply_scenario_command(0, &cast_spell(creature, vec![]))
         .expect("cast creature spell");
     assert_eq!(
         e.state.stack.len(),
@@ -3376,7 +3408,7 @@ fn issue_49_stack_len_after_cast(source: &str, spell: &str, seed: u64) -> usize 
     ensure_in_hand(&mut e, 0, spell);
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, spell);
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast filter probe");
     e.state.stack.len()
 }
@@ -3425,12 +3457,12 @@ fn issue_49_cavalry_drillmaster_applies_both_effects_to_one_trigger_target() {
     ensure_in_hand(&mut e, 0, "cavalry_drillmaster");
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "cavalry_drillmaster");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Cavalry Drillmaster");
     pass_both_players(&mut e);
     assert_eq!(e.state.pending_triggers.len(), 1);
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -3467,13 +3499,13 @@ fn issue_49_skymarch_bloodletter_rejects_its_controller_as_target() {
     ensure_in_hand(&mut e, 0, "skymarch_bloodletter");
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "skymarch_bloodletter");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Skymarch Bloodletter");
     pass_both_players(&mut e);
 
     let controller = e.state.players[0].id as u32;
     let opponent = e.state.players[1].id as u32;
-    let illegal = e.apply_command(
+    let illegal = e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -3490,7 +3522,7 @@ fn issue_49_skymarch_bloodletter_rejects_its_controller_as_target() {
         "a rejected target leaves the trigger pending"
     );
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -3536,7 +3568,7 @@ fn issue_49_steadfast_sentry_cannot_target_a_creature_that_died_with_it() {
     ensure_in_hand(&mut e, 0, "wrath_of_god");
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "wrath_of_god");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Wrath of God");
     pass_both_players(&mut e);
     assert_eq!(
@@ -3545,7 +3577,7 @@ fn issue_49_steadfast_sentry_cannot_target_a_creature_that_died_with_it() {
     );
     assert_eq!(e.state.pending_triggers.len(), 1);
 
-    let illegal = e.apply_command(
+    let illegal = e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -3561,7 +3593,7 @@ fn issue_49_steadfast_sentry_cannot_target_a_creature_that_died_with_it() {
     );
     assert_eq!(e.state.pending_triggers.len(), 1);
 
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -3599,7 +3631,7 @@ fn issue_49_griffin_protector_triggers_once_for_each_simultaneous_entrant() {
     ensure_in_hand(&mut e, 0, "raise_the_alarm");
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "raise_the_alarm");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Raise the Alarm");
     pass_both_players(&mut e);
 
@@ -3637,7 +3669,7 @@ fn issue_49_inspiring_captain_pumps_creatures_present_when_the_trigger_resolves(
     ensure_in_hand(&mut e, 0, "inspiring_captain");
     grant_pool(&mut e, 0);
     let idx = hand_index_for_card(&e, 0, "inspiring_captain");
-    e.apply_command(0, &cast_spell(idx, vec![]))
+    e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Inspiring Captain");
     pass_both_players(&mut e);
     assert_eq!(e.state.stack.len(), 1, "Captain's ETB trigger is waiting");
@@ -3682,12 +3714,13 @@ fn issue_49_audacious_thief_attack_trigger_resolves_before_blockers() {
     let thief = relocate_to_battlefield(&mut e, 0, "audacious_thief", false);
     let hand_before = e.state.players[0].hand.len();
     let life_before = e.state.players[0].life;
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("move to beginning of combat");
-    e.apply_command(0, &pass()).expect("active player pass");
-    e.apply_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(0, &pass())
+        .expect("active player pass");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
 
-    e.apply_command(0, &declare_attackers(vec![thief]))
+    e.apply_scenario_command(0, &declare_attackers(vec![thief]))
         .expect("attack with Audacious Thief");
     assert_eq!(e.state.stack.len(), 1);
     assert_eq!(
@@ -3723,17 +3756,18 @@ fn issue_49_spined_megalodon_attack_trigger_parks_for_private_scry() {
     advance_to_main1_from_game_start(&mut e);
     let shark = relocate_to_battlefield(&mut e, 0, "spined_megalodon", false);
     let top = *e.state.players[0].library.front().expect("library top");
-    e.apply_command(0, &primitive_yield())
+    e.apply_scenario_command(0, &primitive_yield())
         .expect("move to beginning of combat");
-    e.apply_command(0, &pass()).expect("active player pass");
-    e.apply_command(1, &pass()).expect("defender pass");
-    e.apply_command(0, &declare_attackers(vec![shark]))
+    e.apply_scenario_command(0, &pass())
+        .expect("active player pass");
+    e.apply_scenario_command(1, &pass()).expect("defender pass");
+    e.apply_scenario_command(0, &declare_attackers(vec![shark]))
         .expect("attack with Spined Megalodon");
 
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("active player pass on trigger");
     let batch = e
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("defender pass resolves trigger into scry choice");
     let req = find_resolution_choice(&batch).expect("scry choice required");
     assert_eq!(req.choice_kind(), ChoiceKind::LibraryTop);
@@ -3741,7 +3775,7 @@ fn issue_49_spined_megalodon_attack_trigger_parks_for_private_scry() {
     assert_eq!(req.candidate_object_ids, vec![top]);
     assert!(e.state.pending_resolution.is_some());
 
-    e.apply_command(0, &submit_resolution_choice(vec![]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("keep the card on top");
     assert!(e.state.pending_resolution.is_none());
     assert!(e.state.stack.is_empty());

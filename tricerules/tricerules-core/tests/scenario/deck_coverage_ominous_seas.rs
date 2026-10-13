@@ -3,9 +3,10 @@
 //! Oracle and rulings were checked against Scryfall on 2026-09-26. CR 121.2 and 603.2c cover one
 //! trigger per actual card draw; CR 602.2 and 122.1 cover paying and removing its named counters;
 //! CR 702.29a-b cover Cycling from hand; CR 111.3-4 define the token's characteristics and name.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     cost_selection::Selection, ruled_command::Cmd, AbilitySourceZone, ActivateAbility,
     CostChoiceKind, CostObjectRef, CostSelection, CounterRemovalSelection,
@@ -42,7 +43,7 @@ fn cast_ominous_seas(engine: &mut GameEngine) -> u32 {
     );
     let slot = hand_index_for_card(engine, 0, OMINOUS_SEAS);
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Ominous Seas");
     resolve_entire_stack_two_player(engine);
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
@@ -62,7 +63,7 @@ fn draw_two_with_vision_skeins(engine: &mut GameEngine) {
     );
     let slot = hand_index_for_card(engine, 0, "vision_skeins");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Vision Skeins");
     resolve_entire_stack_two_player(engine);
 }
@@ -91,7 +92,7 @@ fn cycle_ominous_seas_from_hand(engine: &mut GameEngine, source: u32) {
         })),
     };
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("activate Cycling from hand");
     assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
     let refreshed = engine.initial_response_batch();
@@ -161,7 +162,7 @@ fn ominous_seas_counts_controller_draws_cycles_from_hand_and_pays_eight_counters
         .unwrap_or(0);
     let command_index = engine.state.command_index;
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_kraken(&engine, source, counter_selection(source, generation, 10)),
         )
@@ -200,7 +201,7 @@ fn ominous_seas_counts_controller_draws_cycles_from_hand_and_pays_eight_counters
 
     let selection = counter_selection(source, generation, removal.options[0].option_id);
     engine
-        .apply_command(0, &activate_kraken(&engine, source, selection))
+        .apply_scenario_command(0, &activate_kraken(&engine, source, selection))
         .expect("remove eight foreshadow counters as the activation cost");
     assert!(engine.state.objects[&source]
         .counter_annotation()

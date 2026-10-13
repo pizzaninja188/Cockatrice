@@ -7,6 +7,7 @@
 //! and 701.21 govern the each-end-step sacrifice; CR 107.5 and 701.9 govern the tap-plus-discard
 //! activation cost; CR 608.2h governs the ETB mass counter snapshot excluding the source; and
 //! CR 603.6c/700.4 govern the another-creature-dies counter trigger and its controller scope.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -46,7 +47,7 @@ fn spell_engine(seed: u64, own: &[&str], opposing: &[&str]) -> GameEngine {
 
 fn enter_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("main1 to beginning of combat");
     pass_both_players(engine);
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
@@ -56,7 +57,7 @@ fn advance_to_main2(engine: &mut GameEngine) {
     for _ in 0..20 {
         let actor = engine.state.priority_player_id();
         engine
-            .apply_command(actor, &pass())
+            .apply_scenario_command(actor, &pass())
             .expect("pass through combat");
         if engine.state.turn_step == TurnStep::Main2 {
             return;
@@ -67,21 +68,21 @@ fn advance_to_main2(engine: &mut GameEngine) {
 
 fn advance_to_end_step(engine: &mut GameEngine, active: i32) {
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("main 1 to beginning of combat");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("beginning of combat advance");
     if engine.state.turn_step == TurnStep::DeclareAttackers {
         engine
-            .apply_command(active, &primitive_yield())
+            .apply_scenario_command(active, &primitive_yield())
             .expect("declare no attackers");
     }
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("end combat to main 2");
     engine
-        .apply_command(active, &primitive_yield())
+        .apply_scenario_command(active, &primitive_yield())
         .expect("main 2 to end step");
     assert_eq!(engine.state.turn_step, TurnStep::EndStep);
 }
@@ -107,7 +108,7 @@ fn issue_327_honor_places_one_counter_and_draws() {
 
     let honor = hand_index_for_card(&engine, 0, "honor");
     engine
-        .apply_command(0, &cast_spell(honor, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(honor, target_object(bear)))
         .expect("cast Honor");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -142,7 +143,9 @@ fn issue_327_honor_fizzles_without_a_legal_target() {
     // No creatures are on the battlefield, so the mandatory target cannot be chosen.
     let honor = hand_index_for_card(&engine, 0, "honor");
     assert!(
-        engine.apply_command(0, &cast_spell(honor, vec![])).is_err(),
+        engine
+            .apply_scenario_command(0, &cast_spell(honor, vec![]))
+            .is_err(),
         "CR 601.2c: Honor cannot be cast without its mandatory target"
     );
     assert_eq!(engine.state.players[0].library.len(), library_before);
@@ -162,7 +165,7 @@ fn issue_327_shivan_dragon_self_pump_applies_and_expires() {
     );
 
     engine
-        .apply_command(0, &activate_ability(dragon, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(dragon, 0, vec![]))
         .expect("activate the {R} self-pump");
     assert_eq!(
         engine.state.players[0].mana_pool.red, 0,
@@ -201,7 +204,7 @@ fn issue_327_dark_deed_kills_a_creature() {
 
     let dark_deed = hand_index_for_card(&engine, 0, "dark_deed");
     engine
-        .apply_command(0, &cast_spell(dark_deed, target_object(victim)))
+        .apply_scenario_command(0, &cast_spell(dark_deed, target_object(victim)))
         .expect("cast Dark Deed at the 2/2");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(
@@ -228,7 +231,7 @@ fn issue_327_dark_deed_pump_expires() {
 
     let dark_deed = hand_index_for_card(&engine, 0, "dark_deed");
     engine
-        .apply_command(0, &cast_spell(dark_deed, target_object(survivor)))
+        .apply_scenario_command(0, &cast_spell(dark_deed, target_object(survivor)))
         .expect("cast Dark Deed at the 6/6");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.effective_power(survivor), Some(2));
@@ -257,7 +260,7 @@ fn issue_327_goblin_oriflamme_anthems_only_current_attackers() {
     );
     let oriflamme = hand_index_for_card(&engine, 0, "goblin_oriflamme");
     engine
-        .apply_command(0, &cast_spell(oriflamme, vec![]))
+        .apply_scenario_command(0, &cast_spell(oriflamme, vec![]))
         .expect("cast Goblin Oriflamme");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -266,7 +269,7 @@ fn issue_327_goblin_oriflamme_anthems_only_current_attackers() {
     let opponent = inject_creature_with_stats(&mut engine, 1, "grizzly_bears", 2, 2);
     enter_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare one attacker");
 
     assert_eq!(
@@ -332,7 +335,7 @@ fn issue_327_charging_strifeknight_requires_tap_and_discard() {
     // Both costs are mandatory: omitting the discard selection is illegal and rolls back the tap.
     assert!(
         engine
-            .apply_command(0, &activate_ability(knight, 0, vec![]))
+            .apply_scenario_command(0, &activate_ability(knight, 0, vec![]))
             .is_err(),
         "the discard cost cannot be skipped"
     );
@@ -342,7 +345,7 @@ fn issue_327_charging_strifeknight_requires_tap_and_discard() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &activate_ability_with_costs(
                 knight,
@@ -394,7 +397,7 @@ fn issue_327_web_warriors_counters_each_other_controlled_creature() {
     );
     let web_warriors = hand_index_for_card(&engine, 0, "web-warriors");
     engine
-        .apply_command(0, &cast_spell(web_warriors, vec![]))
+        .apply_scenario_command(0, &cast_spell(web_warriors, vec![]))
         .expect("cast Web-Warriors");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -434,7 +437,7 @@ fn issue_327_voracious_vermin_counts_only_another_controlled_creature() {
         .damage = 2;
     let priority = engine.state.priority_player_id();
     engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("lethal-damage SBA");
     assert_eq!(engine.state.objects[&friendly].zone, Zone::Graveyard);
     assert_eq!(engine.state.stack.len(), 1, "one dies trigger is pending");
@@ -455,7 +458,7 @@ fn issue_327_voracious_vermin_counts_only_another_controlled_creature() {
         .damage = 2;
     let priority = engine.state.priority_player_id();
     engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("opposing death SBA");
     assert_eq!(engine.state.objects[&opposing].zone, Zone::Graveyard);
     assert!(
@@ -473,7 +476,7 @@ fn issue_327_voracious_vermin_counts_only_another_controlled_creature() {
         .damage = 2;
     let priority = engine.state.priority_player_id();
     engine
-        .apply_command(priority, &pass())
+        .apply_scenario_command(priority, &pass())
         .expect("self death SBA");
     assert_eq!(engine.state.objects[&vermin].zone, Zone::Graveyard);
     assert!(

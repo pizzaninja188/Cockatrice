@@ -1,6 +1,7 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::SubmitResolutionChoice;
 
 const STAFF: &str = "staff_of_compleation";
@@ -22,20 +23,20 @@ fn game(seed: u64, seats: usize) -> (GameEngine, u32) {
             break;
         }
         let actor = e.state.priority_player_id();
-        e.apply_command(actor, &pass()).unwrap();
+        e.apply_scenario_command(actor, &pass()).unwrap();
     }
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
     let source = inject_card_into_hand(&mut e, 0, STAFF);
     e.state.players[0].mana_pool.colorless = 3;
     let slot = hand_index_for_card(&e, 0, STAFF);
-    e.apply_command(0, &cast_spell(slot, vec![]))
+    e.apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast exact Staff");
     for _ in 0..16 {
         if e.state.stack.is_empty() {
             break;
         }
         let actor = e.state.priority_player_id();
-        e.apply_command(actor, &pass()).unwrap();
+        e.apply_scenario_command(actor, &pass()).unwrap();
     }
     assert!(e.state.stack.is_empty());
     assert_eq!(e.state.objects[&source].zone, Zone::Battlefield);
@@ -45,7 +46,7 @@ fn game(seed: u64, seats: usize) -> (GameEngine, u32) {
 
 fn reject(e: &mut GameEngine, actor: i32, cmd: &RuledCommand) {
     let before = format!("{:?}", e.state);
-    e.apply_command(actor, cmd)
+    e.apply_scenario_command(actor, cmd)
         .expect_err("illegal command rejects");
     assert_eq!(format!("{:?}", e.state), before);
 }
@@ -53,6 +54,7 @@ fn reject(e: &mut GameEngine, actor: i32, cmd: &RuledCommand) {
 fn choice(objects: Vec<u32>, players: Vec<i32>) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: objects,
             chosen_player_ids: players,
             ..Default::default()
@@ -101,7 +103,7 @@ fn destroy_uses_physical_owner_independent_of_controller_and_can_target_staff() 
             own
         };
         let cmd = activate_ability_for(&e, source, 0, target_object(target));
-        e.apply_command(0, &cmd).unwrap();
+        e.apply_scenario_command(0, &cmd).unwrap();
         assert_eq!(e.state.players[0].life, 19);
         assert!(e.state.objects[&source].tapped);
         assert_eq!(e.state.objects[&target].zone, Zone::Battlefield);
@@ -127,7 +129,7 @@ fn paid_life_mana_is_immediate_and_has_exactly_five_color_options() {
             a.mana_option_index = 5;
         }
         reject(&mut e, 0, &bad);
-        e.apply_command(0, &cmd).unwrap();
+        e.apply_scenario_command(0, &cmd).unwrap();
         assert_eq!(e.state.players[0].life, 18);
         assert!(e.state.objects[&source].tapped);
         assert!(e.state.stack.is_empty());
@@ -156,7 +158,7 @@ fn all_four_life_costs_reject_unaffordable_payment_and_allow_exact_payment() {
             let amount = ability as i32 + 1;
             e.state.players[0].life = amount - i32::from(!exact);
             if exact {
-                e.apply_command(0, &cmd)
+                e.apply_scenario_command(0, &cmd)
                     .expect("can pay exactly the current life total");
                 assert_eq!(e.state.players[0].life, 0);
                 assert!(
@@ -176,7 +178,7 @@ fn draw_and_generic_untap_use_the_stack_and_untap_has_no_tap_cost() {
     let (mut e, source) = game(26_120_400, 2);
     let hand = e.state.players[0].hand.len();
     let draw = activate_ability_for(&e, source, 3, vec![]);
-    e.apply_command(0, &draw).unwrap();
+    e.apply_scenario_command(0, &draw).unwrap();
     assert_eq!(e.state.players[0].life, 16);
     assert_eq!(e.state.players[0].hand.len(), hand);
     assert!(e.state.objects[&source].tapped);
@@ -186,13 +188,13 @@ fn draw_and_generic_untap_use_the_stack_and_untap_has_no_tap_cost() {
     e.state.players[0].mana_pool.colorless = 4;
     reject(&mut e, 0, &untap);
     e.state.players[0].mana_pool.colorless = 5;
-    e.apply_command(0, &untap).unwrap();
+    e.apply_scenario_command(0, &untap).unwrap();
     assert_eq!(e.state.players[0].mana_pool.colorless, 0);
     assert!(e.state.objects[&source].tapped);
     resolve_entire_stack_two_player(&mut e);
     assert!(!e.state.objects[&source].tapped);
     e.state.players[0].mana_pool.red = 5;
-    e.apply_command(0, &activate_ability_for(&e, source, 4, vec![]))
+    e.apply_scenario_command(0, &activate_ability_for(&e, source, 4, vec![]))
         .unwrap();
     assert!(!e.state.objects[&source].tapped);
     resolve_entire_stack_two_player(&mut e);
@@ -216,7 +218,7 @@ fn staff_proliferates_mixed_recipients_or_none_and_rejects_invalid_choices() {
             .set_counter(CounterKind::Stun, 2);
         e.state.players[1].counters.insert(CounterKind::Poison, 1);
         let blank = inject_permanent_on_battlefield(&mut e, 0, "forest");
-        e.apply_command(0, &activate_ability_for(&e, source, 2, vec![]))
+        e.apply_scenario_command(0, &activate_ability_for(&e, source, 2, vec![]))
             .unwrap();
         assert_eq!(e.state.players[0].life, 17);
         assert!(e.state.objects[&source].tapped);
@@ -238,7 +240,7 @@ fn staff_proliferates_mixed_recipients_or_none_and_rejects_invalid_choices() {
         } else {
             choice(vec![bear], vec![1])
         };
-        e.apply_command(0, &cmd).unwrap();
+        e.apply_scenario_command(0, &cmd).unwrap();
         assert_eq!(
             e.state.objects[&bear].counter_count(CounterKind::PlusOnePlusOne),
             if empty { 1 } else { 2 }

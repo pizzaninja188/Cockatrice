@@ -3,6 +3,7 @@
 //!
 //! Oracle and rulings checked 2026-09-11. Current CR 113.6h, 602.1-.2, 603.6d,
 //! 614.1d, 614.12, 616.1, 701.25, and 701.26 govern these abilities.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{
@@ -24,7 +25,7 @@ fn play_from_hand(engine: &mut GameEngine, player: usize, card_id: &str) -> u32 
     let object_id = relocate_to_hand(engine, player, card_id);
     let hand_index = hand_index_for_card(engine, player, card_id);
     engine
-        .apply_command(engine.state.players[player].id, &play_land(hand_index))
+        .apply_scenario_command(engine.state.players[player].id, &play_land(hand_index))
         .unwrap_or_else(|error| panic!("play {card_id}: {error}"));
     assert_eq!(engine.state.objects[&object_id].zone, Zone::Battlefield);
     object_id
@@ -77,13 +78,13 @@ fn generated_surveil_activation_is_priority_generation_and_payment_safe_and_priv
 
     engine.state.priority_idx = 1;
     engine
-        .apply_command(0, &activate_ability_for(&engine, source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability_for(&engine, source, 1, vec![]))
         .expect_err("controller cannot activate without priority");
     engine.state.priority_idx = 0;
 
     let unfunded = activate_ability_for(&engine, source, 1, vec![]);
     engine
-        .apply_command(0, &unfunded)
+        .apply_scenario_command(0, &unfunded)
         .expect_err("insufficient mana rejects the whole activation");
     assert!(!engine.state.objects[&source].tapped);
     assert!(engine.state.stack.is_empty());
@@ -102,7 +103,7 @@ fn generated_surveil_activation_is_priority_generation_and_payment_safe_and_priv
     };
     ability.expected_zone_change_generation += 1;
     engine
-        .apply_command(0, &stale)
+        .apply_scenario_command(0, &stale)
         .expect_err("stale source generation rejects before payment");
     assert_eq!(engine.state.players[0].mana_pool.colorless, 4);
     assert!(!engine.state.objects[&source].tapped);
@@ -112,18 +113,22 @@ fn generated_surveil_activation_is_priority_generation_and_payment_safe_and_priv
     assert!(engine.state.objects[&source].tapped);
     assert_eq!(engine.state.stack.len(), 1);
 
-    engine.apply_command(0, &pass()).expect("first pass");
-    let resolving = engine.apply_command(1, &pass()).expect("resolve ability");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("first pass");
+    let resolving = engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolve ability");
     let choice = find_resolution_choice(&resolving).expect("private Surveil choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::LibraryLook);
     assert_eq!(choice.deciding_player_id, 0);
     assert_eq!(choice.candidate_object_ids, [surveilled]);
     assert!(choice.public_reveal.is_none());
     engine
-        .apply_command(1, &submit_resolution_choice(vec![surveilled]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![surveilled]))
         .expect_err("opponent cannot submit the private choice");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![surveilled]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![surveilled]))
         .expect("move exact Surveil candidate");
     assert_eq!(engine.state.objects[&surveilled].zone, Zone::Graveyard);
 }
@@ -237,7 +242,7 @@ fn a_copy_of_a_generated_fast_land_rechecks_its_intrinsic_entry_condition() {
     relocate_to_hand(&mut engine, 0, "clone");
     let clone_index = hand_index_for_card(&engine, 0, "clone");
     engine
-        .apply_command(0, &cast_spell(clone_index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(clone_index, Vec::new()))
         .expect("cast Clone");
     pass_both_players(&mut engine);
     let choice = engine
@@ -248,7 +253,7 @@ fn a_copy_of_a_generated_fast_land_rechecks_its_intrinsic_entry_condition() {
     assert_eq!(choice.presentation.choice_kind, ChoiceKind::CopySource);
     assert!(choice.presentation.candidates.contains(&source));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![source]))
         .expect("copy generated fast land");
 
     let clone = battlefield_object_for_card(&engine, 0, "clone");
@@ -308,7 +313,7 @@ fn generated_entry_condition_composes_with_another_replacement_in_either_order()
         let land = relocate_to_hand(&mut engine, 0, "etched_cornfield");
         let hand_index = hand_index_for_card(&engine, 0, "etched_cornfield");
         let played = engine
-            .apply_command(0, &play_land(hand_index))
+            .apply_scenario_command(0, &play_land(hand_index))
             .expect("start conditional land entry");
         let ordering = find_resolution_choice(&played).expect("CR 616 ordering choice");
         assert_eq!(ordering.choice_kind(), ChoiceKind::ReplacementEffect);
@@ -324,7 +329,7 @@ fn generated_entry_condition_composes_with_another_replacement_in_either_order()
             .position(|name| name.starts_with(wanted))
             .expect("replacement label");
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &submit_resolution_choice(vec![ordering.candidate_object_ids[index]]),
             )

@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1 as rv1;
@@ -86,7 +87,7 @@ fn omen_with_no_chosen_target_resolves_then_shuffles_into_owners_library() {
     );
 
     let cast = e
-        .apply_command(0, &cast_spell_face(slot, vec![], 1))
+        .apply_scenario_command(0, &cast_spell_face(slot, vec![], 1))
         .expect("cast Skimming Strike without a target");
     let pushed = cast
         .events
@@ -99,8 +100,8 @@ fn omen_with_no_chosen_target_resolves_then_shuffles_into_owners_library() {
     assert_eq!(pushed.description, "Skimming Strike");
     assert_eq!(pushed.ability_annotation, "Skimming Strike");
 
-    e.apply_command(0, &pass()).expect("caster pass");
-    let resolved = e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    let resolved = e.apply_scenario_command(1, &pass()).expect("opponent pass");
     assert!(e.state.stack.is_empty());
     assert_eq!(e.state.objects[&oid].zone, Zone::Library);
     assert!(e.state.players[0].library.contains(&oid));
@@ -149,10 +150,10 @@ fn omen_shuffle_is_replay_identical_for_the_same_seed_and_commands() {
             },
         );
 
-        e.apply_command(0, &cast_spell_face(slot, vec![], 1))
+        e.apply_scenario_command(0, &cast_spell_face(slot, vec![], 1))
             .expect("cast Skimming Strike without a target");
-        e.apply_command(0, &pass()).expect("caster pass");
-        e.apply_command(1, &pass()).expect("opponent pass");
+        e.apply_scenario_command(0, &pass()).expect("caster pass");
+        e.apply_scenario_command(1, &pass()).expect("opponent pass");
 
         e.state.players[0]
             .library
@@ -195,10 +196,10 @@ fn omen_normal_face_resolves_as_the_permanent_face() {
         },
     );
 
-    e.apply_command(0, &cast_spell_face(slot, vec![], 0))
+    e.apply_scenario_command(0, &cast_spell_face(slot, vec![], 0))
         .expect("cast normal face");
-    e.apply_command(0, &pass()).expect("caster pass");
-    e.apply_command(1, &pass()).expect("opponent pass");
+    e.apply_scenario_command(0, &pass()).expect("caster pass");
+    e.apply_scenario_command(1, &pass()).expect("opponent pass");
     assert_eq!(e.state.objects[&oid].zone, Zone::Battlefield);
     assert_eq!(e.state.objects[&oid].face_up_index, 0);
 }
@@ -244,10 +245,10 @@ fn chosen_target_becoming_illegal_fizzles_omen_to_graveyard_without_drawing() {
         .iter()
         .position(|candidate| *candidate == omen)
         .expect("Omen in hand");
-    e.apply_command(0, &cast_spell_face(omen_slot, target_object(target), 1))
+    e.apply_scenario_command(0, &cast_spell_face(omen_slot, target_object(target), 1))
         .expect("cast targeted Skimming Strike");
     let bolt_slot = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_slot, target_object(target)))
+    e.apply_scenario_command(0, &cast_spell(bolt_slot, target_object(target)))
         .expect("cast Bolt above the Omen");
 
     resolve_entire_stack_two_player(&mut e);
@@ -300,11 +301,12 @@ fn countered_omen_uses_the_ordinary_graveyard_path() {
         .iter()
         .position(|candidate| *candidate == omen)
         .expect("Omen in hand");
-    e.apply_command(0, &cast_spell_face(omen_slot, vec![], 1))
+    e.apply_scenario_command(0, &cast_spell_face(omen_slot, vec![], 1))
         .expect("cast Omen");
-    e.apply_command(0, &pass()).expect("pass to opponent");
+    e.apply_scenario_command(0, &pass())
+        .expect("pass to opponent");
     let counter_slot = hand_index_for_card(&e, 1, "counterspell");
-    e.apply_command(1, &cast_spell(counter_slot, target_object(omen)))
+    e.apply_scenario_command(1, &cast_spell(counter_slot, target_object(omen)))
         .expect("counter the Omen");
     resolve_entire_stack_two_player(&mut e);
 
@@ -344,17 +346,19 @@ fn parked_library_search_finishes_before_the_physical_omen_is_shuffled() {
         .iter()
         .position(|candidate| *candidate == omen)
         .expect("Omen in hand");
-    e.apply_command(0, &cast_spell_face(slot, vec![], 1))
+    e.apply_scenario_command(0, &cast_spell_face(slot, vec![], 1))
         .expect("cast Roost Seek");
-    e.apply_command(0, &pass()).expect("caster passes");
-    let choice_batch = e.apply_command(1, &pass()).expect("begin resolving Omen");
+    e.apply_scenario_command(0, &pass()).expect("caster passes");
+    let choice_batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("begin resolving Omen");
     let choice = find_resolution_choice(&choice_batch).expect("basic-land search choice");
     assert!(choice.candidate_object_ids.contains(&forest));
     assert_eq!(e.state.objects[&omen].zone, Zone::Stack);
     assert!(e.state.pending_resolution.is_some());
 
     let completion = e
-        .apply_command(0, &submit_resolution_choice(vec![forest]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![forest]))
         .expect("choose the basic land");
 
     assert!(e.state.pending_resolution.is_none());
@@ -400,7 +404,7 @@ fn successfully_resolving_omen_copy_shuffles_without_creating_a_library_object()
         .iter()
         .position(|candidate| *candidate == omen)
         .expect("Omen in hand");
-    e.apply_command(0, &cast_spell_face(slot, vec![], 1))
+    e.apply_scenario_command(0, &cast_spell_face(slot, vec![], 1))
         .expect("cast Signaling Roar");
 
     let physical = e
@@ -417,8 +421,8 @@ fn successfully_resolving_omen_copy_shuffles_without_creating_a_library_object()
     e.state.stack.push(copy);
     let library_len = e.state.players[0].library.len();
 
-    e.apply_command(0, &pass()).expect("caster passes");
-    let copy_resolution = e.apply_command(1, &pass()).expect("copy resolves");
+    e.apply_scenario_command(0, &pass()).expect("caster passes");
+    let copy_resolution = e.apply_scenario_command(1, &pass()).expect("copy resolves");
 
     assert!(!e.state.objects.contains_key(&copy_id));
     assert!(!e.state.players[0].library.contains(&copy_id));

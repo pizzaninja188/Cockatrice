@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::{TurnStep, Zone};
 
 fn engine() -> GameEngine {
@@ -18,7 +19,7 @@ fn engine() -> GameEngine {
 fn cast(e: &mut GameEngine, card: &str, method: CastMethod, targets: Vec<TargetRef>) -> u32 {
     let oid = inject_card_into_hand(e, 0, card);
     grant_pool(e, 0);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::CastSpell(CastSpell {
@@ -67,7 +68,7 @@ fn issue_148_knight_warp_creates_human_soldier_and_normal_recast_stays() {
         .find(|permission| permission.object_id == knight)
         .expect("Warp recast permission")
         .group_id;
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::CastSpell(CastSpell {
@@ -117,11 +118,11 @@ fn issue_148_weftblade_accepts_zero_one_or_two_including_itself_and_opponent() {
             .flat_map(target_object)
             .collect();
         assert!(
-            e.apply_command(0, &choose(vec![target_object(enhancer)[0]; 2]))
+            e.apply_scenario_command(0, &choose(vec![target_object(enhancer)[0]; 2]))
                 .is_err(),
             "duplicate targets rejected"
         );
-        e.apply_command(0, &choose(targets)).unwrap();
+        e.apply_scenario_command(0, &choose(targets)).unwrap();
         resolve_entire_stack_two_player(&mut e);
         assert_eq!(
             e.characteristics(enhancer).unwrap().power,
@@ -142,10 +143,13 @@ fn issue_148_perigee_excludes_self_and_returns_other_creature_tapped_once() {
     let beckoner = cast(&mut e, "perigee_beckoner", CastMethod::Warp, vec![]);
     pass_both_players(&mut e);
     assert!(e
-        .apply_command(0, &choose(target_object(beckoner)))
+        .apply_scenario_command(0, &choose(target_object(beckoner)))
         .is_err());
-    assert!(e.apply_command(0, &choose(target_object(other))).is_err());
-    e.apply_command(0, &choose(target_object(bear))).unwrap();
+    assert!(e
+        .apply_scenario_command(0, &choose(target_object(other)))
+        .is_err());
+    e.apply_scenario_command(0, &choose(target_object(bear)))
+        .unwrap();
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.characteristics(bear).unwrap().power, Some(4));
     cast(&mut e, "shock", CastMethod::Normal, target_object(bear));
@@ -212,7 +216,7 @@ fn issue_148_temporal_cost_and_public_reveal_use_existing_choice_contract() {
     e.state.players[0].mana_pool = Default::default();
     e.state.players[0].mana_pool.black = 1;
     let batch = e
-        .apply_command(0, &cast_spell(slot, target_player(1)))
+        .apply_scenario_command(0, &cast_spell(slot, target_player(1)))
         .unwrap();
     assert!(!batch.events.is_empty());
     pass_both_players(&mut e);
@@ -225,10 +229,10 @@ fn issue_148_temporal_cost_and_public_reveal_use_existing_choice_contract() {
         .find(|id| e.state.objects[id].card_id == "forest")
         .unwrap();
     assert!(e
-        .apply_command(0, &submit_resolution_choice(vec![land]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
         .is_err());
     assert_eq!(e.state.command_index, before);
-    e.apply_command(0, &submit_resolution_choice(vec![victim]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![victim]))
         .unwrap();
     assert_eq!(e.state.objects[&victim].zone, Zone::Graveyard);
     assert_eq!(e.state.objects[&temporal].zone, Zone::Graveyard);

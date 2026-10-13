@@ -2,6 +2,7 @@
 //! contracts. Oracle and rulings were checked 2026-09-13. CR 115, 120, 121, 400.7, 601.2c-d,
 //! 608.2b-c, 610, 611.2, 613.4c, 701.6, 701.8, and 701.9 govern these casts, target
 //! revalidation, source-relative damage, zone changes, destruction, exile, and cleanup expiry.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::Keyword;
@@ -41,7 +42,7 @@ fn three_player_main1(seed: u64) -> GameEngine {
     while engine.state.turn_step != TurnStep::Main1 {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("advance three-player turn");
     }
     engine
@@ -84,7 +85,7 @@ fn cast_named(engine: &mut GameEngine, card_id: &str, targets: Vec<TargetRef>) {
     inject_card_into_hand(engine, 0, card_id);
     let slot = hand_index_for_card(engine, 0, card_id);
     engine
-        .apply_command(0, &cast_spell(slot, targets))
+        .apply_scenario_command(0, &cast_spell(slot, targets))
         .unwrap_or_else(|error| panic!("cast {card_id}: {error:?}"));
 }
 
@@ -92,7 +93,7 @@ fn resolve_three_player_stack(engine: &mut GameEngine) {
     while !engine.state.stack.is_empty() {
         let player = engine.state.priority_player_id();
         engine
-            .apply_command(player, &pass())
+            .apply_scenario_command(player, &pass())
             .expect("three-player priority pass");
     }
 }
@@ -107,7 +108,7 @@ fn resolve_two_player_stack_with_last_batch(engine: &mut GameEngine) -> RuledEve
         let first = engine.state.priority_player_id();
         last_batch = Some(
             engine
-                .apply_command(first, &pass())
+                .apply_scenario_command(first, &pass())
                 .expect("first two-player resolution pass"),
         );
         if engine.state.stack.is_empty() {
@@ -116,7 +117,7 @@ fn resolve_two_player_stack_with_last_batch(engine: &mut GameEngine) -> RuledEve
         let second = engine.state.priority_player_id();
         last_batch = Some(
             engine
-                .apply_command(second, &pass())
+                .apply_scenario_command(second, &pass())
                 .expect("second two-player resolution pass"),
         );
     }
@@ -138,7 +139,7 @@ fn alesha_legacy_reuses_controlled_keyword_targets_and_expires_at_cleanup() {
     assert!(!legal.groups[0].valid_permanent_ids.contains(&opponent));
 
     engine
-        .apply_command(0, &cast_spell(slot, target_object(own)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(own)))
         .expect("cast Alesha's Legacy");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.effective_has_keyword(own, Keyword::Deathtouch));
@@ -227,7 +228,7 @@ fn ancestral_reminiscence_draws_three_then_privately_discards_one_physical_card(
         .expect("discard choice after draw three");
     assert!(pending.presentation.candidates.contains(&discarded));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![discarded]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discarded]))
         .expect("submit private discard");
     assert_eq!(engine.state.objects[&discarded].zone, Zone::Graveyard);
     assert!(drawn
@@ -272,7 +273,7 @@ fn bombard_uses_its_source_name_for_four_damage_to_a_creature() {
     let bombard = inject_card_into_hand(&mut engine, 0, "bombard");
     let slot = hand_index_for_card(&engine, 0, "bombard");
     let cast = engine
-        .apply_command(0, &cast_spell(slot, vec![permanent_target(target, 0)]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![permanent_target(target, 0)]))
         .expect("cast Bombard");
     let pushed = cast
         .events
@@ -355,7 +356,7 @@ fn sudden_strike_accepts_only_an_attacking_or_blocking_creature() {
     advance_to_declare_attackers(&mut engine);
     let attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
     fund(&mut engine);
     cast_named(

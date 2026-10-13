@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ruled_event::Ev, ChoiceCandidateSourceZone, ChoiceKind};
 
@@ -25,7 +26,7 @@ fn setup_passage(card_id: &str, extra_cards: &[&str]) -> (GameEngine, u32) {
 
 fn resolve_to_search(engine: &mut GameEngine, passage: u32) -> u32 {
     engine
-        .apply_command(0, &activate_ability(passage, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(passage, 0, vec![]))
         .expect("activate Passage");
     assert_eq!(engine.state.objects[&passage].zone, Zone::Graveyard);
     pass_both_players(engine);
@@ -50,7 +51,7 @@ fn fabled_passage_untaps_only_the_found_land_when_four_lands_are_controlled() {
     }
     let found = resolve_to_search(&mut engine, passage);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![found]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![found]))
         .expect("find basic land");
 
     assert_eq!(engine.state.objects[&found].zone, Zone::Battlefield);
@@ -65,7 +66,7 @@ fn fabled_passage_leaves_the_found_land_tapped_below_four_lands() {
     }
     let found = resolve_to_search(&mut engine, passage);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![found]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![found]))
         .expect("find basic land");
 
     assert!(engine.state.objects[&found].tapped);
@@ -79,7 +80,7 @@ fn elven_passage_pays_life_and_can_behold_an_elf_card_from_hand() {
     let found = resolve_to_search(&mut engine, passage);
     assert_eq!(engine.state.players[0].life, 19);
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![found]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![found]))
         .expect("find basic land");
     let choice = find_resolution_choice(&batch).expect("Behold choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::Behold);
@@ -95,7 +96,7 @@ fn elven_passage_pays_life_and_can_behold_an_elf_card_from_hand() {
     assert!(engine.state.objects[&found].tapped);
 
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![elf]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![elf]))
         .expect("behold Elf from hand");
     assert_eq!(engine.state.objects[&elf].zone, Zone::Hand);
     assert!(!engine.state.objects[&found].tapped);
@@ -120,10 +121,10 @@ fn elven_passage_can_decline_behold_and_leave_the_found_land_tapped() {
     relocate_to_hand(&mut engine, 0, "safewright_cavalry");
     let found = resolve_to_search(&mut engine, passage);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![found]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![found]))
         .expect("find basic land");
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("decline Behold");
 
     assert!(engine.state.objects[&found].tapped);
@@ -135,7 +136,7 @@ fn elven_passage_can_behold_an_elf_permanent() {
     let elf = inject_permanent_on_battlefield(&mut engine, 0, "safewright_cavalry");
     let found = resolve_to_search(&mut engine, passage);
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![found]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![found]))
         .expect("find basic land");
     let choice = find_resolution_choice(&batch).expect("Behold choice");
     let elf_index = choice
@@ -149,7 +150,7 @@ fn elven_passage_can_behold_an_elf_permanent() {
     );
 
     let batch = engine
-        .apply_command(0, &submit_resolution_choice(vec![elf]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![elf]))
         .expect("behold Elf permanent");
     assert!(!engine.state.objects[&found].tapped);
     assert!(!batch
@@ -164,12 +165,12 @@ fn behold_rejects_a_stale_generation_and_keeps_the_choice_pending() {
     let elf = relocate_to_hand(&mut engine, 0, "safewright_cavalry");
     let found = resolve_to_search(&mut engine, passage);
     engine
-        .apply_command(0, &submit_resolution_choice(vec![found]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![found]))
         .expect("find basic land");
     engine.state.zone_change_generation.insert(elf, 1);
 
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![elf]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![elf]))
         .is_err());
     assert!(engine.state.pending_resolution.is_some());
     assert!(engine.state.objects[&found].tapped);
@@ -181,7 +182,7 @@ fn elven_passage_cannot_activate_without_enough_life() {
     engine.state.players[0].life = 0;
 
     assert!(engine
-        .apply_command(0, &activate_ability(passage, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(passage, 0, vec![]))
         .is_err());
     assert_eq!(engine.state.objects[&passage].zone, Zone::Battlefield);
     assert!(!engine.state.objects[&passage].tapped);

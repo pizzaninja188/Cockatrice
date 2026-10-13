@@ -4,6 +4,7 @@
 //! result-carrying `CardResultCount` resolution branch; these scenarios prove the observable
 //! behavior, the edge cases, the CR 701.9c unrevealed hidden-zone replacement, and the
 //! choosing-player boundaries.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_core::Zone;
@@ -59,7 +60,7 @@ fn issue_287_nonland_discard_creates_exactly_one_recruit_soldier() {
         );
 
         engine
-            .apply_command(0, &submit_resolution_choice(vec![nonland]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![nonland]))
             .expect("discard the nonland card");
         assert_eq!(engine.state.objects[&nonland].zone, Zone::Graveyard);
         assert!(engine.state.pending_resolution.is_none());
@@ -100,7 +101,7 @@ fn issue_287_land_discard_creates_no_recruit_soldier() {
         move_ready_to_battlefield(&mut engine, 0, card_id);
         pass_both_players(&mut engine);
         engine
-            .apply_command(0, &submit_resolution_choice(vec![land]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![land]))
             .expect("discard the land");
         assert_eq!(engine.state.objects[&land].zone, Zone::Graveyard);
         assert!(
@@ -115,7 +116,8 @@ fn issue_287_choice_is_private_and_scoped_to_the_recruiting_player() {
     let (mut engine, nonland) = park_recruit_choice("long_lake_nuisance", 287_005);
     let foreign = inject_card_into_hand(&mut engine, 1, "grizzly_bears");
 
-    let opponent_attempt = engine.apply_command(1, &submit_resolution_choice(vec![nonland]));
+    let opponent_attempt =
+        engine.apply_scenario_command(1, &submit_resolution_choice(vec![nonland]));
     assert!(
         matches!(
             opponent_attempt,
@@ -123,12 +125,13 @@ fn issue_287_choice_is_private_and_scoped_to_the_recruiting_player() {
         ),
         "only the recruiting player may answer the private discard choice"
     );
-    let empty_attempt = engine.apply_command(0, &submit_resolution_choice(vec![]));
+    let empty_attempt = engine.apply_scenario_command(0, &submit_resolution_choice(vec![]));
     assert!(
         matches!(empty_attempt, Err(tricerules_core::EngineError::Illegal(_))),
         "the mandatory discard requires exactly one card"
     );
-    let foreign_attempt = engine.apply_command(0, &submit_resolution_choice(vec![foreign]));
+    let foreign_attempt =
+        engine.apply_scenario_command(0, &submit_resolution_choice(vec![foreign]));
     assert!(
         matches!(
             foreign_attempt,
@@ -148,7 +151,7 @@ fn issue_287_choice_is_private_and_scoped_to_the_recruiting_player() {
         .zone_change_generation
         .entry(nonland)
         .or_default() += 1;
-    let stale_attempt = engine.apply_command(0, &submit_resolution_choice(vec![nonland]));
+    let stale_attempt = engine.apply_scenario_command(0, &submit_resolution_choice(vec![nonland]));
     assert!(
         matches!(stale_attempt, Err(tricerules_core::EngineError::Illegal(_))),
         "a stale object generation cannot satisfy the discard choice"
@@ -160,7 +163,7 @@ fn issue_287_choice_is_private_and_scoped_to_the_recruiting_player() {
         .or_default() = generation;
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![nonland]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![nonland]))
         .expect("the recruiting player completes the discard");
     assert_eq!(battlefield_token_oids(&engine, 0, RECRUIT_SOLDIER).len(), 1);
 }
@@ -235,7 +238,7 @@ fn issue_287_library_of_leng_replacement_observes_the_committed_discard_destinat
         move_ready_to_battlefield(&mut engine, 0, "long_lake_nuisance");
         pass_both_players(&mut engine);
         engine
-            .apply_command(0, &submit_resolution_choice(vec![nonland]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![nonland]))
             .expect("choose the nonland card for the replaced discard");
         let destination = engine
             .state
@@ -257,7 +260,7 @@ fn issue_287_library_of_leng_replacement_observes_the_committed_discard_destinat
     {
         let (mut engine, nonland) = park_replaced_recruit(287_008 + u64::from(destination_index));
         let resolved = engine
-            .apply_command(0, &submit_resolution_choice(vec![destination_index]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![destination_index]))
             .expect("commit the replacement destination");
         assert!(engine.state.pending_resolution.is_none());
 
@@ -345,11 +348,15 @@ fn issue_287_choice_and_conditional_token_replay_deterministically() {
         }
         for _ in 0..4 {
             let holder = engine.state.priority_player_id();
-            let batch = engine.apply_command(holder, &pass()).expect("pass");
+            let batch = engine
+                .apply_scenario_command(holder, &pass())
+                .expect("pass");
             if let Some(replay) = replay.as_deref_mut() {
                 assert_eq!(holder, replay.state.priority_player_id());
                 assert_eq!(
-                    replay.apply_command(holder, &pass()).expect("replay pass"),
+                    replay
+                        .apply_scenario_command(holder, &pass())
+                        .expect("replay pass"),
                     batch,
                     "the same seed and command sequence must produce the same batch"
                 );
@@ -371,9 +378,13 @@ fn issue_287_choice_and_conditional_token_replay_deterministically() {
     );
 
     let command = submit_resolution_choice(vec![nonland]);
-    let batch = engine.apply_command(0, &command).expect("player discards");
+    let batch = engine
+        .apply_scenario_command(0, &command)
+        .expect("player discards");
     assert_eq!(
-        replay.apply_command(0, &command).expect("replay discards"),
+        replay
+            .apply_scenario_command(0, &command)
+            .expect("replay discards"),
         batch
     );
     assert_eq!(engine.state.objects[&nonland].zone, Zone::Graveyard);

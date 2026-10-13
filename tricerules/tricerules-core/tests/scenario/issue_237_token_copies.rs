@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{CounterKind, Keyword};
 use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
@@ -24,7 +25,9 @@ fn cast_five(engine: &mut GameEngine) {
     ensure_in_hand(engine, 0, "unexpected_assistance");
     grant_pool(engine, 0);
     let slot = hand_index_for_card(engine, 0, "unexpected_assistance");
-    let batch = engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    let batch = engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     assert_eq!(engine.state.stack.len(), 2);
     assert!(!batch
         .events
@@ -33,14 +36,14 @@ fn cast_five(engine: &mut GameEngine) {
 }
 
 fn resolve_top(engine: &mut GameEngine) -> RuledEventBatch {
-    engine.apply_command(0, &pass()).unwrap();
-    engine.apply_command(1, &pass()).unwrap()
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap()
 }
 
 fn move_source(engine: &mut GameEngine, zone: DevZone) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -131,7 +134,9 @@ fn issue_237_double_faced_permanent_spell_copy_becomes_double_faced_token() {
     ensure_in_hand(&mut engine, 0, "reckless_waif_merciless_predator");
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "reckless_waif_merciless_predator");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     // A permanent spell copy uses the existing stack-copy representation.
     let mut copy = engine.state.stack.last().unwrap().clone();
     copy.id = engine.state.next_object_id;
@@ -177,7 +182,7 @@ fn issue_237_stallion_uses_reduced_and_alternative_actual_payments() {
     engine.state.objects.get_mut(&spell).unwrap().zone = tricerules_core::Zone::Graveyard;
     grant_pool(&mut engine, 0);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CastSpell(CastSpell {
@@ -244,10 +249,10 @@ fn issue_237_stallion_trigger_survives_countering_the_spell() {
     let original = engine.state.stack[0].id;
     inject_card_into_hand(&mut engine, 1, "counterspell");
     grant_pool(&mut engine, 1);
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     let slot = hand_index_for_card(&engine, 1, "counterspell");
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &cast_spell(
                 slot,
@@ -279,12 +284,14 @@ fn issue_237_copied_stallion_keeps_ward_and_opus() {
         .presentation
         .candidates[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![discard]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
         .unwrap();
     inject_card_into_hand(&mut engine, 0, "unexpected_assistance");
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "unexpected_assistance");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     answer_trigger_order_in_engine_order(&mut engine);
     assert_eq!(
         engine.state.stack.len(),
@@ -305,15 +312,15 @@ fn issue_237_copied_stallion_keeps_ward_and_opus() {
         .presentation
         .candidates[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![discard]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
         .unwrap();
 
     inject_card_into_hand(&mut engine, 1, "unsummon");
     grant_pool(&mut engine, 1);
-    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
     let slot = hand_index_for_card(&engine, 1, "unsummon");
     engine
-        .apply_command(1, &cast_spell(slot, target_object(token)))
+        .apply_scenario_command(1, &cast_spell(slot, target_object(token)))
         .unwrap();
     assert_eq!(
         engine.state.stack.len(),
@@ -332,7 +339,7 @@ fn issue_237_copied_stallion_keeps_ward_and_opus() {
         1
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &submit_resolution_decision(
                 tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,
@@ -380,7 +387,7 @@ fn issue_237_source_copy_command_replay_and_three_seat_ownership() {
     ];
     let batches: Vec<_> = commands
         .iter()
-        .map(|(player, cmd)| engine.apply_command(*player, cmd).unwrap())
+        .map(|(player, cmd)| engine.apply_scenario_command(*player, cmd).unwrap())
         .collect();
     let tokens = token_created_events(batches.last().unwrap());
     assert_eq!(tokens.len(), 1);
@@ -393,7 +400,7 @@ fn issue_237_source_copy_command_replay_and_three_seat_ownership() {
     let mut replay = setup();
     let replayed: Vec<_> = commands
         .iter()
-        .map(|(player, cmd)| replay.apply_command(*player, cmd).unwrap())
+        .map(|(player, cmd)| replay.apply_scenario_command(*player, cmd).unwrap())
         .collect();
     assert_eq!(batches, replayed);
     assert_eq!(engine.state.command_index, replay.state.command_index);

@@ -1,5 +1,6 @@
 //! Issue #282: generated self-tap loot and rummage triggers observe only real
 //! untapped-to-tapped transitions and keep their resolution choices private.
+use crate::helpers::ScenarioCommandExt;
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
@@ -72,7 +73,7 @@ fn issue_282_attack_taps_the_source_but_entering_tapped_does_not() {
     advance_to_declare_attackers(&mut attacking);
     let attacker = inject_creature_on_battlefield(&mut attacking, 0, "mechan_navigator");
     attacking
-        .apply_command(0, &declare_attackers(vec![attacker]))
+        .apply_scenario_command(0, &declare_attackers(vec![attacker]))
         .expect("declare Mechan Navigator as an attacker");
     assert!(attacking.state.objects[&attacker].tapped);
     assert_eq!(
@@ -101,16 +102,16 @@ fn issue_282_mandatory_loot_draws_before_the_private_discard_choice() {
     let library_before = engine.state.players[0].library.len();
 
     engine
-        .apply_command(0, &activate_ability(source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(source, 1, vec![]))
         .expect("activate the granted tap ability");
     assert!(engine.state.objects[&source].tapped);
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
     assert_eq!(engine.state.stack.len(), 1, "loot trigger is on the stack");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     let parked = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("trigger resolves to the discard choice");
 
     let choice = find_resolution_choice(&parked).expect("mandatory discard choice");
@@ -136,7 +137,7 @@ fn issue_282_mandatory_loot_draws_before_the_private_discard_choice() {
     assert!(choice.candidate_object_ids.contains(&discard));
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![discard]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
         .expect("discard the known card");
     assert!(engine.state.players[0].graveyard.contains(&discard));
     assert!(engine.state.stack.is_empty());
@@ -171,7 +172,7 @@ fn issue_282_other_effect_taps_optional_source_and_choice_is_controller_private(
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(cryptic, vec![(1, target_object(bounced)), (2, vec![])]),
         )
@@ -186,14 +187,14 @@ fn issue_282_other_effect_taps_optional_source_and_choice_is_controller_private(
     );
 
     let opponent_view = engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("non-controller passes on the trigger");
     assert!(
         find_resolution_choice(&opponent_view).is_none(),
         "the non-controller must not receive a private hand choice"
     );
     let controller_view = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("controller receives the trigger choice");
     let choice = find_resolution_choice(&controller_view).expect("optional discard choice");
     assert_eq!(choice.deciding_player_id, 1);
@@ -206,7 +207,8 @@ fn issue_282_other_effect_taps_optional_source_and_choice_is_controller_private(
         .expect("controller has a discard candidate");
     let hand_before = engine.state.players[1].hand.clone();
     let library_before = engine.state.players[1].library.len();
-    let opponent_attempt = engine.apply_command(0, &submit_resolution_choice(vec![discarded]));
+    let opponent_attempt =
+        engine.apply_scenario_command(0, &submit_resolution_choice(vec![discarded]));
     assert!(
         matches!(
             opponent_attempt,
@@ -220,7 +222,7 @@ fn issue_282_other_effect_taps_optional_source_and_choice_is_controller_private(
         "optional discard does not draw before submission"
     );
     engine
-        .apply_command(1, &submit_resolution_choice(vec![discarded]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![discarded]))
         .expect("controller accepts optional discard");
     assert!(engine.state.players[1].graveyard.contains(&discarded));
     assert_eq!(
@@ -256,20 +258,20 @@ fn issue_282_optional_decline_does_not_draw() {
     let library_before = engine.state.players[0].library.len();
 
     engine
-        .apply_command(0, &activate_ability(source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(source, 1, vec![]))
         .expect("activate the granted tap ability");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     let resolved = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve the optional trigger");
     let choice = find_resolution_choice(&resolved).expect("optional discard choice");
     assert_eq!(choice.deciding_player_id, 0);
     assert_eq!(choice.choice_kind(), ChoiceKind::HandCards);
     assert_eq!((choice.min, choice.max), (0, 1));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .expect("decline optional discard");
     assert_eq!(engine.state.players[0].library.len(), library_before);
     assert!(engine.state.stack.is_empty());
@@ -293,13 +295,13 @@ fn issue_282_optional_empty_hand_cannot_pay_and_does_not_draw() {
     let library_before = engine.state.players[0].library.len();
 
     engine
-        .apply_command(0, &activate_ability(source, 1, vec![]))
+        .apply_scenario_command(0, &activate_ability(source, 1, vec![]))
         .expect("activate the granted tap ability");
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("active player passes");
     let resolved = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve the optional trigger");
     assert!(find_resolution_choice(&resolved).is_none());
     assert_eq!(engine.state.players[0].library.len(), library_before);

@@ -1,5 +1,6 @@
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use crate::helpers::ScenarioCommandExt;
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1 as rv1;
 
 #[test]
@@ -53,10 +54,10 @@ fn issue_176_no_one_left_behind_publishes_graveyard_reduction_and_pays_it() {
         }]
     };
     assert!(engine
-        .apply_command(0, &cast_spell(slot, target(large)))
+        .apply_scenario_command(0, &cast_spell(slot, target(large)))
         .is_err());
     engine
-        .apply_command(0, &cast_spell(slot, target(small)))
+        .apply_scenario_command(0, &cast_spell(slot, target(small)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&small].zone, Zone::Battlefield);
@@ -101,7 +102,7 @@ fn winged_words_uses_the_flying_reduction_for_preview_and_payment() {
     engine.state.players[0].mana_pool.colorless = 1;
     let hand_index = hand_index_for_card(&engine, 0, "winged_words");
     engine
-        .apply_command(0, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(hand_index, vec![]))
         .expect("reduced Winged Words cast");
 
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);
@@ -165,7 +166,7 @@ fn winged_words_tracks_gained_and_lost_flying_and_revalidates_payment_atomically
     grant_pool(&mut engine, 0);
     let flight_index = hand_index_for_card(&engine, 0, "flight");
     engine
-        .apply_command(0, &cast_spell(flight_index, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(flight_index, target_object(bear)))
         .expect("cast Flight");
     resolve_entire_stack_two_player(&mut engine);
     engine.state.players[0].mana_pool.clear();
@@ -192,7 +193,7 @@ fn winged_words_tracks_gained_and_lost_flying_and_revalidates_payment_atomically
     let command_index_before = engine.state.command_index;
     let hand_index = hand_index_for_card(&engine, 0, "winged_words");
     assert!(engine
-        .apply_command(0, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(0, &cast_spell(hand_index, vec![]))
         .is_err());
     assert_eq!(engine.state.players[0].hand, hand_before);
     assert_eq!(engine.state.command_index, command_index_before);

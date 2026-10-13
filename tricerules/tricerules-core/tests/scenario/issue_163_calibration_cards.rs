@@ -1,6 +1,7 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, AbilitySourceZone, ActivateAbility, RuledCommand,
 };
@@ -70,7 +71,7 @@ fn issue_163_conditional_static_and_cost_reduction_track_controller_state() {
     );
     let cloudsculpt = hand_index_for_card(&engine, 0, "cloudsculpt_technician");
     engine
-        .apply_command(0, &cast_spell(cloudsculpt, vec![]))
+        .apply_scenario_command(0, &cast_spell(cloudsculpt, vec![]))
         .expect("cast Technician");
     resolve_entire_stack_two_player(&mut engine);
     let technician = battlefield_object_for_card(&engine, 0, "cloudsculpt_technician");
@@ -85,7 +86,7 @@ fn issue_163_conditional_static_and_cost_reduction_track_controller_state() {
     );
     let bonesplitter = hand_index_for_card(&engine, 0, "bonesplitter");
     engine
-        .apply_command(0, &cast_spell(bonesplitter, vec![]))
+        .apply_scenario_command(0, &cast_spell(bonesplitter, vec![]))
         .expect("cast artifact");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.characteristics(technician).unwrap().power, Some(2));
@@ -121,7 +122,7 @@ fn issue_163_galactic_wayfarer_creates_the_registry_lander_token() {
     );
     let slot = hand_index_for_card(&engine, 0, "galactic_wayfarer");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Wayfarer");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(battlefield_token_oids(&engine, 0, "lander").len(), 1);
@@ -155,12 +156,14 @@ fn issue_163_mongoose_lizard_mountaincycling_is_private_and_generation_bound() {
     );
     let command = zone_ability(&engine, mongoose);
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("activate Mountaincycling");
     assert_eq!(engine.state.objects[&mongoose].zone, Zone::Graveyard);
-    engine.apply_command(0, &pass()).expect("controller passes");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("controller passes");
     let batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("Mountaincycling resolves");
     let choice = find_resolution_choice(&batch).expect("private library search");
     assert!(!choice.candidate_object_ids.is_empty());
@@ -170,11 +173,11 @@ fn issue_163_mongoose_lizard_mountaincycling_is_private_and_generation_bound() {
         .all(|oid| engine.state.objects[oid].card_id == "mountain"));
     let mountain = choice.candidate_object_ids[0];
     engine
-        .apply_command(0, &submit_resolution_choice(vec![mountain]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![mountain]))
         .expect("choose Mountain");
     assert_eq!(engine.state.objects[&mountain].zone, Zone::Hand);
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect_err("stale hand action cannot be replayed");
 }
 
@@ -208,7 +211,7 @@ fn issue_163_azula_one_or_both_applies_each_modes_own_target() {
     );
     let slot = hand_index_for_card(&engine, 0, "azula_always_lies");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_modal_spell(
                 slot,
@@ -254,7 +257,7 @@ fn issue_163_otter_penguin_triggers_only_on_the_second_draw() {
     );
     let slot = hand_index_for_card(&engine, 0, "divination");
     engine
-        .apply_command(0, &cast_spell(slot, vec![]))
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
         .expect("cast Divination");
     resolve_entire_stack_two_player(&mut engine);
     let characteristics = engine.characteristics(otter).unwrap();

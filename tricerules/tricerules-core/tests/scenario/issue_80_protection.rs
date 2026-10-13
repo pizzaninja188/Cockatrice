@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::{AttachmentRecipient, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, BlockPair, ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
@@ -7,6 +8,7 @@ use tricerules_proto::ruled::v1::{
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -16,7 +18,7 @@ fn select_branch(index: u32) -> RuledCommand {
 
 fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
     engine
-        .apply_command(0, &primitive_yield())
+        .apply_scenario_command(0, &primitive_yield())
         .expect("advance to beginning of combat");
     pass_both_players(engine);
     assert_eq!(engine.state.turn_step, TurnStep::DeclareAttackers);
@@ -65,7 +67,7 @@ fn protection_from_red_prevents_pyroclasm_damage() {
     );
     let feat = hand_index_for_card(&engine, 0, "feat_of_resistance");
     engine
-        .apply_command(0, &cast_spell(feat, target_object(knight)))
+        .apply_scenario_command(0, &cast_spell(feat, target_object(knight)))
         .expect("cast Feat of Resistance");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -92,7 +94,7 @@ fn protection_from_red_prevents_pyroclasm_damage() {
     assert_eq!(branches.len(), 5);
     assert_eq!(branches[3].fallback_label(), "Red");
     engine
-        .apply_command(0, &select_branch(3))
+        .apply_scenario_command(0, &select_branch(3))
         .expect("choose protection from red");
     assert!(zone_view_rules_annotation_labels(&mut engine, 0, knight)
         .contains(&"Protection from red".to_string()));
@@ -109,7 +111,7 @@ fn protection_from_red_prevents_pyroclasm_damage() {
     );
     let pyroclasm = hand_index_for_card(&engine, 0, "pyroclasm");
     engine
-        .apply_command(0, &cast_spell(pyroclasm, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(pyroclasm, Vec::new()))
         .expect("cast Pyroclasm");
     pass_both_players(&mut engine);
 
@@ -134,7 +136,7 @@ fn protection_from_red_prevents_pyroclasm_damage() {
     );
     let pyroclasm = hand_index_for_card(&engine, 0, "pyroclasm");
     engine
-        .apply_command(0, &cast_spell(pyroclasm, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(pyroclasm, Vec::new()))
         .expect("cast second Pyroclasm");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -173,7 +175,7 @@ fn protection_from_black_rejects_black_spell_targeting() {
 
     let murder = hand_index_for_card(&engine, 0, "murder");
     engine
-        .apply_command(0, &cast_spell(murder, target_object(knight)))
+        .apply_scenario_command(0, &cast_spell(murder, target_object(knight)))
         .expect_err("protection from black makes White Knight an illegal target");
     assert!(engine.state.stack.is_empty());
 }
@@ -194,12 +196,12 @@ fn protection_from_creatures_rejects_creature_blockers() {
     let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![chaplain]))
+        .apply_scenario_command(0, &declare_attackers(vec![chaplain]))
         .expect("declare Beloved Chaplain");
     pass_to_declare_blockers(&mut engine);
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: chaplain,
@@ -229,11 +231,11 @@ fn protection_granted_after_blockers_keeps_the_block_and_prevents_damage() {
     let blocker = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     advance_main1_to_declare_attackers(&mut engine);
     engine
-        .apply_command(0, &declare_attackers(vec![knight]))
+        .apply_scenario_command(0, &declare_attackers(vec![knight]))
         .expect("declare White Knight");
     pass_to_declare_blockers(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &declare_blockers(vec![BlockPair {
                 attacker_id: knight,
@@ -254,11 +256,11 @@ fn protection_granted_after_blockers_keeps_the_block_and_prevents_damage() {
     );
     let feat = hand_index_for_card(&engine, 0, "feat_of_resistance");
     engine
-        .apply_command(0, &cast_spell(feat, target_object(knight)))
+        .apply_scenario_command(0, &cast_spell(feat, target_object(knight)))
         .expect("cast Feat after blockers");
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &select_branch(4))
+        .apply_scenario_command(0, &select_branch(4))
         .expect("choose protection from green");
 
     assert_eq!(
@@ -305,7 +307,7 @@ fn protection_from_artifacts_detaches_equipment() {
     );
     let slot = hand_index_for_card(&engine, 0, "bonesplitter");
     engine
-        .apply_command(0, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(slot, Vec::new()))
         .expect("cast Bonesplitter");
     pass_both_players(&mut engine);
     let equipment = battlefield_object_for_card(&engine, 0, "bonesplitter");
@@ -337,7 +339,7 @@ fn protection_from_artifacts_detaches_equipment() {
     let blessing = hand_index_for_card(&engine, 0, "apostles_blessing");
     let blessing_oid = engine.state.players[0].hand[blessing];
     engine
-        .apply_command(0, &cast_spell(blessing, target_object(creature)))
+        .apply_scenario_command(0, &cast_spell(blessing, target_object(creature)))
         .expect("cast Apostle's Blessing");
     pass_both_players(&mut engine);
     assert_eq!(
@@ -360,7 +362,7 @@ fn protection_from_artifacts_detaches_equipment() {
     assert_eq!(branches.len(), 6);
     assert_eq!(branches[0].fallback_label(), "artifacts");
     engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("choose protection from artifacts");
 
     assert_eq!(engine.state.objects[&blessing_oid].zone, Zone::Graveyard);

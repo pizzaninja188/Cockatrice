@@ -1,5 +1,6 @@
 //! Exact-card artifact threshold and search coverage; copy-card admission is held pending Aura entry support.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 
 fn game(seed: u64) -> GameEngine {
@@ -100,13 +101,13 @@ fn fair_activation_checks_before_costs_then_reveals_artifact_to_hand_and_shuffle
     let before = format!("{:?}", engine.state.pending_resolution);
     for (actor, choice) in [(1, artifact), (0, island), (0, foreign)] {
         engine
-            .apply_command(actor, &submit_resolution_choice(vec![choice]))
+            .apply_scenario_command(actor, &submit_resolution_choice(vec![choice]))
             .expect_err("invalid chooser/card");
         assert_eq!(format!("{:?}", engine.state.pending_resolution), before);
         assert_eq!(engine.state.objects[&artifact].zone, Zone::Library);
     }
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![artifact]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![artifact]))
         .unwrap();
     assert_eq!(engine.state.objects[&artifact].zone, Zone::Hand);
     assert!(engine.state.players[0].hand.contains(&artifact));

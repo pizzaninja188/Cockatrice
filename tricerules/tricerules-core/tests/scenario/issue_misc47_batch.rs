@@ -4,6 +4,7 @@
 //! Long Goodbye, Slice from the Shadows, and Suspicious Detonation. The shared ruling is that a
 //! target's Ward trigger may be paid, but declining Ward does not counter these spells. Governed
 //! rules: CR 107.3, 115, 120.3, 202.3, 601.2f, 613.4, 701.6, 701.8, 702.21, and 704.5f.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -60,7 +61,7 @@ fn issue_misc47_long_goodbye_enforces_types_mana_value_and_uncounterable_ward() 
         ward.state.pending_resolution.is_some(),
         "Ward payment is offered"
     );
-    ward.apply_command(
+    ward.apply_scenario_command(
         0,
         &submit_resolution_decision(ResolutionChoiceDecision::Decline),
     )
@@ -91,7 +92,7 @@ fn issue_misc47_long_goodbye_enforces_types_mana_value_and_uncounterable_ward() 
     let slot = hand_index_for_card(&too_large, 0, "long_goodbye");
     assert!(
         too_large
-            .apply_command(0, &cast_spell(slot, target_object(giant)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(giant)))
             .is_err(),
         "mana value four is not a legal target"
     );
@@ -138,7 +139,7 @@ fn issue_misc47_slice_uses_cast_x_for_both_stats_and_zero_toughness() {
     inject_card_into_hand(&mut uncounterable, 1, "counterspell");
     let counterspell_slot = hand_index_for_card(&uncounterable, 1, "counterspell");
     uncounterable
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass priority to opponent");
     semantic::accepted(
         &mut uncounterable,
@@ -199,7 +200,7 @@ fn issue_misc47_suspicious_detonation_uses_only_controller_artifact_sacrifices_t
     let mut opponent_artifact = engine(947_022);
     let clue = inject_permanent_on_battlefield(&mut opponent_artifact, 1, "clue");
     opponent_artifact
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("pass priority to opponent");
     apply_ability(&mut opponent_artifact, 1, clue, 0, vec![])
         .expect("opponent sacrifices their Clue");

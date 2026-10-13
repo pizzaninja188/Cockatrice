@@ -2,6 +2,7 @@
 //!
 //! Oracle verified 2026-09-11. Governing rules: CR 702.122, 702.21, 702.73,
 //! 604.3, 113.6g, 613, and 701.6.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::CounterKind;
@@ -87,7 +88,7 @@ fn issue_257_generated_crew_uses_current_power_and_generation_bound_atomic_payme
         .any(|(id, _)| [caravan, land].contains(id)));
 
     engine
-        .apply_command(0, &crew_command(&engine, caravan, &[first]))
+        .apply_scenario_command(0, &crew_command(&engine, caravan, &[first]))
         .expect_err("one unmodified Bear has insufficient power for Crew 3");
     assert!(!engine.state.objects[&first].tapped);
     assert!(engine.state.stack.is_empty());
@@ -104,13 +105,13 @@ fn issue_257_generated_crew_uses_current_power_and_generation_bound_atomic_payme
         .entry(first)
         .or_default() += 1;
     engine
-        .apply_command(0, &stale)
+        .apply_scenario_command(0, &stale)
         .expect_err("a stale physical Crew contributor must be rejected");
     assert!(!engine.state.objects[&first].tapped);
     assert!(engine.state.stack.is_empty());
 
     engine
-        .apply_command(0, &crew_command(&engine, caravan, &[first]))
+        .apply_scenario_command(0, &crew_command(&engine, caravan, &[first]))
         .expect("the Bear's current power of 3 pays Crew 3");
     assert!(engine.state.objects[&first].tapped);
     assert!(!engine.characteristics(caravan).unwrap().is_creature());
@@ -161,7 +162,7 @@ fn issue_257_generated_ward_handles_opponent_spells_and_abilities_but_not_own_sp
     );
     let slot = hand_index_for_card(&paid, 0, "unsummon");
     let spell = paid.state.players[0].hand[slot];
-    paid.apply_command(0, &cast_spell(slot, target_object(spider)))
+    paid.apply_scenario_command(0, &cast_spell(slot, target_object(spider)))
         .expect("opponent spell targets Spider-Rex");
     assert_eq!(paid.state.stack.len(), 2);
     assert_eq!(
@@ -187,12 +188,12 @@ fn issue_257_generated_ward_handles_opponent_spells_and_abilities_but_not_own_sp
     let (mut unpaid, spider) = ward_engine(257_003);
     let prodigal = relocate_to_battlefield(&mut unpaid, 0, "prodigal_sorcerer", false);
     unpaid
-        .apply_command(0, &activate_ability(prodigal, 0, target_object(spider)))
+        .apply_scenario_command(0, &activate_ability(prodigal, 0, target_object(spider)))
         .expect("opponent ability targets Spider-Rex");
     let ability = unpaid.state.stack[0].id;
     pass_both_players(&mut unpaid);
     let batch = unpaid
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -229,7 +230,7 @@ fn issue_257_generated_ward_handles_opponent_spells_and_abilities_but_not_own_sp
             ..Default::default()
         },
     );
-    own.apply_command(
+    own.apply_scenario_command(
         0,
         &cast_spell(
             hand_index_for_card(&own, 0, "unsummon"),
@@ -315,10 +316,12 @@ fn counter_creature_spell(
     );
     let slot = hand_index_for_card(&engine, 0, card_id);
     let spell = engine.state.players[0].hand[slot];
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
-    engine.apply_command(0, &pass()).unwrap();
     engine
-        .apply_command(
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    engine
+        .apply_scenario_command(
             1,
             &cast_spell(
                 hand_index_for_card(&engine, 1, "counterspell"),
@@ -326,14 +329,14 @@ fn counter_creature_spell(
             ),
         )
         .unwrap();
-    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(1, &pass()).unwrap();
     (engine, spell)
 }
 
 #[test]
 fn issue_257_only_the_generated_bear_spell_resists_counterspell() {
     let (mut gigantic, spell) = counter_creature_spell(257_006, "gigantic_big_bear", 2, 5);
-    let batch = gigantic.apply_command(0, &pass()).unwrap();
+    let batch = gigantic.apply_scenario_command(0, &pass()).unwrap();
     assert!(!batch.events.iter().any(|event| matches!(
         &event.ev,
         Some(Ev::StackObjectCountered(countered)) if countered.object_id == spell
@@ -343,7 +346,7 @@ fn issue_257_only_the_generated_bear_spell_resists_counterspell() {
     assert_eq!(gigantic.state.objects[&spell].zone, Zone::Battlefield);
 
     let (mut ordinary, spell) = counter_creature_spell(257_007, "grizzly_bears", 1, 1);
-    let batch = ordinary.apply_command(0, &pass()).unwrap();
+    let batch = ordinary.apply_scenario_command(0, &pass()).unwrap();
     assert!(batch.events.iter().any(|event| matches!(
         &event.ev,
         Some(Ev::StackObjectCountered(countered)) if countered.object_id == spell

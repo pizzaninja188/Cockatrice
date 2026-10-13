@@ -120,6 +120,9 @@ impl GameEngine {
             let mut next_payment = payment;
             next_payment.undo_history_start = self.state.undoable_mana_abilities.len();
             self.state.pending_resolution = Some(PendingResolution {
+                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                resolution_prompt_semantics: None,
+
                 deciding_player: next_player,
                 presentation: pending.presentation,
                 continuation: ResolutionContinuation::JoinForces {

@@ -1068,6 +1068,7 @@ impl GameEngine {
         out.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
@@ -1103,6 +1104,8 @@ impl GameEngine {
         self.state.pending_replacement_event =
             Some(PendingReplacementEvent::Counters(Box::new(batch)));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
             deciding_player,
             presentation: PendingResolutionPresentation {
                 source_object_id,
@@ -1198,6 +1201,7 @@ impl GameEngine {
         out.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
@@ -1233,6 +1237,8 @@ impl GameEngine {
         self.state.pending_replacement_event =
             Some(PendingReplacementEvent::Counters(Box::new(counter_batch)));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
             deciding_player,
             presentation: PendingResolutionPresentation {
                 source_object_id,
@@ -3014,6 +3020,7 @@ impl GameEngine {
         rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     variable_mana_contribution: false,
                     deciding_player_id: event.destination_controller,
                     source_object_id: event.object_id,
@@ -3064,6 +3071,8 @@ impl GameEngine {
             }),
         ));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
             deciding_player,
             presentation: PendingResolutionPresentation {
                 source_object_id,
@@ -3107,6 +3116,7 @@ impl GameEngine {
         rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     variable_mana_contribution: false,
                     deciding_player_id: event.destination_controller,
                     source_object_id: event.object_id,
@@ -3163,6 +3173,8 @@ impl GameEngine {
             }),
         ));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
             deciding_player,
             presentation: PendingResolutionPresentation {
                 source_object_id,
@@ -3759,6 +3771,7 @@ impl GameEngine {
         Some(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     deciding_player_id: entry.event.destination_controller,
                     source_object_id: entry.event.object_id,
                     prompt_text: pending.presentation.prompt.clone(),
@@ -3796,6 +3809,7 @@ impl GameEngine {
         Some(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     deciding_player_id: payer,
                     source_object_id: entry.event.object_id,
                     prompt_text: prompt,
@@ -3841,6 +3855,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
@@ -3873,6 +3888,7 @@ impl GameEngine {
             )),
         });
         let deciding_player = event.destination_controller;
+        let source_object_id = event.object_id;
         self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
             Box::new(PendingBattlefieldEntry {
                 event,
@@ -3883,9 +3899,11 @@ impl GameEngine {
             }),
         ));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
             deciding_player,
             presentation: PendingResolutionPresentation {
-                source_object_id: item.id,
+                source_object_id,
                 candidates: Vec::new(),
                 min: 1,
                 max: 1,
@@ -3973,6 +3991,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     variable_mana_contribution: false,
                     deciding_player_id: event.destination_controller,
                     source_object_id: event.object_id,
@@ -3996,6 +4015,9 @@ impl GameEngine {
             .copied()
             .unwrap_or(0);
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+
             deciding_player: event.destination_controller,
             presentation: PendingResolutionPresentation {
                 source_object_id: event.object_id,
@@ -4060,6 +4082,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
@@ -4100,6 +4123,7 @@ impl GameEngine {
             )),
         });
         let deciding_player = event.destination_controller;
+        let source_object_id = event.object_id;
         self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
             Box::new(PendingBattlefieldEntry {
                 event,
@@ -4110,9 +4134,11 @@ impl GameEngine {
             }),
         ));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
             deciding_player,
             presentation: PendingResolutionPresentation {
-                source_object_id: item.id,
+                source_object_id,
                 candidates: Vec::new(),
                 min: 0,
                 max: 1,
@@ -4152,6 +4178,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
@@ -4185,6 +4212,7 @@ impl GameEngine {
         });
         events.push(ev_log(prompt.clone()));
         let deciding_player = event.destination_controller;
+        let source_object_id = event.object_id;
         self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
             Box::new(PendingBattlefieldEntry {
                 event,
@@ -4195,9 +4223,11 @@ impl GameEngine {
             }),
         ));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
             deciding_player,
             presentation: PendingResolutionPresentation {
-                source_object_id: item.id,
+                source_object_id,
                 candidates: Vec::new(),
                 min: 1,
                 max: 1,
@@ -4736,6 +4766,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     variable_mana_contribution: false,
                     deciding_player_id: event.destination_controller,
                     source_object_id: event.object_id,
@@ -4753,6 +4784,7 @@ impl GameEngine {
         });
         events.push(ev_log(prompt.clone()));
         let deciding_player = event.destination_controller;
+        let source_object_id = event.object_id;
         self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
             Box::new(PendingBattlefieldEntry {
                 event,
@@ -4763,9 +4795,11 @@ impl GameEngine {
             }),
         ));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
             deciding_player,
             presentation: PendingResolutionPresentation {
-                source_object_id: stack.item.id,
+                source_object_id,
                 candidates: recipients,
                 min: 1,
                 max: 1,
@@ -5058,6 +5092,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
                     variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
@@ -5093,6 +5128,7 @@ impl GameEngine {
         });
         events.push(ev_log(prompt.clone()));
         let deciding_player = event.destination_controller;
+        let source_object_id = event.object_id;
         let entering_zone = self.state.objects[&event.object_id].zone;
         let entering_generation = self
             .state
@@ -5122,9 +5158,11 @@ impl GameEngine {
             }),
         ));
         self.state.pending_resolution = Some(PendingResolution {
+            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
             deciding_player,
             presentation: PendingResolutionPresentation {
-                source_object_id: item.id,
+                source_object_id,
                 candidates,
                 min: 0,
                 max: 1,
@@ -5351,6 +5389,7 @@ impl GameEngine {
                             events.push(rv1::RuledEvent {
                                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                                     rv1::ResolutionChoiceRequired {
+                                        resolution_prompt_id: 0,
                                         accepted_permanent_selections: Vec::new(),
                                         variable_mana_contribution: false,
                                         candidate_token_identities: Vec::new(),
@@ -5387,6 +5426,7 @@ impl GameEngine {
                             });
                             events.push(ev_log(prompt.clone()));
                             let deciding_player = event.destination_controller;
+                            let source_object_id = event.object_id;
                             self.state.pending_replacement_event =
                                 Some(PendingReplacementEvent::BattlefieldEntry(Box::new(
                                     PendingBattlefieldEntry {
@@ -5398,9 +5438,11 @@ impl GameEngine {
                                     },
                                 )));
                             self.state.pending_resolution = Some(PendingResolution {
+                                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                                resolution_prompt_semantics: None,
                                 deciding_player,
                                 presentation: PendingResolutionPresentation {
-                                    source_object_id: item.id,
+                                    source_object_id,
                                     candidates: candidate_ids,
                                     min: 1,
                                     max: 1,
@@ -5545,6 +5587,7 @@ impl GameEngine {
                     events.push(rv1::RuledEvent {
                         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                             rv1::ResolutionChoiceRequired {
+                                resolution_prompt_id: 0,
                                 accepted_permanent_selections: Vec::new(),
                                 variable_mana_contribution: false,
                                 candidate_token_identities: Vec::new(),
@@ -5578,6 +5621,7 @@ impl GameEngine {
                     });
                     events.push(ev_log(prompt.clone()));
                     let deciding_player = event.deciding_player;
+                    let source_object_id = event.object_id;
                     self.state.pending_replacement_event =
                         Some(PendingReplacementEvent::BattlefieldEntry(Box::new(
                             PendingBattlefieldEntry {
@@ -5589,9 +5633,11 @@ impl GameEngine {
                             },
                         )));
                     self.state.pending_resolution = Some(PendingResolution {
+                        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                        resolution_prompt_semantics: None,
                         deciding_player,
                         presentation: PendingResolutionPresentation {
-                            source_object_id: item.id,
+                            source_object_id,
                             candidates: application_ids,
                             min: 1,
                             max: 1,

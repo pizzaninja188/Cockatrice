@@ -3,9 +3,10 @@
 //! Oracle and rulings checked 2026-09-25; Scryfall returned no rulings for this Oracle identity.
 //! CR 605.1a and 605.3b govern its activated mana ability. CR 603.6c and 603.10a govern its
 //! battlefield-to-graveyard trigger.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 
 type ManaPool = (u32, u32, u32, u32, u32, u32);
@@ -64,7 +65,7 @@ fn chromatic_star_pays_for_each_color_and_draws_when_sacrificed() {
         let unpaid = activate_with_mana_option(&engine, star, option as u32);
         let command_index_before = engine.state.command_index;
         engine
-            .apply_command(0, &unpaid)
+            .apply_scenario_command(0, &unpaid)
             .expect_err("Chromatic Star requires one generic mana");
         assert_eq!(engine.state.command_index, command_index_before);
         assert_eq!(mana_pool(&engine), (0, 0, 0, 0, 0, 0));

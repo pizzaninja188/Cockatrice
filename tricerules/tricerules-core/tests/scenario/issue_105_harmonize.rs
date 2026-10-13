@@ -1,3 +1,4 @@
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
 use tricerules_core::state::{AffectedScope, ContinuousEffect, SpellCastMethod};
@@ -90,7 +91,7 @@ fn harmonize_publishes_owner_only_candidates_and_commits_tap_with_reduced_paymen
     let opponent_bear = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     engine.state.players[0].mana_pool.colorless = 3;
     let legal_batch = engine
-        .apply_command(0, &activate_ability(island, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(island, 0, vec![]))
         .expect("activate Island for the blue pip");
     let action = legal_batch.legal_by_player[&0]
         .zone_cast_actions
@@ -123,7 +124,7 @@ fn harmonize_publishes_owner_only_candidates_and_commits_tap_with_reduced_paymen
 
     let before_hand = engine.state.players[0].hand.len();
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &harmonize_cast(&engine, whisper, Some((bear, generation))),
         )
@@ -152,7 +153,7 @@ fn full_cost_harmonize_does_not_tap_a_candidate() {
         },
     );
     engine
-        .apply_command(0, &harmonize_cast(&engine, whisper, None))
+        .apply_scenario_command(0, &harmonize_cast(&engine, whisper, None))
         .expect("pay the full {5}{U}");
     assert!(!engine.state.objects[&bear].tapped);
     assert_eq!(engine.state.objects[&whisper].zone, Zone::Stack);
@@ -164,7 +165,7 @@ fn harmonize_obeys_sorcery_timing_and_current_priority() {
     let island = inject_permanent_on_battlefield(&mut engine, 0, "island");
     engine.state.turn_step = tricerules_core::TurnStep::Upkeep;
     let upkeep = engine
-        .apply_command(0, &activate_ability(island, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(island, 0, vec![]))
         .expect("activate mana ability in upkeep");
     assert!(!upkeep.legal_by_player[&0]
         .zone_cast_actions
@@ -172,7 +173,9 @@ fn harmonize_obeys_sorcery_timing_and_current_priority() {
         .any(|action| action.object_id == whisper));
 
     engine.state.turn_step = tricerules_core::TurnStep::Main1;
-    let passed = engine.apply_command(0, &pass()).expect("pass priority");
+    let passed = engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass priority");
     assert!(!passed.legal_by_player[&0]
         .zone_cast_actions
         .iter()
@@ -196,13 +199,13 @@ fn missing_or_wrong_cast_method_is_rejected_for_the_source_zone() {
         panic!("cast command")
     };
     cast.cast_method = CastMethod::Unspecified as i32;
-    assert!(engine.apply_command(0, &missing).is_err());
+    assert!(engine.apply_scenario_command(0, &missing).is_err());
     let mut normal = harmonize_cast(&engine, whisper, None);
     let Some(Cmd::CastSpell(cast)) = normal.cmd.as_mut() else {
         panic!("cast command")
     };
     cast.cast_method = CastMethod::Normal as i32;
-    assert!(engine.apply_command(0, &normal).is_err());
+    assert!(engine.apply_scenario_command(0, &normal).is_err());
     assert_eq!(engine.state.objects[&whisper].zone, Zone::Graveyard);
 }
 
@@ -221,14 +224,14 @@ fn forged_or_unaffordable_harmonize_is_atomic() {
         },
     );
     assert!(engine
-        .apply_command(0, &harmonize_cast(&engine, whisper, Some((land, 0))))
+        .apply_scenario_command(0, &harmonize_cast(&engine, whisper, Some((land, 0))))
         .is_err());
     assert!(!engine.state.objects[&bear].tapped);
     assert!(!engine.state.objects[&land].tapped);
     assert_eq!(engine.state.objects[&whisper].zone, Zone::Graveyard);
 
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &harmonize_cast(&engine, whisper, Some((opponent_bear, 0)))
         )
@@ -238,7 +241,7 @@ fn forged_or_unaffordable_harmonize_is_atomic() {
 
     engine.state.objects.get_mut(&bear).unwrap().tapped = true;
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &harmonize_cast(&engine, whisper, Some((bear, generation)))
         )
@@ -250,7 +253,7 @@ fn forged_or_unaffordable_harmonize_is_atomic() {
     engine.state.players[0].mana_pool.colorless = 2;
     let before_pool = engine.state.players[0].mana_pool;
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &harmonize_cast(&engine, whisper, Some((bear, generation)))
         )
@@ -296,7 +299,7 @@ fn stale_harmonize_selection_rejects_without_tapping_spending_or_moving() {
         .insert(bear, generation + 1);
     let before_pool = engine.state.players[0].mana_pool;
     let err = engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &harmonize_cast(&engine, whisper, Some((bear, generation))),
         )
@@ -357,7 +360,9 @@ fn normal_hand_cast_does_not_receive_harmonize_stack_exit_replacement() {
         panic!("cast helper")
     };
     assert_eq!(cast.cast_method, CastMethod::Normal as i32);
-    engine.apply_command(0, &command).expect("normal cast");
+    engine
+        .apply_scenario_command(0, &command)
+        .expect("normal cast");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&oid].zone, Zone::Graveyard);
 }
@@ -407,15 +412,17 @@ fn countered_harmonize_spell_is_exiled() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &harmonize_cast(&engine, whisper, Some((bear, generation))),
         )
         .expect("cast with Harmonize");
-    engine.apply_command(0, &pass()).expect("pass to counterer");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("pass to counterer");
     let counter_slot = hand_index_for_card(&engine, 1, "counterspell");
     engine
-        .apply_command(1, &cast_spell(counter_slot, target_object(whisper)))
+        .apply_scenario_command(1, &cast_spell(counter_slot, target_object(whisper)))
         .expect("counter Harmonize spell");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&whisper].zone, Zone::Exile);
@@ -459,7 +466,7 @@ fn mammoth_bellow_reduces_only_generic_and_creates_one_five_five_elephant() {
         },
     );
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &harmonize_cast(&engine, bellow, Some((angel, generation))),
         )
@@ -499,7 +506,9 @@ fn harmonize_command_replays_with_method_and_selected_permanent() {
             cast.cast_cost_group_selections[0].selected_object,
             Some(SelectedObject::PermanentId(oid)) if oid == bear
         ));
-        engine.apply_command(0, &command).expect("replay cast");
+        engine
+            .apply_scenario_command(0, &command)
+            .expect("replay cast");
         let method = engine.state.stack.last().unwrap().cast_method;
         resolve_entire_stack_two_player(&mut engine);
         (

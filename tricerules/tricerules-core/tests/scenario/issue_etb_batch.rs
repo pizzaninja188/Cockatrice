@@ -5,6 +5,7 @@
 //! reviewed printed Oracle behavior. Governance: CR 603.6a (entry triggers), 603.7/700.4 (dies
 //! triggers), 121.1 (draw), 701.13 (mill), 119.3 (life gain/loss), 122.1 (counters), 111.10 (token
 //! definitions), 701.18/701.23 (search), and 608.2c (printed instruction order).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -44,6 +45,7 @@ fn submit_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(
             tricerules_proto::ruled::v1::SubmitResolutionChoice {
+                resolution_prompt_id: 0,
                 chosen_object_ids: Vec::new(),
                 selected_branch_index: index,
                 decision: ResolutionChoiceDecision::SelectBranch as i32,
@@ -102,7 +104,7 @@ fn issue_etb_sunshower_druid() {
         1,
         "entry trigger waits for a target"
     );
-    e.apply_command(0, &choose_trigger_target(target))
+    e.apply_scenario_command(0, &choose_trigger_target(target))
         .expect("choose the target creature");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(
@@ -120,7 +122,7 @@ fn issue_etb_sunshower_druid() {
     let life_before = fizzle.state.players[0].life;
     cast_creature(&mut fizzle, "sunshower_druid");
     fizzle
-        .apply_command(0, &choose_trigger_target(target))
+        .apply_scenario_command(0, &choose_trigger_target(target))
         .expect("choose the target creature");
     fizzle.state.players[0]
         .battlefield
@@ -143,7 +145,7 @@ fn issue_etb_vault_plunderer() {
     let life_before = e.state.players[1].life;
     cast_creature(&mut e, "vault_plunderer");
     assert_eq!(e.state.pending_triggers.len(), 1);
-    e.apply_command(0, &choose_trigger_player(1))
+    e.apply_scenario_command(0, &choose_trigger_player(1))
         .expect("target the opponent player");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.players[1].hand.len(), hand_before + 1);
@@ -154,7 +156,7 @@ fn issue_etb_vault_plunderer() {
     let hand_before = own.state.players[0].hand.len();
     let life_before = own.state.players[0].life;
     cast_creature(&mut own, "vault_plunderer");
-    own.apply_command(0, &choose_trigger_player(0))
+    own.apply_scenario_command(0, &choose_trigger_player(0))
         .expect("target the caster");
     resolve_entire_stack_two_player(&mut own);
     assert_eq!(own.state.players[0].hand.len(), hand_before + 1);
@@ -167,8 +169,11 @@ fn issue_etb_fierce_empath() {
     let big = inject_library_card(&mut e, 0, "craw_wurm");
     let small = inject_library_card(&mut e, 0, "grizzly_bears");
     cast_creature(&mut e, "fierce_empath");
-    e.apply_command(0, &pass()).expect("trigger resolves");
-    let batch = e.apply_command(1, &pass()).expect("park for the search");
+    e.apply_scenario_command(0, &pass())
+        .expect("trigger resolves");
+    let batch = e
+        .apply_scenario_command(1, &pass())
+        .expect("park for the search");
     let prompt = find_resolution_choice(&batch).expect("optional search prompt");
     assert_eq!(prompt.choice_kind(), ChoiceKind::ResolutionBranch);
     let batch = semantic::accepted(&mut e, 0, &submit_branch(0));
@@ -184,9 +189,11 @@ fn issue_etb_fierce_empath() {
     let hand_before = decline.state.players[0].hand.len();
     let library_before = decline.state.players[0].library.len();
     cast_creature(&mut decline, "fierce_empath");
-    decline.apply_command(0, &pass()).expect("trigger resolves");
+    decline
+        .apply_scenario_command(0, &pass())
+        .expect("trigger resolves");
     let batch = decline
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("park for the search");
     let prompt = find_resolution_choice(&batch).expect("optional search prompt");
     assert_eq!(prompt.choice_kind(), ChoiceKind::ResolutionBranch);
@@ -238,7 +245,7 @@ fn issue_etb_agents_of_hydra() {
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.objects[&hydra].zone, Zone::Battlefield);
     e.state.objects.get_mut(&hydra).expect("source").damage = 99;
-    e.apply_command(0, &pass())
+    e.apply_scenario_command(0, &pass())
         .expect("state-based actions destroy the source");
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.objects[&hydra].zone, Zone::Graveyard);

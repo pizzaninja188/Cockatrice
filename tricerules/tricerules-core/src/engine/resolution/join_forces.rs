@@ -46,6 +46,9 @@ pub(super) fn begin(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError>
     };
     let prompt = format!("{}: Choose how much mana to contribute.", cx.spell_label);
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+
         deciding_player: first_payer,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,

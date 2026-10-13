@@ -64,6 +64,7 @@ pub(super) fn counter_target_spell(
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        resolution_prompt_id: 0,
                         accepted_permanent_selections: Vec::new(),
                         variable_mana_contribution: false,
                         candidate_token_identities: Vec::new(),
@@ -96,6 +97,8 @@ pub(super) fn counter_target_spell(
                 )),
             });
             engine.state.pending_resolution = Some(PendingResolution {
+                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+                resolution_prompt_semantics: None,
                 deciding_player,
                 presentation: PendingResolutionPresentation {
                     source_object_id: cx.top.id,
@@ -190,6 +193,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 unique_names: false,
             };
             let event = rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -276,6 +280,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 unique_names: false,
             };
             let event = rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
                 variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
@@ -329,6 +334,8 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
         "P{deciding_player} must decide whether to pay {ward_text}."
     )));
     cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
         deciding_player,
         presentation,
         continuation: ResolutionContinuation::WardPayment {
@@ -776,7 +783,7 @@ mod cast_color_tests {
         engine.state.players[0].mana_pool.white = 1;
         engine.state.players[0].mana_pool.blue = 1;
         engine
-            .apply_command(
+            .apply_scenario_command(
                 0,
                 &rv1::RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
@@ -833,7 +840,7 @@ mod cast_color_tests {
             for _ in 0..2 {
                 let actor = engine.state.priority_player_id();
                 engine
-                    .apply_command(
+                    .apply_scenario_command(
                         actor,
                         &rv1::RuledCommand {
                             cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),

@@ -4,6 +4,7 @@
 //! revealing, CR 404.3 governs ordering multiple cards entering a graveyard, CR 609.3 governs a
 //! short library, and CR 400.7 governs zone-change identity. This is a `Look` partition, not the
 //! `Surveil` keyword (CR 701.25), so completion must not emit a Surveilled event or trigger.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{
@@ -48,10 +49,10 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
     let first = engine.state.priority_player_id();
     let second = 1 - first;
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first pass on ETB stack item");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second pass resolves ETB stack item")
 }
 
@@ -126,7 +127,7 @@ fn issue_290_retains_selected_one_and_preserves_top_and_graveyard_order() {
         assert_no_surveil(&parked);
 
         let completion = engine
-            .apply_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
             .expect("retain one card on top");
 
         assert!(engine.state.pending_resolution.is_none());
@@ -179,7 +180,7 @@ fn issue_290_retains_none_and_moves_all_three_in_order() {
     assert_eq!((choice.min, choice.max), (2, 3));
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(top.clone()))
+        .apply_scenario_command(0, &submit_resolution_choice(top.clone()))
         .expect("retain no card on top");
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.stack.is_empty());
@@ -201,7 +202,7 @@ fn issue_290_short_library_clamps_choice_to_available_cards() {
     assert_no_surveil(&parked);
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
         .expect("put one short-library card in the graveyard");
     assert_eq!(engine.state.players[0].graveyard, vec![top[0]]);
     assert_eq!(engine.state.players[0].library.front(), Some(&top[1]));
@@ -222,10 +223,10 @@ fn issue_290_same_seed_produces_the_same_private_choice_and_completion() {
     assert_eq!(top_left, top_right);
     assert_eq!(choice_left, choice_right);
     let left_completion = left
-        .apply_command(0, &submit_resolution_choice(vec![top_left[0], top_left[1]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top_left[0], top_left[1]]))
         .expect("left deterministic completion");
     let right_completion = right
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(vec![top_right[0], top_right[1]]),
         )
@@ -267,7 +268,7 @@ fn issue_290_rejects_unauthorized_noncandidate_and_duplicate_choices_atomically(
     ] {
         assert!(
             matches!(
-                engine.apply_command(player, &submit_resolution_choice(chosen)),
+                engine.apply_scenario_command(player, &submit_resolution_choice(chosen)),
                 Err(EngineError::Illegal(_))
             ),
             "{label} must be rejected"
@@ -289,7 +290,7 @@ fn issue_290_rejects_unauthorized_noncandidate_and_duplicate_choices_atomically(
     }
 
     engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
         .expect("valid choice after rejected submissions");
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.players[0].graveyard, vec![top[0], top[1]]);
@@ -316,7 +317,7 @@ fn issue_290_rejects_a_stale_zone_generation_even_when_the_card_returns_to_the_t
     );
     assert!(
         matches!(
-            engine.apply_command(0, &submit_resolution_choice(vec![top[0], top[1]])),
+            engine.apply_scenario_command(0, &submit_resolution_choice(vec![top[0], top[1]])),
             Err(EngineError::Illegal(_))
         ),
         "the choice must bind the original physical generation"
@@ -359,7 +360,7 @@ fn issue_290_look_is_private_and_does_not_fire_a_surveil_trigger() {
     assert_no_surveil(&parked);
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0], top[1]]))
         .expect("finish private look partition");
     assert!(engine.state.pending_triggers.is_empty());
     assert!(engine.state.staged_trigger_groups.is_empty());

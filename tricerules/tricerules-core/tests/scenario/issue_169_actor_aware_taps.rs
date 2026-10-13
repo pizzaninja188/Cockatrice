@@ -1,4 +1,5 @@
 //! CR 701.26, 603.2c/e: instructed-player tap attribution and action-local multiplicity.
+use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
 use tricerules_cards::primitives::{
     CastTriggerPlayer, ContinuousEffectKind, EffectDuration, RelativePlayerSet,
@@ -51,7 +52,9 @@ fn cast_card(engine: &mut GameEngine, card: &str) {
         },
     );
     let slot = hand_index_for_card(engine, 0, card);
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(engine);
 }
 
@@ -64,8 +67,12 @@ fn sanctuary_etb_uses_one_target_and_publishes_a_separate_friendly_counter_targe
         engine.state.objects.get_mut(&enemy).unwrap().tapped = already_tapped;
         cast_card(&mut engine, "solitary_sanctuary");
         assert_eq!(engine.state.pending_triggers.len(), 1);
-        assert!(engine.apply_command(0, &choose_target(friend)).is_err());
-        engine.apply_command(0, &choose_target(enemy)).unwrap();
+        assert!(engine
+            .apply_scenario_command(0, &choose_target(friend))
+            .is_err());
+        engine
+            .apply_scenario_command(0, &choose_target(enemy))
+            .unwrap();
         pass_both_players(&mut engine);
         assert!(engine.state.objects[&enemy].tapped);
         assert_eq!(
@@ -77,8 +84,12 @@ fn sanctuary_etb_uses_one_target_and_publishes_a_separate_friendly_counter_targe
             assert!(engine.state.stack.is_empty());
         } else {
             assert_eq!(engine.state.pending_triggers.len(), 1);
-            assert!(engine.apply_command(0, &choose_target(enemy)).is_err());
-            engine.apply_command(0, &choose_target(friend)).unwrap();
+            assert!(engine
+                .apply_scenario_command(0, &choose_target(enemy))
+                .is_err());
+            engine
+                .apply_scenario_command(0, &choose_target(friend))
+                .unwrap();
             pass_both_players(&mut engine);
             assert_eq!(
                 engine.state.objects[&friend].counter_count(CounterKind::PlusOnePlusOne),
@@ -95,7 +106,9 @@ fn sharae_etb_stuns_already_tapped_targets_and_only_real_taps_spend_its_limit() 
         let enemy = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
         engine.state.objects.get_mut(&enemy).unwrap().tapped = already_tapped;
         cast_card(&mut engine, "sharae_of_numbing_depths");
-        engine.apply_command(0, &choose_target(enemy)).unwrap();
+        engine
+            .apply_scenario_command(0, &choose_target(enemy))
+            .unwrap();
         let hand = engine.state.players[0].hand.len();
         resolve_entire_stack_two_player(&mut engine);
         assert_eq!(
@@ -129,7 +142,7 @@ fn icewrought_payment_precedes_reflexive_targeting_and_tap_precedes_pump() {
         pass_both_players(&mut engine);
     }
     engine
-        .apply_command(0, &declare_attackers(vec![sentry]))
+        .apply_scenario_command(0, &declare_attackers(vec![sentry]))
         .unwrap();
     assert!(!engine.state.objects[&sentry].tapped, "vigilance");
     assert!(
@@ -138,10 +151,11 @@ fn icewrought_payment_precedes_reflexive_targeting_and_tap_precedes_pump() {
     );
     pass_both_players(&mut engine);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: ResolutionChoiceDecision::SelectBranch as i32,
                     selected_branch_index: 0,
                     ..Default::default()
@@ -163,7 +177,9 @@ fn icewrought_payment_precedes_reflexive_targeting_and_tap_precedes_pump() {
     );
     submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana).unwrap();
     assert_eq!(engine.state.pending_triggers.len(), 1);
-    engine.apply_command(0, &choose_target(enemy)).unwrap();
+    engine
+        .apply_scenario_command(0, &choose_target(enemy))
+        .unwrap();
     assert!(
         !engine.state.objects[&enemy].tapped,
         "reflexive trigger may be responded to"
@@ -211,7 +227,7 @@ fn frost_breath(engine: &mut GameEngine, targets: &[u32]) {
     );
     let slot = hand_index_for_card(engine, 0, "frost_breath");
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &cast_spell(
                 slot,
@@ -305,7 +321,7 @@ fn cryptic_mass_tap_counts_creatures_once_and_sharae_once() {
     let hand = engine.state.players[0].hand.len();
     let slot = hand_index_for_card(&engine, 0, "cryptic_command");
     engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(2, vec![]), (3, vec![])]))
+        .apply_scenario_command(0, &cast_modal_spell(slot, vec![(2, vec![]), (3, vec![])]))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.state.objects[&first].tapped && engine.state.objects[&second].tapped);
@@ -325,7 +341,7 @@ fn resolution_payment_uses_the_deciding_player_not_the_stack_controller() {
     let enemy = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     inject_card_into_hand(&mut engine, 0, "command_bridge");
     let slot = hand_index_for_card(&engine, 0, "command_bridge");
-    engine.apply_command(0, &play_land(slot)).unwrap();
+    engine.apply_scenario_command(0, &play_land(slot)).unwrap();
     pass_both_players(&mut engine);
     // Tangle Wire-shaped fixture: the ability belongs to P0, but P1 is instructed to tap.
     // Exercise the existing resolution payment path, without introducing a new card/picker.
@@ -336,10 +352,11 @@ fn resolution_payment_uses_the_deciding_player_not_the_stack_controller() {
         .unwrap()
         .deciding_player = 1;
     engine
-        .apply_command(
+        .apply_scenario_command(
             1,
             &RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: ResolutionChoiceDecision::SelectBranch as i32,
                     selected_branch_index: 0,
                     ..Default::default()
@@ -348,7 +365,7 @@ fn resolution_payment_uses_the_deciding_player_not_the_stack_controller() {
         )
         .unwrap();
     engine
-        .apply_command(1, &submit_resolution_choice(vec![enemy]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![enemy]))
         .unwrap();
     assert!(engine.state.objects[&enemy].tapped);
     assert!(engine.state.stack.is_empty(), "P0 did not tap the creature");
@@ -371,22 +388,23 @@ fn sentry_can_decline_payment_and_illegal_reflexive_targets_do_not_tap() {
             pass_both_players(&mut engine);
         }
         engine
-            .apply_command(0, &declare_attackers(vec![sentry]))
+            .apply_scenario_command(0, &declare_attackers(vec![sentry]))
             .unwrap();
         pass_both_players(&mut engine);
         if decline {
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &submit_resolution_decision(ResolutionChoiceDecision::Decline),
                 )
                 .unwrap();
         } else {
             engine
-                .apply_command(
+                .apply_scenario_command(
                     0,
                     &RuledCommand {
                         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                            resolution_prompt_id: 0,
                             decision: ResolutionChoiceDecision::SelectBranch as i32,
                             selected_branch_index: 0,
                             ..Default::default()
@@ -404,8 +422,12 @@ fn sentry_can_decline_payment_and_illegal_reflexive_targets_do_not_tap() {
             );
             submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
                 .unwrap();
-            assert!(engine.apply_command(0, &choose_target(sentry)).is_err());
-            engine.apply_command(0, &choose_target(enemy)).unwrap();
+            assert!(engine
+                .apply_scenario_command(0, &choose_target(sentry))
+                .is_err());
+            engine
+                .apply_scenario_command(0, &choose_target(enemy))
+                .unwrap();
             // Target ceases to be legal before the separate reflexive ability resolves.
             engine.state.objects.get_mut(&enemy).unwrap().zone = tricerules_core::Zone::Graveyard;
             engine.state.players[1]
@@ -443,7 +465,7 @@ fn accepted_targeted_and_mass_tap_commands_replay_with_identical_batches_and_act
         player: i32,
         command: RuledCommand,
     ) {
-        let batch = engine.apply_command(player, &command).unwrap();
+        let batch = engine.apply_scenario_command(player, &command).unwrap();
         log.push((player, command, batch));
     }
     let dev = |target, payload| RuledCommand {
@@ -517,7 +539,7 @@ fn accepted_targeted_and_mass_tap_commands_replay_with_identical_batches_and_act
             )
         };
         let before = engine.initial_response_batch();
-        assert!(engine.apply_command(0, &invalid).is_err());
+        assert!(engine.apply_scenario_command(0, &invalid).is_err());
         assert_eq!(engine.initial_response_batch(), before);
         record(&mut engine, &mut log, 0, valid);
         for player in [0, 1, 0, 1] {
@@ -527,7 +549,10 @@ fn accepted_targeted_and_mass_tap_commands_replay_with_identical_batches_and_act
         assert_eq!(engine.state.next_tap_action_id, 1);
         let mut replay = fresh();
         for (player, command, batch) in log {
-            assert_eq!(replay.apply_command(player, &command).unwrap(), batch);
+            assert_eq!(
+                replay.apply_scenario_command(player, &command).unwrap(),
+                batch
+            );
         }
         assert_eq!(
             replay.state.next_tap_action_id,

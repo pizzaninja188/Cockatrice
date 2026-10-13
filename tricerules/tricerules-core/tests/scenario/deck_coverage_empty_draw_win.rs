@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use prost::Message;
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1 as rv1;
@@ -36,7 +37,7 @@ fn paid_spell(engine: &mut GameEngine, card: &str) -> u32 {
         .position(|&id| id == oid)
         .unwrap();
     engine
-        .apply_command(caster, &cast_spell(slot, Vec::new()))
+        .apply_scenario_command(caster, &cast_spell(slot, Vec::new()))
         .unwrap();
     oid
 }
@@ -49,7 +50,12 @@ fn resolve(engine: &mut GameEngine, oid: u32) -> Vec<rv1::RuledEvent> {
             return events;
         }
         let actor = engine.state.priority_player_id();
-        events.extend(engine.apply_command(actor, &pass()).unwrap().events);
+        events.extend(
+            engine
+                .apply_scenario_command(actor, &pass())
+                .unwrap()
+                .events,
+        );
     }
     panic!("resolution did not finish");
 }
@@ -90,7 +96,7 @@ fn jace_paid_minus_eight_checks_empty_library_after_source_leaves_before_losses(
         engine.state.players[0].library.truncate(remaining);
         let hand = engine.state.players[0].hand.len();
         let command = activate_ability_for(&engine, jace, 1, Vec::new());
-        engine.apply_command(4, &command).unwrap();
+        engine.apply_scenario_command(4, &command).unwrap();
         assert_eq!(engine.state.objects[&jace].zone, Zone::Graveyard);
         let ability = engine.state.stack.last().unwrap().id;
         let events = resolve(&mut engine, ability);
@@ -117,7 +123,7 @@ fn jace_paid_minus_eight_checks_empty_library_after_source_leaves_before_losses(
 fn resolve_until_choice(engine: &mut GameEngine) -> rv1::ResolutionChoiceRequired {
     for _ in 0..16 {
         let actor = engine.state.priority_player_id();
-        let batch = engine.apply_command(actor, &pass()).unwrap();
+        let batch = engine.apply_scenario_command(actor, &pass()).unwrap();
         if let Some(choice) = find_resolution_choice(&batch) {
             return choice.clone();
         }
@@ -162,7 +168,7 @@ fn empty_draw_win_both_replacement_orders_stop_children_and_reject_invalid_answe
                 (4, submit_resolution_choice(vec![selected, selected])),
                 (4, submit_resolution_choice(vec![u32::MAX])),
             ] {
-                assert!(engine.apply_command(actor, &command).is_err());
+                assert!(engine.apply_scenario_command(actor, &command).is_err());
                 assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
             }
             let mut extra = submit_resolution_choice(vec![selected]);
@@ -171,7 +177,7 @@ fn empty_draw_win_both_replacement_orders_stop_children_and_reject_invalid_answe
             {
                 answer.chosen_player_ids.push(9);
             }
-            assert!(engine.apply_command(4, &extra).is_err());
+            assert!(engine.apply_scenario_command(4, &extra).is_err());
             assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
             *engine
                 .state
@@ -186,7 +192,7 @@ fn empty_draw_win_both_replacement_orders_stop_children_and_reject_invalid_answe
                 .unwrap()
                 .application_id;
             assert!(engine
-                .apply_command(4, &submit_resolution_choice(vec![old_win]))
+                .apply_scenario_command(4, &submit_resolution_choice(vec![old_win]))
                 .is_err());
             assert_eq!(engine.diagnostic_snapshot().unwrap(), stale);
             *engine
@@ -195,7 +201,7 @@ fn empty_draw_win_both_replacement_orders_stop_children_and_reject_invalid_answe
                 .get_mut(&source)
                 .unwrap() -= 2;
             let batch = engine
-                .apply_command(4, &submit_resolution_choice(vec![selected]))
+                .apply_scenario_command(4, &submit_resolution_choice(vec![selected]))
                 .unwrap();
             assert_eq!(engine.state.winner(), Some(4));
             assert!(find_resolution_choice(&batch).is_none());
@@ -256,7 +262,7 @@ fn maniac_nonactive_apnap_winner_stops_later_players_and_staged_draw_triggers() 
         engine.state.players[seat].library.clear();
     }
     engine
-        .apply_command(4, &activate_ability(beleren, 0, Vec::new()))
+        .apply_scenario_command(4, &activate_ability(beleren, 0, Vec::new()))
         .unwrap();
     let ability = engine.state.stack.last().unwrap().id;
     let hands = engine
@@ -295,7 +301,7 @@ fn maniac_scheduled_empty_draw_wins_without_step_completion_priority_or_loss() {
     let mut last = None;
     for _ in 0..3 {
         let actor = engine.state.priority_player_id();
-        last = Some(engine.apply_command(actor, &pass()).unwrap());
+        last = Some(engine.apply_scenario_command(actor, &pass()).unwrap());
     }
     let batch = last.unwrap();
     assert_eq!(engine.state.winner(), Some(4));
@@ -330,14 +336,14 @@ fn jace_plus_one_mills_chosen_player_before_controller_draw_and_illegal_target_c
             let expected_draw = engine.state.players[0].library[usize::from(target == 4) * 2];
             let hand = engine.state.players[0].hand.clone();
             let command = activate_ability_for(&engine, jace, 0, target_player(target));
-            engine.apply_command(4, &command).unwrap();
+            engine.apply_scenario_command(4, &command).unwrap();
             assert_eq!(
                 engine.state.objects[&jace].counters[&tricerules_cards::CounterKind::Loyalty],
                 5
             );
             let ability = engine.state.stack.last().unwrap().id;
             if departed {
-                engine.apply_command(9, &concede()).unwrap();
+                engine.apply_scenario_command(9, &concede()).unwrap();
             }
             resolve(&mut engine, ability);
             assert!(engine.state.winner().is_none());
@@ -361,12 +367,12 @@ fn jace_insufficient_loyalty_is_atomic_and_self_mill_can_reach_empty_draw_win() 
     resolve(&mut engine, jace);
     let before = engine.diagnostic_snapshot().unwrap();
     let command = activate_ability_for(&engine, jace, 1, Vec::new());
-    assert!(engine.apply_command(4, &command).is_err());
+    assert!(engine.apply_scenario_command(4, &command).is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     engine.state.players[0].library.truncate(2);
     let hand = engine.state.players[0].hand.clone();
     let command = activate_ability_for(&engine, jace, 0, target_player(4));
-    engine.apply_command(4, &command).unwrap();
+    engine.apply_scenario_command(4, &command).unwrap();
     let ability = engine.state.stack.last().unwrap().id;
     resolve(&mut engine, ability);
     assert_eq!(engine.state.winner(), Some(4));
@@ -390,7 +396,7 @@ fn serialized_terminal_draw_choices_use_fresh_handles_and_replay_exact_batches()
     let initial = loop {
         let actor = engine.state.priority_player_id();
         let command = pass();
-        let batch = engine.apply_command(actor, &command).unwrap();
+        let batch = engine.apply_scenario_command(actor, &command).unwrap();
         let choice = find_resolution_choice(&batch);
         recorded.push((actor, command, batch));
         if let Some(choice) = choice {
@@ -410,7 +416,7 @@ fn serialized_terminal_draw_choices_use_fresh_handles_and_replay_exact_batches()
         .unwrap()
         .application_id;
     let command = submit_resolution_choice(vec![reflection]);
-    let batch = engine.apply_command(4, &command).unwrap();
+    let batch = engine.apply_scenario_command(4, &command).unwrap();
     let child = find_resolution_choice(&batch).unwrap().clone();
     recorded.push((4, command, batch));
     assert_eq!(child.replacement_options.len(), 2);
@@ -420,25 +426,28 @@ fn serialized_terminal_draw_choices_use_fresh_handles_and_replay_exact_batches()
         .all(|id| !initial.candidate_object_ids.contains(id)));
     let before = engine.diagnostic_snapshot().unwrap();
     assert!(engine
-        .apply_command(4, &submit_resolution_choice(vec![old_win]))
+        .apply_scenario_command(4, &submit_resolution_choice(vec![old_win]))
         .is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     let command = submit_resolution_choice(vec![child.candidate_object_ids[0]]);
-    let batch = engine.apply_command(4, &command).unwrap();
+    let batch = engine.apply_scenario_command(4, &command).unwrap();
     assert_eq!(engine.state.winner(), Some(4));
     assert!(batch.legal_by_player.is_empty());
     recorded.push((4, command, batch));
     let mut replay = fresh();
     for (actor, command, batch) in recorded {
         let decoded = rv1::RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
-        assert_eq!(replay.apply_command(actor, &decoded).unwrap(), batch);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &decoded).unwrap(),
+            batch
+        );
     }
     assert_eq!(
         replay.diagnostic_snapshot().unwrap(),
         engine.diagnostic_snapshot().unwrap()
     );
     let before = engine.diagnostic_snapshot().unwrap();
-    assert!(engine.apply_command(4, &pass()).is_err());
+    assert!(engine.apply_scenario_command(4, &pass()).is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
 }
 
@@ -576,7 +585,7 @@ fn parked_empty_draw_win_revalidates_face_control_suppression_copy_and_library()
         }
         let before = engine.diagnostic_snapshot().unwrap();
         assert!(engine
-            .apply_command(4, &submit_resolution_choice(vec![old]))
+            .apply_scenario_command(4, &submit_resolution_choice(vec![old]))
             .is_err());
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
         if mode == 4 {
@@ -587,7 +596,7 @@ fn parked_empty_draw_win_revalidates_face_control_suppression_copy_and_library()
                 .unwrap()
                 .application_id;
             let batch = engine
-                .apply_command(4, &submit_resolution_choice(vec![double]))
+                .apply_scenario_command(4, &submit_resolution_choice(vec![double]))
                 .unwrap();
             assert_eq!(engine.state.winner(), Some(4));
             assert_eq!(engine.state.players[0].hand.len(), hand.len() + 1);
@@ -624,13 +633,13 @@ fn discard_destination_commits_before_empty_draw_win_with_library_of_leng() {
         let discard = resolve_until_choice(&mut engine);
         assert_eq!(discard.choice_kind(), rv1::ChoiceKind::HandCards);
         let batch = engine
-            .apply_command(4, &submit_resolution_choice(vec![discarded]))
+            .apply_scenario_command(4, &submit_resolution_choice(vec![discarded]))
             .unwrap();
         let choice = find_resolution_choice(&batch).unwrap();
         assert_eq!(choice.choice_kind(), rv1::ChoiceKind::PrivateReplacement);
         assert_eq!(engine.state.objects[&discarded].zone, Zone::Hand);
         engine
-            .apply_command(4, &submit_resolution_choice(vec![destination]))
+            .apply_scenario_command(4, &submit_resolution_choice(vec![destination]))
             .unwrap();
         assert_eq!(engine.state.winner(), Some(4));
         assert_eq!(
@@ -666,7 +675,7 @@ fn final_concession_publishes_one_terminal_result() {
         true,
     )
     .unwrap();
-    let batch = engine.apply_command(9, &concede()).unwrap();
+    let batch = engine.apply_scenario_command(9, &concede()).unwrap();
     assert_eq!(engine.state.winner(), Some(4));
     assert_eq!(
         batch

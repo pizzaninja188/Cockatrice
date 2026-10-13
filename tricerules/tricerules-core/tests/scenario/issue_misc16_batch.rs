@@ -7,6 +7,7 @@
 //! and Soldier token), CR 603.6a (entry trigger), CR 701.8 (destroy), CR 701.21/118.12a
 //! (sacrifice cost), CR 701.23 (search), CR 702.33 (kicker), CR 702.122 (crew), and CR 702.190
 //! (sneak).
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::Zone;
@@ -84,7 +85,8 @@ fn issue_misc16_gigastorm_titan_costs_less_after_another_spell() {
     );
     let slot = hand_index_for_card(&e, 0, "gigastorm_titan");
     assert!(
-        e.apply_command(0, &cast_spell(slot, vec![])).is_err(),
+        e.apply_scenario_command(0, &cast_spell(slot, vec![]))
+            .is_err(),
         "no prior spell means no reduction"
     );
 
@@ -185,7 +187,7 @@ fn issue_misc16_fate_of_the_sun_cryst_costs_less_on_a_tapped_target() {
     );
     let slot = hand_index_for_card(&full, 0, "fate_of_the_sun-cryst");
     assert!(
-        full.apply_command(0, &cast_spell(slot, target_object(untapped)))
+        full.apply_scenario_command(0, &cast_spell(slot, target_object(untapped)))
             .is_err(),
         "an untapped target gets no reduction"
     );
@@ -288,7 +290,7 @@ fn issue_misc16_barrels_of_blasting_jelly_limits_mana_and_deals_damage() {
     );
     let second_mana = activate_on(&e, barrels, 0, vec![]);
     assert!(
-        e.apply_command(0, &second_mana).is_err(),
+        e.apply_scenario_command(0, &second_mana).is_err(),
         "the mana ability is limited to once each turn"
     );
 
@@ -342,6 +344,7 @@ fn select_branch(index: u32) -> RuledCommand {
         cmd: Some(
             tricerules_proto::ruled::v1::ruled_command::Cmd::SubmitResolutionChoice(
                 tricerules_proto::ruled::v1::SubmitResolutionChoice {
+                    resolution_prompt_id: 0,
                     decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::SelectBranch
                         as i32,
                     selected_branch_index: index,

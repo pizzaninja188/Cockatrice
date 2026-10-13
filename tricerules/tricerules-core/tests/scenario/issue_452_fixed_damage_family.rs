@@ -5,9 +5,10 @@
 //! returned a ruling. CR 120.2b keeps the resolving spell as the damage source, CR 115.1a
 //! requires a declared creature target, CR 608.2b rechecks target legality on resolution, and
 //! CR 704.5g handles lethal damage as a state-based action.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 
 const COHORT: [(&str, u32); 7] = [
     ("ragefire", 3),
@@ -83,7 +84,7 @@ fn issue_452_family_rejects_players_and_artifacts_as_targets() {
         for illegal in [target_player(1), target_object(artifact)] {
             let before = engine.state.command_index;
             engine
-                .apply_command(0, &cast_spell(slot, illegal.clone()))
+                .apply_scenario_command(0, &cast_spell(slot, illegal.clone()))
                 .expect_err("only creature targets are legal");
             assert_eq!(
                 engine.state.command_index, before,

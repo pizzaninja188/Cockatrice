@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_proto::ruled::v1 as rv1;
 
 fn object_ref(engine: &GameEngine, oid: u32) -> rv1::CostObjectRef {
@@ -68,7 +69,7 @@ fn draft(
 }
 
 fn preview(engine: &GameEngine, cast: &rv1::CastSpell) -> rv1::PaymentPreview {
-    engine.preview_payment(
+    engine.preview_payment_scenario(
         0,
         &rv1::PreviewPayment {
             commit_ability_activation: None,
@@ -88,7 +89,7 @@ fn commit(
     engine: &mut GameEngine,
     cast: rv1::CastSpell,
 ) -> Result<rv1::RuledEventBatch, tricerules_core::EngineError> {
-    engine.apply_command(
+    engine.apply_scenario_command(
         0,
         &rv1::RuledCommand {
             cmd: Some(Cmd::CastSpell(cast)),
@@ -191,9 +192,9 @@ fn convoke_serialized_command_replays_identically_without_preview_queries() {
         .encode_to_vec();
         let replayed = rv1::RuledCommand::decode(encoded.as_slice()).unwrap();
         let batches = vec![
-            engine.apply_command(0, &replayed).unwrap(),
-            engine.apply_command(0, &pass()).unwrap(),
-            engine.apply_command(1, &pass()).unwrap(),
+            engine.apply_scenario_command(0, &replayed).unwrap(),
+            engine.apply_scenario_command(0, &pass()).unwrap(),
+            engine.apply_scenario_command(1, &pass()).unwrap(),
         ];
         (encoded, batches)
     }
@@ -245,7 +246,7 @@ fn convoke_preview_is_read_only_and_publishes_only_derived_legal_colors() {
         })),
     };
     assert!(
-        engine.apply_command(0, &query).is_err(),
+        engine.apply_scenario_command(0, &query).is_err(),
         "queries never enter gameplay/replay"
     );
     assert_eq!(format!("{:?}", engine.state), before);
@@ -366,13 +367,13 @@ fn convoke_all_mana_resolves_assistance_with_private_discard() {
     assert!(preview(&engine, &cast).complete);
     commit(&mut engine, cast).unwrap();
     let hand_before = engine.state.players[0].hand.len();
-    engine.apply_command(0, &pass()).unwrap();
-    let batch = engine.apply_command(1, &pass()).unwrap();
+    engine.apply_scenario_command(0, &pass()).unwrap();
+    let batch = engine.apply_scenario_command(1, &pass()).unwrap();
     let choice = find_resolution_choice(&batch).expect("draw then private discard");
     assert_eq!(engine.state.players[0].hand.len(), hand_before + 3);
     assert_eq!(choice.deciding_player_id, 0);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &submit_resolution_choice(vec![choice.candidate_object_ids[0]]),
         )
@@ -534,7 +535,7 @@ fn convoke_all_creature_celebrant_resolves_with_vigilance() {
                 )),
             })),
         };
-        engine.apply_command(0, &command).unwrap();
+        engine.apply_scenario_command(0, &command).unwrap();
         creatures.push(*engine.state.players[0].battlefield.last().unwrap());
     }
     let contributions = creatures
@@ -586,16 +587,18 @@ fn convoke_tapping_an_attacker_or_blocker_does_not_remove_it_from_combat() {
             .unwrap()
             .summoning_sick = false;
         engine.state.objects.get_mut(&blocker).unwrap().card_id = "serra_angel".into();
-        engine.apply_command(0, &primitive_yield()).unwrap();
-        engine.apply_command(0, &pass()).unwrap();
-        engine.apply_command(1, &pass()).unwrap();
         engine
-            .apply_command(0, &declare_attackers(vec![attacker]))
+            .apply_scenario_command(0, &primitive_yield())
             .unwrap();
-        engine.apply_command(0, &pass()).unwrap();
-        engine.apply_command(1, &pass()).unwrap();
+        engine.apply_scenario_command(0, &pass()).unwrap();
+        engine.apply_scenario_command(1, &pass()).unwrap();
         engine
-            .apply_command(
+            .apply_scenario_command(0, &declare_attackers(vec![attacker]))
+            .unwrap();
+        engine.apply_scenario_command(0, &pass()).unwrap();
+        engine.apply_scenario_command(1, &pass()).unwrap();
+        engine
+            .apply_scenario_command(
                 1,
                 &declare_blockers(vec![BlockPair {
                     attacker_id: attacker,
@@ -621,7 +624,7 @@ fn convoke_tapping_an_attacker_or_blocker_does_not_remove_it_from_combat() {
             engine.state.players[1].hand.push(source);
             engine.state.objects.get_mut(&source).unwrap().owner = 1;
             cast.source = Some(hand_cast_source(engine.state.players[1].hand.len() - 1));
-            engine.apply_command(0, &pass()).unwrap();
+            engine.apply_scenario_command(0, &pass()).unwrap();
         }
         cast.payment.as_mut().unwrap().expected_state_revision = engine.state.command_index;
         cast.payment
@@ -635,7 +638,7 @@ fn convoke_tapping_an_attacker_or_blocker_does_not_remove_it_from_combat() {
         engine.state.players[payer].mana_pool.blue = 2;
         engine.state.players[payer].mana_pool.colorless = 2;
         engine
-            .apply_command(
+            .apply_scenario_command(
                 payer as i32,
                 &rv1::RuledCommand {
                     cmd: Some(Cmd::CastSpell(cast)),
@@ -691,7 +694,7 @@ fn convoke_mixed_payment_taps_a_summoning_sick_creature_without_making_mana() {
         }),
     });
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("one creature pays the missing generic unit");
     assert!(engine.state.objects[&bear].tapped);
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);

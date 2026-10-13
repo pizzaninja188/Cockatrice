@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, ResolutionChoiceDecision, RuledCommand, SelectedSpellMode,
     SubmitResolutionChoice,
@@ -25,6 +26,7 @@ fn engine() -> GameEngine {
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
@@ -41,7 +43,7 @@ fn select_branch(index: u32) -> RuledCommand {
 fn crime_with_bolt(e: &mut GameEngine) {
     inject_card_into_hand(e, 0, "lightning_bolt");
     grant_pool(e, 0);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &cast_spell(
             hand_index_for_card(e, 0, "lightning_bolt"),
@@ -70,8 +72,8 @@ fn issue_171_apothecary_targets_first_and_chooses_keyword_at_resolution() {
                 selected_modes: vec![],
             })),
         };
-        assert!(e.apply_command(0, &choose(opponent)).is_err());
-        e.apply_command(0, &choose(apothecary)).unwrap();
+        assert!(e.apply_scenario_command(0, &choose(opponent)).is_err());
+        e.apply_scenario_command(0, &choose(apothecary)).unwrap();
         assert!(
             e.state.pending_resolution.is_none(),
             "keyword is not a modal trigger choice"
@@ -86,9 +88,9 @@ fn issue_171_apothecary_targets_first_and_chooses_keyword_at_resolution() {
                 .choice_kind,
             ChoiceKind::ResolutionBranch
         );
-        assert!(e.apply_command(0, &select_branch(99)).is_err());
-        assert!(e.apply_command(1, &select_branch(choice)).is_err());
-        e.apply_command(0, &select_branch(choice)).unwrap();
+        assert!(e.apply_scenario_command(0, &select_branch(99)).is_err());
+        assert!(e.apply_scenario_command(1, &select_branch(choice)).is_err());
+        e.apply_scenario_command(0, &select_branch(choice)).unwrap();
         assert!(e
             .characteristics(apothecary)
             .unwrap()
@@ -96,7 +98,7 @@ fn issue_171_apothecary_targets_first_and_chooses_keyword_at_resolution() {
             .contains(&keyword));
         assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 1);
         assert!(
-            e.apply_command(0, &select_branch(choice)).is_err(),
+            e.apply_scenario_command(0, &select_branch(choice)).is_err(),
             "no repeated continuation"
         );
         resolve_entire_stack_two_player(&mut e);
@@ -120,9 +122,9 @@ fn servant_combat_trigger(crime: bool) -> (GameEngine, u32, u32) {
         crime_with_bolt(&mut e);
         resolve_entire_stack_two_player(&mut e);
     }
-    e.apply_command(0, &primitive_yield()).unwrap();
+    e.apply_scenario_command(0, &primitive_yield()).unwrap();
     pass_both_players(&mut e);
-    e.apply_command(0, &declare_attackers(vec![servant]))
+    e.apply_scenario_command(0, &declare_attackers(vec![servant]))
         .unwrap();
     pass_both_players(&mut e);
     pass_both_players(&mut e);
@@ -143,7 +145,7 @@ fn issue_171_servant_sacrifices_only_itself_then_searches() {
             .choice_kind,
         ChoiceKind::ResolutionBranch
     );
-    e.apply_command(0, &select_branch(0)).unwrap();
+    e.apply_scenario_command(0, &select_branch(0)).unwrap();
     assert_eq!(
         e.state
             .pending_resolution
@@ -154,9 +156,9 @@ fn issue_171_servant_sacrifices_only_itself_then_searches() {
         vec![servant]
     );
     assert!(e
-        .apply_command(0, &submit_resolution_choice(vec![other]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![other]))
         .is_err());
-    e.apply_command(0, &submit_resolution_choice(vec![servant]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![servant]))
         .unwrap();
     assert!(e.state.players[0].graveyard.contains(&servant));
     let pending = e
@@ -167,7 +169,7 @@ fn issue_171_servant_sacrifices_only_itself_then_searches() {
     assert_eq!(pending.deciding_player, 0);
     assert_eq!(pending.presentation.choice_kind, ChoiceKind::LibrarySearch);
     let searched = pending.presentation.candidates[0];
-    e.apply_command(0, &submit_resolution_choice(vec![searched]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![searched]))
         .unwrap();
     assert!(e.state.players[0].hand.contains(&searched));
     assert!(e.state.pending_resolution.is_none());
@@ -201,7 +203,7 @@ fn issue_171_servant_checks_condition_and_never_searches_without_payment() {
         }
         pass_both_players(&mut e);
         if failure == "decline" {
-            e.apply_command(
+            e.apply_scenario_command(
                 0,
                 &submit_resolution_decision(ResolutionChoiceDecision::Decline),
             )
@@ -220,16 +222,16 @@ fn issue_171_servant_checks_condition_and_never_searches_without_payment() {
 fn issue_171_servant_rejects_a_returned_source_during_payment() {
     let (mut e, servant, _) = servant_combat_trigger(true);
     pass_both_players(&mut e);
-    e.apply_command(0, &select_branch(0)).unwrap();
+    e.apply_scenario_command(0, &select_branch(0)).unwrap();
     e.state.zone_change_generation.insert(servant, 1);
     let history = e.state.turn_history.clone();
     assert!(e
-        .apply_command(0, &submit_resolution_choice(vec![servant]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![servant]))
         .is_err());
     assert!(e.state.players[0].battlefield.contains(&servant));
     assert_eq!(e.state.turn_history, history);
     assert!(e.state.pending_resolution.is_some());
-    e.apply_command(0, &submit_resolution_choice(vec![]))
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![]))
         .unwrap();
     assert!(e.state.pending_resolution.is_none());
 }
@@ -239,7 +241,7 @@ fn issue_171_apothecary_fizzles_without_prompt_when_target_blinks() {
     let mut e = engine();
     let source = inject_creature_on_battlefield(&mut e, 0, "rattleback_apothecary");
     crime_with_bolt(&mut e);
-    e.apply_command(
+    e.apply_scenario_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -288,7 +290,7 @@ fn trufflesnout_trigger_mode_is_chosen_before_it_reaches_the_stack() {
     );
     let index = hand_index_for_card(&engine, 0, "trufflesnout");
     engine
-        .apply_command(0, &cast_spell(index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(index, Vec::new()))
         .expect("cast Trufflesnout");
     pass_both_players(&mut engine);
 
@@ -299,7 +301,7 @@ fn trufflesnout_trigger_mode_is_chosen_before_it_reaches_the_stack() {
         .expect("modal ETB choice must be pending");
     assert!(pending.ability.modal.is_some());
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
@@ -341,7 +343,7 @@ fn crypt_lurker_discard_branch_pays_then_draws() {
     );
     let index = hand_index_for_card(&engine, 0, "crypt_lurker");
     engine
-        .apply_command(0, &cast_spell(index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(index, Vec::new()))
         .expect("cast Crypt Lurker");
     pass_both_players(&mut engine); // creature resolves, ETB trigger reaches stack
     pass_both_players(&mut engine); // ETB parks for branch choice
@@ -371,7 +373,7 @@ fn crypt_lurker_discard_branch_pays_then_draws() {
         }
     ));
     engine
-        .apply_command(0, &select_branch(1))
+        .apply_scenario_command(0, &select_branch(1))
         .expect("choose discard branch");
     assert!(matches!(
         &engine
@@ -389,7 +391,7 @@ fn crypt_lurker_discard_branch_pays_then_draws() {
         }
     ));
     engine
-        .apply_command(0, &submit_resolution_choice(vec![discarded]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![discarded]))
         .expect("discard creature card");
     assert_eq!(
         engine
@@ -419,12 +421,12 @@ fn crypt_lurker_rejects_a_stale_discard_without_consuming_the_choice() {
     );
     let index = hand_index_for_card(&engine, 0, "crypt_lurker");
     engine
-        .apply_command(0, &cast_spell(index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(index, Vec::new()))
         .expect("cast Crypt Lurker");
     pass_both_players(&mut engine);
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &select_branch(1))
+        .apply_scenario_command(0, &select_branch(1))
         .expect("choose discard branch");
 
     engine.state.players[0].hand.retain(|oid| *oid != candidate);
@@ -436,7 +438,7 @@ fn crypt_lurker_rejects_a_stale_discard_without_consuming_the_choice() {
         .expect("candidate")
         .zone = tricerules_core::Zone::Graveyard;
     assert!(engine
-        .apply_command(0, &submit_resolution_choice(vec![candidate]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![candidate]))
         .is_err());
     assert!(engine.state.pending_resolution.is_some());
 }
@@ -456,12 +458,12 @@ fn sparktongue_payment_creates_a_separately_targeted_reflexive_trigger() {
     );
     let index = hand_index_for_card(&engine, 0, "sparktongue_dragon");
     engine
-        .apply_command(0, &cast_spell(index, Vec::new()))
+        .apply_scenario_command(0, &cast_spell(index, Vec::new()))
         .expect("cast Sparktongue Dragon");
     pass_both_players(&mut engine);
     pass_both_players(&mut engine);
     engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("choose mana branch");
     assert!(matches!(
         &engine
@@ -491,7 +493,7 @@ fn sparktongue_payment_creates_a_separately_targeted_reflexive_trigger() {
         .expect("pay {2}{R}");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {

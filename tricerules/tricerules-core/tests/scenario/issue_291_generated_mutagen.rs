@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::CounterKind;
 use tricerules_core::Zone;
 
@@ -10,10 +11,10 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
         engine.state.players[0].id
     };
     engine
-        .apply_command(first, &pass())
+        .apply_scenario_command(first, &pass())
         .expect("first priority pass");
     engine
-        .apply_command(second, &pass())
+        .apply_scenario_command(second, &pass())
         .expect("second priority pass resolves stack item")
 }
 
@@ -190,7 +191,7 @@ fn issue_291_mutagen_rejects_noncreature_targets_and_stale_source_generation() {
     };
     ability.expected_zone_change_generation = generation + 1;
     let err = engine
-        .apply_command(0, &stale)
+        .apply_scenario_command(0, &stale)
         .expect_err("stale Mutagen physical identity must be rejected");
     assert!(
         format!("{err:?}").contains("stale"),

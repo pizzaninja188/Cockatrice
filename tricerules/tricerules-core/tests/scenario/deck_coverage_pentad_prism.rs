@@ -1,10 +1,11 @@
 //! Actual cast-color, entry-copy and mana-ability coverage for Pentad Prism.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CountExpression, CounterKind,
     ManaAmount, SpellEffectKind,
 };
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     cost_selection::Selection, ruled_command::Cmd, CounterRemovalSelection, PaymentMana,
     PreviewPayment,
@@ -42,7 +43,7 @@ fn paid_cast(engine: &mut GameEngine, card: &str, mana: PaymentMana) -> u32 {
     let Some(Cmd::CastSpell(cast)) = command.cmd.as_mut() else {
         unreachable!()
     };
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             cast_spell: Some(cast.clone()),
@@ -63,7 +64,7 @@ fn finish(engine: &mut GameEngine) {
 
 fn illegal(engine: &mut GameEngine, player: i32, command: &RuledCommand) {
     let before = format!("{:?}", engine.state);
-    assert!(engine.apply_command(player, command).is_err());
+    assert!(engine.apply_scenario_command(player, command).is_err());
     assert_eq!(
         format!("{:?}", engine.state),
         before,
@@ -864,7 +865,10 @@ fn pentad_prism_serialized_paid_cast_and_parked_copy_choice_replay_exactly() {
     let (mut replay, ..) = fresh();
     for (actor, command, batch) in recorded {
         let decoded = RuledCommand::decode(command.encode_to_vec().as_slice()).unwrap();
-        assert_eq!(replay.apply_command(actor, &decoded).unwrap(), batch);
+        assert_eq!(
+            replay.apply_scenario_command(actor, &decoded).unwrap(),
+            batch
+        );
     }
     assert_eq!(
         replay.diagnostic_snapshot().unwrap(),

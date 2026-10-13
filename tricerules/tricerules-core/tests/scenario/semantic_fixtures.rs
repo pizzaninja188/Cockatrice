@@ -1,4 +1,5 @@
 use super::helpers::{semantic::*, *};
+use crate::helpers::ScenarioCommandExt;
 
 #[test]
 fn authoring_rows_exercise_reviewed_draw_and_removal_cards() {
@@ -217,7 +218,7 @@ fn semantic_fixtures_modal_illegal_targets_preserve_state() {
         cast_modal_spell(slot, vec![(1, target_object(bear))]),
         cast_modal_spell(slot, vec![(3, vec![])]),
     ] {
-        assert!(engine.apply_command(0, &command).is_err());
+        assert!(engine.apply_scenario_command(0, &command).is_err());
         assert_eq!(engine.state.command_index, revision);
         assert_object(
             &engine,
@@ -292,7 +293,9 @@ fn semantic_fixtures_parked_resolution_is_not_exercised() {
         },
     );
     let slot = hand_index_for_card(&engine, 0, "opt");
-    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, vec![]))
+        .unwrap();
     pass_both_players(&mut engine);
     assert!(engine.state.stack.is_empty());
     assert!(engine.state.pending_resolution.is_some());

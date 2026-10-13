@@ -1,7 +1,8 @@
 //! Doubling Season's token and counter replacement behavior.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::{AbilityPresentation, CounterKind, Layout};
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{ruled_command::Cmd, PaymentMana, PreviewPayment};
 
 const SEASON: &str = "doubling_season";
@@ -47,7 +48,7 @@ fn cast_with_payment(engine: &mut GameEngine, card_id: &str, mana: PaymentMana) 
     let Some(Cmd::CastSpell(cast)) = command.cmd.as_mut() else {
         unreachable!()
     };
-    let preview = engine.preview_payment(
+    let preview = engine.preview_payment_scenario(
         0,
         &PreviewPayment {
             cast_spell: Some(cast.clone()),
@@ -59,7 +60,7 @@ fn cast_with_payment(engine: &mut GameEngine, card_id: &str, mana: PaymentMana) 
     selection.mana = Some(mana);
     cast.payment = Some(selection);
     engine
-        .apply_command(0, &command)
+        .apply_scenario_command(0, &command)
         .expect("cast with selected payment");
     resolve_entire_stack_two_player(engine);
 }
@@ -108,7 +109,7 @@ fn effect_created_tokens_compound_and_keep_their_physical_identity() {
         grant_pool(&mut engine, 0);
         let slot = hand_index_for_card(&engine, 0, "call_the_cavalry");
         engine
-            .apply_command(0, &cast_spell(slot, vec![]))
+            .apply_scenario_command(0, &cast_spell(slot, vec![]))
             .expect("cast Call the Cavalry");
         resolve_entire_stack_two_player(&mut engine);
 
@@ -143,7 +144,7 @@ fn token_replacement_uses_each_recipient_controller() {
         grant_pool(&mut engine, 0);
         let slot = hand_index_for_card(&engine, 0, "beast_within");
         engine
-            .apply_command(0, &cast_spell(slot, target_object(target)))
+            .apply_scenario_command(0, &cast_spell(slot, target_object(target)))
             .expect("cast Beast Within");
         resolve_entire_stack_two_player(&mut engine);
 
@@ -169,7 +170,7 @@ fn doublers_preserve_tapped_token_properties() {
         },
     );
     engine
-        .apply_command(0, &activate_ability(moxite, 0, vec![]))
+        .apply_scenario_command(0, &activate_ability(moxite, 0, vec![]))
         .expect("activate Melded Moxite");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -189,7 +190,7 @@ fn effect_created_copy_tokens_are_doubled_without_losing_copiable_values() {
     grant_pool(&mut engine, 0);
     let slot = hand_index_for_card(&engine, 0, "cackling_counterpart");
     engine
-        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(source)))
         .expect("cast Cackling Counterpart");
     resolve_entire_stack_two_player(&mut engine);
 
@@ -236,7 +237,7 @@ fn effect_and_entry_counters_are_doubled() {
     );
     let slot = hand_index_for_card(&effect, 0, "battlegrowth");
     effect
-        .apply_command(0, &cast_spell(slot, target_object(bear)))
+        .apply_scenario_command(0, &cast_spell(slot, target_object(bear)))
         .expect("cast Battlegrowth");
     resolve_entire_stack_two_player(&mut effect);
     assert_eq!(

@@ -1,5 +1,6 @@
 //! Exact Sword: paid equip, protection layers, real combat, actors and resolution-time counts.
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use prost::Message;
 use tricerules_cards::primitives::ProtectionQuality;
 use tricerules_cards::{Color, ContinuousEffectKind, ControllerReference, EffectDuration, Keyword};
@@ -193,7 +194,7 @@ fn sword_equip_rejections_preserve_mana_stack_and_attachment() {
     );
     let cmd = activate_ability_for(&e, sword, 0, target_object(own));
     let before = e.diagnostic_snapshot().unwrap();
-    assert!(e.apply_command(10, &cmd).is_err());
+    assert!(e.apply_scenario_command(10, &cmd).is_err());
     assert_eq!(e.diagnostic_snapshot().unwrap(), before);
     give_mana(
         &mut e,
@@ -206,13 +207,13 @@ fn sword_equip_rejections_preserve_mana_stack_and_attachment() {
     for (actor, target) in [(20, own), (10, other)] {
         let cmd = activate_ability_for(&e, sword, 0, target_object(target));
         let before = e.diagnostic_snapshot().unwrap();
-        assert!(e.apply_command(actor, &cmd).is_err());
+        assert!(e.apply_scenario_command(actor, &cmd).is_err());
         assert_eq!(e.diagnostic_snapshot().unwrap(), before);
     }
     semantic::accepted(&mut e, 10, &primitive_yield());
     let cmd = activate_ability_for(&e, sword, 0, target_object(own));
     let before = e.diagnostic_snapshot().unwrap();
-    assert!(e.apply_command(10, &cmd).is_err());
+    assert!(e.apply_scenario_command(10, &cmd).is_err());
     assert_eq!(e.diagnostic_snapshot().unwrap(), before);
 }
 
@@ -282,7 +283,7 @@ fn sword_red_white_targets_rejected_and_nontargeted_red_damage_prevented() {
         let slot = hand_index_for_card(&e, 0, card);
         let before = e.diagnostic_snapshot().unwrap();
         assert!(e
-            .apply_command(10, &cast_spell(slot, target_object(host)))
+            .apply_scenario_command(10, &cast_spell(slot, target_object(host)))
             .is_err());
         assert_eq!(e.diagnostic_snapshot().unwrap(), before);
     }
@@ -316,7 +317,7 @@ fn sword_red_white_blocks_rejected_but_green_block_is_legal() {
     for blocker in [red, white] {
         let before = e.diagnostic_snapshot().unwrap();
         assert!(e
-            .apply_command(
+            .apply_scenario_command(
                 20,
                 &declare_blockers(vec![BlockPair {
                     attacker_id: host,
@@ -719,7 +720,7 @@ fn sword_paid_cast_equip_combat_and_trigger_commands_replay_identically() {
     let (mut replay, _, _) = fresh();
     let replay_events: Vec<_> = commands
         .iter()
-        .map(|(actor, cmd)| replay.apply_command(*actor, cmd).unwrap())
+        .map(|(actor, cmd)| replay.apply_scenario_command(*actor, cmd).unwrap())
         .collect();
     assert_eq!(events, replay_events);
     assert_eq!(

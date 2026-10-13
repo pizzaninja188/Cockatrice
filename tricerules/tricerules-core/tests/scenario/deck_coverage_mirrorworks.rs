@@ -1,8 +1,9 @@
 //! Actual-card coverage for Mirrorworks' per-entry optional payment and event-object copy.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::state::CopiableValues;
-use tricerules_core::{GameEngine, Zone};
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     dev_command::Dev, ruled_command::Cmd, ChoiceKind, DevCommand, DevMoveCard, DevZone,
     ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
@@ -11,6 +12,7 @@ use tricerules_proto::ruled::v1::{
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -39,7 +41,7 @@ fn enter_sol_ring_and_put_mirrorworks_trigger_on_stack(engine: &mut GameEngine) 
     );
     let hand_index = hand_index_for_object(engine, 0, sol_ring);
     engine
-        .apply_command(controller, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(controller, &cast_spell(hand_index, vec![]))
         .expect("cast Sol Ring");
     pass_priority_round(engine);
     assert_eq!(engine.state.objects[&sol_ring].zone, Zone::Battlefield);
@@ -65,7 +67,7 @@ fn enter_sol_ring_and_put_mirrorworks_trigger_on_stack(engine: &mut GameEngine) 
 fn move_card(engine: &mut GameEngine, player: i32, card_name: &str, zone: DevZone) {
     engine.enable_dev_commands();
     engine
-        .apply_command(
+        .apply_scenario_command(
             player,
             &RuledCommand {
                 cmd: Some(Cmd::DevCommand(DevCommand {
@@ -118,7 +120,7 @@ fn mirrorworks_pays_per_trigger_and_copies_the_exact_entering_artifact_lki() {
     );
     let hand_index = hand_index_for_object(&engine, 0, bears);
     engine
-        .apply_command(4, &cast_spell(hand_index, vec![]))
+        .apply_scenario_command(4, &cast_spell(hand_index, vec![]))
         .expect("cast a nonartifact creature");
     pass_priority_round(&mut engine);
     assert_eq!(
@@ -202,10 +204,10 @@ fn mirrorworks_pays_per_trigger_and_copies_the_exact_entering_artifact_lki() {
         ChoiceKind::ResolutionBranch
     );
     let before_wrong_player = format!("{:?}", engine.state);
-    assert!(engine.apply_command(9, &select_branch(0)).is_err());
+    assert!(engine.apply_scenario_command(9, &select_branch(0)).is_err());
     assert_eq!(format!("{:?}", engine.state), before_wrong_player);
     engine
-        .apply_command(
+        .apply_scenario_command(
             4,
             &submit_resolution_decision(ResolutionChoiceDecision::Decline),
         )
@@ -227,7 +229,7 @@ fn mirrorworks_pays_per_trigger_and_copies_the_exact_entering_artifact_lki() {
         },
     );
     engine
-        .apply_command(4, &select_branch(0))
+        .apply_scenario_command(4, &select_branch(0))
         .expect("choose the optional {2} copy branch");
     assert_eq!(
         engine
@@ -242,7 +244,7 @@ fn mirrorworks_pays_per_trigger_and_copies_the_exact_entering_artifact_lki() {
     );
     let before_wrong_payer = format!("{:?}", engine.state);
     assert!(engine
-        .apply_command(
+        .apply_scenario_command(
             9,
             &submit_resolution_decision(ResolutionChoiceDecision::PayMana),
         )

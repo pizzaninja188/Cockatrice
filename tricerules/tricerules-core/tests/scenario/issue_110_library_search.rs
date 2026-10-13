@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::helpers::ScenarioCommandExt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     ruled_command::Cmd, AbilitySourceZone, ActivateAbility, ChoiceCandidateSourceZone, ChoiceKind,
@@ -8,6 +9,7 @@ use tricerules_proto::ruled::v1::{
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
@@ -24,6 +26,7 @@ fn select_branch(index: u32) -> RuledCommand {
 fn decline_resolution_choice() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: ResolutionChoiceDecision::Decline as i32,
             selected_branch_index: 0,
@@ -115,14 +118,16 @@ fn living_phone_uses_printed_power_and_random_bottom_is_replay_deterministic() {
         );
         let bolt = hand_index_for_card(&engine, 0, "lightning_bolt");
         engine
-            .apply_command(0, &cast_spell(bolt, target_object(living)))
+            .apply_scenario_command(0, &cast_spell(bolt, target_object(living)))
             .expect("cast Bolt at Living Phone");
         pass_both_players(&mut engine);
         assert_eq!(engine.state.objects[&living].zone, Zone::Graveyard);
 
-        engine.apply_command(0, &pass()).expect("controller pass");
+        engine
+            .apply_scenario_command(0, &pass())
+            .expect("controller pass");
         let batch = engine
-            .apply_command(1, &pass())
+            .apply_scenario_command(1, &pass())
             .expect("resolve death trigger");
         let choice = find_resolution_choice(&batch).expect("Living Phone look choice");
         assert_eq!(choice.choice_kind(), ChoiceKind::LibraryLook);
@@ -133,7 +138,7 @@ fn living_phone_uses_printed_power_and_random_bottom_is_replay_deterministic() {
         );
 
         engine
-            .apply_command(0, &submit_resolution_choice(vec![looked_at[0]]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![looked_at[0]]))
             .expect("choose printed power 2 creature");
         assert!(engine.state.players[0].hand.contains(&looked_at[0]));
         let library = engine.state.players[0]
@@ -177,10 +182,14 @@ fn say_its_name_mills_before_publishing_the_optional_current_graveyard_choice() 
     );
     let index = hand_index_for_card(&engine, 0, "say_its_name");
     engine
-        .apply_command(0, &cast_spell(index, vec![]))
+        .apply_scenario_command(0, &cast_spell(index, vec![]))
         .expect("cast");
-    engine.apply_command(0, &pass()).expect("caster pass");
-    let batch = engine.apply_command(1, &pass()).expect("resolve to choice");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
+    let batch = engine
+        .apply_scenario_command(1, &pass())
+        .expect("resolve to choice");
 
     let choice = find_resolution_choice(&batch).expect("post-mill graveyard choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::GraveyardCards);
@@ -195,7 +204,7 @@ fn say_its_name_mills_before_publishing_the_optional_current_graveyard_choice() 
         .all(|oid| engine.state.objects[oid].zone == Zone::Graveyard));
 
     engine
-        .apply_command(0, &submit_resolution_choice(Vec::new()))
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
         .expect("decline optional return");
     assert!(engine.state.pending_resolution.is_none());
 }
@@ -229,11 +238,13 @@ fn uncharted_voyage_asks_the_target_owner_then_resumes_with_casters_surveil() {
     );
     let index = hand_index_for_card(&engine, 0, "uncharted_voyage");
     engine
-        .apply_command(0, &cast_spell(index, target_object(target)))
+        .apply_scenario_command(0, &cast_spell(index, target_object(target)))
         .expect("cast");
-    engine.apply_command(0, &pass()).expect("caster pass");
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("caster pass");
     let batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("resolve to owner choice");
     let choice = find_resolution_choice(&batch).expect("owner top/bottom choice");
     assert_eq!(choice.deciding_player_id, 1);
@@ -243,18 +254,18 @@ fn uncharted_voyage_asks_the_target_owner_then_resumes_with_casters_surveil() {
     assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
     assert!(engine.state.players[1].battlefield.contains(&target));
     assert!(
-        engine.apply_command(0, &select_branch(0)).is_err(),
+        engine.apply_scenario_command(0, &select_branch(0)).is_err(),
         "caster is not the owner"
     );
     assert!(
         engine
-            .apply_command(1, &decline_resolution_choice())
+            .apply_scenario_command(1, &decline_resolution_choice())
             .is_err(),
         "owner placement is mandatory"
     );
 
     let resumed = engine
-        .apply_command(1, &select_branch(0))
+        .apply_scenario_command(1, &select_branch(0))
         .expect("owner chooses top");
     assert_eq!(
         engine.state.players[1].library.front().copied(),
@@ -266,7 +277,7 @@ fn uncharted_voyage_asks_the_target_owner_then_resumes_with_casters_surveil() {
     assert_eq!(surveil.deciding_player_id, 0);
     assert_eq!(surveil.choice_kind(), ChoiceKind::LibraryLook);
     engine
-        .apply_command(0, &submit_resolution_choice(Vec::new()))
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
         .expect("keep surveilled card on top");
     assert!(engine.state.pending_resolution.is_none());
 }
@@ -303,12 +314,14 @@ fn embermouth_rechecks_the_dragon_condition_when_the_search_completes() {
         );
         let sentinel = hand_index_for_card(&engine, 0, "embermouth_sentinel");
         engine
-            .apply_command(0, &cast_spell(sentinel, vec![]))
+            .apply_scenario_command(0, &cast_spell(sentinel, vec![]))
             .expect("cast Sentinel");
         pass_both_players(&mut engine);
-        engine.apply_command(0, &pass()).expect("controller pass");
+        engine
+            .apply_scenario_command(0, &pass())
+            .expect("controller pass");
         let optional = engine
-            .apply_command(1, &pass())
+            .apply_scenario_command(1, &pass())
             .expect("open optional ETB choice");
         assert_eq!(
             find_resolution_choice(&optional)
@@ -317,12 +330,12 @@ fn embermouth_rechecks_the_dragon_condition_when_the_search_completes() {
             ChoiceKind::ResolutionBranch
         );
         let search = engine
-            .apply_command(0, &select_branch(0))
+            .apply_scenario_command(0, &select_branch(0))
             .expect("take search branch");
         let choice = find_resolution_choice(&search).expect("basic-land search");
         assert!(choice.candidate_object_ids.contains(&basic));
         engine
-            .apply_command(0, &submit_resolution_choice(vec![basic]))
+            .apply_scenario_command(0, &submit_resolution_choice(vec![basic]))
             .expect("choose exact basic");
         (engine, basic)
     }
@@ -368,7 +381,7 @@ fn altanak_hand_ability_discards_itself_and_returns_the_exact_land_tapped() {
     );
 
     engine
-        .apply_command(
+        .apply_scenario_command(
             0,
             &zone_ability(
                 &engine,
@@ -436,18 +449,22 @@ fn altanak_triggers_only_for_an_opponent_controlled_spell_or_ability_target() {
     let before = engine.state.players[0].hand.len();
 
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("give opponent priority");
     let bolt = hand_index_for_card(&engine, 1, "lightning_bolt");
     engine
-        .apply_command(1, &cast_spell(bolt, target_object(altanak)))
+        .apply_scenario_command(1, &cast_spell(bolt, target_object(altanak)))
         .expect("opponent targets Altanak");
     assert_eq!(engine.state.stack.len(), 2, "Altanak trigger is above Bolt");
     assert_eq!(engine.state.stack.last().expect("trigger").controller, 0);
     let first = engine.state.priority_player_id();
     let second = 1 - first;
-    engine.apply_command(first, &pass()).expect("first pass");
-    let resolved = engine.apply_command(second, &pass()).expect("second pass");
+    engine
+        .apply_scenario_command(first, &pass())
+        .expect("first pass");
+    let resolved = engine
+        .apply_scenario_command(second, &pass())
+        .expect("second pass");
     assert_eq!(
         engine.state.players[0].hand.len(),
         before + 1,

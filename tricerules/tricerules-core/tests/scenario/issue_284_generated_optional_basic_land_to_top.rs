@@ -5,6 +5,7 @@
 //! searching and fail-to-find, CR 701.24 and 701.24b govern shuffling and excluding found cards
 //! from that shuffle, and CR 401 governs the library and top-of-library placement. The scenarios
 //! also exercise the engine's private candidate publication and current-generation validation.
+use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_core::{EngineError, Zone};
@@ -30,6 +31,7 @@ fn issue_284_engine(seed: u64, card_id: &str, basic: &str) -> GameEngine {
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             ..Default::default()
@@ -40,6 +42,7 @@ fn select_branch(index: u32) -> RuledCommand {
 fn decline_branch() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            resolution_prompt_id: 0,
             decision: ResolutionChoiceDecision::Decline as i32,
             ..Default::default()
         })),
@@ -50,10 +53,10 @@ fn open_branch(engine: &mut GameEngine, card_id: &str) -> (u32, ResolutionChoice
     let source = move_ready_to_battlefield(engine, 0, card_id);
     let batch = {
         engine
-            .apply_command(0, &pass())
+            .apply_scenario_command(0, &pass())
             .expect("controller passes ETB");
         engine
-            .apply_command(1, &pass())
+            .apply_scenario_command(1, &pass())
             .expect("opponent passes ETB")
     };
     let choice = find_resolution_choice(&batch).expect("optional ETB branch");
@@ -99,10 +102,10 @@ fn issue_284_declining_the_etb_branch_does_not_search_or_shuffle() {
     let source = move_ready_to_battlefield(&mut engine, 0, "campus_guide");
     let library_before: Vec<_> = engine.state.players[0].library.iter().copied().collect();
     engine
-        .apply_command(0, &pass())
+        .apply_scenario_command(0, &pass())
         .expect("controller passes ETB");
     let branch_batch = engine
-        .apply_command(1, &pass())
+        .apply_scenario_command(1, &pass())
         .expect("opponent passes ETB");
     let branch = find_resolution_choice(&branch_batch).expect("optional ETB branch");
     assert_eq!(branch.deciding_player_id, 0);
@@ -111,11 +114,11 @@ fn issue_284_declining_the_etb_branch_does_not_search_or_shuffle() {
     assert!(branch.candidate_object_ids.is_empty());
 
     assert!(
-        engine.apply_command(1, &decline_branch()).is_err(),
+        engine.apply_scenario_command(1, &decline_branch()).is_err(),
         "only the controller may decline the branch"
     );
     let completion = engine
-        .apply_command(0, &decline_branch())
+        .apply_scenario_command(0, &decline_branch())
         .expect("decline the optional branch");
 
     assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
@@ -151,11 +154,11 @@ fn issue_284_search_is_private_controller_only_and_basic_land_only() {
     assert!(branch.public_reveal.is_none());
 
     assert!(
-        engine.apply_command(1, &select_branch(0)).is_err(),
+        engine.apply_scenario_command(1, &select_branch(0)).is_err(),
         "only the controller may select the ETB branch"
     );
     let search_batch = engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("select the search branch");
     let search = find_resolution_choice(&search_batch).expect("private library search");
     assert_eq!(search.deciding_player_id, 0);
@@ -171,7 +174,7 @@ fn issue_284_search_is_private_controller_only_and_basic_land_only() {
         .all(|object_id| engine.state.objects[object_id].card_id == "forest"));
 
     assert!(matches!(
-        engine.apply_command(1, &submit_resolution_choice(vec![own_basic])),
+        engine.apply_scenario_command(1, &submit_resolution_choice(vec![own_basic])),
         Err(EngineError::Illegal(_))
     ));
     assert!(engine.state.pending_resolution.is_some());
@@ -184,14 +187,14 @@ fn issue_284_accepting_search_reveals_shuffles_and_puts_the_basic_land_on_top() 
     let nonbasic = inject_library_card(&mut engine, 0, "taiga");
     let (_source, _) = open_branch(&mut engine, "campus_guide");
     let search_batch = engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("select search branch");
     let search = find_resolution_choice(&search_batch).expect("search choice");
     assert!(search.candidate_object_ids.contains(&basic));
     assert!(!search.candidate_object_ids.contains(&nonbasic));
 
     let completion = engine
-        .apply_command(0, &submit_resolution_choice(vec![basic]))
+        .apply_scenario_command(0, &submit_resolution_choice(vec![basic]))
         .expect("choose the basic land");
     assert_eq!(engine.state.objects[&basic].zone, Zone::Library);
     assert_eq!(engine.state.players[0].library.front(), Some(&basic));
@@ -218,7 +221,7 @@ fn issue_284_rejects_stale_noncandidate_and_unauthorized_library_choices() {
     let unauthorized = inject_library_card(&mut engine, 1, "forest");
     let (_source, _) = open_branch(&mut engine, "spider-bot");
     engine
-        .apply_command(0, &select_branch(0))
+        .apply_scenario_command(0, &select_branch(0))
         .expect("select search branch");
     let search = engine
         .state
@@ -240,7 +243,7 @@ fn issue_284_rejects_stale_noncandidate_and_unauthorized_library_choices() {
     ] {
         assert!(
             matches!(
-                engine.apply_command(player, &submit_resolution_choice(vec![chosen])),
+                engine.apply_scenario_command(player, &submit_resolution_choice(vec![chosen])),
                 Err(EngineError::Illegal(_))
             ),
             "{label} choice must be rejected"
@@ -248,7 +251,7 @@ fn issue_284_rejects_stale_noncandidate_and_unauthorized_library_choices() {
         assert!(engine.state.pending_resolution.is_some());
     }
     engine
-        .apply_command(0, &submit_resolution_choice(Vec::new()))
+        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
         .expect("fail to find after rejected stale choices");
     assert!(engine.state.pending_resolution.is_none());
 }
