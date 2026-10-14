@@ -1,15 +1,16 @@
 # Composable card execution and authoring contract
 
-Status (2026-10-13): target design with a bounded authored-owner implementation increment,
+Status (2026-10-14): target design with a bounded authored-owner implementation increment,
 cross-component resolution-prompt identity, exact compiled owner identities, and immutable ability
 binding. The runner supports targetless program operations and four targetful role signatures on
 spell faces, modal modes, activated abilities and triggered abilities. The DrawDiscard migration
 lowers whole legacy owners into the same runner, including every sibling of an affected modal
 container. Its original census is 41 existing card identities, 42 DrawDiscard bodies and three
 additional modal siblings: 45 compiled owners, not 45 card admissions. Typed discard outcomes and
-replacement/entry/payment continuations retain the owning frame. The first authored-owner card
-conversions exercise Calamitous Tide's face, Agna Qel'a's activation, Uthros Scanship's ETB and all
-three Three Steps Ahead modes. The [active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs)
+replacement/entry/payment continuations retain the owning frame. Authored-owner conversions cover
+Calamitous Tide's face, Agna Qel'a's activation, Uthros Scanship's ETB, all three Three Steps Ahead
+modes, and the exact Recruit generator pair for Long Lake Nuisance and Patient Instructor. The
+[active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs)
 owns accepted syntax and restrictions. The broader operations, contexts, remaining card/template
 conversion and retirement of the legacy DrawDiscard family remain migration targets. Prompt
 identity applies to legacy resolution choices as well as program choices; it does not widen the

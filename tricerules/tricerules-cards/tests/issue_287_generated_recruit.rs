@@ -1,12 +1,15 @@
 use tricerules_cards::primitives::{
     CardResultAction, CardResultFilter, CardResultSource, CardTypeFilter, DrawDiscardOrder,
-    PlayerRecipient, RelativePlayerSet, ResolutionBranchRequirement, ResolutionBranchSelection,
-    ResolutionCost, SpellEffectKind,
+    InstructionKind, PlayerRecipient, ProgramResultCondition, RelativePlayerSet,
+    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SpellEffectKind,
 };
-use tricerules_cards::{AbilityPresentation, Amount, ChoiceId, TriggerCondition};
+use tricerules_cards::{
+    AbilityDefinitionId, AbilityId, AbilityPresentation, Amount, CardFaceId, ChoiceId,
+    ProgramOwnerId, TriggerCondition,
+};
 
 #[test]
-fn issue_287_registers_both_generated_recruit_etb_cards_with_the_exact_result_branch() {
+fn issue_287_registers_both_generated_recruit_etb_cards_with_exact_programs() {
     let registry = tricerules_cards::registry::global();
     for (id, name, mana_cost, types, stats, keyword, oracle_line) in [
         (
@@ -49,67 +52,79 @@ fn issue_287_registers_both_generated_recruit_etb_cards_with_the_exact_result_br
         assert!(!ability.may);
         assert!(ability.targeting.is_none());
         assert!(
-            ability.effect.len() == 2,
-            "{id} must emit draw/discard plus the result branch"
+            ability.effect.is_empty(),
+            "{id} uses its authored program body"
         );
-
+        let program = ability
+            .program
+            .as_ref()
+            .unwrap_or_else(|| panic!("{id} must register its authored ETB program"));
+        assert_eq!(program.target_bindings, []);
+        assert!(program.body.yields.is_empty());
+        let [draw, discard, condition] = program.body.steps.as_slice() else {
+            panic!("{id} must register the three-step Recruit program");
+        };
+        assert_eq!(draw.id, "draw_one");
         assert_eq!(
-            ability.effect[0],
-            SpellEffectKind::DrawDiscard {
+            draw.kind,
+            InstructionKind::Perform(Box::new(SpellEffectKind::Draw {
                 who: PlayerRecipient::Controller,
-                draw_count: 1,
-                discard_count: 1,
-                order: DrawDiscardOrder::DrawThenDiscard,
-                optional: false,
-            }
+                count: Amount::Fixed(1),
+            }))
         );
-        let SpellEffectKind::ChooseResolutionBranch {
-            chooser,
-            optional,
-            selection,
-            branches,
-            otherwise,
-        } = &ability.effect[1]
-        else {
-            panic!("{id} must emit the engine-owned resolution branch");
-        };
-        assert_eq!(*chooser, PlayerRecipient::Controller);
-        assert!(!*optional);
-        assert_eq!(*selection, ResolutionBranchSelection::FirstApplicable);
-        assert!(otherwise.is_empty());
-
-        let [soldier, fallback] = branches.as_slice() else {
-            panic!("{id} must emit exactly the token branch and its fallback");
-        };
-        assert_eq!(soldier.branch_id.as_str(), "create_a_soldier");
-        assert_eq!(soldier.presentation, AbilityPresentation::Fallback);
-        assert_eq!(soldier.cost, ResolutionCost::None);
+        assert_eq!(discard.id, "discard_one");
+        assert_eq!(discard.bind, ["discarded"]);
         assert_eq!(
-            soldier.requirement,
-            ResolutionBranchRequirement::CardResultCount {
-                filter: CardResultFilter {
-                    source: CardResultSource::PreviousEffect,
-                    action: CardResultAction::Discard,
-                    players: RelativePlayerSet::Controller,
-                    card_type: Some(CardTypeFilter::Nonland),
-                },
+            discard.kind,
+            InstructionKind::Perform(Box::new(SpellEffectKind::Discard {
+                who: PlayerRecipient::Controller,
+                quantity: tricerules_cards::primitives::DiscardQuantity::Exact(1),
+            }))
+        );
+        assert_eq!(condition.id, "if_discarded_nonland");
+        let InstructionKind::IfResult { condition, yes, no } = &condition.kind else {
+            panic!("{id} must test the typed discard result");
+        };
+        assert_eq!(
+            *condition,
+            ProgramResultCondition::DiscardCount {
+                result: "discarded".into(),
+                players: RelativePlayerSet::Controller,
+                card_type: Some(CardTypeFilter::Nonland),
                 min: Some(1),
                 max: None,
             }
         );
+        assert!(yes.yields.is_empty());
+        let [create_soldier] = yes.steps.as_slice() else {
+            panic!("{id} must create one Soldier only in the successful discard branch");
+        };
+        assert_eq!(create_soldier.id, "create_soldier");
         assert_eq!(
-            soldier.effects,
-            [SpellEffectKind::CreateTokens {
+            create_soldier.kind,
+            InstructionKind::Perform(Box::new(SpellEffectKind::CreateTokens {
                 token: "human_soldier_w_1_1".into(),
                 count: Amount::Fixed(1),
                 who: PlayerRecipient::Controller,
                 tapped: false,
                 sacrifice_timing: None,
-            }]
+            }))
         );
-        assert_eq!(fallback.branch_id, ChoiceId::new("no_soldier").unwrap());
-        assert_eq!(fallback.requirement, ResolutionBranchRequirement::Always);
-        assert!(fallback.effects.is_empty());
+        assert!(no.steps.is_empty());
+        assert!(no.yields.is_empty());
+
+        let owner = ProgramOwnerId::ability(AbilityDefinitionId {
+            card_id: id.into(),
+            face_id: CardFaceId::new(id).unwrap(),
+            ability_path: vec![AbilityId::new("triggered_01").unwrap()],
+        });
+        assert_eq!(
+            registry
+                .compiled_program_for_owner(&owner)
+                .map(|compiled| &compiled.owner),
+            Some(&owner),
+            "{id} must compile under its exact triggered ability owner"
+        );
     }
 }
 

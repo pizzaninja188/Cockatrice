@@ -5952,59 +5952,20 @@ const ISSUE_287_REVIEWED_ORACLE_IDS: &[&str] = &[
 ];
 
 /// CR 701.70: Recruit is draw, then a private mandatory discard, then a nonland-gated token.
-/// The engine-owned branch reads the typed discard result emitted by the immediately preceding
-/// instruction, so no authoring surface can weaken the land/nonland check.
-fn recruit_effects() -> Vec<SpellEffectKind> {
-    vec![
-        SpellEffectKind::DrawDiscard {
-            who: PlayerRecipient::Controller,
-            draw_count: 1,
-            discard_count: 1,
-            order: DrawDiscardOrder::DrawThenDiscard,
-            optional: false,
-        },
-        SpellEffectKind::ChooseResolutionBranch {
-            chooser: PlayerRecipient::Controller,
-            optional: false,
-            selection: ResolutionBranchSelection::FirstApplicable,
-            branches: vec![
-                ResolutionBranchDef {
-                    branch_id: ChoiceId::new("create_a_soldier")
-                        .expect("closed Recruit branch uses a valid choice ID"),
-                    presentation: AbilityPresentation::Fallback,
-                    runtime_fallback: None,
-                    cost: ResolutionCost::None,
-                    requirement: ResolutionBranchRequirement::CardResultCount {
-                        filter: CardResultFilter {
-                            source: CardResultSource::PreviousEffect,
-                            action: CardResultAction::Discard,
-                            players: RelativePlayerSet::Controller,
-                            card_type: Some(CardTypeFilter::Nonland),
-                        },
-                        min: Some(1),
-                        max: None,
-                    },
-                    effects: vec![SpellEffectKind::CreateTokens {
-                        token: "human_soldier_w_1_1".into(),
-                        count: Amount::Fixed(1),
-                        who: PlayerRecipient::Controller,
-                        tapped: false,
-                        sacrifice_timing: None,
-                    }],
-                },
-                ResolutionBranchDef {
-                    branch_id: ChoiceId::new("no_soldier")
-                        .expect("closed Recruit fallback uses a valid choice ID"),
-                    presentation: AbilityPresentation::Fallback,
-                    runtime_fallback: None,
-                    cost: ResolutionCost::None,
-                    requirement: ResolutionBranchRequirement::Always,
-                    effects: Vec::new(),
-                },
-            ],
-            otherwise: Vec::new(),
-        },
-    ]
+/// The typed discard result controls the following token instruction without a card-specific
+/// engine branch or optional-payment receipt.
+fn recruit_program() -> CardProgram {
+    ron::from_str(
+        r#"(body: (steps: [
+            (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
+            (id: "discard_one", bind: ["discarded"], kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+            (id: "if_discarded_nonland", kind: IfResult(
+                condition: DiscardCount(result: "discarded", players: Controller, card_type: Some(Nonland), min: Some(1), max: None),
+                yes: (steps: [(id: "create_soldier", kind: Perform(CreateTokens(token: "human_soldier_w_1_1", count: 1, who: Controller, tapped: false, sacrifice_timing: None)))], yields: []),
+                no: (steps: [], yields: []))),
+        ], yields: []), target_bindings: [])"#,
+    )
+    .expect("the fixed Recruit program is valid authored RON")
 }
 
 const ISSUE_287_RECRUIT_CLAUSE: &str = r#"When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)"#;
@@ -6052,10 +6013,10 @@ fn match_etb_recruit(text: &str, context: &RecipeContext) -> Option<RecipeEmissi
             .is_none_or(issue_287_oracle_id_is_reviewed)
         && text == ISSUE_287_RECRUIT_CLAUSE)
         .then(|| {
-            triggered_ability_with(
+            triggered_program_ability(
                 context,
                 TriggerCondition::WhenSelfEntersBattlefield,
-                recruit_effects(),
+                recruit_program(),
             )
         })
 }
@@ -29956,6 +29917,14 @@ mod tests {
         const LONG_LAKE_NUISANCE_ID: &str = "a833fdf1-db0c-4846-8452-d3b2059c2355";
         const PATIENT_INSTRUCTOR_ID: &str = "bddd7e99-ec74-4ca6-9137-155b85695a95";
         const RECRUIT_CLAUSE: &str = r#"When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)"#;
+        const RECRUIT_PROGRAM: &str = r#"(body: (steps: [
+            (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
+            (id: "discard_one", bind: ["discarded"], kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+            (id: "if_discarded_nonland", kind: IfResult(
+                condition: DiscardCount(result: "discarded", players: Controller, card_type: Some(Nonland), min: Some(1), max: None),
+                yes: (steps: [(id: "create_soldier", kind: Perform(CreateTokens(token: "human_soldier_w_1_1", count: 1, who: Controller, tapped: false, sacrifice_timing: None)))], yields: []),
+                no: (steps: [], yields: []))),
+        ], yields: []), target_bindings: [])"#;
         const RECIPE_ID: &str = "triggered.self_enters.recruit";
 
         for oracle_id in [LONG_LAKE_NUISANCE_ID, PATIENT_INSTRUCTOR_ID] {
@@ -29984,73 +29953,13 @@ mod tests {
             assert!(ability.modal.is_none());
             assert!(ability.targeting.is_none());
             assert!(ability.intervening_if.is_none());
-            let [SpellEffectKind::DrawDiscard {
-                who,
-                draw_count,
-                discard_count,
-                order,
-                optional,
-            }, SpellEffectKind::ChooseResolutionBranch {
-                chooser,
-                optional: branch_optional,
-                selection,
-                branches,
-                otherwise,
-            }] = ability.effect.as_slice()
-            else {
-                panic!(
-                    "issue #287 must emit a draw/discard continuation followed by the result-gated token"
-                );
-            };
-            assert_eq!(*who, PlayerRecipient::Controller);
-            assert_eq!((*draw_count, *discard_count), (1, 1));
-            assert_eq!(*order, DrawDiscardOrder::DrawThenDiscard);
-            assert!(!*optional);
-            assert_eq!(*chooser, PlayerRecipient::Controller);
-            assert!(!*branch_optional);
-            assert_eq!(*selection, ResolutionBranchSelection::FirstApplicable);
-            assert!(otherwise.is_empty());
-            let [soldier, fallback] = branches.as_slice() else {
-                panic!("issue #287 must emit exactly the token branch and its applicable fallback");
-            };
-            assert_eq!(soldier.branch_id.as_str(), "create_a_soldier");
-            assert_eq!(soldier.presentation, AbilityPresentation::Fallback);
-            assert_eq!(soldier.cost, ResolutionCost::None);
-            assert_eq!(
-                soldier.requirement,
-                tricerules_cards::primitives::ResolutionBranchRequirement::CardResultCount {
-                    filter: CardResultFilter {
-                        source: CardResultSource::PreviousEffect,
-                        action: CardResultAction::Discard,
-                        players: RelativePlayerSet::Controller,
-                        card_type: Some(CardTypeFilter::Nonland),
-                    },
-                    min: Some(1),
-                    max: None,
-                }
+            assert!(
+                ability.effect.is_empty(),
+                "Recruit uses its authored program body"
             );
-            assert_eq!(
-                soldier.effects,
-                [SpellEffectKind::CreateTokens {
-                    token: "human_soldier_w_1_1".into(),
-                    count: Amount::Fixed(1),
-                    who: PlayerRecipient::Controller,
-                    tapped: false,
-                    sacrifice_timing: None,
-                }]
-            );
-            assert_eq!(fallback.branch_id.as_str(), "no_soldier");
-            assert_eq!(fallback.presentation, AbilityPresentation::Fallback);
-            assert_eq!(
-                fallback.requirement,
-                tricerules_cards::primitives::ResolutionBranchRequirement::Always
-            );
-            assert!(fallback.effects.is_empty());
-            assert_eq!(
-                SpellEffectKind::validate_list(&ability.effect),
-                Ok(()),
-                "the engine-authored Recruit assembly must pass list validation"
-            );
+            let expected: CardProgram =
+                ron::from_str(RECRUIT_PROGRAM).expect("the exact Recruit program is valid RON");
+            assert_eq!(ability.program.as_ref(), Some(&expected));
         }
 
         for oracle_id in [

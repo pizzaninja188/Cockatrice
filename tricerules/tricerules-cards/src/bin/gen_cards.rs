@@ -3534,21 +3534,21 @@ mod tests {
     use std::io::{Cursor, Write};
     use tricerules_cards::card_def::RawCardDefinition;
     use tricerules_cards::primitives::{
-        BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
-        CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole, CountExpression,
+        BattlefieldPermanentFilter, CardResultAction, CardResultSource, CardTypeFilter,
+        CombatRestriction, CombatRestrictionScope, CombatRole, CountExpression,
         CreatureScopeController, CreatureScopeFilter, EffectSubject, EntersTappedAffected,
         EntryCost, GameCondition, GraveyardFilter, GraveyardOwner, LibraryPlacement,
         ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient,
-        PowerComparison, PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
-        ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SearchDestination,
-        SearchZoneSelection, SpellCastFilter, SpellCostModifier, SpellManaSpentComparison,
-        StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
-        TargetMatchFilter, TargetObjectExclusion, TargetingSourceFilter, TypeLineAddition,
+        PowerComparison, PowerToughnessCharacteristic, RelativePlayerSet, ResolutionCost,
+        SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
+        SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController,
+        TargetFilter, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingSourceFilter,
+        TypeLineAddition,
     };
     use tricerules_cards::{
         AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount,
-        CastTriggerPlayer, CharacteristicDefiningAbility, ChoiceId, Color, CounterKind, Keyword,
-        Layout, ManaCost, SpellEffectKind, TriggerCondition,
+        CastTriggerPlayer, CharacteristicDefiningAbility, Color, CounterKind, Keyword, Layout,
+        ManaCost, SpellEffectKind, TriggerCondition,
     };
 
     fn face(
@@ -11194,6 +11194,14 @@ mod tests {
     #[test]
     fn issue_287_two_card_cohort_generates_exact_typed_recruit() {
         const RECRUIT_CLAUSE: &str = r#"When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)"#;
+        const RECRUIT_PROGRAM: &str = r#"(body: (steps: [
+            (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
+            (id: "discard_one", bind: ["discarded"], kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+            (id: "if_discarded_nonland", kind: IfResult(
+                condition: DiscardCount(result: "discarded", players: Controller, card_type: Some(Nonland), min: Some(1), max: None),
+                yes: (steps: [(id: "create_soldier", kind: Perform(CreateTokens(token: "human_soldier_w_1_1", count: 1, who: Controller, tapped: false, sacrifice_timing: None)))], yields: []),
+                no: (steps: [], yields: []))),
+        ], yields: []), target_bindings: [])"#;
         let cases = [
             (
                 "a833fdf1-db0c-4846-8452-d3b2059c2355",
@@ -11253,57 +11261,13 @@ mod tests {
             assert!(ability.modal.is_none());
             assert!(ability.targeting.is_none());
             assert!(ability.intervening_if.is_none());
-            assert_eq!(
-                ability.effect,
-                [
-                    SpellEffectKind::DrawDiscard {
-                        who: PlayerRecipient::Controller,
-                        draw_count: 1,
-                        discard_count: 1,
-                        order: DrawDiscardOrder::DrawThenDiscard,
-                        optional: false,
-                    },
-                    SpellEffectKind::ChooseResolutionBranch {
-                        chooser: PlayerRecipient::Controller,
-                        optional: false,
-                        selection: ResolutionBranchSelection::FirstApplicable,
-                        branches: vec![
-                            ResolutionBranchDef {
-                                branch_id: ChoiceId::new("create_a_soldier").unwrap(),
-                                presentation: AbilityPresentation::Fallback,
-                                runtime_fallback: None,
-                                cost: ResolutionCost::None,
-                                requirement: ResolutionBranchRequirement::CardResultCount {
-                                    filter: CardResultFilter {
-                                        source: CardResultSource::PreviousEffect,
-                                        action: CardResultAction::Discard,
-                                        players: RelativePlayerSet::Controller,
-                                        card_type: Some(CardTypeFilter::Nonland),
-                                    },
-                                    min: Some(1),
-                                    max: None,
-                                },
-                                effects: vec![SpellEffectKind::CreateTokens {
-                                    token: "human_soldier_w_1_1".into(),
-                                    count: Amount::Fixed(1),
-                                    who: PlayerRecipient::Controller,
-                                    tapped: false,
-                                    sacrifice_timing: None,
-                                }],
-                            },
-                            ResolutionBranchDef {
-                                branch_id: ChoiceId::new("no_soldier").unwrap(),
-                                presentation: AbilityPresentation::Fallback,
-                                runtime_fallback: None,
-                                cost: ResolutionCost::None,
-                                requirement: ResolutionBranchRequirement::Always,
-                                effects: Vec::new(),
-                            },
-                        ],
-                        otherwise: Vec::new(),
-                    },
-                ]
+            assert!(
+                ability.effect.is_empty(),
+                "{name} uses its authored program owner"
             );
+            let expected: tricerules_cards::primitives::CardProgram =
+                ron::from_str(RECRUIT_PROGRAM).expect("the exact Recruit program is valid RON");
+            assert_eq!(ability.program.as_ref(), Some(&expected), "{name}");
         }
 
         let unreviewed = normal_card_with_oracle_id(
