@@ -124,7 +124,6 @@ pub(crate) struct PendingDiscardBatch {
     pub cards: Vec<ProposedDiscard>,
     pub current: usize,
     pub revealed: bool,
-    pub draw_after: Option<(PlayerId, u32)>,
     pub library_orders: BTreeMap<PlayerId, Vec<ObjectId>>,
 }
 
@@ -2071,9 +2070,7 @@ pub struct PendingHandChoice {
     #[serde(default)]
     pub program_selection: bool,
     pub candidate_generations: Vec<(ObjectId, u64)>,
-    pub draw_after: u32,
     pub revealed: bool,
-    pub draw_only_if_discarded: bool,
     /// Exact triggered-ability occurrence that directly instructed the selected object to enter.
     pub entry_cause: Option<TriggerUseKey>,
 }

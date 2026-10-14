@@ -88,7 +88,6 @@ pub(super) fn execute_effect(
         }
         SpellEffectKind::ExileResolvingSpell => zones::exile_resolving_spell(cx)?,
         effect @ SpellEffectKind::Discard { .. } => zones::discard(cx, effect)?,
-        effect @ SpellEffectKind::DrawDiscard { .. } => zones::draw_discard(cx, effect)?,
         effect @ SpellEffectKind::Scry { .. } => zones::scry(cx, effect)?,
         effect @ SpellEffectKind::LibraryPartition { .. } => zones::library_partition(cx, effect)?,
         effect @ SpellEffectKind::RevealTopCardToHandIfMatches { .. } => {

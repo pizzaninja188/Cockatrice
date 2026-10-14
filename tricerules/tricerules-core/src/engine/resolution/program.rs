@@ -585,7 +585,7 @@ impl GameEngine {
                     let outcome =
                         if target_context.has_bindings && target_context.targets.is_empty() {
                             // CR 608.2b has already taken the one stack-wide target snapshot. A
-                            // source-lowered leaf whose own owner-local role groups are now empty is
+                            // authored leaf whose own owner-local role groups are now empty is
                             // skipped while its program unit and any later selected modes continue.
                             if outputs.iter().any(|slot_id| {
                                 compiled.slot(*slot_id).is_some_and(|slot| {
@@ -1116,23 +1116,49 @@ mod invariant_rollback_tests {
                         trigger: WhenSelfEntersBattlefield,
                         modal: Some((min_modes: 2, max_modes: 2, modes: [
                             (mode_id: "first_mode", presentation: Fallback,
-                                effects: [
-                                    DamageTarget(amount: 1, target: (kind: Creature)),
-                                    DrawDiscard(who: Controller, draw_count: 1,
-                                        discard_count: 1, order: DiscardThenDraw,
-                                        optional: true)
-                                ],
+                                effects: [],
+                                program: Some((body: (steps: [
+                                    (id: "damage", kind: Perform(DamageTarget(amount: 1,
+                                        target: (kind: Creature)))),
+                                    (id: "discard", bind: ["discarded"], kind: Perform(Discard(
+                                        who: Controller, quantity: OptionalExact(1)
+                                    ))),
+                                    (id: "draw_if_paid", kind: IfResult(
+                                        condition: DiscardOutcome(result: "discarded",
+                                            outcome: ChosenToPay),
+                                        yes: (steps: [(id: "draw", kind: Perform(Draw(
+                                            who: Controller, count: 1
+                                        )))], yields: []),
+                                        no: (steps: [], yields: [])
+                                    ))
+                                ], yields: []), target_bindings: [
+                                    (instruction_id: "damage", role: Target,
+                                        target_group_index: 0)
+                                ])),
                                 targeting: Some((groups: [(min: 1, max: 1,
-                                    prompt: "Choose first creature", effect_indices: [0])]))),
+                                    prompt: "Choose first creature", effect_indices: [])]))),
                             (mode_id: "second_mode", presentation: Fallback,
-                                effects: [
-                                    DamageTarget(amount: 1, target: (kind: Creature)),
-                                    DrawDiscard(who: Controller, draw_count: 1,
-                                        discard_count: 1, order: DiscardThenDraw,
-                                        optional: true)
-                                ],
+                                effects: [],
+                                program: Some((body: (steps: [
+                                    (id: "damage", kind: Perform(DamageTarget(amount: 1,
+                                        target: (kind: Creature)))),
+                                    (id: "discard", bind: ["discarded"], kind: Perform(Discard(
+                                        who: Controller, quantity: OptionalExact(1)
+                                    ))),
+                                    (id: "draw_if_paid", kind: IfResult(
+                                        condition: DiscardOutcome(result: "discarded",
+                                            outcome: ChosenToPay),
+                                        yes: (steps: [(id: "draw", kind: Perform(Draw(
+                                            who: Controller, count: 1
+                                        )))], yields: []),
+                                        no: (steps: [], yields: [])
+                                    ))
+                                ], yields: []), target_bindings: [
+                                    (instruction_id: "damage", role: Target,
+                                        target_group_index: 0)
+                                ])),
                                 targeting: Some((groups: [(min: 1, max: 1,
-                                    prompt: "Choose second creature", effect_indices: [0])])))
+                                    prompt: "Choose second creature", effect_indices: [])])))
                         ])),
                     )],
                 ),
@@ -1563,18 +1589,13 @@ mod invariant_rollback_tests {
             .first()
             .expect("Anvil trigger")
             .clone();
-        // The tail migration removes every legacy DrawDiscard data owner. Keep this captured
-        // pre-cutover shape synthetic so the unowned legacy fallback remains covered.
+        // Legacy effect-only triggers still use ordinary effect-list dispatch without acquiring
+        // a compiled program owner.
         legacy_ability.program = None;
-        legacy_ability.effect = vec![
-            tricerules_card_model::primitives::SpellEffectKind::DrawDiscard {
-                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
-                draw_count: 1,
-                discard_count: 1,
-                order: tricerules_card_model::primitives::DrawDiscardOrder::DrawThenDiscard,
-                optional: false,
-            },
-        ];
+        legacy_ability.effect = vec![tricerules_card_model::primitives::SpellEffectKind::Draw {
+            who: tricerules_card_model::primitives::PlayerRecipient::Controller,
+            count: tricerules_card_model::primitives::Amount::Fixed(1),
+        }];
         legacy.triggered_ability = Some(legacy_ability);
         assert!(legacy.triggered_ability.as_ref().unwrap().program.is_none());
         assert_eq!(

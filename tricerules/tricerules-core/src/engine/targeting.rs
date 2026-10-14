@@ -1697,7 +1697,6 @@ fn validate_effect_targets(
         | SpellEffectKind::JoinForces
         | SpellEffectKind::Discard { .. }
         | SpellEffectKind::Blight { .. }
-        | SpellEffectKind::DrawDiscard { .. }
         | SpellEffectKind::SelectHandCards { .. }
         | SpellEffectKind::PutSelectedHandCardsOnLibraryTop
         | SpellEffectKind::GainLife { .. }
@@ -2959,7 +2958,7 @@ mod tests {
             );
             let compiled = registry
                 .compiled_program_for_owner(&owner)
-                .expect("the draw-discard sibling compiles every legacy mode owner");
+                .expect("every Three Steps Ahead mode compiles under its exact authored owner");
             let schema =
                 target_schema_with_program(&mode.effects, mode.targeting.as_ref(), Some(compiled));
             assert_eq!(

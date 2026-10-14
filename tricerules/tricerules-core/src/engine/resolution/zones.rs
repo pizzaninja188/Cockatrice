@@ -350,10 +350,8 @@ pub(super) fn draw(
             (drawer, value)
         })
         .collect();
-    let completion = super::super::draw::DrawCompletion::ResumeEffects {
-        stack: parked_stack,
-        result: cx.effect_result.clone(),
-    };
+    let completion =
+        super::super::draw::DrawCompletion::resume_effects(parked_stack, cx.effect_result.clone());
     match engine.start_draw_transaction(requests, completion, spell_label, events)? {
         super::super::draw::DrawProgress::Complete(done) => {
             cx.effect_result.produced_objects.extend(done.receipts);
@@ -381,10 +379,10 @@ pub(super) fn target_player_draws(
                 .with_affected_player(player)
                 .with_previous_effect_result(cx.previous_effect_result),
         );
-        let completion = super::super::draw::DrawCompletion::ResumeEffects {
-            stack: ParkedStackResolution::new(cx.top.clone()),
-            result: cx.effect_result.clone(),
-        };
+        let completion = super::super::draw::DrawCompletion::resume_effects(
+            ParkedStackResolution::new(cx.top.clone()),
+            cx.effect_result.clone(),
+        );
         match cx.engine.start_draw_transaction(
             vec![(player, count)],
             completion,
@@ -1741,7 +1739,6 @@ pub(super) fn choose_hand_cards(
             eligible_override: None,
             optional,
             visibility,
-            draw_after: 0,
             action,
             put_prompt: None,
             entry_cause: None,
@@ -1814,94 +1811,11 @@ pub(super) fn put_permanent_from_hand(
             eligible_override: Some(candidates),
             optional: true,
             visibility: HandChoiceVisibility::PrivateLook,
-            draw_after: 0,
             action: HandCardAction::PutOntoBattlefield,
             put_prompt: Some(put_prompt),
             entry_cause,
         },
     )
-}
-
-pub(super) fn draw_discard(
-    cx: &mut EffectCx<'_>,
-    effect: SpellEffectKind,
-) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::DrawDiscard {
-        who,
-        draw_count,
-        discard_count,
-        order,
-        optional,
-    } = effect
-    else {
-        return Err(EngineError::Illegal("resolution dispatch mismatch"));
-    };
-    let recipients = player_recipients(cx, who);
-    let [player] = recipients.as_slice() else {
-        return if recipients.is_empty() {
-            Ok(EffectOutcome::Continue)
-        } else {
-            Err(EngineError::Illegal(
-                "DrawDiscard requires exactly one affected player",
-            ))
-        };
-    };
-    let player = *player;
-
-    match order {
-        DrawDiscardOrder::DrawThenDiscard => {
-            let completion = super::super::draw::DrawCompletion::BeginDiscard {
-                stack: ParkedStackResolution::new(cx.top.clone()),
-                player,
-                count: discard_count,
-                result: cx.effect_result.clone(),
-            };
-            match cx.engine.start_draw_transaction(
-                vec![(player, draw_count)],
-                completion,
-                cx.spell_label,
-                cx.events,
-            )? {
-                super::super::draw::DrawProgress::Complete(done) => {
-                    cx.effect_result.produced_objects.extend(done.receipts)
-                }
-                super::super::draw::DrawProgress::Parked => return Ok(EffectOutcome::Suspended),
-                super::super::draw::DrawProgress::GameEnded => return Ok(EffectOutcome::GameEnded),
-            }
-            choose_hand_cards_for_player(
-                cx,
-                player,
-                HandCardChoiceSpec {
-                    count: discard_count,
-                    chooser: HandCardChooser::AffectedPlayer,
-                    card_filter: None,
-                    eligible_override: None,
-                    optional: false,
-                    visibility: HandChoiceVisibility::PrivateLook,
-                    draw_after: 0,
-                    action: HandCardAction::Discard,
-                    put_prompt: None,
-                    entry_cause: None,
-                },
-            )
-        }
-        DrawDiscardOrder::DiscardThenDraw => choose_hand_cards_for_player(
-            cx,
-            player,
-            HandCardChoiceSpec {
-                count: discard_count,
-                chooser: HandCardChooser::AffectedPlayer,
-                card_filter: None,
-                eligible_override: None,
-                optional,
-                visibility: HandChoiceVisibility::PrivateLook,
-                draw_after: draw_count,
-                action: HandCardAction::Discard,
-                put_prompt: None,
-                entry_cause: None,
-            },
-        ),
-    }
 }
 
 struct HandCardChoiceSpec<'a> {
@@ -1911,80 +1825,10 @@ struct HandCardChoiceSpec<'a> {
     eligible_override: Option<Vec<ObjectId>>,
     optional: bool,
     visibility: HandChoiceVisibility,
-    draw_after: u32,
     action: HandCardAction,
     put_prompt: Option<&'a str>,
     entry_cause: Option<TriggerUseKey>,
 }
-
-pub(in crate::engine) fn resume_draw_then_discard(
-    engine: &mut GameEngine,
-    stack: ParkedStackResolution,
-    player: PlayerId,
-    count: u32,
-    mut result: EffectResult,
-    mut events: Vec<rv1::RuledEvent>,
-) -> Result<RuledEventBatch, EngineError> {
-    let top = &stack.item;
-    let label = engine
-        .registry
-        .get(&top.card_id)
-        .and_then(|card| card.face(top.face_index))
-        .map(|face| face.name.clone())
-        .unwrap_or_else(|| top.card_id.clone());
-    let previous = stack.previous_result.clone();
-    let mut cx = EffectCx {
-        engine,
-        events: &mut events,
-        top,
-        controller: top.controller,
-        affected_player: player,
-        targets: &[],
-        targets_by_role: &[],
-        target_damage: &[],
-        target_group_indices: &[],
-        spell_label: &label,
-        previous_effect_result: &previous,
-        effect_result: &mut result,
-        effect_index: stack.resume_effect_index.unwrap_or(1).saturating_sub(1),
-        program_state: stack.program.clone(),
-    };
-    let outcome = choose_hand_cards_for_player(
-        &mut cx,
-        player,
-        HandCardChoiceSpec {
-            count,
-            chooser: HandCardChooser::AffectedPlayer,
-            card_filter: None,
-            eligible_override: None,
-            optional: false,
-            visibility: HandChoiceVisibility::PrivateLook,
-            draw_after: 0,
-            action: HandCardAction::Discard,
-            put_prompt: None,
-            entry_cause: None,
-        },
-    )?;
-    if matches!(outcome, EffectOutcome::Suspended) {
-        if let Some(next) = engine
-            .state
-            .pending_resolution
-            .as_mut()
-            .and_then(|pending| pending.continuation.stack_mut())
-        {
-            next.resume_effect_index = stack.resume_effect_index;
-            next.previous_result = result;
-        }
-        return Ok(finish_with_events(engine, events));
-    }
-    engine.complete_parked_resolution_with_previous(
-        stack.item,
-        stack.resume_effect_index,
-        result,
-        events,
-    )
-}
-
 fn choose_hand_cards_for_player(
     cx: &mut EffectCx<'_>,
     affected_player: PlayerId,
@@ -1997,7 +1841,6 @@ fn choose_hand_cards_for_player(
         eligible_override,
         optional,
         visibility,
-        draw_after,
         action,
         put_prompt,
         entry_cause,
@@ -2063,7 +1906,6 @@ fn choose_hand_cards_for_player(
                         .map(|oid| (affected_player, *oid, crate::state::DiscardCause::Effect))
                         .collect(),
                     visibility == HandChoiceVisibility::PublicReveal,
-                    None,
                 )?;
                 events.extend(batch.events);
                 return Ok(EffectOutcome::Suspended);
@@ -2094,24 +1936,6 @@ fn choose_hand_cards_for_player(
             "P{affected_player} has no eligible cards to {} ({spell_label}).",
             hand_action_verb(action)
         )));
-        if action == HandCardAction::Discard && draw_after > 0 && !optional {
-            let completion = super::super::draw::DrawCompletion::ResumeEffects {
-                stack: parked_stack.clone(),
-                result: cx.effect_result.clone(),
-            };
-            match engine.start_draw_transaction(
-                vec![(affected_player, draw_after)],
-                completion,
-                spell_label,
-                events,
-            )? {
-                super::super::draw::DrawProgress::Complete(done) => {
-                    cx.effect_result.produced_objects.extend(done.receipts)
-                }
-                super::super::draw::DrawProgress::Parked => return Ok(EffectOutcome::Suspended),
-                super::super::draw::DrawProgress::GameEnded => return Ok(EffectOutcome::GameEnded),
-            }
-        }
         return Ok(EffectOutcome::Continue);
     }
 
@@ -2231,9 +2055,7 @@ fn choose_hand_cards_for_player(
                         )
                     })
                     .collect(),
-                draw_after,
                 revealed: visibility == HandChoiceVisibility::PublicReveal,
-                draw_only_if_discarded: optional,
                 entry_cause,
             },
         },
@@ -2341,9 +2163,7 @@ pub(super) fn select_hand_cards_for_program(
                         )
                     })
                     .collect(),
-                draw_after: 0,
                 revealed: false,
-                draw_only_if_discarded: false,
                 entry_cause: None,
             },
         },

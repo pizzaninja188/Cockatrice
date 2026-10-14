@@ -153,54 +153,6 @@ fn validate_compiled_program_admission(
     Ok(())
 }
 
-fn compile_legacy_program_owner(
-    registry: &mut CardRegistry,
-    card_id: &str,
-    owner: ProgramOwnerId,
-    effects: &[SpellEffectKind],
-    targeting: Option<&TargetingDef>,
-    source_path: &str,
-    trigger: Option<&TriggerCondition>,
-) -> Result<(), RegistryError> {
-    let compiled = CompiledProgram::compile_legacy_effects(owner.clone(), effects, targeting)
-        .map_err(|reason| RegistryError::InvalidCard {
-            id: card_id.to_owned(),
-            reason: format!("resolution owner {owner:?} at {source_path}: {reason}"),
-        })?;
-    validate_compiled_program_admission(&compiled, &registry.tokens).map_err(|reason| {
-        RegistryError::InvalidCard {
-            id: card_id.to_owned(),
-            reason: format!("resolution owner {owner:?} at {source_path}: {reason}"),
-        }
-    })?;
-    for required in &compiled.required_inputs {
-        let supplied = match required {
-            ProgramRequiredInput::TriggerAffectedPlayer => {
-                trigger.is_some_and(TriggerCondition::supplies_program_affected_player)
-            }
-        };
-        if !supplied {
-            return Err(RegistryError::InvalidCard {
-                id: card_id.to_owned(),
-                reason: format!(
-                    "resolution owner {owner:?} at {source_path} requires {required:?}, but its trigger does not supply that input"
-                ),
-            });
-        }
-    }
-    if registry
-        .compiled_programs
-        .insert(owner.clone(), compiled)
-        .is_some()
-    {
-        return Err(RegistryError::InvalidCard {
-            id: card_id.to_owned(),
-            reason: format!("multiple programs resolve to exact owner {owner:?}"),
-        });
-    }
-    Ok(())
-}
-
 fn compile_authored_program_owner(
     registry: &mut CardRegistry,
     card_id: &str,
@@ -275,57 +227,37 @@ fn compile_authored_program_owner(
     Ok(())
 }
 
-fn compile_legacy_face_programs(
+fn compile_authored_face_programs(
     registry: &mut CardRegistry,
     card: &CardDefinition,
     face: &CardFace,
 ) -> Result<(), RegistryError> {
-    if !face.spell_effect.is_empty()
-        && crate::primitives::effects_contain_draw_discard(&face.spell_effect)
-    {
-        let owner = ProgramOwnerId::face(card.id.clone(), face.face_id.clone());
-        compile_legacy_program_owner(
-            registry,
-            &card.id,
-            owner,
-            &face.spell_effect,
-            face.targeting.as_ref(),
-            "spell_effect",
-            None,
-        )?;
-    }
     if let Some(modal) = &face.modal_spell {
-        let compile_modal_programs = modal.modes.iter().any(|mode| {
-            mode.program.is_some() || crate::primitives::effects_contain_draw_discard(&mode.effects)
-        });
-        if compile_modal_programs {
+        if modal.modes.iter().any(|mode| mode.program.is_some()) {
+            if modal.modes.iter().any(|mode| mode.program.is_none()) {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "a modal spell with authored programs requires a program for every sibling mode"
+                        .into(),
+                });
+            }
             for mode in &modal.modes {
                 let owner = ProgramOwnerId::face_mode(
                     card.id.clone(),
                     face.face_id.clone(),
                     mode.mode_id.clone(),
                 );
-                if let Some(program) = &mode.program {
-                    compile_authored_program_owner(
-                        registry,
-                        &card.id,
-                        owner,
-                        program,
-                        mode.targeting.as_ref(),
-                        &format!("modal_spell.mode_id={}", mode.mode_id),
-                        None,
-                    )?;
-                } else {
-                    compile_legacy_program_owner(
-                        registry,
-                        &card.id,
-                        owner,
-                        &mode.effects,
-                        mode.targeting.as_ref(),
-                        &format!("modal_spell.mode_id={}", mode.mode_id),
-                        None,
-                    )?;
-                }
+                compile_authored_program_owner(
+                    registry,
+                    &card.id,
+                    owner,
+                    mode.program
+                        .as_ref()
+                        .expect("all modal siblings were checked"),
+                    mode.targeting.as_ref(),
+                    &format!("modal_spell.mode_id={}", mode.mode_id),
+                    None,
+                )?;
             }
         }
     }
@@ -341,21 +273,11 @@ fn compile_legacy_face_programs(
                 ability,
                 &format!("activated ability path {path:?}"),
             )?;
-        } else {
-            compile_legacy_ability_program(
-                registry,
-                card,
-                face,
-                &path,
-                &ability.effect,
-                ability.targeting.as_ref(),
-                &format!("activated ability path {path:?}"),
-            )?;
         }
     }
     for ability in face_triggered_abilities(face) {
         let path = vec![ability.ability_id.clone()];
-        compile_legacy_triggered_program(
+        compile_authored_triggered_program(
             registry,
             card,
             face,
@@ -373,16 +295,6 @@ fn compile_legacy_face_programs(
                 face,
                 &path,
                 &bar.level_ability,
-                &format!("class level {} ability path {path:?}", bar.level),
-            )?;
-        } else {
-            compile_legacy_ability_program(
-                registry,
-                card,
-                face,
-                &path,
-                &bar.level_ability.effect,
-                bar.level_ability.targeting.as_ref(),
                 &format!("class level {} ability path {path:?}", bar.level),
             )?;
         }
@@ -427,21 +339,11 @@ fn compile_legacy_face_programs(
                     ability,
                     &format!("static grant ability path {path:?}"),
                 )?;
-            } else {
-                compile_legacy_ability_program(
-                    registry,
-                    card,
-                    face,
-                    &path,
-                    &ability.effect,
-                    ability.targeting.as_ref(),
-                    &format!("static grant ability path {path:?}"),
-                )?;
             }
         }
         for ability in triggered {
             let path = vec![parent_id.clone(), ability.ability_id.clone()];
-            compile_legacy_triggered_program(
+            compile_authored_triggered_program(
                 registry,
                 card,
                 face,
@@ -452,34 +354,6 @@ fn compile_legacy_face_programs(
         }
     }
     Ok(())
-}
-
-fn compile_legacy_ability_program(
-    registry: &mut CardRegistry,
-    card: &CardDefinition,
-    face: &CardFace,
-    ability_path: &[crate::AbilityId],
-    effects: &[SpellEffectKind],
-    targeting: Option<&TargetingDef>,
-    source_path: &str,
-) -> Result<(), RegistryError> {
-    if !crate::primitives::effects_contain_draw_discard(effects) {
-        return Ok(());
-    }
-    let owner = ProgramOwnerId::ability(AbilityDefinitionId {
-        card_id: card.id.clone(),
-        face_id: face.face_id.clone(),
-        ability_path: ability_path.to_vec(),
-    });
-    compile_legacy_program_owner(
-        registry,
-        &card.id,
-        owner,
-        effects,
-        targeting,
-        source_path,
-        None,
-    )
 }
 
 fn compile_authored_ability_program(
@@ -522,7 +396,7 @@ fn compile_authored_ability_program(
     })
 }
 
-fn compile_legacy_triggered_program(
+fn compile_authored_triggered_program(
     registry: &mut CardRegistry,
     card: &CardDefinition,
     face: &CardFace,
@@ -531,10 +405,15 @@ fn compile_legacy_triggered_program(
     source_path: &str,
 ) -> Result<(), RegistryError> {
     if let Some(modal) = &ability.modal {
-        let compile_modal_programs = modal.modes.iter().any(|mode| {
-            mode.program.is_some() || crate::primitives::effects_contain_draw_discard(&mode.effects)
-        });
-        if compile_modal_programs {
+        if modal.modes.iter().any(|mode| mode.program.is_some()) {
+            if modal.modes.iter().any(|mode| mode.program.is_none()) {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: format!(
+                        "triggered modal ability at {source_path} with authored programs requires a program for every sibling mode"
+                    ),
+                });
+            }
             let definition = AbilityDefinitionId {
                 card_id: card.id.clone(),
                 face_id: face.face_id.clone(),
@@ -542,27 +421,17 @@ fn compile_legacy_triggered_program(
             };
             for mode in &modal.modes {
                 let owner = ProgramOwnerId::ability_mode(definition.clone(), mode.mode_id.clone());
-                if let Some(program) = &mode.program {
-                    compile_authored_program_owner(
-                        registry,
-                        &card.id,
-                        owner,
-                        program,
-                        mode.targeting.as_ref(),
-                        &format!("{source_path}.modal.mode_id={}", mode.mode_id),
-                        Some(&ability.trigger),
-                    )?;
-                } else {
-                    compile_legacy_program_owner(
-                        registry,
-                        &card.id,
-                        owner,
-                        &mode.effects,
-                        mode.targeting.as_ref(),
-                        &format!("{source_path}.modal.mode_id={}", mode.mode_id),
-                        Some(&ability.trigger),
-                    )?;
-                }
+                compile_authored_program_owner(
+                    registry,
+                    &card.id,
+                    owner,
+                    mode.program
+                        .as_ref()
+                        .expect("all modal siblings were checked"),
+                    mode.targeting.as_ref(),
+                    &format!("{source_path}.modal.mode_id={}", mode.mode_id),
+                    Some(&ability.trigger),
+                )?;
             }
         }
     } else if let Some(program) = &ability.program {
@@ -576,24 +445,6 @@ fn compile_legacy_triggered_program(
             &card.id,
             owner,
             program,
-            ability.targeting.as_ref(),
-            source_path,
-            Some(&ability.trigger),
-        )?;
-    } else {
-        if !crate::primitives::effects_contain_draw_discard(&ability.effect) {
-            return Ok(());
-        }
-        let owner = ProgramOwnerId::ability(AbilityDefinitionId {
-            card_id: card.id.clone(),
-            face_id: face.face_id.clone(),
-            ability_path: ability_path.to_vec(),
-        });
-        compile_legacy_program_owner(
-            registry,
-            &card.id,
-            owner,
-            &ability.effect,
             ability.targeting.as_ref(),
             source_path,
             Some(&ability.trigger),
@@ -3671,13 +3522,13 @@ impl CardRegistry {
                 })?;
             }
         }
-        // Source-lowered resolution owners use the same exact face and ability identities as
+        // Authored resolution owners use the same exact face and ability identities as
         // ordinary registry programs. Compile token faces only after their complete token
         // namespace and source contracts have been validated.
         let token_definitions: Vec<_> = reg.tokens.values().cloned().collect();
         for token in &token_definitions {
             for face in token.faces_iter() {
-                compile_legacy_face_programs(&mut reg, token, face)?;
+                compile_authored_face_programs(&mut reg, token, face)?;
             }
         }
         for chunk in chunks {
@@ -4387,7 +4238,7 @@ impl CardRegistry {
                 }
             }
             for face in card.faces_iter() {
-                compile_legacy_face_programs(&mut reg, &card, face)?;
+                compile_authored_face_programs(&mut reg, &card, face)?;
             }
             if reg.by_id.insert(id.clone(), card).is_some() {
                 return Err(RegistryError::InvalidCard {

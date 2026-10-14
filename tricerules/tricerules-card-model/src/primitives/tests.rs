@@ -161,26 +161,29 @@ fn zone_card_filter_omits_unset_color_match_from_ron() {
 }
 
 #[test]
-fn registry_lowers_the_complete_draw_discard_spell_owner() {
+fn registry_compiles_authored_draw_then_discard_spell_program() {
     let ron = r#"(
         id: "whole_draw_discard_fixture", name: "Whole Draw Discard Fixture",
         face_id: "whole_draw_discard_fixture", types: ["Sorcery"],
-        spell_effect: [Draw(count: 1), DrawDiscard(
-            who: Controller, draw_count: 1, discard_count: 1,
-            order: DrawThenDiscard, optional: false
-        )]
+        spell_effect: [],
+        spell_program: Some((body: (steps: [
+            (id: "draw", kind: Perform(Draw(who: Controller, count: 1))),
+            (id: "discard", bind: ["discarded"], kind: Perform(Discard(
+                who: Controller, quantity: Exact(1)
+            )))
+        ], yields: []), target_bindings: []))
     )"#;
     let registry = crate::CardRegistry::from_chunks_and_tokens(&[ron], &[])
-        .expect("valid draw/discard fixture should load");
+        .expect("authored draw/discard fixture should load");
     let owner = crate::ProgramOwnerId::face(
         "whole_draw_discard_fixture",
         crate::CardFaceId::new("whole_draw_discard_fixture").unwrap(),
     );
     let program = registry
         .compiled_program_for_owner(&owner)
-        .expect("every DrawDiscard-bearing owner should have a compiled whole-body program");
+        .expect("the exact face owner should compile its authored program");
     assert_eq!(program.owner, owner);
-    assert_eq!(program.body.steps.len(), 3);
+    assert_eq!(program.body.steps.len(), 2);
     assert!(matches!(
         &program.body.steps[0].kind,
         crate::primitives::CompiledInstructionKind::Perform(effect)
@@ -189,15 +192,24 @@ fn registry_lowers_the_complete_draw_discard_spell_owner() {
     assert!(matches!(
         &program.body.steps[1].kind,
         crate::primitives::CompiledInstructionKind::Perform(effect)
-            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Draw { count: crate::primitives::Amount::Fixed(1), .. })
-    ));
-    assert!(matches!(
-        &program.body.steps[2].kind,
-        crate::primitives::CompiledInstructionKind::Perform(effect)
             if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Discard {
                 quantity: crate::primitives::DiscardQuantity::Exact(1), ..
             })
     ));
+}
+
+#[test]
+fn registry_rejects_retired_draw_discard_ron_variant() {
+    let ron = r#"(
+        id: "retired_draw_discard_syntax", name: "Retired Draw Discard Syntax",
+        face_id: "retired_draw_discard_syntax", types: ["Sorcery"],
+        spell_effect: [DrawDiscard(who: Controller, draw_count: 1,
+            discard_count: 1, order: DrawThenDiscard, optional: false)]
+    )"#;
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[ron], &[]).is_err(),
+        "retired DrawDiscard RON syntax must not be admitted"
+    );
 }
 
 #[test]
@@ -212,7 +224,7 @@ fn optional_exact_discard_is_a_typed_exact_n_operation() {
 }
 
 #[test]
-fn registry_lowers_every_mode_of_an_affected_modal_owner_by_stable_mode_id() {
+fn registry_compiles_authored_modal_modes_by_stable_id_with_owner_local_targets() {
     let ron = r#"(
         id: "modal_draw_discard_fixture", name: "Modal Draw Discard Fixture",
         face_id: "modal_draw_discard_fixture", types: ["Sorcery"],
@@ -220,24 +232,43 @@ fn registry_lowers_every_mode_of_an_affected_modal_owner_by_stable_mode_id() {
             min_modes: 1, max_modes: 1,
             modes: [
                 (mode_id: "mode_01", presentation: Fallback,
-                    effects: [DrawDiscard(who: Controller, draw_count: 1,
-                        discard_count: 1, order: DrawThenDiscard, optional: false)]),
+                    effects: [], program: Some((body: (steps: [
+                        (id: "draw", kind: Perform(Draw(who: Controller, count: 1))),
+                        (id: "discard", kind: Perform(Discard(
+                            who: Controller, quantity: Exact(1)
+                        )))
+                    ], yields: [])))),
                 (mode_id: "mode_02", presentation: Fallback,
-                    effects: [Draw(count: 2)]),
+                    effects: [], program: Some((body: (steps: [
+                        (id: "draw_two", kind: Perform(Draw(who: Controller, count: 2)))
+                    ], yields: [])))),
                 (mode_id: "mode_03", presentation: Fallback,
-                    effects: [CounterTargetSpell()],
+                    effects: [], program: Some((body: (steps: [
+                        (id: "counter_spell", kind: Perform(CounterTargetSpell(
+                            spell_filter: (any_of: None, card_type: None, is_color: None,
+                                min_mana_value: None, max_mana_value: None),
+                            unless_controller_pays: None,
+                            unless_controller_pays_by_cast_cost: None
+                        )))
+                    ], yields: []), target_bindings: [
+                        (instruction_id: "counter_spell", role: Spell, target_group_index: 0)
+                    ])),
                     targeting: Some((groups: [(min: 1, max: 1,
-                        prompt: "Choose target spell", effect_indices: [0])]))),
+                        prompt: "Choose target spell", effect_indices: [])]))),
                 (mode_id: "mode_04", presentation: Fallback,
-                    effects: [CreateTokenCopies(count: 1,
-                        source: Chosen((kind: Creature, controller: You)))],
+                    effects: [], program: Some((body: (steps: [
+                        (id: "copy_creature", kind: Perform(CreateTokenCopies(count: 1,
+                            source: Chosen((kind: Creature, controller: You)))))
+                    ], yields: []), target_bindings: [
+                        (instruction_id: "copy_creature", role: Source, target_group_index: 0)
+                    ])),
                     targeting: Some((groups: [(min: 1, max: 1,
-                        prompt: "Choose target creature you control", effect_indices: [0])])))
+                        prompt: "Choose target creature you control", effect_indices: [])])))
             ]
         )
     )"#;
     let registry = crate::CardRegistry::from_chunks_and_tokens(&[ron], &[])
-        .expect("valid modal fixture should load");
+        .expect("all-authored modal fixture should load");
     for (mode, expected_len) in [
         ("mode_01", 2),
         ("mode_02", 1),
@@ -251,7 +282,7 @@ fn registry_lowers_every_mode_of_an_affected_modal_owner_by_stable_mode_id() {
         );
         let program = registry
             .compiled_program_for_owner(&owner)
-            .expect("every mode in an affected modal owner must be lowered");
+            .expect("every authored mode must compile for its stable owner id");
         assert_eq!(program.owner, owner);
         assert_eq!(program.body.steps.len(), expected_len);
         if mode == "mode_03" || mode == "mode_04" {
@@ -270,30 +301,37 @@ fn registry_lowers_every_mode_of_an_affected_modal_owner_by_stable_mode_id() {
 }
 
 #[test]
-fn registry_lowers_validated_targeted_spell_siblings_in_owner_order() {
+fn registry_compiles_authored_targeted_spell_siblings_in_instruction_order() {
     let ron = r#"(
         id: "targeted_draw_discard_fixture", name: "Targeted Draw Discard Fixture",
         face_id: "targeted_draw_discard_fixture", types: ["Sorcery"],
-        spell_effect: [
-            DamageTarget(amount: 5, target: (kind: Creature)),
-            ReturnToOwnersHand(subject: Chosen((kind: Creature))),
-            DrawDiscard(who: Controller, draw_count: 2, discard_count: 1,
-                order: DrawThenDiscard, optional: false)
-        ],
+        spell_effect: [],
+        spell_program: Some((body: (steps: [
+            (id: "damage", kind: Perform(DamageTarget(amount: 5,
+                target: (kind: Creature)))),
+            (id: "return", kind: Perform(ReturnToOwnersHand(
+                subject: Chosen((kind: Creature))))),
+            (id: "draw", kind: Perform(Draw(who: Controller, count: 2))),
+            (id: "discard", kind: Perform(Discard(who: Controller,
+                quantity: Exact(1))))
+        ], yields: []), target_bindings: [
+            (instruction_id: "damage", role: Target, target_group_index: 0),
+            (instruction_id: "return", role: Subject, target_group_index: 1)
+        ])),
         targeting: Some((groups: [
-            (min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0]),
-            (min: 0, max: 2, prompt: "Choose up to two target creatures", effect_indices: [1])
+            (min: 1, max: 1, prompt: "Choose target creature", effect_indices: []),
+            (min: 0, max: 2, prompt: "Choose up to two target creatures", effect_indices: [])
         ]))
     )"#;
     let registry = crate::CardRegistry::from_chunks_and_tokens(&[ron], &[])
-        .expect("target roles and source operations should pass their ordinary validators");
+        .expect("authored target roles and source operations should pass their validators");
     let owner = crate::ProgramOwnerId::face(
         "targeted_draw_discard_fixture",
         crate::CardFaceId::new("targeted_draw_discard_fixture").unwrap(),
     );
     let program = registry
         .compiled_program_for_owner(&owner)
-        .expect("targeted DrawDiscard owner should compile as one whole body");
+        .expect("the complete authored owner should compile as one body");
     assert_eq!(program.body.steps.len(), 4);
     assert!(matches!(
         &program.body.steps[0].kind,
@@ -320,69 +358,91 @@ fn registry_lowers_validated_targeted_spell_siblings_in_owner_order() {
     );
     assert_eq!(program.target_bindings[1].target_group_index, 1);
     assert_eq!(program.target_bindings[1].role_index, 0);
-    assert_eq!(
-        program.body.steps[2].source_effect_path,
-        Some(crate::primitives::SourceEffectPath {
-            root_effect_index: 2,
-            nested_steps: Vec::new(),
-        })
-    );
-    assert_eq!(
-        program.body.steps[3].source_effect_path,
-        program.body.steps[2].source_effect_path
-    );
+    assert!(matches!(
+        &program.body.steps[2].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Draw { count: crate::primitives::Amount::Fixed(2), .. })
+    ));
+    assert!(matches!(
+        &program.body.steps[3].kind,
+        crate::primitives::CompiledInstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Discard {
+                quantity: crate::primitives::DiscardQuantity::Exact(1), ..
+            })
+    ));
 }
 
 #[test]
-fn registry_rejects_nested_target_roles_until_the_program_path_is_modeled() {
+fn registry_compiles_nested_authored_target_roles_by_instruction_id() {
     let ron = r#"(
         id: "nested_target_program_fixture", name: "Nested Target Program Fixture",
         face_id: "nested_target_program_fixture", types: ["Sorcery"],
-        spell_effect: [
-            Conditional(condition: ControllerLibraryEmpty,
-                effect: Destroy(subject: Chosen((kind: Creature)))),
-            DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
-                order: DrawThenDiscard, optional: false)
-        ],
+        spell_effect: [],
+        spell_program: Some((body: (steps: [
+            (id: "conditional_damage", kind: If(condition: ControllerLibraryEmpty,
+                yes: (steps: [(id: "damage", kind: Perform(DamageTarget(
+                    amount: 3, target: (kind: Creature))))], yields: []),
+                no: (steps: [], yields: [])))
+        ], yields: []), target_bindings: [
+            (instruction_id: "damage", role: Target, target_group_index: 0)
+        ])),
         targeting: Some((groups: [
-            (min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])
+            (min: 1, max: 1, prompt: "Choose target creature", effect_indices: [])
         ]))
     )"#;
-    let error = crate::CardRegistry::from_chunks_and_tokens(&[ron], &[])
-        .expect_err("conditional target bindings cannot be emitted with a root-only path");
-    assert!(
-        format!("{error}").contains("nested target roles inside Conditional"),
-        "{error}"
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[ron], &[])
+        .expect("the authored compiler binds targets inside nested branches by instruction id");
+    let owner = crate::ProgramOwnerId::face(
+        "nested_target_program_fixture",
+        crate::CardFaceId::new("nested_target_program_fixture").unwrap(),
     );
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("authored face program is registered");
+    assert!(
+        matches!(
+            &program.body.steps[0].kind,
+            crate::primitives::CompiledInstructionKind::If { yes, .. }
+                if matches!(yes.steps[0].kind, crate::primitives::CompiledInstructionKind::Perform(_))
+        ),
+        "nested target instruction remains inside its explicit branch"
+    );
+    assert_eq!(program.target_bindings.len(), 1);
+    assert_eq!(program.target_bindings[0].instruction_address, 1);
+    assert_eq!(program.target_bindings[0].target_group_index, 0);
+    assert_eq!(program.target_bindings[0].role_index, 0);
 }
 
 #[test]
-fn registry_lowers_recruit_discard_count_branch_to_its_typed_result_slot() {
+fn registry_compiles_authored_discard_count_branch_to_its_typed_result_slot() {
     let card = r#"(
         id: "discard_branch_fixture", name: "Discard Branch Fixture",
         face_id: "discard_branch_fixture", types: ["Creature"], power: 2, toughness: 2,
         triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
-            trigger: WhenSelfEntersBattlefield,
-            effect: [
-                DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
-                    order: DrawThenDiscard, optional: false),
-                ChooseResolutionBranch(chooser: Controller, optional: false,
-                    selection: FirstApplicable, branches: [
-                        (branch_id: "create_soldier", presentation: Fallback, cost: None,
-                            requirement: CardResultCount(filter: (source: PreviousEffect,
-                                action: Discard, players: Controller, card_type: Some(Nonland)),
-                                min: Some(1), max: None),
-                            effects: [CreateTokens(token: "soldier_w_1_1", count: 1,
-                                who: Controller, tapped: false, sacrifice_timing: None)]),
-                        (branch_id: "otherwise", presentation: Fallback, cost: None,
-                            requirement: Always, effects: [])
-                    ], otherwise: [])
-            ])]
+            trigger: WhenSelfEntersBattlefield, effect: [],
+            program: Some((body: (steps: [
+                (id: "draw", kind: Perform(Draw(who: Controller, count: 1))),
+                (id: "discard", bind: ["discarded"], kind: Perform(Discard(
+                    who: Controller, quantity: Exact(1)
+                ))),
+                (id: "create_soldier_if_nonland", kind: IfResult(
+                    condition: DiscardCount(result: "discarded", players: Controller,
+                        card_type: Some(Nonland), min: Some(1), max: None),
+                    yes: (steps: [(id: "create_soldier", kind: Perform(CreateTokens(
+                        token: "soldier_w_1_1", count: 1, who: Controller,
+                        tapped: false, sacrifice_timing: None
+                    )))], yields: []),
+                    no: (steps: [], yields: [])
+                ))
+            ], yields: []))),
+            modal: None, targeting: None, may: false, intervening_if: None,
+            triggers_only_once: false, max_triggers_per_turn: None
+        )]
     )"#;
     let token = r#"(id: "soldier_w_1_1", name: "Soldier", face_id: "soldier_w_1_1",
         types: ["Creature", "Soldier"], colors: [White], power: 1, toughness: 1)"#;
     let registry = crate::CardRegistry::from_chunks_and_tokens(&[card], &[token])
-        .expect("typed discard branch and registered token should load");
+        .expect("authored typed-discard branch and registered token should load");
     let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
         card_id: "discard_branch_fixture".into(),
         face_id: crate::CardFaceId::new("discard_branch_fixture").unwrap(),
@@ -390,7 +450,7 @@ fn registry_lowers_recruit_discard_count_branch_to_its_typed_result_slot() {
     });
     let program = registry
         .compiled_program_for_owner(&owner)
-        .expect("the complete triggered owner should compile");
+        .expect("the authored triggered owner should compile");
     assert_eq!(program.body.steps.len(), 3);
     let crate::primitives::CompiledInstructionKind::If { condition, yes, no } =
         &program.body.steps[2].kind
@@ -420,16 +480,7 @@ fn registry_lowers_recruit_discard_count_branch_to_its_typed_result_slot() {
         crate::primitives::CompiledInstructionKind::Perform(effect)
             if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::CreateTokens { .. })
     ));
-    assert_eq!(
-        yes.steps[0].source_effect_path,
-        Some(crate::primitives::SourceEffectPath {
-            root_effect_index: 1,
-            nested_steps: vec![crate::primitives::SourceEffectPathStep::BranchEffect {
-                branch_id: crate::ChoiceId::new("create_soldier").unwrap(),
-                effect_index: 0,
-            }],
-        })
-    );
+    assert_eq!(yes.steps[0].id, "create_soldier");
     assert!(no.steps.is_empty());
 }
 
@@ -440,9 +491,13 @@ fn registry_requires_a_draw_step_producer_for_affected_player_program_input() {
             r#"(id: "affected_draw_fixture", name: "Affected Draw Fixture",
                 face_id: "affected_draw_fixture", types: ["Creature"], power: 1, toughness: 1,
                 triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
-                    trigger: {trigger}, effect: [DrawDiscard(who: AffectedPlayer,
-                        draw_count: 1, discard_count: 1, order: DrawThenDiscard,
-                        optional: false)])])"#
+                    trigger: {trigger}, effect: [], program: Some((body: (steps: [
+                        (id: "draw", kind: Perform(Draw(who: AffectedPlayer, count: 1))),
+                        (id: "discard", kind: Perform(Discard(who: AffectedPlayer,
+                            quantity: Exact(1))))
+                    ], yields: []))), modal: None, targeting: None,
+                    may: false, intervening_if: None, triggers_only_once: false,
+                    max_triggers_per_turn: None)])"#
         )
     };
     let wrong_trigger = make_card("WhenSelfEntersBattlefield");
@@ -2465,41 +2520,78 @@ fn graveyard_card_cost_requires_a_positive_bounded_filtered_cohort() {
 }
 
 #[test]
-fn optional_draw_discard_is_only_single_card_discard_then_draw() {
-    let effect = |who, discard_count, order| SpellEffectKind::DrawDiscard {
-        who,
-        draw_count: 1,
-        discard_count,
-        order,
-        optional: true,
-    };
-    assert!(effect(
-        PlayerRecipient::Controller,
-        1,
-        DrawDiscardOrder::DiscardThenDraw
+fn optional_discard_then_draw_is_an_authored_payment_result_branch() {
+    let body: crate::primitives::AuthoredBlock = ron::from_str(
+        r#"(steps: [
+            (id: "discard", bind: ["discarded"], kind: Perform(Discard(
+                who: Controller, quantity: OptionalExact(1)
+            ))),
+            (id: "draw_if_paid", kind: IfResult(
+                condition: DiscardOutcome(result: "discarded", outcome: ChosenToPay),
+                yes: (steps: [(id: "draw", kind: Perform(Draw(who: Controller, count: 1)))],
+                    yields: []),
+                no: (steps: [], yields: [])
+            ))
+        ], yields: [])"#,
     )
-    .validate(EffectContext::Ability)
-    .is_ok());
+    .expect("optional discard program fixture parses");
+    let program = crate::primitives::CardProgram {
+        body,
+        target_bindings: Vec::new(),
+    };
+    let owner = crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+        card_id: "optional_discard_program_fixture".into(),
+        face_id: crate::CardFaceId::new("optional_discard_program_fixture").unwrap(),
+        ability_path: vec![crate::AbilityId::new("triggered_01").unwrap()],
+    });
+    let compiled = crate::primitives::CompiledProgram::compile(
+        owner,
+        crate::primitives::EffectContext::Ability,
+        &program,
+    )
+    .expect("optional discard and conditional draw compile as authored instructions");
 
-    for invalid in [
-        effect(
-            PlayerRecipient::Controller,
-            1,
-            DrawDiscardOrder::DrawThenDiscard,
-        ),
-        effect(
-            PlayerRecipient::Controller,
-            2,
-            DrawDiscardOrder::DiscardThenDraw,
-        ),
-        effect(
-            PlayerRecipient::EachPlayer,
-            1,
-            DrawDiscardOrder::DiscardThenDraw,
-        ),
-    ] {
-        assert!(invalid.validate(EffectContext::Ability).is_err());
-    }
+    let crate::primitives::CompiledInstructionKind::Perform(discard) = &compiled.body.steps[0].kind
+    else {
+        panic!("optional discard remains the first authored operation");
+    };
+    assert!(matches!(
+        discard.as_ref(),
+        crate::primitives::SpellEffectKind::Discard {
+            quantity: crate::primitives::DiscardQuantity::OptionalExact(1),
+            ..
+        }
+    ));
+    assert!(matches!(
+        compiled
+            .slot(compiled.body.steps[0].outputs[0])
+            .unwrap()
+            .result_type,
+        crate::primitives::ResultType::DiscardResult {
+            optional_payment: true,
+            ..
+        }
+    ));
+    let crate::primitives::CompiledInstructionKind::If { condition, yes, no } =
+        &compiled.body.steps[1].kind
+    else {
+        panic!("the draw must remain guarded by the discard outcome");
+    };
+    assert!(matches!(
+        condition.as_ref(),
+        crate::primitives::CompiledProgramCondition::Result(
+            crate::primitives::CompiledProgramResultCondition::DiscardOutcome {
+                outcome: crate::primitives::DiscardResultOutcome::ChosenToPay,
+                ..
+            }
+        )
+    ));
+    assert!(matches!(
+        yes.steps[0].kind,
+        crate::primitives::CompiledInstructionKind::Perform(ref effect)
+            if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::Draw { .. })
+    ));
+    assert!(no.steps.is_empty());
 }
 
 #[test]
@@ -4775,10 +4867,16 @@ fn authored_programs_compile_for_exact_mode_activated_and_triggered_owners() {
         ), (
             ability_id: "triggered_02", presentation: Fallback,
             trigger: WhenSelfEntersBattlefield, effect: [], program: None,
-            modal: Some((min_modes: 1, max_modes: 1, modes: [
+            modal: Some((min_modes: 1, max_modes: 2, modes: [
                 (mode_id: "mode_01", presentation: Fallback, linked_cast_cost: None,
                     effects: [], program: Some((body: (steps: [
                         (id: "mode_draw", bind: ["drawn"], kind: Perform(Draw(count: 1)))
+                    ], yields: []))), targeting: None),
+                (mode_id: "mode_02", presentation: Fallback, linked_cast_cost: None,
+                    effects: [], program: Some((body: (steps: [
+                        (id: "mode_discard", bind: ["discarded"], kind: Perform(Discard(
+                            who: Controller, quantity: Exact(1)
+                        )))
                     ], yields: []))), targeting: None),
             ])), targeting: None, may: false, intervening_if: None,
             triggers_only_once: false, max_triggers_per_turn: None,
@@ -4794,16 +4892,19 @@ fn authored_programs_compile_for_exact_mode_activated_and_triggered_owners() {
             ability_path: vec![crate::AbilityId::new(ability_id).unwrap()],
         })
     };
-    let mode_owner = crate::ProgramOwnerId::ability_mode(
-        crate::AbilityDefinitionId {
-            card_id: "program_owner_fixture".into(),
-            face_id: face_id.clone(),
-            ability_path: vec![crate::AbilityId::new("triggered_02").unwrap()],
-        },
-        crate::ModeId::new("mode_01").unwrap(),
-    );
+    let mode_owners = ["mode_01", "mode_02"].map(|mode_id| {
+        crate::ProgramOwnerId::ability_mode(
+            crate::AbilityDefinitionId {
+                card_id: "program_owner_fixture".into(),
+                face_id: face_id.clone(),
+                ability_path: vec![crate::AbilityId::new("triggered_02").unwrap()],
+            },
+            crate::ModeId::new(mode_id).unwrap(),
+        )
+    });
     for owner in [
-        mode_owner,
+        mode_owners[0].clone(),
+        mode_owners[1].clone(),
         ability_owner("activated_02"),
         ability_owner("triggered_01"),
     ] {
@@ -4815,47 +4916,68 @@ fn authored_programs_compile_for_exact_mode_activated_and_triggered_owners() {
 }
 
 #[test]
-fn modal_program_owners_allow_mixed_supported_legacy_siblings_and_reject_unsupported_siblings() {
-    let definition = r#"(id: "mixed_modal_program_fixture", name: "Mixed Modal Program Fixture",
-        face_id: "mixed_modal_program_fixture", mana_cost: "{0}", types: ["Instant"],
+fn all_legacy_modal_spell_owners_stay_on_legacy_dispatch() {
+    let definition = r#"(id: "all_legacy_modal_fixture", name: "All Legacy Modal Fixture",
+        face_id: "all_legacy_modal_fixture", mana_cost: "{0}", types: ["Instant"],
+        modal_spell: Some((min_modes: 1, max_modes: 1, modes: [
+            (mode_id: "draw", presentation: Fallback, linked_cast_cost: None,
+                effects: [Draw(count: 1)], program: None, targeting: None),
+            (mode_id: "life", presentation: Fallback, linked_cast_cost: None,
+                effects: [GainLife(amount: 3)], program: None, targeting: None),
+        ])))"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
+        .expect("all-legacy modal owners remain valid effect-list owners");
+    let face_id = crate::CardFaceId::new("all_legacy_modal_fixture").unwrap();
+    for mode_id in ["draw", "life"] {
+        let owner = crate::ProgramOwnerId::face_mode(
+            "all_legacy_modal_fixture",
+            face_id.clone(),
+            crate::ModeId::new(mode_id).unwrap(),
+        );
+        assert!(
+            registry.compiled_program_for_owner(&owner).is_none(),
+            "all-legacy mode {mode_id} remains on legacy effect dispatch"
+        );
+    }
+}
+
+#[test]
+fn registry_rejects_mixed_authored_and_legacy_modal_spell_siblings() {
+    let definition = r#"(id: "mixed_modal_spell_fixture", name: "Mixed Modal Spell Fixture",
+        face_id: "mixed_modal_spell_fixture", mana_cost: "{0}", types: ["Instant"],
         modal_spell: Some((min_modes: 1, max_modes: 1, modes: [
             (mode_id: "authored", presentation: Fallback, linked_cast_cost: None,
                 effects: [], program: Some((body: (steps: [
                     (id: "authored_draw", bind: ["drawn"], kind: Perform(Draw(count: 1)))
                 ], yields: []))), targeting: None),
-            (mode_id: "legacy_non_dd", presentation: Fallback, linked_cast_cost: None,
-                effects: [ChoosePermanents(chooser: Controller,
-                    filter: (kind: AnyPermanent), min: 0, max: 1)],
-                program: None, targeting: None),
-            (mode_id: "legacy_dd", presentation: Fallback, linked_cast_cost: None,
-                effects: [DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
-                    order: DrawThenDiscard, optional: false)], program: None, targeting: None),
+            (mode_id: "legacy_draw", presentation: Fallback, linked_cast_cost: None,
+                effects: [Draw(count: 1)], program: None, targeting: None),
         ])))"#;
-    let registry = crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
-        .expect("one program selects a modal owner whose every sibling is compiled");
-    let face_id = crate::CardFaceId::new("mixed_modal_program_fixture").unwrap();
-    for mode_id in ["authored", "legacy_non_dd", "legacy_dd"] {
-        let owner = crate::ProgramOwnerId::face_mode(
-            "mixed_modal_program_fixture",
-            face_id.clone(),
-            crate::ModeId::new(mode_id).unwrap(),
-        );
-        assert!(
-            registry.compiled_program_for_owner(&owner).is_some(),
-            "mixed modal owner must compile sibling mode {mode_id}"
-        );
-    }
-
-    let unsupported_sibling = definition.replace(
-        "effects: [ChoosePermanents(chooser: Controller,\n                    filter: (kind: AnyPermanent), min: 0, max: 1)],",
-        "effects: [GainLife(amount: 3)],",
-    );
-    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unsupported_sibling], &[])
-        .expect_err("an unsupported legacy sibling cannot hide behind another authored mode")
-        .to_string();
     assert!(
-        error.contains("effect is not in the resolution-program operation whitelist"),
-        "the exact sibling compiler should reject the unsupported shape: {error}"
+        crate::CardRegistry::from_chunks_and_tokens(&[definition], &[]).is_err(),
+        "a programmed modal spell cannot retain a legacy-only sibling"
+    );
+}
+
+#[test]
+fn registry_rejects_mixed_authored_and_legacy_triggered_modal_siblings() {
+    let definition = r#"(id: "mixed_triggered_modal_fixture", name: "Mixed Triggered Modal Fixture",
+        face_id: "mixed_triggered_modal_fixture", types: ["Creature"], power: 2, toughness: 2,
+        triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+            trigger: WhenSelfEntersBattlefield, effect: [], program: None,
+            modal: Some((min_modes: 1, max_modes: 1, modes: [
+                (mode_id: "authored", presentation: Fallback, linked_cast_cost: None,
+                    effects: [], program: Some((body: (steps: [
+                        (id: "authored_draw", bind: ["drawn"], kind: Perform(Draw(count: 1)))
+                    ], yields: []))), targeting: None),
+                (mode_id: "legacy_draw", presentation: Fallback, linked_cast_cost: None,
+                    effects: [Draw(count: 1)], program: None, targeting: None),
+            ])), targeting: None, may: false, intervening_if: None,
+            triggers_only_once: false, max_triggers_per_turn: None
+        )])"#;
+    assert!(
+        crate::CardRegistry::from_chunks_and_tokens(&[definition], &[]).is_err(),
+        "a programmed triggered-modal ability cannot retain a legacy-only sibling"
     );
 }
 

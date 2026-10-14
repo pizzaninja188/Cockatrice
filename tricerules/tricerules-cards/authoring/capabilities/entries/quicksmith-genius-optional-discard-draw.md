@@ -10,8 +10,8 @@
 
 - **Behavior:** When an artifact enters under Quicksmith Genius's controller, that player may
   discard one card; if they do, they draw one card.
-- **Composition and prerequisites:** The checked RON uses an artifact-entry trigger followed by an
-  optional one-card `DiscardThenDraw` effect. It is discard-before-draw, not draw-before-discard.
+- **Composition and prerequisites:** The checked RON uses an artifact-entry trigger with an authored
+  program: one optional exact discard, then a typed `IfResult` that draws only for `ChosenToPay`.
 - **Boundaries:** The cited scenario resolves one Sol Ring entry event, exercises choosing a card to
   discard, and separately exercises declining the optional discard.
 - **Near misses:** Repeated artifact entries, opponent-controlled artifacts, and a draw-first loot
@@ -22,15 +22,18 @@
 - **Status:** `Supported` for one controlled artifact-entry event and the optional discard/draw
   choice shown in the cited fixture.
 - **Typed symbols:** `TriggerCondition::WheneverPermanentEntersBattlefield` in
-  `tricerules/tricerules-card-model/src/primitives/abilities.rs`; `SpellEffectKind::DrawDiscard` and
-  `DrawDiscardOrder::DiscardThenDraw` in
-  `tricerules/tricerules-card-model/src/primitives/effects.rs`.
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs`; `SpellEffectKind::Discard` and
+  `DiscardQuantity::OptionalExact` in `tricerules/tricerules-card-model/src/primitives/effects.rs`;
+  `ProgramResultCondition::DiscardOutcome` in
+  `tricerules/tricerules-card-model/src/primitives/program.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`
-  and `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`; validator:
-  `tricerules/tricerules-card-model/src/primitives/abilities.rs#TriggeredAbilityDef::validate_shape`
-  and `tricerules/tricerules-card-model/src/primitives/effects.rs#SpellEffectKind::validate_list`;
+  and `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`; validators:
+  `tricerules/tricerules-card-model/src/primitives/abilities.rs#TriggeredAbilityDef::validate_shape`,
+  `tricerules/tricerules-card-model/src/primitives/effects.rs#SpellEffectKind::validate_list`, and
+  `tricerules/tricerules-card-model/src/primitives/program.rs#CompiledProgram::compile_with_targeting`;
   trigger collector: `tricerules/tricerules-core/src/engine/triggers.rs#collect_event_triggers`;
-  choice/effect consumer: `tricerules/tricerules-core/src/engine/resolution/zones.rs#draw_discard`.
+  program runner and discard consumer: `tricerules/tricerules-core/src/engine/resolution/program.rs#run_program_only_leaf`
+  and `tricerules/tricerules-core/src/engine/resolution/zones.rs#discard`.
 - **Evidence and limits:** The selected-card case checks the controller's hand-card choice, the selected
   card entering the graveyard, the next card entering hand, and completed resolution. The decline
   case checks unchanged hand and library. Neither scenario tests recipient redaction or proves that

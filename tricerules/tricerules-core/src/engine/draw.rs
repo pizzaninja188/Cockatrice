@@ -610,10 +610,37 @@ mod library_replacement_tests {
         };
         let mut stack = ParkedStackResolution::new(top);
         stack.program = Some(program);
-        let completion = DrawCompletion::ResumeEffects {
-            stack,
-            result: EffectResult::default(),
+        let completion = DrawCompletion::resume_effects(stack, EffectResult::default());
+        let DrawCompletion::ResumeEffects(resume) = &completion else {
+            panic!("expected the saved-effect draw completion")
         };
+        let diagnostic = crate::diagnostic_json::to_value(&completion).unwrap();
+        assert_eq!(
+            diagnostic
+                .get("variant")
+                .and_then(serde_json::Value::as_str),
+            Some("ResumeEffects")
+        );
+        let payload = diagnostic
+            .get("value")
+            .and_then(serde_json::Value::as_object)
+            .expect("struct-variant diagnostic payload");
+        assert_eq!(
+            payload.get("_type").and_then(serde_json::Value::as_str),
+            Some("DrawCompletion"),
+            "the serialized diagnostic struct name is part of the state shape"
+        );
+        let mut payload_fields = payload.keys().cloned().collect::<Vec<_>>();
+        payload_fields.sort();
+        assert_eq!(payload_fields, ["_type", "result", "stack"]);
+        assert_eq!(
+            payload.get("stack"),
+            Some(&crate::diagnostic_json::to_value(&resume.stack).unwrap())
+        );
+        assert_eq!(
+            payload.get("result"),
+            Some(&crate::diagnostic_json::to_value(&resume.result).unwrap())
+        );
         assert!(matches!(
             engine
                 .start_draw_transaction(vec![(0, 3)], completion, "Brainstorm", &mut Vec::new())
@@ -1467,17 +1494,16 @@ struct DrawNode {
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
+// diagnostic_json uses the struct name for `_type`; keep the former variant struct's name.
+#[serde(rename = "DrawCompletion")]
+pub(crate) struct ResumeEffects {
+    stack: ParkedStackResolution,
+    result: EffectResult,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum DrawCompletion {
-    ResumeEffects {
-        stack: ParkedStackResolution,
-        result: EffectResult,
-    },
-    BeginDiscard {
-        stack: ParkedStackResolution,
-        player: PlayerId,
-        count: u32,
-        result: EffectResult,
-    },
+    ResumeEffects(Box<ResumeEffects>),
     FinishDrawStep {
         active_player: PlayerId,
         occurrence: u64,
@@ -1485,18 +1511,20 @@ pub(crate) enum DrawCompletion {
 }
 
 impl DrawCompletion {
+    pub(crate) fn resume_effects(stack: ParkedStackResolution, result: EffectResult) -> Self {
+        Self::ResumeEffects(Box::new(ResumeEffects { stack, result }))
+    }
+
     fn stack(&self) -> Option<&ParkedStackResolution> {
         match self {
-            Self::ResumeEffects { stack, .. } | Self::BeginDiscard { stack, .. } => Some(stack),
+            Self::ResumeEffects(resume) => Some(&resume.stack),
             Self::FinishDrawStep { .. } => None,
         }
     }
     fn transfer_stack(&mut self, parent: Option<ParkedStackResolution>) {
         if let Some(parent) = parent {
             match self {
-                Self::ResumeEffects { stack, .. } | Self::BeginDiscard { stack, .. } => {
-                    *stack = parent
-                }
+                Self::ResumeEffects(resume) => resume.stack = parent,
                 Self::FinishDrawStep { .. } => {}
             }
         }
@@ -1527,7 +1555,7 @@ pub(super) struct CompletedDraw {
     pub receipts: Vec<TriggerObjectRef>,
 }
 pub(super) enum DrawProgress {
-    Complete(Box<CompletedDraw>),
+    Complete(CompletedDraw),
     Parked,
     GameEnded,
 }
@@ -1808,10 +1836,10 @@ impl GameEngine {
                 request.failed = true;
             }
         }
-        Ok(DrawProgress::Complete(Box::new(CompletedDraw {
+        Ok(DrawProgress::Complete(CompletedDraw {
             completion: work.completion,
             receipts: work.receipts,
-        })))
+        }))
     }
 
     fn apply_draw_replacement(
@@ -2171,24 +2199,14 @@ impl GameEngine {
 
     pub(super) fn complete_draw_transaction(
         &mut self,
-        completed: Box<CompletedDraw>,
+        completed: CompletedDraw,
         mut events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
         match completed.completion {
-            DrawCompletion::ResumeEffects { stack, mut result } => {
+            DrawCompletion::ResumeEffects(resume) => {
+                let ResumeEffects { stack, mut result } = *resume;
                 result.produced_objects.extend(completed.receipts);
                 self.complete_parked_stack_with_previous(stack, result, events)
-            }
-            DrawCompletion::BeginDiscard {
-                stack,
-                player,
-                count,
-                mut result,
-            } => {
-                result.produced_objects.extend(completed.receipts);
-                resolution::zones::resume_draw_then_discard(
-                    self, stack, player, count, result, events,
-                )
             }
             DrawCompletion::FinishDrawStep {
                 active_player,

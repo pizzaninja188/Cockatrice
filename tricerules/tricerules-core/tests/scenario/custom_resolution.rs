@@ -3,220 +3,6 @@ use crate::helpers::*;
 use prost::Message;
 use std::collections::BTreeSet;
 
-fn legacy_effects_contain_draw_discard(
-    effects: &[tricerules_card_model::primitives::SpellEffectKind],
-) -> bool {
-    fn contains(effect: &tricerules_card_model::primitives::SpellEffectKind) -> bool {
-        use tricerules_card_model::primitives::{ResolvingPermanentModifier, SpellEffectKind};
-        match effect {
-            SpellEffectKind::DrawDiscard { .. } => true,
-            SpellEffectKind::Conditional { effect, .. }
-            | SpellEffectKind::ConditionalCastCost { effect, .. } => contains(effect),
-            SpellEffectKind::ChooseResolutionBranch {
-                branches,
-                otherwise,
-                ..
-            } => branches
-                .iter()
-                .flat_map(|branch| &branch.effects)
-                .chain(otherwise)
-                .any(contains),
-            SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
-                ability.effect.iter().any(contains)
-            }
-            SpellEffectKind::GrantTriggeredAbility { ability, .. }
-            | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
-                ability.effect.iter().any(contains)
-            }
-            SpellEffectKind::ApplyPermanentModifier {
-                modifier: ResolvingPermanentModifier::GrantActivatedAbility(ability),
-                ..
-            } => ability.effect.iter().any(contains),
-            _ => false,
-        }
-    }
-
-    effects.iter().any(contains)
-}
-
-fn insert_legacy_activated_owner(
-    owners: &mut BTreeSet<tricerules_card_model::ProgramOwnerId>,
-    card_id: &str,
-    face_id: &tricerules_card_model::CardFaceId,
-    ability_path: Vec<tricerules_card_model::AbilityId>,
-    ability: &tricerules_card_model::ActivatedAbilityDef,
-) {
-    if ability.program.is_none() && legacy_effects_contain_draw_discard(&ability.effect) {
-        owners.insert(tricerules_card_model::ProgramOwnerId::ability(
-            tricerules_card_model::AbilityDefinitionId {
-                card_id: card_id.to_owned(),
-                face_id: face_id.clone(),
-                ability_path,
-            },
-        ));
-    }
-}
-
-fn insert_legacy_triggered_owner(
-    owners: &mut BTreeSet<tricerules_card_model::ProgramOwnerId>,
-    card_id: &str,
-    face_id: &tricerules_card_model::CardFaceId,
-    ability_path: Vec<tricerules_card_model::AbilityId>,
-    ability: &tricerules_card_model::TriggeredAbilityDef,
-) {
-    let definition = tricerules_card_model::AbilityDefinitionId {
-        card_id: card_id.to_owned(),
-        face_id: face_id.clone(),
-        ability_path,
-    };
-    if let Some(modal) = &ability.modal {
-        if modal.modes.iter().any(|mode| {
-            mode.program.is_some() || legacy_effects_contain_draw_discard(&mode.effects)
-        }) {
-            for mode in modal.modes.iter().filter(|mode| mode.program.is_none()) {
-                owners.insert(tricerules_card_model::ProgramOwnerId::ability_mode(
-                    definition.clone(),
-                    mode.mode_id.clone(),
-                ));
-            }
-        }
-    } else if ability.program.is_none() && legacy_effects_contain_draw_discard(&ability.effect) {
-        owners.insert(tricerules_card_model::ProgramOwnerId::ability(definition));
-    }
-}
-
-fn embedded_draw_discard_source_owners() -> BTreeSet<tricerules_card_model::ProgramOwnerId> {
-    use tricerules_card_model::primitives::StaticAbilityDef;
-    let registry = tricerules_cards::registry::global();
-    let mut owners = BTreeSet::new();
-    for card in registry.definitions() {
-        for face in &card.faces {
-            if face.spell_program.is_none()
-                && legacy_effects_contain_draw_discard(&face.spell_effect)
-            {
-                owners.insert(tricerules_card_model::ProgramOwnerId::face(
-                    card.id.clone(),
-                    face.face_id.clone(),
-                ));
-            }
-            if let Some(modal) = &face.modal_spell {
-                if modal.modes.iter().any(|mode| {
-                    mode.program.is_some() || legacy_effects_contain_draw_discard(&mode.effects)
-                }) {
-                    for mode in modal.modes.iter().filter(|mode| mode.program.is_none()) {
-                        owners.insert(tricerules_card_model::ProgramOwnerId::face_mode(
-                            card.id.clone(),
-                            face.face_id.clone(),
-                            mode.mode_id.clone(),
-                        ));
-                    }
-                }
-            }
-
-            for ability in &face.activated_abilities {
-                insert_legacy_activated_owner(
-                    &mut owners,
-                    &card.id,
-                    &face.face_id,
-                    vec![ability.ability_id.clone()],
-                    ability,
-                );
-            }
-            for ability in &face.triggered_abilities {
-                insert_legacy_triggered_owner(
-                    &mut owners,
-                    &card.id,
-                    &face.face_id,
-                    vec![ability.ability_id.clone()],
-                    ability,
-                );
-            }
-            for bar in &face.class_level_bars {
-                insert_legacy_activated_owner(
-                    &mut owners,
-                    &card.id,
-                    &face.face_id,
-                    vec![bar.level_ability.ability_id.clone()],
-                    &bar.level_ability,
-                );
-                for ability in &bar.activated_abilities {
-                    insert_legacy_activated_owner(
-                        &mut owners,
-                        &card.id,
-                        &face.face_id,
-                        vec![ability.ability_id.clone()],
-                        ability,
-                    );
-                }
-                for ability in &bar.triggered_abilities {
-                    insert_legacy_triggered_owner(
-                        &mut owners,
-                        &card.id,
-                        &face.face_id,
-                        vec![ability.ability_id.clone()],
-                        ability,
-                    );
-                }
-            }
-
-            for parent in face.static_abilities.iter().chain(
-                face.class_level_bars
-                    .iter()
-                    .flat_map(|bar| &bar.static_abilities),
-            ) {
-                let parent_id = parent.ability_id.clone();
-                let (activated, triggered) = match &parent.definition {
-                    StaticAbilityDef::AttachedModifier {
-                        activated_abilities,
-                        triggered_abilities,
-                        ..
-                    }
-                    | StaticAbilityDef::ConditionalSelfModifier {
-                        activated_abilities,
-                        triggered_abilities,
-                        ..
-                    } => (
-                        activated_abilities.as_slice(),
-                        triggered_abilities.as_slice(),
-                    ),
-                    StaticAbilityDef::GrantActivatedAbilityToPermanents {
-                        activated_abilities,
-                        ..
-                    } => (activated_abilities.as_slice(), &[][..]),
-                    StaticAbilityDef::GrantTriggeredAbilityToPermanents {
-                        triggered_abilities,
-                        ..
-                    }
-                    | StaticAbilityDef::ConditionalPermanentTransformation {
-                        triggered_abilities,
-                        ..
-                    } => (&[][..], triggered_abilities.as_slice()),
-                    _ => (&[][..], &[][..]),
-                };
-                for ability in activated {
-                    insert_legacy_activated_owner(
-                        &mut owners,
-                        &card.id,
-                        &face.face_id,
-                        vec![parent_id.clone(), ability.ability_id.clone()],
-                        ability,
-                    );
-                }
-                for ability in triggered {
-                    insert_legacy_triggered_owner(
-                        &mut owners,
-                        &card.id,
-                        &face.face_id,
-                        vec![parent_id.clone(), ability.ability_id.clone()],
-                        ability,
-                    );
-                }
-            }
-        }
-    }
-    owners
-}
-
 fn insert_authored_activated_owner(
     owners: &mut BTreeSet<tricerules_card_model::ProgramOwnerId>,
     card_id: &str,
@@ -398,38 +184,6 @@ fn insert_static_authored_program_owners(
     }
 }
 
-fn draw_discard_owner_label(owner: &tricerules_card_model::ProgramOwnerId) -> String {
-    use tricerules_card_model::ProgramOwnerId;
-
-    let face_label = |face: &tricerules_card_model::CardFaceDefinitionId| {
-        format!("{}/{}", face.card_id, face.face_id)
-    };
-    let ability_label = |ability: &tricerules_card_model::AbilityDefinitionId| {
-        format!(
-            "{}/{}:{}",
-            ability.card_id,
-            ability.face_id,
-            ability
-                .ability_path
-                .iter()
-                .map(tricerules_card_model::AbilityId::as_str)
-                .collect::<Vec<_>>()
-                .join("/")
-        )
-    };
-
-    match owner {
-        ProgramOwnerId::Face(face) => format!("face:{}", face_label(face)),
-        ProgramOwnerId::FaceMode { face, mode_id } => {
-            format!("face-mode:{}:{mode_id}", face_label(face))
-        }
-        ProgramOwnerId::Ability(ability) => format!("ability:{}", ability_label(ability)),
-        ProgramOwnerId::AbilityMode { ability, mode_id } => {
-            format!("ability-mode:{}:{mode_id}", ability_label(ability))
-        }
-    }
-}
-
 fn frozen_draw_discard_source_owners() -> BTreeSet<tricerules_card_model::ProgramOwnerId> {
     use tricerules_card_model::{
         AbilityDefinitionId, AbilityId, CardFaceId, ModeId, ProgramOwnerId,
@@ -531,40 +285,22 @@ fn frozen_draw_discard_source_owners() -> BTreeSet<tricerules_card_model::Progra
 }
 
 #[test]
-fn embedded_draw_discard_source_owner_census_is_complete() {
+fn frozen_draw_discard_owners_are_authored_and_compile_for_their_exact_identity() {
     let registry = tricerules_cards::registry::global();
-    let legacy_owners = embedded_draw_discard_source_owners();
     let frozen_owners = frozen_draw_discard_source_owners();
     let source_authored_owners = source_authored_program_owners();
-    let authored_owners = frozen_owners
+    let authored_frozen_owners = frozen_owners
         .intersection(&source_authored_owners)
         .cloned()
         .collect::<BTreeSet<_>>();
-    assert!(
-        legacy_owners.is_disjoint(&authored_owners),
-        "converted authored owners must not remain in the legacy source census"
-    );
-    let owners = legacy_owners
-        .union(&authored_owners)
-        .cloned()
-        .collect::<BTreeSet<_>>();
-    let labels = |owners: &BTreeSet<tricerules_card_model::ProgramOwnerId>| {
-        owners
-            .iter()
-            .map(draw_discard_owner_label)
-            .collect::<Vec<_>>()
-    };
     assert_eq!(
-        owners,
-        frozen_owners,
-        "the current legacy/authored partition must exactly cover the frozen baseline cohort; current={:?}, frozen={:?}",
-        labels(&owners),
-        labels(&frozen_owners)
+        authored_frozen_owners, frozen_owners,
+        "every frozen source owner must now have an authored program"
     );
-    for owner in &owners {
+    for owner in &frozen_owners {
         let program = registry
             .compiled_program_for_owner(owner)
-            .unwrap_or_else(|| panic!("missing compiled program for exact source owner {owner:?}"));
+            .unwrap_or_else(|| panic!("missing compiled program for exact frozen owner {owner:?}"));
         assert_eq!(&program.owner, owner);
     }
 }
@@ -826,20 +562,27 @@ fn optional_exact_discard_requires_zero_or_the_full_payment_before_branching() {
 }
 
 #[test]
-fn source_lowered_soft_counter_resumes_at_its_following_discard_after_payment() {
+fn authored_soft_counter_resumes_at_its_following_discard_after_payment() {
     let counter = r#"(
         id: "program_counter_then_loot",
         name: "Program Counter Then Loot",
         face_id: "program_counter_then_loot",
         mana_cost: "{0}",
         types: ["Instant"],
-        spell_effect: [
-            CounterTargetSpell(spell_filter: (), unless_controller_pays: Some(1)),
-            DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
-                order: DrawThenDiscard, optional: false)
-        ],
+        spell_effect: [],
+        spell_program: Some((body: (steps: [
+            (id: "counter", kind: Perform(CounterTargetSpell(
+                spell_filter: (), unless_controller_pays: Some(1)
+            ))),
+            (id: "draw", kind: Perform(Draw(who: Controller, count: 1))),
+            (id: "discard", bind: ["discarded"], kind: Perform(Discard(
+                who: Controller, quantity: Exact(1)
+            )))
+        ], yields: []), target_bindings: [
+            (instruction_id: "counter", role: Spell, target_group_index: 0)
+        ])),
         targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target spell",
-            effect_indices: [0])]))
+            effect_indices: [])]))
     )"#;
     let target = r#"(
         id: "program_counter_target",
@@ -919,7 +662,7 @@ fn source_lowered_soft_counter_resumes_at_its_following_discard_after_payment() 
         .state
         .pending_resolution
         .as_ref()
-        .expect("the source-lowered instruction after the payment must resume");
+        .expect("the authored discard after payment must resume");
     assert_eq!(discard.presentation.choice_kind, ChoiceKind::HandCards);
     assert_eq!(discard.deciding_player, 1);
     assert!(engine
@@ -930,7 +673,7 @@ fn source_lowered_soft_counter_resumes_at_its_following_discard_after_payment() 
     let discarded = discard.presentation.candidates[0];
     engine
         .apply_scenario_command(1, &submit_resolution_choice(vec![discarded]))
-        .expect("finish the resumed draw-discard instruction");
+        .expect("finish the resumed authored discard step");
     assert_eq!(
         engine.state.objects[&discarded].zone,
         tricerules_core::Zone::Graveyard
@@ -1974,20 +1717,27 @@ fn authored_copy_reprompts_when_final_targets_violate_group_uniqueness_or_distin
 }
 
 #[test]
-fn source_lowered_soft_counter_resumes_at_its_following_discard_after_declined_payment() {
+fn authored_soft_counter_resumes_at_its_following_discard_after_declined_payment() {
     let counter = r#"(
         id: "program_counter_then_loot_decline",
         name: "Program Counter Then Loot Decline",
         face_id: "program_counter_then_loot_decline",
         mana_cost: "{0}",
         types: ["Instant"],
-        spell_effect: [
-            CounterTargetSpell(spell_filter: (), unless_controller_pays: Some(1)),
-            DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
-                order: DrawThenDiscard, optional: false)
-        ],
+        spell_effect: [],
+        spell_program: Some((body: (steps: [
+            (id: "counter", kind: Perform(CounterTargetSpell(
+                spell_filter: (), unless_controller_pays: Some(1)
+            ))),
+            (id: "draw", kind: Perform(Draw(who: Controller, count: 1))),
+            (id: "discard", bind: ["discarded"], kind: Perform(Discard(
+                who: Controller, quantity: Exact(1)
+            )))
+        ], yields: []), target_bindings: [
+            (instruction_id: "counter", role: Spell, target_group_index: 0)
+        ])),
         targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target spell",
-            effect_indices: [0])]))
+            effect_indices: [])]))
     )"#;
     let target = r#"(
         id: "program_counter_decline_target",
@@ -2067,7 +1817,7 @@ fn source_lowered_soft_counter_resumes_at_its_following_discard_after_declined_p
         .state
         .pending_resolution
         .as_ref()
-        .expect("the source-lowered instruction after a declined payment must resume");
+        .expect("the authored discard after a declined payment must resume");
     assert_eq!(discard.presentation.choice_kind, ChoiceKind::HandCards);
     assert_eq!(discard.deciding_player, 1);
     assert!(!engine
@@ -2082,7 +1832,7 @@ fn source_lowered_soft_counter_resumes_at_its_following_discard_after_declined_p
     let discarded = discard.presentation.candidates[0];
     engine
         .apply_scenario_command(1, &submit_resolution_choice(vec![discarded]))
-        .expect("finish the resumed draw-discard instruction");
+        .expect("finish the resumed authored discard step");
     assert_eq!(
         engine.state.objects[&discarded].zone,
         tricerules_core::Zone::Graveyard
@@ -2099,7 +1849,7 @@ fn source_lowered_soft_counter_resumes_at_its_following_discard_after_declined_p
 }
 
 #[test]
-fn source_lowered_copy_tokens_resume_after_entry_counter_replacement_and_order_choices() {
+fn authored_copy_tokens_resume_after_entry_counter_replacement_and_order_choices() {
     let program = r#"(
         id: "copy_then_draw_program",
         name: "Copy Then Draw Program",
@@ -2111,15 +1861,20 @@ fn source_lowered_copy_tokens_resume_after_entry_counter_replacement_and_order_c
             max_modes: 1,
             modes: [
                 (mode_id: "copy_mode", presentation: Fallback,
-                    effects: [
-                        DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
-                            order: DrawThenDiscard, optional: false),
-                        CreateTokenCopies(count: 2,
-                            source: Chosen((kind: Creature, controller: You))),
-                        Draw(count: 1)
-                    ],
+                    effects: [],
+                    program: Some((body: (steps: [
+                        (id: "draw_first", kind: Perform(Draw(who: Controller, count: 1))),
+                        (id: "discard", kind: Perform(Discard(who: Controller,
+                            quantity: Exact(1)))),
+                        (id: "copy_creature", kind: Perform(CreateTokenCopies(count: 2,
+                            source: Chosen((kind: Creature, controller: You))))),
+                        (id: "draw_last", kind: Perform(Draw(who: Controller, count: 1)))
+                    ], yields: []), target_bindings: [
+                        (instruction_id: "copy_creature", role: Source,
+                            target_group_index: 0)
+                    ])),
                     targeting: Some((groups: [(min: 1, max: 1,
-                        prompt: "Choose target creature you control", effect_indices: [1])])))
+                        prompt: "Choose target creature you control", effect_indices: [])])))
             ]
         )
     )"#;
@@ -2169,18 +1924,18 @@ fn source_lowered_copy_tokens_resume_after_entry_counter_replacement_and_order_c
                 vec![(0, target_object(source))],
             ),
         )
-        .expect("cast the source-lowered token-copy program");
+        .expect("cast the authored token-copy program");
     pass_priority_round(&mut engine);
     let discard = engine
         .state
         .pending_resolution
         .as_ref()
-        .expect("the lowered DrawDiscard chooser runs before token creation");
+        .expect("the authored hand choice resumes before token creation");
     assert_eq!(discard.presentation.choice_kind, ChoiceKind::HandCards);
     let discarded = discard.presentation.candidates[0];
     engine
         .apply_scenario_command(0, &submit_resolution_choice(vec![discarded]))
-        .expect("complete the first lowered DrawDiscard leaf");
+        .expect("complete the authored draw step before token creation");
     let draws_before_entries = engine.state.turn_history.current.player(0).cards_drawn;
     assert_eq!(draws_before_entries, draws_before + 1);
 
@@ -2228,7 +1983,7 @@ fn source_lowered_copy_tokens_resume_after_entry_counter_replacement_and_order_c
     assert_eq!(
         engine.state.turn_history.current.player(0).cards_drawn,
         draws_before_entries + 1,
-        "the source-lowered program resumes after replacement and ordering choices"
+        "the authored program resumes after replacement and ordering choices"
     );
     let copied_tokens = engine
         .state

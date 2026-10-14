@@ -87,7 +87,6 @@ fn caster_complement_refuses_every_non_draw_recipient_slot() {
     for data in [
         format!("DamagePlayer(amount:1,who:{recipient})"),
         format!("Discard(quantity:Exact(1),who:{recipient})"),
-        format!("DrawDiscard(draw_count:1,discard_count:1,order:DrawThenDiscard,who:{recipient})"),
         format!("ChooseResolutionBranch(branches:[],chooser:{recipient})"),
         format!("ChoosePermanents(filter:(kind:Creature),min:0,max:1,chooser:{recipient})"),
         format!("LoseLife(amount:Fixed(1),who:{recipient})"),

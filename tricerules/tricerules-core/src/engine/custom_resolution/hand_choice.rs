@@ -102,8 +102,6 @@ impl GameEngine {
                     })
                     .collect(),
                 hand_choice.revealed,
-                (hand_choice.draw_after > 0)
-                    .then_some((hand_choice.affected_player, hand_choice.draw_after)),
             );
         }
         let card_name = self
@@ -209,25 +207,6 @@ impl GameEngine {
                 vec![(hand_choice.affected_player, discard_receipts)],
                 &mut events,
             );
-        }
-        if hand_choice.draw_after > 0 && (!hand_choice.draw_only_if_discarded || !chosen.is_empty())
-        {
-            let completion = super::super::draw::DrawCompletion::ResumeEffects {
-                stack,
-                result: result.into(),
-            };
-            return match self.start_draw_transaction(
-                vec![(hand_choice.affected_player, hand_choice.draw_after)],
-                completion,
-                &card_name,
-                &mut events,
-            )? {
-                super::super::draw::DrawProgress::Parked => Ok(finish_with_events(self, events)),
-                super::super::draw::DrawProgress::GameEnded => Ok(finish_with_events(self, events)),
-                super::super::draw::DrawProgress::Complete(done) => {
-                    self.complete_draw_transaction(done, events)
-                }
-            };
         }
         self.complete_parked_stack_with_previous(stack, result.into(), events)
     }
@@ -431,7 +410,7 @@ impl GameEngine {
                     })
                 })
                 .collect();
-            let batch = self.start_discard_replacements(stack, selected, false, None)?;
+            let batch = self.start_discard_replacements(stack, selected, false)?;
             events.extend(batch.events);
             return Ok(None);
         }

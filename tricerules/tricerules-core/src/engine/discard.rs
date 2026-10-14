@@ -210,7 +210,6 @@ impl GameEngine {
         stack: ParkedStackResolution,
         selected: Vec<(PlayerId, ObjectId, DiscardCause)>,
         revealed: bool,
-        draw_after: Option<(PlayerId, u32)>,
     ) -> Result<RuledEventBatch, EngineError> {
         let cards = selected
             .into_iter()
@@ -236,7 +235,6 @@ impl GameEngine {
                 cards,
                 current: 0,
                 revealed,
-                draw_after,
                 library_orders: BTreeMap::new(),
             },
         )
@@ -460,24 +458,6 @@ impl GameEngine {
                 batches: discard_batches,
                 cards: typed_cards,
             });
-        }
-        if let Some((player, count)) = batch.draw_after {
-            let completion = super::draw::DrawCompletion::ResumeEffects {
-                stack,
-                result: result.into(),
-            };
-            return match self.start_draw_transaction(
-                vec![(player, count)],
-                completion,
-                "discard continuation",
-                &mut events,
-            )? {
-                super::draw::DrawProgress::Parked => Ok(finish_with_events(self, events)),
-                super::draw::DrawProgress::GameEnded => Ok(finish_with_events(self, events)),
-                super::draw::DrawProgress::Complete(done) => {
-                    self.complete_draw_transaction(done, events)
-                }
-            };
         }
         self.complete_parked_stack_with_previous(stack, result.into(), events)
     }

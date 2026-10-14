@@ -1,7 +1,7 @@
 use tricerules_cards::primitives::{
-    CardResultAction, CardResultFilter, CardResultSource, CardTypeFilter, DrawDiscardOrder,
-    InstructionKind, PlayerRecipient, ProgramResultCondition, RelativePlayerSet,
-    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SpellEffectKind,
+    CardResultAction, CardResultFilter, CardResultSource, CardTypeFilter, InstructionKind,
+    PlayerRecipient, ProgramResultCondition, RelativePlayerSet, ResolutionBranchRequirement,
+    ResolutionBranchSelection, ResolutionCost, SpellEffectKind,
 };
 use tricerules_cards::{
     AbilityDefinitionId, AbilityId, AbilityPresentation, Amount, CardFaceId, ChoiceId,
@@ -174,12 +174,13 @@ fn issue_287_recruit_assembly_requires_the_typed_discard_result_producer() {
     };
     assert_eq!(
         SpellEffectKind::validate_list(&[
-            SpellEffectKind::DrawDiscard {
+            SpellEffectKind::Draw {
                 who: PlayerRecipient::Controller,
-                draw_count: 1,
-                discard_count: 1,
-                order: DrawDiscardOrder::DrawThenDiscard,
-                optional: false,
+                count: Amount::Fixed(1),
+            },
+            SpellEffectKind::Discard {
+                who: PlayerRecipient::Controller,
+                quantity: tricerules_cards::primitives::DiscardQuantity::Exact(1),
             },
             branch_effect.clone(),
         ]),

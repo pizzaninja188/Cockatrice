@@ -42,8 +42,9 @@ pub struct ModeDef {
     #[serde(default)]
     pub effects: Vec<SpellEffectKind>,
     /// Authored result-bearing resolution body for this exact mode. Mutually exclusive with
-    /// `effects`; when any sibling mode uses a program, the registry compiles every sibling mode
-    /// through the same exact-owner path, including supported legacy-effect siblings.
+    /// `effects`. If any sibling mode in the owning modal set has a program, every sibling must
+    /// have an authored program; mixed authored/legacy mode sets are rejected at registry load.
+    /// All-legacy mode sets continue through ordinary effect-list dispatch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub program: Option<CardProgram>,
     #[serde(default)]

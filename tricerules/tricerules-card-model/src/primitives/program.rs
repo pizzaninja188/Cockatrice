@@ -10,9 +10,8 @@
 //! separately typed context/result contract.
 
 use super::{
-    Amount, CardTypeFilter, DiscardQuantity, DrawDiscardOrder, EffectContext, EffectSubject,
-    GameCondition, PlayerRecipient, RelativePlayerSet, ResolutionBranchRequirement,
-    SpellEffectKind, TargetFilter, TargetSchema, TargetingDef, TokenCopySource,
+    Amount, CardTypeFilter, EffectContext, EffectSubject, GameCondition, PlayerRecipient,
+    RelativePlayerSet, SpellEffectKind, TargetFilter, TargetSchema, TargetingDef, TokenCopySource,
 };
 use crate::{ModeId, ProgramOwnerId};
 use serde::{Deserialize, Serialize};
@@ -105,47 +104,6 @@ pub struct Instruction {
     #[serde(default)]
     pub input: Option<String>,
     pub kind: InstructionKind,
-    /// Source-only provenance attached by legacy lowering. It is omitted from authored RON;
-    /// compiled instructions retain it for owner-local target binding.
-    #[serde(skip)]
-    source_effect_path: Option<SourceEffectPath>,
-}
-
-/// Structural address of the effect in the source owner that produced a compiled instruction.
-/// The enclosing `CompiledProgram.owner` scopes the root index to a face, ability, or stable mode.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct SourceEffectPath {
-    pub root_effect_index: u32,
-    #[serde(default)]
-    pub nested_steps: Vec<SourceEffectPathStep>,
-}
-
-/// Edges through source wrappers and nested effect lists. List indices remain local to their
-/// immediate parent; the root source effect ordinal is never inferred from expanded instruction
-/// positions or generated IDs.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum SourceEffectPathStep {
-    ConditionalEffect,
-    ConditionalCastCostEffect,
-    BranchEffect {
-        branch_id: crate::ChoiceId,
-        effect_index: u32,
-    },
-    OtherwiseEffect {
-        effect_index: u32,
-    },
-    IfBeheldEffect {
-        effect_index: u32,
-    },
-}
-
-impl SourceEffectPath {
-    fn root(root_effect_index: u32) -> Self {
-        Self {
-            root_effect_index,
-            nested_steps: Vec::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -275,8 +233,6 @@ pub struct CompiledInstruction {
     pub id: String,
     pub outputs: Vec<ResultSlotId>,
     pub input: Option<ResultSlotId>,
-    #[serde(default)]
-    pub source_effect_path: Option<SourceEffectPath>,
     pub kind: CompiledInstructionKind,
 }
 
@@ -316,7 +272,6 @@ struct Compiler {
     slots: Vec<CompiledSlot>,
     instruction_ids: HashSet<String>,
     required_inputs: std::collections::BTreeSet<ProgramRequiredInput>,
-    preserve_source_paths: bool,
     next_instruction_address: u32,
 }
 
@@ -329,62 +284,6 @@ impl CompiledProgram {
         Self::compile_with_targeting(owner, context, program, None)
     }
 
-    /// Normalize and compile one complete legacy effect body. The registry calls this only when
-    /// the exact owner contains DrawDiscard; its siblings are retained in their original order.
-    pub(crate) fn compile_legacy_effects(
-        owner: ProgramOwnerId,
-        effects: &[SpellEffectKind],
-        targeting: Option<&TargetingDef>,
-    ) -> Result<Self, String> {
-        let schema = TargetSchema::compile(effects, targeting)?;
-        if schema
-            .groups
-            .iter()
-            .flat_map(|group| &group.bindings)
-            .any(|binding| {
-                matches!(
-                    effects.get(binding.effect_index),
-                    Some(
-                        SpellEffectKind::Conditional { .. }
-                            | SpellEffectKind::ConditionalCastCost { .. }
-                    )
-                )
-            })
-        {
-            return Err(
-                "nested target roles inside Conditional or ConditionalCastCost are not yet supported in resolution programs".into(),
-            );
-        }
-        let body = lower_legacy_effects(effects, "source")?;
-        let program = CardProgram {
-            body,
-            target_bindings: Vec::new(),
-        };
-        let mut compiled =
-            Self::compile_with_policy(owner.clone(), owner.effect_context(), &program, true)?;
-        for (group_index, group) in schema.groups.iter().enumerate() {
-            for binding in &group.bindings {
-                let source_effect_path = SourceEffectPath::root(
-                    u32::try_from(binding.effect_index)
-                        .map_err(|_| "targeted source effect index exceeds u32".to_string())?,
-                );
-                let instruction_address =
-                    find_instruction_address_by_source_path(&compiled.body, &source_effect_path)
-                        .ok_or_else(|| {
-                            "legacy target binding has no lowered program instruction".to_string()
-                        })?;
-                compiled.target_bindings.push(ProgramTargetBinding {
-                    instruction_address,
-                    target_group_index: u32::try_from(group_index)
-                        .map_err(|_| "target group index exceeds u32".to_string())?,
-                    role_index: u32::try_from(binding.role_index)
-                        .map_err(|_| "target role index exceeds u32".to_string())?,
-                });
-            }
-        }
-        Ok(compiled)
-    }
-
     /// Compile one authored program against its program-owned target-group declaration.
     pub fn compile_with_targeting(
         owner: ProgramOwnerId,
@@ -392,7 +291,7 @@ impl CompiledProgram {
         program: &CardProgram,
         targeting: Option<&TargetingDef>,
     ) -> Result<Self, String> {
-        let mut compiled = Self::compile_with_policy(owner, context, program, false)?;
+        let mut compiled = Self::compile_internal(owner, context, program)?;
         if context == EffectContext::Spell
             && targeting.is_some_and(TargetingDef::requires_opponent_choice)
         {
@@ -433,11 +332,10 @@ impl CompiledProgram {
         Ok(compiled)
     }
 
-    fn compile_with_policy(
+    fn compile_internal(
         owner: ProgramOwnerId,
         context: EffectContext,
         program: &CardProgram,
-        preserve_source_paths: bool,
     ) -> Result<Self, String> {
         if owner.effect_context() != context {
             return Err("program owner does not match the supplied effect context".into());
@@ -451,7 +349,6 @@ impl CompiledProgram {
             slots: Vec::new(),
             instruction_ids: HashSet::new(),
             required_inputs: std::collections::BTreeSet::new(),
-            preserve_source_paths,
             next_instruction_address: 0,
         };
         let (body, _) = compiler.compile_block(&program.body, &HashMap::new())?;
@@ -508,26 +405,6 @@ fn find_instruction_by_id<'a>(
                 return Some(found);
             }
             if let Some(found) = find_instruction_by_id(no, id) {
-                return Some(found);
-            }
-        }
-    }
-    None
-}
-
-fn find_instruction_address_by_source_path(
-    block: &CompiledBlock,
-    source_effect_path: &SourceEffectPath,
-) -> Option<u32> {
-    for instruction in &block.steps {
-        if instruction.source_effect_path.as_ref() == Some(source_effect_path) {
-            return Some(instruction.instruction_address);
-        }
-        if let CompiledInstructionKind::If { yes, no, .. } = &instruction.kind {
-            if let Some(found) = find_instruction_address_by_source_path(yes, source_effect_path) {
-                return Some(found);
-            }
-            if let Some(found) = find_instruction_address_by_source_path(no, source_effect_path) {
                 return Some(found);
             }
         }
@@ -667,11 +544,6 @@ impl Compiler {
                 id: instruction.id.clone(),
                 outputs,
                 input,
-                source_effect_path: if self.preserve_source_paths {
-                    instruction.source_effect_path.clone()
-                } else {
-                    None
-                },
                 kind,
             });
         }
@@ -695,297 +567,6 @@ impl Compiler {
     }
 }
 
-fn lower_legacy_effects(
-    effects: &[SpellEffectKind],
-    prefix: &str,
-) -> Result<AuthoredBlock, String> {
-    let source_paths = effects
-        .iter()
-        .enumerate()
-        .map(|(index, _)| {
-            Ok(SourceEffectPath {
-                root_effect_index: u32::try_from(index)
-                    .map_err(|_| "source effect list is too large")?,
-                nested_steps: Vec::new(),
-            })
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-    lower_legacy_effects_with_paths(effects, prefix, &source_paths)
-}
-
-fn lower_legacy_branch_effects(
-    effects: &[SpellEffectKind],
-    prefix: &str,
-    parent: &SourceEffectPath,
-    branch_id: &crate::ChoiceId,
-) -> Result<AuthoredBlock, String> {
-    let source_paths = effects
-        .iter()
-        .enumerate()
-        .map(|(index, _)| {
-            let mut path = parent.clone();
-            path.nested_steps.push(SourceEffectPathStep::BranchEffect {
-                branch_id: branch_id.clone(),
-                effect_index: u32::try_from(index)
-                    .map_err(|_| "source branch effect list is too large")?,
-            });
-            Ok(path)
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-    lower_legacy_effects_with_paths(effects, prefix, &source_paths)
-}
-
-fn lower_legacy_effects_with_paths(
-    effects: &[SpellEffectKind],
-    prefix: &str,
-    source_paths: &[SourceEffectPath],
-) -> Result<AuthoredBlock, String> {
-    if effects.len() != source_paths.len() {
-        return Err("source effect path count does not match the effect list".into());
-    }
-    let mut steps = Vec::new();
-    let mut previous_discard_result = None;
-    let mut previous_selection_result = None;
-
-    for (index, (effect, source_effect_path)) in effects.iter().zip(source_paths).enumerate() {
-        let path = format!("{prefix}_{index:03}");
-        match effect {
-            SpellEffectKind::DrawDiscard {
-                who,
-                draw_count,
-                discard_count,
-                order,
-                optional,
-            } => {
-                if *optional && (*order != DrawDiscardOrder::DiscardThenDraw || *discard_count != 1)
-                {
-                    return Err(format!(
-                        "{path}: optional DrawDiscard requires DiscardThenDraw with one discarded card"
-                    ));
-                }
-                let draw = SpellEffectKind::Draw {
-                    who: *who,
-                    count: Amount::Fixed(*draw_count),
-                };
-                let discard = SpellEffectKind::Discard {
-                    who: *who,
-                    quantity: if *optional {
-                        DiscardQuantity::OptionalExact(*discard_count)
-                    } else {
-                        DiscardQuantity::Exact(*discard_count)
-                    },
-                };
-                let discard_result = format!("{path}_discard_result");
-                if *optional {
-                    steps.push(Instruction {
-                        id: format!("{path}_discard"),
-                        bind: vec![discard_result.clone()],
-                        input: None,
-                        kind: InstructionKind::Perform(Box::new(discard)),
-                        source_effect_path: Some(source_effect_path.clone()),
-                    });
-                    steps.push(Instruction {
-                        id: format!("{path}_draw_if_paid"),
-                        bind: Vec::new(),
-                        input: None,
-                        kind: InstructionKind::IfResult {
-                            condition: ProgramResultCondition::DiscardOutcome {
-                                result: discard_result.clone(),
-                                outcome: DiscardResultOutcome::ChosenToPay,
-                            },
-                            yes: AuthoredBlock {
-                                steps: vec![source_perform(
-                                    format!("{path}_paid_000"),
-                                    draw,
-                                    None,
-                                    None,
-                                    source_effect_path.clone(),
-                                )],
-                                yields: Vec::new(),
-                            },
-                            no: AuthoredBlock {
-                                steps: Vec::new(),
-                                yields: Vec::new(),
-                            },
-                        },
-                        source_effect_path: Some(source_effect_path.clone()),
-                    });
-                } else {
-                    let (first, second) = match order {
-                        DrawDiscardOrder::DrawThenDiscard => (&draw, &discard),
-                        DrawDiscardOrder::DiscardThenDraw => (&discard, &draw),
-                    };
-                    steps.push(source_perform(
-                        format!("{path}_first"),
-                        first.clone(),
-                        (std::ptr::eq(first, &discard)).then(|| discard_result.clone()),
-                        None,
-                        source_effect_path.clone(),
-                    ));
-                    steps.push(source_perform(
-                        format!("{path}_second"),
-                        second.clone(),
-                        (std::ptr::eq(second, &discard)).then(|| discard_result.clone()),
-                        None,
-                        source_effect_path.clone(),
-                    ));
-                }
-                previous_discard_result = Some(discard_result);
-                previous_selection_result = None;
-            }
-            SpellEffectKind::ChooseResolutionBranch { .. } if previous_discard_result.is_some() => {
-                let Some((condition, branch_id, yes_effects, no_effects)) =
-                    typed_discard_branch(effect, previous_discard_result.as_deref().unwrap())
-                else {
-                    return Err(format!(
-                        "{path}: a PreviousEffect discard condition must be lowered to an explicit typed result branch"
-                    ));
-                };
-                steps.push(Instruction {
-                    id: format!("{path}_result_branch"),
-                    bind: Vec::new(),
-                    input: None,
-                    kind: InstructionKind::IfResult {
-                        condition,
-                        yes: lower_legacy_branch_effects(
-                            &yes_effects,
-                            &format!("{path}_yes"),
-                            source_effect_path,
-                            &branch_id,
-                        )?,
-                        no: lower_legacy_effects(&no_effects, &format!("{path}_no"))?,
-                    },
-                    source_effect_path: Some(source_effect_path.clone()),
-                });
-                previous_discard_result = None;
-                previous_selection_result = None;
-            }
-            _ => {
-                let input = match effect {
-                    SpellEffectKind::UntapChosenPermanents => previous_selection_result.take(),
-                    SpellEffectKind::PutSelectedHandCardsOnLibraryTop => {
-                        previous_selection_result.take()
-                    }
-                    _ => None,
-                };
-                let bind = match effect {
-                    SpellEffectKind::Discard { .. } => {
-                        let result = format!("{path}_discard_result");
-                        previous_discard_result = Some(result.clone());
-                        vec![result]
-                    }
-                    SpellEffectKind::ChoosePermanents { .. }
-                    | SpellEffectKind::SelectHandCards { .. } => {
-                        let result = format!("{path}_selection_result");
-                        previous_selection_result = Some(result.clone());
-                        vec![result]
-                    }
-                    _ => {
-                        previous_discard_result = None;
-                        previous_selection_result = None;
-                        Vec::new()
-                    }
-                };
-                steps.push(Instruction {
-                    id: path,
-                    bind,
-                    input,
-                    kind: InstructionKind::Perform(Box::new(effect.clone())),
-                    source_effect_path: Some(source_effect_path.clone()),
-                });
-            }
-        }
-    }
-
-    Ok(AuthoredBlock {
-        steps,
-        yields: Vec::new(),
-    })
-}
-
-fn source_perform(
-    id: String,
-    effect: SpellEffectKind,
-    result: Option<String>,
-    input: Option<String>,
-    source_effect_path: SourceEffectPath,
-) -> Instruction {
-    Instruction {
-        id,
-        bind: result.into_iter().collect(),
-        input,
-        kind: InstructionKind::Perform(Box::new(effect)),
-        source_effect_path: Some(source_effect_path),
-    }
-}
-
-fn typed_discard_branch(
-    effect: &SpellEffectKind,
-    result: &str,
-) -> Option<(
-    ProgramResultCondition,
-    crate::ChoiceId,
-    Vec<SpellEffectKind>,
-    Vec<SpellEffectKind>,
-)> {
-    let SpellEffectKind::ChooseResolutionBranch {
-        chooser: PlayerRecipient::Controller,
-        optional: false,
-        selection: super::ResolutionBranchSelection::FirstApplicable,
-        branches,
-        otherwise,
-    } = effect
-    else {
-        return None;
-    };
-    if !otherwise.is_empty() {
-        return None;
-    }
-    let mut result_branch = None;
-    for branch in branches {
-        let ResolutionBranchRequirement::CardResultCount { filter, min, max } = &branch.requirement
-        else {
-            if branch.requirement == ResolutionBranchRequirement::Always
-                && branch.cost == super::ResolutionCost::None
-                && branch.effects.is_empty()
-            {
-                continue;
-            }
-            return None;
-        };
-        if filter.source != super::CardResultSource::PreviousEffect
-            || filter.action != super::CardResultAction::Discard
-            || filter.players != RelativePlayerSet::Controller
-            || filter.card_type != Some(CardTypeFilter::Nonland)
-            || branch.cost != super::ResolutionCost::None
-            || branch.effects.is_empty()
-            || result_branch.is_some()
-        {
-            return None;
-        }
-        result_branch = Some((
-            filter,
-            *min,
-            *max,
-            branch.branch_id.clone(),
-            branch.effects.clone(),
-        ));
-    }
-    let (filter, min, max, branch_id, effects) = result_branch?;
-    Some((
-        ProgramResultCondition::DiscardCount {
-            result: result.to_owned(),
-            players: filter.players,
-            card_type: filter.card_type,
-            min,
-            max,
-        },
-        branch_id,
-        effects,
-        Vec::new(),
-    ))
-}
-
 fn operation_needs_affected_player(effect: &SpellEffectKind) -> bool {
     matches!(
         effect,
@@ -997,41 +578,6 @@ fn operation_needs_affected_player(effect: &SpellEffectKind) -> bool {
             ..
         }
     )
-}
-
-fn effect_contains_draw_discard(effect: &SpellEffectKind) -> bool {
-    match effect {
-        SpellEffectKind::DrawDiscard { .. } => true,
-        SpellEffectKind::Conditional { effect, .. }
-        | SpellEffectKind::ConditionalCastCost { effect, .. } => {
-            effect_contains_draw_discard(effect)
-        }
-        SpellEffectKind::ChooseResolutionBranch {
-            branches,
-            otherwise,
-            ..
-        } => branches
-            .iter()
-            .flat_map(|branch| &branch.effects)
-            .chain(otherwise)
-            .any(effect_contains_draw_discard),
-        SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
-            ability.effect.iter().any(effect_contains_draw_discard)
-        }
-        SpellEffectKind::GrantTriggeredAbility { ability, .. }
-        | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
-            ability.effect.iter().any(effect_contains_draw_discard)
-        }
-        SpellEffectKind::ApplyPermanentModifier {
-            modifier: super::ResolvingPermanentModifier::GrantActivatedAbility(ability),
-            ..
-        } => ability.effect.iter().any(effect_contains_draw_discard),
-        _ => false,
-    }
-}
-
-pub(crate) fn effects_contain_draw_discard(effects: &[SpellEffectKind]) -> bool {
-    effects.iter().any(effect_contains_draw_discard)
 }
 
 fn compile_program_condition(

@@ -616,13 +616,6 @@ pub enum DiscardQuantity {
     },
 }
 
-/// Written order for a draw/discard sequence whose discard may suspend resolution.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DrawDiscardOrder {
-    DrawThenDiscard,
-    DiscardThenDraw,
-}
-
 /// A fixed protection quality or an engine-authored list chosen as the effect resolves.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProtectionGrant {
@@ -1115,20 +1108,6 @@ pub enum SpellEffectKind {
         #[serde(default)]
         who: PlayerRecipient,
         quantity: DiscardQuantity,
-    },
-    /// Draw and discard as one resumable instruction. This is intentionally untargeted: `who`
-    /// identifies the affected player and that player chooses from their private hand.
-    ///
-    /// Rousing Read and Teferi's Protege draw then discard. Keldon Raider optionally discards,
-    /// then draws only if a card was actually discarded.
-    DrawDiscard {
-        #[serde(default)]
-        who: PlayerRecipient,
-        draw_count: u32,
-        discard_count: u32,
-        order: DrawDiscardOrder,
-        #[serde(default)]
-        optional: bool,
     },
     /// Present engine-authored branches as an in-resolution choice. The chosen branch's single
     /// cost is validated and paid atomically, then its effects run in authored order.
@@ -3317,7 +3296,6 @@ impl SpellEffectKind {
             self,
             Self::DamagePlayer { who: Attacker, .. }
                 | Self::Discard { who: Attacker, .. }
-                | Self::DrawDiscard { who: Attacker, .. }
                 | Self::ChooseResolutionBranch {
                     chooser: Attacker,
                     ..
@@ -3540,7 +3518,6 @@ impl SpellEffectKind {
             | SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { .. }
             | SpellEffectKind::ExileResolvingSpell
             | SpellEffectKind::Discard { .. }
-            | SpellEffectKind::DrawDiscard { .. }
             | SpellEffectKind::Blight { .. }
             | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
             | SpellEffectKind::ChooseResolutionBranch { .. }
@@ -4135,7 +4112,6 @@ impl SpellEffectKind {
                             action: HandCardAction::Discard,
                             ..
                         }
-                        | SpellEffectKind::DrawDiscard { .. }
                 ),
                 CardResultAction::Destroy => matches!(
                     effect,
@@ -4587,9 +4563,6 @@ impl SpellEffectKind {
                 who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
                 ..
             } | Self::Discard {
-                who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
-                ..
-            } | Self::DrawDiscard {
                 who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
                 ..
             } | Self::ChooseResolutionBranch {
@@ -5659,33 +5632,6 @@ impl SpellEffectKind {
             _ => {}
         }
 
-        if let SpellEffectKind::DrawDiscard {
-            who,
-            draw_count,
-            discard_count,
-            order,
-            optional,
-            ..
-        } = self
-        {
-            if *draw_count == 0 || *discard_count == 0 {
-                return Err("DrawDiscard counts must be at least 1".into());
-            }
-            if *optional && (*order != DrawDiscardOrder::DiscardThenDraw || *discard_count != 1) {
-                return Err(
-                    "optional DrawDiscard requires DiscardThenDraw with discard_count 1".into(),
-                );
-            }
-            if matches!(
-                who,
-                PlayerRecipient::EachOpponent
-                    | PlayerRecipient::EachPlayer
-                    | PlayerRecipient::AttackingOpponentsOfDefendingPlayer
-            ) {
-                return Err("DrawDiscard requires a single player recipient".into());
-            }
-        }
-
         if let SpellEffectKind::Discard {
             quantity:
                 crate::primitives::DiscardQuantity::Exact(0)
@@ -5833,10 +5779,6 @@ impl SpellEffectKind {
                     ..
                 }
                 | SpellEffectKind::Mill {
-                    who: PlayerRecipient::TriggerObjectController,
-                    ..
-                }
-                | SpellEffectKind::DrawDiscard {
                     who: PlayerRecipient::TriggerObjectController,
                     ..
                 }

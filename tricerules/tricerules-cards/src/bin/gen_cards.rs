@@ -3500,7 +3500,12 @@ fn run(args: Args) -> ExitCode {
 mod tests {
     use super::*;
     use crate::recipes::{draw_then_discard_program, optional_discard_then_draw_program};
-    use tricerules_cards::primitives::DrawDiscardOrder;
+
+    #[derive(Clone, Copy)]
+    enum AuthoredDrawDiscardOrder {
+        DrawThenDiscard,
+        DiscardThenDraw,
+    }
 
     type MutationCase = (&'static str, fn(&mut Value));
 
@@ -7298,7 +7303,7 @@ mod tests {
                 "Whenever this creature becomes tapped, draw a card, then discard a card.",
                 Some(("2", "3")),
                 "self becomes tapped draw then discard",
-                DrawDiscardOrder::DrawThenDiscard,
+                AuthoredDrawDiscardOrder::DrawThenDiscard,
                 false,
             ),
             (
@@ -7308,7 +7313,7 @@ mod tests {
                 "Whenever this creature becomes tapped, draw a card, then discard a card.",
                 Some(("2", "1")),
                 "self becomes tapped draw then discard",
-                DrawDiscardOrder::DrawThenDiscard,
+                AuthoredDrawDiscardOrder::DrawThenDiscard,
                 false,
             ),
             (
@@ -7318,7 +7323,7 @@ mod tests {
                 "Whenever this creature becomes tapped, you may discard a card. If you do, draw a card.",
                 Some(("4", "2")),
                 "self becomes tapped optional discard then draw",
-                DrawDiscardOrder::DiscardThenDraw,
+                AuthoredDrawDiscardOrder::DiscardThenDraw,
                 true,
             ),
             (
@@ -7328,7 +7333,7 @@ mod tests {
                 "Whenever this creature becomes tapped, you may discard a card. If you do, draw a card.",
                 Some(("2", "2")),
                 "self becomes tapped optional discard then draw",
-                DrawDiscardOrder::DiscardThenDraw,
+                AuthoredDrawDiscardOrder::DiscardThenDraw,
                 true,
             ),
         ] {
@@ -7360,8 +7365,12 @@ mod tests {
             assert!(ability.targeting.is_none(), "{name} has no targets");
             assert!(ability.effect.is_empty(), "{name}");
             let expected_program = match (order, optional) {
-                (DrawDiscardOrder::DrawThenDiscard, false) => draw_then_discard_program(1, 1),
-                (DrawDiscardOrder::DiscardThenDraw, true) => optional_discard_then_draw_program(1),
+                (AuthoredDrawDiscardOrder::DrawThenDiscard, false) => {
+                    draw_then_discard_program(1, 1)
+                }
+                (AuthoredDrawDiscardOrder::DiscardThenDraw, true) => {
+                    optional_discard_then_draw_program(1)
+                }
                 _ => panic!("{name} has an unreviewed discard/draw order"),
             };
             assert_eq!(ability.program, Some(expected_program), "{name}");

@@ -171,12 +171,10 @@ explicit. Use player-set-generic logic rather than two-player arithmetic.
 Use a `CardProgram` at one exact resolution owner when its supported ordered actions need explicit
 results, nested conditional suspension, or a target group bound to an instruction. The owners are
 the card face's `spell_program`, one modal mode's `program`, or one activated/triggered ability's
-`program`. A program replaces that owner's legacy effect list. If one mode of a modal spell or
-triggered ability uses a program, that mode cannot also use its legacy effects; sibling modes may
-retain supported legacy owners. When any sibling needs the program runner, the registry compiles
-each sibling through that runner, using authored programs for authored modes and the bounded legacy
-lowering for supported legacy modes. Each mode keeps its own targeting groups and group indices.
-Do not add a face-level `spell_program` to a modal spell.
+`program`. A program replaces that owner's legacy effect list. Modal spell and triggered modal
+owners are all-authored or all-legacy: when any sibling declares a program, every sibling must
+declare one; otherwise their effects stay on ordinary effect-list dispatch. Each authored mode keeps
+its own targeting groups and group indices. Do not add a face-level `spell_program` to a modal spell.
 
 The finite tree has `Perform` leaves and nested `If`/`IfResult` blocks; no loops, jumps or authored
 functions. Targetless leaves accepted are `Draw`, `Discard`, `ChoosePermanents`,
@@ -277,10 +275,11 @@ selection and bound library-top placement; that body also fits Brainstone and Ja
 Sculptor's draw/put-back ability, without admitting their other mechanics or ability contexts.
 Selection does not move cards; the placement instruction uses generation-bound selected identities.
 The two hand-selection/placement leaves are program-only and are rejected in ordinary effect lists.
-Legacy `DrawDiscard` definitions and generator templates remain supported until separately migrated.
-Their complete owners lower through this runner, including exact activated/triggered owners and every
-sibling mode of an affected modal container. The finite authored face, mode, activated-ability and
-triggered-ability programs, including the target signatures described above, are now also admitted.
+The retired `DrawDiscard` effect and its legacy source-lowering path are no longer accepted. Express
+an ordered sequence as separate `Draw` and `Discard` program instructions, adding a typed
+`IfResult` branch when later actions depend on the discard outcome. The finite authored face, mode,
+activated-ability and triggered-ability programs, including the target signatures described above,
+are admitted.
 
 ### Printed-card filters and graveyard targets
 
