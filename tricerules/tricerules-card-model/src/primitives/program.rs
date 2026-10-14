@@ -2,16 +2,17 @@
 //!
 //! Programs reuse the ordinary effect vocabulary for leaf actions. Their compiler gives results
 //! stable slots and requires every branch to declare the values it yields to its parent.
-//! The initial runner is deliberately narrower than that vocabulary: spell programs are
-//! targetless, controller-scoped instant/sorcery sequences. Draw and private hand-choice amounts
-//! are fixed literals, `If` accepts only controller-library/hand-count conditions, and permanent
-//! choices cannot use event-bound filters or cross-object constraints. Widening these rules needs
-//! a separately typed context/result contract.
+//! The initial runner is deliberately narrower than that vocabulary: target groups bind only the
+//! finite authored role signatures compiled below, while the remaining supported instructions
+//! are controller-scoped spell/ability sequences. Draw and private hand-choice amounts are fixed
+//! literals, `If` accepts only controller-library/hand-count conditions, and permanent choices
+//! cannot use event-bound filters or cross-object constraints. Widening these rules needs a
+//! separately typed context/result contract.
 
 use super::{
-    Amount, CardTypeFilter, DiscardQuantity, DrawDiscardOrder, EffectContext, GameCondition,
-    PlayerRecipient, RelativePlayerSet, ResolutionBranchRequirement, SpellEffectKind, TargetFilter,
-    TargetSchema, TargetingDef,
+    Amount, CardTypeFilter, DiscardQuantity, DrawDiscardOrder, EffectContext, EffectSubject,
+    GameCondition, PlayerRecipient, RelativePlayerSet, ResolutionBranchRequirement,
+    SpellEffectKind, TargetFilter, TargetSchema, TargetingDef, TokenCopySource,
 };
 use crate::{ModeId, ProgramOwnerId};
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,30 @@ use std::collections::{HashMap, HashSet};
 #[serde(deny_unknown_fields)]
 pub struct CardProgram {
     pub body: AuthoredBlock,
+    /// Stable instruction-to-group role references for this exact program owner.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub target_bindings: Vec<ProgramTargetReference>,
+}
+
+/// The finite target roles that authored resolution programs may bind to target groups.
+///
+/// These names are authoring coordinates; each accepted operation maps its one semantic role to
+/// an existing `TargetRole` during compilation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ProgramTargetRole {
+    Target,
+    Spell,
+    Source,
+    Subject,
+}
+
+/// Stable source reference from a target group to one authored program instruction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProgramTargetReference {
+    pub instruction_id: String,
+    pub role: ProgramTargetRole,
+    pub target_group_index: u32,
 }
 
 /// Selects the target coordinates owned by a compiled program.
@@ -244,6 +269,9 @@ pub struct CompiledBlock {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompiledInstruction {
+    /// Stable pre-order address assigned once by the compiler across the entire conditional tree.
+    #[serde(default)]
+    pub instruction_address: u32,
     pub id: String,
     pub outputs: Vec<ResultSlotId>,
     pub input: Option<ResultSlotId>,
@@ -255,7 +283,7 @@ pub struct CompiledInstruction {
 /// Owner-local target role binding compiled from the owner's validated TargetingDef.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProgramTargetBinding {
-    pub source_effect_path: SourceEffectPath,
+    pub instruction_address: u32,
     pub target_group_index: u32,
     pub role_index: u32,
 }
@@ -289,6 +317,7 @@ struct Compiler {
     instruction_ids: HashSet<String>,
     required_inputs: std::collections::BTreeSet<ProgramRequiredInput>,
     preserve_source_paths: bool,
+    next_instruction_address: u32,
 }
 
 impl CompiledProgram {
@@ -297,7 +326,7 @@ impl CompiledProgram {
         context: EffectContext,
         program: &CardProgram,
     ) -> Result<Self, String> {
-        Self::compile_with_policy(owner, context, program, false)
+        Self::compile_with_targeting(owner, context, program, None)
     }
 
     /// Normalize and compile one complete legacy effect body. The registry calls this only when
@@ -327,16 +356,25 @@ impl CompiledProgram {
             );
         }
         let body = lower_legacy_effects(effects, "source")?;
-        let program = CardProgram { body };
+        let program = CardProgram {
+            body,
+            target_bindings: Vec::new(),
+        };
         let mut compiled =
             Self::compile_with_policy(owner.clone(), owner.effect_context(), &program, true)?;
         for (group_index, group) in schema.groups.iter().enumerate() {
             for binding in &group.bindings {
+                let source_effect_path = SourceEffectPath::root(
+                    u32::try_from(binding.effect_index)
+                        .map_err(|_| "targeted source effect index exceeds u32".to_string())?,
+                );
+                let instruction_address =
+                    find_instruction_address_by_source_path(&compiled.body, &source_effect_path)
+                        .ok_or_else(|| {
+                            "legacy target binding has no lowered program instruction".to_string()
+                        })?;
                 compiled.target_bindings.push(ProgramTargetBinding {
-                    source_effect_path: SourceEffectPath::root(
-                        u32::try_from(binding.effect_index)
-                            .map_err(|_| "targeted source effect index exceeds u32".to_string())?,
-                    ),
+                    instruction_address,
                     target_group_index: u32::try_from(group_index)
                         .map_err(|_| "target group index exceeds u32".to_string())?,
                     role_index: u32::try_from(binding.role_index)
@@ -344,6 +382,54 @@ impl CompiledProgram {
                 });
             }
         }
+        Ok(compiled)
+    }
+
+    /// Compile one authored program against its program-owned target-group declaration.
+    pub fn compile_with_targeting(
+        owner: ProgramOwnerId,
+        context: EffectContext,
+        program: &CardProgram,
+        targeting: Option<&TargetingDef>,
+    ) -> Result<Self, String> {
+        let mut compiled = Self::compile_with_policy(owner, context, program, false)?;
+        if context == EffectContext::Spell
+            && targeting.is_some_and(TargetingDef::requires_opponent_choice)
+        {
+            return Err("opponent target choices require a supported activated ability".into());
+        }
+        if let Some(targeting) = targeting {
+            for reference in &program.target_bindings {
+                if reference.target_group_index as usize >= targeting.groups.len() {
+                    return Err("program target binding references an unknown target group".into());
+                }
+                let (instruction_address, effect) =
+                    find_instruction_by_id(&compiled.body, &reference.instruction_id).ok_or_else(
+                        || {
+                            format!(
+                                "target binding references unknown program instruction '{}'",
+                                reference.instruction_id
+                            )
+                        },
+                    )?;
+                let role_index =
+                    authored_target_role_index(effect, reference.role).ok_or_else(|| {
+                        format!(
+                            "program instruction '{}' does not expose target role {:?}",
+                            reference.instruction_id, reference.role
+                        )
+                    })?;
+                compiled.target_bindings.push(ProgramTargetBinding {
+                    instruction_address,
+                    target_group_index: reference.target_group_index,
+                    role_index: u32::try_from(role_index)
+                        .map_err(|_| "target role index exceeds u32".to_string())?,
+                });
+            }
+        } else if !program.target_bindings.is_empty() {
+            return Err("program target binding requires an authored target group".into());
+        }
+        TargetSchema::compile_program(&compiled, targeting)?;
         Ok(compiled)
     }
 
@@ -366,6 +452,7 @@ impl CompiledProgram {
             instruction_ids: HashSet::new(),
             required_inputs: std::collections::BTreeSet::new(),
             preserve_source_paths,
+            next_instruction_address: 0,
         };
         let (body, _) = compiler.compile_block(&program.body, &HashMap::new())?;
         Ok(Self {
@@ -382,6 +469,70 @@ impl CompiledProgram {
     pub fn slot(&self, id: ResultSlotId) -> Option<&CompiledSlot> {
         self.slots.get(id.0 as usize)
     }
+}
+
+fn authored_target_role_index(effect: &SpellEffectKind, role: ProgramTargetRole) -> Option<usize> {
+    match (effect, role) {
+        (SpellEffectKind::DamageTarget { .. }, ProgramTargetRole::Target)
+        | (SpellEffectKind::CounterTargetSpell { .. }, ProgramTargetRole::Spell)
+        | (
+            SpellEffectKind::CreateTokenCopies {
+                source: TokenCopySource::Chosen(_),
+                ..
+            },
+            ProgramTargetRole::Source,
+        )
+        | (
+            SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::Chosen(_),
+            },
+            ProgramTargetRole::Subject,
+        ) => Some(0),
+        _ => None,
+    }
+}
+
+fn find_instruction_by_id<'a>(
+    block: &'a CompiledBlock,
+    id: &str,
+) -> Option<(u32, &'a SpellEffectKind)> {
+    for instruction in &block.steps {
+        if instruction.id == id {
+            if let CompiledInstructionKind::Perform(effect) = &instruction.kind {
+                return Some((instruction.instruction_address, effect));
+            }
+            return None;
+        }
+        if let CompiledInstructionKind::If { yes, no, .. } = &instruction.kind {
+            if let Some(found) = find_instruction_by_id(yes, id) {
+                return Some(found);
+            }
+            if let Some(found) = find_instruction_by_id(no, id) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn find_instruction_address_by_source_path(
+    block: &CompiledBlock,
+    source_effect_path: &SourceEffectPath,
+) -> Option<u32> {
+    for instruction in &block.steps {
+        if instruction.source_effect_path.as_ref() == Some(source_effect_path) {
+            return Some(instruction.instruction_address);
+        }
+        if let CompiledInstructionKind::If { yes, no, .. } = &instruction.kind {
+            if let Some(found) = find_instruction_address_by_source_path(yes, source_effect_path) {
+                return Some(found);
+            }
+            if let Some(found) = find_instruction_address_by_source_path(no, source_effect_path) {
+                return Some(found);
+            }
+        }
+    }
+    None
 }
 
 impl Compiler {
@@ -401,6 +552,11 @@ impl Compiler {
                     instruction.id
                 ));
             }
+            let instruction_address = self.next_instruction_address;
+            self.next_instruction_address = self
+                .next_instruction_address
+                .checked_add(1)
+                .ok_or_else(|| "program instruction address exceeds u32".to_string())?;
             let (input, result_types, kind) = match &instruction.kind {
                 InstructionKind::Perform(effect) => {
                     let input =
@@ -507,6 +663,7 @@ impl Compiler {
                 &mut self.slots,
             )?;
             steps.push(CompiledInstruction {
+                instruction_address,
                 id: instruction.id.clone(),
                 outputs,
                 input,

@@ -6140,6 +6140,7 @@ impl SpellEffectKind {
                         "Saga chapter triggers must be printed on an Enchantment Saga face".into(),
                     );
                 }
+                ability.reject_unowned_authored_program()?;
                 ability.validate_shape()
             }
             SpellEffectKind::CreateDelayedTrigger {
@@ -6190,6 +6191,7 @@ impl SpellEffectKind {
                 if !ability.trigger.is_delayed_only() {
                     return Err("CreateDelayedTrigger requires a delayed trigger condition".into());
                 }
+                ability.reject_unowned_authored_program()?;
                 if matches!(subject, Some(EffectSubject::PreviousEffectObjects)) {
                     ability.validate_token_copy_cohort_shape()
                 } else {
@@ -7176,6 +7178,7 @@ impl ResolvingPermanentModifier {
                 Ok(())
             }
             Self::GrantActivatedAbility(ability) => {
+                ability.reject_unowned_authored_program()?;
                 if ability.intrinsic_land_mana {
                     return Err(
                         "intrinsic land mana cannot be an independently granted ability".into(),

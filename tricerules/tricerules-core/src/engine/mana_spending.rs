@@ -76,6 +76,7 @@ fn scry_trigger_ability() -> TriggeredAbilityDef {
         effect: vec![SpellEffectKind::Scry {
             count: Amount::Fixed(1),
         }],
+        program: None,
         modal: None,
         targeting: None,
         may: false,

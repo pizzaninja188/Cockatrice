@@ -156,6 +156,50 @@ TEST(RuledE2EHarnessTest, PaymentPreviewDoesNotAdvanceTheObservedGame)
     EXPECT_EQ(client.nextCmdId, 1u);
 }
 
+TEST(RuledE2EHarnessTest, CopyTargetRetainsTypedAndKeepOriginalChoicesOnlyForDecider)
+{
+    QStringList transcript;
+    OpeningDriver decider(true, "decider", &transcript);
+    OpeningDriver observer(false, "observer", &transcript);
+    decider.myId = 7;
+    observer.myId = 19;
+
+    ruled::v1::RuledEventBatch typedPlayerBatch;
+    auto *typedPlayerChoice = typedPlayerBatch.add_events()->mutable_resolution_choice_required();
+    typedPlayerChoice->set_deciding_player_id(decider.myId);
+    typedPlayerChoice->set_choice_kind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
+    typedPlayerChoice->set_min(0);
+    typedPlayerChoice->set_max(1);
+    typedPlayerChoice->add_candidate_player_ids(decider.myId);
+    typedPlayerChoice->add_candidate_player_ids(observer.myId);
+    decider.applyRuledBatch(typedPlayerBatch);
+    ASSERT_TRUE(decider.pendingChoice.has_value());
+    EXPECT_EQ(decider.pendingChoice->candidate_player_ids_size(), 2);
+    auto redactedTypedPlayerBatch = typedPlayerBatch;
+    redactedTypedPlayerBatch.mutable_events(0)
+        ->mutable_resolution_choice_required()
+        ->clear_candidate_player_ids();
+    observer.applyRuledBatch(redactedTypedPlayerBatch);
+    EXPECT_FALSE(observer.pendingChoice.has_value());
+
+    decider.pendingChoice.reset();
+    observer.pendingChoice.reset();
+    ruled::v1::RuledEventBatch keepOriginalBatch;
+    auto *keepOriginalChoice = keepOriginalBatch.add_events()->mutable_resolution_choice_required();
+    keepOriginalChoice->set_deciding_player_id(decider.myId);
+    keepOriginalChoice->set_choice_kind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
+    keepOriginalChoice->set_min(0);
+    keepOriginalChoice->set_max(1);
+    decider.applyRuledBatch(keepOriginalBatch);
+    ASSERT_TRUE(decider.pendingChoice.has_value());
+    EXPECT_EQ(decider.pendingChoice->min(), 0u);
+    EXPECT_EQ(decider.pendingChoice->max(), 1u);
+    EXPECT_EQ(decider.pendingChoice->candidate_object_ids_size(), 0);
+    EXPECT_EQ(decider.pendingChoice->candidate_player_ids_size(), 0);
+    observer.applyRuledBatch(keepOriginalBatch);
+    EXPECT_FALSE(observer.pendingChoice.has_value());
+}
+
 TEST(RuledE2EHarnessTest, ActivePromptAcceptsZeroBasedFirstSeatId)
 {
     QStringList transcript;

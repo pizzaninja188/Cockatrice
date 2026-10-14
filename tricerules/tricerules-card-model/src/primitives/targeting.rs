@@ -1,11 +1,12 @@
 //! Target kinds and composable target filters.
 
 use super::{
-    CastCostReceiptCondition, Color, ConditionObjectRef, Keyword, PermanentChoiceConstraint,
-    SpellEffectKind, ZoneCardFilter,
+    CastCostReceiptCondition, Color, CompiledBlock, CompiledInstructionKind, CompiledProgram,
+    ConditionObjectRef, Keyword, PermanentChoiceConstraint, SpellEffectKind, ZoneCardFilter,
 };
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 /// Authored target declaration for one spell, mode, activated ability, or triggered ability.
 /// Omit it to retain the legacy single required group containing every targeted effect.
@@ -400,6 +401,154 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
         Ok(schema)
     }
 
+    /// Compile the groups for one exact authored program owner. Bindings use precompiled
+    /// instruction addresses and roles; legacy effect indices are deliberately rejected.
+    pub fn compile_program(
+        program: &'effects CompiledProgram,
+        targeting: Option<&'targeting TargetingDef>,
+    ) -> Result<Self, String> {
+        let mut effects_by_address = HashMap::new();
+        collect_program_effects(&program.body, &mut effects_by_address);
+        let mut effect_role_counts = vec![
+            0usize;
+            effects_by_address
+                .keys()
+                .copied()
+                .max()
+                .map_or(0, |address| address as usize + 1)
+        ];
+        for (&address, effect) in &effects_by_address {
+            effect_role_counts[address as usize] = effect.target_roles().len();
+        }
+
+        let Some(targeting) = targeting else {
+            if !program.target_bindings.is_empty()
+                || effect_role_counts.iter().any(|&count| count > 0)
+            {
+                return Err("targeted program instruction has no authored target group".into());
+            }
+            return Ok(Self {
+                groups: Vec::new(),
+                effect_role_counts,
+            });
+        };
+        if targeting.groups.is_empty() {
+            return Err("targeting requires at least one group".into());
+        }
+
+        let mut bound_roles = HashMap::<u32, Vec<bool>>::new();
+        for (&address, effect) in &effects_by_address {
+            bound_roles.insert(address, vec![false; effect.target_roles().len()]);
+        }
+        let mut groups = Vec::with_capacity(targeting.groups.len());
+        for (group_index, group) in targeting.groups.iter().enumerate() {
+            if !group.effect_indices.is_empty() {
+                return Err("program target group cannot reference legacy effect indices".into());
+            }
+            let group_program_bindings = program
+                .target_bindings
+                .iter()
+                .filter(|binding| binding.target_group_index as usize == group_index)
+                .collect::<Vec<_>>();
+            if group_program_bindings.is_empty() {
+                return Err(
+                    "program target group must reference at least one instruction role".into(),
+                );
+            }
+            if group.min > group.max || group.max == 0 {
+                return Err("target group requires min <= max and max > 0".into());
+            }
+            if group.prompt.trim().is_empty() {
+                return Err("target group prompt must not be empty".into());
+            }
+            if let Some(expansion) = &group.cast_cost_expansion {
+                if group_program_bindings.len() != 1 {
+                    return Err(
+                        "cast-cost target expansion requires exactly one referenced role".into(),
+                    );
+                }
+                expansion.without_cost.validate_target_constraints()?;
+            }
+
+            let mut bindings = Vec::new();
+            for binding in group_program_bindings {
+                let effect = effects_by_address
+                    .get(&binding.instruction_address)
+                    .ok_or_else(|| {
+                        "program target binding references an unknown instruction".to_string()
+                    })?;
+                let role_index = binding.role_index as usize;
+                let role = *effect.target_roles().get(role_index).ok_or_else(|| {
+                    "program target binding references an unknown target role".to_string()
+                })?;
+                if matches!(effect, SpellEffectKind::CreateTokenCopies { .. })
+                    && (group.min != 1 || group.max != 1)
+                {
+                    return Err("CreateTokenCopies requires exactly one source target".into());
+                }
+                let consumed = bound_roles
+                    .get_mut(&binding.instruction_address)
+                    .and_then(|roles| roles.get_mut(role_index))
+                    .ok_or_else(|| {
+                        "program target binding references an unknown target role".to_string()
+                    })?;
+                if *consumed {
+                    return Err("program target role is bound more than once".into());
+                }
+                *consumed = true;
+                bindings.push(TargetBinding {
+                    effect_index: binding.instruction_address as usize,
+                    role_index,
+                    role,
+                });
+            }
+            let mut distinct = std::collections::HashSet::new();
+            for &other in &group.distinct_from {
+                if other as usize >= targeting.groups.len() || other as usize == group_index {
+                    return Err("target group has an invalid distinctness reference".into());
+                }
+                if !distinct.insert(other) {
+                    return Err("target group repeats a distinctness reference".into());
+                }
+            }
+            if group.same_graveyard
+                && bindings
+                    .iter()
+                    .any(|binding| !matches!(binding.role, TargetRole::GraveyardCard(_)))
+            {
+                return Err("same_graveyard requires a graveyard-card target group".into());
+            }
+            groups.push(TargetGroupSchema {
+                chooser: group.chooser,
+                min: group.min,
+                max: group.max,
+                prompt: Cow::Borrowed(group.prompt.as_str()),
+                distinct_from: Cow::Borrowed(group.distinct_from.as_slice()),
+                same_graveyard: group.same_graveyard,
+                bindings,
+            });
+        }
+
+        for binding in &program.target_bindings {
+            if binding.target_group_index as usize >= groups.len() {
+                return Err("program target binding references an unknown target group".into());
+            }
+        }
+        if bound_roles
+            .values()
+            .any(|roles| roles.iter().any(|bound| !bound))
+        {
+            return Err(
+                "targeted program instruction role must belong to exactly one target group".into(),
+            );
+        }
+
+        Ok(Self {
+            groups,
+            effect_role_counts,
+        })
+    }
+
     fn validate_chosen_target_power_references(
         &self,
         effects: &[SpellEffectKind],
@@ -639,11 +788,35 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
     }
 }
 
+fn collect_program_effects<'a>(
+    block: &'a CompiledBlock,
+    effects: &mut HashMap<u32, &'a SpellEffectKind>,
+) {
+    for instruction in &block.steps {
+        match &instruction.kind {
+            CompiledInstructionKind::Perform(effect) => {
+                effects.insert(instruction.instruction_address, effect.as_ref());
+            }
+            CompiledInstructionKind::If { yes, no, .. } => {
+                collect_program_effects(yes, effects);
+                collect_program_effects(no, effects);
+            }
+        }
+    }
+}
+
 impl TargetingDef {
     pub fn requires_opponent_choice(&self) -> bool {
         self.groups
             .iter()
             .any(|group| group.chooser == TargetChooser::ChosenOpponent)
+    }
+
+    pub(crate) fn validate_nonactivated_program(targeting: Option<&Self>) -> Result<(), String> {
+        if targeting.is_some_and(Self::requires_opponent_choice) {
+            return Err("opponent target choices require a supported activated ability".into());
+        }
+        Ok(())
     }
 
     pub(crate) fn validate_optional(
@@ -663,6 +836,25 @@ impl TargetingDef {
         costs: &[super::AbilityCost],
     ) -> Result<(), String> {
         let schema = TargetSchema::compile(effects, targeting)?;
+        Self::validate_activation_schema(targeting, schema, source_zone, costs)
+    }
+
+    pub(crate) fn validate_activation_program(
+        targeting: Option<&Self>,
+        program: &CompiledProgram,
+        source_zone: super::AbilitySourceZone,
+        costs: &[super::AbilityCost],
+    ) -> Result<(), String> {
+        let schema = TargetSchema::compile_program(program, targeting)?;
+        Self::validate_activation_schema(targeting, schema, source_zone, costs)
+    }
+
+    fn validate_activation_schema<'effects, 'targeting>(
+        targeting: Option<&'targeting Self>,
+        schema: TargetSchema<'effects, 'targeting>,
+        source_zone: super::AbilitySourceZone,
+        costs: &[super::AbilityCost],
+    ) -> Result<(), String> {
         if !targeting.is_some_and(Self::requires_opponent_choice) {
             return Ok(());
         }

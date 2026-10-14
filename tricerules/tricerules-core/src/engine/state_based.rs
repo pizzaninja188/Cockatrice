@@ -1792,6 +1792,7 @@ mod sba_tests {
             effect: vec![tricerules_card_model::SpellEffectKind::GainLife {
                 amount: tricerules_card_model::Amount::Fixed(1),
             }],
+            program: None,
             modal: None,
             targeting: None,
             may: false,

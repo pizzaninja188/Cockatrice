@@ -636,12 +636,16 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
             return false;
         }
         const QString zoneName = card->getZone()->getName();
-        if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK) {
-            handler->emitLocalLog(PlayerActions::tr("Select a target on the battlefield or stack for the copy."));
+        const bool isGraveyard = zoneName == ZoneNames::GRAVE;
+        if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK && !isGraveyard) {
+            handler->emitLocalLog(
+                PlayerActions::tr("Select a target on the battlefield, stack, or graveyard for the copy."));
             return true;
         }
         const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-        const quint32 targetOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+        const quint32 targetOid = isGraveyard
+                                      ? handler->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId())
+                                      : handler->engineOidForCardId(ownerPlayerId, card->getId());
         if (targetOid == 0 || !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, targetOid)) {
             handler->emitLocalLog(PlayerActions::tr("That is not a valid target for the copy."));
             return true;
@@ -814,12 +818,12 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(PlayerActions *action
         if (!targetPlayer) {
             return false;
         }
-        const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
-        if (!handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, targetOid)) {
+        const quint32 targetPlayerId = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
+        if (!handler->isPendingCopyTargetPlayerCandidate(targetPlayerId)) {
             handler->emitLocalLog(PlayerActions::tr("That player is not a valid target for the copy."));
             return true;
         }
-        handler->submitPendingChoiceObject(targetOid);
+        handler->submitPendingCopyTargetPlayer(targetPlayerId);
         return true;
     }
 

@@ -142,6 +142,7 @@ fn source_copy_object(
     }
     let source_id = put_creature_on_battlefield(engine, player, "entry_copy_fixture");
     let values = CopiableValues {
+        prototyped: false,
         source_card_id: "entry_copy_source".into(),
         source_face_index: 0,
         display_name: face.name.clone(),
@@ -393,6 +394,12 @@ fn copied_non_aura_does_not_keep_the_printed_auras_cast_target() {
         .find(|object_id| engine.state.objects[object_id].card_id == "entry_copy_aura_spell")
         .expect("Aura copy in hand");
     let slot = hand_index_for_card(&engine, 0, "entry_copy_aura_spell");
+    let original_target_generation = engine
+        .state
+        .zone_change_generation
+        .get(&original_target)
+        .copied()
+        .unwrap_or(0);
     engine
         .apply_scenario_command(
             0,
@@ -403,6 +410,7 @@ fn copied_non_aura_does_not_keep_the_printed_auras_cast_target() {
                     damage_amount: 0,
                     group_index: 0,
                     kind: 0,
+                    expected_zone_change_generation: Some(original_target_generation),
                 }],
             ),
         )
@@ -422,6 +430,12 @@ fn resolve_aura_copy_token_spell(
     aura: u32,
 ) -> tricerules_proto::ruled::v1::RuledEventBatch {
     let slot = hand_index_for_card(engine, 0, "entry_copy_aura_token_spell");
+    let aura_generation = engine
+        .state
+        .zone_change_generation
+        .get(&aura)
+        .copied()
+        .unwrap_or(0);
     engine.state.players[0].mana_pool.blue = 1;
     engine.state.players[0].mana_pool.colorless = 2;
     engine
@@ -434,6 +448,7 @@ fn resolve_aura_copy_token_spell(
                     damage_amount: 0,
                     group_index: 0,
                     kind: 0,
+                    expected_zone_change_generation: Some(aura_generation),
                 }],
             ),
         )

@@ -23,7 +23,7 @@
       "start_line": 3,
       "end_line": 3,
       "typed_paths": [
-        "/faces/0/activated_abilities/1"
+        "/faces/0/activated_abilities/1/program"
       ]
     }
   ],
@@ -37,8 +37,12 @@
       "typed_path": "/faces/0/activated_abilities/0/effect/0"
     },
     {
-      "symbol": "SpellEffectKind::DrawDiscard",
-      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/activated_abilities/1/program/body/steps/1/kind/Perform/Discard"
     }
   ],
   "tokens": [],

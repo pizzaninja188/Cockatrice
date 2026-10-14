@@ -7,18 +7,22 @@
       "start_line": 1,
       "end_line": 1,
       "typed_paths": [
-        "/faces/0/spell_effect"
+        "/faces/0/spell_program"
       ]
     }
   ],
   "primitive_references": [
     {
       "symbol": "SpellEffectKind::ReturnToOwnersHand",
-      "typed_path": "/faces/0/spell_effect/0"
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/ReturnToOwnersHand"
     },
     {
-      "symbol": "SpellEffectKind::DrawDiscard",
-      "typed_path": "/faces/0/spell_effect/1"
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/spell_program/body/steps/2/kind/Perform/Discard"
     },
     {
       "symbol": "TargetingDef",

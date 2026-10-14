@@ -497,6 +497,7 @@ fn next_end_step_delayed_trigger_is_one_shot_and_keeps_object_identity() {
                     subject: EffectSubject::TriggerObject,
                 }],
                 modal: None,
+                program: None,
                 targeting: None,
                 may: false,
                 intervening_if: None,

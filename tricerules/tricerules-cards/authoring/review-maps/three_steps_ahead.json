@@ -43,15 +43,19 @@
   "primitive_references": [
     {
       "symbol": "SpellEffectKind::CounterTargetSpell",
-      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+      "typed_path": "/faces/0/modal_spell/modes/0/program/body/steps/0/kind/Perform/CounterTargetSpell"
     },
     {
       "symbol": "SpellEffectKind::CreateTokenCopies",
-      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+      "typed_path": "/faces/0/modal_spell/modes/1/program/body/steps/0/kind/Perform/CreateTokenCopies"
     },
     {
-      "symbol": "SpellEffectKind::DrawDiscard",
-      "typed_path": "/faces/0/modal_spell/modes/2/effects/0"
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/modal_spell/modes/2/program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/modal_spell/modes/2/program/body/steps/1/kind/Perform/Discard"
     }
   ],
   "tokens": [],

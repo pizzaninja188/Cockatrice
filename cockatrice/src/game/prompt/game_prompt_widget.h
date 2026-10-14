@@ -126,6 +126,8 @@ public:
         bool activationPayment = false;
         /// A resolving effect accepts any amount, including zero; the player must confirm it.
         bool variableManaContribution = false;
+        /// ClickChoice only: label for the optional empty answer when it has specific meaning.
+        QString clickChoiceDeclineLabel;
     };
 
     /// Independent async inputs that all mean "mid-cast / mid-activation" and OR into

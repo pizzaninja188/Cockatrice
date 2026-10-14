@@ -38,6 +38,7 @@ impl GameEngine {
                 ordinal_scope: Default::default(),
             },
             effect: vec![SpellEffectKind::CopyCapturedSpell { count: 1 }],
+            program: None,
             modal: None,
             targeting: None,
             may: false,

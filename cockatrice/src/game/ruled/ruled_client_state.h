@@ -583,10 +583,10 @@ public:
     /// installing a new one tears the previous one down (see setPendingChoice).
     ///
     /// The kinds differ only in how they are *rendered*: TriggerTarget / CopyTarget / CopySource /
-    /// LegendKeep
-    /// are answered by clicking a permanent on the battlefield, ResolutionPick by clicking cards in
-    /// a zone (hand, deck view, or a revealed popup). The state, the clearing and — for everything
-    /// but TriggerTarget — the SubmitResolutionChoice submission are shared.
+    /// LegendKeep are answered by clicking an engine-offered card or player in its applicable
+    /// surface, ResolutionPick by clicking cards in a zone (hand, deck view, or a revealed popup).
+    /// The state, clearing and — for everything but TriggerTarget — the SubmitResolutionChoice
+    /// submission are shared.
     struct RuledPendingChoice
     {
         enum class Kind
@@ -729,6 +729,8 @@ public:
         QHash<int, quint32> orderCardIdToOid;
         QVector<ruled::v1::ReplacementEffectOption> replacementOptions;
         bool replacementSubmitting = false;
+        /// CopyTarget's empty single-occurrence answer preserves the original target receipt.
+        QString emptyChoiceActionLabel;
     };
 
     /// Engine-authoritative targeting data, refreshed from LegalActions each RuledEventBatch.
@@ -1135,7 +1137,8 @@ public:
     /// there is exactly one place that decides which graveyards should be open.
     void setPendingCastGraveyardTargets(const QSet<quint32> &oids);
 
-    /// Recompute and emit `graveyardTargetsNeeded` from the pending trigger and pending cast.
+    /// Recompute and emit `graveyardTargetsNeeded` from pending cast, trigger, active copy-target,
+    /// and stack-target graveyard references.
     void emitGraveyardTargetsNeeded();
 
     /// Engine OID for a graveyard card, given the player whose graveyard it is in and its
@@ -1737,6 +1740,10 @@ public:
     {
         return hasPendingChoiceOfKind(kind) && pendingChoice->candidateOids.contains(oid);
     }
+    [[nodiscard]] bool isPendingCopyTargetPlayerCandidate(quint32 playerId) const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::CopyTarget) && pendingChoice->candidatePlayerIds.contains(playerId);
+    }
     /// True when this permanent is an engine-offered cast-during-resolution candidate. This
     /// describes the parked choice even if its prompt has since gone stale; callers that authorize
     /// an action must also capture and validate the exact active prompt ID.
@@ -1769,6 +1776,8 @@ public:
     /// For LegendKeep the chosen permanent is the one KEPT (CR 704.5j); the engine sacrifices
     /// the rest. Clears the choice and sends SubmitResolutionChoice.
     void submitPendingChoiceObject(quint32 oid);
+    /// Submit a player selected for a copied spell target using the player-id field, not object IDs.
+    void submitPendingCopyTargetPlayer(quint32 playerId);
     [[nodiscard]] bool hasPermanentChoiceCohort() const
     {
         return hasPendingChoiceOfKind(ChoiceKind::PermanentChoice) && pendingChoice->max > 1;

@@ -161,17 +161,20 @@ void ObservedState::observeRuledEvent(const ruled::v1::RuledEvent &ev, const std
         lastResolutionChoice = rcr;
         if (rcr.deciding_player_id() == myId &&
             (rcr.candidate_object_ids_size() > 0 ||
+             rcr.candidate_player_ids_size() > 0 ||
+             (rcr.choice_kind() == ruled::v1::CHOICE_KIND_TARGET_OBJECTS && rcr.min() == 0 && rcr.max() == 1) ||
              (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH && rcr.min() == 0) ||
              rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT ||
              rcr.choice_kind() == ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH ||
              rcr.choice_kind() == ruled::v1::CHOICE_KIND_ATTACKING_TOKEN_DEFENDER)) {
             pendingChoice = rcr;
-            log(QStringLiteral("resolution choice: kind %1 min %2 max %3 ordered %4 candidates %5")
+            log(QStringLiteral("resolution choice: kind %1 min %2 max %3 ordered %4 object candidates %5 player candidates %6")
                     .arg(QString::fromStdString(ruled::v1::ChoiceKind_Name(rcr.choice_kind())))
                     .arg(rcr.min())
                     .arg(rcr.max())
                     .arg(rcr.ordered())
-                    .arg(rcr.candidate_object_ids_size()));
+                    .arg(rcr.candidate_object_ids_size())
+                    .arg(rcr.candidate_player_ids_size()));
         }
     } else if (ev.has_cards_revealed()) {
         revealEvents.push_back(ev.cards_revealed());

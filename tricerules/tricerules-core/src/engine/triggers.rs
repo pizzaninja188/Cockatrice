@@ -2,8 +2,8 @@ use super::damage::{DamageClassification, DamageRecipient};
 use super::events::{ev_log, ev_trigger_order_required};
 use super::presentation::{ability_presentation, child_presentation_ref, PresentationPath};
 use super::targeting::{
-    compute_ability_targets_with_context, legal_target_group_has_minimum, target_schema,
-    TargetSourceIdentity,
+    ability_mode_program, ability_program, compute_ability_targets_with_context_and_program,
+    legal_target_group_has_minimum, target_schema_with_program, TargetSourceIdentity,
 };
 use super::*;
 use crate::engine::events::ev_log_ability;
@@ -321,6 +321,7 @@ impl GameEngine {
             presentation: tricerules_card_model::AbilityPresentation::Fallback,
             trigger: TriggerCondition::WhenSelfDies,
             effect: vec![SpellEffectKind::SiegeDefeat],
+            program: None,
             modal: None,
             targeting: None,
             may: false,
@@ -3061,7 +3062,19 @@ impl GameEngine {
             trigger_context,
             ..
         } = trigger;
-        let needs_target = target_schema(&ability.effect, ability.targeting.as_ref()).has_targets();
+        let authored_definition = ability_origin.as_ref().and_then(|origin| match origin {
+            TriggerAbilityOrigin::Printed(definition)
+            | TriggerAbilityOrigin::StaticGrant { definition, .. } => Some(definition),
+            TriggerAbilityOrigin::SpellKeyword(_) | TriggerAbilityOrigin::ResolvingGrant(_) => None,
+        });
+        let ability_program =
+            authored_definition.and_then(|definition| ability_program(self, definition));
+        let needs_target = target_schema_with_program(
+            &ability.effect,
+            ability.targeting.as_ref(),
+            ability_program,
+        )
+        .has_targets();
         let mode_history_key = ability
             .modal
             .as_ref()
@@ -3094,15 +3107,20 @@ impl GameEngine {
                 .iter()
                 .enumerate()
                 .map(|(mode_index, mode)| {
+                    let program = authored_definition.and_then(|definition| {
+                        ability_mode_program(self, definition, &mode.mode_id)
+                    });
                     let mode_needs_target =
-                        target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
-                    let targets = compute_ability_targets_with_context(
+                        target_schema_with_program(&mode.effects, mode.targeting.as_ref(), program)
+                            .has_targets();
+                    let targets = compute_ability_targets_with_context_and_program(
                         self,
                         controller,
                         TargetSourceIdentity::captured(source_id, source_zone_change),
                         &mode.effects,
                         mode.targeting.as_ref(),
                         trigger_context,
+                        program,
                     );
                     let selectable = !mode_needs_target
                         || targets
@@ -3132,13 +3150,14 @@ impl GameEngine {
                 .collect::<Vec<_>>()
         });
         let legal_targets = if needs_target {
-            Some(compute_ability_targets_with_context(
+            Some(compute_ability_targets_with_context_and_program(
                 self,
                 controller,
                 TargetSourceIdentity::captured(source_id, source_zone_change),
                 &ability.effect,
                 ability.targeting.as_ref(),
                 trigger_context,
+                ability_program,
             ))
         } else {
             None
@@ -5092,6 +5111,7 @@ mod tests {
                         who: PlayerRecipient::Controller,
                         count: Amount::Fixed(1),
                     }],
+                    program: None,
                     modal: None,
                     targeting: None,
                     may: false,
@@ -5212,6 +5232,7 @@ mod tests {
                         who: PlayerRecipient::Controller,
                         count: Amount::Fixed(1),
                     }],
+                    program: None,
                     modal: None,
                     targeting: None,
                     may: false,
@@ -5313,6 +5334,7 @@ mod tests {
                         who: PlayerRecipient::Controller,
                         count: Amount::Fixed(1),
                     }],
+                    program: None,
                     modal: None,
                     targeting: None,
                     may: false,

@@ -1752,6 +1752,7 @@ pub(super) fn create_reflexive_trigger(
                     // This definition is staged directly; the condition is never scanned.
                     trigger: TriggerCondition::WhenSelfEntersBattlefield,
                     effect: ability.effect,
+                    program: None,
                     modal: None,
                     targeting: ability.targeting,
                     may: false,

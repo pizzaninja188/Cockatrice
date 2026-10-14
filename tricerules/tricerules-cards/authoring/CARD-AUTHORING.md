@@ -166,21 +166,71 @@ For Rust engine behavior, reject illegal input with `EngineError::Illegal` rathe
 Keep steps, priority, event-time facts, new-object identity, hidden information, and player roles
 explicit. Use player-set-generic logic rather than two-player arithmetic.
 
-### Finite targetless spell programs
+### Finite authored programs
 
-Use `spell_program` for supported ordered spell actions that need explicit results or nested
-conditional suspension. It is currently limited to targetless Instant/Sorcery faces and is the
-face's sole resolution owner: do not combine it with `spell_effect`, `modal_spell` or `custom_effect`.
-The finite tree has `Perform` leaves and nested `If`/`IfResult` blocks; no loops, jumps or authored functions.
+Use a `CardProgram` at one exact resolution owner when its supported ordered actions need explicit
+results, nested conditional suspension, or a target group bound to an instruction. The owners are
+the card face's `spell_program`, one modal mode's `program`, or one activated/triggered ability's
+`program`. A program replaces that owner's legacy effect list. If one mode of a modal spell or
+triggered ability uses a program, that mode cannot also use its legacy effects; sibling modes may
+retain supported legacy owners. When any sibling needs the program runner, the registry compiles
+each sibling through that runner, using authored programs for authored modes and the bounded legacy
+lowering for supported legacy modes. Each mode keeps its own targeting groups and group indices.
+Do not add a face-level `spell_program` to a modal spell.
 
-Accepted leaves are `Draw`, `Discard`, `ChoosePermanents`, `UntapChosenPermanents`,
-`SelectHandCards`, `PutSelectedHandCardsOnLibraryTop` and ordinary fixed-count controller
-`CreateTokens` without delayed sacrifice. Draw/discard recipients and permanent
-choosers must be `Controller`; draw and hand-selection counts must be fixed literals. Discard
-retains the existing validated `DiscardQuantity` choices. Permanent filters cannot use
+The finite tree has `Perform` leaves and nested `If`/`IfResult` blocks; no loops, jumps or authored
+functions. Targetless leaves accepted are `Draw`, `Discard`, `ChoosePermanents`,
+`UntapChosenPermanents`, `SelectHandCards`, `PutSelectedHandCardsOnLibraryTop` and ordinary
+fixed-count controller `CreateTokens` without delayed sacrifice. Spell-face and modal-spell
+programs limit draw/discard recipients to `Controller`; triggered ability programs may also use
+`AffectedPlayer` when their trigger supplies the captured event-time player. Activated programs do
+not have that trigger input. Permanent choosers must be `Controller`; draw and hand-selection counts
+must be fixed literals.
+Discard retains the existing validated `DiscardQuantity` choices. Permanent filters cannot use
 `DefendingPlayer` or `AttachedObject`, including inside `any_of`, and constraints must be empty.
 `If` accepts `ControllerLibraryEmpty`, controller `CardsInHand`, and valid `AllOf`/`AnyOf`
 combinations of those conditions. Other contexts and leaf operations fail registration.
+
+Targetful leaves currently accepted are `DamageTarget` with role `Target`, `CounterTargetSpell` with
+role `Spell`, `CreateTokenCopies(Chosen(...))` with role `Source`, and
+`ReturnToOwnersHand(Chosen(...))` with role `Subject`. These are the only target-role signatures
+accepted in authored programs. A copied permanent source requires exactly one target (`min: 1`,
+`max: 1`).
+
+Ability programs use the ability context. A triggered program may use `AffectedPlayer` only when its
+trigger supplies that event-time player; registry validation checks this captured input. Activated
+programs have no trigger input and cannot use `AffectedPlayer`. Effect-created activated or triggered
+abilities also cannot own authored programs (including modal program bodies): their resolving
+occurrences have no stable registry definition identity. Do not author targetful activated abilities
+with `ChosenOpponent` target groups from Hand or Graveyard: the opponent-choice activation path is
+available only for battlefield sources, and model/registry validation rejects this authored shape.
+This boundary is specific to opponent-selected groups; direct controller-chosen target groups are
+not rejected solely because an activated ability's source zone is Hand or Graveyard. Legacy
+abilities retain their existing validation path.
+
+Declare each target role in `CardProgram.target_bindings` by its stable instruction `id`, role and
+zero-based `target_group_index`. Target groups remain in the owner's `TargetingDef`; use an empty
+`effect_indices` list for program groups. Every targeted instruction role must bind exactly once,
+and every group must reference at least one role. A target group intersects its roles' filters just
+as a legacy group intersects its effects; use separate groups when distinct instructions have
+different requirements, including targetful leaves in separate conditional branches. All groups
+for the owner are announced and revalidated even when a branch is not selected. Mode groups are
+local to their mode, not flattened across sibling modes.
+
+For example, Calamitous Tide's return instruction uses its optional group 0; the following draw
+and discard steps have no target binding:
+
+```ron
+spell_program: Some((body: (steps: [
+  (id: "return_creature", kind: Perform(ReturnToOwnersHand(
+    subject: Chosen((kind: Creature))))),
+  (id: "draw_two", kind: Perform(Draw(who: Controller, count: 2))),
+  (id: "discard_one", kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+], yields: []), target_bindings: [
+  (instruction_id: "return_creature", role: Subject, target_group_index: 0),
+])),
+targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two target creatures", effect_indices: [])])),
+```
 
 `bind` names an operation's typed result. `input: Some("name")` consumes an earlier in-scope
 result: untap requires a permanent selection; library-top placement requires an ordered hand
@@ -228,9 +278,9 @@ Sculptor's draw/put-back ability, without admitting their other mechanics or abi
 Selection does not move cards; the placement instruction uses generation-bound selected identities.
 The two hand-selection/placement leaves are program-only and are rejected in ordinary effect lists.
 Legacy `DrawDiscard` definitions and generator templates remain supported until separately migrated.
-Their complete owners already lower through this runner, including exact activated/triggered owners
-and every sibling mode of an affected modal container. This internal lowering does not admit authored
-ability/mode programs or targetful `spell_program` definitions; those need the next schema increment.
+Their complete owners lower through this runner, including exact activated/triggered owners and every
+sibling mode of an affected modal container. The finite authored face, mode, activated-ability and
+triggered-ability programs, including the target signatures described above, are now also admitted.
 
 ### Printed-card filters and graveyard targets
 
@@ -602,7 +652,7 @@ Only add vocabulary after confirming existing data cannot express the behavior.
 
 The following list examples describe existing `spell_effect` syntax. Within a supported
 `spell_program`, use explicit `Perform` instructions and typed bindings as described in
-[the current program subset](#finite-targetless-spell-programs); do not insert `DrawDiscard`
+[the current program subset](#finite-authored-programs); do not insert `DrawDiscard`
 as a program leaf.
 
 Use `Discard(quantity: Exact(2))` for a fixed untargeted discard and

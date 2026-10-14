@@ -1950,11 +1950,114 @@ TEST(RuledPendingTargetTest, ClickEligibilityCoversAbilitiesTriggersAndCopyRetar
     RuledClientState::RuledPendingChoice copy;
     copy.kind = RuledClientState::ChoiceKind::CopyTarget;
     copy.candidateOids = {500};
+    copy.candidatePlayerIds = {0u, 1u};
     state.setPendingChoice(copy);
     EXPECT_EQ(ruledTargetClickEligibility({}, {}, state, RuledTargetCandidateKind::Battlefield, 500, 0),
               RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledTargetClickEligibility({}, {}, state, RuledTargetCandidateKind::Stack, 500, 0),
+              RuledTargetClickEligibility::Legal);
     EXPECT_EQ(ruledTargetClickEligibility({}, {}, state, RuledTargetCandidateKind::Graveyard, 500, 0),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledTargetClickEligibility({}, {}, state, RuledTargetCandidateKind::Graveyard, 501, 0),
               RuledTargetClickEligibility::Illegal);
+    EXPECT_EQ(ruledTargetClickEligibility({}, {}, state, RuledTargetCandidateKind::Player, 0, 0),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledTargetClickEligibility({}, {}, state, RuledTargetCandidateKind::Player, 1, 0),
+              RuledTargetClickEligibility::Legal);
+    // Client-side identity domains stay separate even under a forged numeric collision. Engine
+    // candidate object and player IDs do not collide this way in a valid offer.
+    EXPECT_EQ(ruledTargetClickEligibility({}, {}, state, RuledTargetCandidateKind::Player, 500, 0),
+              RuledTargetClickEligibility::Illegal);
+    EXPECT_EQ(ruledTargetClickEligibility({}, {}, state, RuledTargetCandidateKind::Graveyard, 0, 0),
+              RuledTargetClickEligibility::Illegal);
+}
+
+TEST_F(RuledClientTest, PendingCopyTargetOffersOpenOnlyOfferedOwnersGraveyardUntilStackCopyResolves)
+{
+    QSignalSpy spy(state, &RuledClientState::graveyardTargetsNeeded);
+
+    const auto addGraveyardMap = [](ruled::v1::RuledEventBatch &batch) {
+        auto *map = batch.add_events()->mutable_graveyard_object_map();
+        auto *local = map->add_entries();
+        local->set_player_id(kLocalPlayer);
+        local->set_engine_object_id(500);
+        local->set_server_card_id(11);
+        auto *opponent = map->add_entries();
+        opponent->set_player_id(kOpponent);
+        opponent->set_engine_object_id(501);
+        opponent->set_server_card_id(11); // Owner-local card ids can repeat across graveyards.
+    };
+    const auto addPrompt = [](ruled::v1::RuledEventBatch &batch, int decider, quint64 promptId,
+                              const QVector<quint32> &objects, const QVector<int> &players) {
+        auto *snapshot = batch.mutable_resolution_prompt_state();
+        snapshot->set_active(true);
+        snapshot->set_deciding_player_id(decider);
+        if (decider == kLocalPlayer)
+            snapshot->set_resolution_prompt_id(promptId);
+
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(decider);
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
+        if (decider == kLocalPlayer)
+            choice->set_resolution_prompt_id(promptId);
+        choice->set_min(0);
+        choice->set_max(1);
+        choice->set_prompt_text("Choose a new target for the copy or keep the original.");
+        for (quint32 oid : objects) {
+            choice->add_candidate_object_ids(oid);
+            choice->add_candidate_card_ids("test_card");
+            choice->add_candidate_names("Test card");
+        }
+        for (int playerId : players)
+            choice->add_candidate_player_ids(playerId);
+    };
+    const auto addInactivePrompt = [](ruled::v1::RuledEventBatch &batch) {
+        auto *snapshot = batch.mutable_resolution_prompt_state();
+        snapshot->set_active(false);
+        snapshot->set_deciding_player_id(kLocalPlayer);
+    };
+
+    // The valid RCR has aligned object metadata and an active, exact local prompt ID. Only the
+    // opponent's graveyard OID is offered although both owners have the same server card ID.
+    ruled::v1::RuledEventBatch promptBatch;
+    addGraveyardMap(promptBatch);
+    addPrompt(promptBatch, kLocalPlayer, 9401, {501u}, {kLocalPlayer});
+    applyRaw(promptBatch);
+    ASSERT_GE(spy.count(), 1);
+    EXPECT_EQ(spy.last().at(0).value<QList<int>>(), QList<int>{kOpponent});
+
+    // Once that occurrence is chosen, its copy stack object keeps only the latched graveyard open.
+    ruled::v1::RuledEventBatch copyPushBatch;
+    addInactivePrompt(copyPushBatch);
+    addGraveyardMap(copyPushBatch);
+    auto *copy = copyPushBatch.add_events()->mutable_stack_pushed();
+    copy->set_object_id(900);
+    copy->set_is_copy(true);
+    copy->add_targets()->set_object_id(501);
+    copy->mutable_targets(0)->set_kind(ruled::v1::TARGET_REF_KIND_GRAVEYARD);
+    applyRaw(copyPushBatch);
+    EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
+    EXPECT_EQ(spy.last().at(0).value<QList<int>>(), QList<int>{kOpponent});
+
+    ruled::v1::RuledEventBatch resolvedBatch;
+    addInactivePrompt(resolvedBatch);
+    addGraveyardMap(resolvedBatch);
+    resolvedBatch.add_events()->mutable_stack_resolved()->set_object_id(900);
+    applyRaw(resolvedBatch);
+    EXPECT_TRUE(spy.last().at(0).value<QList<int>>().isEmpty());
+
+    // Typed player candidates (including player 0) and an observer's offer never name a graveyard.
+    ruled::v1::RuledEventBatch playerOnlyBatch;
+    addGraveyardMap(playerOnlyBatch);
+    addPrompt(playerOnlyBatch, kLocalPlayer, 9402, {}, {kLocalPlayer});
+    applyRaw(playerOnlyBatch);
+    EXPECT_TRUE(spy.last().at(0).value<QList<int>>().isEmpty());
+
+    ruled::v1::RuledEventBatch observerBatch;
+    addGraveyardMap(observerBatch);
+    addPrompt(observerBatch, kOpponent, 0, {501u}, {});
+    applyRaw(observerBatch);
+    EXPECT_TRUE(spy.last().at(0).value<QList<int>>().isEmpty());
 }
 
 TEST(RuledXTargetChoiceTest, PublishesOnlyEngineBoundValuesAndGenerations)
@@ -10857,6 +10960,93 @@ TEST_F(RuledClientTest, TargetObjectAndLegendKeepChoicesUseClickToSelect)
     }
 }
 
+TEST_F(RuledClientTest, CopyTargetKeepsPlayerIdentityAndAllowsEmptyKeepOriginal)
+{
+    {
+        ruled::v1::RuledEventBatch batch;
+        auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+        rcr->set_deciding_player_id(kLocalPlayer);
+        rcr->set_choice_kind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
+        rcr->set_min(0);
+        rcr->set_max(1);
+        rcr->set_prompt_text("Target 1 of 1 for the copy: choose a new target or keep the original");
+        rcr->add_candidate_player_ids(kOpponent);
+        apply(batch);
+
+        ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
+        EXPECT_TRUE(state->pendingClickChoiceMayDecline());
+        EXPECT_TRUE(state->isPendingCopyTargetPlayerCandidate(kOpponent));
+        EXPECT_FALSE(state->isPendingCopyTargetPlayerCandidate(kLocalPlayer));
+        EXPECT_EQ(host.dialogRequests, 0);
+
+        host.sentCommands.clear();
+        state->submitPendingCopyTargetPlayer(kOpponent);
+        ASSERT_EQ(host.sentCommands.size(), 1);
+        const auto &submission = host.sentCommands[0].submit_resolution_choice();
+        EXPECT_EQ(submission.chosen_player_ids_size(), 1);
+        EXPECT_EQ(submission.chosen_player_ids(0), kOpponent);
+        EXPECT_EQ(submission.chosen_object_ids_size(), 0);
+    }
+    {
+        ruled::v1::RuledEventBatch batch;
+        auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+        rcr->set_deciding_player_id(kLocalPlayer);
+        rcr->set_choice_kind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
+        rcr->set_min(0);
+        rcr->set_max(1);
+        rcr->set_prompt_text("Target 1 of 1 for the copy: choose a new target or keep the original");
+        apply(batch);
+
+        ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
+        EXPECT_TRUE(state->pendingClickChoiceMayDecline());
+        EXPECT_TRUE(state->pendingChoice->candidateOids.isEmpty());
+        EXPECT_TRUE(state->pendingChoice->candidatePlayerIds.isEmpty());
+
+        host.sentCommands.clear();
+        state->declinePendingClickChoice();
+        ASSERT_EQ(host.sentCommands.size(), 1);
+        const auto &submission = host.sentCommands[0].submit_resolution_choice();
+        EXPECT_EQ(submission.chosen_object_ids_size(), 0);
+        EXPECT_EQ(submission.chosen_player_ids_size(), 0);
+        EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
+    }
+}
+
+TEST_F(RuledClientTest, CopyTargetGraveyardCardUsesOwnerScopedEngineObjectId)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *graveyardMap = batch.add_events()->mutable_graveyard_object_map();
+    auto *ownCard = graveyardMap->add_entries();
+    ownCard->set_player_id(kLocalPlayer);
+    ownCard->set_engine_object_id(500);
+    ownCard->set_server_card_id(11);
+    auto *opponentCard = graveyardMap->add_entries();
+    opponentCard->set_player_id(kOpponent);
+    opponentCard->set_engine_object_id(501);
+    opponentCard->set_server_card_id(11); // Server_Card ids are owner-local.
+
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
+    choice->add_candidate_object_ids(500);
+    choice->add_candidate_object_ids(501);
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
+    EXPECT_EQ(state->graveyardEngineOidForOwnedCard(kLocalPlayer, 11), 500u);
+    const quint32 opponentObjectId = state->graveyardEngineOidForOwnedCard(kOpponent, 11);
+    EXPECT_EQ(opponentObjectId, 501u);
+    EXPECT_TRUE(state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, opponentObjectId));
+
+    host.sentCommands.clear();
+    state->submitPendingChoiceObject(opponentObjectId);
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &submission = host.sentCommands[0].submit_resolution_choice();
+    ASSERT_EQ(submission.chosen_object_ids_size(), 1);
+    EXPECT_EQ(submission.chosen_object_ids(0), 501u);
+    EXPECT_EQ(submission.chosen_player_ids_size(), 0);
+}
+
 TEST_F(RuledClientTest, CopySourceChoiceUsesBoardSelectionAndEmptyResolutionChoiceDeclines)
 {
     ruled::v1::RuledEventBatch batch;
@@ -10952,6 +11142,49 @@ TEST_F(RuledClientTest, ResolutionCostObjectsToggleAsABoundedCohortBeforeSubmiss
     EXPECT_EQ(chosen.Get(0), 100u);
     EXPECT_EQ(chosen.Get(1), 101u);
     EXPECT_EQ(progressSpy.count(), 3); // two selections and clearing the submitted choice
+}
+
+TEST_F(RuledClientTest, OptionalSacrificeCostObjectsPreserveEmptyAndPaidObjectAnswers)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_COST_OBJECTS);
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->set_prompt_text("Choose a permanent to sacrifice, or decline.");
+    choice->add_candidate_object_ids(101);
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CostObjects));
+    ASSERT_TRUE(state->pendingChoice.has_value());
+    EXPECT_EQ(state->pendingChoice->min, 0);
+    EXPECT_EQ(state->pendingChoice->max, 1);
+    EXPECT_TRUE(state->pendingClickChoiceMayDecline());
+    EXPECT_TRUE(state->pendingChoice->candidateOids.contains(101));
+
+    host.sentCommands.clear();
+    state->submitResolutionCostObjects();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &declined = host.sentCommands[0].submit_resolution_choice();
+    EXPECT_EQ(declined.chosen_object_ids_size(), 0);
+    EXPECT_EQ(declined.chosen_player_ids_size(), 0);
+
+    batch.Clear();
+    choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_COST_OBJECTS);
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(101);
+    apply(batch);
+    state->toggleResolutionCostObject(101);
+    state->submitResolutionCostObjects();
+    ASSERT_EQ(host.sentCommands.size(), 2);
+    const auto &paid = host.sentCommands[1].submit_resolution_choice();
+    ASSERT_EQ(paid.chosen_object_ids_size(), 1);
+    EXPECT_EQ(paid.chosen_object_ids(0), 101u);
+    EXPECT_EQ(paid.chosen_player_ids_size(), 0);
 }
 
 TEST_F(RuledClientTest, CancellingResolutionCostObjectsRepaintsClearedSelectionImmediately)

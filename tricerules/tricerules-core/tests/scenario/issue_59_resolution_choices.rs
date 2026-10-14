@@ -146,6 +146,16 @@ fn issue_171_servant_sacrifices_only_itself_then_searches() {
         ChoiceKind::ResolutionBranch
     );
     e.apply_scenario_command(0, &select_branch(0)).unwrap();
+    let payment = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("optional sacrifice payment")
+        .presentation
+        .clone();
+    assert_eq!(payment.choice_kind, ChoiceKind::CostObjects);
+    assert_eq!(payment.min, 0);
+    assert_eq!(payment.max, 1);
     assert_eq!(
         e.state
             .pending_resolution
@@ -173,6 +183,26 @@ fn issue_171_servant_sacrifices_only_itself_then_searches() {
         .unwrap();
     assert!(e.state.players[0].hand.contains(&searched));
     assert!(e.state.pending_resolution.is_none());
+}
+
+#[test]
+fn issue_171_servant_can_decline_its_optional_sacrifice_payment() {
+    let (mut e, servant, _) = servant_combat_trigger(true);
+    let hand_before = e.state.players[0].hand.len();
+    pass_both_players(&mut e);
+    e.apply_scenario_command(0, &select_branch(0))
+        .expect("choose the optional sacrifice branch");
+    let payment = &e.state.pending_resolution.as_ref().unwrap().presentation;
+    assert_eq!(payment.choice_kind, ChoiceKind::CostObjects);
+    assert_eq!((payment.min, payment.max), (0, 1));
+    assert_eq!(payment.candidates, vec![servant]);
+
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![]))
+        .expect("decline the optional sacrifice payment");
+    assert!(e.state.players[0].battlefield.contains(&servant));
+    assert_eq!(e.state.players[0].hand.len(), hand_before);
+    assert!(e.state.pending_resolution.is_none());
+    assert!(e.state.stack.is_empty());
 }
 
 #[test]
@@ -402,6 +432,55 @@ fn crypt_lurker_discard_branch_pays_then_draws() {
             .zone,
         tricerules_core::Zone::Graveyard
     );
+    assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
+fn crypt_lurker_sacrifice_branch_uses_optional_cost_object_payment() {
+    let mut engine = engine();
+    inject_card_into_hand(&mut engine, 0, "crypt_lurker");
+    let sacrificed = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let index = hand_index_for_card(&engine, 0, "crypt_lurker");
+    engine
+        .apply_scenario_command(0, &cast_spell(index, Vec::new()))
+        .expect("cast Crypt Lurker");
+    pass_both_players(&mut engine);
+    pass_both_players(&mut engine);
+    engine
+        .apply_scenario_command(0, &select_branch(0))
+        .expect("choose the optional sacrifice branch");
+
+    let payment = &engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .unwrap()
+        .presentation;
+    assert_eq!(payment.choice_kind, ChoiceKind::CostObjects);
+    assert_eq!((payment.min, payment.max), (0, 1));
+    assert!(payment.candidates.contains(&sacrificed));
+    let hand_before_payment = engine.state.players[0].hand.len();
+    engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![sacrificed]))
+        .expect("pay with the other creature");
+    assert!(engine.state.players[0].graveyard.contains(&sacrificed));
+    assert!(engine.state.players[0].battlefield.iter().any(|oid| {
+        engine
+            .state
+            .objects
+            .get(oid)
+            .is_some_and(|object| object.card_id == "crypt_lurker")
+    }));
+    assert_eq!(engine.state.players[0].hand.len(), hand_before_payment + 1);
     assert!(engine.state.pending_resolution.is_none());
 }
 

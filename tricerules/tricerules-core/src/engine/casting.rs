@@ -8,8 +8,9 @@ use super::presentation::{
     ability_presentation, child_presentation_ref, spell_stack_presentation, PresentationPath,
 };
 use super::targeting::{
-    capture_stack_target, target_filter_legal_at_resolution, validate_ability_targets,
-    validate_spell_targets, validate_x_target_mana_value, TargetSourceIdentity,
+    capture_stack_target, face_mode_program, face_program, target_filter_legal_at_resolution,
+    validate_ability_targets_with_context_and_program, validate_spell_targets_with_program,
+    validate_x_target_mana_value, TargetResolutionContext, TargetSourceIdentity,
 };
 use super::*;
 use crate::engine::events::ev_log_ability;
@@ -1329,13 +1330,14 @@ impl GameEngine {
                     .modes
                     .get(selection.mode_index as usize)
                     .ok_or(EngineError::Illegal("bad spell mode index"))?;
-                validate_spell_targets(
+                validate_spell_targets_with_program(
                     self,
                     player,
                     target_source,
                     &mode.effects,
                     mode.targeting.as_ref(),
                     &selection.targets,
+                    face_mode_program(self, &card_id, &face.face_id, &mode.mode_id),
                 )?;
                 validate_cast_cost_target_expansions(
                     self,
@@ -1400,13 +1402,14 @@ impl GameEngine {
                     "selected_modes given for a nonmodal spell",
                 ));
             }
-            validate_spell_targets(
+            validate_spell_targets_with_program(
                 self,
                 player,
                 target_source,
                 &face_effects,
                 face_targeting.as_ref(),
                 targets,
+                face_program(self, &card_id, &face.face_id),
             )?;
             validate_cast_cost_target_expansions(
                 self,
@@ -2359,13 +2362,27 @@ impl GameEngine {
         // CR 608.2: an ability's effect list validates exactly like a spell's — same shape,
         // same multi-target handling — so it goes through the list-level entry point.
         let target_source = TargetSourceIdentity::captured(permanent_id, source_zone_change);
-        validate_ability_targets(
+        let program = match &effective.occurrence {
+            ActivatedAbilityOccurrence::Printed(definition)
+            | ActivatedAbilityOccurrence::Granted(TriggerAbilityOrigin::StaticGrant {
+                definition,
+                ..
+            }) => self.registry.compiled_program_for_owner(
+                &tricerules_card_model::ProgramOwnerId::ability(definition.clone()),
+            ),
+            _ => None,
+        };
+        validate_ability_targets_with_context_and_program(
             self,
             player,
             target_source,
-            &ability.effect,
-            ability.targeting.as_ref(),
             targets,
+            TargetResolutionContext {
+                effects: &ability.effect,
+                targeting: ability.targeting.as_ref(),
+                trigger_context: TriggerContext::default(),
+                program,
+            },
         )?;
         validate_x_target_mana_value(
             self,
@@ -2373,6 +2390,7 @@ impl GameEngine {
             ability.targeting.as_ref(),
             targets,
             x_value,
+            program,
         )?;
 
         let announcement = self.capture_ability_announcement(
@@ -4642,15 +4660,19 @@ mod cast_snapshot_tests {
         e.apply_scenario_command(0, &cast).expect("storm cast");
         resolve(&mut e);
         assert!(e.state.pending_resolution.is_some(), "first copy choice");
+        let original_target = e
+            .state
+            .stack
+            .iter()
+            .find(|item| !item.is_copy)
+            .expect("original storm spell remains on the stack")
+            .targets[0];
 
         e.apply_scenario_command(
             0,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
-                    rv1::SubmitResolutionChoice {
-                        chosen_object_ids: vec![1],
-                        ..Default::default()
-                    },
+                    rv1::SubmitResolutionChoice::default(),
                 )),
             },
         )
@@ -4660,6 +4682,13 @@ mod cast_snapshot_tests {
             "second copy must receive its own target choice before priority"
         );
         assert_eq!(e.state.stack.iter().filter(|item| item.is_copy).count(), 1);
+        let first_copy = e
+            .state
+            .stack
+            .iter()
+            .find(|item| item.is_copy)
+            .expect("first copy is pushed before asking for the second");
+        assert_eq!(first_copy.targets, vec![original_target]);
 
         let second_copy_id = e
             .state
@@ -4696,7 +4725,7 @@ mod cast_snapshot_tests {
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
                     rv1::SubmitResolutionChoice {
-                        chosen_object_ids: vec![0],
+                        chosen_player_ids: vec![0],
                         ..Default::default()
                     },
                 )),
@@ -4705,6 +4734,15 @@ mod cast_snapshot_tests {
         .expect("second copy chooses independently");
         assert!(e.state.pending_resolution.is_none());
         assert_eq!(e.state.stack.iter().filter(|item| item.is_copy).count(), 2);
+        let copy_targets = e
+            .state
+            .stack
+            .iter()
+            .filter(|item| item.is_copy)
+            .map(|item| item.targets[0].object_id)
+            .collect::<Vec<_>>();
+        assert!(copy_targets.contains(&original_target.object_id));
+        assert!(copy_targets.contains(&0));
         assert_eq!(e.state.turn_history.current.spells_cast, 3);
     }
 
@@ -5873,6 +5911,7 @@ mod mana_payment_tests {
                 who: PlayerRecipient::Controller,
                 count: Amount::Fixed(1),
             }],
+            program: None,
             targeting: None,
             timing: ActivationTiming::Normal,
             conditions: vec![],

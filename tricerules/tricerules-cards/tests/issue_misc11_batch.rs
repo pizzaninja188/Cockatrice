@@ -9,8 +9,8 @@
 //! CR 614.1c/d (enters tapped), CR 702.12b (indestructible), and CR 700.4 ("dies").
 
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, BattlefieldAggregate, CardTypeFilter, DiscardQuantity, DrawDiscardOrder,
-    EffectSubject, EntersTappedAffected, GameCondition, ObjectContributionKind,
+    AbilityCost, Amount, BattlefieldAggregate, CardTypeFilter, DiscardQuantity, EffectSubject,
+    EntersTappedAffected, GameCondition, InstructionKind, ObjectContributionKind,
     ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient, RelativePlayerSet,
     SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TriggerCondition,
 };
@@ -274,19 +274,29 @@ fn issue_misc11_batch_maps_definitions() {
         "{:?}",
         agna_loot.costs
     );
-    assert!(
-        matches!(
-            agna_loot.effect.as_slice(),
-            [SpellEffectKind::DrawDiscard {
-                draw_count: 1,
-                discard_count: 1,
-                order: DrawDiscardOrder::DrawThenDiscard,
-                ..
-            }]
-        ),
-        "{:?}",
-        agna_loot.effect
-    );
+    assert!(agna_loot.effect.is_empty());
+    let program = agna_loot
+        .program
+        .as_ref()
+        .expect("authored activated program");
+    assert!(program.target_bindings.is_empty());
+    assert_eq!(program.body.steps.len(), 2);
+    assert!(matches!(
+        &program.body.steps[0].kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            })
+    ));
+    assert!(matches!(
+        &program.body.steps[1].kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Discard {
+                who: PlayerRecipient::Controller,
+                quantity: DiscardQuantity::Exact(1),
+            })
+    ));
 
     // Nutrient Block: indestructible, sac for 3 life, and a dies trigger (CR 700.4).
     let nutrient = primary(registry, "nutrient_block");

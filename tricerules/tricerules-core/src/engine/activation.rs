@@ -2,7 +2,9 @@
 use super::combat::priority_locked_for_combat_declaration;
 use super::payment::transaction::CostTransactionPlan;
 use super::payment::PreparedPaymentCosts;
-use super::targeting::{compute_ability_targets, TargetSourceIdentity};
+use super::targeting::{
+    compute_ability_targets_with_program, TargetResolutionContext, TargetSourceIdentity,
+};
 use super::*;
 use prost::Message;
 
@@ -35,7 +37,20 @@ impl GameEngine {
         pending: &rv1::PendingAbilityActivation,
         ability: &ActivatedAbilityDef,
     ) -> Vec<PlayerId> {
-        let groups = self.activation_target_groups(pending, ability);
+        self.eligible_activation_opponents_with_program(
+            pending,
+            ability,
+            self.activation_program(pending),
+        )
+    }
+
+    fn eligible_activation_opponents_with_program(
+        &self,
+        pending: &rv1::PendingAbilityActivation,
+        ability: &ActivatedAbilityDef,
+        program: Option<&tricerules_card_model::primitives::CompiledProgram>,
+    ) -> Vec<PlayerId> {
+        let groups = self.activation_target_groups_with_program(pending, ability, program);
         let Some(group) = groups.groups.get(1) else {
             return Vec::new();
         };
@@ -191,7 +206,20 @@ impl GameEngine {
         pending: &rv1::PendingAbilityActivation,
         ability: &ActivatedAbilityDef,
     ) -> rv1::SpellTargets {
-        compute_ability_targets(
+        self.activation_target_groups_with_program(
+            pending,
+            ability,
+            self.activation_program(pending),
+        )
+    }
+
+    fn activation_target_groups_with_program(
+        &self,
+        pending: &rv1::PendingAbilityActivation,
+        ability: &ActivatedAbilityDef,
+        program: Option<&tricerules_card_model::primitives::CompiledProgram>,
+    ) -> rv1::SpellTargets {
+        compute_ability_targets_with_program(
             self,
             pending.actor_player_id,
             TargetSourceIdentity::captured(
@@ -200,7 +228,31 @@ impl GameEngine {
             ),
             &ability.effect,
             ability.targeting.as_ref(),
+            program,
         )
+    }
+
+    fn program_for_activation_occurrence(
+        &self,
+        occurrence: &crate::state::ActivatedAbilityOccurrence,
+    ) -> Option<&tricerules_card_model::primitives::CompiledProgram> {
+        let definition = match occurrence {
+            crate::state::ActivatedAbilityOccurrence::Printed(definition) => definition,
+            crate::state::ActivatedAbilityOccurrence::Granted(
+                crate::state::TriggerAbilityOrigin::StaticGrant { definition, .. },
+            ) => definition,
+            _ => return None,
+        };
+        let owner = tricerules_card_model::ProgramOwnerId::ability(definition.clone());
+        self.registry.compiled_program_for_owner(&owner)
+    }
+
+    fn activation_program(
+        &self,
+        _pending: &rv1::PendingAbilityActivation,
+    ) -> Option<&tricerules_card_model::primitives::CompiledProgram> {
+        let effective = &self.pending_ability_activation_internal.as_ref()?.effective;
+        self.program_for_activation_occurrence(&effective.occurrence)
     }
 
     fn set_activation_opponent(
@@ -209,11 +261,26 @@ impl GameEngine {
         ability: &ActivatedAbilityDef,
         opponent: PlayerId,
     ) -> Result<(), EngineError> {
+        self.set_activation_opponent_with_program(
+            pending,
+            ability,
+            opponent,
+            self.activation_program(pending),
+        )
+    }
+
+    fn set_activation_opponent_with_program(
+        &self,
+        pending: &mut rv1::PendingAbilityActivation,
+        ability: &ActivatedAbilityDef,
+        opponent: PlayerId,
+        program: Option<&tricerules_card_model::primitives::CompiledProgram>,
+    ) -> Result<(), EngineError> {
         if !pending.valid_opponent_ids.contains(&opponent) {
             return Err(EngineError::Illegal("ineligible opponent for activation"));
         }
         let mut group = self
-            .activation_target_groups(pending, ability)
+            .activation_target_groups_with_program(pending, ability, program)
             .groups
             .into_iter()
             .nth(1)
@@ -286,6 +353,7 @@ impl GameEngine {
             .into_iter()
             .find(|effective| effective.slot == command.ability_index)
             .ok_or(EngineError::Illegal("missing activated ability"))?;
+        let program = self.program_for_activation_occurrence(&effective.occurrence);
         if !effective.definition.requires_opponent_target_choice()
             || !self.ability_activatable(
                 source.id,
@@ -314,7 +382,8 @@ impl GameEngine {
             source_description: events::object_display_name(&self.state, self.registry, source.id),
             ..Default::default()
         };
-        let groups = self.activation_target_groups(&pending, &effective.definition);
+        let groups =
+            self.activation_target_groups_with_program(&pending, &effective.definition, program);
         if own.group_index != 0
             || self.activation_target_receipt(own.object_id, 0) != *own
             || !groups
@@ -326,8 +395,11 @@ impl GameEngine {
                 "illegal or stale controller creature target",
             ));
         }
-        pending.valid_opponent_ids =
-            self.eligible_activation_opponents(&pending, &effective.definition);
+        pending.valid_opponent_ids = self.eligible_activation_opponents_with_program(
+            &pending,
+            &effective.definition,
+            program,
+        );
         if pending.valid_opponent_ids.is_empty() {
             return Err(EngineError::Illegal(
                 "no opponent can complete this activation",
@@ -337,7 +409,12 @@ impl GameEngine {
             (pending.valid_opponent_ids.len() == 1).then(|| pending.valid_opponent_ids[0])
         });
         if let Some(opponent) = selected {
-            self.set_activation_opponent(&mut pending, &effective.definition, opponent)?;
+            self.set_activation_opponent_with_program(
+                &mut pending,
+                &effective.definition,
+                opponent,
+                program,
+            )?;
         }
         let announcement = self.capture_ability_announcement(
             player,
@@ -542,16 +619,20 @@ impl GameEngine {
                 }
                 pending.announced_targets.push(*target);
                 let targets: Vec<_> = pending.announced_targets.iter().map(target_ref).collect();
-                super::targeting::validate_ability_targets(
+                super::targeting::validate_ability_targets_with_context_and_program(
                     self,
                     pending.actor_player_id,
                     TargetSourceIdentity::captured(
                         pending.source_object_id,
                         pending.source_zone_change_generation,
                     ),
-                    &ability.effect,
-                    ability.targeting.as_ref(),
                     &targets,
+                    TargetResolutionContext {
+                        effects: &ability.effect,
+                        targeting: ability.targeting.as_ref(),
+                        trigger_context: TriggerContext::default(),
+                        program: self.activation_program(&pending),
+                    },
                 )?;
                 if pending.announced_targets.iter().any(|target| {
                     self.activation_target_receipt(target.object_id, target.group_index) != *target

@@ -43,6 +43,7 @@ impl GameEngine {
             presentation: tricerules_card_model::AbilityPresentation::Fallback,
             trigger: TriggerCondition::AtBeginningOfNextEndStep,
             effect: vec![SpellEffectKind::ExileWarpedObject],
+            program: None,
             modal: None,
             targeting: None,
             may: false,

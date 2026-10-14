@@ -823,6 +823,7 @@ pub(super) fn earthbend(
                     entry_counters: vec![],
                     set_types: None,
                 }],
+                program: None,
                 modal: None,
                 targeting: None,
                 may: false,

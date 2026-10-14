@@ -1711,6 +1711,15 @@ pub(crate) fn submit_resolution_choice(chosen: Vec<u32>) -> RuledCommand {
     }
 }
 
+pub(crate) fn submit_resolution_player_choice(chosen: Vec<i32>) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            chosen_player_ids: chosen,
+            ..Default::default()
+        })),
+    }
+}
+
 pub(crate) fn submit_resolution_decision(decision: rv1::ResolutionChoiceDecision) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {

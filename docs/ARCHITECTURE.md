@@ -8,9 +8,10 @@ For local structured evidence, privacy boundaries, deterministic reconstruction,
 see [RULED-DIAGNOSTICS.md](RULED-DIAGNOSTICS.md).
 
 The [composable card execution and authoring contract](COMPOSABLE-CARD-EXECUTION.md) describes the
-broader composition target. A bounded targetless spell-program runner is implemented; the
-[active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-targetless-spell-programs)
-defines its supported syntax. Prompt-ID propagation and the remaining migration stay separate.
+broader composition target. A bounded authored-program runner now supports targetless operations
+and four targetful role signatures on spell faces, modal modes, activated abilities and triggered
+abilities; the [active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs)
+defines accepted syntax. Prompt-ID propagation and the broader migration stay separate.
 
 ---
 

@@ -460,7 +460,7 @@ fn standstill_on_battlefield_during_twincast_copy_is_not_triggered_by_copy_creat
     pass_priority_round(&mut engine);
     assert!(engine.state.pending_resolution.is_some());
     engine
-        .apply_scenario_command(10, &submit_resolution_choice(vec![20]))
+        .apply_scenario_command(10, &submit_resolution_player_choice(vec![20]))
         .unwrap();
     assert!(engine.state.stack.last().unwrap().is_copy);
     assert_eq!(engine.state.stack.last().unwrap().cast_occurrence, None);

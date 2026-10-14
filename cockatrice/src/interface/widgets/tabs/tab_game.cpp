@@ -890,8 +890,9 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         // CR 707.10c: a spell copy is waiting for the local player to choose new targets.
         state.mode = PromptMode::ClickChoice;
         state.canDecline = h->pendingClickChoiceMayDecline();
+        state.clickChoiceDeclineLabel = h->pendingChoice->emptyChoiceActionLabel;
         state.text = h->pendingChoicePromptText(ChoiceKind::CopyTarget) +
-                     tr("\nClick a target, or click the original target to keep it.");
+                     tr("\nClick a legal new target, or choose Keep original target.");
     } else if (h->hasPendingChoiceOfKind(ChoiceKind::PermanentChoice)) {
         state.mode = PromptMode::ClickChoice;
         state.canDecline = h->pendingClickChoiceMayDecline();

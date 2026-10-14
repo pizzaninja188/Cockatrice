@@ -604,9 +604,9 @@ fn zenith_twincast_created_stack_copy_is_not_another_cast() {
     let history = engine.state.turn_history.current.spell_casts.clone();
     pass_priority_round(&mut engine);
     assert!(engine.state.pending_resolution.is_some());
-    rejected(&mut engine, 10, &submit_resolution_choice(vec![30]));
+    rejected(&mut engine, 10, &submit_resolution_player_choice(vec![30]));
     engine
-        .apply_scenario_command(30, &submit_resolution_choice(vec![30]))
+        .apply_scenario_command(30, &submit_resolution_player_choice(vec![30]))
         .unwrap();
     let copy = engine.state.stack.last().unwrap();
     assert!(copy.is_copy);

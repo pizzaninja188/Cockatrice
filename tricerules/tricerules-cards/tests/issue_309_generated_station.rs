@@ -3,8 +3,8 @@ use std::collections::BTreeSet;
 use tricerules_cards::mana::ManaCost;
 use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CardResultAction, CardResultFilter,
-    CardResultSource, CardTypeFilter, CountExpression, DrawDiscardOrder, EffectSubject,
-    GameCondition, ObjectPaymentConstraint, PlayerRecipient, PowerToughnessCharacteristic,
+    CardResultSource, CardTypeFilter, CountExpression, EffectSubject, GameCondition,
+    InstructionKind, ObjectPaymentConstraint, PlayerRecipient, PowerToughnessCharacteristic,
     SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, CounterKind, Keyword};
@@ -136,16 +136,29 @@ fn issue_309_cards_preserve_exact_faces_abilities_and_presentation_fingerprints(
                 trigger.presentation,
                 AbilityPresentation::OracleLines(vec![1])
             );
-            assert_eq!(
-                trigger.effect,
-                [SpellEffectKind::DrawDiscard {
-                    who: PlayerRecipient::Controller,
-                    draw_count: 2,
-                    discard_count: 1,
-                    order: DrawDiscardOrder::DrawThenDiscard,
-                    optional: false,
-                }]
-            );
+            assert!(trigger.effect.is_empty());
+            let program = trigger
+                .program
+                .as_ref()
+                .expect("authored Uthros ETB program");
+            assert!(program.target_bindings.is_empty());
+            assert_eq!(program.body.steps.len(), 2);
+            assert!(matches!(
+                &program.body.steps[0].kind,
+                InstructionKind::Perform(effect)
+                    if matches!(effect.as_ref(), SpellEffectKind::Draw {
+                        who: PlayerRecipient::Controller,
+                        count: Amount::Fixed(2),
+                    })
+            ));
+            assert!(matches!(
+                &program.body.steps[1].kind,
+                InstructionKind::Perform(effect)
+                    if matches!(effect.as_ref(), SpellEffectKind::Discard {
+                        who: PlayerRecipient::Controller,
+                        quantity: tricerules_cards::primitives::DiscardQuantity::Exact(1),
+                    })
+            ));
         } else {
             assert_eq!(face.activated_abilities.len(), 2);
             let pump = &face.activated_abilities[1];

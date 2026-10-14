@@ -1,7 +1,9 @@
 use super::*;
 use tricerules_card_model::primitives::{
-    GraveyardFilter, GraveyardOwner, TargetObjectExclusion, TargetRole, TargetSchema, TargetingDef,
+    CompiledProgram, GraveyardFilter, GraveyardOwner, TargetObjectExclusion, TargetRole,
+    TargetSchema, TargetingDef,
 };
+use tricerules_card_model::{AbilityDefinitionId, CardFaceId, ModeId, ProgramOwnerId};
 
 /// CR 608.2b/h: current attachment, or generation-scoped LKI after the source leaves.
 /// Shared by Due Diligence's target exclusion and untargeted attached-object effects.
@@ -93,6 +95,75 @@ pub(super) fn target_schema<'effects, 'targeting>(
     targeting: Option<&'targeting TargetingDef>,
 ) -> TargetSchema<'effects, 'targeting> {
     TargetSchema::compile(effects, targeting).expect("card registry validated target schema")
+}
+
+pub(super) fn target_schema_with_program<'effects, 'targeting>(
+    effects: &'effects [SpellEffectKind],
+    targeting: Option<&'targeting TargetingDef>,
+    program: Option<&'effects CompiledProgram>,
+) -> TargetSchema<'effects, 'targeting> {
+    if !effects.is_empty() || program.is_none() {
+        return target_schema(effects, targeting);
+    }
+    TargetSchema::compile_program(program.expect("checked above"), targeting)
+        .expect("card registry validated authored program target schema")
+}
+
+/// The authored/legacy target data and event-time context consumed by one targeting operation.
+/// Keeping this together prevents candidate publication and command validation from diverging.
+#[derive(Clone, Copy)]
+pub(super) struct TargetResolutionContext<'a> {
+    pub(super) effects: &'a [SpellEffectKind],
+    pub(super) targeting: Option<&'a TargetingDef>,
+    pub(super) trigger_context: TriggerContext,
+    pub(super) program: Option<&'a CompiledProgram>,
+}
+
+pub(super) fn face_program<'a>(
+    engine: &'a GameEngine,
+    card_id: &str,
+    face_id: &CardFaceId,
+) -> Option<&'a CompiledProgram> {
+    engine
+        .registry
+        .compiled_program_for_owner(&ProgramOwnerId::face(card_id.to_owned(), face_id.clone()))
+}
+
+pub(super) fn face_mode_program<'a>(
+    engine: &'a GameEngine,
+    card_id: &str,
+    face_id: &CardFaceId,
+    mode_id: &ModeId,
+) -> Option<&'a CompiledProgram> {
+    engine
+        .registry
+        .compiled_program_for_owner(&ProgramOwnerId::face_mode(
+            card_id.to_owned(),
+            face_id.clone(),
+            mode_id.clone(),
+        ))
+}
+
+pub(super) fn ability_program<'a>(
+    engine: &'a GameEngine,
+    definition: &AbilityDefinitionId,
+) -> Option<&'a CompiledProgram> {
+    engine
+        .registry
+        .compiled_program_for_owner(&ProgramOwnerId::ability(definition.clone()))
+}
+
+pub(super) fn ability_mode_program<'a>(
+    engine: &'a GameEngine,
+    definition: &AbilityDefinitionId,
+    mode_id: &ModeId,
+) -> Option<&'a CompiledProgram> {
+    engine
+        .registry
+        .compiled_program_for_owner(&ProgramOwnerId::ability_mode(
+            definition.clone(),
+            mode_id.clone(),
+        ))
 }
 
 pub(super) fn capture_stack_target(engine: &GameEngine, target: &rv1::TargetRef) -> StackTarget {
@@ -618,7 +689,7 @@ pub(super) fn target_owner_matches(
     }
 }
 
-fn target_role_legality_error(
+pub(super) fn target_role_legality_error(
     engine: &GameEngine,
     role: TargetRole<'_>,
     tid: ObjectId,
@@ -1823,7 +1894,14 @@ pub(super) fn validate_ability_targets(
 pub(super) fn x_target_group_indices(
     effects: &[SpellEffectKind],
     targeting: Option<&TargetingDef>,
+    program: Option<&CompiledProgram>,
 ) -> std::collections::HashSet<usize> {
+    // The authored program operation whitelist has no X-dependent target leaf. Program owners
+    // can still have ordinary target groups, whose empty legacy effect slice cannot be compiled
+    // through the legacy schema just to search for a CopyTargetArtifactWithManaValueX role.
+    if effects.is_empty() && program.is_some() {
+        return std::collections::HashSet::new();
+    }
     target_schema(effects, targeting)
         .groups
         .iter()
@@ -1849,8 +1927,9 @@ pub(super) fn validate_x_target_mana_value(
     targeting: Option<&TargetingDef>,
     targets: &[rv1::TargetRef],
     x_value: u32,
+    program: Option<&CompiledProgram>,
 ) -> Result<(), EngineError> {
-    for group_index in x_target_group_indices(effects, targeting) {
+    for group_index in x_target_group_indices(effects, targeting, program) {
         let mut selected = targets
             .iter()
             .filter(|target| target.group_index as usize == group_index);
@@ -1879,17 +1958,31 @@ pub(super) fn validate_ability_targets_with_context(
     targets: &[rv1::TargetRef],
     trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
-    validate_grouped_targets(
+    validate_ability_targets_with_context_and_program(
         engine,
         caster,
         source,
-        effects,
-        targeting,
         targets,
-        trigger_context,
+        TargetResolutionContext {
+            effects,
+            targeting,
+            trigger_context,
+            program: None,
+        },
     )
 }
 
+pub(super) fn validate_ability_targets_with_context_and_program(
+    engine: &GameEngine,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    targets: &[rv1::TargetRef],
+    target_context: TargetResolutionContext<'_>,
+) -> Result<(), EngineError> {
+    validate_grouped_targets(engine, caster, source, targets, target_context)
+}
+
+#[cfg(test)]
 pub(super) fn validate_spell_targets(
     engine: &GameEngine,
     caster: PlayerId,
@@ -1898,14 +1991,29 @@ pub(super) fn validate_spell_targets(
     targeting: Option<&TargetingDef>,
     targets: &[rv1::TargetRef],
 ) -> Result<(), EngineError> {
+    validate_spell_targets_with_program(engine, caster, source, effects, targeting, targets, None)
+}
+
+pub(super) fn validate_spell_targets_with_program(
+    engine: &GameEngine,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
+    targets: &[rv1::TargetRef],
+    program: Option<&CompiledProgram>,
+) -> Result<(), EngineError> {
     validate_grouped_targets(
         engine,
         caster,
         source,
-        effects,
-        targeting,
         targets,
-        TriggerContext::default(),
+        TargetResolutionContext {
+            effects,
+            targeting,
+            trigger_context: TriggerContext::default(),
+            program,
+        },
     )
 }
 
@@ -1931,12 +2039,14 @@ fn validate_grouped_targets(
     engine: &GameEngine,
     caster: PlayerId,
     source: TargetSourceIdentity,
-    effects: &[SpellEffectKind],
-    targeting: Option<&TargetingDef>,
     targets: &[rv1::TargetRef],
-    trigger_context: TriggerContext,
+    target_context: TargetResolutionContext<'_>,
 ) -> Result<(), EngineError> {
-    let schema = target_schema(effects, targeting);
+    let schema = target_schema_with_program(
+        target_context.effects,
+        target_context.targeting,
+        target_context.program,
+    );
     if schema.groups.is_empty() {
         return if targets.is_empty() {
             Ok(())
@@ -1964,7 +2074,7 @@ fn validate_grouped_targets(
     for (group_index, group) in schema.groups.iter().enumerate() {
         let selected = &grouped[group_index];
         if selected.len() < group.min as usize || selected.len() > group.max as usize {
-            if targeting.is_none() && group.min == 1 && group.max == 1 {
+            if target_context.targeting.is_none() && group.min == 1 && group.max == 1 {
                 return Err(EngineError::Illegal("spell requires exactly one target"));
             }
             return Err(EngineError::Illegal("target group cardinality is invalid"));
@@ -1977,7 +2087,7 @@ fn validate_grouped_targets(
                     "target kind does not match the referenced game object",
                 ));
             }
-            if !seen.insert(target.object_id) {
+            if !seen.insert(target_ref_identity(engine, target)) {
                 return Err(EngineError::Illegal("duplicate target in target group"));
             }
             if target
@@ -2012,7 +2122,7 @@ fn validate_grouped_targets(
             }
             for binding in &group.bindings {
                 if matches!(
-                    effects.get(binding.effect_index),
+                    target_context.effects.get(binding.effect_index),
                     Some(SpellEffectKind::CopyTargetArtifactWithManaValueX { .. })
                 ) && target.expected_zone_change_generation.is_none()
                 {
@@ -2026,7 +2136,7 @@ fn validate_grouped_targets(
                     target,
                     caster,
                     source,
-                    trigger_context,
+                    target_context.trigger_context,
                 )?;
             }
         }
@@ -2037,9 +2147,9 @@ fn validate_grouped_targets(
                     "target group distinctness index is invalid",
                 ))?;
             if selected.iter().any(|target| {
-                other
-                    .iter()
-                    .any(|candidate| candidate.object_id == target.object_id)
+                other.iter().any(|candidate| {
+                    target_ref_identity(engine, candidate) == target_ref_identity(engine, target)
+                })
             }) {
                 return Err(EngineError::Illegal(
                     "target must be distinct across target groups",
@@ -2047,7 +2157,7 @@ fn validate_grouped_targets(
             }
         }
     }
-    for (effect_index, effect) in effects.iter().enumerate() {
+    for (effect_index, effect) in target_context.effects.iter().enumerate() {
         if matches!(effect, SpellEffectKind::ExchangeArtifactWithGraveyard) {
             let (first, second) = schema
                 .artifact_exchange_groups(effect_index)
@@ -2062,6 +2172,57 @@ fn validate_grouped_targets(
         }
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum TargetRefIdentity {
+    Player(PlayerId),
+    Object(ObjectId, u64),
+}
+
+/// CR 400.7 and CR 115.3: an object id alone is not a physical target identity after a zone
+/// change, and its integer can also equal a PlayerId. Typed receipts keep those domains separate.
+fn target_ref_identity(engine: &GameEngine, target: &rv1::TargetRef) -> TargetRefIdentity {
+    match rv1::TargetRefKind::try_from(target.kind) {
+        Ok(rv1::TargetRefKind::Player) => TargetRefIdentity::Player(target.object_id as PlayerId),
+        Ok(
+            rv1::TargetRefKind::Permanent
+            | rv1::TargetRefKind::Stack
+            | rv1::TargetRefKind::Graveyard,
+        ) => TargetRefIdentity::Object(
+            target.object_id,
+            target.expected_zone_change_generation.unwrap_or_else(|| {
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(&target.object_id)
+                    .copied()
+                    .unwrap_or(0)
+            }),
+        ),
+        Ok(rv1::TargetRefKind::Unspecified) | Err(_) => {
+            if target.expected_zone_change_generation.is_none()
+                && engine
+                    .state
+                    .player_idx(target.object_id as PlayerId)
+                    .is_some()
+            {
+                TargetRefIdentity::Player(target.object_id as PlayerId)
+            } else {
+                TargetRefIdentity::Object(
+                    target.object_id,
+                    target.expected_zone_change_generation.unwrap_or_else(|| {
+                        engine
+                            .state
+                            .zone_change_generation
+                            .get(&target.object_id)
+                            .copied()
+                            .unwrap_or(0)
+                    }),
+                )
+            }
+        }
+    }
 }
 
 /// Welder's matched player is the current battlefield controller and graveyard owner.
@@ -2449,6 +2610,7 @@ fn spell_target_legality_error_with_context(
 /// Compute `SpellTargets` for a spell — which objects/players `caster` can legally send this set
 /// of effects at, given the current game state. Only effects that need a target are considered;
 /// non-targeted effects in the same spell are ignored.
+#[cfg(test)]
 pub(super) fn compute_spell_targets(
     engine: &GameEngine,
     caster: PlayerId,
@@ -2457,13 +2619,36 @@ pub(super) fn compute_spell_targets(
     targeting: Option<&TargetingDef>,
     cost_modifiers: &[SpellCostModifier],
 ) -> rv1::SpellTargets {
-    let mut targets = compute_targets_with_context(
+    compute_spell_targets_with_program(
         engine,
         caster,
         source,
         effects,
         targeting,
-        TriggerContext::default(),
+        cost_modifiers,
+        None,
+    )
+}
+
+pub(super) fn compute_spell_targets_with_program(
+    engine: &GameEngine,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
+    cost_modifiers: &[SpellCostModifier],
+    program: Option<&CompiledProgram>,
+) -> rv1::SpellTargets {
+    let mut targets = compute_targets_with_context(
+        engine,
+        caster,
+        source,
+        TargetResolutionContext {
+            effects,
+            targeting,
+            trigger_context: TriggerContext::default(),
+            program,
+        },
         Some(TargetingCostAction::Spells),
     );
     targets.targeted_cost_reduction_applications = engine.targeted_cost_reduction_applications(
@@ -2475,24 +2660,29 @@ pub(super) fn compute_spell_targets(
     targets
 }
 
-pub(super) fn compute_ability_targets(
+pub(super) fn compute_ability_targets_with_program(
     engine: &GameEngine,
     caster: PlayerId,
     source: TargetSourceIdentity,
     effects: &[SpellEffectKind],
     targeting: Option<&TargetingDef>,
+    program: Option<&CompiledProgram>,
 ) -> rv1::SpellTargets {
     compute_targets_with_context(
         engine,
         caster,
         source,
-        effects,
-        targeting,
-        TriggerContext::default(),
+        TargetResolutionContext {
+            effects,
+            targeting,
+            trigger_context: TriggerContext::default(),
+            program,
+        },
         Some(TargetingCostAction::ActivatedAbilities),
     )
 }
 
+#[cfg(test)]
 pub(super) fn compute_ability_targets_with_context(
     engine: &GameEngine,
     caster: PlayerId,
@@ -2501,7 +2691,7 @@ pub(super) fn compute_ability_targets_with_context(
     targeting: Option<&TargetingDef>,
     trigger_context: TriggerContext,
 ) -> rv1::SpellTargets {
-    compute_targets_with_context(
+    compute_ability_targets_with_context_and_program(
         engine,
         caster,
         source,
@@ -2512,13 +2702,34 @@ pub(super) fn compute_ability_targets_with_context(
     )
 }
 
-fn compute_targets_with_context(
+pub(super) fn compute_ability_targets_with_context_and_program(
     engine: &GameEngine,
     caster: PlayerId,
     source: TargetSourceIdentity,
     effects: &[SpellEffectKind],
     targeting: Option<&TargetingDef>,
     trigger_context: TriggerContext,
+    program: Option<&CompiledProgram>,
+) -> rv1::SpellTargets {
+    compute_targets_with_context(
+        engine,
+        caster,
+        source,
+        TargetResolutionContext {
+            effects,
+            targeting,
+            trigger_context,
+            program,
+        },
+        None,
+    )
+}
+
+fn compute_targets_with_context(
+    engine: &GameEngine,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    target_context: TargetResolutionContext<'_>,
     targeting_cost_action: Option<TargetingCostAction>,
 ) -> rv1::SpellTargets {
     // DamageTargets metadata controls the allocation UI. Cardinality lives exclusively on groups.
@@ -2526,7 +2737,7 @@ fn compute_targets_with_context(
     let mut is_damage_targets = false;
     let mut extra_mana_per_target: u32 = 0;
     let mut damage_division = rv1::DamageDivision::ChooseAtCast;
-    for effect in effects {
+    for effect in target_context.effects {
         if let SpellEffectKind::DamageTargets {
             amount,
             extra_mana_per_target: empt,
@@ -2549,7 +2760,11 @@ fn compute_targets_with_context(
         }
     }
 
-    let schema = target_schema(effects, targeting);
+    let schema = target_schema_with_program(
+        target_context.effects,
+        target_context.targeting,
+        target_context.program,
+    );
     let mut groups = schema
         .groups
         .iter()
@@ -2563,7 +2778,7 @@ fn compute_targets_with_context(
                         object_id,
                         caster,
                         source,
-                        trigger_context,
+                        target_context.trigger_context,
                     )
                     .is_ok()
                 })
@@ -2601,7 +2816,7 @@ fn compute_targets_with_context(
                 .iter()
                 .any(|binding| {
                     matches!(
-                        effects.get(binding.effect_index),
+                        target_context.effects.get(binding.effect_index),
                         Some(SpellEffectKind::CopyTargetArtifactWithManaValueX { .. })
                     )
                 })
@@ -2666,7 +2881,7 @@ fn compute_targets_with_context(
         })
         .collect::<Vec<_>>();
 
-    for (effect_index, effect) in effects.iter().enumerate() {
+    for (effect_index, effect) in target_context.effects.iter().enumerate() {
         if !matches!(effect, SpellEffectKind::ExchangeArtifactWithGraveyard) {
             continue;
         }
@@ -2727,6 +2942,37 @@ fn compute_targets_with_context(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn legacy_modal_program_siblings_keep_their_legacy_target_schema() {
+        let registry = tricerules_cards::registry::global();
+        let face = registry
+            .get("three_steps_ahead")
+            .expect("Three Steps Ahead is in the generated registry")
+            .primary_face();
+        let modal = face.modal_spell.as_ref().expect("Spree modes");
+
+        for mode in &modal.modes {
+            let owner = ProgramOwnerId::face_mode(
+                "three_steps_ahead",
+                face.face_id.clone(),
+                mode.mode_id.clone(),
+            );
+            let compiled = registry
+                .compiled_program_for_owner(&owner)
+                .expect("the draw-discard sibling compiles every legacy mode owner");
+            let schema =
+                target_schema_with_program(&mode.effects, mode.targeting.as_ref(), Some(compiled));
+            assert_eq!(
+                schema.groups.len(),
+                mode.targeting
+                    .as_ref()
+                    .map_or(0, |targeting| targeting.groups.len()),
+                "{} keeps its legacy target-group projection",
+                mode.mode_id,
+            );
+        }
+    }
+
     fn issue_205_stack_item(
         id: ObjectId,
         card_id: &str,

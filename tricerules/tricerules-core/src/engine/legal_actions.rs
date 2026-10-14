@@ -5,8 +5,10 @@ use super::payment::components::ObjectPaymentComponent;
 use super::presentation::{presentation_ref, PresentationPath};
 use super::priority::{instant_timing_step_allowed, sorcery_speed_available};
 use super::targeting::{
-    compute_ability_targets, compute_ability_targets_with_context, compute_spell_targets,
-    target_filter_legal_at_resolution, target_schema, TargetSourceIdentity,
+    ability_program, compute_ability_targets_with_context_and_program,
+    compute_ability_targets_with_program, compute_spell_targets_with_program, face_mode_program,
+    face_program, target_filter_legal_at_resolution, target_schema_with_program,
+    TargetSourceIdentity,
 };
 use super::*;
 
@@ -67,17 +69,23 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 for (face_index, face) in def.faces_iter().enumerate() {
                     if !def.face_available_from_hand(face_index)
                         || face.is_land
-                        || !target_schema(&face.spell_effect, face.targeting.as_ref()).has_targets()
+                        || !target_schema_with_program(
+                            &face.spell_effect,
+                            face.targeting.as_ref(),
+                            face_program(eng, &obj.card_id, &face.face_id),
+                        )
+                        .has_targets()
                     {
                         continue;
                     }
-                    let mut t = compute_spell_targets(
+                    let mut t = compute_spell_targets_with_program(
                         eng,
                         p.id,
                         TargetSourceIdentity::spell_face(eng, oid, face_index),
                         &face.spell_effect,
                         face.targeting.as_ref(),
                         &face.cost_modifiers,
+                        face_program(eng, &obj.card_id, &face.face_id),
                     );
                     if let Some(costs) = hand_actions
                         .iter()
@@ -128,13 +136,21 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         key,
                         legal_ability_cost_choices(eng, p.id, poid, ai, &ability),
                     );
-                    if target_schema(&ability.effect, ability.targeting.as_ref()).has_targets() {
-                        let targets = compute_ability_targets(
+                    let program = effective_ability_program(eng, &effective.occurrence);
+                    if target_schema_with_program(
+                        &ability.effect,
+                        ability.targeting.as_ref(),
+                        program,
+                    )
+                    .has_targets()
+                    {
+                        let targets = compute_ability_targets_with_program(
                             eng,
                             p.id,
                             TargetSourceIdentity::current(eng, poid),
                             &ability.effect,
                             ability.targeting.as_ref(),
+                            program,
                         );
                         valid_targets_by_ability.insert(key, targets);
                     }
@@ -146,7 +162,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     rv1::AbilitySourceZone::Graveyard => AbilitySourceZone::Graveyard,
                     rv1::AbilitySourceZone::Battlefield => continue,
                 };
-                let Some((_, ability, _)) = eng
+                let Some((_, ability, face_index)) = eng
                     .authored_zone_activated_abilities(action.object_id, source_zone)
                     .into_iter()
                     .find(|(index, _, _)| *index == action.ability_index as usize)
@@ -175,10 +191,20 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         &ability,
                     ),
                 );
-                if target_schema(&ability.effect, ability.targeting.as_ref()).has_targets() {
+                let program = ability_program(
+                    eng,
+                    &eng.ability_definition(
+                        action.object_id,
+                        face_index,
+                        vec![ability.ability_id.clone()],
+                    ),
+                );
+                if target_schema_with_program(&ability.effect, ability.targeting.as_ref(), program)
+                    .has_targets()
+                {
                     valid_targets_by_ability.insert(
                         key,
-                        compute_ability_targets(
+                        compute_ability_targets_with_program(
                             eng,
                             p.id,
                             TargetSourceIdentity::captured(
@@ -187,6 +213,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                             ),
                             &ability.effect,
                             ability.targeting.as_ref(),
+                            program,
                         ),
                     );
                 }
@@ -196,22 +223,24 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             if !action.needs_target {
                 continue;
             }
+            let Some(object) = eng.state.objects.get(&action.object_id) else {
+                continue;
+            };
             let Some(face) = eng
-                .state
-                .objects
-                .get(&action.object_id)
-                .and_then(|object| eng.registry.get(&object.card_id))
+                .registry
+                .get(&object.card_id)
                 .and_then(|definition| definition.face(action.face_index as usize))
             else {
                 continue;
             };
-            let mut targets = compute_spell_targets(
+            let mut targets = compute_spell_targets_with_program(
                 eng,
                 p.id,
                 TargetSourceIdentity::spell_face(eng, action.object_id, action.face_index as usize),
                 &face.spell_effect,
                 face.targeting.as_ref(),
                 &face.cost_modifiers,
+                face_program(eng, &object.card_id, &face.face_id),
             );
             if let Some(costs) = action.cost_choices.as_ref() {
                 apply_cast_cost_target_requirements(
@@ -245,13 +274,19 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         // so the parked trigger is the only thing its controller can be choosing targets for.
         if let Some(pt) = eng.state.pending_triggers.front() {
             if pt.controller == p.id {
-                let targets = compute_ability_targets_with_context(
+                let program = pt
+                    .ability_origin
+                    .as_ref()
+                    .and_then(trigger_origin_definition)
+                    .and_then(|definition| ability_program(eng, definition));
+                let targets = compute_ability_targets_with_context_and_program(
                     eng,
                     p.id,
                     TargetSourceIdentity::captured(pt.source_permanent_id, pt.source_zone_change),
                     &pt.ability.effect,
                     pt.ability.targeting.as_ref(),
                     pt.trigger_context,
+                    program,
                 );
                 let key = (pt.source_permanent_id as u64) << 32 | pt.ability_index as u64;
                 valid_targets_by_ability.insert(key, targets);
@@ -488,6 +523,37 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 pending_attack_declaration,
             },
         );
+    }
+}
+
+fn effective_ability_program<'a>(
+    engine: &'a GameEngine,
+    occurrence: &ActivatedAbilityOccurrence,
+) -> Option<&'a tricerules_card_model::primitives::CompiledProgram> {
+    let definition = match occurrence {
+        ActivatedAbilityOccurrence::Printed(definition)
+        | ActivatedAbilityOccurrence::Granted(TriggerAbilityOrigin::StaticGrant {
+            definition,
+            ..
+        }) => definition,
+        _ => return None,
+    };
+    ability_program(engine, definition)
+}
+
+fn trigger_origin_definition(origin: &TriggerAbilityOrigin) -> Option<&AbilityDefinitionId> {
+    match origin {
+        TriggerAbilityOrigin::Printed(definition)
+        | TriggerAbilityOrigin::StaticGrant { definition, .. } => Some(definition),
+        TriggerAbilityOrigin::SpellKeyword(crate::state::SpellKeywordOrigin::StaticGrant {
+            definition,
+            ..
+        }) => Some(definition),
+        TriggerAbilityOrigin::SpellKeyword(
+            crate::state::SpellKeywordOrigin::Printed { .. }
+            | crate::state::SpellKeywordOrigin::StaticEmblemGrant { .. },
+        )
+        | TriggerAbilityOrigin::ResolvingGrant(_) => None,
     }
 }
 
@@ -2338,7 +2404,12 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                     hand_index,
                     &face.name,
                     face_index,
-                    target_schema(&face.spell_effect, face.targeting.as_ref()).has_targets(),
+                    target_schema_with_program(
+                        &face.spell_effect,
+                        face.targeting.as_ref(),
+                        face_program(eng, card_id, &face.face_id),
+                    )
+                    .has_targets(),
                 );
                 action.eligible_restricted_mana_group_ids =
                     eng.eligible_restricted_mana_for_spell(player_index, face);
@@ -2362,15 +2433,22 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                         .iter()
                         .enumerate()
                         .map(|(mode_index, mode)| {
-                            let needs_target =
-                                target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
-                            let mut targets = compute_spell_targets(
+                            let program =
+                                face_mode_program(eng, card_id, &face.face_id, &mode.mode_id);
+                            let needs_target = target_schema_with_program(
+                                &mode.effects,
+                                mode.targeting.as_ref(),
+                                program,
+                            )
+                            .has_targets();
+                            let mut targets = compute_spell_targets_with_program(
                                 eng,
                                 pid,
                                 TargetSourceIdentity::spell_face(eng, oid, face_index),
                                 &mode.effects,
                                 mode.targeting.as_ref(),
                                 &face.cost_modifiers,
+                                program,
                             );
                             apply_cast_cost_target_requirements(
                                 eng,
@@ -2527,8 +2605,12 @@ pub(super) fn legal_zone_cast_actions(
                         .unwrap_or(0),
                     card_name: face.name.clone(),
                     face_index: face_index as u32,
-                    needs_target: target_schema(&face.spell_effect, face.targeting.as_ref())
-                        .has_targets(),
+                    needs_target: target_schema_with_program(
+                        &face.spell_effect,
+                        face.targeting.as_ref(),
+                        face_program(eng, card_id, &face.face_id),
+                    )
+                    .has_targets(),
                     min_modes: 0,
                     max_modes: 0,
                     modes: vec![],
@@ -2565,15 +2647,22 @@ pub(super) fn legal_zone_cast_actions(
                         .iter()
                         .enumerate()
                         .map(|(mode_index, mode)| {
-                            let needs_target =
-                                target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
-                            let mut targets = compute_spell_targets(
+                            let program =
+                                face_mode_program(eng, card_id, &face.face_id, &mode.mode_id);
+                            let needs_target = target_schema_with_program(
+                                &mode.effects,
+                                mode.targeting.as_ref(),
+                                program,
+                            )
+                            .has_targets();
+                            let mut targets = compute_spell_targets_with_program(
                                 eng,
                                 pid,
                                 TargetSourceIdentity::spell_face(eng, oid, face_index),
                                 &mode.effects,
                                 mode.targeting.as_ref(),
                                 &face.cost_modifiers,
+                                program,
                             );
                             apply_cast_cost_target_requirements(
                                 eng,
@@ -2710,8 +2799,12 @@ pub(super) fn legal_zone_cast_actions(
                 zone_change_generation: generation,
                 card_name: face.name.clone(),
                 face_index: face_index as u32,
-                needs_target: target_schema(&face.spell_effect, face.targeting.as_ref())
-                    .has_targets(),
+                needs_target: target_schema_with_program(
+                    &face.spell_effect,
+                    face.targeting.as_ref(),
+                    face_program(eng, &object.card_id, &face.face_id),
+                )
+                .has_targets(),
                 min_modes: 0,
                 max_modes: 0,
                 modes: vec![],
@@ -2743,13 +2836,14 @@ pub(super) fn legal_zone_cast_actions(
             };
             if action.needs_target && face.modal_spell.is_none() {
                 let target_source = TargetSourceIdentity::spell_face(eng, object.id, face_index);
-                let mut targets = compute_spell_targets(
+                let mut targets = compute_spell_targets_with_program(
                     eng,
                     pid,
                     target_source,
                     &face.spell_effect,
                     face.targeting.as_ref(),
                     &face.cost_modifiers,
+                    face_program(eng, &object.card_id, &face.face_id),
                 );
                 apply_cast_cost_target_requirements(
                     eng,
@@ -2780,17 +2874,24 @@ pub(super) fn legal_zone_cast_actions(
                     .iter()
                     .enumerate()
                     .map(|(mode_index, mode)| {
-                        let needs_target =
-                            target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
+                        let program =
+                            face_mode_program(eng, &object.card_id, &face.face_id, &mode.mode_id);
+                        let needs_target = target_schema_with_program(
+                            &mode.effects,
+                            mode.targeting.as_ref(),
+                            program,
+                        )
+                        .has_targets();
                         let target_source =
                             TargetSourceIdentity::spell_face(eng, object.id, face_index);
-                        let mut targets = compute_spell_targets(
+                        let mut targets = compute_spell_targets_with_program(
                             eng,
                             pid,
                             target_source,
                             &mode.effects,
                             mode.targeting.as_ref(),
                             &face.cost_modifiers,
+                            program,
                         );
                         apply_cast_cost_target_requirements(
                             eng,
@@ -2937,7 +3038,12 @@ fn legal_library_top_face_cast_actions(
     }
 
     let card_id = &eng.state.objects[&object_id].card_id;
-    let needs_target = target_schema(&face.spell_effect, face.targeting.as_ref()).has_targets();
+    let needs_target = target_schema_with_program(
+        &face.spell_effect,
+        face.targeting.as_ref(),
+        face_program(eng, card_id, &face.face_id),
+    )
+    .has_targets();
     let mut action = rv1::LegalZoneCastAction {
         source_zone: rv1::CastSourceZone::Library as i32,
         object_id,
@@ -2967,13 +3073,14 @@ fn legal_library_top_face_cast_actions(
     };
     if needs_target && face.modal_spell.is_none() {
         let target_source = TargetSourceIdentity::spell_face(eng, object_id, face_index);
-        let mut targets = compute_spell_targets(
+        let mut targets = compute_spell_targets_with_program(
             eng,
             pid,
             target_source,
             &face.spell_effect,
             face.targeting.as_ref(),
             &face.cost_modifiers,
+            face_program(eng, card_id, &face.face_id),
         );
         apply_cast_cost_target_requirements(
             eng,
@@ -2998,16 +3105,19 @@ fn legal_library_top_face_cast_actions(
             .iter()
             .enumerate()
             .map(|(mode_index, mode)| {
+                let program = face_mode_program(eng, card_id, &face.face_id, &mode.mode_id);
                 let needs_target =
-                    target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
+                    target_schema_with_program(&mode.effects, mode.targeting.as_ref(), program)
+                        .has_targets();
                 let target_source = TargetSourceIdentity::spell_face(eng, object_id, face_index);
-                let mut targets = compute_spell_targets(
+                let mut targets = compute_spell_targets_with_program(
                     eng,
                     pid,
                     target_source,
                     &mode.effects,
                     mode.targeting.as_ref(),
                     &face.cost_modifiers,
+                    program,
                 );
                 apply_cast_cost_target_requirements(
                     eng,
@@ -3428,9 +3538,12 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
                     let cast_ok = eng.legendary_spell_cast_allowed(pid, face)
                         && face_cast_timing_available(face, &costs, instant_ok, sorcery_ok);
                     if cast_ok {
-                        let needs_target =
-                            target_schema(&face.spell_effect, face.targeting.as_ref())
-                                .has_targets();
+                        let needs_target = target_schema_with_program(
+                            &face.spell_effect,
+                            face.targeting.as_ref(),
+                            face_program(eng, cid, &face.face_id),
+                        )
+                        .has_targets();
                         if needs_target {
                             v.push(format!("Cast {name} (hand idx {i}, target)"));
                         } else {

@@ -379,6 +379,7 @@ fn aligned_hedron_network_owner_concession_returns_survivors_before_publication(
                     trigger: TriggerCondition::AtBeginningOfNextEndStep,
                     effect: vec![],
                     modal: None,
+                    program: None,
                     targeting: None,
                     may: false,
                     intervening_if: None,

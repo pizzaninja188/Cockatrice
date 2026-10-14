@@ -849,10 +849,15 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
                                                                              int localPlayerId)
 {
     if (state.hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget)) {
-        const bool supportedSurface = kind == RuledTargetCandidateKind::Battlefield ||
-                                      kind == RuledTargetCandidateKind::Stack ||
-                                      kind == RuledTargetCandidateKind::Player;
-        return supportedSurface && state.isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, oid)
+        if (kind == RuledTargetCandidateKind::Player) {
+            return state.isPendingCopyTargetPlayerCandidate(oid) ? RuledTargetClickEligibility::Legal
+                                                                 : RuledTargetClickEligibility::Illegal;
+        }
+        const bool supportedObjectSurface = kind == RuledTargetCandidateKind::Battlefield ||
+                                            kind == RuledTargetCandidateKind::Stack ||
+                                            kind == RuledTargetCandidateKind::Graveyard;
+        return supportedObjectSurface &&
+                       state.isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, oid)
                    ? RuledTargetClickEligibility::Legal
                    : RuledTargetClickEligibility::Illegal;
     }

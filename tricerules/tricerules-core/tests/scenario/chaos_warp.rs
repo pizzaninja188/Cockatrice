@@ -378,15 +378,53 @@ fn chaos_warp_private_composition_resumes_tail_once_after_foreign_controlled_com
     let hand_before = engine.state.players[0].hand.len();
     let (spell, _) = cast_named_and_resolve(&mut engine, "chaos_warp_tail_fixture", target);
     assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
-    let completed = engine.apply_scenario_command(9, &concede()).unwrap();
+    let commander_choice = engine.apply_scenario_command(9, &concede()).unwrap();
+    assert_eq!(
+        engine.state.players[0].hand.len(),
+        hand_before + 3,
+        "the parked Chaos Warp resumes its authored tail once before the post-resolution commander-zone choice"
+    );
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the exiled commander owner receives a state-based choice");
+    assert_eq!(pending.deciding_player, 4);
+    assert_eq!(
+        pending.presentation.choice_kind,
+        tricerules_core::custom::ChoiceKind::ResolutionBranch
+    );
+    assert!(pending.presentation.prompt.contains("command zone"));
+    let offered_choice = commander_choice
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+            _ => None,
+        });
+    let offered_choice = offered_choice.expect("the commander-zone choice is published");
+    assert_eq!(offered_choice.deciding_player_id, 4);
+    assert_eq!(
+        offered_choice.choice_kind,
+        tricerules_proto::ruled::v1::ChoiceKind::ResolutionBranch as i32
+    );
+    assert_eq!(offered_choice.source_object_id, target);
+    assert_eq!(offered_choice.resolution_branches.len(), 2);
+    assert_eq!(offered_choice.resolution_branches[1].branch_index, 1);
+    assert_eq!(
+        offered_choice.resolution_branches[1].label,
+        "Leave it in Exile"
+    );
+    let completed = engine.apply_scenario_command(4, &branch(1)).unwrap();
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.players[0].hand.len(), hand_before + 3);
     assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
     assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
     assert_eq!(
-        completed
+        commander_choice
             .events
             .iter()
+            .chain(completed.events.iter())
             .filter(|event| matches!(&event.ev,
         Some(Ev::StackResolved(resolved)) if resolved.object_id == spell))
             .count(),

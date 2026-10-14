@@ -1872,7 +1872,7 @@ mod tests {
         assert!(matches!(
             err,
             RegistryError::InvalidCard { reason, .. }
-                if reason.contains("requires exactly one of effect or modal")
+                if reason.contains("requires exactly one of effect, program, or modal")
         ));
     }
 

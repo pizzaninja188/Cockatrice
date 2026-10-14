@@ -141,7 +141,7 @@ void RuledClientState::setPendingCastGraveyardTargets(const QSet<quint32> &oids)
 
 void RuledClientState::emitGraveyardTargetsNeeded()
 {
-    // Union of the three things that can want a graveyard open. All go through here so the "which
+    // Union of the four things that can want a graveyard open. All go through here so the "which
     // views are open" decision has a single owner — the alternative is several signals racing to
     // open and close the same widget.
     //
@@ -155,7 +155,17 @@ void RuledClientState::emitGraveyardTargetsNeeded()
             oids.insert(oid);
         }
     }
-    // 3. the graveyard targets of anything still *on the stack*. A spell that has been cast keeps
+    // 3. the object candidates of an active local copy-retarget offer. Player candidates use their
+    //    own ID domain and never identify graveyard cards.
+    if (pendingChoice.has_value() && pendingChoice->kind == ChoiceKind::CopyTarget &&
+        isCurrentResolutionPrompt(pendingChoice->resolutionPromptId)) {
+        for (quint32 oid : pendingChoice->candidateOids) {
+            if (graveyardOidToPlayerId.contains(oid)) {
+                oids.insert(oid);
+            }
+        }
+    }
+    // 4. the graveyard targets of anything still *on the stack*. A spell that has been cast keeps
     //    its graveyard open until it resolves or is countered, so the targeting arrow stays
     //    anchored to the card rather than to a pile the player can no longer see. Falls out of the
     //    stack order automatically the moment the spell leaves the stack.
@@ -728,6 +738,17 @@ void RuledClientState::submitPendingChoiceObject(quint32 oid)
     const quint64 promptId = pendingChoice->resolutionPromptId;
     clearPendingChoice();
     sendResolutionChoice({oid}, ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED, {}, promptId);
+}
+
+void RuledClientState::submitPendingCopyTargetPlayer(quint32 playerId)
+{
+    if (!isPendingCopyTargetPlayerCandidate(playerId) || !pendingChoice.has_value())
+        return;
+    const quint64 promptId = pendingChoice->resolutionPromptId;
+    if (!isCurrentResolutionPrompt(promptId))
+        return;
+    clearPendingChoiceOfKind(ChoiceKind::CopyTarget);
+    sendResolutionChoice({}, ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED, {playerId}, promptId);
 }
 
 void RuledClientState::submitPermanentChoiceObjects()

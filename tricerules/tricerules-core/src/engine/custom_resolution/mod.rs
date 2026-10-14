@@ -15,8 +15,9 @@ use super::resolution::{
     seat_resolved_spell_last_in_graveyard, ResolutionEffect,
 };
 use super::targeting::{
-    capture_stack_target, compute_spell_targets, validate_ability_targets_with_context,
-    validate_spell_targets, TargetSourceIdentity,
+    artifact_exchange_player, capture_stack_target, compute_spell_targets_with_program,
+    face_mode_program, face_program, target_role_legality_error, target_schema_with_program,
+    TargetResolutionContext, TargetSourceIdentity,
 };
 use super::*;
 use crate::state::{PendingTargetedPlayerChoiceStage, SpecialCastCompletion};
@@ -899,6 +900,9 @@ impl GameEngine {
                 return Err(EngineError::Illegal("unknown resolution choice decision"));
             }
         };
+        if self.copy_target_choice_pending(&pending) {
+            return self.finish_copy_target_occurrence_choice(pending, answer);
+        }
         if matches!(
             pending.continuation,
             ResolutionContinuation::OptionalTriggeredAbility { .. }
@@ -1144,7 +1148,7 @@ impl GameEngine {
                 return self.finish_aura_return(pending, chosen[0]);
             }
             ResolutionContinuation::CopyTargets { .. } => {
-                return self.finish_copy_target_choice(pending, chosen);
+                unreachable!("copy-target branch handled before object-choice validation")
             }
             ResolutionContinuation::SearchLibrary { .. } => {
                 return self.finish_library_search(pending, chosen);

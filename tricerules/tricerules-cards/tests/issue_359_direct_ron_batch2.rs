@@ -13,9 +13,9 @@
 
 use tricerules_cards::primitives::{
     Amount, CastCostGroupDef, CastCostOptionDef, CombatRestriction, CombatRestrictionScope,
-    DrawDiscardOrder, EffectSubject, LibraryPlacement, ManaCostChoiceKind, PermanentTypeFilter,
-    PlayerRecipient, SearchDestination, SpellEffectKind, StackSpellFilter, TargetController,
-    TargetFilter, TargetKind, TokenCopySource, TriggerCondition,
+    EffectSubject, InstructionKind, LibraryPlacement, ManaCostChoiceKind, PermanentTypeFilter,
+    PlayerRecipient, ProgramTargetRole, SearchDestination, SpellEffectKind, StackSpellFilter,
+    TargetController, TargetFilter, TargetKind, TokenCopySource, TriggerCondition,
 };
 use tricerules_cards::{AbilityPresentation, ChoiceId, Color, Layout, ModalDef};
 
@@ -103,33 +103,70 @@ fn issue_359_direct_ron_batch2_maps_definitions() {
         counter.presentation,
         AbilityPresentation::OracleLines(vec![2])
     );
-    assert_eq!(counter.effects, [counter_spell_default()]);
+    assert!(counter.effects.is_empty());
+    let counter_program = counter
+        .program
+        .as_ref()
+        .expect("authored counter mode program");
+    assert_eq!(counter_program.target_bindings.len(), 1);
+    assert_eq!(
+        counter_program.target_bindings[0].role,
+        ProgramTargetRole::Spell
+    );
+    assert_eq!(
+        counter_program.target_bindings[0].instruction_id,
+        "counter_spell"
+    );
+    assert_eq!(counter_program.target_bindings[0].target_group_index, 0);
+    assert!(matches!(
+        &counter_program.body.steps[0].kind,
+        InstructionKind::Perform(effect) if effect.as_ref() == &counter_spell_default()
+    ));
     assert_eq!(
         single_group(counter.targeting.as_ref().unwrap()).prompt,
         "Choose target spell"
     );
     assert_eq!(copy.mode_id, tricerules_cards::ModeId::new("copy").unwrap());
+    assert!(copy.effects.is_empty());
+    let copy_program = copy.program.as_ref().expect("authored copy mode program");
+    assert_eq!(copy_program.target_bindings.len(), 1);
     assert_eq!(
-        copy.effects,
-        [SpellEffectKind::CreateTokenCopies {
-            count: Amount::Fixed(1),
-            source: TokenCopySource::Chosen(Box::new(TargetFilter {
-                any_of: Some(vec![
-                    TargetFilter {
-                        kind: TargetKind::AnyPermanent,
-                        controller: TargetController::You,
-                        permanent_types: vec![PermanentTypeFilter::Artifact],
-                        ..TargetFilter::default()
-                    },
-                    TargetFilter {
-                        kind: TargetKind::Creature,
-                        controller: TargetController::You,
-                        ..TargetFilter::default()
-                    },
-                ]),
-                ..TargetFilter::default()
-            })),
-        }]
+        copy_program.target_bindings[0].role,
+        ProgramTargetRole::Source
+    );
+    assert_eq!(
+        copy_program.target_bindings[0].instruction_id,
+        "copy_source"
+    );
+    assert_eq!(copy_program.target_bindings[0].target_group_index, 0);
+    let InstructionKind::Perform(effect) = &copy_program.body.steps[0].kind else {
+        panic!("the copy mode starts with its token-copy instruction");
+    };
+    let SpellEffectKind::CreateTokenCopies { count, source } = effect.as_ref() else {
+        panic!("the copy mode creates one token copy");
+    };
+    assert_eq!(*count, Amount::Fixed(1));
+    let TokenCopySource::Chosen(filter) = source else {
+        panic!("the copy mode uses its chosen spell target");
+    };
+    assert_eq!(
+        filter.as_ref(),
+        &TargetFilter {
+            any_of: Some(vec![
+                TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    controller: TargetController::You,
+                    permanent_types: vec![PermanentTypeFilter::Artifact],
+                    ..TargetFilter::default()
+                },
+                TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                },
+            ]),
+            ..TargetFilter::default()
+        }
     );
     assert_eq!(
         single_group(copy.targeting.as_ref().unwrap()).prompt,
@@ -139,16 +176,29 @@ fn issue_359_direct_ron_batch2_maps_definitions() {
         draw.mode_id,
         tricerules_cards::ModeId::new("draw_discard").unwrap()
     );
-    assert_eq!(
-        draw.effects,
-        [SpellEffectKind::DrawDiscard {
-            who: PlayerRecipient::Controller,
-            draw_count: 2,
-            discard_count: 1,
-            order: DrawDiscardOrder::DrawThenDiscard,
-            optional: false,
-        }]
-    );
+    assert!(draw.effects.is_empty());
+    let draw_program = draw
+        .program
+        .as_ref()
+        .expect("authored draw-discard mode program");
+    assert!(draw_program.target_bindings.is_empty());
+    assert_eq!(draw_program.body.steps.len(), 2);
+    assert!(matches!(
+        &draw_program.body.steps[0].kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(2),
+            })
+    ));
+    assert!(matches!(
+        &draw_program.body.steps[1].kind,
+        InstructionKind::Perform(effect)
+            if matches!(effect.as_ref(), SpellEffectKind::Discard {
+                who: PlayerRecipient::Controller,
+                quantity: tricerules_cards::primitives::DiscardQuantity::Exact(1),
+            })
+    ));
     assert!(draw.targeting.is_none());
 
     // Trash the Town: counters / trample / granted combat-damage draw, linked to {2}, {1}, {1}.

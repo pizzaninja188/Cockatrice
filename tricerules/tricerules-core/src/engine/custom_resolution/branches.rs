@@ -486,7 +486,12 @@ impl GameEngine {
                     rv1::ChoiceKind::HandCards
                 } else if is_graveyard_exile {
                     rv1::ChoiceKind::GraveyardCards
-                } else if is_tap || matches!(branch.cost, ResolutionCost::Blight { .. }) {
+                } else if is_tap
+                    || matches!(
+                        branch.cost,
+                        ResolutionCost::Blight { .. } | ResolutionCost::SacrificePermanent { .. }
+                    )
+                {
                     rv1::ChoiceKind::CostObjects
                 } else {
                     rv1::ChoiceKind::TargetObjects

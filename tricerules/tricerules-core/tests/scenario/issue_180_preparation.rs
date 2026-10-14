@@ -208,7 +208,7 @@ fn preparation_palette_copies_the_next_cast_even_after_original_is_countered() {
         "retarget the copied Bolt"
     );
     engine
-        .apply_scenario_command(0, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(0, &submit_resolution_player_choice(vec![1]))
         .unwrap();
     assert!(engine.state.stack.last().unwrap().is_copy);
     resolve_entire_stack_two_player(&mut engine);
@@ -379,7 +379,7 @@ fn preparation_copied_spell_preserves_x_and_classification_without_a_second_cast
         .unwrap();
     pass_both_players(&mut engine);
     let batch = engine
-        .apply_scenario_command(0, &submit_resolution_choice(vec![0]))
+        .apply_scenario_command(0, &submit_resolution_player_choice(vec![0]))
         .unwrap();
     assert!(batch.events.iter().any(|e| matches!(&e.ev, Some(rv1::ruled_event::Ev::StackPushed(p)) if p.is_prepare_spell && p.is_copy && p.copy_source_object_id == copy)));
     assert!(batch.events.iter().any(|e| matches!(&e.ev, Some(rv1::ruled_event::Ev::StackPushed(p)) if p.is_prepare_spell && p.card_display_name == "Infirmary Healer // Stream of Life" && p.description == "Stream of Life")));
@@ -560,7 +560,7 @@ fn preparation_palette_multiple_one_shot_triggers_use_shared_order_and_retargeti
         pass_both_players(&mut engine);
         assert!(engine.state.pending_resolution.is_some());
         engine
-            .apply_scenario_command(0, &submit_resolution_choice(vec![1]))
+            .apply_scenario_command(0, &submit_resolution_player_choice(vec![1]))
             .unwrap();
         pass_both_players(&mut engine);
     }

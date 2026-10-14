@@ -186,6 +186,7 @@ impl GameEngine {
                 ordinal_scope: CastOrdinalScope::AllSpells,
             },
             effect: vec![effect],
+            program: None,
             modal: None,
             targeting: None,
             may: false,

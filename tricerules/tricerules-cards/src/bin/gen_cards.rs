@@ -73,7 +73,7 @@ use recipes::{
 };
 #[cfg(test)]
 use tricerules_cards::primitives::{
-    GraveyardDestination, LifeAmount, PermanentEventFilter, ZoneCardFilter,
+    GraveyardDestination, InstructionKind, LifeAmount, PermanentEventFilter, ZoneCardFilter,
 };
 #[cfg(test)]
 use tricerules_cards::LibraryPartitionKind;
@@ -917,6 +917,7 @@ fn assemble_modal_modes(
         let mode_id = ModeId::new(format!("mode_{:02}", mode_index + 1))
             .map_err(|_| RulesParseError::Unsupported)?;
         modes.push(ModeDef {
+            program: None,
             mode_id,
             presentation: context.presentation,
             linked_cast_cost: None,
@@ -1307,6 +1308,7 @@ fn parse_rules_text(
                     let mut presentation_lines = vec![line_index];
                     presentation_lines.extend(first_bullet_line..first_bullet_line + bullet_count);
                     parsed.triggered_abilities.push(TriggeredAbilityDef {
+                        program: None,
                         ability_id: context.triggered_ability_id.clone(),
                         presentation: AbilityPresentation::OracleLines(presentation_lines),
                         trigger: assembly_emission.trigger,
@@ -1481,6 +1483,7 @@ fn add_intrinsic_land_mana_ability(
     }
 
     rules.activated_abilities.push(ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: true,
         ability_id: AbilityId::new("activated_01").map_err(|_| RulesParseError::Unsupported)?,
         presentation: AbilityPresentation::OracleLines(vec![1]),
@@ -1916,6 +1919,7 @@ fn render_generated_activated_ability(ability: &ActivatedAbilityDef) -> String {
 
 fn render_generated_triggered_ability(ability: &TriggeredAbilityDef) -> String {
     if ability.trigger == TriggerCondition::WhenSelfEntersBattlefield
+        && ability.program.is_none()
         && ability.modal.is_none()
         && ability.targeting.is_none()
         && !ability.may
@@ -5864,16 +5868,29 @@ mod tests {
                     ability.presentation,
                     AbilityPresentation::OracleLines(vec![1])
                 );
-                assert_eq!(
-                    ability.effect,
-                    [SpellEffectKind::DrawDiscard {
-                        who: PlayerRecipient::Controller,
-                        draw_count: 2,
-                        discard_count: 1,
-                        order: DrawDiscardOrder::DrawThenDiscard,
-                        optional: false,
-                    }]
-                );
+                assert!(ability.effect.is_empty());
+                let program = ability
+                    .program
+                    .as_ref()
+                    .expect("Uthros emits an authored ETB program");
+                assert!(program.target_bindings.is_empty());
+                assert_eq!(program.body.steps.len(), 2);
+                assert!(matches!(
+                    &program.body.steps[0].kind,
+                    InstructionKind::Perform(effect)
+                        if matches!(effect.as_ref(), SpellEffectKind::Draw {
+                            who: PlayerRecipient::Controller,
+                            count: Amount::Fixed(2),
+                        })
+                ));
+                assert!(matches!(
+                    &program.body.steps[1].kind,
+                    InstructionKind::Perform(effect)
+                        if matches!(effect.as_ref(), SpellEffectKind::Discard {
+                            who: PlayerRecipient::Controller,
+                            quantity: tricerules_cards::primitives::DiscardQuantity::Exact(1),
+                        })
+                ));
             } else {
                 assert_eq!(raw.activated_abilities.len(), 2);
                 let pump = &raw.activated_abilities[1];
@@ -15100,6 +15117,7 @@ mod tests {
         );
 
         let wrong_recipient = ModeDef {
+            program: None,
             mode_id: ModeId::new("mode_01").unwrap(),
             presentation: AbilityPresentation::OracleLines(vec![2]),
             linked_cast_cost: None,
@@ -15114,6 +15132,7 @@ mod tests {
         ));
 
         let source_dependent = ModeDef {
+            program: None,
             mode_id: ModeId::new("mode_01").unwrap(),
             presentation: AbilityPresentation::OracleLines(vec![2]),
             linked_cast_cost: None,

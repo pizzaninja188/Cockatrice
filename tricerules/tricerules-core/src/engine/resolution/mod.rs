@@ -6,11 +6,11 @@
 
 use super::events::{color_string, ev_log, object_display_name};
 use super::targeting::{
-    attachment_recipient_for_target, battlefield_objects_matching,
-    effect_has_legal_target_at_resolution, graveyard_target_legal, object_matches_mass_filter,
-    object_matches_scoped_mass_filter, stack_target_identity_is_current,
-    target_filter_legal_at_resolution, target_role_legal_at_resolution, target_schema,
-    TargetSourceIdentity,
+    ability_mode_program, attachment_recipient_for_target, battlefield_objects_matching,
+    effect_has_legal_target_at_resolution, face_mode_program, face_program, graveyard_target_legal,
+    object_matches_mass_filter, object_matches_scoped_mass_filter,
+    stack_target_identity_is_current, target_filter_legal_at_resolution,
+    target_role_legal_at_resolution, target_schema_with_program, TargetSourceIdentity,
 };
 use super::*;
 use tricerules_card_model::primitives::{
@@ -327,8 +327,9 @@ impl GameEngine {
 fn target_roles_by_group<'a>(
     effects: &'a [SpellEffectKind],
     targeting: Option<&TargetingDef>,
+    program: Option<&'a tricerules_card_model::primitives::CompiledProgram>,
 ) -> Vec<Vec<TargetRole<'a>>> {
-    target_schema(effects, targeting)
+    target_schema_with_program(effects, targeting, program)
         .groups
         .into_iter()
         .map(|group| {
@@ -969,7 +970,11 @@ impl GameEngine {
 
     /// CR 608.2b target snapshot. Writing the filtered grouped records back to this local stack
     /// item also preserves the snapshot if a primitive parks and later resumes its effect tail.
-    fn snapshot_resolution_targets(&self, top: &mut StackItem) {
+    fn snapshot_resolution_targets(
+        &self,
+        top: &mut StackItem,
+        program_owners: Option<&[tricerules_card_model::ProgramOwnerId]>,
+    ) -> bool {
         let source = TargetSourceIdentity::for_stack_item(self, top);
         let controller = top.controller;
         let chosen_x = top.chosen_x;
@@ -1000,6 +1005,13 @@ impl GameEngine {
             .registry
             .get(&top.card_id)
             .and_then(|definition| definition.face(top.face_index));
+        let authored_target_groups = program_owners.is_some_and(|owners| {
+            owners.iter().any(|owner| {
+                self.registry
+                    .compiled_program_for_owner(owner)
+                    .is_some_and(|program| !program.target_bindings.is_empty())
+            })
+        });
         if !top.chosen_modes.is_empty() {
             let Some(modal) = top
                 .triggered_ability
@@ -1007,16 +1019,37 @@ impl GameEngine {
                 .and_then(|ability| ability.modal.as_ref())
                 .or_else(|| face.and_then(|face| face.modal_spell.as_ref()))
             else {
-                return;
+                return false;
             };
+            let ability_program_owner = top.ability_program_owner();
+            let is_triggered = top.is_triggered;
+            let is_spell = top.ability_text.is_none();
             for chosen in &mut top.chosen_modes {
                 let Some(mode) = modal.mode_by_id(&chosen.mode_id) else {
                     continue;
                 };
-                let requirements = target_roles_by_group(&mode.effects, mode.targeting.as_ref());
+                let program = if is_triggered {
+                    ability_program_owner
+                        .as_ref()
+                        .and_then(|owner| match owner {
+                            tricerules_card_model::ProgramOwnerId::Ability(definition) => {
+                                ability_mode_program(self, definition, &mode.mode_id)
+                            }
+                            _ => None,
+                        })
+                } else if is_spell {
+                    face.and_then(|face| {
+                        face_mode_program(self, &top.card_id, &face.face_id, &mode.mode_id)
+                    })
+                } else {
+                    None
+                };
+                let requirements =
+                    target_roles_by_group(&mode.effects, mode.targeting.as_ref(), program);
                 let x_bound_groups = super::targeting::x_target_group_indices(
                     &mode.effects,
                     mode.targeting.as_ref(),
+                    program,
                 );
                 chosen.targets.retain(|target| {
                     requirements
@@ -1030,37 +1063,51 @@ impl GameEngine {
                         })
                 });
             }
-            return;
+            return authored_target_groups
+                && top
+                    .chosen_modes
+                    .iter()
+                    .all(|chosen| chosen.targets.is_empty());
         }
 
-        let (effects, targeting) = if top.ability_text.is_some() {
+        let (effects, targeting, program) = if top.ability_text.is_some() {
             if top.is_triggered {
                 let Some(ability) = top.triggered_ability.as_ref().or_else(|| {
                     face.and_then(|face| {
                         face.triggered_abilities.get(top.ability_index.unwrap_or(0))
                     })
                 }) else {
-                    return;
+                    return false;
                 };
-                (&ability.effect[..], ability.targeting.as_ref())
+                let program = top
+                    .ability_program_owner()
+                    .and_then(|owner| self.registry.compiled_program_for_owner(&owner));
+                (&ability.effect[..], ability.targeting.as_ref(), program)
             } else {
                 let Some(ability) = top.activated_ability.as_ref().or_else(|| {
                     face.and_then(|face| {
                         face.activated_abilities.get(top.ability_index.unwrap_or(0))
                     })
                 }) else {
-                    return;
+                    return false;
                 };
-                (&ability.effect[..], ability.targeting.as_ref())
+                let program = top
+                    .ability_program_owner()
+                    .and_then(|owner| self.registry.compiled_program_for_owner(&owner));
+                (&ability.effect[..], ability.targeting.as_ref(), program)
             }
         } else {
             let Some(face) = face else {
-                return;
+                return false;
             };
-            (&face.spell_effect[..], face.targeting.as_ref())
+            (
+                &face.spell_effect[..],
+                face.targeting.as_ref(),
+                face_program(self, &top.card_id, &face.face_id),
+            )
         };
-        let requirements = target_roles_by_group(effects, targeting);
-        let x_bound_groups = super::targeting::x_target_group_indices(effects, targeting);
+        let requirements = target_roles_by_group(effects, targeting, program);
+        let x_bound_groups = super::targeting::x_target_group_indices(effects, targeting, program);
         top.targets.retain(|target| {
             requirements
                 .get(target.group_index as usize)
@@ -1072,6 +1119,7 @@ impl GameEngine {
                     )
                 })
         });
+        authored_target_groups && top.targets.is_empty()
     }
 
     pub(super) fn resolve_top_of_stack(
@@ -1092,7 +1140,8 @@ impl GameEngine {
         // illegal (which does not resolve).
         let had_chosen_targets =
             !top.targets.is_empty() || top.chosen_modes.iter().any(|mode| !mode.targets.is_empty());
-        self.snapshot_resolution_targets(&mut top);
+        let authored_program_targets_all_illegal =
+            self.snapshot_resolution_targets(&mut top, compiled_program_owners.as_deref());
         let controller = top.controller;
         let card_id = top.card_id.clone();
         let targets = top
@@ -1411,10 +1460,11 @@ impl GameEngine {
             .filter(|entry| !entry.role_group_indices.is_empty())
             .collect();
         let fizzle = had_chosen_targets
-            && !targeted_effects.is_empty()
-            && targeted_effects
-                .iter()
-                .all(|entry| entry.targets.is_empty());
+            && (authored_program_targets_all_illegal
+                || (!targeted_effects.is_empty()
+                    && targeted_effects
+                        .iter()
+                        .all(|entry| entry.targets.is_empty())));
         if fizzle {
             events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
             self.finish_deferred_stack_exit(&top, DeferredStackExit::DidNotResolve, events)?;
@@ -1672,9 +1722,16 @@ impl GameEngine {
                     .as_ref()
                     .or_else(|| face.and_then(|f| f.triggered_abilities.get(ability_index)))
                     .map(|ability| {
+                        let program = top
+                            .ability_program_owner()
+                            .and_then(|owner| self.registry.compiled_program_for_owner(&owner));
                         if ability.may
-                            && !target_schema(&ability.effect, ability.targeting.as_ref())
-                                .has_targets()
+                            && !target_schema_with_program(
+                                &ability.effect,
+                                ability.targeting.as_ref(),
+                                program,
+                            )
+                            .has_targets()
                             && ability.modal.is_none()
                         {
                             vec![SpellEffectKind::ChooseResolutionBranch {
@@ -1721,8 +1778,11 @@ impl GameEngine {
 
         let build_entries = |effects: &[SpellEffectKind],
                              targeting: Option<&TargetingDef>,
-                             chosen_targets: &[StackTarget]| {
-            let schema = target_schema(effects, targeting);
+                             chosen_targets: &[StackTarget],
+                             program: Option<
+            &tricerules_card_model::primitives::CompiledProgram,
+        >| {
+            let schema = target_schema_with_program(effects, targeting, program);
             effects
                 .iter()
                 .cloned()
@@ -1782,10 +1842,31 @@ impl GameEngine {
             if let Some(modal) = modal {
                 for chosen in &top.chosen_modes {
                     if let Some(mode) = modal.mode_by_id(&chosen.mode_id) {
+                        let program = if is_ability {
+                            top.ability_program_owner().and_then(|owner| match owner {
+                                tricerules_card_model::ProgramOwnerId::Ability(definition) => {
+                                    ability_mode_program(self, &definition, &mode.mode_id)
+                                }
+                                _ => None,
+                            })
+                        } else {
+                            self.registry
+                                .get(card_id)
+                                .and_then(|definition| definition.face(top.face_index))
+                                .and_then(|face| {
+                                    face_mode_program(
+                                        self,
+                                        &top.card_id,
+                                        &face.face_id,
+                                        &mode.mode_id,
+                                    )
+                                })
+                        };
                         resolution_effects.extend(build_entries(
                             &mode.effects,
                             mode.targeting.as_ref(),
                             &chosen.targets,
+                            program,
                         ));
                     }
                 }
@@ -1821,7 +1902,16 @@ impl GameEngine {
                     .and_then(|definition| definition.face(top.face_index))
                     .and_then(|face| face.targeting.as_ref())
             };
-            resolution_effects.extend(build_entries(&effects, targeting, &top.targets));
+            let program = if is_ability {
+                top.ability_program_owner()
+                    .and_then(|owner| self.registry.compiled_program_for_owner(&owner))
+            } else {
+                self.registry
+                    .get(card_id)
+                    .and_then(|definition| definition.face(top.face_index))
+                    .and_then(|face| face_program(self, card_id, &face.face_id))
+            };
+            resolution_effects.extend(build_entries(&effects, targeting, &top.targets, program));
         }
 
         if !top.resolution_branch_choices.is_empty() {
@@ -1883,7 +1973,7 @@ impl GameEngine {
                     if let Some(choice) = top.resolution_branch_choices.get(&(effect_index as u32))
                     {
                         if choice.is_some() {
-                            expanded.extend(build_entries(if_beheld, None, &[]));
+                            expanded.extend(build_entries(if_beheld, None, &[], None));
                         }
                         continue;
                     }
@@ -11161,7 +11251,7 @@ mod attached_subject_tests {
             );
             let expected_kind = match cost {
                 ResolutionCost::DiscardCard { .. } => rv1::ChoiceKind::HandCards,
-                ResolutionCost::SacrificePermanent { .. } => rv1::ChoiceKind::TargetObjects,
+                ResolutionCost::SacrificePermanent { .. } => rv1::ChoiceKind::CostObjects,
                 _ => rv1::ChoiceKind::CostObjects,
             };
             assert_eq!(choice.choice_kind, expected_kind as i32);
@@ -11395,6 +11485,7 @@ mod attached_subject_tests {
                     amount: Amount::Fixed(2),
                 },
             ],
+            program: None,
             modal: None,
             targeting: None,
             may: false,
@@ -11480,6 +11571,7 @@ mod attached_subject_tests {
                     amount: Amount::Fixed(2),
                 },
             ],
+            program: None,
             modal: None,
             targeting: None,
             may: false,
@@ -11551,6 +11643,7 @@ mod attached_subject_tests {
                     amount: Amount::Fixed(2),
                 },
             ],
+            program: None,
             modal: None,
             targeting: None,
             may: false,

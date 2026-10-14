@@ -187,8 +187,15 @@ TEST_F(RuledE2ESmokeTest, RalStormCopiesResumeTargetQueueAndPublishStableStackId
     ASSERT_TRUE(pass(p2));
     ASSERT_TRUE(p1.pendingChoice.has_value());
     ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
-    ASSERT_EQ(p1.pendingChoice->min(), 1u);
+    ASSERT_EQ(p1.pendingChoice->min(), 0u);
     ASSERT_EQ(p1.pendingChoice->max(), 1u);
+    EXPECT_TRUE(std::find(p1.pendingChoice->candidate_object_ids().begin(),
+                          p1.pendingChoice->candidate_object_ids().end(), bear->oid) !=
+                p1.pendingChoice->candidate_object_ids().end());
+    EXPECT_TRUE(std::find(p1.pendingChoice->candidate_object_ids().begin(),
+                          p1.pendingChoice->candidate_object_ids().end(), giant->oid) !=
+                p1.pendingChoice->candidate_object_ids().end());
+    EXPECT_TRUE(p1.pendingChoice->candidate_player_ids().empty());
     ASSERT_NE(p1.pendingChoice->resolution_prompt_id(), 0u);
     ASSERT_TRUE(p2.lastResolutionChoice.has_value());
     EXPECT_FALSE(p2.pendingChoice.has_value());

@@ -452,6 +452,49 @@ TEST_F(GamePromptWidgetTest, OptionalClickChoiceUsesTheGenericDeclineControl)
     EXPECT_EQ(spy.count(), 1);
 }
 
+TEST_F(GamePromptWidgetTest, CopyTargetEmptyActionUsesKeepOriginalLabel)
+{
+    GamePromptWidget::RuledPromptState prompt;
+    prompt.mode = PromptMode::ClickChoice;
+    prompt.canDecline = true;
+    prompt.text = "Target 2 of 3 for the copy: choose a new target or keep the original";
+    prompt.clickChoiceDeclineLabel = QStringLiteral("Keep original target");
+    widget->setRuledPromptState(prompt);
+
+    auto *keepOriginal = btn("declineClickChoiceButton");
+    ASSERT_NE(keepOriginal, nullptr);
+    EXPECT_FALSE(keepOriginal->isHidden());
+    EXPECT_EQ(keepOriginal->text(), QStringLiteral("Keep original target"));
+}
+
+TEST_F(GamePromptWidgetTest, OptionalResolutionCostObjectsAllowZeroOfOneAndShowDecline)
+{
+    QSignalSpy confirmSpy(widget.get(), &GamePromptWidget::ruledCostSelectionConfirmRequested);
+    QSignalSpy declineSpy(widget.get(), &GamePromptWidget::declineClickChoiceRequested);
+    widget->setLocalPlayerHasPriority(true);
+
+    GamePromptWidget::RuledPromptState prompt;
+    prompt.mode = PromptMode::CostSelection;
+    prompt.required = 0;
+    prompt.selected = 0;
+    prompt.max = 1;
+    prompt.canDecline = true;
+    prompt.text = "Choose a permanent to sacrifice, or decline.";
+    widget->setRuledPromptState(prompt);
+
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::CostSelection);
+    EXPECT_FALSE(btn("resolutionHandPickConfirmButton")->isHidden());
+    EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isEnabled());
+    EXPECT_FALSE(btn("declineClickChoiceButton")->isHidden());
+    EXPECT_EQ(btn("declineClickChoiceButton")->text(), QStringLiteral("Decline"));
+    btn("resolutionHandPickConfirmButton")->click();
+    EXPECT_EQ(confirmSpy.count(), 1);
+
+    widget->setRuledPromptState(prompt);
+    btn("declineClickChoiceButton")->click();
+    EXPECT_EQ(declineSpy.count(), 1);
+}
+
 TEST_F(GamePromptWidgetTest, VariableClickChoiceUsesConfirmTargetsIncludingZeroSelections)
 {
     QSignalSpy spy(widget.get(), &GamePromptWidget::confirmTargetsRequested);

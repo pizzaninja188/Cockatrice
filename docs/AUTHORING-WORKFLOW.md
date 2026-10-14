@@ -10,7 +10,7 @@ references are needed only when using or changing those tools. Do not reload unc
 |---|---|
 | Scope, models, permissions and completion | Current campaign policy, e.g. [four-deck policy](prompts/four-deck-authoring-goal.md) |
 | Source research, typed semantics, presentation and admission | [Card authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md) |
-| Supported finite spell-program syntax | [Current program subset](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-targetless-spell-programs) |
+| Supported finite authored-program syntax and target bindings | [Current program subset](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs) |
 | Commands and final affected-side verification | [Verification guide](AGENT-VERIFICATION.md) |
 | Relevant engine interactions | [Interaction checklist](RULES-INTERACTION-CHECKLIST.md) |
 | Tool arguments and fixture boundaries | [Workbench reference](../tricerules/tricerules-cards/authoring/BATCH-WORKBENCH.md) |

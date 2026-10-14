@@ -591,6 +591,7 @@ impl GameEngine {
             presentation: static_ability.presentation.clone(),
             trigger: TriggerCondition::WhenSelfDies,
             effect: vec![SpellEffectKind::CastMadness { cost }],
+            program: None,
             modal: None,
             targeting: None,
             may: false,

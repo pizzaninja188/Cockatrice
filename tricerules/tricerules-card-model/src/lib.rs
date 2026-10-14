@@ -40,12 +40,13 @@ pub use primitives::{
     ObjectCastCostKind, ObjectContributionKind, ObjectPaymentConstraint, PermanentChoiceConstraint,
     PermanentTypeFilter, PlayerComparisonMetric, PowerComparison, PowerToughnessCharacteristic,
     ProgramCondition, ProgramRequiredInput, ProgramResultCondition, ProgramTargetBinding,
-    ProgramTargetProjection, PtScale, PtScaleBasis, QuantityTerm, RelativePlayerSet,
-    ResolvingEffectDuration, ResolvingPermanentModifier, ResultSlotId, ResultType,
-    SearchDestination, SearchZoneSelection, SourceEffectPath, SourceEffectPathStep,
-    SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin, SpellCostModifier, SpellEffectKind,
-    SpellKeyword, StaticEmblemEffect, TargetMatchFilter, TargetObjectExclusion, TriggerCondition,
-    TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement, ZoneCardFilter,
+    ProgramTargetProjection, ProgramTargetReference, ProgramTargetRole, PtScale, PtScaleBasis,
+    QuantityTerm, RelativePlayerSet, ResolvingEffectDuration, ResolvingPermanentModifier,
+    ResultSlotId, ResultType, SearchDestination, SearchZoneSelection, SourceEffectPath,
+    SourceEffectPathStep, SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin,
+    SpellCostModifier, SpellEffectKind, SpellKeyword, StaticEmblemEffect, TargetMatchFilter,
+    TargetObjectExclusion, TriggerCondition, TriggeredAbilityDef, TypeLineAddition,
+    TypeLineReplacement, ZoneCardFilter,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

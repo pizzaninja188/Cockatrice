@@ -1,5 +1,6 @@
 use crate::helpers::ScenarioCommandExt;
 use crate::helpers::*;
+use tricerules_proto::ruled::v1 as rv1;
 
 #[test]
 fn issue_173_twincast_retains_x_but_not_the_faerie_bonus() {
@@ -1491,15 +1492,16 @@ fn twincast_copies_bolt_both_deal_damage() {
         "P1 (Twincast controller) chooses"
     );
     assert!(
-        rcr.candidate_object_ids.contains(&1u32),
-        "P1 (object id 1) is a valid target for the copy"
+        rcr.candidate_player_ids.contains(&1),
+        "P1 (player id 1) is a valid target for the copy"
     );
+    assert!(rcr.candidate_player_ids.contains(&0));
     // Stack still just has the original bolt; copy not yet pushed.
     assert_eq!(e.state.stack.len(), 1, "only the original bolt on stack");
 
     // P1 submits target choice: keep original target (P1 = player id 1).
     let target_batch = e
-        .apply_scenario_command(1, &submit_resolution_choice(vec![1]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![]))
         .expect("P1 submits copy target");
 
     let copy_push = target_batch
@@ -1730,7 +1732,7 @@ fn countering_a_spell_copy_removes_it_without_error() {
         "copy target choice is pending"
     );
     // P1 keeps the original target (P1 = player 1).
-    e.apply_scenario_command(1, &submit_resolution_choice(vec![1]))
+    e.apply_scenario_command(1, &submit_resolution_choice(vec![]))
         .expect("P1 submits copy target");
 
     let copy_item = e.state.stack.last().expect("copy on stack");
@@ -1875,17 +1877,17 @@ fn twincast_copy_controller_chooses_new_target() {
     assert_eq!(rcr.deciding_player_id, 1, "P1 chooses targets for the copy");
     // Both players should be valid targets for Lightning Bolt.
     assert!(
-        rcr.candidate_object_ids.contains(&0u32),
+        rcr.candidate_player_ids.contains(&0),
         "P0 is a valid target"
     );
     assert!(
-        rcr.candidate_object_ids.contains(&1u32),
+        rcr.candidate_player_ids.contains(&1),
         "P1 is a valid target"
     );
 
     // P1 redirects the copy to hit P0 instead.
     let target_batch = e
-        .apply_scenario_command(1, &submit_resolution_choice(vec![0]))
+        .apply_scenario_command(1, &submit_resolution_player_choice(vec![0]))
         .expect("P1 chooses P0 as new target");
 
     let copy_push = target_batch
@@ -1903,7 +1905,7 @@ fn twincast_copy_controller_chooses_new_target() {
             object_id: 0,
             damage_amount: 0,
             group_index: 0,
-            kind: 0,
+            kind: rv1::TargetRefKind::Player as i32,
         }],
         "copy targets P0"
     );
@@ -2027,7 +2029,7 @@ fn twincast_copy_may_keep_an_original_target_that_is_now_illegal() {
     yank_from_battlefield(&mut e, 0, original_target);
 
     let batch = e
-        .apply_scenario_command(1, &submit_resolution_choice(vec![original_target]))
+        .apply_scenario_command(1, &submit_resolution_choice(vec![]))
         .expect("keeping the original target is legal even though it left the battlefield");
 
     let copy_push = batch
@@ -2064,7 +2066,7 @@ fn issue_171_copy_retargeting_does_not_commit_another_crime() {
         "Twincast targeted an opposing spell"
     );
     inject_creature_on_battlefield(&mut e, 1, "raven_of_fell_omens");
-    e.apply_scenario_command(1, &submit_resolution_choice(vec![0]))
+    e.apply_scenario_command(1, &submit_resolution_player_choice(vec![0]))
         .unwrap();
     assert_eq!(e.state.turn_history.current.player(1).crimes_committed, 1);
     assert!(e.state.stack.iter().all(|item| !item.is_triggered));
@@ -2079,10 +2081,13 @@ fn twincast_copy_rejects_an_illegal_new_target_without_losing_the_choice() {
     let (mut e, _, other_creature) = twincast_awaiting_copy_target(1452);
     yank_from_battlefield(&mut e, 1, other_creature);
 
-    let err = e.apply_scenario_command(1, &submit_resolution_choice(vec![other_creature]));
+    let rejected = e
+        .apply_scenario_command(1, &submit_resolution_choice(vec![other_creature]))
+        .expect("the illegal choice reissues the copy-target prompt");
+    let prompt = find_resolution_choice(&rejected).expect("copy target prompt is reissued");
     assert!(
-        err.is_err(),
-        "a newly chosen target must be legal at the time it is chosen"
+        !prompt.candidate_object_ids.contains(&other_creature),
+        "the newly illegal target is no longer offered"
     );
     assert!(
         e.state.pending_resolution.is_some(),
@@ -2091,7 +2096,7 @@ fn twincast_copy_rejects_an_illegal_new_target_without_losing_the_choice() {
 
     // The player can still complete the choice, and the copy resolves normally.
     let p0_life = e.state.players[0].life;
-    e.apply_scenario_command(1, &submit_resolution_choice(vec![0]))
+    e.apply_scenario_command(1, &submit_resolution_player_choice(vec![0]))
         .expect("retry with a legal target succeeds");
     while !e.state.stack.is_empty() {
         pass_both_players(&mut e);

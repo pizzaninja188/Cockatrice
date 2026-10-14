@@ -1,5 +1,8 @@
 use super::*;
 use crate::engine::presentation::{child_presentation_ref, PresentationPath};
+use crate::engine::targeting::{
+    ability_mode_program, ability_program, validate_ability_targets_with_context_and_program,
+};
 
 impl GameEngine {
     pub(in crate::engine) fn choose_trigger_target(
@@ -61,6 +64,18 @@ impl GameEngine {
             .as_ref()
             .is_some_and(|modal| modal.trigger_mode_selection_restriction.is_some())
             && pending.ability_origin.is_none();
+        let authored_definition = pending
+            .ability_origin
+            .as_ref()
+            .and_then(|origin| match origin {
+                TriggerAbilityOrigin::Printed(definition)
+                | TriggerAbilityOrigin::StaticGrant { definition, .. } => Some(definition),
+                TriggerAbilityOrigin::SpellKeyword(_) | TriggerAbilityOrigin::ResolvingGrant(_) => {
+                    None
+                }
+            });
+        let ability_program =
+            authored_definition.and_then(|definition| ability_program(self, definition));
         let used_modes = mode_history_key
             .as_ref()
             .and_then(|key| self.state.trigger_modes_used_this_turn.get(key))
@@ -102,14 +117,20 @@ impl GameEngine {
                         ));
                         break;
                     }
-                    if let Err(error) = validate_ability_targets_with_context(
+                    let program = authored_definition.and_then(|definition| {
+                        ability_mode_program(self, definition, &mode.mode_id)
+                    });
+                    if let Err(error) = validate_ability_targets_with_context_and_program(
                         self,
                         player,
                         target_source,
-                        &mode.effects,
-                        mode.targeting.as_ref(),
                         &selection.targets,
-                        pending.trigger_context,
+                        TargetResolutionContext {
+                            effects: &mode.effects,
+                            targeting: mode.targeting.as_ref(),
+                            trigger_context: pending.trigger_context,
+                            program,
+                        },
                     ) {
                         result = Err(error);
                         break;
@@ -129,14 +150,17 @@ impl GameEngine {
                 result
             }
         } else if selected_modes.is_empty() {
-            validate_ability_targets_with_context(
+            validate_ability_targets_with_context_and_program(
                 self,
                 player,
                 target_source,
-                &pending.ability.effect,
-                pending.ability.targeting.as_ref(),
                 targets,
-                pending.trigger_context,
+                TargetResolutionContext {
+                    effects: &pending.ability.effect,
+                    targeting: pending.ability.targeting.as_ref(),
+                    trigger_context: pending.trigger_context,
+                    program: ability_program,
+                },
             )
             .map(|()| public_targets.extend_from_slice(targets))
         } else {

@@ -262,12 +262,7 @@ fn registry_lowers_every_mode_of_an_affected_modal_owner_by_stable_mode_id() {
                 }
             );
             assert_eq!(program.target_bindings.len(), 1);
-            assert_eq!(
-                program.target_bindings[0]
-                    .source_effect_path
-                    .root_effect_index,
-                0
-            );
+            assert_eq!(program.target_bindings[0].instruction_address, 0);
             assert_eq!(program.target_bindings[0].target_group_index, 0);
             assert_eq!(program.target_bindings[0].role_index, 0);
         }
@@ -311,27 +306,17 @@ fn registry_lowers_validated_targeted_spell_siblings_in_owner_order() {
             if matches!(effect.as_ref(), crate::primitives::SpellEffectKind::ReturnToOwnersHand { .. })
     ));
     assert_eq!(program.target_bindings.len(), 2);
+    assert_eq!(program.target_bindings[0].instruction_address, 0);
     assert_eq!(
-        program.target_bindings[0]
-            .source_effect_path
-            .root_effect_index,
-        0
-    );
-    assert_eq!(
-        program.target_bindings[0].source_effect_path,
-        program.body.steps[0].source_effect_path.clone().unwrap()
+        program.target_bindings[0].instruction_address,
+        program.body.steps[0].instruction_address
     );
     assert_eq!(program.target_bindings[0].target_group_index, 0);
     assert_eq!(program.target_bindings[0].role_index, 0);
+    assert_eq!(program.target_bindings[1].instruction_address, 1);
     assert_eq!(
-        program.target_bindings[1]
-            .source_effect_path
-            .root_effect_index,
-        1
-    );
-    assert_eq!(
-        program.target_bindings[1].source_effect_path,
-        program.body.steps[1].source_effect_path.clone().unwrap()
+        program.target_bindings[1].instruction_address,
+        program.body.steps[1].instruction_address
     );
     assert_eq!(program.target_bindings[1].target_group_index, 1);
     assert_eq!(program.target_bindings[1].role_index, 0);
@@ -1949,6 +1934,7 @@ fn trigger_object_copy_is_nested_trigger_context_scoped() {
         presentation: AbilityPresentation::Fallback,
         trigger: TriggerCondition::WhenSelfEntersBattlefield,
         effect: vec![branch.clone()],
+        program: None,
         modal: None,
         targeting: None,
         may: false,
@@ -1969,6 +1955,7 @@ fn trigger_object_copy_is_nested_trigger_context_scoped() {
         costs: vec![AbilityCost::Tap],
         cost_modifiers: vec![],
         effect: vec![branch.clone()],
+        program: None,
         targeting: None,
         timing: Default::default(),
         conditions: vec![],
@@ -3057,6 +3044,7 @@ fn explicit_and_intrinsic_sorcery_speed_share_one_query() {
         costs: vec![],
         cost_modifiers: vec![],
         effect: vec![],
+        program: None,
         targeting: None,
         timing: ActivationTiming::SorcerySpeed,
         conditions: vec![],
@@ -3074,6 +3062,7 @@ fn explicit_and_intrinsic_sorcery_speed_share_one_query() {
         effect: vec![SpellEffectKind::Equip {
             target: TargetFilter::default(),
         }],
+        program: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -3105,6 +3094,7 @@ fn activation_limit_rejects_zero_maximum_for_every_scope() {
             restriction: None,
             conditional: None,
         }],
+        program: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -3137,6 +3127,7 @@ fn commander_color_identity_mana_is_a_bounded_zero_or_more_choice_ability() {
             restriction: None,
             conditional: None,
         }],
+        program: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -3179,6 +3170,7 @@ fn storage_counter_split_ability(mana_cost: &str) -> ActivatedAbilityDef {
                 second_color: Color::Black,
             },
         ],
+        program: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -3248,6 +3240,7 @@ fn mana_then_controller_damage_ability() -> super::ActivatedAbilityDef {
                 who: super::PlayerRecipient::Controller,
             },
         ],
+        program: None,
         targeting: None,
         timing: super::ActivationTiming::Normal,
         conditions: vec![],
@@ -3360,6 +3353,7 @@ fn opponent_land_mana_is_restricted_to_the_tap_activated_ability_shape() {
         costs: vec![AbilityCost::Tap],
         cost_modifiers: vec![],
         effect: vec![opponent_land_mana_effect()],
+        program: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -3389,6 +3383,7 @@ fn opponent_land_mana_is_restricted_to_the_tap_activated_ability_shape() {
         presentation: crate::AbilityPresentation::Fallback,
         trigger: TriggerCondition::WhenSelfEntersBattlefield,
         effect: vec![opponent_land_mana_effect()],
+        program: None,
         modal: None,
         targeting: None,
         may: false,
@@ -3409,6 +3404,7 @@ fn source_counter_scaled_mana_accepts_the_supported_activated_ability_shape() {
         costs: vec![AbilityCost::Tap],
         cost_modifiers: vec![],
         effect: vec![source_counter_scaled_mana_effect()],
+        program: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -3437,6 +3433,7 @@ fn source_counter_scaled_mana_rejects_mixed_activated_effects() {
                 amount: Amount::Fixed(1),
             },
         ],
+        program: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -3461,6 +3458,7 @@ fn source_counter_scaled_mana_rejects_nested_activated_effects() {
         effect: vec![source_counter_scaled_mana_branch(
             source_counter_scaled_mana_effect(),
         )],
+        program: None,
         targeting: None,
         timing: ActivationTiming::Normal,
         conditions: vec![],
@@ -3482,6 +3480,7 @@ fn source_counter_scaled_mana_rejects_triggered_and_reflexive_appearances() {
         effect: vec![source_counter_scaled_mana_branch(
             source_counter_scaled_mana_effect(),
         )],
+        program: None,
         modal: None,
         targeting: None,
         may: false,
@@ -4524,6 +4523,50 @@ fn program_compiler_preserves_owner_context_and_local_target_projection() {
 }
 
 #[test]
+fn public_program_compilers_reject_target_leaves_without_a_complete_schema() {
+    let body: super::AuthoredBlock = ron::from_str(
+        r#"(steps: [(id: "damage", kind: Perform(
+            DamageTarget(amount: 3, target: (kind: Creature))
+        ))], yields: [])"#,
+    )
+    .expect("target leaf fixture parses");
+    let owner = crate::ProgramOwnerId::face(
+        "public_target_compile_fixture",
+        crate::CardFaceId::new("public_target_compile_fixture").unwrap(),
+    );
+    let bound_program = super::CardProgram {
+        body: body.clone(),
+        target_bindings: vec![super::ProgramTargetReference {
+            instruction_id: "damage".into(),
+            role: super::ProgramTargetRole::Target,
+            target_group_index: 0,
+        }],
+    };
+    let unbound_program = super::CardProgram {
+        body,
+        target_bindings: Vec::new(),
+    };
+
+    let plain_compile =
+        super::CompiledProgram::compile(owner.clone(), super::EffectContext::Spell, &bound_program);
+    let missing_schema_compile = super::CompiledProgram::compile_with_targeting(
+        owner,
+        super::EffectContext::Spell,
+        &unbound_program,
+        None,
+    );
+
+    assert!(
+        plain_compile.is_err(),
+        "plain public compilation must not return a targetful body without target-group metadata"
+    );
+    assert!(
+        missing_schema_compile.is_err(),
+        "targeting-aware compilation must validate target roles even when targeting is absent"
+    );
+}
+
+#[test]
 fn program_compiler_rejects_untyped_dynamic_and_event_bound_leaf_parameters() {
     let compile_error = |effect: &str, context: super::EffectContext| {
         let body: super::AuthoredBlock = ron::from_str(&format!(
@@ -4531,7 +4574,10 @@ fn program_compiler_rejects_untyped_dynamic_and_event_bound_leaf_parameters() {
                 kind: Perform({effect}))], yields: [])"#
         ))
         .expect("leaf fixture parses");
-        let program = super::CardProgram { body };
+        let program = super::CardProgram {
+            body,
+            target_bindings: Vec::new(),
+        };
         let owner = match context {
             super::EffectContext::Spell => crate::ProgramOwnerId::face(
                 "leaf_contract_fixture",
@@ -4593,9 +4639,476 @@ fn authored_program_rejects_targeted_leaf_without_compiled_binding() {
     assert!(
         error
             .to_string()
-            .contains("has no owner-local target binding"),
+            .contains("targeted program instruction has no authored target group"),
         "{error}"
     );
+}
+
+#[test]
+fn authored_program_accepts_targets_bound_by_program_instructions() {
+    let definition = r#"(id: "target_program_fixture", name: "Target Program Fixture",
+        face_id: "target_program_fixture", mana_cost: "{R}", types: ["Instant"],
+        spell_program: Some((body: (steps: [
+            (id: "damage", kind: Perform(DamageTarget(amount: 3, target: (kind: Creature))))
+        ], yields: []), target_bindings: [
+            (instruction_id: "damage", role: Target, target_group_index: 0),
+        ])),
+        targeting: Some((groups: [(
+            min: 1, max: 1, prompt: "Choose target creature", effect_indices: [],
+        )])))"#;
+
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
+        .expect("an authored program target group binds its instruction directly");
+    let owner = crate::ProgramOwnerId::face(
+        "target_program_fixture",
+        crate::CardFaceId::new("target_program_fixture").unwrap(),
+    );
+    let compiled = registry
+        .compiled_program_for_owner(&owner)
+        .expect("targetful program owner is compiled once at registry load");
+    assert_eq!(
+        compiled.target_bindings,
+        [crate::primitives::ProgramTargetBinding {
+            instruction_address: 0,
+            target_group_index: 0,
+            role_index: 0,
+        }]
+    );
+    let face = registry
+        .get("target_program_fixture")
+        .unwrap()
+        .primary_face();
+    let schema =
+        crate::primitives::TargetSchema::compile_program(compiled, face.targeting.as_ref())
+            .expect("compiled program and authored group share the target contract");
+    assert_eq!(schema.groups[0].min, 1);
+    assert_eq!(schema.groups[0].max, 1);
+    assert_eq!(schema.groups[0].bindings.len(), 1);
+    assert!(matches!(
+        schema.groups[0].bindings[0].role,
+        crate::primitives::TargetRole::Filtered(_)
+    ));
+
+    for (malformed, expected) in [
+        (
+            definition.replace("role: Target", "role: Source"),
+            "does not expose target role",
+        ),
+        (
+            definition.replace("min: 1, max: 1", "min: 2, max: 1"),
+            "min <= max",
+        ),
+        (
+            definition.replace("target_group_index: 0", "target_group_index: 1"),
+            "unknown target group",
+        ),
+        (
+            definition.replace("effect_indices: []", "effect_indices: [0]"),
+            "cannot reference legacy effect indices",
+        ),
+    ] {
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&malformed], &[])
+            .expect_err("malformed program-target schemas fail closed")
+            .to_string();
+        assert!(
+            error.contains(expected),
+            "expected {expected:?}, got {error}"
+        );
+    }
+}
+
+#[test]
+fn authored_copy_program_requires_exactly_one_source_target() {
+    let definition = r#"(id: "copy_target_program_fixture", name: "Copy Target Program Fixture",
+        face_id: "copy_target_program_fixture", mana_cost: "{U}", types: ["Instant"],
+        spell_program: Some((body: (steps: [
+            (id: "copy", kind: Perform(CreateTokenCopies(count: 1,
+                source: Chosen((kind: Creature)))))
+        ], yields: []), target_bindings: [
+            (instruction_id: "copy", role: Source, target_group_index: 0),
+        ])),
+        targeting: Some((groups: [(
+            min: 1, max: 1, prompt: "Choose target creature", effect_indices: [],
+        )])))"#;
+
+    crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
+        .expect("copy-source target uses one required target");
+    let optional_source = definition.replace("min: 1, max: 1", "min: 0, max: 1");
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&optional_source], &[])
+        .expect_err("copy source cannot use an optional target group")
+        .to_string();
+    assert!(
+        error.contains("CreateTokenCopies requires exactly one source target"),
+        "{error}"
+    );
+    let multiple_sources = definition.replace("min: 1, max: 1", "min: 1, max: 2");
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&multiple_sources], &[])
+        .expect_err("copy source cannot use a multi-target group")
+        .to_string();
+    assert!(
+        error.contains("CreateTokenCopies requires exactly one source target"),
+        "{error}"
+    );
+}
+
+#[test]
+fn authored_programs_compile_for_exact_mode_activated_and_triggered_owners() {
+    let definition = r#"(id: "program_owner_fixture", name: "Program Owner Fixture",
+        face_id: "program_owner_fixture", mana_cost: "{1}{U}", types: ["Creature"],
+        power: Some(2), toughness: Some(2),
+        activated_abilities: [(
+            ability_id: "activated_02", presentation: Fallback,
+            source_zone: Battlefield, costs: [], effect: [],
+            program: Some((body: (steps: [
+                (id: "activation_draw", bind: ["drawn"], kind: Perform(Draw(count: 1)))
+            ], yields: []))),
+            targeting: None, timing: Normal, conditions: [], activation_limit: None,
+        )],
+        triggered_abilities: [(
+            ability_id: "triggered_01", presentation: Fallback,
+            trigger: WhenSelfEntersBattlefield, effect: [], modal: None,
+            program: Some((body: (steps: [
+                (id: "trigger_draw", bind: ["drawn"], kind: Perform(Draw(count: 1)))
+            ], yields: []))),
+            targeting: None, may: false, intervening_if: None,
+            triggers_only_once: false, max_triggers_per_turn: None,
+        ), (
+            ability_id: "triggered_02", presentation: Fallback,
+            trigger: WhenSelfEntersBattlefield, effect: [], program: None,
+            modal: Some((min_modes: 1, max_modes: 1, modes: [
+                (mode_id: "mode_01", presentation: Fallback, linked_cast_cost: None,
+                    effects: [], program: Some((body: (steps: [
+                        (id: "mode_draw", bind: ["drawn"], kind: Perform(Draw(count: 1)))
+                    ], yields: []))), targeting: None),
+            ])), targeting: None, may: false, intervening_if: None,
+            triggers_only_once: false, max_triggers_per_turn: None,
+        )])"#;
+
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
+        .expect("each exact owner compiles through the common program admission path");
+    let face_id = crate::CardFaceId::new("program_owner_fixture").unwrap();
+    let ability_owner = |ability_id: &str| {
+        crate::ProgramOwnerId::ability(crate::AbilityDefinitionId {
+            card_id: "program_owner_fixture".into(),
+            face_id: face_id.clone(),
+            ability_path: vec![crate::AbilityId::new(ability_id).unwrap()],
+        })
+    };
+    let mode_owner = crate::ProgramOwnerId::ability_mode(
+        crate::AbilityDefinitionId {
+            card_id: "program_owner_fixture".into(),
+            face_id: face_id.clone(),
+            ability_path: vec![crate::AbilityId::new("triggered_02").unwrap()],
+        },
+        crate::ModeId::new("mode_01").unwrap(),
+    );
+    for owner in [
+        mode_owner,
+        ability_owner("activated_02"),
+        ability_owner("triggered_01"),
+    ] {
+        let compiled = registry
+            .compiled_program_for_owner(&owner)
+            .unwrap_or_else(|| panic!("missing exact program owner {owner:?}"));
+        assert!(compiled.target_bindings.is_empty());
+    }
+}
+
+#[test]
+fn modal_program_owners_allow_mixed_supported_legacy_siblings_and_reject_unsupported_siblings() {
+    let definition = r#"(id: "mixed_modal_program_fixture", name: "Mixed Modal Program Fixture",
+        face_id: "mixed_modal_program_fixture", mana_cost: "{0}", types: ["Instant"],
+        modal_spell: Some((min_modes: 1, max_modes: 1, modes: [
+            (mode_id: "authored", presentation: Fallback, linked_cast_cost: None,
+                effects: [], program: Some((body: (steps: [
+                    (id: "authored_draw", bind: ["drawn"], kind: Perform(Draw(count: 1)))
+                ], yields: []))), targeting: None),
+            (mode_id: "legacy_non_dd", presentation: Fallback, linked_cast_cost: None,
+                effects: [ChoosePermanents(chooser: Controller,
+                    filter: (kind: AnyPermanent), min: 0, max: 1)],
+                program: None, targeting: None),
+            (mode_id: "legacy_dd", presentation: Fallback, linked_cast_cost: None,
+                effects: [DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
+                    order: DrawThenDiscard, optional: false)], program: None, targeting: None),
+        ])))"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
+        .expect("one program selects a modal owner whose every sibling is compiled");
+    let face_id = crate::CardFaceId::new("mixed_modal_program_fixture").unwrap();
+    for mode_id in ["authored", "legacy_non_dd", "legacy_dd"] {
+        let owner = crate::ProgramOwnerId::face_mode(
+            "mixed_modal_program_fixture",
+            face_id.clone(),
+            crate::ModeId::new(mode_id).unwrap(),
+        );
+        assert!(
+            registry.compiled_program_for_owner(&owner).is_some(),
+            "mixed modal owner must compile sibling mode {mode_id}"
+        );
+    }
+
+    let unsupported_sibling = definition.replace(
+        "effects: [ChoosePermanents(chooser: Controller,\n                    filter: (kind: AnyPermanent), min: 0, max: 1)],",
+        "effects: [GainLife(amount: 3)],",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&unsupported_sibling], &[])
+        .expect_err("an unsupported legacy sibling cannot hide behind another authored mode")
+        .to_string();
+    assert!(
+        error.contains("effect is not in the resolution-program operation whitelist"),
+        "the exact sibling compiler should reject the unsupported shape: {error}"
+    );
+}
+
+#[test]
+fn resolving_created_ability_owners_reject_programs_including_nested_modal_modes() {
+    let program = r#"Some((body: (steps: [
+        (id: "draw", bind: ["drawn"], kind: Perform(Draw(count: 1)))
+    ], yields: [])))"#;
+    let direct_program = format!(
+        r#"(id: "unowned_program_grant", name: "Unowned Program Grant",
+            face_id: "unowned_program_grant", mana_cost: "{{0}}", types: ["Instant"],
+            spell_effect: [GrantTriggeredAbility(
+                subject: Chosen((kind: Creature)),
+                ability: (ability_id: "granted", presentation: Fallback,
+                    trigger: WhenSelfDies, effect: [], program: {program}, modal: None,
+                    targeting: None))],
+            targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature",
+                effect_indices: [0])])) )"#
+    );
+    let nested_modal_program = r#"(id: "unowned_modal_grant", name: "Unowned Modal Grant",
+        face_id: "unowned_modal_grant", mana_cost: "{0}", types: ["Instant"],
+        spell_effect: [CreateDelayedTrigger(subject: None, affected_player: None,
+            ability: (ability_id: "delayed", presentation: Fallback,
+                trigger: AtBeginningOfNextTurnUpkeep, effect: [], program: None,
+                modal: Some((min_modes: 1, max_modes: 1, modes: [
+                    (mode_id: "mode_01", presentation: Fallback, linked_cast_cost: None,
+                        effects: [], program: Some((body: (steps: [
+                            (id: "draw", bind: ["drawn"], kind: Perform(Draw(count: 1)))
+                        ], yields: []))), targeting: None),
+                ])), targeting: None))])"#;
+    let dynamic_activated_program = format!(
+        r#"(id: "unowned_activated_grant", name: "Unowned Activated Grant",
+            face_id: "unowned_activated_grant", mana_cost: "{{0}}", types: ["Instant"],
+            spell_effect: [ApplyPermanentModifier(
+                subject: Chosen((kind: Creature)),
+                modifier: GrantActivatedAbility((ability_id: "granted", presentation: Fallback,
+                    source_zone: Battlefield, costs: [], effect: [], program: {program},
+                    targeting: None, timing: Normal, conditions: [], activation_limit: None)),
+                duration: UntilEndOfTurn)],
+            targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature",
+                effect_indices: [0])])) )"#
+    );
+    let nested_reflexive_program = format!(
+        r#"(id: "unowned_reflexive_grant", name: "Unowned Reflexive Grant",
+            face_id: "unowned_reflexive_grant", mana_cost: "{{0}}", types: ["Instant"],
+            spell_effect: [ChooseResolutionBranch(optional: false, branches: [(
+                branch_id: "create", presentation: Fallback, cost: None,
+                effects: [CreateReflexiveTrigger(ability: (
+                    ability_id: "reflexive", presentation: Fallback,
+                    effect: [GrantTriggeredAbility(subject: Source,
+                        ability: (ability_id: "granted", presentation: Fallback,
+                            trigger: WhenSelfDies, effect: [], program: {program},
+                            modal: None, targeting: None))], targeting: None))],
+            )])])"#
+    );
+
+    for definition in [
+        direct_program,
+        nested_modal_program.to_owned(),
+        dynamic_activated_program,
+        nested_reflexive_program,
+    ] {
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+            .expect_err("a resolving-created owner has no stable compiled program identity")
+            .to_string();
+        assert!(
+            error.contains("resolving-created abilities cannot use authored programs"),
+            "expected the unowned-program boundary, got {error}"
+        );
+    }
+}
+
+#[test]
+fn nonactivated_programs_reject_chosen_opponent_target_groups() {
+    let definitions = [
+        r#"(id: "spell_chosen_opponent_fixture", name: "Spell Chosen Opponent Fixture",
+            face_id: "spell_chosen_opponent_fixture", mana_cost: "{1}{R}", types: ["Instant"],
+            spell_program: Some((body: (steps: [
+                (id: "damage", kind: Perform(DamageTarget(amount: 1,
+                    target: (kind: Creature))))
+            ], yields: []), target_bindings: [
+                (instruction_id: "damage", role: Target, target_group_index: 0),
+            ])),
+            targeting: Some((groups: [(
+                min: 1, max: 1, prompt: "Choose a target", chooser: ChosenOpponent,
+                effect_indices: [],
+            )])))"#,
+        r#"(id: "trigger_chosen_opponent_fixture", name: "Trigger Chosen Opponent Fixture",
+            face_id: "trigger_chosen_opponent_fixture", mana_cost: "{1}{R}", types: ["Creature"],
+            power: Some(2), toughness: Some(2), triggered_abilities: [(
+                ability_id: "triggered_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield, effect: [], modal: None,
+                program: Some((body: (steps: [
+                    (id: "damage", kind: Perform(DamageTarget(amount: 1,
+                        target: (kind: Creature))))
+                ], yields: []), target_bindings: [
+                    (instruction_id: "damage", role: Target, target_group_index: 0),
+                ])),
+                targeting: Some((groups: [(
+                    min: 1, max: 1, prompt: "Choose a target", chooser: ChosenOpponent,
+                    effect_indices: [],
+                )])), may: false, intervening_if: None,
+                triggers_only_once: false, max_triggers_per_turn: None,
+            )])"#,
+    ];
+
+    for definition in definitions {
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[definition], &[])
+            .expect_err("opponent-selected targets are restricted to supported activations")
+            .to_string();
+        assert!(
+            error.contains("opponent target choices require a supported activated ability"),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn authored_nonbattlefield_activated_programs_reject_chosen_opponent_groups() {
+    for source_zone in ["Hand", "Graveyard"] {
+        let ability: ActivatedAbilityDef = ron::from_str(&format!(
+            r#"(
+                ability_id: "activated_01", presentation: Fallback,
+                source_zone: {source_zone}, costs: [], effect: [],
+                program: Some((body: (steps: [
+                    (id: "damage", bind: [], kind: Perform(DamageTarget(
+                        amount: 1, target: (kind: Creature))))
+                ], yields: []), target_bindings: [
+                    (instruction_id: "damage", role: Target, target_group_index: 0),
+                ])),
+                targeting: Some((groups: [(
+                    min: 1, max: 1, prompt: "Choose an opponent's creature",
+                    chooser: ChosenOpponent, effect_indices: [],
+                )])),
+                timing: Normal, conditions: [], activation_limit: None,
+            )"#
+        ))
+        .expect("nonbattlefield program fixture parses");
+
+        let error = ability
+            .validate_shape()
+            .expect_err("an opponent-selected authored target cannot be activated off battlefield");
+        assert!(
+            error.contains("authored opponent-choice groups require a battlefield source"),
+            "expected the precise authored source-zone boundary, got {error}"
+        );
+    }
+
+    let ordinary_hand_target: ActivatedAbilityDef = ron::from_str(
+        r#"(
+            ability_id: "activated_01", presentation: Fallback,
+            source_zone: Hand, costs: [], effect: [],
+            program: Some((body: (steps: [
+                (id: "damage", bind: [], kind: Perform(DamageTarget(
+                    amount: 1, target: (kind: Creature))))
+            ], yields: []), target_bindings: [
+                (instruction_id: "damage", role: Target, target_group_index: 0),
+            ])),
+            targeting: Some((groups: [(
+                min: 1, max: 1, prompt: "Choose a creature", effect_indices: [],
+            )])),
+            timing: Normal, conditions: [], activation_limit: None,
+        )"#,
+    )
+    .expect("ordinary hand target fixture parses");
+    ordinary_hand_target
+        .validate_shape()
+        .expect("ordinary controller-chosen hand targets remain accepted");
+}
+
+#[test]
+fn authored_opponent_program_registry_source_zone_admission_is_narrow() {
+    let card = |name: &str, source_zone: &str, costs: &str, program: &str, targeting: &str| {
+        format!(
+            r#"(
+                id: "{name}", name: "{name}", face_id: "{name}",
+                mana_cost: "{{0}}", types: ["Creature"], power: Some(2), toughness: Some(2),
+                activated_abilities: [(
+                    ability_id: "activated_01", presentation: Fallback,
+                    source_zone: {source_zone}, costs: {costs}, effect: [],
+                    program: {program}, targeting: Some({targeting}),
+                    timing: Normal, conditions: [], activation_limit: None,
+                )],
+            )"#
+        )
+    };
+    let single_opponent_program = r#"Some((body: (steps: [
+        (id: "damage", kind: Perform(DamageTarget(amount: 1,
+            target: (kind: Creature, controller: Opponent))))
+    ], yields: []), target_bindings: [
+        (instruction_id: "damage", role: Target, target_group_index: 0),
+    ]))"#;
+    let chosen_opponent_targeting = r#"(groups: [(
+        min: 1, max: 1, prompt: "Choose an opponent's creature",
+        chooser: ChosenOpponent, effect_indices: [],
+    )])"#;
+
+    for source_zone in ["Hand", "Graveyard"] {
+        let definition = card(
+            &format!(
+                "authored_{}_opponent_target_fixture",
+                source_zone.to_lowercase()
+            ),
+            source_zone,
+            "[]",
+            single_opponent_program,
+            chosen_opponent_targeting,
+        );
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[])
+            .expect_err("nonbattlefield chosen-opponent programs are not admitted")
+            .to_string();
+        assert!(
+            error.contains("authored opponent-choice groups require a battlefield source"),
+            "expected the scoped source-zone admission reason, got {error}"
+        );
+    }
+
+    let ordinary_hand = card(
+        "authored_hand_controller_target_fixture",
+        "Hand",
+        "[]",
+        r#"Some((body: (steps: [
+            (id: "damage", kind: Perform(DamageTarget(amount: 1,
+                target: (kind: Creature))))
+        ], yields: []), target_bindings: [
+            (instruction_id: "damage", role: Target, target_group_index: 0),
+        ]))"#,
+        r#"(groups: [(min: 1, max: 1, prompt: "Choose a creature", effect_indices: [])])"#,
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&ordinary_hand], &[])
+        .expect("direct ordinary hand target groups remain supported");
+
+    let battlefield_opponent_program = card(
+        "authored_battlefield_opponent_target_fixture",
+        "Battlefield",
+        r#"[Mana("{3}"), Tap]"#,
+        r#"Some((body: (steps: [
+            (id: "damage_you", kind: Perform(DamageTarget(amount: 1,
+                target: (kind: Creature, controller: You)))),
+            (id: "damage_opponent", kind: Perform(DamageTarget(amount: 1,
+                target: (kind: Creature, controller: Opponent))))
+        ], yields: []), target_bindings: [
+            (instruction_id: "damage_you", role: Target, target_group_index: 0),
+            (instruction_id: "damage_opponent", role: Target, target_group_index: 1),
+        ]))"#,
+        r#"(groups: [
+            (min: 1, max: 1, prompt: "Choose your creature", effect_indices: []),
+            (min: 1, max: 1, prompt: "Choose an opponent's creature",
+                chooser: ChosenOpponent, effect_indices: []),
+        ])"#,
+    );
+    crate::CardRegistry::from_chunks_and_tokens(&[&battlefield_opponent_program], &[])
+        .expect("the supported battlefield opponent-choice program remains admitted");
 }
 
 #[test]

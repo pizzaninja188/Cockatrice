@@ -6206,6 +6206,7 @@ impl GameEngine {
                     presentation: tricerules_card_model::AbilityPresentation::Fallback,
                     trigger,
                     effect: vec![SpellEffectKind::SacrificeObservedObjects],
+                    program: None,
                     modal: None,
                     targeting: None,
                     may: false,

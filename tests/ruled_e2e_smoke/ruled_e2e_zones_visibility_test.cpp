@@ -177,8 +177,15 @@ TEST_F(RuledE2ESmokeTest, BlueSunRealTwincastDrawsPrivatelyAndMovesOnlyTheOrigin
     ASSERT_TRUE(pass());
     ASSERT_TRUE(pass());
     ASSERT_TRUE(p2.pendingChoice.has_value());
+    ASSERT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
+    ASSERT_EQ(p2.pendingChoice->min(), 0u);
+    ASSERT_EQ(p2.pendingChoice->max(), 1u);
+    EXPECT_EQ(p2.pendingChoice->candidate_object_ids_size(), 0);
+    EXPECT_TRUE(std::find(p2.pendingChoice->candidate_player_ids().begin(),
+                          p2.pendingChoice->candidate_player_ids().end(), p2.myId) !=
+                p2.pendingChoice->candidate_player_ids().end());
     ruled::v1::RuledCommand choose;
-    choose.mutable_submit_resolution_choice()->add_chosen_object_ids(p2.myId);
+    choose.mutable_submit_resolution_choice()->add_chosen_player_ids(p2.myId);
     ASSERT_TRUE(send(p2, choose, QStringLiteral("keep Blue copy target")));
     ASSERT_EQ(p1.bluePushes.size(), 2u);
     ASSERT_TRUE(p1.bluePushes[1].is_copy());

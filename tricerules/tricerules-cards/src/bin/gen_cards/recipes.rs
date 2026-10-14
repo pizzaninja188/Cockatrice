@@ -1,9 +1,9 @@
 use tricerules_cards::primitives::{
     ActivatedCostModifier, ActivationLimit, BasePowerToughnessValue, BattlefieldAggregate,
-    BattlefieldCreatureCountFilter, BattlefieldPermanentFilter, CardResultAction, CardResultFilter,
-    CardResultSource, CardSearchZone, CardTypeFilter, CastCostGroupDef, CastCostOptionDef,
-    CombatRestriction, CombatRestrictionScope, CombatRole, ConditionPlayerSet, CountExpression,
-    CounterRemovalPaymentSource, CreatureScopeController, CreatureScopeFilter,
+    BattlefieldCreatureCountFilter, BattlefieldPermanentFilter, CardProgram, CardResultAction,
+    CardResultFilter, CardResultSource, CardSearchZone, CardTypeFilter, CastCostGroupDef,
+    CastCostOptionDef, CombatRestriction, CombatRestrictionScope, CombatRole, ConditionPlayerSet,
+    CountExpression, CounterRemovalPaymentSource, CreatureScopeController, CreatureScopeFilter,
     DelayedTokenSacrificeTiming, DiscardQuantity, DrawDiscardOrder, EffectSubject,
     EntersTappedAffected, EntersWithCountersAffected, EntryCost, EventZone, FaceChangeAction,
     GameCondition, GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner,
@@ -159,7 +159,7 @@ pub(super) enum RecipeEmission {
     ModalAssembly(ModalAssemblyEmission),
     TeamworkModalAssembly(TeamworkModalAssemblyEmission),
     TriggeredModalAssembly(TriggeredModalAssemblyEmission),
-    StationAssembly(StationAssemblyEmission),
+    StationAssembly(Box<StationAssemblyEmission>),
     /// CR 702.185: the face-level hand alternative cost printed as `Warp {cost}`.
     WarpCost(ManaCost),
     /// CR 702.34: the face-level graveyard alternative cost printed as `Flashback {cost}`.
@@ -203,6 +203,10 @@ pub(super) struct TriggeredModalAssemblyEmission {
 pub(super) struct StationAssemblyEmission {
     pub(super) activated_ability: ActivatedAbilityDef,
     pub(super) static_ability: IdentifiedAbility<StaticAbilityDef>,
+}
+
+fn station_assembly(assembly: StationAssemblyEmission) -> RecipeEmission {
+    RecipeEmission::StationAssembly(Box::new(assembly))
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1308,6 +1312,7 @@ fn match_fixed_generic_equip(text: &str, context: &RecipeContext) -> Option<Reci
     }
     let mana_cost = exact_mana_cost(&format!("{{{generic}}}"))?;
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -1354,6 +1359,7 @@ fn match_equipment_clue_sacrifice_self_draw(
 ) -> Option<RecipeEmission> {
     (context.source_is_equipment && text == ISSUE_415_CLUE_SACRIFICE_DRAW).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -1408,6 +1414,7 @@ fn match_equipment_granted_attack_surveil_two(
                 keywords: Vec::new(),
                 protections: Box::default(),
                 triggered_abilities: vec![TriggeredAbilityDef {
+                    program: None,
                     ability_id: issue_415_nested_ability_id("triggered_01"),
                     presentation: AbilityPresentation::Fallback,
                     trigger: TriggerCondition::WheneverSelfAttacks {
@@ -1561,6 +1568,7 @@ fn match_equipment_vigilance_granted_tap_target_creature(
                 protections: Box::default(),
                 triggered_abilities: Vec::new(),
                 activated_abilities: vec![ActivatedAbilityDef {
+                    program: None,
                     intrinsic_land_mana: false,
                     ability_id: issue_415_nested_ability_id("activated_01"),
                     presentation: AbilityPresentation::Fallback,
@@ -1951,6 +1959,7 @@ fn match_aura_granted_two_mana_any_one_color(
                 false,
                 false,
                 vec![ActivatedAbilityDef {
+                    program: None,
                     intrinsic_land_mana: false,
                     ability_id: context.activated_ability_id.clone(),
                     presentation: AbilityPresentation::Fallback,
@@ -2000,6 +2009,7 @@ fn match_aura_granted_pump_per_creature(
                 false,
                 false,
                 vec![ActivatedAbilityDef {
+                    program: None,
                     intrinsic_land_mana: false,
                     ability_id: context.activated_ability_id.clone(),
                     presentation: AbilityPresentation::Fallback,
@@ -4668,6 +4678,27 @@ fn triggered_ability_with(
         presentation: context.presentation.clone(),
         trigger,
         effect,
+        program: None,
+        modal: None,
+        targeting: None,
+        may: false,
+        intervening_if: None,
+        max_triggers_per_turn: None,
+        triggers_only_once: false,
+    })
+}
+
+fn triggered_program_ability(
+    context: &RecipeContext,
+    trigger: TriggerCondition,
+    program: CardProgram,
+) -> RecipeEmission {
+    RecipeEmission::TriggeredAbility(TriggeredAbilityDef {
+        ability_id: context.triggered_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        trigger,
+        effect: Vec::new(),
+        program: Some(program),
         modal: None,
         targeting: None,
         may: false,
@@ -6435,6 +6466,7 @@ fn match_graveyard_return_self_to_hand(
 ) -> Option<RecipeEmission> {
     let cost = exact_mana_cost(text.strip_suffix(ISSUE_317_GRAVEYARD_RETURN_SELF_SUFFIX)?)?;
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -7024,8 +7056,9 @@ fn issue_313_station_assembly(text: &str, context: &RecipeContext) -> Option<Rec
         _ => return None,
     };
     let threshold_line = station_line.checked_add(1)?;
-    Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
+    Some(station_assembly(StationAssemblyEmission {
         activated_ability: ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -7199,8 +7232,9 @@ pub(super) fn match_station_6_7_flying_assembly(
         _ => return None,
     };
     let threshold_line = station_line.checked_add(1)?;
-    Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
+    Some(station_assembly(StationAssemblyEmission {
         activated_ability: ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -7365,8 +7399,9 @@ pub(super) fn match_station_3_or_9_keyword_assembly(
         _ => return None,
     };
     let threshold_line = station_line.checked_add(1)?;
-    Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
+    Some(station_assembly(StationAssemblyEmission {
         activated_ability: ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -7482,8 +7517,9 @@ pub(super) fn match_station_8_flying_assembly(
         _ => return None,
     };
     let threshold_line = station_line.checked_add(1)?;
-    Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
+    Some(station_assembly(StationAssemblyEmission {
         activated_ability: ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -7563,17 +7599,22 @@ fn match_uthros_etb_draw_two_discard_one(
         && issue_309_is_uthros(context)
         && text == "When this Spacecraft enters, draw two cards, then discard a card.")
         .then(|| {
-            triggered_ability(
+            triggered_program_ability(
                 context,
-                SpellEffectKind::DrawDiscard {
-                    who: PlayerRecipient::Controller,
-                    draw_count: 2,
-                    discard_count: 1,
-                    order: DrawDiscardOrder::DrawThenDiscard,
-                    optional: false,
-                },
+                TriggerCondition::WhenSelfEntersBattlefield,
+                uthros_etb_program(),
             )
         })
+}
+
+fn uthros_etb_program() -> CardProgram {
+    ron::from_str(
+        r#"(body: (steps: [
+            (id: "draw_two", kind: Perform(Draw(who: Controller, count: 2))),
+            (id: "discard_one", kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+        ], yields: []), target_bindings: [])"#,
+    )
+    .expect("the fixed Uthros ETB program is valid authored RON")
 }
 
 fn match_debris_etb_damage_three_any_target(
@@ -7777,6 +7818,7 @@ fn issue_423_station_line(context: &RecipeContext) -> Option<u16> {
 /// from the committed activation payment, so the count stays generation-bound.
 fn issue_423_station_charge_activation(context: &RecipeContext) -> ActivatedAbilityDef {
     ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -7972,7 +8014,7 @@ pub(super) fn match_station_spacecraft_thresholds(
         return None;
     }
     let threshold_line = issue_423_station_line(context)?.checked_add(1)?;
-    Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
+    Some(station_assembly(StationAssemblyEmission {
         activated_ability: issue_423_station_charge_activation(context),
         static_ability: issue_423_conditional_static(
             context,
@@ -8046,6 +8088,7 @@ fn issue_423_kavaron_inner_activation(context: &RecipeContext, line: u16) -> Act
         ..CreatureScopeFilter::default()
     };
     ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: AbilityPresentation::OracleLines(vec![line]),
@@ -8094,6 +8137,7 @@ fn issue_423_susur_secundi_inner_activation(
     line: u16,
 ) -> ActivatedAbilityDef {
     ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: AbilityPresentation::OracleLines(vec![line]),
@@ -8161,7 +8205,7 @@ pub(super) fn match_station_planets_12_activated(
             issue_423_susur_secundi_inner_activation(context, threshold_line)
         }
     };
-    Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
+    Some(station_assembly(StationAssemblyEmission {
         activated_ability: issue_423_station_charge_activation(context),
         static_ability: issue_423_conditional_static(
             context,
@@ -8386,6 +8430,7 @@ fn match_station_static_damage_100_attack(
             == "10+ | Whenever you attack, Dawnsire deals 100 damage to up to one target creature or planeswalker.")
         .then(|| {
             let damage = TriggeredAbilityDef {
+                program: None,
                 ability_id: context.triggered_ability_id.clone(),
                 presentation: context.presentation.clone(),
                 trigger: TriggerCondition::WheneverControllerAttacks {
@@ -8465,6 +8510,7 @@ fn match_station_static_combat_animation(
                 duration: ResolvingEffectDuration::UntilEndOfTurn,
             };
             let ability = TriggeredAbilityDef {
+                program: None,
                 ability_id: context.triggered_ability_id.clone(),
                 presentation: context.presentation.clone(),
                 trigger: TriggerCondition::AtBeginningOfCombat {
@@ -9349,6 +9395,7 @@ fn match_other_controlled_creature_enters_gain_one(
 fn match_prowess(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == "Prowess").then(|| {
         RecipeEmission::TriggeredAbility(TriggeredAbilityDef {
+            program: None,
             ability_id: context.triggered_ability_id.clone(),
             presentation: context.presentation.clone(),
             trigger: TriggerCondition::WheneverPlayerCastsSpell {
@@ -9415,6 +9462,7 @@ fn match_crew(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     }
 
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -9623,6 +9671,7 @@ fn match_tap_for_one_mana(text: &str, context: &RecipeContext) -> Option<RecipeE
         return None;
     }
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -9645,6 +9694,7 @@ fn match_tap_for_one_mana(text: &str, context: &RecipeContext) -> Option<RecipeE
 fn match_tap_for_any_color(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == "{T}: Add one mana of any color.").then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -9673,6 +9723,7 @@ fn match_tap_for_any_color(text: &str, context: &RecipeContext) -> Option<Recipe
 fn match_pay_one_tap_for_any_color(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == "{1}, {T}: Add one mana of any color.").then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -9732,6 +9783,7 @@ fn utility_activated_ability(
     targeting: Option<TargetingDef>,
 ) -> RecipeEmission {
     RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -9940,6 +9992,7 @@ fn match_pay_one_for_any_color_once_per_turn(
         && text == "{1}: Add one mana of any color. Activate only once each turn.")
         .then(|| {
             RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                program: None,
                 intrinsic_land_mana: false,
                 ability_id: context.activated_ability_id.clone(),
                 presentation: context.presentation.clone(),
@@ -9971,6 +10024,7 @@ fn match_creature_self_pump_one_one(text: &str, context: &RecipeContext) -> Opti
     (context.source_is_creature && text == "{1}{B}: This creature gets +1/+1 until end of turn.")
         .then(|| {
             RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                program: None,
                 intrinsic_land_mana: false,
                 ability_id: context.activated_ability_id.clone(),
                 presentation: context.presentation.clone(),
@@ -10002,6 +10056,7 @@ fn match_creature_self_pump_two_two_once_per_turn(
             == "{2}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.")
         .then(|| {
             RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                program: None,
                 intrinsic_land_mana: false,
                 ability_id: context.activated_ability_id.clone(),
                 presentation: context.presentation.clone(),
@@ -10035,6 +10090,7 @@ fn match_creature_team_pump_one_one(text: &str, context: &RecipeContext) -> Opti
         _ => return None,
     };
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -10086,6 +10142,7 @@ fn match_tap_for_multicolor_mana(text: &str, context: &RecipeContext) -> Option<
     }
 
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -10136,6 +10193,7 @@ fn match_activated_tap_conditional_pair_mana(
     let (first, second) = (color(first)?, color(second)?);
     REVIEWED_PAIRS.contains(&(first, second)).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -10189,6 +10247,7 @@ fn match_activated_tap_conditional_pair_mana(
 fn match_sacrifice_to_naturalize(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == "{1}, Sacrifice this creature: Destroy target artifact or enchantment.").then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -10222,6 +10281,7 @@ fn match_land_tap_sacrifice_draw_one(
 ) -> Option<RecipeEmission> {
     (context.source_is_land && text == "{4}, {T}, Sacrifice this land: Draw a card.").then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -10253,6 +10313,7 @@ fn match_land_tap_sacrifice_search_basic_tapped(
             == "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.")
         .then(|| {
             RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                program: None,
                 intrinsic_land_mana: false,
                 ability_id: context.activated_ability_id.clone(),
                 presentation: context.presentation.clone(),
@@ -10291,6 +10352,7 @@ fn match_land_pay_four_tap_surveil_one(
 ) -> Option<RecipeEmission> {
     (context.source_is_land && text == "{4}, {T}: Surveil 1.").then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -10328,6 +10390,7 @@ fn hand_discard_ability(
     effect: SpellEffectKind,
 ) -> RecipeEmission {
     RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -10883,6 +10946,7 @@ fn match_activated_creature_self_pump_plus_one_zero(
     let cost = text.strip_suffix(": This creature gets +1/+0 until end of turn.")?;
     let mana = issue_327_single_colored_symbol(cost)?;
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -10977,6 +11041,7 @@ fn match_activated_tap_discard_draw_one(
 ) -> Option<RecipeEmission> {
     (text == ISSUE_327_TAP_DISCARD_DRAW_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -11092,6 +11157,7 @@ fn match_activated_sacrifice_self_destroy_enchantment(
 ) -> Option<RecipeEmission> {
     (text == ISSUE_328_SACRIFICE_SELF_DESTROY_ENCHANTMENT_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -11140,6 +11206,7 @@ fn match_triggered_upkeep_self_damage_controller_one(
 fn match_activated_tap_surveil_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == ISSUE_328_TAP_SURVEIL_ONE_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -11184,6 +11251,7 @@ fn match_activated_mana_tap_surveil_one(
     let cost = exact_mana_cost(prefix)?;
     REVIEWED_COSTS.contains(&prefix).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -11213,6 +11281,7 @@ fn match_activated_tap_target_creature_gains_haste(
 ) -> Option<RecipeEmission> {
     (text == ISSUE_328_TAP_TARGET_CREATURE_GAINS_HASTE_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -11471,6 +11540,7 @@ fn any_one_color_mana_options(per_color: u32) -> Vec<ManaAmount> {
 /// sacrifice or mana variants, restrictions, and other multipliers stay unsupported.
 fn tap_for_any_one_color_mana(context: &RecipeContext, per_color: u32) -> RecipeEmission {
     RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -12316,6 +12386,7 @@ fn match_two_counter_self_activation(
             .strip_suffix(": Put two +1/+1 counters on this creature.")?,
     )?;
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -13311,6 +13382,7 @@ fn match_activated_pay_life_pump_self_once_per_turn(
     (context.source_is_creature && text == ISSUE_358_PAY_LIFE_PUMP_ONCE_PER_TURN_CLAUSE).then(
         || {
             RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                program: None,
                 intrinsic_land_mana: false,
                 ability_id: context.activated_ability_id.clone(),
                 presentation: context.presentation.clone(),
@@ -13365,6 +13437,7 @@ fn match_activated_graveyard_exile_self_draw_one_lose_one(
 ) -> Option<RecipeEmission> {
     (text == ISSUE_358_GRAVEYARD_EXILE_SELF_DRAW_ONE_LOSE_ONE_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -13794,6 +13867,7 @@ fn match_sacrifice_another_creature_or_token_draw_sorcery(
 ) -> Option<RecipeEmission> {
     (context.source_is_creature && text == ISSUE_417_ICE_CREAM_KITTY_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -13845,6 +13919,7 @@ fn match_animate_noncreature_artifact_four_four(
     (text == ISSUE_417_TOUGH_COOKIE_ANIMATION_CLAUSE).then(|| {
         let target = issue_417_noncreature_artifact_you_control();
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -14225,6 +14300,7 @@ fn match_activated_pump_count_graveyard_permanent_cards(
             == "{8}: Until end of turn, this creature gets +1/+1 for each permanent card in your graveyard.")
     .then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -14393,6 +14469,7 @@ fn match_activated_graveyard_put_counters_count_graveyard_land_cards(
             == "Renew — {1}{G}, Exile this card from your graveyard: Put X +1/+1 counters on target creature, where X is the number of land cards in your graveyard. Activate only as a sorcery.")
     .then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -14506,6 +14583,7 @@ fn match_activated_put_counter_and_draw_graveyard_threshold_once(
             == "Threshold — {1}{U}: Put a +1/+1 counter on this creature and draw a card. Activate only if there are seven or more cards in your graveyard and only once.")
     .then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -15724,6 +15802,7 @@ fn match_enters_or_attacks_draw_discard(
 fn match_hybrid_mana_surveil_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (context.source_is_creature && text == ISSUE_377_HYBRID_MANA_SURVEIL_ONE_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -15960,6 +16039,7 @@ fn match_activated_create_villain_menace_only_two_creature_cards_graveyard(
 ) -> Option<RecipeEmission> {
     (context.source_is_creature && text == ISSUE_371_ARNIM_ACTIVATED_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -16049,6 +16129,7 @@ fn match_activated_create_worm_for_each_land_graveyard_card(
 ) -> Option<RecipeEmission> {
     (context.source_is_creature && text == ISSUE_371_LLUWEN_ACTIVATED_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -16126,6 +16207,7 @@ fn match_activated_create_elf_for_each_elf_graveyard_card_sorcery(
 ) -> Option<RecipeEmission> {
     (context.source_is_enchantment && text == ISSUE_371_MORCANT_ACTIVATED_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -16517,6 +16599,7 @@ fn match_activated_transform_graveyard_distinct_permanent_types_4(
         && text == ISSUE_375_MATZALANTLI_CLAUSE)
         .then(|| {
             RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                program: None,
                 intrinsic_land_mana: false,
                 ability_id: context.activated_ability_id.clone(),
                 presentation: context.presentation.clone(),
@@ -16623,6 +16706,7 @@ fn match_activated_tri_color_mana_once_each_turn(
         return None;
     }
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -17505,6 +17589,7 @@ fn match_activated_remove_counter_grant_indestructible(
 ) -> Option<RecipeEmission> {
     (context.source_is_creature && text == ISSUE_414_BURDENED_STONEBACK_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -17536,6 +17621,7 @@ fn match_activated_remove_counter_draw_one(
 ) -> Option<RecipeEmission> {
     (context.source_is_creature && text == ISSUE_414_MOONLIT_LAMENTER_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -17575,6 +17661,7 @@ fn match_activated_remove_counter_pump_flying_another_creature(
             ..TargetFilter::default()
         };
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -17639,6 +17726,7 @@ fn match_activated_remove_counter_pump_minus_two(
         )];
         costs.extend(issue_414_remove_two_counters_from_source());
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -17675,6 +17763,7 @@ fn match_activated_remove_counter_return_small_creature_card(
         )];
         costs.extend(issue_414_remove_two_counters_from_source());
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            program: None,
             intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -18113,6 +18202,7 @@ fn match_activated_each_opponent_damage(
         vec![AbilityCost::Mana(exact_mana_cost(cost)?)]
     };
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        program: None,
         intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -47608,6 +47698,7 @@ mod tests {
                 keywords: Vec::new(),
                 protections: Box::default(),
                 triggered_abilities: vec![TriggeredAbilityDef {
+                    program: None,
                     ability_id: AbilityId::new("triggered_01").expect("static nested ability id"),
                     presentation: AbilityPresentation::Fallback,
                     trigger: TriggerCondition::WheneverSelfAttacks {
@@ -47838,6 +47929,7 @@ mod tests {
                 protections: Box::default(),
                 triggered_abilities: Vec::new(),
                 activated_abilities: vec![ActivatedAbilityDef {
+                    program: None,
                     intrinsic_land_mana: false,
                     ability_id: AbilityId::new("activated_01").expect("static nested ability id"),
                     presentation: AbilityPresentation::Fallback,
@@ -49082,6 +49174,7 @@ mod tests {
         assert_eq!(
             matched.emission,
             RecipeEmission::TriggeredAbility(TriggeredAbilityDef {
+                program: None,
                 ability_id: AbilityId::new("triggered_01").unwrap(),
                 presentation: AbilityPresentation::OracleLines(vec![1]),
                 trigger: TriggerCondition::WhenSelfEntersBattlefield,
@@ -49257,6 +49350,7 @@ mod tests {
         assert_eq!(
             matched.emission,
             RecipeEmission::TriggeredAbility(TriggeredAbilityDef {
+                program: None,
                 ability_id: AbilityId::new("triggered_01").unwrap(),
                 presentation: AbilityPresentation::OracleLines(vec![1]),
                 trigger: TriggerCondition::WheneverSelfAttacks {
@@ -53990,6 +54084,7 @@ mod tests {
 
     fn issue_429_triggered(effect: SpellEffectKind) -> RecipeEmission {
         RecipeEmission::TriggeredAbility(TriggeredAbilityDef {
+            program: None,
             ability_id: AbilityId::new("triggered_01").unwrap(),
             presentation: AbilityPresentation::OracleLines(vec![1]),
             trigger: TriggerCondition::WhenSelfEntersBattlefield,
@@ -54120,6 +54215,7 @@ mod tests {
                 false,
                 false,
                 vec![ActivatedAbilityDef {
+                    program: None,
                     intrinsic_land_mana: false,
                     ability_id: AbilityId::new("activated_01").unwrap(),
                     presentation: AbilityPresentation::Fallback,
@@ -54151,6 +54247,7 @@ mod tests {
                 false,
                 false,
                 vec![ActivatedAbilityDef {
+                    program: None,
                     intrinsic_land_mana: false,
                     ability_id: AbilityId::new("activated_01").unwrap(),
                     presentation: AbilityPresentation::Fallback,

@@ -70,6 +70,10 @@ pub struct ActivatedAbilityDef {
     /// CR 608.2: the ability's effects, resolved in the order written — the same shape and the
     /// same semantics as a spell's `spell_effect`. A single-effect ability is a one-element list.
     pub effect: Vec<SpellEffectKind>,
+    /// Authored result-bearing resolution body for this exact ability. Mutually exclusive with
+    /// the legacy effect list; target roles bind through the owner's authored target groups.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program: Option<crate::CardProgram>,
     #[serde(default)]
     pub targeting: Option<TargetingDef>,
     /// Additional timing instruction printed after the ability's effect (CR 602.1b). Normal
@@ -332,11 +336,32 @@ impl ActivatedAbilityDef {
             || self.is_loyalty_ability()
     }
 
+    /// A resolving grant has no stable ability-definition owner in the registry, so it cannot
+    /// refer to an authored program that needs an exact compiled owner.
+    pub(crate) fn reject_unowned_authored_program(&self) -> Result<(), String> {
+        if self.program.is_some() {
+            return Err("resolving-created abilities cannot use authored programs".into());
+        }
+        Ok(())
+    }
+
     pub(crate) fn validate_shape(&self) -> Result<(), String> {
         self.ability_id.validate()?;
         self.presentation.validate()?;
-        if self.effect.is_empty() {
+        if self.effect.is_empty() && self.program.is_none() {
             return Err("activated ability must contain at least one effect".into());
+        }
+        if !self.effect.is_empty() && self.program.is_some() {
+            return Err("activated ability cannot combine a program with legacy effects".into());
+        }
+        if self.program.is_some()
+            && self.source_zone != super::AbilitySourceZone::Battlefield
+            && self
+                .targeting
+                .as_ref()
+                .is_some_and(TargetingDef::requires_opponent_choice)
+        {
+            return Err("authored opponent-choice groups require a battlefield source".into());
         }
         if self
             .effect
@@ -612,12 +637,16 @@ impl ActivatedAbilityDef {
         {
             return Err("attack-recipient effects require an attack trigger".into());
         }
-        TargetingDef::validate_activation(
-            self.targeting.as_ref(),
-            &self.effect,
-            self.source_zone,
-            &self.costs,
-        )
+        if self.program.is_some() {
+            Ok(())
+        } else {
+            TargetingDef::validate_activation(
+                self.targeting.as_ref(),
+                &self.effect,
+                self.source_zone,
+                &self.costs,
+            )
+        }
     }
 }
 
@@ -1563,6 +1592,10 @@ pub struct TriggeredAbilityDef {
     /// lose 1 life" is `[Draw(count: 1), LoseLife(amount: Fixed(1))]`.
     #[serde(default)]
     pub effect: Vec<SpellEffectKind>,
+    /// Authored result-bearing resolution body for this exact ability. Mutually exclusive with
+    /// the legacy effect list and modal owner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program: Option<crate::CardProgram>,
     /// CR 603.3c / 700.2b: modes selected as this triggered ability is put on the stack.
     /// Mutually exclusive with `effect`; each mode owns its own effects and targeting.
     #[serde(default)]
@@ -1649,6 +1682,20 @@ impl TriggeredAbilityDef {
         Ok(())
     }
 
+    /// A resolving grant has no stable ability-definition owner in the registry. Reject both a
+    /// direct program and a program attached to any exact modal sibling.
+    pub(crate) fn reject_unowned_authored_program(&self) -> Result<(), String> {
+        if self.program.is_some()
+            || self
+                .modal
+                .as_ref()
+                .is_some_and(|modal| modal.modes.iter().any(|mode| mode.program.is_some()))
+        {
+            return Err("resolving-created abilities cannot use authored programs".into());
+        }
+        Ok(())
+    }
+
     pub(crate) fn validate_shape(&self) -> Result<(), String> {
         self.validate_shape_with_token_copy_cohort_exile(false)
     }
@@ -1665,8 +1712,13 @@ impl TriggeredAbilityDef {
         self.validate_trigger_limit()?;
         self.ability_id.validate()?;
         self.presentation.validate()?;
-        if self.effect.is_empty() == self.modal.is_none() {
-            return Err("triggered ability requires exactly one of effect or modal".into());
+        let resolution_owners = usize::from(!self.effect.is_empty())
+            + usize::from(self.modal.is_some())
+            + usize::from(self.program.is_some());
+        if resolution_owners != 1 {
+            return Err(
+                "triggered ability requires exactly one of effect, program, or modal".into(),
+            );
         }
         if allow_token_copy_cohort_exile
             && (!matches!(self.trigger, TriggerCondition::AtBeginningOfNextEndStep)
@@ -1894,6 +1946,8 @@ impl TriggeredAbilityDef {
                 return Err("modal triggered ability uses per-mode targeting".into());
             }
             modal.validate(EffectContext::Ability)
+        } else if self.program.is_some() {
+            Ok(())
         } else {
             TargetingDef::validate_optional(self.targeting.as_ref(), &self.effect)
         }
@@ -2879,6 +2933,7 @@ mod combat_damage_trigger_cardinality_tests {
             effect: vec![SpellEffectKind::Destroy {
                 subject: EffectSubject::TriggerObject,
             }],
+            program: None,
             modal: None,
             targeting: None,
             may: false,

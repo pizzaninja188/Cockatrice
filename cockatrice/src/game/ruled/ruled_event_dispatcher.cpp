@@ -1496,7 +1496,53 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         rcr.candidate_source_zones_size() == 0 && rcr.candidate_player_ids_size() == 0 &&
         rcr.candidate_token_identities_size() == 0 && rcr.selection_alternatives_size() == 0 &&
         rcr.resolution_branches_size() == 0 && rcr.combat_defender_options_size() == 0;
-    if (rcr.candidate_object_ids_size() <= 0 && !isEmptyLibrarySearch && !isEmptyOptionalHandPick) {
+    const bool isOptionalTargetObjectsChoice =
+        rcr.choice_kind() == ruled::v1::CHOICE_KIND_TARGET_OBJECTS && rcr.min() == 0 && rcr.max() == 1;
+    if (rcr.candidate_object_ids_size() <= 0 && !isEmptyLibrarySearch && !isEmptyOptionalHandPick &&
+        !isOptionalTargetObjectsChoice) {
+        return;
+    }
+
+    // CR 707.10c copy retargeting is one optional typed occurrence at a time. Preserve player
+    // candidates in their separate identity domain, and keep the empty Keep Original answer
+    // actionable even when no legal new target exists.
+    if (isOptionalTargetObjectsChoice) {
+        const int objectCount = rcr.candidate_object_ids_size();
+        QSet<quint32> objectIds;
+        QSet<int> playerIds;
+        bool valid = !rcr.ordered() && !rcr.unique_names() &&
+                     rcr.candidate_card_ids_size() == objectCount && rcr.candidate_names_size() == objectCount &&
+                     rcr.candidate_server_card_ids_size() == 0 && rcr.candidate_source_zones_size() == 0 &&
+                     rcr.candidate_selectable_size() == 0 && rcr.candidate_token_identities_size() == 0 &&
+                     rcr.selection_alternatives_size() == 0 && rcr.resolution_branches_size() == 0 &&
+                     rcr.combat_defender_options_size() == 0;
+        for (const auto objectId : rcr.candidate_object_ids()) {
+            valid = valid && objectId != 0 && !objectIds.contains(objectId);
+            objectIds.insert(objectId);
+        }
+        for (const auto playerId : rcr.candidate_player_ids()) {
+            valid = valid && playerId >= 0 && !playerIds.contains(playerId);
+            playerIds.insert(playerId);
+        }
+        if (!valid) {
+            qWarning() << "Rejecting malformed typed copy-target candidates";
+            return;
+        }
+        PendingChoice choice;
+        choice.kind = ChoiceKind::CopyTarget;
+        choice.min = 0;
+        choice.max = 1;
+        choice.promptText = QString::fromStdString(rcr.prompt_text());
+        choice.mayDecline = true;
+        choice.emptyChoiceActionLabel = tr("Keep original target");
+        for (const auto objectId : rcr.candidate_object_ids()) {
+            choice.candidateOids.append(objectId);
+        }
+        for (const auto playerId : rcr.candidate_player_ids()) {
+            choice.candidatePlayerIds.append(static_cast<quint32>(playerId));
+        }
+        state->setPendingChoice(std::move(choice));
+        ctx.matchingResolutionChoiceSeen = true;
         return;
     }
 

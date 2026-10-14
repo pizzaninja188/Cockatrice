@@ -118,11 +118,11 @@ fn blue_actual_twincast_copies_x_and_shuffles_only_its_copy_owner() {
     assert!(engine.state.pending_resolution.is_some());
     let before = serde_json::to_vec(&engine.state).unwrap();
     assert!(engine
-        .apply_scenario_command(0, &submit_resolution_choice(vec![2]))
+        .apply_scenario_command(0, &submit_resolution_player_choice(vec![2]))
         .is_err());
     assert_eq!(serde_json::to_vec(&engine.state).unwrap(), before);
     engine
-        .apply_scenario_command(1, &submit_resolution_choice(vec![2]))
+        .apply_scenario_command(1, &submit_resolution_player_choice(vec![2]))
         .unwrap();
     let copy = engine.state.stack.last().unwrap().clone();
     assert!(copy.is_copy && copy.id != source);

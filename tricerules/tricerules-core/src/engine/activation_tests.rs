@@ -20,6 +20,29 @@ const OPPONENT_CHOICE_LAND: &str = r#"(
     )],
 )"#;
 
+const AUTHORED_OPPONENT_CHOICE_LAND: &str = r#"(
+    id: "authored_opponent_choice_land", name: "Authored Opponent Choice Land",
+    face_id: "authored_opponent_choice_land", types: ["Land"],
+    activated_abilities: [(
+        ability_id: "activated_01", presentation: Fallback,
+        costs: [Mana("{3}"), Tap], effect: [],
+        program: Some((body: (steps: [
+            (id: "damage_own", kind: Perform(DamageTarget(
+                amount: 1, target: (kind: Creature, controller: You)))),
+            (id: "damage_opponent", kind: Perform(DamageTarget(
+                amount: 1, target: (kind: Creature, controller: Opponent))))
+        ], yields: []), target_bindings: [
+            (instruction_id: "damage_own", role: Target, target_group_index: 0),
+            (instruction_id: "damage_opponent", role: Target, target_group_index: 1)
+        ])),
+        targeting: Some((groups: [
+            (min: 1, max: 1, prompt: "Choose your creature", effect_indices: []),
+            (min: 1, max: 1, prompt: "Choose an opponent's creature", effect_indices: [],
+             chooser: ChosenOpponent)
+        ]))
+    )]
+)"#;
+
 const PAYMENT_CREATURE: &str = r#"(
     id: "payment_creature", name: "Payment Creature", face_id: "payment_creature",
     types: ["Creature"], power: Some(2), toughness: Some(2),
@@ -200,6 +223,161 @@ fn concede(engine: &mut GameEngine, player: PlayerId) -> RuledEventBatch {
             },
         )
         .unwrap()
+}
+
+#[test]
+fn authored_battlefield_chosen_opponent_uses_the_staged_target_and_exact_owner() {
+    let registry = CardRegistry::from_chunks_and_tokens(
+        &[
+            include_str!("../../../tricerules-cards/data/forest.ron"),
+            include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+            AUTHORED_OPPONENT_CHOICE_LAND,
+        ],
+        &[],
+    )
+    .expect("authored opponent-choice ability compiles");
+    let decks = (0..2)
+        .map(|_| EngineDeck {
+            mainboard: vec!["forest".into(); 40],
+            commanders: Vec::new(),
+        })
+        .collect();
+    let mut engine = GameEngine::new_with_registry(
+        602_302,
+        &[10, 20],
+        20,
+        Some(decks),
+        true,
+        Box::leak(Box::new(registry)),
+    )
+    .expect("engine");
+    engine.state.turn_step = TurnStep::Main1;
+    engine.state.priority_idx = 0;
+    let source = place_ready(&mut engine, 10, "Authored Opponent Choice Land");
+    let own_creature = place_ready(&mut engine, 10, "Grizzly Bears");
+    let opponent_creature = place_ready(&mut engine, 20, "Grizzly Bears");
+    engine.state.players[0].mana_pool.colorless = 3;
+
+    let source_generation = engine.payment_object_ref(source).zone_change_generation;
+    let own_generation = engine
+        .payment_object_ref(own_creature)
+        .zone_change_generation;
+    let begin = RuledCommand {
+        cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(
+            rv1::BeginAbilityActivation {
+                source_object_id: source,
+                expected_zone_change_generation: source_generation,
+                ability_index: 0,
+                source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+                own_target: Some(rv1::AbilityActivationTarget {
+                    object_id: own_creature,
+                    zone_change_generation: own_generation,
+                    group_index: 0,
+                }),
+                opponent_player_id: Some(20),
+            },
+        )),
+    };
+    let batch = engine
+        .apply_scenario_command(10, &begin)
+        .expect("controller announces the authored battlefield ability");
+    let pending_for_opponent = batch.legal_by_player[&20]
+        .pending_ability_activation
+        .as_ref()
+        .expect("the chosen opponent receives the target group");
+    assert_eq!(
+        pending_for_opponent.deciding_player_id, 20,
+        "only the chosen opponent decides the authored target group"
+    );
+    let candidate = pending_for_opponent
+        .target_candidates
+        .iter()
+        .find(|target| target.object_id == opponent_creature && target.group_index == 1)
+        .cloned()
+        .expect("the authored second target binding is offered in group one");
+
+    let occurrence = engine
+        .pending_ability_activation_internal
+        .as_ref()
+        .expect("the announcement is captured before costs")
+        .effective
+        .occurrence
+        .clone();
+    let crate::state::ActivatedAbilityOccurrence::Printed(definition) = &occurrence else {
+        panic!("the authored ability must retain its printed exact definition")
+    };
+    assert_eq!(definition.card_id, "authored_opponent_choice_land");
+    assert_eq!(definition.face_id.as_str(), "authored_opponent_choice_land");
+    assert_eq!(definition.ability_path[0].as_str(), "activated_01");
+    assert!(engine
+        .registry
+        .compiled_program_for_owner(&tricerules_card_model::ProgramOwnerId::ability(
+            definition.clone(),
+        ))
+        .is_some());
+
+    let pending = engine.state.pending_ability_activation.as_ref().unwrap();
+    engine
+        .apply_scenario_command(
+            20,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
+                    rv1::SubmitAbilityActivationChoice {
+                        transaction_id: pending.transaction_id,
+                        expected_revision: pending.revision,
+                        target: Some(candidate),
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("the opponent supplies the second target");
+    assert_eq!(
+        engine
+            .state
+            .pending_ability_activation
+            .as_ref()
+            .unwrap()
+            .stage(),
+        rv1::AbilityActivationStage::Payment
+    );
+
+    let pending = engine.state.pending_ability_activation.as_ref().unwrap();
+    engine
+        .apply_scenario_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                    rv1::CommitAbilityActivation {
+                        transaction_id: pending.transaction_id,
+                        expected_revision: pending.revision,
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("the controller pays and commits the announced ability");
+    let stack_item = engine.state.stack.last().expect("ability is on the stack");
+    assert_eq!(
+        stack_item.activated_ability_occurrence.as_ref(),
+        Some(&occurrence)
+    );
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+    assert!(engine.state.objects[&source].tapped);
+
+    for _ in 0..2 {
+        let actor = engine.state.priority_player_id();
+        engine
+            .apply_scenario_command(
+                actor,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                },
+            )
+            .expect("pass priority to resolve the staged authored ability");
+    }
+    assert_eq!(engine.state.objects[&own_creature].damage, 1);
+    assert_eq!(engine.state.objects[&opponent_creature].damage, 1);
 }
 
 #[test]

@@ -3,7 +3,7 @@
 // review map and review packet evidence live under authoring/review-maps and build/direct-ron.
 // CR 614.1c/d: the entered-tapped replacement is evaluated against the proposed entry, so
 // lands entering at the same time do not count as basic lands already controlled. CR 121.1
-// (draw) and CR 701.8 (discard) for the loot ability.
+// (draw) and CR 701.9 (discard) for the loot ability.
 (
   id: "agna_qela",
   name: "Agna Qel'a",
@@ -33,7 +33,12 @@
       ability_id: "activated_02",
       presentation: OracleLines([3]),
       costs: [Mana("{2}{U}"), Tap],
-      effect: [DrawDiscard(draw_count: 1, discard_count: 1, order: DrawThenDiscard)],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
+        (id: "discard_one", kind: Perform(Discard(
+          who: Controller, quantity: Exact(1)))),
+      ], yields: []), target_bindings: [])),
     ),
   ],
 )

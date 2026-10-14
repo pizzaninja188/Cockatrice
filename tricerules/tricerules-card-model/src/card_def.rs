@@ -21,7 +21,7 @@ use crate::primitives::{
     PermanentTypeFilter, PowerComparison, ProtectionQuality, ResolutionCost, SpellCostModifier,
     SpellEffectKind, StaticAbilityDef, TargetingDef, TriggeredAbilityDef, ZoneCardFilter,
 };
-use crate::{AbilityId, AbilityPresentation, CardFaceId, IdentifiedAbility, ModeId};
+use crate::{AbilityId, AbilityPresentation, CardFaceId, CardProgram, IdentifiedAbility, ModeId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -41,6 +41,11 @@ pub struct ModeDef {
     /// Data-driven effects for this mode, resolved from this mode's own target group.
     #[serde(default)]
     pub effects: Vec<SpellEffectKind>,
+    /// Authored result-bearing resolution body for this exact mode. Mutually exclusive with
+    /// `effects`; when any sibling mode uses a program, the registry compiles every sibling mode
+    /// through the same exact-owner path, including supported legacy-effect siblings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program: Option<CardProgram>,
     #[serde(default)]
     pub targeting: Option<TargetingDef>,
 }
@@ -114,17 +119,19 @@ impl ModalDef {
             if !mode_ids.insert(&mode.mode_id) {
                 return Err(format!("duplicate mode id '{}'", mode.mode_id));
             }
-            if mode.effects.is_empty() {
+            if mode.effects.is_empty() == mode.program.is_none() {
                 return Err(format!(
-                    "modal mode '{}' must contain at least one effect",
+                    "modal mode '{}' requires exactly one of effects or program",
                     mode.mode_id
                 ));
             }
-            for effect in &mode.effects {
-                effect.validate(context)?;
+            if mode.program.is_none() {
+                for effect in &mode.effects {
+                    effect.validate(context)?;
+                }
+                SpellEffectKind::validate_list(&mode.effects)?;
+                TargetingDef::validate_optional(mode.targeting.as_ref(), &mode.effects)?;
             }
-            SpellEffectKind::validate_list(&mode.effects)?;
-            TargetingDef::validate_optional(mode.targeting.as_ref(), &mode.effects)?;
         }
         Ok(())
     }
@@ -1839,6 +1846,7 @@ mod tests {
             costs: vec![crate::AbilityCost::Mana(ManaCost::parse("{B}").unwrap())],
             cost_modifiers: Vec::new(),
             effect: vec![SpellEffectKind::None],
+            program: None,
             targeting: None,
             timing: Default::default(),
             conditions: Vec::new(),
@@ -1907,6 +1915,7 @@ mod tests {
             costs: vec![AbilityCost::Mana(ManaCost::parse("{B}").unwrap())],
             cost_modifiers: Vec::new(),
             effect: vec![SpellEffectKind::None],
+            program: None,
             targeting: None,
             timing: Default::default(),
             conditions: Vec::new(),

@@ -4896,6 +4896,59 @@ TEST_F(RuledBatchTest, ProliferateChoiceShowsPublicPermanentsButRoutesPlayerIdsO
     EXPECT_EQ(findCardByEngineOid(p1, 601u), bear);
 }
 
+TEST_F(RuledBatchTest, CopyRetargetKeepsPlayerCandidatesPrivateWhileObjectCandidatesStayPublic)
+{
+    Server_Card *bear = addCardToTable(p1, QStringLiteral("Grizzly Bears"));
+    ruled::v1::RuledPerPlayerView view = buildPerPlayerView(p1, {601u}, {false});
+    applyZoneView(p1, view, nullptr);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *choice = response.mutable_batch()->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
+    choice->set_prompt_text("Target 1 of 1 for the copy: choose a new target or keep the original");
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(601u);
+    choice->add_candidate_player_ids(p2->getPlayerId());
+    updatePendingResolutionChoiceCache(response);
+
+    ResponseContainer deciderReconnect(-1);
+    game->createGameJoinedEvent(p1, deciderReconnect, true);
+    ASSERT_EQ(deciderReconnect.getPostResponseQueue().size(), 3);
+    const auto *deciderContainer =
+        dynamic_cast<const GameEventContainer *>(deciderReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(deciderContainer, nullptr);
+    ruled::v1::RuledEventBatch deciderBatch;
+    ASSERT_TRUE(deciderBatch.ParseFromString(
+        deciderContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    const auto &deciderChoice = deciderBatch.events(0).resolution_choice_required();
+    EXPECT_EQ(deciderChoice.choice_kind(), ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
+    ASSERT_EQ(deciderChoice.candidate_object_ids_size(), 1);
+    EXPECT_EQ(deciderChoice.candidate_object_ids(0), 601u);
+    ASSERT_EQ(deciderChoice.candidate_player_ids_size(), 1);
+    EXPECT_EQ(deciderChoice.candidate_player_ids(0), p2->getPlayerId());
+    EXPECT_EQ(deciderChoice.prompt_text(), "Target 1 of 1 for the copy: choose a new target or keep the original");
+
+    ResponseContainer opponentReconnect(-1);
+    game->createGameJoinedEvent(p2, opponentReconnect, true);
+    ASSERT_EQ(opponentReconnect.getPostResponseQueue().size(), 3);
+    const auto *opponentContainer =
+        dynamic_cast<const GameEventContainer *>(opponentReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(opponentContainer, nullptr);
+    ruled::v1::RuledEventBatch opponentBatch;
+    ASSERT_TRUE(opponentBatch.ParseFromString(
+        opponentContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    const auto &opponentChoice = opponentBatch.events(0).resolution_choice_required();
+    EXPECT_EQ(opponentChoice.choice_kind(), ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
+    ASSERT_EQ(opponentChoice.candidate_object_ids_size(), 1);
+    EXPECT_EQ(opponentChoice.candidate_object_ids(0), 601u);
+    EXPECT_EQ(opponentChoice.candidate_player_ids_size(), 0);
+    EXPECT_EQ(opponentChoice.prompt_text(), "Target 1 of 1 for the copy: choose a new target or keep the original");
+    EXPECT_EQ(findCardByEngineOid(p1, 601u), bear);
+}
+
 TEST_F(RuledBatchTest, ResolvedOmenMovesTheExactStackCardFaceDownAndReconcilesDuplicateLibraryCards)
 {
     const QString cardId = QStringLiteral("dirgur_island_dragon_skimming_strike");

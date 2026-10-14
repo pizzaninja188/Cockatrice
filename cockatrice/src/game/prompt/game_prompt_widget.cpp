@@ -831,7 +831,11 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     castCostDeclineButton->setText(promptState.castCostSkipLabel.isEmpty()
                                        ? tr("Decline")
                                        : tr("Decline — %1").arg(promptState.castCostSkipLabel));
-    declineClickChoiceButton->setText(mode == PromptMode::CastCostObject ? tr("Back") : tr("Decline"));
+    declineClickChoiceButton->setText(
+        mode == PromptMode::CastCostObject
+            ? tr("Back")
+            : (promptState.clickChoiceDeclineLabel.isEmpty() ? tr("Decline")
+                                                               : promptState.clickChoiceDeclineLabel));
     confirmSpellDamageButton->setVisible(false);
 
     // Mode-owned buttons: shown by exactly one mode each, hidden everywhere else.

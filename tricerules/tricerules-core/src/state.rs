@@ -1276,6 +1276,37 @@ pub(crate) struct ProgramRunState {
     pub in_flight: Option<Vec<ResultSlotId>>,
 }
 
+/// Stable target slot for one retargeting decision while a spell copy is being assembled.
+/// Mode ids keep group indices local to the exact copied mode owner.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct CopyTargetOccurrence {
+    pub mode_id: Option<ModeId>,
+    pub group_index: u32,
+    pub slot_index: u32,
+    pub original: StackTarget,
+}
+
+/// One object candidate as it was offered for the active copy-target occurrence. Object ids are
+/// reused across zones, so the generation receipt prevents a delayed click from silently binding
+/// to a returned incarnation.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct CopyTargetObjectOffer {
+    pub object_id: ObjectId,
+    pub kind: i32,
+    pub zone_change_generation: Option<u64>,
+}
+
+/// Server-owned progress for one copied spell's ordered target-occurrence choices.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct CopyTargetChoiceProgress {
+    pub stack: ParkedStackResolution,
+    pub copy_source_object_id: ObjectId,
+    pub remaining: Vec<ParkedStackResolution>,
+    pub occurrences: Vec<CopyTargetOccurrence>,
+    pub cursor: usize,
+    pub selected_targets: Vec<StackTarget>,
+}
+
 /// Common publication and validation data carried by every resolution choice.
 #[derive(serde::Serialize, Debug, Clone)]
 pub struct PendingResolutionPresentation {
@@ -1481,9 +1512,9 @@ pub enum ResolutionContinuation {
         sacrifice: Box<crate::engine::PendingMassSacrifice>,
     },
     CopyTargets {
-        stack: ParkedStackResolution,
-        copy_source_object_id: ObjectId,
-        remaining: Vec<ParkedStackResolution>,
+        progress: CopyTargetChoiceProgress,
+        offered_objects: Vec<CopyTargetObjectOffer>,
+        offered_players: Vec<PlayerId>,
     },
     SearchLibrary {
         stack: ParkedStackResolution,
@@ -1828,7 +1859,6 @@ impl ResolutionContinuation {
             | Self::DifferentNamedGraveyardReturn { stack, .. }
             | Self::LinkedExileChoice { stack, .. }
             | Self::Sacrifice { stack }
-            | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
             | Self::SearchZoneScope { stack, .. }
             | Self::OptionalSearch { stack, .. }
@@ -1854,6 +1884,7 @@ impl ResolutionContinuation {
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::SpecialCast { stack, .. } => Some(stack),
+            Self::CopyTargets { progress, .. } => Some(&progress.stack),
             Self::CounterReplacement { stack, .. } => stack.as_ref(),
             Self::EntryCounterReplacement { resume } => match resume.as_ref() {
                 EntryCounterReplacementResume::Single { stack, .. } => Some(stack),
@@ -1891,7 +1922,6 @@ impl ResolutionContinuation {
             | Self::DifferentNamedGraveyardReturn { stack, .. }
             | Self::LinkedExileChoice { stack, .. }
             | Self::Sacrifice { stack }
-            | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
             | Self::SearchZoneScope { stack, .. }
             | Self::OptionalSearch { stack, .. }
@@ -1917,6 +1947,7 @@ impl ResolutionContinuation {
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::SpecialCast { stack, .. } => Some(stack),
+            Self::CopyTargets { progress, .. } => Some(&mut progress.stack),
             Self::CounterReplacement { stack, .. } => stack.as_mut(),
             Self::EntryCounterReplacement { resume } => match resume.as_mut() {
                 EntryCounterReplacementResume::Single { stack, .. } => Some(stack),

@@ -89,8 +89,26 @@ impl GameEngine {
         use tricerules_card_model::ProgramOwnerId;
 
         let is_ability = top.ability_text.is_some();
+        let captured_authored_program_body = if top.is_triggered {
+            top.triggered_ability.as_ref().is_some_and(|ability| {
+                ability.program.is_some()
+                    || ability
+                        .modal
+                        .as_ref()
+                        .is_some_and(|modal| modal.modes.iter().any(|mode| mode.program.is_some()))
+            })
+        } else {
+            top.activated_ability
+                .as_ref()
+                .is_some_and(|ability| ability.program.is_some())
+        };
         let base_owner = if is_ability {
             let Some(owner) = top.ability_program_owner() else {
+                if captured_authored_program_body {
+                    return Err(EngineError::ProgramInvariant(
+                        "captured authored ability program has no exact owner occurrence",
+                    ));
+                }
                 // Intrinsic mana, keyword-granted, and resolving-grant abilities retain their
                 // legacy behavior because they have no authored definition owner.
                 return Ok(None);
@@ -225,6 +243,11 @@ impl GameEngine {
         {
             return Err(EngineError::ProgramInvariant(
                 "authored spell program owner was not compiled",
+            ));
+        }
+        if captured_authored_program_body {
+            return Err(EngineError::ProgramInvariant(
+                "captured authored ability program was not compiled for its exact owner",
             ));
         }
         Ok(None)
@@ -526,11 +549,8 @@ impl GameEngine {
                     let effect = effect.as_ref().clone();
                     let outputs = instruction.outputs.clone();
                     let input = instruction.input;
-                    let target_context = program_target_context(
-                        top,
-                        compiled,
-                        instruction.source_effect_path.as_ref(),
-                    )?;
+                    let target_context =
+                        program_target_context(top, compiled, instruction.instruction_address)?;
                     program_state.frames[frame_index].next_instruction += 1;
                     program_state.in_flight = Some(outputs.clone());
 
@@ -688,24 +708,21 @@ struct ProgramTargetContext {
     target_group_indices: Vec<u32>,
 }
 
-/// Project the exact target records owned by one compiled instruction. The compiler retained
-/// source paths and role/group bindings; mode-local programs read only their stable mode's target
-/// records and never fall back to the stack-wide flattened target list.
+/// Project the exact target records owned by one compiled instruction address. Mode-local
+/// programs read only their stable mode's target records and never fall back to the stack-wide
+/// flattened target list.
 fn program_target_context(
     top: &StackItem,
     compiled: &CompiledProgram,
-    source_effect_path: Option<&tricerules_card_model::primitives::SourceEffectPath>,
+    instruction_address: u32,
 ) -> Result<ProgramTargetContext, EngineError> {
     if compiled.target_bindings.is_empty() {
         return Ok(ProgramTargetContext::default());
     }
-    let source_effect_path = source_effect_path.ok_or(EngineError::ProgramInvariant(
-        "source-lowered target program instruction lost its source effect path",
-    ))?;
     let mut bindings = compiled
         .target_bindings
         .iter()
-        .filter(|binding| &binding.source_effect_path == source_effect_path)
+        .filter(|binding| binding.instruction_address == instruction_address)
         .collect::<Vec<_>>();
     if bindings.is_empty() {
         return Ok(ProgramTargetContext::default());
@@ -1469,6 +1486,91 @@ mod invariant_rollback_tests {
                     .collect::<Vec<_>>()
             ),
             "static-granted modal units use the complete captured ability path, not the face index"
+        );
+    }
+
+    #[test]
+    fn captured_program_abilities_require_their_exact_registry_owner() {
+        let engine = program_resolution_fixture();
+        let uthros = engine
+            .registry
+            .get("uthros_scanship")
+            .and_then(|card| card.face(0))
+            .expect("Uthros Scanship face");
+        let trigger_definition = uthros
+            .triggered_abilities
+            .iter()
+            .find(|ability| ability.program.is_some())
+            .expect("Uthros authored trigger")
+            .clone();
+        let mut trigger = engine
+            .state
+            .stack
+            .last()
+            .expect("fixture stack item")
+            .clone();
+        trigger.card_id = "uthros_scanship".into();
+        trigger.ability_text = Some("Uthros ETB trigger".into());
+        trigger.is_triggered = true;
+        trigger.triggered_ability = Some(trigger_definition.clone());
+        trigger.trigger_use_key = None;
+        assert_eq!(trigger.ability_program_owner(), None);
+        assert!(matches!(
+            engine.compiled_resolution_program_owners(&trigger),
+            Err(EngineError::ProgramInvariant(
+                "captured authored ability program has no exact owner occurrence"
+            ))
+        ));
+
+        let agna = engine
+            .registry
+            .get("agna_qela")
+            .and_then(|card| card.face(0))
+            .expect("Agna face");
+        let activation_definition = agna
+            .activated_abilities
+            .iter()
+            .find(|ability| ability.program.is_some())
+            .expect("Agna authored activation")
+            .clone();
+        let mut activation = engine
+            .state
+            .stack
+            .last()
+            .expect("fixture stack item")
+            .clone();
+        activation.card_id = "agna_qela".into();
+        activation.ability_text = Some("Agna loot activation".into());
+        activation.is_triggered = false;
+        activation.activated_ability = Some(activation_definition.clone());
+        activation.activated_ability_occurrence = None;
+        assert!(matches!(
+            engine.compiled_resolution_program_owners(&activation),
+            Err(EngineError::ProgramInvariant(
+                "captured authored ability program has no exact owner occurrence"
+            ))
+        ));
+
+        let anvil = engine
+            .registry
+            .get("anvil_of_bogardan")
+            .and_then(|card| card.face(0))
+            .expect("Anvil face");
+        let mut legacy = trigger;
+        legacy.card_id = "anvil_of_bogardan".into();
+        legacy.triggered_ability = Some(
+            anvil
+                .triggered_abilities
+                .first()
+                .expect("Anvil trigger")
+                .clone(),
+        );
+        assert!(legacy.triggered_ability.as_ref().unwrap().program.is_none());
+        assert_eq!(
+            engine
+                .compiled_resolution_program_owners(&legacy)
+                .expect("unowned legacy trigger retains fallback"),
+            None
         );
     }
 }

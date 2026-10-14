@@ -46,7 +46,7 @@ fn insert_legacy_activated_owner(
     ability_path: Vec<tricerules_card_model::AbilityId>,
     ability: &tricerules_card_model::ActivatedAbilityDef,
 ) {
-    if legacy_effects_contain_draw_discard(&ability.effect) {
+    if ability.program.is_none() && legacy_effects_contain_draw_discard(&ability.effect) {
         owners.insert(tricerules_card_model::ProgramOwnerId::ability(
             tricerules_card_model::AbilityDefinitionId {
                 card_id: card_id.to_owned(),
@@ -70,19 +70,17 @@ fn insert_legacy_triggered_owner(
         ability_path,
     };
     if let Some(modal) = &ability.modal {
-        if modal
-            .modes
-            .iter()
-            .any(|mode| legacy_effects_contain_draw_discard(&mode.effects))
-        {
-            for mode in &modal.modes {
+        if modal.modes.iter().any(|mode| {
+            mode.program.is_some() || legacy_effects_contain_draw_discard(&mode.effects)
+        }) {
+            for mode in modal.modes.iter().filter(|mode| mode.program.is_none()) {
                 owners.insert(tricerules_card_model::ProgramOwnerId::ability_mode(
                     definition.clone(),
                     mode.mode_id.clone(),
                 ));
             }
         }
-    } else if legacy_effects_contain_draw_discard(&ability.effect) {
+    } else if ability.program.is_none() && legacy_effects_contain_draw_discard(&ability.effect) {
         owners.insert(tricerules_card_model::ProgramOwnerId::ability(definition));
     }
 }
@@ -93,19 +91,19 @@ fn embedded_draw_discard_source_owners() -> BTreeSet<tricerules_card_model::Prog
     let mut owners = BTreeSet::new();
     for card in registry.definitions() {
         for face in &card.faces {
-            if legacy_effects_contain_draw_discard(&face.spell_effect) {
+            if face.spell_program.is_none()
+                && legacy_effects_contain_draw_discard(&face.spell_effect)
+            {
                 owners.insert(tricerules_card_model::ProgramOwnerId::face(
                     card.id.clone(),
                     face.face_id.clone(),
                 ));
             }
             if let Some(modal) = &face.modal_spell {
-                if modal
-                    .modes
-                    .iter()
-                    .any(|mode| legacy_effects_contain_draw_discard(&mode.effects))
-                {
-                    for mode in &modal.modes {
+                if modal.modes.iter().any(|mode| {
+                    mode.program.is_some() || legacy_effects_contain_draw_discard(&mode.effects)
+                }) {
+                    for mode in modal.modes.iter().filter(|mode| mode.program.is_none()) {
                         owners.insert(tricerules_card_model::ProgramOwnerId::face_mode(
                             card.id.clone(),
                             face.face_id.clone(),
@@ -219,14 +217,349 @@ fn embedded_draw_discard_source_owners() -> BTreeSet<tricerules_card_model::Prog
     owners
 }
 
+fn insert_authored_activated_owner(
+    owners: &mut BTreeSet<tricerules_card_model::ProgramOwnerId>,
+    card_id: &str,
+    face_id: &tricerules_card_model::CardFaceId,
+    ability_path: Vec<tricerules_card_model::AbilityId>,
+    ability: &tricerules_card_model::ActivatedAbilityDef,
+) {
+    if ability.program.is_some() {
+        owners.insert(tricerules_card_model::ProgramOwnerId::ability(
+            tricerules_card_model::AbilityDefinitionId {
+                card_id: card_id.to_owned(),
+                face_id: face_id.clone(),
+                ability_path,
+            },
+        ));
+    }
+}
+
+fn insert_authored_triggered_owner(
+    owners: &mut BTreeSet<tricerules_card_model::ProgramOwnerId>,
+    card_id: &str,
+    face_id: &tricerules_card_model::CardFaceId,
+    ability_path: Vec<tricerules_card_model::AbilityId>,
+    ability: &tricerules_card_model::TriggeredAbilityDef,
+) {
+    let definition = tricerules_card_model::AbilityDefinitionId {
+        card_id: card_id.to_owned(),
+        face_id: face_id.clone(),
+        ability_path,
+    };
+    if let Some(modal) = &ability.modal {
+        for mode in modal.modes.iter().filter(|mode| mode.program.is_some()) {
+            owners.insert(tricerules_card_model::ProgramOwnerId::ability_mode(
+                definition.clone(),
+                mode.mode_id.clone(),
+            ));
+        }
+    } else if ability.program.is_some() {
+        owners.insert(tricerules_card_model::ProgramOwnerId::ability(definition));
+    }
+}
+
+fn source_authored_program_owners() -> BTreeSet<tricerules_card_model::ProgramOwnerId> {
+    use tricerules_card_model::ProgramOwnerId;
+
+    let registry = tricerules_cards::registry::global();
+    let mut owners = BTreeSet::new();
+    for card in registry.definitions() {
+        for face in &card.faces {
+            if face.spell_program.is_some() {
+                owners.insert(ProgramOwnerId::face(card.id.clone(), face.face_id.clone()));
+            }
+            if let Some(modal) = &face.modal_spell {
+                for mode in modal.modes.iter().filter(|mode| mode.program.is_some()) {
+                    owners.insert(ProgramOwnerId::face_mode(
+                        card.id.clone(),
+                        face.face_id.clone(),
+                        mode.mode_id.clone(),
+                    ));
+                }
+            }
+
+            for ability in &face.activated_abilities {
+                insert_authored_activated_owner(
+                    &mut owners,
+                    &card.id,
+                    &face.face_id,
+                    vec![ability.ability_id.clone()],
+                    ability,
+                );
+            }
+            for ability in &face.triggered_abilities {
+                insert_authored_triggered_owner(
+                    &mut owners,
+                    &card.id,
+                    &face.face_id,
+                    vec![ability.ability_id.clone()],
+                    ability,
+                );
+            }
+            for bar in &face.class_level_bars {
+                insert_authored_activated_owner(
+                    &mut owners,
+                    &card.id,
+                    &face.face_id,
+                    vec![bar.level_ability.ability_id.clone()],
+                    &bar.level_ability,
+                );
+                for ability in &bar.activated_abilities {
+                    insert_authored_activated_owner(
+                        &mut owners,
+                        &card.id,
+                        &face.face_id,
+                        vec![ability.ability_id.clone()],
+                        ability,
+                    );
+                }
+                for ability in &bar.triggered_abilities {
+                    insert_authored_triggered_owner(
+                        &mut owners,
+                        &card.id,
+                        &face.face_id,
+                        vec![ability.ability_id.clone()],
+                        ability,
+                    );
+                }
+                for parent in &bar.static_abilities {
+                    insert_static_authored_program_owners(
+                        &mut owners,
+                        &card.id,
+                        &face.face_id,
+                        parent,
+                    );
+                }
+            }
+
+            for parent in &face.static_abilities {
+                insert_static_authored_program_owners(&mut owners, &card.id, &face.face_id, parent);
+            }
+        }
+    }
+    owners
+}
+
+fn insert_static_authored_program_owners(
+    owners: &mut BTreeSet<tricerules_card_model::ProgramOwnerId>,
+    card_id: &str,
+    face_id: &tricerules_card_model::CardFaceId,
+    parent: &tricerules_card_model::IdentifiedStaticAbility,
+) {
+    use tricerules_card_model::primitives::StaticAbilityDef;
+
+    let parent_id = parent.ability_id.clone();
+    let (activated, triggered) = match &parent.definition {
+        StaticAbilityDef::AttachedModifier {
+            activated_abilities,
+            triggered_abilities,
+            ..
+        }
+        | StaticAbilityDef::ConditionalSelfModifier {
+            activated_abilities,
+            triggered_abilities,
+            ..
+        } => (
+            activated_abilities.as_slice(),
+            triggered_abilities.as_slice(),
+        ),
+        StaticAbilityDef::GrantActivatedAbilityToPermanents {
+            activated_abilities,
+            ..
+        } => (activated_abilities.as_slice(), &[][..]),
+        StaticAbilityDef::GrantTriggeredAbilityToPermanents {
+            triggered_abilities,
+            ..
+        }
+        | StaticAbilityDef::ConditionalPermanentTransformation {
+            triggered_abilities,
+            ..
+        } => (&[][..], triggered_abilities.as_slice()),
+        _ => (&[][..], &[][..]),
+    };
+    for ability in activated {
+        insert_authored_activated_owner(
+            owners,
+            card_id,
+            face_id,
+            vec![parent_id.clone(), ability.ability_id.clone()],
+            ability,
+        );
+    }
+    for ability in triggered {
+        insert_authored_triggered_owner(
+            owners,
+            card_id,
+            face_id,
+            vec![parent_id.clone(), ability.ability_id.clone()],
+            ability,
+        );
+    }
+}
+
+fn draw_discard_owner_label(owner: &tricerules_card_model::ProgramOwnerId) -> String {
+    use tricerules_card_model::ProgramOwnerId;
+
+    let face_label = |face: &tricerules_card_model::CardFaceDefinitionId| {
+        format!("{}/{}", face.card_id, face.face_id)
+    };
+    let ability_label = |ability: &tricerules_card_model::AbilityDefinitionId| {
+        format!(
+            "{}/{}:{}",
+            ability.card_id,
+            ability.face_id,
+            ability
+                .ability_path
+                .iter()
+                .map(tricerules_card_model::AbilityId::as_str)
+                .collect::<Vec<_>>()
+                .join("/")
+        )
+    };
+
+    match owner {
+        ProgramOwnerId::Face(face) => format!("face:{}", face_label(face)),
+        ProgramOwnerId::FaceMode { face, mode_id } => {
+            format!("face-mode:{}:{mode_id}", face_label(face))
+        }
+        ProgramOwnerId::Ability(ability) => format!("ability:{}", ability_label(ability)),
+        ProgramOwnerId::AbilityMode { ability, mode_id } => {
+            format!("ability-mode:{}:{mode_id}", ability_label(ability))
+        }
+    }
+}
+
+fn frozen_draw_discard_source_owners() -> BTreeSet<tricerules_card_model::ProgramOwnerId> {
+    use tricerules_card_model::{
+        AbilityDefinitionId, AbilityId, CardFaceId, ModeId, ProgramOwnerId,
+    };
+
+    let face_id = |value: &str| CardFaceId::new(value).expect("frozen face id is canonical");
+    let face = |card_id: &str, face: &str| ProgramOwnerId::face(card_id, face_id(face));
+    let face_mode = |card_id: &str, face: &str, mode: &str| {
+        ProgramOwnerId::face_mode(
+            card_id,
+            face_id(face),
+            ModeId::new(mode).expect("frozen mode id is canonical"),
+        )
+    };
+    let ability = |card_id: &str, face: &str, ability: &str| {
+        ProgramOwnerId::ability(AbilityDefinitionId {
+            card_id: card_id.to_owned(),
+            face_id: face_id(face),
+            ability_path: vec![AbilityId::new(ability).expect("frozen ability id is canonical")],
+        })
+    };
+
+    // Frozen from baseline 05d3fb97 source data plus the six exact owners migrated in this change.
+    BTreeSet::from([
+        face("abandon_attachments", "abandon_attachments"),
+        face("ancestral_reminiscence", "ancestral_reminiscence"),
+        face("broadside_barrage", "broadside_barrage"),
+        face("calamitous_tide", "calamitous_tide"),
+        face("careful_study", "careful_study"),
+        face("focus_the_mind", "focus_the_mind"),
+        face("incinerating_blast", "incinerating_blast"),
+        face("refute", "refute"),
+        face("romantic_rendezvous", "romantic_rendezvous"),
+        face("stormshriek_feral_flush_out", "flush_out"),
+        face("traumatic_critique", "traumatic_critique"),
+        face_mode(
+            "confusticate_and_bebother",
+            "confusticate_and_bebother",
+            "mode_01",
+        ),
+        face_mode(
+            "confusticate_and_bebother",
+            "confusticate_and_bebother",
+            "mode_02",
+        ),
+        face_mode("three_steps_ahead", "three_steps_ahead", "copy"),
+        face_mode("three_steps_ahead", "three_steps_ahead", "counter"),
+        face_mode("three_steps_ahead", "three_steps_ahead", "draw_discard"),
+        ability("agna_qela", "agna_qela", "activated_02"),
+        ability("anvil_of_bogardan", "anvil_of_bogardan", "triggered_01"),
+        ability("bellowing_crier", "bellowing_crier", "triggered_01"),
+        ability(
+            "currency_converter",
+            "currency_converter",
+            "draw_then_discard",
+        ),
+        ability("discerning_peddler", "discerning_peddler", "triggered_01"),
+        ability("dreadwing_scavenger", "dreadwing_scavenger", "triggered_01"),
+        ability("dreadwing_scavenger", "dreadwing_scavenger", "triggered_02"),
+        ability("gristle_glutton", "gristle_glutton", "activated_01"),
+        ability("icewind_elemental", "icewind_elemental", "triggered_01"),
+        ability("keldon_raider", "keldon_raider", "triggered_01"),
+        ability(
+            "kiora,_the_rising_tide",
+            "kiora_the_rising_tide",
+            "triggered_01",
+        ),
+        ability("long_lake_nuisance", "long_lake_nuisance", "triggered_01"),
+        ability("mechan_navigator", "mechan_navigator", "triggered_01"),
+        ability("melded_moxite", "melded_moxite", "triggered_01"),
+        ability(
+            "null_group_biological_assets",
+            "null_group_biological_assets",
+            "triggered_01",
+        ),
+        ability("patient_instructor", "patient_instructor", "triggered_01"),
+        ability("quicksmith_genius", "quicksmith_genius", "triggered_01"),
+        ability("ragged_short_spear", "ragged_short_spear", "triggered_01"),
+        ability("rescue_leopard", "rescue_leopard", "triggered_01"),
+        ability("roiling_dragonstorm", "roiling_dragonstorm", "triggered_01"),
+        ability("rousing_read", "rousing_read", "triggered_01"),
+        ability("silvergill_peddler", "silvergill_peddler", "triggered_01"),
+        ability("strix_lookout", "strix_lookout", "activated_01"),
+        ability("teferis_protege", "teferi_s_protege", "activated_01"),
+        ability("temur_tawnyback", "temur_tawnyback", "triggered_01"),
+        ability(
+            "the_mountain-kings_return",
+            "the_mountain_kings_return",
+            "chapter_i",
+        ),
+        ability("uthros_scanship", "uthros_scanship", "triggered_01"),
+        ability(
+            "volatile_wanderglyph",
+            "volatile_wanderglyph",
+            "triggered_01",
+        ),
+        ability("yuyan_archers", "yuyan_archers", "triggered_01"),
+    ])
+}
+
 #[test]
 fn embedded_draw_discard_source_owner_census_is_complete() {
     let registry = tricerules_cards::registry::global();
-    let owners = embedded_draw_discard_source_owners();
+    let legacy_owners = embedded_draw_discard_source_owners();
+    let frozen_owners = frozen_draw_discard_source_owners();
+    let source_authored_owners = source_authored_program_owners();
+    let authored_owners = frozen_owners
+        .intersection(&source_authored_owners)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    assert!(
+        legacy_owners.is_disjoint(&authored_owners),
+        "converted authored owners must not remain in the legacy source census"
+    );
+    let owners = legacy_owners
+        .union(&authored_owners)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let labels = |owners: &BTreeSet<tricerules_card_model::ProgramOwnerId>| {
+        owners
+            .iter()
+            .map(draw_discard_owner_label)
+            .collect::<Vec<_>>()
+    };
     assert_eq!(
-        owners.len(),
-        45,
-        "embedded source-lowered owner census changed"
+        owners,
+        frozen_owners,
+        "the current legacy/authored partition must exactly cover the frozen baseline cohort; current={:?}, frozen={:?}",
+        labels(&owners),
+        labels(&frozen_owners)
     );
     for owner in &owners {
         let program = registry
@@ -615,6 +948,1028 @@ fn source_lowered_soft_counter_resumes_at_its_following_discard_after_payment() 
     assert!(
         engine.state.stack.len() == 1,
         "the target spell remains on stack"
+    );
+}
+
+#[test]
+fn authored_target_binding_publishes_casts_and_resumes_after_a_soft_counter_choice() {
+    let counter = r#"(
+        id: "authored_program_counter_then_draw",
+        name: "Authored Program Counter Then Draw",
+        face_id: "authored_program_counter_then_draw",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_program: Some((body: (steps: [
+            (id: "counter", kind: Perform(CounterTargetSpell(
+                spell_filter: (), unless_controller_pays: Some(1)))),
+            (id: "draw", bind: ["drawn"], kind: Perform(Draw(count: 1))),
+        ], yields: []), target_bindings: [
+            (instruction_id: "counter", role: Spell, target_group_index: 0),
+        ])),
+        targeting: Some((groups: [(min: 1, max: 1,
+            prompt: "Choose target spell", effect_indices: [])]))
+    )"#;
+    let target = r#"(
+        id: "authored_program_counter_target",
+        name: "Authored Program Counter Target",
+        face_id: "authored_program_counter_target",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [Draw(count: 1)]
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                counter,
+                target,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("authored target-program fixture registry validates"),
+    ));
+    let decks = Some(vec![
+        deck_with("island", &["authored_program_counter_target"]),
+        deck_with("forest", &["authored_program_counter_then_draw"]),
+    ]);
+    let mut engine = GameEngine::new(registry, 9_432, &[0, 1], 20, decks, true)
+        .expect("authored target-program fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_card_into_hand(&mut engine, 0, "authored_program_counter_target");
+    inject_card_into_hand(&mut engine, 1, "authored_program_counter_then_draw");
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(
+                hand_index_for_card(&engine, 0, "authored_program_counter_target"),
+                Vec::new(),
+            ),
+        )
+        .expect("cast the spell that will be targeted");
+    let target_spell = engine.state.stack.last().expect("target spell on stack").id;
+
+    let counter_slot = hand_index_for_card(&engine, 1, "authored_program_counter_then_draw") as u32;
+    let legal = engine
+        .apply_scenario_command(0, &pass())
+        .expect("publish the opponent's target candidates");
+    assert!(
+        legal.legal_by_player[&1].valid_targets_by_hand_slot[&(counter_slot << 8)].groups[0]
+            .valid_stack_ids
+            .contains(&target_spell)
+    );
+
+    engine
+        .apply_scenario_command(
+            1,
+            &cast_spell(
+                counter_slot as usize,
+                vec![TargetRef {
+                    object_id: target_spell,
+                    kind: TargetRefKind::Stack as i32,
+                    group_index: 0,
+                    ..Default::default()
+                }],
+            ),
+        )
+        .expect("submit the exact authored program target reference");
+    engine.state.players[0].mana_pool.colorless = 1;
+    let draws_before = engine.state.turn_history.current.player(1).cards_drawn;
+    pass_priority_round(&mut engine);
+
+    let payment = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("soft-counter instruction parks for its target controller");
+    assert_eq!(payment.presentation.choice_kind, ChoiceKind::ManaPayment);
+    submit_mana_resolution_decision(
+        &mut engine,
+        0,
+        tricerules_proto::ruled::v1::ResolutionChoiceDecision::PayMana,
+    )
+    .expect("pay to preserve the target spell and resume the owner-bound body");
+
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine
+        .state
+        .stack
+        .iter()
+        .any(|item| item.id == target_spell));
+    assert_eq!(
+        engine.state.turn_history.current.player(1).cards_drawn,
+        draws_before + 1,
+        "the instruction after the suspended target action runs exactly once"
+    );
+}
+
+#[test]
+fn authored_program_targets_publish_and_submit_for_activated_and_triggered_owners() {
+    let owner = r#"(
+        id: "authored_program_ability_target_source",
+        name: "Authored Program Ability Target Source",
+        face_id: "authored_program_ability_target_source",
+        mana_cost: "{0}",
+        types: ["Creature"],
+        power: 2,
+        toughness: 2,
+        activated_abilities: [(
+            ability_id: "activated_01", presentation: Fallback,
+            source_zone: Battlefield, costs: [], effect: [],
+            program: Some((body: (steps: [
+                (id: "damage", kind: Perform(DamageTarget(amount: 1,
+                    target: (kind: Creature, controller: Opponent))))
+            ], yields: []), target_bindings: [
+                (instruction_id: "damage", role: Target, target_group_index: 0),
+            ])),
+            targeting: Some((groups: [(min: 1, max: 1,
+                prompt: "Choose an opposing creature", effect_indices: [])])),
+            timing: Normal, conditions: [], activation_limit: None,
+        )],
+        triggered_abilities: [(
+            ability_id: "triggered_01", presentation: Fallback,
+            trigger: WhenSelfEntersBattlefield, effect: [],
+            program: Some((body: (steps: [
+                (id: "damage", kind: Perform(DamageTarget(amount: 1,
+                    target: (kind: Creature, controller: Opponent))))
+            ], yields: []), target_bindings: [
+                (instruction_id: "damage", role: Target, target_group_index: 0),
+            ])),
+            modal: None,
+            targeting: Some((groups: [(min: 1, max: 1,
+                prompt: "Choose an opposing creature", effect_indices: [])])),
+            may: false, intervening_if: None,
+            triggers_only_once: false, max_triggers_per_turn: None,
+        )]
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                owner,
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("activated and triggered target programs compile for their exact owners"),
+    ));
+    let decks = Some(vec![
+        deck_with(
+            "forest",
+            &["authored_program_ability_target_source", "forest", "forest"],
+        ),
+        deck_with("forest", &["grizzly_bears", "forest", "forest"]),
+    ]);
+    let mut engine = GameEngine::new(registry, 9_433, &[0, 1], 20, decks, true)
+        .expect("authored ability target fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let opposing_creature = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
+    inject_card_into_hand(&mut engine, 0, "authored_program_ability_target_source");
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(
+                hand_index_for_card(&engine, 0, "authored_program_ability_target_source"),
+                Vec::new(),
+            ),
+        )
+        .expect("cast the permanent with a targeted ETB program");
+    pass_priority_round(&mut engine);
+
+    let source = *engine.state.players[0]
+        .battlefield
+        .iter()
+        .find(|oid| engine.state.objects[oid].card_id == "authored_program_ability_target_source")
+        .expect("the source resolved onto the battlefield");
+    let ability_key = u64::from(source) << 32;
+    let trigger_targets = &engine.initial_response_batch().legal_by_player[&0]
+        .valid_targets_by_ability[&ability_key]
+        .groups[0];
+    assert_eq!(
+        trigger_targets.valid_permanent_ids,
+        vec![opposing_creature],
+        "the pending trigger publishes candidates from its authored Target binding"
+    );
+    engine
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(
+                    tricerules_proto::ruled::v1::ruled_command::Cmd::ChooseTriggerTarget(
+                        tricerules_proto::ruled::v1::ChooseTriggerTarget {
+                            decline: false,
+                            selected_modes: Vec::new(),
+                            targets: target_object(opposing_creature),
+                        },
+                    ),
+                ),
+            },
+        )
+        .expect("submit the exact authored target for the ETB ability");
+    pass_priority_round(&mut engine);
+    assert_eq!(engine.state.objects[&opposing_creature].damage, 1);
+
+    let activation_targets = &engine.initial_response_batch().legal_by_player[&0]
+        .valid_targets_by_ability[&ability_key]
+        .groups[0];
+    assert_eq!(
+        activation_targets.valid_permanent_ids,
+        vec![opposing_creature],
+        "the printed activated ability publishes candidates through its own owner"
+    );
+    engine
+        .apply_scenario_command(
+            0,
+            &activate_ability_for(&engine, source, 0, target_object(opposing_creature)),
+        )
+        .expect("submit the exact authored target for the activated ability");
+    pass_priority_round(&mut engine);
+    assert_eq!(
+        engine.state.objects[&opposing_creature].zone,
+        tricerules_core::Zone::Graveyard,
+        "the two one-damage program owners resolve the selected 2/2 target"
+    );
+}
+
+#[test]
+fn authored_program_static_grant_uses_its_exact_nested_ability_owner() {
+    let grantor = r#"(
+        id: "authored_program_grant_source",
+        name: "Authored Program Grant Source",
+        face_id: "authored_program_grant_source",
+        mana_cost: "{0}",
+        types: ["Artifact"],
+        static_abilities: [(
+            ability_id: "static_01", presentation: Fallback,
+            definition: GrantActivatedAbilityToPermanents(
+                filter: (kind: AnyPermanent, controller: You, permanent_types: [Creature]),
+                activated_abilities: [(
+                    ability_id: "activated_01", presentation: Fallback,
+                    costs: [Tap], effect: [],
+                    program: Some((body: (steps: [
+                        (id: "damage", kind: Perform(DamageTarget(amount: 1,
+                            target: (kind: Creature, controller: Opponent))))
+                    ], yields: []), target_bindings: [
+                        (instruction_id: "damage", role: Target, target_group_index: 0),
+                    ])),
+                    targeting: Some((groups: [(min: 1, max: 1,
+                        prompt: "Choose an opposing creature", effect_indices: [])]))
+                )],
+            ),
+        )]
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                grantor,
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("static grant compiles its complete nested authored program owner"),
+    ));
+    let decks = Some(vec![
+        deck_with("island", &["authored_program_grant_source"]),
+        deck_with("forest", &["grizzly_bears"]),
+    ]);
+    let mut engine = GameEngine::new(registry, 9_436, &[0, 1], 20, decks, true)
+        .expect("authored static-grant target fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_card_into_hand(&mut engine, 0, "authored_program_grant_source");
+    engine
+        .apply_scenario_command(
+            0,
+            &cast_spell(
+                hand_index_for_card(&engine, 0, "authored_program_grant_source"),
+                Vec::new(),
+            ),
+        )
+        .expect("cast the static grant source through the engine");
+    pass_priority_round(&mut engine);
+    let recipient = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let opposing_creature = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+
+    let legal = engine.initial_response_batch();
+    let ability_targets = &legal.legal_by_player[&0].valid_targets_by_ability;
+    let available_keys = ability_targets.keys().copied().collect::<Vec<_>>();
+    let (&ability_key, target_offer) = ability_targets
+        .iter()
+        .find(|(key, _)| (**key >> 32) as u32 == recipient)
+        .unwrap_or_else(|| {
+            panic!(
+                "the granted ability publishes a target offer; available keys: {available_keys:?}"
+            )
+        });
+    let ability_index = ability_key as u32;
+    let targets = &target_offer.groups[0];
+    assert_eq!(targets.valid_permanent_ids, vec![opposing_creature]);
+    engine
+        .apply_scenario_command(
+            0,
+            &activate_ability_for(
+                &engine,
+                recipient,
+                ability_index,
+                target_object(opposing_creature),
+            ),
+        )
+        .expect("activate the static-granted authored program with its exact target");
+    pass_priority_round(&mut engine);
+
+    assert_eq!(engine.state.objects[&opposing_creature].damage, 1);
+}
+
+#[test]
+fn nested_authored_if_announces_each_owner_local_target_group() {
+    // Both authored groups are required when the spell is cast, even though only one nested
+    // branch executes. The active leaf must receive only the target from its own group.
+    let owner = r#"(
+        id: "nested_authored_target_union",
+        name: "Nested Authored Target Union",
+        face_id: "nested_authored_target_union",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [],
+        spell_program: Some((body: (steps: [
+            (id: "outer", kind: If(
+                condition: CardsInHand(players: Relative(Controller),
+                    min: Some(0), max: Some(50)),
+                yes: (steps: [
+                    (id: "inner", kind: If(
+                        condition: ControllerLibraryEmpty,
+                        yes: (steps: [
+                            (id: "player_damage", kind: Perform(DamageTarget(
+                                amount: 1, target: (kind: OpponentPlayer))))
+                        ], yields: []),
+                        no: (steps: [
+                            (id: "creature_damage", kind: Perform(DamageTarget(
+                                amount: 1, target: (kind: Creature, controller: Opponent))))
+                        ], yields: [])
+                    ))
+                ], yields: []),
+                no: (steps: [], yields: [])
+            ))
+        ], yields: []), target_bindings: [
+            (instruction_id: "creature_damage", role: Target, target_group_index: 0),
+            (instruction_id: "player_damage", role: Target, target_group_index: 1),
+        ])),
+        targeting: Some((groups: [
+            (min: 1, max: 1, prompt: "Choose target opposing creature", effect_indices: []),
+            (min: 1, max: 1, prompt: "Choose target opponent", effect_indices: []),
+        ]))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                owner,
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("nested target branches compile under one face program owner"),
+    ));
+    let decks = Some(vec![
+        deck_with("island", &["nested_authored_target_union", "island"]),
+        deck_with("forest", &["grizzly_bears", "forest"]),
+    ]);
+    let mut engine = GameEngine::new(registry, 9_434, &[0, 1], 20, decks, true)
+        .expect("nested authored target fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let opposing_creature = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
+    inject_card_into_hand(&mut engine, 0, "nested_authored_target_union");
+    let slot = hand_index_for_card(&engine, 0, "nested_authored_target_union");
+
+    let offer = &engine.initial_response_batch().legal_by_player[&0].valid_targets_by_hand_slot
+        [&((slot as u32) << 8)];
+    assert_eq!(offer.groups.len(), 2);
+    assert_eq!(offer.groups[0].valid_permanent_ids, vec![opposing_creature]);
+    assert!(offer.groups[1].can_target_opponent);
+
+    let mut targets = target_object(opposing_creature);
+    let mut opponent_target = target_player(1);
+    opponent_target[0].group_index = 1;
+    targets.extend(opponent_target);
+    engine
+        .apply_scenario_command(0, &cast_spell(slot, targets))
+        .expect("submit both branch-union target groups");
+    pass_priority_round(&mut engine);
+
+    assert_eq!(engine.state.objects[&opposing_creature].damage, 1);
+    assert_eq!(engine.state.players[1].life, 20,
+        "the nested ControllerLibraryEmpty no-arm receives only group 0; group 1 was still announced")
+}
+
+#[test]
+fn authored_copy_program_can_retarget_a_copied_program_with_current_generation() {
+    let targeted = r#"(
+        id: "program_damage_for_copy",
+        name: "Program Damage for Copy",
+        face_id: "program_damage_for_copy",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [],
+        spell_program: Some((body: (steps: [
+            (id: "damage", kind: Perform(DamageTarget(
+                amount: 1, target: (kind: Creature))))
+        ], yields: []), target_bindings: [
+            (instruction_id: "damage", role: Target, target_group_index: 0),
+        ])),
+        targeting: Some((groups: [(min: 1, max: 1,
+            prompt: "Choose target creature", effect_indices: [])]))
+    )"#;
+    let copier = r#"(
+        id: "authored_copy_program",
+        name: "Authored Copy Program",
+        face_id: "authored_copy_program",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [CopyTargetSpell(
+            count: 1, spell_filter: (card_type: Some(InstantOrSorcery)))],
+        targeting: Some((groups: [(min: 1, max: 1,
+            prompt: "Choose target instant or sorcery spell", effect_indices: [0])]))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                targeted,
+                copier,
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/generated/h/hill_giant.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("legacy copy effect and authored-damage program owner compile"),
+    ));
+    let decks = Some(vec![
+        deck_with("island", &["program_damage_for_copy"]),
+        deck_with("forest", &["authored_copy_program"]),
+    ]);
+    let mut engine = GameEngine::new(registry, 9_435, &[0, 1], 20, decks, true)
+        .expect("authored program-copy fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let original_target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    let retarget = inject_creature_on_battlefield(&mut engine, 1, "hill_giant");
+
+    fn dev_move(engine: &mut GameEngine, card_name: &str, zone: i32) {
+        engine
+            .apply_scenario_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(Cmd::DevCommand(tricerules_proto::ruled::v1::DevCommand {
+                        target_player_id: 1,
+                        dev: Some(tricerules_proto::ruled::v1::dev_command::Dev::MoveCard(
+                            tricerules_proto::ruled::v1::DevMoveCard {
+                                card_name: card_name.to_owned(),
+                                zone,
+                                ready: true,
+                            },
+                        )),
+                    })),
+                },
+            )
+            .expect("move the exact retarget candidate between zones");
+    }
+
+    engine.enable_dev_commands();
+    let original_retarget_generation = engine
+        .state
+        .zone_change_generation
+        .get(&retarget)
+        .copied()
+        .unwrap_or(0);
+    dev_move(
+        &mut engine,
+        "Hill Giant",
+        tricerules_proto::ruled::v1::DevZone::Hand as i32,
+    );
+    dev_move(
+        &mut engine,
+        "Hill Giant",
+        tricerules_proto::ruled::v1::DevZone::Battlefield as i32,
+    );
+    let retarget_generation = engine
+        .state
+        .zone_change_generation
+        .get(&retarget)
+        .copied()
+        .unwrap_or(0);
+    assert!(retarget_generation > original_retarget_generation);
+
+    inject_card_into_hand(&mut engine, 0, "program_damage_for_copy");
+    inject_card_into_hand(&mut engine, 1, "authored_copy_program");
+    let target_slot = hand_index_for_card(&engine, 0, "program_damage_for_copy");
+    let copy_slot = hand_index_for_card(&engine, 1, "authored_copy_program");
+    engine
+        .apply_scenario_command(0, &cast_spell(target_slot, target_object(original_target)))
+        .expect("cast the authored targeted damage spell");
+    let target_spell = engine.state.stack.last().expect("target spell on stack").id;
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("give the opponent priority to copy the spell");
+
+    let offered = &engine.initial_response_batch().legal_by_player[&1].valid_targets_by_hand_slot
+        [&((copy_slot as u32) << 8)];
+    assert!(offered.groups[0].valid_stack_ids.contains(&target_spell));
+    engine
+        .apply_scenario_command(1, &cast_spell(copy_slot, target_object(target_spell)))
+        .expect("cast the target spell copier");
+    pass_priority_round(&mut engine);
+
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the copied spell asks for a new target");
+    assert!(pending.presentation.candidates.contains(&retarget));
+    engine
+        .apply_scenario_command(1, &submit_resolution_choice(vec![retarget]))
+        .expect("retarget the copied authored spell at the current candidate generation");
+
+    let copy = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| item.is_copy && item.card_id == "program_damage_for_copy")
+        .expect("the retargeted copy is on the stack");
+    assert_eq!(copy.targets[0].object_id, retarget);
+    assert_eq!(copy.targets[0].group_index, 0);
+    assert_eq!(
+        copy.targets[0].zone_change_generation,
+        Some(retarget_generation)
+    );
+
+    resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(engine.state.objects[&original_target].damage, 1);
+    assert_eq!(engine.state.objects[&retarget].damage, 1);
+}
+
+#[test]
+fn authored_copy_keeps_stale_same_object_receipts_unless_current_incarnation_is_selected() {
+    let targeted = r#"(
+        id: "program_damage_for_same_object_copy",
+        name: "Program Damage for Same Object Copy",
+        face_id: "program_damage_for_same_object_copy",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [],
+        spell_program: Some((body: (steps: [
+            (id: "damage", kind: Perform(DamageTarget(
+                amount: 1, target: (kind: Creature))))
+        ], yields: []), target_bindings: [
+            (instruction_id: "damage", role: Target, target_group_index: 0),
+        ])),
+        targeting: Some((groups: [(min: 1, max: 1,
+            prompt: "Choose target creature", effect_indices: [])]))
+    )"#;
+    let copier = r#"(
+        id: "legacy_copy_for_same_object",
+        name: "Legacy Copy for Same Object",
+        face_id: "legacy_copy_for_same_object",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [CopyTargetSpell(
+            count: 1, spell_filter: (card_type: Some(InstantOrSorcery)))],
+        targeting: Some((groups: [(min: 1, max: 1,
+            prompt: "Choose target instant or sorcery spell", effect_indices: [0])]))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                targeted,
+                copier,
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("authored damage program and legacy copier compile"),
+    ));
+
+    fn dev_move(engine: &mut GameEngine, zone: i32) {
+        engine
+            .apply_scenario_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(Cmd::DevCommand(tricerules_proto::ruled::v1::DevCommand {
+                        target_player_id: 1,
+                        dev: Some(tricerules_proto::ruled::v1::dev_command::Dev::MoveCard(
+                            tricerules_proto::ruled::v1::DevMoveCard {
+                                card_name: "Grizzly Bears".to_owned(),
+                                zone,
+                                ready: true,
+                            },
+                        )),
+                    })),
+                },
+            )
+            .expect("move the original target out and back before the copy resolves");
+    }
+
+    for (seed, choose_current_incarnation) in [(9_438, false), (9_439, true)] {
+        let decks = Some(vec![
+            deck_with("island", &["program_damage_for_same_object_copy"]),
+            deck_with("forest", &["legacy_copy_for_same_object"]),
+        ]);
+        let mut engine = GameEngine::new(registry, seed, &[0, 1], 20, decks, true)
+            .expect("same-object copied-target fixture engine");
+        advance_to_main1_from_game_start(&mut engine);
+        let target = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+        inject_card_into_hand(&mut engine, 0, "program_damage_for_same_object_copy");
+        inject_card_into_hand(&mut engine, 1, "legacy_copy_for_same_object");
+        let target_slot = hand_index_for_card(&engine, 0, "program_damage_for_same_object_copy");
+        let copy_slot = hand_index_for_card(&engine, 1, "legacy_copy_for_same_object");
+        engine.enable_dev_commands();
+
+        engine
+            .apply_scenario_command(0, &cast_spell(target_slot, target_object(target)))
+            .expect("cast the authored spell at the physical target");
+        let original_generation = engine
+            .state
+            .stack
+            .last()
+            .expect("authored spell on stack")
+            .targets[0]
+            .zone_change_generation
+            .expect("object target receipt captures its generation");
+        let target_spell = engine.state.stack.last().expect("target spell on stack").id;
+        engine
+            .apply_scenario_command(0, &pass())
+            .expect("give the opponent priority to copy the spell");
+        engine
+            .apply_scenario_command(1, &cast_spell(copy_slot, target_object(target_spell)))
+            .expect("cast the legacy target copier");
+
+        dev_move(
+            &mut engine,
+            tricerules_proto::ruled::v1::DevZone::Hand as i32,
+        );
+        dev_move(
+            &mut engine,
+            tricerules_proto::ruled::v1::DevZone::Battlefield as i32,
+        );
+        let current_generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .expect("returned permanent retains its new generation");
+        assert!(current_generation > original_generation);
+
+        pass_priority_round(&mut engine);
+        assert!(engine.state.pending_resolution.is_some());
+        if choose_current_incarnation {
+            engine
+                .apply_scenario_command(1, &submit_resolution_choice(vec![target]))
+                .expect("choosing the returned object binds the copy to its current generation");
+        } else {
+            engine
+                .apply_scenario_command(1, &submit_resolution_choice(Vec::new()))
+                .expect("empty selection keeps the original generation-bound receipt");
+        }
+
+        let copy = engine
+            .state
+            .stack
+            .iter()
+            .find(|item| item.is_copy && item.card_id == "program_damage_for_same_object_copy")
+            .expect("copy is pushed after its one occurrence is answered");
+        assert_eq!(copy.targets[0].object_id, target);
+        assert_eq!(
+            copy.targets[0].zone_change_generation,
+            Some(if choose_current_incarnation {
+                current_generation
+            } else {
+                original_generation
+            })
+        );
+
+        resolve_entire_stack_two_player(&mut engine);
+        assert_eq!(
+            engine.state.objects[&target].damage,
+            u32::from(choose_current_incarnation),
+            "only an explicitly selected current incarnation can be damaged"
+        );
+    }
+}
+
+#[test]
+fn authored_copy_target_occurrences_keep_typed_domains_and_allow_unrelated_group_duplicates() {
+    let targeted = r#"(
+        id: "program_three_any_targets",
+        name: "Program Three Any Targets",
+        face_id: "program_three_any_targets",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [],
+        spell_program: Some((body: (steps: [
+            (id: "damage_one", kind: Perform(DamageTarget(
+                amount: 1, target: (kind: AnyTarget)))),
+            (id: "damage_two", kind: Perform(DamageTarget(
+                amount: 1, target: (kind: AnyTarget)))),
+            (id: "damage_three", kind: Perform(DamageTarget(
+                amount: 1, target: (kind: AnyTarget))))
+        ], yields: []), target_bindings: [
+            (instruction_id: "damage_one", role: Target, target_group_index: 0),
+            (instruction_id: "damage_two", role: Target, target_group_index: 1),
+            (instruction_id: "damage_three", role: Target, target_group_index: 2),
+        ])),
+        targeting: Some((groups: [
+            (min: 1, max: 1, prompt: "First target", effect_indices: []),
+            (min: 1, max: 1, prompt: "Second target", effect_indices: []),
+            (min: 1, max: 1, prompt: "Third target", effect_indices: []),
+        ]))
+    )"#;
+    let copier = r#"(
+        id: "legacy_copy_for_three_targets",
+        name: "Legacy Copy for Three Targets",
+        face_id: "legacy_copy_for_three_targets",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [CopyTargetSpell(
+            count: 1, spell_filter: (card_type: Some(InstantOrSorcery)))],
+        targeting: Some((groups: [(min: 1, max: 1,
+            prompt: "Choose target instant or sorcery", effect_indices: [0])]))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                targeted,
+                copier,
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/generated/h/hill_giant.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("three authored target groups and the legacy copier compile"),
+    ));
+    let decks = Some(vec![
+        deck_with("island", &["program_three_any_targets"]),
+        deck_with("forest", &["legacy_copy_for_three_targets"]),
+    ]);
+    let mut engine = GameEngine::new(registry, 9_437, &[0, 1], 20, decks, true)
+        .expect("typed authored copy fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let first_permanent = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    let second_permanent = inject_creature_on_battlefield(&mut engine, 1, "hill_giant");
+    inject_card_into_hand(&mut engine, 0, "program_three_any_targets");
+    inject_card_into_hand(&mut engine, 1, "legacy_copy_for_three_targets");
+    let target_slot = hand_index_for_card(&engine, 0, "program_three_any_targets");
+    let copy_slot = hand_index_for_card(&engine, 1, "legacy_copy_for_three_targets");
+
+    let mut original_targets = target_player(1);
+    let mut second_target = target_object(first_permanent);
+    second_target[0].group_index = 1;
+    let mut third_target = target_object(second_permanent);
+    third_target[0].group_index = 2;
+    original_targets.extend(second_target);
+    original_targets.extend(third_target);
+    engine
+        .apply_scenario_command(0, &cast_spell(target_slot, original_targets))
+        .expect("cast the authored three-target spell");
+    let target_spell = engine.state.stack.last().expect("target spell on stack").id;
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("give the opponent a chance to copy the spell");
+    engine
+        .apply_scenario_command(1, &cast_spell(copy_slot, target_object(target_spell)))
+        .expect("cast a legacy copy effect against the authored-program spell");
+
+    let mut resolving_batch = None;
+    for _ in 0..2 {
+        let actor = engine.state.priority_player_id();
+        let batch = engine
+            .apply_scenario_command(actor, &pass())
+            .expect("pass priority until the copier resolves");
+        if batch.events.iter().any(|event| {
+            matches!(
+                event.ev,
+                Some(Ev::ResolutionChoiceRequired(ref choice))
+                    if choice.choice_kind == ChoiceKind::TargetObjects as i32
+            )
+        }) {
+            resolving_batch = Some(batch);
+        }
+    }
+    let batch = resolving_batch.expect("copy target prompt was published");
+    let first_choice = batch
+        .events
+        .iter()
+        .find_map(|event| match event.ev.as_ref() {
+            Some(Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+            _ => None,
+        })
+        .expect("one target occurrence is presented");
+    assert_eq!(
+        first_choice.min, 0,
+        "empty selection keeps this original target"
+    );
+    assert_eq!(
+        first_choice.max, 1,
+        "one typed target occurrence is asked at a time"
+    );
+    assert!(first_choice.prompt_text.contains("Target 1 of 3"));
+    assert!(first_choice.prompt_text.contains("keep the original"));
+    assert!(first_choice.candidate_object_ids.contains(&first_permanent));
+    assert!(first_choice.candidate_player_ids.contains(&1));
+
+    let submit_object = |object_id| RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            chosen_object_ids: vec![object_id],
+            ..Default::default()
+        })),
+    };
+    let submit_player = |player_id| RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            chosen_player_ids: vec![player_id],
+            ..Default::default()
+        })),
+    };
+    assert!(engine
+        .apply_scenario_command(1, &submit_object(1))
+        .expect_err("a player id cannot be submitted in the object identity domain")
+        .to_string()
+        .contains("not offered"));
+    engine
+        .apply_scenario_command(1, &submit_player(first_permanent as i32))
+        .expect("an object id in the player field leaves the occurrence prompt pending");
+    assert!(engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .is_some_and(|pending| pending.presentation.prompt.contains("Target 1 of 3")));
+    engine
+        .apply_scenario_command(1, &submit_object(first_permanent))
+        .expect("replace the original player target with a permanent target");
+    let second_choice = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the second target occurrence is pending");
+    assert_eq!(second_choice.presentation.min, 0);
+    assert_eq!(second_choice.presentation.max, 1);
+    engine
+        .apply_scenario_command(1, &submit_player(1))
+        .expect("replace the original permanent target with a player target");
+    engine
+        .apply_scenario_command(1, &submit_object(first_permanent))
+        .expect("reuse a target in an unrelated group");
+
+    let copy = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| item.is_copy && item.card_id == "program_three_any_targets")
+        .expect("the copy is pushed only after all three occurrences are answered");
+    assert_eq!(copy.targets.len(), 3);
+    assert_eq!(copy.targets[0].object_id, first_permanent);
+    assert_eq!(copy.targets[0].kind, TargetRefKind::Permanent as i32);
+    assert_eq!(copy.targets[0].group_index, 0);
+    assert_eq!(copy.targets[1].object_id, 1);
+    assert_eq!(copy.targets[1].kind, TargetRefKind::Player as i32);
+    assert_eq!(copy.targets[1].group_index, 1);
+    assert_eq!(copy.targets[2].object_id, first_permanent);
+    assert_eq!(copy.targets[2].kind, TargetRefKind::Permanent as i32);
+    assert_eq!(copy.targets[2].group_index, 2);
+}
+
+#[test]
+fn authored_copy_reprompts_when_final_targets_violate_group_uniqueness_or_distinctness() {
+    let targeted = r#"(
+        id: "program_distinct_copy_targets",
+        name: "Program Distinct Copy Targets",
+        face_id: "program_distinct_copy_targets",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [],
+        spell_program: Some((body: (steps: [
+            (id: "damage_one", kind: Perform(DamageTarget(
+                amount: 1, target: (kind: Creature)))),
+            (id: "damage_two", kind: Perform(DamageTarget(
+                amount: 1, target: (kind: Creature)))),
+            (id: "damage_three", kind: Perform(DamageTarget(
+                amount: 1, target: (kind: Creature))))
+        ], yields: []), target_bindings: [
+            (instruction_id: "damage_one", role: Target, target_group_index: 0),
+            (instruction_id: "damage_two", role: Target, target_group_index: 0),
+            (instruction_id: "damage_three", role: Target, target_group_index: 1),
+        ])),
+        targeting: Some((groups: [
+            (min: 2, max: 2, prompt: "Choose two distinct creatures", effect_indices: [], distinct_from: [1]),
+            (min: 1, max: 1, prompt: "Choose another creature", effect_indices: [], distinct_from: [0]),
+        ]))
+    )"#;
+    let copier = r#"(
+        id: "legacy_copy_for_distinct_targets",
+        name: "Legacy Copy for Distinct Targets",
+        face_id: "legacy_copy_for_distinct_targets",
+        mana_cost: "{0}",
+        types: ["Instant"],
+        spell_effect: [CopyTargetSpell(
+            count: 1, spell_filter: (card_type: Some(InstantOrSorcery)))],
+        targeting: Some((groups: [(min: 1, max: 1,
+            prompt: "Choose target instant or sorcery", effect_indices: [0])]))
+    )"#;
+    let registry = Box::leak(Box::new(
+        tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+            &[
+                targeted,
+                copier,
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/generated/h/hill_giant.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect("authored repeated target groups and legacy copy effect compile"),
+    ));
+    let decks = Some(vec![
+        deck_with("island", &["program_distinct_copy_targets"]),
+        deck_with("forest", &["legacy_copy_for_distinct_targets"]),
+    ]);
+    let mut engine = GameEngine::new(registry, 9_440, &[0, 1], 20, decks, true)
+        .expect("distinct copied-target fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let first = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    let second = inject_creature_on_battlefield(&mut engine, 1, "hill_giant");
+    let third = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    inject_card_into_hand(&mut engine, 0, "program_distinct_copy_targets");
+    inject_card_into_hand(&mut engine, 1, "legacy_copy_for_distinct_targets");
+    let target_slot = hand_index_for_card(&engine, 0, "program_distinct_copy_targets");
+    let copy_slot = hand_index_for_card(&engine, 1, "legacy_copy_for_distinct_targets");
+    let mut target_receipts = target_object(first);
+    target_receipts.extend(target_object(second));
+    let mut third_group = target_object(third);
+    third_group[0].group_index = 1;
+    target_receipts.extend(third_group);
+    engine
+        .apply_scenario_command(0, &cast_spell(target_slot, target_receipts))
+        .expect("cast the authored spell with three distinct original targets");
+    let target_spell = engine.state.stack.last().expect("target spell on stack").id;
+    engine
+        .apply_scenario_command(0, &pass())
+        .expect("give the opponent a chance to copy the spell");
+    engine
+        .apply_scenario_command(1, &cast_spell(copy_slot, target_object(target_spell)))
+        .expect("cast the legacy copy effect");
+    pass_priority_round(&mut engine);
+
+    let answer = |object_id| submit_resolution_choice(vec![object_id]);
+    let answer_sequence = |engine: &mut GameEngine, targets: [u32; 3]| {
+        for target in targets {
+            engine
+                .apply_scenario_command(1, &answer(target))
+                .expect("each target occurrence is answered");
+        }
+    };
+    answer_sequence(&mut engine, [first, first, third]);
+    assert!(engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .is_some_and(|pending| { pending.presentation.prompt.contains("Target 1 of 3") }));
+    assert!(!engine
+        .state
+        .stack
+        .iter()
+        .any(|item| item.is_copy && item.card_id == "program_distinct_copy_targets"));
+
+    answer_sequence(&mut engine, [first, second, first]);
+    assert!(engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .is_some_and(|pending| { pending.presentation.prompt.contains("Target 1 of 3") }));
+    assert!(!engine
+        .state
+        .stack
+        .iter()
+        .any(|item| item.is_copy && item.card_id == "program_distinct_copy_targets"));
+
+    // The first occurrence temporarily matches the unchanged second receipt; the final swap is
+    // nevertheless valid once the second occurrence is answered, as CR 115.7e evaluates the set.
+    answer_sequence(&mut engine, [second, first, third]);
+    let copy = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| item.is_copy && item.card_id == "program_distinct_copy_targets")
+        .expect("copy is pushed after a valid final target vector");
+    assert_eq!(
+        copy.targets
+            .iter()
+            .map(|target| (target.object_id, target.group_index))
+            .collect::<Vec<_>>(),
+        vec![(second, 0), (first, 0), (third, 1)]
     );
 }
 
@@ -1173,7 +2528,7 @@ fn discard_count_branch_counts_public_madness_exile_as_known_nonland() {
 }
 
 #[test]
-fn modal_source_lowered_program_binds_each_modes_targets_after_the_global_fizzle_check() {
+fn modal_authored_program_binds_each_modes_local_group_after_the_global_fizzle_check() {
     let modal_program = r#"(
         id: "modal_targeted_draw_discard_program",
         name: "Modal Targeted Draw Discard Program",
@@ -1185,21 +2540,27 @@ fn modal_source_lowered_program_binds_each_modes_targets_after_the_global_fizzle
             max_modes: 2,
             modes: [
                 (mode_id: "first_mode", presentation: Fallback,
-                    effects: [
-                        DamageTarget(amount: 1, target: (kind: Creature)),
-                        DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
-                            order: DiscardThenDraw, optional: true)
-                    ],
+                    effects: [],
+                    program: Some((body: (steps: [
+                        (id: "damage", kind: Perform(DamageTarget(
+                            amount: 1, target: (kind: Creature, controller: Opponent)))),
+                        (id: "draw", kind: Perform(Draw(who: Controller, count: 1)))
+                    ], yields: []), target_bindings: [
+                        (instruction_id: "damage", role: Target, target_group_index: 0),
+                    ])),
                     targeting: Some((groups: [(min: 1, max: 1,
-                        prompt: "Choose a creature for the first mode", effect_indices: [0])]))),
+                        prompt: "Choose a creature for the first mode", effect_indices: [])]))),
                 (mode_id: "second_mode", presentation: Fallback,
-                    effects: [
-                        DamageTarget(amount: 1, target: (kind: Creature)),
-                        DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
-                            order: DiscardThenDraw, optional: true)
-                    ],
+                    effects: [],
+                    program: Some((body: (steps: [
+                        (id: "damage", kind: Perform(DamageTarget(
+                            amount: 1, target: (kind: Creature, controller: You)))),
+                        (id: "draw", kind: Perform(Draw(who: Controller, count: 1)))
+                    ], yields: []), target_bindings: [
+                        (instruction_id: "damage", role: Target, target_group_index: 0),
+                    ])),
                     targeting: Some((groups: [(min: 1, max: 1,
-                        prompt: "Choose a creature for the second mode", effect_indices: [0])])))
+                        prompt: "Choose a creature for the second mode", effect_indices: [])])))
             ]
         )
     )"#;
@@ -1224,7 +2585,7 @@ fn modal_source_lowered_program_binds_each_modes_targets_after_the_global_fizzle
             ],
             &[],
         )
-        .expect("modal target fixture registry validates"),
+        .expect("modal authored target-program fixture registry validates"),
     ));
     let decks = Some(vec![
         vec!["island".into(); 30],
@@ -1236,17 +2597,34 @@ fn modal_source_lowered_program_binds_each_modes_targets_after_the_global_fizzle
     advance_to_main1_from_game_start(&mut engine);
     engine.state.players[1].life = 1;
     inject_card_into_hand(&mut engine, 1, "grizzly_bears");
-    inject_card_into_hand(&mut engine, 2, "grizzly_bears");
     let first_mode_target = put_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
-    let second_mode_target = put_creature_on_battlefield(&mut engine, 2, "grizzly_bears");
+    let second_mode_target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     inject_card_into_hand(&mut engine, 0, "modal_targeted_draw_discard_program");
     inject_card_into_hand(&mut engine, 2, "targeted_fatal_ping");
+    let cards_drawn_before_resolution = engine.state.turn_history.current.player(0).cards_drawn;
+    let modal_slot = hand_index_for_card(&engine, 0, "modal_targeted_draw_discard_program");
+    let legal = engine.initial_response_batch();
+    let modal_action = legal.legal_by_player[&0]
+        .hand_actions
+        .iter()
+        .find(|action| action.hand_index == modal_slot as u32)
+        .expect("modal card has an authoritative cast offer");
+    assert_eq!(
+        modal_action.modes[0].targets.as_ref().unwrap().groups[0].valid_permanent_ids,
+        vec![first_mode_target],
+        "first mode targets its own local group 0"
+    );
+    assert_eq!(
+        modal_action.modes[1].targets.as_ref().unwrap().groups[0].valid_permanent_ids,
+        vec![second_mode_target],
+        "second mode targets its own local group 0"
+    );
 
     engine
         .apply_scenario_command(
             0,
             &cast_modal_spell(
-                hand_index_for_card(&engine, 0, "modal_targeted_draw_discard_program"),
+                modal_slot,
                 vec![
                     (0, target_object(first_mode_target)),
                     (1, target_object(second_mode_target)),
@@ -1273,31 +2651,6 @@ fn modal_source_lowered_program_binds_each_modes_targets_after_the_global_fizzle
     assert!(engine.state.players[1].has_lost);
     pass_priority_round(&mut engine);
 
-    assert_eq!(
-        engine
-            .state
-            .pending_resolution
-            .as_ref()
-            .unwrap()
-            .deciding_player,
-        0
-    );
-    engine
-        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
-        .expect("decline the first mode's optional discard");
-    assert_eq!(
-        engine
-            .state
-            .pending_resolution
-            .as_ref()
-            .unwrap()
-            .deciding_player,
-        0
-    );
-    engine
-        .apply_scenario_command(0, &submit_resolution_choice(Vec::new()))
-        .expect("decline the second mode's optional discard");
-
     assert!(engine.state.pending_resolution.is_none());
     assert!(
         !engine.state.objects.contains_key(&first_mode_target),
@@ -1307,10 +2660,15 @@ fn modal_source_lowered_program_binds_each_modes_targets_after_the_global_fizzle
         engine.state.objects[&second_mode_target].damage, 1,
         "the second mode retains its own target and continues after the one global fizzle check"
     );
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        cards_drawn_before_resolution + 2,
+        "each exact mode program continues after its own target check"
+    );
 }
 
 #[test]
-fn modal_source_lowered_program_fizzles_once_when_all_mode_targets_are_illegal() {
+fn modal_authored_program_fizzles_once_when_all_mode_targets_are_illegal() {
     let modal_program = r#"(
         id: "all_illegal_modal_draw_discard_program",
         name: "All Illegal Modal Draw Discard Program",
@@ -1322,21 +2680,27 @@ fn modal_source_lowered_program_fizzles_once_when_all_mode_targets_are_illegal()
             max_modes: 2,
             modes: [
                 (mode_id: "first_mode", presentation: Fallback,
-                    effects: [
-                        DamageTarget(amount: 1, target: (kind: Creature)),
-                        DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
-                            order: DiscardThenDraw, optional: true)
-                    ],
+                    effects: [],
+                    program: Some((body: (steps: [
+                        (id: "damage", kind: Perform(DamageTarget(
+                            amount: 1, target: (kind: Creature)))),
+                        (id: "draw", kind: Perform(Draw(who: Controller, count: 1)))
+                    ], yields: []), target_bindings: [
+                        (instruction_id: "damage", role: Target, target_group_index: 0),
+                    ])),
                     targeting: Some((groups: [(min: 1, max: 1,
-                        prompt: "Choose a creature for the first mode", effect_indices: [0])]))),
+                        prompt: "Choose a creature for the first mode", effect_indices: [])]))),
                 (mode_id: "second_mode", presentation: Fallback,
-                    effects: [
-                        DamageTarget(amount: 1, target: (kind: Creature)),
-                        DrawDiscard(who: Controller, draw_count: 1, discard_count: 1,
-                            order: DiscardThenDraw, optional: true)
-                    ],
+                    effects: [],
+                    program: Some((body: (steps: [
+                        (id: "damage", kind: Perform(DamageTarget(
+                            amount: 1, target: (kind: Creature)))),
+                        (id: "draw", kind: Perform(Draw(who: Controller, count: 1)))
+                    ], yields: []), target_bindings: [
+                        (instruction_id: "damage", role: Target, target_group_index: 0),
+                    ])),
                     targeting: Some((groups: [(min: 1, max: 1,
-                        prompt: "Choose a creature for the second mode", effect_indices: [0])])))
+                        prompt: "Choose a creature for the second mode", effect_indices: [])])))
             ]
         )
     )"#;

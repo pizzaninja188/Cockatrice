@@ -178,7 +178,7 @@ Every signal is declared on `RuledClientState` and emitted by it or by the dispa
 | `battlefieldMapUpdated()` | `CardItem`, `TabGame` | Repaint after the identity maps change. |
 | `stackHasItemsChanged(bool)` | `TabGame`, `GamePromptWidget` | Stack window visibility; pass-priority button text. |
 | `stackOrderChanged(QList<quint32>)` | `TabGame` | Re-sort the stack window (LIFO; `Event_MoveCard` may arrive before `stack_pushed`). |
-| `graveyardTargetsNeeded(QList<int>)` | `TabGame` | Open/close graveyard views. Three sources union in `emitGraveyardTargetsNeeded()`: a pending cast's legal targets, a pending trigger's, and the graveyard targets of anything still on the stack (so a view stays open until the spell resolves and its arrow stays anchored). Names players, not a bool: a spell may target any graveyard (Reanimate). |
+| `graveyardTargetsNeeded(QList<int>)` | `TabGame` | Open/close graveyard views. Four sources union in `emitGraveyardTargetsNeeded()`: pending cast and trigger targets, object candidates in the active local copy-retarget offer, and latched graveyard targets of anything still on the stack (so a view stays open until that stack object resolves). Copy-target player candidates stay in their separate ID domain. Names players, not a bool: a spell may target any graveyard (Reanimate). |
 | `firstStrikeStepPendingChanged(bool)` | `GamePromptWidget` | "First Strike Damage" vs "Combat Damage" button label. |
 | `firstStrikeDamageStepActiveChanged(bool)` | `GamePromptWidget` | Same, once inside the substep (CR 510.4). |
 | `undoableManaAbilitiesChanged(int)` | `TabGame` | The undo-land-tap affordance (CR 605 float courtesy). |
@@ -329,6 +329,11 @@ resolution answer or removes the active optional cast-cost group's staged paymen
 `Cancel` abandons an unsubmitted cast/activation, and `Back` returns from cost-object selection.
 Mode/target-linked required costs cannot be declined. `ruled_resolution_choice_dialog.cpp`
 owns the fallback picker and follows the same explicit-decline rule for a zero minimum.
+
+Copy retargeting presents one target occurrence at a time, including its ordinal in the prompt.
+Object and player candidates stay in their separate ID fields through click handling and command
+submission. The optional empty action is labeled `Keep original target`; it preserves the original
+generation-bound target receipt, including when that permanent has since left and returned.
 
 ### Opening actions
 

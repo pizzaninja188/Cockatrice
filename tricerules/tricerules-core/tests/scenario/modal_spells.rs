@@ -316,7 +316,7 @@ fn copied_modal_spell_retains_modes_and_mode_targets() {
     while !e.state.stack.is_empty() {
         if e.state.pending_resolution.is_some() {
             let deciding_player = e.state.pending_resolution.as_ref().unwrap().deciding_player;
-            e.apply_scenario_command(deciding_player, &submit_resolution_choice(vec![1]))
+            e.apply_scenario_command(deciding_player, &submit_resolution_choice(vec![]))
                 .unwrap();
         } else {
             pass_both_players(&mut e);

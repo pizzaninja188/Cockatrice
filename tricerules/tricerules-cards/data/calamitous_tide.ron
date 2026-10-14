@@ -2,9 +2,15 @@
 (
   id: "calamitous_tide", name: "Calamitous Tide", face_id: "calamitous_tide",
   mana_cost: "{4}{U}{U}", types: ["Sorcery"],
-  spell_effect: [
-    ReturnToOwnersHand(subject: Chosen((kind: Creature))),
-    DrawDiscard(draw_count: 2, discard_count: 1, order: DrawThenDiscard),
-  ],
-  targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two target creatures", effect_indices: [0])])),
+  spell_effect: [],
+  spell_program: Some((body: (steps: [
+    (id: "return_creature", kind: Perform(ReturnToOwnersHand(
+      subject: Chosen((kind: Creature))))),
+    (id: "draw_two", kind: Perform(Draw(who: Controller, count: 2))),
+    (id: "discard_one", kind: Perform(Discard(
+      who: Controller, quantity: Exact(1)))),
+  ], yields: []), target_bindings: [
+    (instruction_id: "return_creature", role: Subject, target_group_index: 0),
+  ])),
+  targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two target creatures", effect_indices: [])])),
 )

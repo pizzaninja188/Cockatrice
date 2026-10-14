@@ -1,17 +1,19 @@
 # Composable card execution and authoring contract
 
-Status (2026-10-13): target design with a bounded targetless Instant/Sorcery implementation pilot,
+Status (2026-10-13): target design with a bounded authored-owner implementation increment,
 cross-component resolution-prompt identity, exact compiled owner identities, and immutable ability
-binding. The DrawDiscard migration now lowers whole legacy owners into the same runner, including
-every sibling of an affected modal container. Its census is 41 existing card identities, 42
-DrawDiscard bodies and three additional modal siblings: 45 compiled owners, not 45 card admissions.
-Typed discard outcomes and replacement/entry/payment continuations retain the owning frame.
-Authored ability/mode programs, explicit authored target bindings, card/template conversion and
-retirement of the legacy DrawDiscard family remain the next migration increments.
-The [active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-targetless-spell-programs)
-owns currently accepted syntax and restrictions. The broader operations, contexts and custom-effect
-integration below remain migration targets. Prompt identity applies to legacy resolution choices
-as well as program choices; its implementation does not widen accepted program syntax.
+binding. The runner supports targetless program operations and four targetful role signatures on
+spell faces, modal modes, activated abilities and triggered abilities. The DrawDiscard migration
+lowers whole legacy owners into the same runner, including every sibling of an affected modal
+container. Its original census is 41 existing card identities, 42 DrawDiscard bodies and three
+additional modal siblings: 45 compiled owners, not 45 card admissions. Typed discard outcomes and
+replacement/entry/payment continuations retain the owning frame. The first authored-owner card
+conversions exercise Calamitous Tide's face, Agna Qel'a's activation, Uthros Scanship's ETB and all
+three Three Steps Ahead modes. The [active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs)
+owns accepted syntax and restrictions. The broader operations, contexts, remaining card/template
+conversion and retirement of the legacy DrawDiscard family remain migration targets. Prompt
+identity applies to legacy resolution choices as well as program choices; it does not widen the
+accepted syntax.
 The initial design was reviewed against `41e4ccf463930d8384ac00eb60ac21f931646b38` (2026-10-12).
 The former deck campaign remains outside scope. Cards require complete-card evidence and the
 applicable verification and visible acceptance gates independently of this design.
