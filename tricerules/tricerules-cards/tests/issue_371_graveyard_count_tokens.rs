@@ -11,8 +11,8 @@ use crate::common::draw_discard_program::{
     assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
 };
 use tricerules_cards::primitives::{
-    CardResultAction, CardResultSource, CardTypeFilter, GraveyardDestination, PlayerRecipient,
-    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, ZoneCardFilter,
+    CardProgram, CardTypeFilter, PlayerRecipient, ResolutionBranchRequirement,
+    ResolutionBranchSelection, ResolutionCost, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, CastTriggerPlayer, Color,
@@ -424,32 +424,25 @@ fn issue_371_lluwen_and_morcant_payloads_are_exact() {
     let etb = &lluwen.triggered_abilities[0];
     assert_eq!(etb.presentation, AbilityPresentation::OracleLines(vec![1]));
     assert_eq!(etb.trigger, TriggerCondition::WhenSelfEntersBattlefield);
-    let [SpellEffectKind::Mill { count, who }, SpellEffectKind::ChooseGraveyardCard {
-        filter,
-        destination,
-        optional,
-        from_result,
-    }] = etb.effect.as_slice()
-    else {
-        panic!(
-            "Lluwen's ETB must mill then optionally top a milled card: {:?}",
-            etb.effect
-        );
-    };
-    assert_eq!(*count, Amount::Fixed(4));
-    assert_eq!(*who, PlayerRecipient::Controller);
-    assert_eq!(*destination, GraveyardDestination::LibraryTop);
-    assert!(optional, "the printed put-on-top is a you-may choice");
-    assert_eq!(
-        filter.any_of.as_ref().map(Vec::len),
-        Some(2),
-        "the choice is a creature or land card"
-    );
-    let from_result = from_result.as_ref().expect("milled cohort restriction");
-    assert_eq!(from_result.source, CardResultSource::PreviousEffect);
-    assert_eq!(from_result.action, CardResultAction::Mill);
-    assert_eq!(from_result.players, RelativePlayerSet::Controller);
-    assert_eq!(from_result.card_type, None);
+    assert!(etb.effect.is_empty());
+    let expected: CardProgram = ron::from_str(
+        r#"(body: (steps: [
+            (id: "mill_four", bind: ["milled"], input: None,
+                kind: Perform(Mill(count: 4, who: Controller))),
+            (id: "choose_creature_or_land", bind: [], input: Some("milled"),
+                kind: Perform(ChooseCard(
+                    source: CardResultCohort(players: Controller),
+                    filter: (any_of: Some([
+                        (card_type: Some(Creature)),
+                        (card_type: Some(Land)),
+                    ])),
+                    destination: LibraryTop,
+                    optional: true,
+                )))
+        ], yields: []), target_bindings: [])"#,
+    )
+    .expect("the exact Lluwen ETB program is valid RON");
+    assert_eq!(etb.program.as_ref(), Some(&expected));
 
     let morcant = registry
         .get("morcants_eyes")

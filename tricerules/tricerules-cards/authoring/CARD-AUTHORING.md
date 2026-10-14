@@ -238,13 +238,13 @@ read forward/across sibling scopes. Each branch explicitly lists its `yields`; b
 yield compatible types, and an `If` binding exports their joined result to its parent.
 Conditions are evaluated on entry and are not reevaluated after a private choice resumes.
 
-`Mill` may bind a typed `CardResultCohort`. In a spell program, `ChooseCard` accepts two exact
-source shapes: `WholeCurrentGraveyard`, which searches the controller's current graveyard without
-an input, or `CardResultCohort(players: ...)`, which requires `input: Some("earlier_mill")` bound
-to an earlier `Mill` in scope. The cohort form is exactly that Mill instruction's committed output,
-including when empty; it does not fall back to cards already in the graveyard. `ActionFacts` entries
-from other actions are not movement evidence and cannot satisfy this selector. Current CardResult
-bindings for this source are limited to Mill.
+`Mill` may bind a typed `CardResultCohort`. In a spell or triggered-ability program, `ChooseCard`
+accepts two exact source shapes: `WholeCurrentGraveyard`, which searches the controller's current
+graveyard without an input, or `CardResultCohort(players: ...)`, which requires
+`input: Some("earlier_mill")` bound to an earlier `Mill` in scope. The cohort form is exactly that
+Mill instruction's committed output, including when empty; it does not fall back to cards already
+in the graveyard. `ActionFacts` entries from other actions are not movement evidence and cannot
+satisfy this selector. Current CardResult bindings for this source are limited to Mill.
 
 The filtered picker considers only exact, still-live, face-up public output incarnations in the
 graveyard, battlefield, exile, stack or command zone. Hidden destinations and `UnknownHidden`
@@ -252,8 +252,8 @@ outputs are ineligible and never appear in the candidate projection. The selecto
 rules characteristics; battlefield continuous effects apply, while `printed_power` remains a
 printed characteristic. A stack candidate must be the exact physical spell cast, not a copy or
 ability. `ChooseCard` currently accepts only `Hand`, `LibraryTop` or `LibraryBottom` destinations in
-a spell program. Commander replacement uses the commander's owner's choice and the same movement
-path.
+a spell or triggered-ability program. Commander replacement uses the commander's owner's choice
+and the same movement path.
 
 ```ron
 (id: "mill_four", bind: ["milled"], input: None,

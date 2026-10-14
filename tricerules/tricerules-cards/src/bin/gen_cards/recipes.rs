@@ -244,6 +244,24 @@ fn counter_spell_unless_four_program() -> CardProgram {
     )
 }
 
+fn lluwen_mill_then_choose_program() -> CardProgram {
+    authored_program(
+        "(id: \"mill_four\", bind: [\"milled\"], input: None, \
+            kind: Perform(Mill(count: 4, who: Controller))), \
+         (id: \"choose_creature_or_land\", bind: [], input: Some(\"milled\"), \
+            kind: Perform(ChooseCard(\
+                source: CardResultCohort(players: Controller), \
+                filter: (any_of: Some([\
+                    (card_type: Some(Creature)), \
+                    (card_type: Some(Land)), \
+                ])), \
+                destination: LibraryTop, \
+                optional: true, \
+            )))",
+        "",
+    )
+}
+
 fn single_program_targeting(prompt: &str) -> TargetingDef {
     TargetingDef {
         groups: vec![TargetGroupDef {
@@ -16139,10 +16157,9 @@ fn match_activated_create_worm_for_each_land_graveyard_card(
     })
 }
 
-/// Lluwen's non-cohort ETB mills four and then offers the printed optional choice among the
-/// exact milled cards (`from_result` binds the preceding mill cohort), putting one creature-or-land
-/// card on top of the library (CR 608.2d). A mandatory choice, another count, another destination,
-/// or a mill-then-return wording all stay unsupported.
+/// Lluwen's ETB mills four and then offers the printed optional choice among the exact Mill result,
+/// putting one creature-or-land card on top of the library (CR 608.2d). A mandatory choice,
+/// another count, another destination, or a mill-then-return wording all stay unsupported.
 fn match_triggered_etb_mill_four_then_may_choose_creature_or_land_to_top(
     text: &str,
     context: &RecipeContext,
@@ -16150,32 +16167,10 @@ fn match_triggered_etb_mill_four_then_may_choose_creature_or_land_to_top(
     (context.source_is_creature
         && issue_377_self_name_normalized(text, context) == ISSUE_371_LLUWEN_ETB_CLAUSE)
         .then(|| {
-            triggered_ability_with(
+            triggered_program_ability(
                 context,
                 TriggerCondition::WhenSelfEntersBattlefield,
-                vec![
-                    SpellEffectKind::Mill {
-                        count: Amount::Fixed(4),
-                        who: PlayerRecipient::Controller,
-                    },
-                    SpellEffectKind::ChooseGraveyardCard {
-                        filter: ZoneCardFilter {
-                            any_of: Some(vec![
-                                issue_371_creature_card_filter(),
-                                issue_371_land_card_filter(),
-                            ]),
-                            ..ZoneCardFilter::default()
-                        },
-                        destination: GraveyardDestination::LibraryTop,
-                        optional: true,
-                        from_result: Some(CardResultFilter {
-                            source: CardResultSource::PreviousEffect,
-                            action: CardResultAction::Mill,
-                            players: RelativePlayerSet::Controller,
-                            card_type: None,
-                        }),
-                    },
-                ],
+                lluwen_mill_then_choose_program(),
             )
         })
 }
@@ -44710,7 +44705,7 @@ mod tests {
         assert!(etb.effect.is_empty());
         assert_eq!(etb.program, Some(draw_then_discard_program(2, 2)));
 
-        // Lluwen's non-cohort ETB binds the optional choice to the preceding mill cohort.
+        // Lluwen's ETB is an ordered program so the optional choice consumes the exact Mill output.
         let RecipeEmission::TriggeredAbility(lluwen) = issue_371_emission(
             "Lluwen, Imperfect Naturalist",
             ISSUE_371_LLUWEN_ETB_CLAUSE,
@@ -44718,23 +44713,26 @@ mod tests {
         ) else {
             panic!("Lluwen's ETB must emit one triggered ability");
         };
-        let [SpellEffectKind::Mill { count, .. }, SpellEffectKind::ChooseGraveyardCard {
-            filter,
-            destination,
-            optional,
-            from_result,
-        }] = lluwen.effect.as_slice()
-        else {
-            panic!("unexpected Lluwen ETB payload: {:?}", lluwen.effect);
-        };
-        assert_eq!(*count, Amount::Fixed(4));
-        assert!(*optional);
-        assert_eq!(*destination, GraveyardDestination::LibraryTop);
-        assert_eq!(filter.any_of.as_ref().map(Vec::len), Some(2));
-        let from_result = from_result.as_ref().expect("milled cohort restriction");
-        assert_eq!(from_result.source, CardResultSource::PreviousEffect);
-        assert_eq!(from_result.action, CardResultAction::Mill);
-        assert_eq!(from_result.players, RelativePlayerSet::Controller);
+        assert_eq!(lluwen.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(lluwen.effect.is_empty());
+        let expected: CardProgram = ron::from_str(
+            "(body: (steps: [\
+                (id: \"mill_four\", bind: [\"milled\"], input: None, \
+                    kind: Perform(Mill(count: 4, who: Controller))), \
+                (id: \"choose_creature_or_land\", bind: [], input: Some(\"milled\"), \
+                    kind: Perform(ChooseCard(\
+                        source: CardResultCohort(players: Controller), \
+                        filter: (any_of: Some([\
+                            (card_type: Some(Creature)), \
+                            (card_type: Some(Land)), \
+                        ])), \
+                        destination: LibraryTop, \
+                        optional: true, \
+                    )))\
+            ], yields: []), target_bindings: [])",
+        )
+        .expect("the exact Lluwen authored program is valid RON");
+        assert_eq!(lluwen.program.as_ref(), Some(&expected));
     }
 
     fn issue_375_assert_identity_gate(clause: &str, is_spell: bool, oracle_id: &str) {
