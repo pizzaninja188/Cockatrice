@@ -159,9 +159,8 @@ pub struct BlightReceipt {
     pub creature: Option<TriggerObjectRef>,
 }
 
-/// Private rules-only snapshot of one card that was actually moved by a cost or instruction.
-/// `matched_card_types` is captured at the action boundary, so later predicates never inspect a
-/// destination zone or a newer object generation.
+/// Private rules-only action/count facts for one card, with optional evidence of one exact
+/// committed movement. Action facts alone do not prove that the card remains in any zone.
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct CardResultEntry {
     pub action: CardResultAction,
@@ -169,6 +168,24 @@ pub(crate) struct CardResultEntry {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
     pub matched_card_types: Vec<CardTypeFilter>,
+    pub provenance: CardResultProvenance,
+}
+
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CardResultProvenance {
+    ActionFacts,
+    CommittedMovement {
+        input_zone: Zone,
+        input_generation: u64,
+        actual_output_zone: Zone,
+        output_visibility: CardResultOutputVisibility,
+    },
+}
+
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CardResultOutputVisibility {
+    FaceUpPublic,
+    UnknownHidden,
 }
 
 #[derive(serde::Serialize, Debug, Clone, Default)]
@@ -1259,6 +1276,7 @@ pub(crate) enum ProgramValue {
     DiscardResult(ProgramDiscardResult),
     PermanentSelection(Vec<TriggerObjectRef>),
     HandSelection(Vec<TriggerObjectRef>),
+    CardResultCohort(CardResultCohort),
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -1385,6 +1403,13 @@ pub(crate) struct PendingLinkedExilePlay {
 
 /// The exact work to resume after a resolution choice. Each variant owns only the metadata its
 /// handler consumes; engine-owned string sentinels and unrelated optional fields are forbidden.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CardChoiceCandidateRef {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+    pub source_zone: Zone,
+}
+
 #[derive(serde::Serialize, Debug, Clone)]
 #[allow(private_interfaces)] // The Teferi cohort is engine-private even though continuations are inspectable.
 pub enum ResolutionContinuation {
@@ -1490,6 +1515,29 @@ pub enum ResolutionContinuation {
         destination: tricerules_card_model::primitives::GraveyardDestination,
         candidate_generations: Vec<(ObjectId, u64)>,
         spell_label: String,
+    },
+    ChooseCard {
+        stack: ParkedStackResolution,
+        chooser: PlayerId,
+        destination: tricerules_card_model::primitives::GraveyardDestination,
+        candidates: Vec<CardChoiceCandidateRef>,
+        spell_label: String,
+    },
+    ChooseCardCommander {
+        stack: ParkedStackResolution,
+        chooser: PlayerId,
+        commander_owner: PlayerId,
+        destination: tricerules_card_model::primitives::GraveyardDestination,
+        candidate: CardChoiceCandidateRef,
+        spell_label: String,
+    },
+    /// Read-only native UI fixture. Its exact live zone snapshot and waiting physical cast are
+    /// retained while the client maps a ZoneSearch popup selection back to ObjectIds.
+    PublicZoneSearchFixture {
+        stack_item: StackItem,
+        candidates: Vec<CardChoiceCandidateRef>,
+        priority_idx: usize,
+        passes_since_stack_change: u32,
     },
     DifferentNamedGraveyardReturn {
         stack: ParkedStackResolution,
@@ -1855,6 +1903,8 @@ impl ResolutionContinuation {
             | Self::PlayerSetDiscard { stack, .. }
             | Self::PlayerSetSacrifice { stack, .. }
             | Self::GraveyardChoice { stack, .. }
+            | Self::ChooseCard { stack, .. }
+            | Self::ChooseCardCommander { stack, .. }
             | Self::DifferentNamedGraveyardReturn { stack, .. }
             | Self::LinkedExileChoice { stack, .. }
             | Self::Sacrifice { stack }
@@ -1894,7 +1944,8 @@ impl ResolutionContinuation {
             | Self::MassSacrificeGraveyardOrder { stack, .. } => stack.as_ref(),
             Self::ManaAbilityDamageReplacement { .. }
             | Self::CombatDamageReplacement { .. }
-            | Self::StateBasedActions { .. } => None,
+            | Self::StateBasedActions { .. }
+            | Self::PublicZoneSearchFixture { .. } => None,
         }
     }
 
@@ -1918,6 +1969,8 @@ impl ResolutionContinuation {
             | Self::PlayerSetDiscard { stack, .. }
             | Self::PlayerSetSacrifice { stack, .. }
             | Self::GraveyardChoice { stack, .. }
+            | Self::ChooseCard { stack, .. }
+            | Self::ChooseCardCommander { stack, .. }
             | Self::DifferentNamedGraveyardReturn { stack, .. }
             | Self::LinkedExileChoice { stack, .. }
             | Self::Sacrifice { stack }
@@ -1957,7 +2010,8 @@ impl ResolutionContinuation {
             | Self::MassSacrificeGraveyardOrder { stack, .. } => stack.as_mut(),
             Self::ManaAbilityDamageReplacement { .. }
             | Self::CombatDamageReplacement { .. }
-            | Self::StateBasedActions { .. } => None,
+            | Self::StateBasedActions { .. }
+            | Self::PublicZoneSearchFixture { .. } => None,
         }
     }
 

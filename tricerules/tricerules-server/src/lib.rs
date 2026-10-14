@@ -335,3 +335,67 @@ mod session_count_tests {
         assert!(unsupported.engine.is_none());
     }
 }
+
+#[cfg(test)]
+mod dev_gate_ipc_tests {
+    use super::*;
+    use prost::Message;
+    use tricerules_proto::ipc_envelope::Msg;
+    use tricerules_proto::ruled::v1 as rv1;
+
+    #[test]
+    fn public_zone_fixture_command_is_rejected_when_either_session_gate_is_off() {
+        // The first case models a production sidecar receiving a request from a dev-configured
+        // Servatrice. The second models a dev-enabled sidecar receiving a normal session request.
+        for (sidecar_allows_dev, request_enables_dev) in [(false, true), (true, false)] {
+            let mut session = EngineSession::new(sidecar_allows_dev);
+            let started = session
+                .process(&IpcEnvelope {
+                    msg: Some(Msg::SessionStart(rv1::SessionStart {
+                        game_id: 900,
+                        seed: 901,
+                        player_ids: vec![0, 1],
+                        dev_commands_enabled: request_enables_dev,
+                        ..Default::default()
+                    })),
+                })
+                .expect("session-start response");
+            assert!(started.ok, "{}", started.error);
+            assert!(!started.effective_dev_commands_enabled);
+
+            let before = session
+                .engine
+                .as_ref()
+                .expect("started engine")
+                .state
+                .command_index;
+            let command = rv1::RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::DevCommand(rv1::DevCommand {
+                    target_player_id: 0,
+                    dev: Some(rv1::dev_command::Dev::OpenPublicZoneSearchFixture(
+                        rv1::OpenPublicZoneSearchFixture {},
+                    )),
+                })),
+            };
+            let rejected = session
+                .process(&IpcEnvelope {
+                    msg: Some(Msg::PlayerCommand(rv1::PlayerCommand {
+                        player_id: 0,
+                        ruled_command: command.encode_to_vec(),
+                    })),
+                })
+                .expect("command response");
+            assert!(!rejected.ok, "disabled gate accepted fixture command");
+            assert!(
+                rejected.error.contains("dev commands are not enabled"),
+                "unexpected rejection: {}",
+                rejected.error
+            );
+            assert!(rejected.batch.is_none());
+            assert_eq!(rejected.diagnostic_command_index, before);
+            let engine = session.engine.as_ref().expect("session survives rejection");
+            assert_eq!(engine.state.command_index, before);
+            assert!(engine.state.pending_resolution.is_none());
+        }
+    }
+}

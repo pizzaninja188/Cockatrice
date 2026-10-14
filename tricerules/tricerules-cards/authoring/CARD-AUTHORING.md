@@ -178,7 +178,8 @@ its own targeting groups and group indices. Do not add a face-level `spell_progr
 
 The finite tree has `Perform` leaves and nested `If`/`IfResult` blocks; no loops, jumps or authored
 functions. Targetless leaves accepted are `Draw`, `Discard`, `ChoosePermanents`,
-`UntapChosenPermanents`, `SelectHandCards`, `PutSelectedHandCardsOnLibraryTop` and ordinary
+`UntapChosenPermanents`, `SelectHandCards`, `PutSelectedHandCardsOnLibraryTop`, `Mill`, `ChooseCard`
+and ordinary
 fixed-count controller `CreateTokens` without delayed sacrifice. Spell-face and modal-spell
 programs limit draw/discard recipients to `Controller`; triggered ability programs may also use
 `AffectedPlayer` when their trigger supplies the captured event-time player. Activated programs do
@@ -236,6 +237,39 @@ selection. There is no implicit "previous instruction" input. Bindings cannot be
 read forward/across sibling scopes. Each branch explicitly lists its `yields`; both arms must
 yield compatible types, and an `If` binding exports their joined result to its parent.
 Conditions are evaluated on entry and are not reevaluated after a private choice resumes.
+
+`Mill` may bind a typed `CardResultCohort`. In a spell program, `ChooseCard` accepts two exact
+source shapes: `WholeCurrentGraveyard`, which searches the controller's current graveyard without
+an input, or `CardResultCohort(players: ...)`, which requires `input: Some("earlier_mill")` bound
+to an earlier `Mill` in scope. The cohort form is exactly that Mill instruction's committed output,
+including when empty; it does not fall back to cards already in the graveyard. `ActionFacts` entries
+from other actions are not movement evidence and cannot satisfy this selector. Current CardResult
+bindings for this source are limited to Mill.
+
+The filtered picker considers only exact, still-live, face-up public output incarnations in the
+graveyard, battlefield, exile, stack or command zone. Hidden destinations and `UnknownHidden`
+outputs are ineligible and never appear in the candidate projection. The selector checks current
+rules characteristics; battlefield continuous effects apply, while `printed_power` remains a
+printed characteristic. A stack candidate must be the exact physical spell cast, not a copy or
+ability. `ChooseCard` currently accepts only `Hand`, `LibraryTop` or `LibraryBottom` destinations in
+a spell program. Commander replacement uses the commander's owner's choice and the same movement
+path.
+
+```ron
+(id: "mill_four", bind: ["milled"], input: None,
+  kind: Perform(Mill(count: 4, who: Controller))),
+(id: "return_milled_land", bind: [], input: Some("milled"),
+  kind: Perform(ChooseCard(
+    source: CardResultCohort(players: Controller),
+    filter: (card_type: Some(Land)),
+    destination: Hand,
+    optional: true,
+  ))),
+```
+
+`WholeCurrentGraveyard` remains a separate, explicit source. Do not replace it with the Mill cohort
+when an effect allows any currently matching graveyard card, or reverse that substitution when the
+Oracle instruction limits the choice to cards moved by one specific instruction.
 
 `Discard` produces a typed result containing committed discard batches, captured card-type
 knowledge and a separate outcome. `IfResult` can inspect an earlier in-scope discard binding:

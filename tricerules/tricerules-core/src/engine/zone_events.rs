@@ -515,8 +515,24 @@ impl GameEngine {
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         let snapshot = self.snapshot_zone_event();
+        let leave_event = if destination != Zone::Battlefield
+            && self
+                .state
+                .objects
+                .get(&oid)
+                .is_some_and(|object| object.zone == Zone::Battlefield)
+        {
+            snapshot
+                .sources
+                .iter()
+                .find(|source| source.object_id == oid)
+                .cloned()
+                .map(|source| GameEvent::LeavesBattlefield { source })
+        } else {
+            None
+        };
         move_object_to_zone(&mut self.state, self.registry, oid, destination, controller)?;
-        self.fire_zone_triggers(snapshot, vec![], out);
+        self.fire_zone_triggers(snapshot, leave_event.into_iter().collect(), out);
         Ok(())
     }
 

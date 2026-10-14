@@ -3436,23 +3436,34 @@ TEST_F(RuledClientTest, MultiZoneSearchCarriesSourceAnnotationsAndMalformedMetad
     choice->set_choice_kind(ruled::v1::CHOICE_KIND_ZONE_SEARCH);
     choice->set_prompt_text("Search the selected zones for Altanak");
     choice->set_min(0);
-    choice->set_max(1);
-    for (const quint32 oid : {71u, 72u, 73u})
+    choice->set_max(7);
+    for (const quint32 oid : {71u, 72u, 73u, 74u, 75u, 76u, 77u})
         choice->add_candidate_object_ids(oid);
-    for (const int scid : {0, 1, 2})
+    for (const int scid : {0, 1, 2, 3, 4, 5, 6})
         choice->add_candidate_server_card_ids(scid);
-    for (int i = 0; i < 3; ++i)
-        choice->add_candidate_names("Altanak, the Thrice-Called");
+    for (const char *name : {"A hand card", "A graveyard card", "A library card", "A battlefield card",
+                              "An exiled card", "A stack spell", "A commander card"})
+        choice->add_candidate_names(name);
     choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
     choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD);
     choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY);
+    choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_BATTLEFIELD);
+    choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_EXILE);
+    choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_STACK);
+    choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_COMMAND);
     apply(batch);
 
     ASSERT_TRUE(state->isResolutionHandPickActive());
     EXPECT_EQ(state->resolutionHandPickViewTitle(), QStringLiteral("Search selected zones"));
     EXPECT_FALSE(state->resolutionHandPickShowViewControls());
     EXPECT_EQ(state->resolutionHandPickCandidateAnnotations(),
-              QStringList({QStringLiteral("Hand"), QStringLiteral("Graveyard"), QStringLiteral("Library")}));
+              QStringList({QStringLiteral("Hand"), QStringLiteral("Graveyard"), QStringLiteral("Library"),
+                           QStringLiteral("Battlefield"), QStringLiteral("Exile"), QStringLiteral("Stack"),
+                           QStringLiteral("Command")}));
+    ASSERT_TRUE(state->pendingChoice.has_value());
+    for (int i = 0; i < 7; ++i) {
+        EXPECT_EQ(state->pendingChoice->serverCardIdToOid.value(i), static_cast<quint32>(71 + i));
+    }
     ASSERT_EQ(started.count(), 1);
 
     state->clearPendingChoice();
@@ -3967,6 +3978,41 @@ TEST_F(RuledClientTest, StackPushAndResolveKeepLifoOrder)
     apply(resolve);
     EXPECT_EQ(state->getStackOidOrder(), QList<quint32>({10}));
     EXPECT_FALSE(state->stackTargetsByStackOid.contains(11));
+    EXPECT_EQ(host.removedSyntheticCards, QVector<quint32>({11}));
+}
+
+TEST_F(RuledClientTest, PermanentMovedRetiresOnlyTheExactStackObjectAndTargets)
+{
+    ruled::v1::RuledEventBatch pushed;
+    auto *retainedStackObject = pushed.add_events()->mutable_stack_pushed();
+    retainedStackObject->set_object_id(10);
+    retainedStackObject->mutable_targets()->Add()->set_object_id(101);
+    auto *selectedStackObject = pushed.add_events()->mutable_stack_pushed();
+    selectedStackObject->set_object_id(11);
+    selectedStackObject->mutable_targets()->Add()->set_object_id(100);
+    apply(pushed);
+
+    const auto selectedTargetKey = RuledClientState::stackTargetKey(11, 100);
+    const auto retainedTargetKey = RuledClientState::stackTargetKey(10, 101);
+    state->stackTargetKindByStackAndTargetOid.insert(
+        selectedTargetKey, RuledTargetItemKind::Battlefield);
+    state->stackTargetKindByStackAndTargetOid.insert(
+        retainedTargetKey, RuledTargetItemKind::Battlefield);
+
+    ruled::v1::RuledEventBatch moved;
+    auto *untrackedPermanent = moved.add_events()->mutable_permanent_moved();
+    untrackedPermanent->set_object_id(100);
+    untrackedPermanent->set_destination(ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD);
+    auto *selectedCard = moved.add_events()->mutable_permanent_moved();
+    selectedCard->set_object_id(11);
+    selectedCard->set_destination(ruled::v1::PermanentMoved::DESTINATION_HAND);
+    apply(moved);
+
+    EXPECT_EQ(state->getStackOidOrder(), QList<quint32>({10}));
+    EXPECT_FALSE(state->stackTargetsByStackOid.contains(11));
+    EXPECT_EQ(state->stackTargetsByStackOid.value(10), QVector<quint32>({101}));
+    EXPECT_FALSE(state->stackTargetKindByStackAndTargetOid.contains(selectedTargetKey));
+    EXPECT_TRUE(state->stackTargetKindByStackAndTargetOid.contains(retainedTargetKey));
     EXPECT_EQ(host.removedSyntheticCards, QVector<quint32>({11}));
 }
 
@@ -11802,6 +11848,8 @@ TEST(RuledDevCommandParserTest, EveryZoneAliasResolves)
         {QStringLiteral("lib"), ruled::v1::DEV_ZONE_LIBRARY},
         {QStringLiteral("library"), ruled::v1::DEV_ZONE_LIBRARY},
         {QStringLiteral("deck"), ruled::v1::DEV_ZONE_LIBRARY},
+        {QStringLiteral("cmd"), ruled::v1::DEV_ZONE_COMMAND},
+        {QStringLiteral("command"), ruled::v1::DEV_ZONE_COMMAND},
     };
     for (const auto &[word, zone] : cases) {
         const auto r = parseLine(QStringLiteral("put %1 Grizzly Bears").arg(word));
@@ -12053,6 +12101,20 @@ TEST_F(RuledClientTest, SpecialCastSubmissionPreservesTheCompleteAnnouncementAnd
     announcement->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     ASSERT_TRUE(RuledPendingCast::submissionCommand(proposal, &spell, state).has_value());
     EXPECT_TRUE(RuledPendingCast::submissionCommand(proposal, &spell, state)->has_begin_spell_cast());
+}
+
+TEST(RuledDevCommandParserTest, PublicZoneChoiceFixtureHasNoCallerControlledFields)
+{
+    const auto r = parseLine(QStringLiteral("choice public-zones"));
+    ASSERT_TRUE(r.ok) << r.error.toStdString();
+    const auto &dev = r.command.dev_command();
+    EXPECT_EQ(dev.target_player_id(), kMe);
+    EXPECT_TRUE(dev.has_open_public_zone_search_fixture());
+    EXPECT_FALSE(dev.has_put_card_in_zone());
+    EXPECT_FALSE(dev.has_move_card());
+
+    EXPECT_FALSE(parseLine(QStringLiteral("choice public-zones 2")).ok);
+    EXPECT_FALSE(parseLine(QStringLiteral("choice public-zones hand Grizzly Bears")).ok);
 }
 
 TEST_F(RuledClientTest, PermissionCastConversionRequiresTheCapturedExactSpecialCastOffer)

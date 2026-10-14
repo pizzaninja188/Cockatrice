@@ -893,6 +893,12 @@ impl GameEngine {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("not your resolution choice"));
         }
+        if matches!(
+            &pending.continuation,
+            ResolutionContinuation::PublicZoneSearchFixture { .. }
+        ) {
+            return self.finish_public_zone_search_fixture_choice(pending, answer, player);
+        }
         let decision = match rv1::ResolutionChoiceDecision::try_from(answer.decision) {
             Ok(decision) => decision,
             Err(_) => {
@@ -1014,6 +1020,12 @@ impl GameEngine {
             ResolutionContinuation::ChaosWarpCommander { .. }
         ) {
             return self.finish_chaos_warp_commander(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::ChooseCardCommander { .. }
+        ) {
+            return self.finish_choose_card_commander(pending, answer, decision);
         }
         if matches!(
             pending.continuation,
@@ -1165,6 +1177,9 @@ impl GameEngine {
             ResolutionContinuation::ChaosWarpCommander { .. } => {
                 unreachable!("commander replacement handled before object-choice validation")
             }
+            ResolutionContinuation::ChooseCardCommander { .. } => {
+                unreachable!("commander replacement handled before object-choice validation")
+            }
             ResolutionContinuation::SpecialCastCommanderCleanup { .. } => {
                 unreachable!(
                     "special-cast commander replacement handled before object-choice validation"
@@ -1193,6 +1208,9 @@ impl GameEngine {
             }
             ResolutionContinuation::GraveyardChoice { .. } => {
                 return self.finish_graveyard_choice(pending, chosen);
+            }
+            ResolutionContinuation::ChooseCard { .. } => {
+                return self.finish_choose_card(pending, chosen);
             }
             ResolutionContinuation::DifferentNamedGraveyardReturn { .. } => {
                 return self.finish_different_named_graveyard_return(pending, chosen);
@@ -1289,7 +1307,10 @@ impl GameEngine {
             ResolutionContinuation::Custom { .. } => {}
             ResolutionContinuation::ManaPayment { .. }
             | ResolutionContinuation::JoinForces { .. }
-            | ResolutionContinuation::CounterMove { .. } => unreachable!("handled above"),
+            | ResolutionContinuation::CounterMove { .. }
+            | ResolutionContinuation::PublicZoneSearchFixture { .. } => {
+                unreachable!("handled above")
+            }
         }
 
         let (key, controller, item, step_no, scratch) = match &pending.continuation {

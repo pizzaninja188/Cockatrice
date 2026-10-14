@@ -16,7 +16,9 @@ pub(in crate::engine) use mana::commit_mana_payment;
 pub(in crate::engine) use mana::plan_mana_payment;
 #[cfg(test)]
 pub(in crate::engine) use mana::plan_mana_payment_with_reduction;
-pub(in crate::engine) use transaction::{card_result_entry, PaidCardCost, PreparedPaymentCosts};
+pub(in crate::engine) use transaction::{
+    card_result_entry, committed_card_result_entry, PaidCardCost, PreparedPaymentCosts,
+};
 
 use super::*;
 use tricerules_card_model::ManaSpendingRestriction;

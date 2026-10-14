@@ -227,7 +227,43 @@ pub(in crate::engine) fn card_result_entry(
             .copied()
             .unwrap_or(0),
         matched_card_types,
+        provenance: crate::state::CardResultProvenance::ActionFacts,
     }
+}
+
+/// Record one canonical committed movement with both its exact input incarnation and the
+/// actual post-commit zone/generation/visibility. The requested destination is never evidence.
+pub(in crate::engine) fn committed_card_result_entry(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    action: CardResultAction,
+    affected_player: PlayerId,
+    object_id: ObjectId,
+    input_zone: crate::state::Zone,
+    input_generation: u64,
+) -> Result<CardResultEntry, EngineError> {
+    let object = state
+        .objects
+        .get(&object_id)
+        .ok_or(EngineError::ProgramInvariant(
+            "committed card movement has no live output object",
+        ))?;
+    let mut entry = card_result_entry(state, registry, action, affected_player, object_id);
+    entry.provenance = crate::state::CardResultProvenance::CommittedMovement {
+        input_zone,
+        input_generation,
+        actual_output_zone: object.zone,
+        output_visibility: if object.face_down
+            || matches!(
+                object.zone,
+                crate::state::Zone::Hand | crate::state::Zone::Library
+            ) {
+            crate::state::CardResultOutputVisibility::UnknownHidden
+        } else {
+            crate::state::CardResultOutputVisibility::FaceUpPublic
+        },
+    };
+    Ok(entry)
 }
 
 /// Casting, activation, resolution, and turn-based attack costs share debits; only casting

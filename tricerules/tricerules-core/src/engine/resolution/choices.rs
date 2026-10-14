@@ -1794,6 +1794,7 @@ mod result_count_tests {
             zone_change_generation: generation,
             action,
             matched_card_types: vec![kind],
+            provenance: crate::state::CardResultProvenance::ActionFacts,
         };
         let land = CardTypeFilter::Land;
         let discard = CardResultAction::Discard;
@@ -1876,6 +1877,7 @@ mod result_count_tests {
                     object_id: 1,
                     zone_change_generation: 1,
                     matched_card_types: vec![CardTypeFilter::Land],
+                    provenance: crate::state::CardResultProvenance::ActionFacts,
                 },
                 CardResultEntry {
                     action: CardResultAction::Discard,
@@ -1883,6 +1885,7 @@ mod result_count_tests {
                     object_id: 2,
                     zone_change_generation: 1,
                     matched_card_types: vec![CardTypeFilter::Land],
+                    provenance: crate::state::CardResultProvenance::ActionFacts,
                 },
                 CardResultEntry {
                     action: CardResultAction::Discard,
@@ -1890,6 +1893,7 @@ mod result_count_tests {
                     object_id: 3,
                     zone_change_generation: 1,
                     matched_card_types: vec![CardTypeFilter::Land],
+                    provenance: crate::state::CardResultProvenance::ActionFacts,
                 },
             ],
             program_discard_result: None,

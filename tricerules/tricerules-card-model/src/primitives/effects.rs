@@ -1747,6 +1747,16 @@ pub enum SpellEffectKind {
         #[serde(default)]
         from_result: Option<CardResultFilter>,
     },
+    /// Resolution-time selection and ordinary movement from either the current controller's
+    /// graveyard or an explicitly bound typed card-result cohort. Program compilation enforces
+    /// the required input for the cohort form; it never falls back to a broader live zone.
+    ChooseCard {
+        source: ChooseCardSource,
+        filter: ZoneCardFilter,
+        destination: GraveyardDestination,
+        #[serde(default)]
+        optional: bool,
+    },
     /// Choose one currently present card from a source-incarnation-linked Exile set at
     /// resolution. Currency Converter and Nautiloid Ship demonstrate the two bounded
     /// destinations: the card owner's graveyard or the ability controller's battlefield.
@@ -2203,6 +2213,13 @@ pub enum SpellEffectKind {
         cost: crate::ManaCost,
     },
     None,
+}
+
+/// The two bounded source shapes currently supported by `ChooseCard`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChooseCardSource {
+    WholeCurrentGraveyard,
+    CardResultCohort { players: RelativePlayerSet },
 }
 
 fn default_true() -> bool {
@@ -3558,6 +3575,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { .. }
             | SpellEffectKind::ReturnDifferentNamedPermanentsFromGraveyard
             | SpellEffectKind::ChooseGraveyardCard { .. }
+            | SpellEffectKind::ChooseCard { .. }
             | SpellEffectKind::ChooseLinkedExiledCard { .. }
             | SpellEffectKind::PlayLinkedExiledCard { .. }
             | SpellEffectKind::GrantKeywordsAllPermanents { .. }
@@ -4501,9 +4519,11 @@ impl SpellEffectKind {
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
         if matches!(
             self,
-            Self::SelectHandCards { .. } | Self::PutSelectedHandCardsOnLibraryTop
+            Self::SelectHandCards { .. }
+                | Self::PutSelectedHandCardsOnLibraryTop
+                | Self::ChooseCard { .. }
         ) {
-            return Err("SelectHandCards and PutSelectedHandCardsOnLibraryTop are valid only inside a spell_program".into());
+            return Err("SelectHandCards, PutSelectedHandCardsOnLibraryTop, and ChooseCard are valid only inside a spell_program".into());
         }
         if matches!(self, Self::ExileObservedObjects) && context != EffectContext::Ability {
             return Err("ExileObservedObjects requires an ability context".into());
@@ -6547,6 +6567,7 @@ impl SpellEffectKind {
                 }
                 Ok(())
             }
+            SpellEffectKind::ChooseCard { filter, .. } => filter.validate(),
             // CR 701.18: scry is legal on spells and on abilities alike (scry lands, Sensei's
             // Divining Top-style activations). Reject a useless literal zero; a dynamic amount
             // may evaluate to zero and then does nothing.

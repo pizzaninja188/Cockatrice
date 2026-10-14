@@ -156,8 +156,15 @@ message DevCommand {
     // Add poison counters during a dev-built multiplayer scenario. This stays behind the same
     // server-and-session dev-command gate as every other board-construction cheat.
     DevAddPoisonCounters add_poison_counters = 5;
+    // Publish one bounded, read-only ZoneSearch snapshot for the native popup mapping fixture.
+    // This has no caller-supplied candidate or destination data.
+    OpenPublicZoneSearchFixture open_public_zone_search_fixture = 6;
   }
 }
+
+// Test-only prompt for checking public multi-zone candidate presentation. The engine derives its
+// exact five candidates from the live game; the request carries no parameters.
+message OpenPublicZoneSearchFixture {}
 
 // Destination zone for DevPutCardInZone. HAND and BATTLEFIELD may be conjured into; the rest are
 // move-only (they have separate physical binding maps on the relay side, so reach them by
@@ -2313,8 +2320,10 @@ message AbilityLogPresentation {
   string suffix = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
-// A permanent left the battlefield (currently only graveyard via SBAs / destroy effects).
-// Servers translate this into a Cockatrice moveCard from TABLE to the destination zone.
+// A physical card moved by an engine effect to Hand, Library, Graveyard, Exile, Command, or the
+// Battlefield. A move from Stack retires that physical spell object without resolving or
+// countering it; abilities and copies use their own stack-retirement events. Servers translate
+// this into the matching Cockatrice moveCard from the source to the destination zone.
 message PermanentMoved {
   uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   int32 owner_player_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];

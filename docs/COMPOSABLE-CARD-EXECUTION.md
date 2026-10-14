@@ -17,6 +17,13 @@ generator pair for Long Lake Nuisance and Patient Instructor. The
 owns accepted syntax and restrictions. Broader operations and contexts remain migration targets.
 Prompt identity applies to legacy resolution choices as well as program choices; it does not widen
 the accepted syntax.
+The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an
+earlier-result input to `ChooseCard`. The cohort records committed public output incarnations and
+the chooser revalidates their live identity and current characteristics before offering them.
+Midnight Tilling is the only card migrated to this form in this increment. Legacy `from_result`
+remains for unmigrated definitions; this does not migrate Lluwen or other whole-graveyard consumers,
+or retire that compatibility path. The developer `choice public-zones` fixture exercises the
+cross-zone candidate projection without moving a card or changing priority.
 The initial design was reviewed against `41e4ccf463930d8384ac00eb60ac21f931646b38` (2026-10-12).
 The former deck campaign remains outside scope. Cards require complete-card evidence and the
 applicable verification and visible acceptance gates independently of this design.

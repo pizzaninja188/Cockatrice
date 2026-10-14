@@ -161,16 +161,19 @@ fn choice_engine_players(players: &[PlayerId]) -> (GameEngine, rv1::ActivateAbil
         (20, "Grizzly Bears"),
     ] {
         engine
-            .apply_dev_command(&rv1::DevCommand {
-                target_player_id: player,
-                dev: Some(rv1::dev_command::Dev::PutCardInZone(
-                    rv1::DevPutCardInZone {
-                        card_name: card.into(),
-                        zone: rv1::DevZone::Battlefield as i32,
-                        ready: true,
-                    },
-                )),
-            })
+            .apply_dev_command(
+                player,
+                &rv1::DevCommand {
+                    target_player_id: player,
+                    dev: Some(rv1::dev_command::Dev::PutCardInZone(
+                        rv1::DevPutCardInZone {
+                            card_name: card.into(),
+                            zone: rv1::DevZone::Battlefield as i32,
+                            ready: true,
+                        },
+                    )),
+                },
+            )
             .unwrap();
         placed.push(engine.state.next_object_id - 1);
     }
@@ -199,16 +202,19 @@ fn choice_engine_players(players: &[PlayerId]) -> (GameEngine, rv1::ActivateAbil
 
 fn place_ready(engine: &mut GameEngine, player: PlayerId, name: &str) -> ObjectId {
     engine
-        .apply_dev_command(&rv1::DevCommand {
-            target_player_id: player,
-            dev: Some(rv1::dev_command::Dev::PutCardInZone(
-                rv1::DevPutCardInZone {
-                    card_name: name.into(),
-                    zone: rv1::DevZone::Battlefield as i32,
-                    ready: true,
-                },
-            )),
-        })
+        .apply_dev_command(
+            player,
+            &rv1::DevCommand {
+                target_player_id: player,
+                dev: Some(rv1::dev_command::Dev::PutCardInZone(
+                    rv1::DevPutCardInZone {
+                        card_name: name.into(),
+                        zone: rv1::DevZone::Battlefield as i32,
+                        ready: true,
+                    },
+                )),
+            },
+        )
         .unwrap();
     engine.reconcile_activated_ability_slots();
     engine.state.next_object_id - 1

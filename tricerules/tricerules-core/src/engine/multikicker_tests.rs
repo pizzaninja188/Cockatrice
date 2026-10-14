@@ -108,16 +108,19 @@ fn pass_two(e: &mut GameEngine) {
 }
 
 fn put_hand(e: &mut GameEngine, name: &str) -> ObjectId {
-    e.apply_dev_command(&rv1::DevCommand {
-        target_player_id: 0,
-        dev: Some(rv1::dev_command::Dev::PutCardInZone(
-            rv1::DevPutCardInZone {
-                card_name: name.into(),
-                zone: rv1::DevZone::Hand as i32,
-                ready: true,
-            },
-        )),
-    })
+    e.apply_dev_command(
+        0,
+        &rv1::DevCommand {
+            target_player_id: 0,
+            dev: Some(rv1::dev_command::Dev::PutCardInZone(
+                rv1::DevPutCardInZone {
+                    card_name: name.into(),
+                    zone: rv1::DevZone::Hand as i32,
+                    ready: true,
+                },
+            )),
+        },
+    )
     .unwrap();
     e.state.next_object_id - 1
 }

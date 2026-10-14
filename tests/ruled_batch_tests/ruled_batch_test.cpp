@@ -616,6 +616,64 @@ protected:
         return v;
     }
 
+    using TestPrivateCard = QPair<quint32, QString>;
+
+    void appendP1ZoneViewWithPrivateCards(ruled::v1::IpcResponse &response,
+                                          const QVector<TestPrivateCard> &handCards,
+                                          const QVector<TestPrivateCard> &libraryCards)
+    {
+        auto *zoneView = response.mutable_batch()->add_events()->mutable_zone_view();
+        auto p1View = buildPerPlayerView(p1, {}, {});
+        for (const auto &[oid, cardId] : handCards) {
+            auto *card = p1View.add_hand_cards();
+            card->set_object_id(oid);
+            card->set_card_id(cardId.toStdString());
+        }
+        for (const auto &[oid, cardId] : libraryCards) {
+            auto *card = p1View.add_library_cards();
+            card->set_object_id(oid);
+            card->set_card_id(cardId.toStdString());
+        }
+        *zoneView->add_per_player() = p1View;
+        *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    }
+
+    int commitHandSpellForTest(quint32 handIndex,
+                               quint32 reservedOid,
+                               quint32 stackOid,
+                               quint64 transactionId,
+                               const QString &cardId,
+                               const QString &displayName,
+                               const QVector<TestPrivateCard> &handAfterBegin,
+                               const QVector<TestPrivateCard> &libraryAfterBegin)
+    {
+        ruled::v1::RuledCommand begin;
+        auto *announcement = begin.mutable_begin_spell_cast()->mutable_announcement();
+        announcement->mutable_source()->set_hand_index(handIndex);
+
+        ruled::v1::IpcResponse begun;
+        begun.set_ok(true);
+        auto *pending = (*begun.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()].mutable_pending_spell_cast();
+        pending->set_transaction_id(transactionId);
+        pending->set_reserved_object_id(reservedOid);
+        pending->mutable_announcement()->CopyFrom(*announcement);
+        applyAcceptedCommandVisuals(p1->getPlayerId(), begin, begun);
+        appendP1ZoneViewWithPrivateCards(begun, handAfterBegin, libraryAfterBegin);
+        callBatchApply(begun);
+
+        ruled::v1::RuledCommand commit;
+        commit.mutable_commit_spell_cast()->set_transaction_id(transactionId);
+        ruled::v1::IpcResponse committed;
+        committed.set_ok(true);
+        auto *pushed = committed.mutable_batch()->add_events()->mutable_stack_pushed();
+        pushed->set_object_id(stackOid);
+        pushed->set_card_id(cardId.toStdString());
+        pushed->set_description(displayName.toStdString());
+        applyAcceptedCommandVisuals(p1->getPlayerId(), commit, committed);
+        callBatchApply(committed);
+        return boundStackServerCardId(stackOid);
+    }
+
     void expectCommandEntryAndImmediateDeparture(Server_Player *entryController)
     {
         auto *command = new Server_CardZone(p1, ZoneNames::COMMAND, false, ServerInfo_Zone::PublicZone);
@@ -2312,6 +2370,74 @@ TEST_F(RuledBatchTest, MultiZoneSearchMetadataAndTransientIdsAreDeciderPrivate)
     EXPECT_EQ(p2Choice.candidate_object_ids_size(), 0);
     EXPECT_EQ(p2Choice.candidate_names_size(), 0);
     EXPECT_EQ(p2Choice.candidate_source_zones_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_server_card_ids_size(), 0);
+    EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
+}
+
+TEST_F(RuledBatchTest, FixedPublicZoneSearchFixtureMetadataAndTransientIdsAreDeciderPrivate)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_ZONE_SEARCH);
+    choice->set_prompt_text("P1: choose one card from the public zones shown.");
+    choice->set_min(1);
+    choice->set_max(1);
+
+    const std::vector<std::pair<quint32, ruled::v1::ChoiceCandidateSourceZone>> candidates{
+        {501u, ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_BATTLEFIELD},
+        {502u, ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD},
+        {503u, ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_EXILE},
+        {504u, ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_STACK},
+        {505u, ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_COMMAND},
+    };
+    const std::vector<std::pair<const char *, const char *>> identities{
+        {"forest", "Forest"},
+        {"serra_angel", "Serra Angel"},
+        {"shock", "Shock"},
+        {"opt", "Opt"},
+        {"kami_of_the_crescent_moon", "Kami of the Crescent Moon"},
+    };
+    for (std::size_t index = 0; index < candidates.size(); ++index) {
+        choice->add_candidate_object_ids(candidates[index].first);
+        choice->add_candidate_source_zones(candidates[index].second);
+        choice->add_candidate_card_ids(identities[index].first);
+        choice->add_candidate_names(identities[index].second);
+        choice->add_candidate_selectable(true);
+    }
+    choice->set_source_object_id(504u);
+
+    const auto forP1 = redactFor(batch, p1);
+    const auto p1It = std::find_if(forP1.events().begin(), forP1.events().end(),
+                                   [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p1It, forP1.events().end());
+    const auto &p1Choice = p1It->resolution_choice_required();
+    ASSERT_EQ(p1Choice.candidate_object_ids_size(), 5);
+    ASSERT_EQ(p1Choice.candidate_source_zones_size(), 5);
+    ASSERT_EQ(p1Choice.candidate_card_ids_size(), 5);
+    ASSERT_EQ(p1Choice.candidate_names_size(), 5);
+    ASSERT_EQ(p1Choice.candidate_selectable_size(), 5);
+    ASSERT_EQ(p1Choice.candidate_server_card_ids_size(), 5);
+    EXPECT_EQ(p1Choice.source_object_id(), 504u);
+    for (int index = 0; index < 5; ++index) {
+        EXPECT_EQ(p1Choice.candidate_server_card_ids(index), index);
+        EXPECT_EQ(p1Choice.candidate_object_ids(index), candidates[static_cast<std::size_t>(index)].first);
+        EXPECT_EQ(p1Choice.candidate_source_zones(index), candidates[static_cast<std::size_t>(index)].second);
+        EXPECT_EQ(p1Choice.candidate_card_ids(index), identities[static_cast<std::size_t>(index)].first);
+        EXPECT_EQ(p1Choice.candidate_names(index), identities[static_cast<std::size_t>(index)].second);
+        EXPECT_TRUE(p1Choice.candidate_selectable(index));
+    }
+
+    const auto forP2 = redactFor(batch, p2);
+    const auto p2It = std::find_if(forP2.events().begin(), forP2.events().end(),
+                                   [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p2It, forP2.events().end());
+    const auto &p2Choice = p2It->resolution_choice_required();
+    EXPECT_EQ(p2Choice.candidate_object_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_source_zones_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_card_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_names_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_selectable_size(), 0);
     EXPECT_EQ(p2Choice.candidate_server_card_ids_size(), 0);
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
 }
@@ -5105,6 +5231,124 @@ TEST_F(RuledBatchTest, StackObjectCounteredRetiresOnlyTheExactAbilityOrCopyBindi
 
     EXPECT_FALSE(hasSyntheticStackBookkeeping(900u));
     EXPECT_TRUE(hasSyntheticStackBookkeeping(901u));
+}
+
+TEST_F(RuledBatchTest, PermanentMovedFromStackRetiresItsBindingAndRegistersLibraryIdentity)
+{
+    seedCardCatalog({"Blue Sun's Zenith"});
+    const QString cardId = QStringLiteral("blue_suns_zenith");
+    const QString displayName = QStringLiteral("Blue Sun's Zenith");
+    Server_Card *spell = addCardToHand(p1, displayName);
+    Server_Card *libraryDuplicate = addCardToDeck(p1, displayName);
+    Server_CardZone *stack = p1->getZones().value(ZoneNames::STACK);
+    Server_CardZone *library = p1->getZones().value(ZoneNames::DECK);
+    ASSERT_NE(stack, nullptr);
+    ASSERT_NE(library, nullptr);
+
+    ruled::v1::IpcResponse seeded;
+    seeded.set_ok(true);
+    bindPublicObject(p1, 800u, spell);
+    bindLibraryObject(p1, 801u, libraryDuplicate);
+    appendP1ZoneViewWithPrivateCards(seeded, {{800u, cardId}}, {{801u, cardId}});
+    ASSERT_TRUE(callBatchApply(seeded).zoneViewApplied);
+    ASSERT_EQ(bindingFor(p1).engineOidToServerCardId.value(800u), spell->getId());
+    ASSERT_EQ(bindingFor(p1).libraryEngineOidToServerCardId.value(801u), libraryDuplicate->getId());
+    seedSyntheticStackBookkeeping(802u, 803u, false);
+
+    ASSERT_EQ(commitHandSpellForTest(0u, 800u, 810u, 41u, cardId, displayName, {}, {{801u, cardId}}),
+              spell->getId());
+    ASSERT_EQ(stack->getCards(), (QList<Server_Card *>{spell}));
+    EXPECT_EQ(boundStackServerCardId(810u), spell->getId());
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *moved = response.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(810u);
+    moved->set_owner_player_id(p1->getPlayerId());
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_LIBRARY);
+    moved->set_card_id(cardId.toStdString());
+    appendP1ZoneViewWithPrivateCards(response, {}, {{801u, cardId}, {810u, cardId}});
+    ASSERT_EQ(response.batch().events_size(), 2);
+    EXPECT_TRUE(response.batch().events(0).has_permanent_moved());
+    EXPECT_TRUE(response.batch().events(1).has_zone_view());
+    EXPECT_FALSE(std::any_of(response.batch().events().begin(), response.batch().events().end(), [](const auto &event) {
+        return event.has_stack_resolved() || event.has_stack_object_countered();
+    }));
+    ASSERT_TRUE(callBatchApply(response).zoneViewApplied);
+
+    EXPECT_EQ(library->getCards(), (QList<Server_Card *>{libraryDuplicate, spell}));
+    EXPECT_EQ(bindingFor(p1).libraryEngineOidToServerCardId.value(801u), libraryDuplicate->getId());
+    EXPECT_EQ(bindingFor(p1).libraryEngineOidToServerCardId.value(810u), spell->getId());
+    EXPECT_EQ(findCardByEngineOid(p1, 801u), libraryDuplicate);
+    EXPECT_EQ(findCardByEngineOid(p1, 810u), spell);
+    EXPECT_TRUE(stack->getCards().isEmpty());
+    EXPECT_FALSE(hasSyntheticStackBookkeeping(810u));
+    EXPECT_EQ(boundStackServerCardId(810u), -1);
+    EXPECT_TRUE(hasSyntheticStackBookkeeping(802u));
+}
+
+TEST_F(RuledBatchTest, PermanentMovedFromStackRegistersTheExactHandIdentityAfterZoneReconcile)
+{
+    seedCardCatalog({"Blue Sun's Zenith"});
+    const QString cardId = QStringLiteral("blue_suns_zenith");
+    const QString displayName = QStringLiteral("Blue Sun's Zenith");
+    Server_Card *spell = addCardToHand(p1, displayName);
+    Server_Card *libraryDuplicate = addCardToDeck(p1, displayName);
+    Server_CardZone *stack = p1->getZones().value(ZoneNames::STACK);
+    Server_CardZone *hand = p1->getZones().value(ZoneNames::HAND);
+    ASSERT_NE(stack, nullptr);
+    ASSERT_NE(hand, nullptr);
+
+    // A pre-existing same-name physical spell makes the subsequent StackPushed association
+    // prove which new cast moved, rather than merely finding an unambiguous name match.
+    Server_Card *stackSibling = addCardToHand(p1, displayName);
+    hand->removeCard(stackSibling);
+    stack->insertCard(stackSibling, -1, 0);
+    bindStackObject(819u, stackSibling, p1->getPlayerId(), displayName);
+
+    ruled::v1::IpcResponse seeded;
+    seeded.set_ok(true);
+    bindPublicObject(p1, 820u, spell);
+    bindLibraryObject(p1, 821u, libraryDuplicate);
+    appendP1ZoneViewWithPrivateCards(seeded, {{820u, cardId}}, {{821u, cardId}});
+    ASSERT_TRUE(callBatchApply(seeded).zoneViewApplied);
+    ASSERT_EQ(bindingFor(p1).engineOidToServerCardId.value(820u), spell->getId());
+    ASSERT_EQ(bindingFor(p1).libraryEngineOidToServerCardId.value(821u), libraryDuplicate->getId());
+    EXPECT_EQ(boundStackServerCardId(819u), stackSibling->getId());
+    seedSyntheticStackBookkeeping(822u, 823u, false);
+
+    ASSERT_EQ(commitHandSpellForTest(0u, 820u, 830u, 42u, cardId, displayName, {}, {{821u, cardId}}), spell->getId());
+    ASSERT_EQ(stack->getCards().size(), 2);
+    EXPECT_TRUE(stack->getCards().contains(stackSibling));
+    EXPECT_TRUE(stack->getCards().contains(spell));
+    EXPECT_EQ(boundStackServerCardId(830u), spell->getId());
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *moved = response.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(830u);
+    moved->set_owner_player_id(p1->getPlayerId());
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_HAND);
+    moved->set_card_id(cardId.toStdString());
+    appendP1ZoneViewWithPrivateCards(response, {{830u, cardId}}, {{821u, cardId}});
+    ASSERT_EQ(response.batch().events_size(), 2);
+    EXPECT_TRUE(response.batch().events(0).has_permanent_moved());
+    EXPECT_TRUE(response.batch().events(1).has_zone_view());
+    EXPECT_FALSE(std::any_of(response.batch().events().begin(), response.batch().events().end(), [](const auto &event) {
+        return event.has_stack_resolved() || event.has_stack_object_countered();
+    }));
+    ASSERT_TRUE(callBatchApply(response).zoneViewApplied);
+
+    EXPECT_EQ(hand->getCards(), (QList<Server_Card *>{spell}));
+    EXPECT_EQ(bindingFor(p1).engineOidToServerCardId.value(830u), spell->getId());
+    EXPECT_EQ(findCardByEngineOid(p1, 830u), spell);
+    EXPECT_EQ(boundStackServerCardId(819u), stackSibling->getId());
+    EXPECT_EQ(bindingFor(p1).libraryEngineOidToServerCardId.value(821u), libraryDuplicate->getId());
+    EXPECT_EQ(findCardByEngineOid(p1, 821u), libraryDuplicate);
+    EXPECT_EQ(stack->getCards(), (QList<Server_Card *>{stackSibling}));
+    EXPECT_FALSE(hasSyntheticStackBookkeeping(830u));
+    EXPECT_EQ(boundStackServerCardId(830u), -1);
+    EXPECT_TRUE(hasSyntheticStackBookkeeping(822u));
 }
 
 // --------------------------------------------------------------------------------------------

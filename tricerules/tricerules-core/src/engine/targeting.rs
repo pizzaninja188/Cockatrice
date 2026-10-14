@@ -1196,7 +1196,7 @@ pub(super) fn stack_spell_target_legal(
             .is_none_or(|maximum| mana_value <= maximum)
 }
 
-fn stack_characteristics_match_type(
+pub(super) fn stack_characteristics_match_type(
     characteristics: &super::characteristics::Characteristics,
     filter: CardTypeFilter,
 ) -> bool {
@@ -1824,6 +1824,7 @@ fn validate_effect_targets(
         // acts on are the top of the controller's own library, decided at resolution.
         | SpellEffectKind::SearchLibrary { .. }
         | SpellEffectKind::ChooseGraveyardCard { .. }
+        | SpellEffectKind::ChooseCard { .. }
         | SpellEffectKind::ChooseLinkedExiledCard { .. }
         | SpellEffectKind::PlayLinkedExiledCard { .. }
         | SpellEffectKind::IntoTheWilds

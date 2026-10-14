@@ -749,6 +749,9 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         if (e.has_stack_object_countered()) {
             applyStackObjectCountered(e.stack_object_countered(), ctx);
         }
+        if (e.has_permanent_moved()) {
+            applyPermanentMoved(e.permanent_moved(), ctx);
+        }
         if (e.has_trigger_needs_target()) {
             applyTriggerNeedsTarget(e.trigger_needs_target(), ctx);
         }
@@ -1085,6 +1088,17 @@ void RuledEventDispatcher::applyStackObjectCountered(const ruled::v1::StackObjec
     retireStackObject(objectId, ctx);
     RULED_TRACE("client") << "stackObjectCountered: oid=" << objectId
                           << " stackOidOrderRemaining=" << state->stackOidOrder.size();
+}
+
+void RuledEventDispatcher::applyPermanentMoved(const ruled::v1::PermanentMoved &moved, BatchContext &ctx)
+{
+    const quint32 objectId = moved.object_id();
+    // An effect may move a physical spell directly from Stack. Such a move is neither a resolve
+    // nor a counter, so the ordinary stack-exit events do not apply. The exact OID in the public
+    // physical-move event is sufficient to retire only its client stack and target bookkeeping.
+    if (state->stackOidOrder.contains(objectId)) {
+        retireStackObject(objectId, ctx);
+    }
 }
 
 void RuledEventDispatcher::retireStackObject(quint32 objectId, BatchContext &ctx)
@@ -1803,11 +1817,32 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
                         pick.candidateAnnotations.append(tr("Library"));
                         break;
                     case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_BATTLEFIELD:
-                        if (!isBehold) {
+                        if (!isBehold && !isZoneSearch) {
                             qWarning() << "Rejecting ruled choice with an invalid source zone";
                             return;
                         }
                         pick.candidateAnnotations.append(tr("Battlefield"));
+                        break;
+                    case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_EXILE:
+                        if (!isZoneSearch) {
+                            qWarning() << "Rejecting ruled choice with an invalid source zone";
+                            return;
+                        }
+                        pick.candidateAnnotations.append(tr("Exile"));
+                        break;
+                    case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_STACK:
+                        if (!isZoneSearch) {
+                            qWarning() << "Rejecting ruled choice with an invalid source zone";
+                            return;
+                        }
+                        pick.candidateAnnotations.append(tr("Stack"));
+                        break;
+                    case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_COMMAND:
+                        if (!isZoneSearch) {
+                            qWarning() << "Rejecting ruled choice with an invalid source zone";
+                            return;
+                        }
+                        pick.candidateAnnotations.append(tr("Command"));
                         break;
                     default:
                         qWarning() << "Rejecting ruled choice with unspecified source zone";

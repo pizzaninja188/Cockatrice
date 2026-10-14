@@ -6027,6 +6027,7 @@ mod mana_payment_tests {
             object_id,
             zone_change_generation: 1,
             matched_card_types: Vec::new(),
+            provenance: crate::state::CardResultProvenance::ActionFacts,
         };
         assert_eq!(format_paid_card_costs_log(&[]), "");
         assert_eq!(
@@ -6749,16 +6750,19 @@ mod mana_payment_tests {
         e.registry = Box::leak(Box::new(registry));
         let place = |engine: &mut GameEngine, card: &str| {
             engine
-                .apply_dev_command(&rv1::DevCommand {
-                    target_player_id: 0,
-                    dev: Some(rv1::dev_command::Dev::PutCardInZone(
-                        rv1::DevPutCardInZone {
-                            card_name: card.into(),
-                            zone: rv1::DevZone::Battlefield as i32,
-                            ready: true,
-                        },
-                    )),
-                })
+                .apply_dev_command(
+                    0,
+                    &rv1::DevCommand {
+                        target_player_id: 0,
+                        dev: Some(rv1::dev_command::Dev::PutCardInZone(
+                            rv1::DevPutCardInZone {
+                                card_name: card.into(),
+                                zone: rv1::DevZone::Battlefield as i32,
+                                ready: true,
+                            },
+                        )),
+                    },
+                )
                 .expect("put fixture permanent on battlefield");
             engine.state.next_object_id - 1
         };

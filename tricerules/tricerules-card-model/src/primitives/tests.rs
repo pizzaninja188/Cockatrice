@@ -4720,6 +4720,94 @@ fn program_compiler_rejects_untyped_dynamic_and_event_bound_leaf_parameters() {
 }
 
 #[test]
+fn program_compiler_accepts_a_bound_mill_cohort_for_choose_card() {
+    let body: super::AuthoredBlock = ron::from_str(
+        r#"(steps: [
+            (id: "mill", bind: ["milled"], input: None,
+                kind: Perform(Mill(count: 4, who: Controller))),
+            (id: "recover", bind: [], input: Some("milled"),
+                kind: Perform(ChooseCard(
+                    source: CardResultCohort(players: Controller),
+                    filter: (any_of: Some([
+                        (card_type: Some(Land)),
+                        (card_type: Some(NonlandPermanent)),
+                    ])),
+                    destination: Hand,
+                    optional: true,
+                )))
+        ], yields: [])"#,
+    )
+    .expect("the bounded Mill-to-ChooseCard authoring form should parse");
+    let program = super::CardProgram {
+        body,
+        target_bindings: Vec::new(),
+    };
+    let owner = crate::ProgramOwnerId::face(
+        "mill_choose_card_fixture",
+        crate::CardFaceId::new("mill_choose_card_fixture").unwrap(),
+    );
+    let compiled = super::CompiledProgram::compile(owner, super::EffectContext::Spell, &program)
+        .expect("ChooseCard should consume a bound Mill result cohort");
+    assert_eq!(compiled.body.steps[1].input, Some(super::ResultSlotId(0)));
+    assert!(matches!(
+        compiled.slots[0].result_type,
+        super::ResultType::CardResultCohort { .. }
+    ));
+}
+
+#[test]
+fn program_compiler_rejects_unbound_incompatible_and_forward_choose_card_inputs() {
+    let owner = crate::ProgramOwnerId::face(
+        "mill_choose_card_invalid_fixture",
+        crate::CardFaceId::new("mill_choose_card_invalid_fixture").unwrap(),
+    );
+    let compile = |body: &str| {
+        let body: super::AuthoredBlock = ron::from_str(body).expect("invalid-input fixture parses");
+        let program = super::CardProgram {
+            body,
+            target_bindings: Vec::new(),
+        };
+        super::CompiledProgram::compile(owner.clone(), super::EffectContext::Spell, &program)
+    };
+    let choose = r#"Perform(ChooseCard(
+        source: CardResultCohort(players: Controller),
+        filter: (card_type: Some(Land)), destination: Hand, optional: true))"#;
+
+    let missing = format!(
+        r#"(steps: [
+            (id: "mill", bind: ["milled"], input: None,
+                kind: Perform(Mill(count: 4, who: Controller))),
+            (id: "recover", bind: [], input: None, kind: {choose}),
+        ], yields: [])"#
+    );
+    assert!(compile(&missing)
+        .unwrap_err()
+        .contains("requires an explicitly bound input result"));
+
+    let incompatible = format!(
+        r#"(steps: [
+            (id: "discard", bind: ["discarded"], input: None,
+                kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+            (id: "recover", bind: [], input: Some("discarded"), kind: {choose}),
+        ], yields: [])"#
+    );
+    assert!(compile(&incompatible)
+        .unwrap_err()
+        .contains("has the wrong type for this instruction"));
+
+    let forward = format!(
+        r#"(steps: [
+            (id: "recover", bind: [], input: Some("milled"), kind: {choose}),
+            (id: "mill", bind: ["milled"], input: None,
+                kind: Perform(Mill(count: 4, who: Controller))),
+        ], yields: [])"#
+    );
+    assert!(compile(&forward)
+        .unwrap_err()
+        .contains("input result 'milled' is not in scope"));
+}
+
+#[test]
 fn authored_program_rejects_targeted_leaf_without_compiled_binding() {
     let definition = program_fixture(
         r#"(steps: [(id: "damage", bind: [], kind: Perform(

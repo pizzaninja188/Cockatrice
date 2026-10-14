@@ -1,21 +1,24 @@
-// Oracle verified 2026-08-29. CR 701.17c/608.2i: the optional return is limited
-// to the exact cards milled by the preceding instruction that remain in the graveyard.
+// Oracle verified 2026-08-29. CR 701.17c: mill moves a card from a library to its owner's graveyard.
+// Optional return uses only this Mill's exact, committed, live, face-up public output incarnations.
 (
   id: "midnight_tilling",
   name: "Midnight Tilling",
   face_id: "midnight_tilling",
   mana_cost: "{1}{G}",
   types: ["Instant"],
-  spell_effect: [
-    Mill(count: 4),
-    ChooseGraveyardCard(
-      filter: (any_of: Some([
-        (card_type: Some(Land)),
-        (card_type: Some(NonlandPermanent)),
-      ])),
-      destination: Hand,
-      optional: true,
-      from_result: Some((source: PreviousEffect, action: Mill, players: Controller)),
-    ),
-  ],
+  spell_effect: [],
+  spell_program: Some((body: (steps: [
+    (id: "mill", bind: ["milled"], input: None,
+      kind: Perform(Mill(count: 4, who: Controller))),
+    (id: "recover", bind: [], input: Some("milled"),
+      kind: Perform(ChooseCard(
+        source: CardResultCohort(players: Controller),
+        filter: (any_of: Some([
+          (card_type: Some(Land)),
+          (card_type: Some(NonlandPermanent)),
+        ])),
+        destination: Hand,
+        optional: true,
+      ))),
+  ], yields: []), target_bindings: [])),
 )

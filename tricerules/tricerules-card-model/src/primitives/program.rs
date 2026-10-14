@@ -10,8 +10,9 @@
 //! separately typed context/result contract.
 
 use super::{
-    Amount, CardTypeFilter, EffectContext, EffectSubject, GameCondition, PlayerRecipient,
-    RelativePlayerSet, SpellEffectKind, TargetFilter, TargetSchema, TargetingDef, TokenCopySource,
+    Amount, CardResultAction, CardTypeFilter, ChooseCardSource, EffectContext, EffectSubject,
+    GameCondition, PlayerRecipient, RelativePlayerSet, SpellEffectKind, TargetFilter, TargetSchema,
+    TargetingDef, TokenCopySource,
 };
 use crate::{ModeId, ProgramOwnerId};
 use serde::{Deserialize, Serialize};
@@ -209,6 +210,11 @@ pub enum ResultType {
     HandSelection {
         cardinality: Cardinality,
         ordered: bool,
+    },
+    CardResultCohort {
+        action: CardResultAction,
+        who: PlayerRecipient,
+        cardinality: Cardinality,
     },
 }
 
@@ -576,6 +582,9 @@ fn operation_needs_affected_player(effect: &SpellEffectKind) -> bool {
         } | SpellEffectKind::Discard {
             who: PlayerRecipient::AffectedPlayer,
             ..
+        } | SpellEffectKind::Mill {
+            who: PlayerRecipient::AffectedPlayer,
+            ..
         }
     )
 }
@@ -686,6 +695,10 @@ fn compile_input(
     let expected = match effect {
         EffectOp::UntapChosenPermanents => Some("PermanentSelection"),
         EffectOp::PutSelectedHandCardsOnLibraryTop => Some("HandSelection"),
+        EffectOp::ChooseCard {
+            source: ChooseCardSource::CardResultCohort { .. },
+            ..
+        } => Some("CardResultCohort"),
         _ => None,
     };
     match (expected, input) {
@@ -700,14 +713,26 @@ fn compile_input(
             let actual = slots
                 .get(slot.0 as usize)
                 .ok_or_else(|| format!("input result '{name}' is unknown"))?;
-            let matches = matches!(
-                (&actual.result_type, expected),
-                (ResultType::PermanentSelection { .. }, "PermanentSelection")
-                    | (
-                        ResultType::HandSelection { ordered: true, .. },
-                        "HandSelection"
-                    )
-            );
+            let matches = match effect {
+                EffectOp::ChooseCard {
+                    source: ChooseCardSource::CardResultCohort { .. },
+                    ..
+                } => matches!(
+                    actual.result_type,
+                    ResultType::CardResultCohort {
+                        action: CardResultAction::Mill,
+                        ..
+                    }
+                ),
+                _ => matches!(
+                    (&actual.result_type, expected),
+                    (ResultType::PermanentSelection { .. }, "PermanentSelection")
+                        | (
+                            ResultType::HandSelection { ordered: true, .. },
+                            "HandSelection"
+                        )
+                ),
+            };
             if !matches {
                 return Err(format!(
                     "input result '{name}' has the wrong type for this instruction"
@@ -825,6 +850,22 @@ fn join_result_types(left: &ResultType, right: &ResultType) -> Option<ResultType
             cardinality: union(*ac, *bc),
             ordered: *ao,
         },
+        (
+            ResultType::CardResultCohort {
+                action: aa,
+                who: aw,
+                cardinality: ac,
+            },
+            ResultType::CardResultCohort {
+                action: ba,
+                who: bw,
+                cardinality: bc,
+            },
+        ) if aa == ba && aw == bw => ResultType::CardResultCohort {
+            action: *aa,
+            who: *aw,
+            cardinality: union(*ac, *bc),
+        },
         _ => return None,
     })
 }
@@ -905,6 +946,38 @@ fn validate_and_result_types(
                 },
                 ordered: *ordered,
             }])
+        }
+        SpellEffectKind::Mill { count, who } => {
+            effect.validate(context)?;
+            validate_program_recipient(*who, context, "Mill recipient")?;
+            validate_program_amount(count)?;
+            Ok(vec![ResultType::CardResultCohort {
+                action: CardResultAction::Mill,
+                who: *who,
+                cardinality: Cardinality {
+                    min: 0,
+                    max: amount_upper_bound(count),
+                },
+            }])
+        }
+        SpellEffectKind::ChooseCard {
+            filter,
+            destination,
+            ..
+        } => {
+            filter.validate()?;
+            if !matches!(
+                destination,
+                super::GraveyardDestination::Hand
+                    | super::GraveyardDestination::LibraryTop
+                    | super::GraveyardDestination::LibraryBottom
+            ) {
+                return Err(
+                    "ChooseCard currently supports only Hand and Library destinations in spell_program"
+                        .into(),
+                );
+            }
+            Ok(Vec::new())
         }
         SpellEffectKind::PutSelectedHandCardsOnLibraryTop => Ok(Vec::new()),
         SpellEffectKind::DamageTarget { amount, target } => {

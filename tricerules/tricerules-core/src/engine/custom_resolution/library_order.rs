@@ -792,6 +792,7 @@ mod into_the_wilds_tests {
                     object_id: rest,
                     zone_change_generation: 0,
                     matched_card_types: vec![CardTypeFilter::BasicLand],
+                    provenance: crate::state::CardResultProvenance::ActionFacts,
                 });
             engine.state.pending_resolution = Some(PendingResolution {
                 resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
@@ -1008,6 +1009,7 @@ mod into_the_wilds_tests {
                     object_id: forest,
                     zone_change_generation: 0,
                     matched_card_types: vec![CardTypeFilter::BasicLand],
+                    provenance: crate::state::CardResultProvenance::ActionFacts,
                 });
             engine.state.pending_resolution = Some(PendingResolution {
                 resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,

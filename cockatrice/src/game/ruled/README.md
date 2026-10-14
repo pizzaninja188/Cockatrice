@@ -308,7 +308,7 @@ transport with the others instead of widening an upstream class.
 Three grammar rules worth knowing before extending it:
 
 - **`put` and `move` are separate verbs on purpose.** `put` always conjures a new card; `move`
-  relocates one the seat already owns and is the only way to reach graveyard, exile or library.
+  relocates one the seat already owns and is the way to reach graveyard, exile, library or command.
   They were one verb that guessed (move if a copy exists, else conjure), which made "give me a
   second Serra Angel" impossible to express and silently pulled the existing one off the
   battlefield instead. If you add a third placement verb, keep the intent explicit.
@@ -318,6 +318,15 @@ Three grammar rules worth knowing before extending it:
   second seat. It is read as a seat only when it is a valid ordinal *with* symbols after it, so
   `mana 3 RR` falls back to mana rather than erroring on a seat that cannot exist. `put` has no
   such ambiguity (no zone word is numeric). Seats are 1-based ordinals, never raw player ids.
+- `cmd` and `command` both name `DEV_ZONE_COMMAND`, so stage an existing object with
+  `move cmd Card Name`; there is no Stack destination for dev movement.
+- **`choice public-zones`** opens a parameterless, read-only `ZoneSearch` mapping fixture. At the
+  current priority window it snapshots one distinct, face-up live card from each of Battlefield,
+  Graveyard, Exile, Stack and Command. The Stack candidate must be a real physical spell cast; the
+  engine derives every ObjectId, generation, name and source zone, and the authenticated command
+  actor answers. It neither moves a candidate nor resolves/retire the Stack item. Stage the five
+  cards first, including actually casting the card intended for the Stack row. This fixture checks
+  multi-zone presentation and answer mapping; it is separate from Midnight Tilling's Mill behavior.
 
 Adding a primitive is a proto arm, a `parse` case, and an engine handler — no new UI.
 

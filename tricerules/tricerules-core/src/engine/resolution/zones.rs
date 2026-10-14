@@ -2343,6 +2343,12 @@ fn mill_players(
             let Some(oid) = engine.state.players[pi].library.front().copied() else {
                 break;
             };
+            let input_generation = engine
+                .state
+                .zone_change_generation
+                .get(&oid)
+                .copied()
+                .unwrap_or(0);
             move_object_to_zone(
                 &mut engine.state,
                 engine.registry,
@@ -2356,13 +2362,15 @@ fn mill_players(
                 pid,
                 rv1::permanent_moved::Destination::Graveyard,
             ));
-            result.cards.push(payment::card_result_entry(
+            result.cards.push(payment::committed_card_result_entry(
                 &engine.state,
                 engine.registry,
                 CardResultAction::Mill,
                 pid,
                 oid,
-            ));
+                Zone::Library,
+                input_generation,
+            )?);
             milled += 1;
         }
         events.push(ev_log(format!(
@@ -2486,6 +2494,407 @@ pub(super) fn target_player_sacrifices(
     }
 
     Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn choose_card(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ChooseCard {
+        source,
+        filter,
+        destination,
+        optional,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let controller = cx.controller;
+    let mut candidate_refs = Vec::new();
+    let mut seen = HashSet::new();
+    match source {
+        ChooseCardSource::WholeCurrentGraveyard => {
+            let Some(index) = cx.engine.state.player_idx(controller) else {
+                return Ok(EffectOutcome::Continue);
+            };
+            for oid in cx.engine.state.players[index].graveyard.iter().copied() {
+                let generation = cx
+                    .engine
+                    .state
+                    .zone_change_generation
+                    .get(&oid)
+                    .copied()
+                    .unwrap_or(0);
+                let source_zone = Zone::Graveyard;
+                if seen.insert((oid, generation))
+                    && live_choose_card_candidate(cx.engine, oid, generation, source_zone)
+                    && choose_card_filter_matches(cx.engine, oid, source_zone, &filter)
+                {
+                    candidate_refs.push(crate::state::CardChoiceCandidateRef {
+                        object_id: oid,
+                        zone_change_generation: generation,
+                        source_zone,
+                    });
+                }
+            }
+        }
+        ChooseCardSource::CardResultCohort { players } => {
+            for entry in &cx.previous_effect_result.cards {
+                let Some(candidate) =
+                    committed_choose_card_candidate(cx.engine, entry, controller, players, &filter)
+                else {
+                    continue;
+                };
+                if seen.insert((candidate.object_id, candidate.zone_change_generation)) {
+                    candidate_refs.push(candidate);
+                }
+            }
+        }
+    }
+    if candidate_refs.is_empty() {
+        cx.events.push(ev_log(format!(
+            "P{controller} has no matching public card ({}).",
+            cx.spell_label
+        )));
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let candidates = candidate_refs
+        .iter()
+        .map(|candidate| candidate.object_id)
+        .collect::<Vec<_>>();
+    let (candidate_card_ids, candidate_names) = candidate_identities(cx.engine, &candidates);
+    let choice_kind = if candidate_refs.iter().all(|candidate| {
+        candidate.source_zone == Zone::Graveyard
+            && cx
+                .engine
+                .state
+                .objects
+                .get(&candidate.object_id)
+                .is_some_and(|object| object.owner == controller)
+    }) {
+        custom::ChoiceKind::GraveyardCards
+    } else {
+        custom::ChoiceKind::ZoneSearch
+    };
+    let min = if optional { 0 } else { 1 };
+    let prompt = if optional {
+        format!("P{controller}: you may choose a matching card from the offered public zones.")
+    } else {
+        format!("P{controller}: choose a matching card from the offered public zones.")
+    };
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
+                deciding_player_id: controller,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: choice_kind as i32,
+                candidate_object_ids: candidates.clone(),
+                candidate_card_ids,
+                min,
+                max: 1,
+                ordered: false,
+                candidate_names,
+                candidate_server_card_ids: Vec::new(),
+                candidate_source_zones: candidate_refs
+                    .iter()
+                    .map(|candidate| choice_candidate_source_zone(candidate.source_zone) as i32)
+                    .collect(),
+                ..Default::default()
+            },
+        )),
+    });
+    cx.events.push(ev_log(prompt.clone()));
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+        deciding_player: controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates,
+            min,
+            max: 1,
+            ordered: false,
+            prompt,
+            choice_kind,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::ChooseCard {
+            stack: cx.parked_stack(),
+            chooser: controller,
+            destination,
+            candidates: candidate_refs,
+            spell_label: cx.spell_label.to_string(),
+        },
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
+fn committed_choose_card_candidate(
+    engine: &GameEngine,
+    entry: &crate::state::CardResultEntry,
+    controller: PlayerId,
+    players: RelativePlayerSet,
+    filter: &ZoneCardFilter,
+) -> Option<crate::state::CardChoiceCandidateRef> {
+    if !super::super::history::relative_player_set_contains(
+        &engine.state,
+        players,
+        controller,
+        entry.affected_player,
+    ) {
+        return None;
+    }
+    let (source_zone, visibility) = match entry.provenance {
+        CardResultProvenance::ActionFacts => return None,
+        CardResultProvenance::CommittedMovement {
+            actual_output_zone,
+            output_visibility,
+            ..
+        } => (actual_output_zone, output_visibility),
+    };
+    if visibility != CardResultOutputVisibility::FaceUpPublic
+        || !matches!(
+            source_zone,
+            Zone::Graveyard | Zone::Battlefield | Zone::Exile | Zone::Stack | Zone::Command
+        )
+        || !live_choose_card_candidate(
+            engine,
+            entry.object_id,
+            entry.zone_change_generation,
+            source_zone,
+        )
+        || !choose_card_filter_matches(engine, entry.object_id, source_zone, filter)
+    {
+        return None;
+    }
+    Some(crate::state::CardChoiceCandidateRef {
+        object_id: entry.object_id,
+        zone_change_generation: entry.zone_change_generation,
+        source_zone,
+    })
+}
+
+fn choice_candidate_source_zone(zone: Zone) -> rv1::ChoiceCandidateSourceZone {
+    match zone {
+        Zone::Hand => rv1::ChoiceCandidateSourceZone::Hand,
+        Zone::Graveyard => rv1::ChoiceCandidateSourceZone::Graveyard,
+        Zone::Library => rv1::ChoiceCandidateSourceZone::Library,
+        Zone::Battlefield => rv1::ChoiceCandidateSourceZone::Battlefield,
+        Zone::Exile => rv1::ChoiceCandidateSourceZone::Exile,
+        Zone::Stack => rv1::ChoiceCandidateSourceZone::Stack,
+        Zone::Command => rv1::ChoiceCandidateSourceZone::Command,
+    }
+}
+
+pub(in crate::engine) fn live_choose_card_candidate(
+    engine: &GameEngine,
+    oid: ObjectId,
+    generation: u64,
+    source_zone: Zone,
+) -> bool {
+    if !matches!(
+        source_zone,
+        Zone::Graveyard | Zone::Battlefield | Zone::Exile | Zone::Stack | Zone::Command
+    ) || engine
+        .state
+        .zone_change_generation
+        .get(&oid)
+        .copied()
+        .unwrap_or(0)
+        != generation
+    {
+        return false;
+    }
+    let Some(object) = engine.state.objects.get(&oid) else {
+        return false;
+    };
+    // Do not derive or project card identity until both the recorded and live visibility gates
+    // have established that this exact incarnation is a public face-up card.
+    if object.zone != source_zone || object.face_down || !engine.state.is_card_object(oid) {
+        return false;
+    }
+    if source_zone == Zone::Stack {
+        return engine.state.stack.iter().any(|item| {
+            item.id == oid
+                && item.ability_text.is_none()
+                && !item.is_copy
+                && item.card_id == object.card_id
+                && item.face_index == object.face_up_index
+                && item.prototyped == object.prototyped
+                && item.cast_occurrence
+                    == Some(crate::state::StackObjectRef {
+                        object_id: oid,
+                        zone_change_generation: Some(generation),
+                    })
+        });
+    }
+    true
+}
+
+fn choose_card_filter_matches(
+    engine: &GameEngine,
+    oid: ObjectId,
+    source_zone: Zone,
+    filter: &ZoneCardFilter,
+) -> bool {
+    if let Some(branches) = &filter.any_of {
+        return branches
+            .iter()
+            .any(|branch| choose_card_filter_matches(engine, oid, source_zone, branch));
+    }
+    match source_zone {
+        Zone::Battlefield => {
+            let Some(characteristics) = engine.characteristics(oid) else {
+                return false;
+            };
+            zone_filter_matches_characteristics(engine, oid, filter, &characteristics, None)
+        }
+        Zone::Stack => {
+            let Some(item) = engine
+                .state
+                .stack
+                .iter()
+                .find(|item| item.id == oid && item.ability_text.is_none() && !item.is_copy)
+                .cloned()
+            else {
+                return false;
+            };
+            let Some(object) = engine.state.objects.get(&oid) else {
+                return false;
+            };
+            if item.card_id != object.card_id
+                || item.face_index != object.face_up_index
+                || item.prototyped != object.prototyped
+            {
+                return false;
+            }
+            let Some(definition) = engine.registry.get(&item.card_id) else {
+                return false;
+            };
+            let Some(printed_face) = definition.face(item.face_index) else {
+                return false;
+            };
+            let prototype_face;
+            let face = if item.prototyped {
+                let Some(face) = printed_face.prototyped_face() else {
+                    return false;
+                };
+                prototype_face = face;
+                &prototype_face
+            } else {
+                printed_face
+            };
+            let characteristics = super::super::characteristics::spell_cast_characteristics(
+                &engine.state,
+                engine.registry,
+                item.id,
+                item.controller,
+                face,
+            );
+            zone_filter_matches_characteristics(
+                engine,
+                oid,
+                filter,
+                &characteristics,
+                Some((&item, definition, face)),
+            )
+        }
+        Zone::Graveyard | Zone::Exile | Zone::Command => {
+            super::super::card_predicates::zone_card_matches_filter(
+                &engine.state,
+                engine.registry,
+                oid,
+                Some(filter),
+            )
+        }
+        Zone::Hand | Zone::Library => false,
+    }
+}
+
+fn zone_filter_matches_characteristics(
+    engine: &GameEngine,
+    oid: ObjectId,
+    filter: &ZoneCardFilter,
+    characteristics: &super::super::characteristics::Characteristics,
+    stack: Option<(
+        &crate::state::StackItem,
+        &tricerules_card_model::CardDefinition,
+        &tricerules_card_model::CardFace,
+    )>,
+) -> bool {
+    let Some(object) = engine.state.objects.get(&oid) else {
+        return false;
+    };
+    let Some(definition) = engine.registry.get(&object.card_id) else {
+        return false;
+    };
+    let type_matches = |card_type| {
+        super::super::targeting::stack_characteristics_match_type(characteristics, card_type)
+    };
+    let name_matches = filter.exact_name.as_deref().is_none_or(|name| {
+        if stack.is_some() {
+            engine
+                .characteristics(oid)
+                .is_some_and(|current| current.has_name(name))
+        } else {
+            characteristics.has_name(name)
+        }
+    });
+    let colors_are_empty = if let Some((item, _, _)) = stack {
+        super::super::characteristics::stack_spell_colors(&engine.state, engine.registry, item)
+            .map(|colors| colors.is_empty())
+    } else {
+        Some(characteristics.colors.is_empty())
+    };
+    let live_fields_match = name_matches
+        && filter.card_type.is_none_or(type_matches)
+        && !filter.excluded_card_types.iter().copied().any(type_matches)
+        && filter
+            .is_colorless
+            .is_none_or(|required| colors_are_empty.is_some_and(|actual| actual == required))
+        && filter.min_mana_value.is_none_or(|minimum| {
+            stack.is_some_and(|(item, _, face)| {
+                face.mana_cost.mana_value_on_stack(item.chosen_x) >= minimum
+            }) || (stack.is_none() && characteristics.mana_value >= minimum)
+        })
+        && filter.max_mana_value.is_none_or(|maximum| {
+            stack.is_some_and(|(item, _, face)| {
+                face.mana_cost.mana_value_on_stack(item.chosen_x) <= maximum
+            }) || (stack.is_none() && characteristics.mana_value <= maximum)
+        })
+        && filter
+            .required_subtypes
+            .iter()
+            .all(|subtype| characteristics.has_type(subtype))
+        && !filter
+            .excluded_subtypes
+            .iter()
+            .any(|subtype| characteristics.has_type(subtype))
+        && filter.required_supertypes.iter().all(|supertype| {
+            characteristics
+                .supertypes
+                .iter()
+                .any(|value| value == supertype)
+        });
+    if !live_fields_match {
+        return false;
+    }
+    let printed_filter = ZoneCardFilter {
+        has_adventure: filter.has_adventure,
+        printed_power: filter.printed_power,
+        ..Default::default()
+    };
+    if printed_filter == ZoneCardFilter::default() {
+        return true;
+    }
+    if let Some((item, definition, _)) = stack {
+        definition.matches_zone_card_filter_for_face(item.face_index, &printed_filter)
+    } else {
+        definition.matches_zone_card_filter(&printed_filter)
+    }
 }
 
 pub(super) fn choose_graveyard_card(
@@ -6790,6 +7199,406 @@ pub(super) fn search_library(
 mod tests {
     use super::*;
     use crate::state::ProgramFrame;
+
+    #[test]
+    fn choose_card_requires_a_committed_public_live_output_incarnation() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            90_098,
+            &[0, 1],
+            20,
+            Some(vec![
+                vec!["grizzly_bears".to_string(); 8],
+                vec!["island".to_string(); 8],
+            ]),
+            true,
+        )
+        .expect("new game");
+        let oid = *engine.state.players[0]
+            .library
+            .front()
+            .expect("fixture bear is in the library");
+        let input_generation = engine
+            .state
+            .zone_change_generation
+            .get(&oid)
+            .copied()
+            .unwrap_or(0);
+        let mut movement_events = Vec::new();
+        engine
+            .commit_observed_zone_move(oid, Zone::Graveyard, None, &mut movement_events)
+            .expect("move the fixture card into public graveyard");
+        let entry = payment::committed_card_result_entry(
+            &engine.state,
+            engine.registry,
+            CardResultAction::Mill,
+            0,
+            oid,
+            Zone::Library,
+            input_generation,
+        )
+        .expect("record the committed output");
+        assert!(matches!(
+            entry.provenance,
+            CardResultProvenance::CommittedMovement {
+                input_zone: Zone::Library,
+                input_generation: recorded_input,
+                actual_output_zone: Zone::Graveyard,
+                output_visibility: CardResultOutputVisibility::FaceUpPublic,
+            } if recorded_input == input_generation
+        ));
+        assert_ne!(entry.zone_change_generation, input_generation);
+
+        let filter = ZoneCardFilter {
+            card_type: Some(CardTypeFilter::Creature),
+            ..Default::default()
+        };
+        assert!(committed_choose_card_candidate(
+            &engine,
+            &entry,
+            0,
+            RelativePlayerSet::Controller,
+            &filter,
+        )
+        .is_some());
+
+        let mut action_facts = entry.clone();
+        action_facts.provenance = CardResultProvenance::ActionFacts;
+        assert!(committed_choose_card_candidate(
+            &engine,
+            &action_facts,
+            0,
+            RelativePlayerSet::Controller,
+            &filter,
+        )
+        .is_none());
+
+        let mut hidden_evidence = entry.clone();
+        hidden_evidence.provenance = CardResultProvenance::CommittedMovement {
+            input_zone: Zone::Library,
+            input_generation,
+            actual_output_zone: Zone::Graveyard,
+            output_visibility: CardResultOutputVisibility::UnknownHidden,
+        };
+        assert!(committed_choose_card_candidate(
+            &engine,
+            &hidden_evidence,
+            0,
+            RelativePlayerSet::Controller,
+            &filter,
+        )
+        .is_none());
+
+        engine.state.objects.get_mut(&oid).unwrap().face_down = true;
+        assert!(committed_choose_card_candidate(
+            &engine,
+            &entry,
+            0,
+            RelativePlayerSet::Controller,
+            &filter,
+        )
+        .is_none());
+        engine.state.objects.get_mut(&oid).unwrap().face_down = false;
+        engine
+            .commit_observed_zone_move(oid, Zone::Hand, None, &mut movement_events)
+            .expect("move the fixture card into a hidden zone");
+        assert!(committed_choose_card_candidate(
+            &engine,
+            &entry,
+            0,
+            RelativePlayerSet::Controller,
+            &filter,
+        )
+        .is_none());
+        let committed_output_generation = entry.zone_change_generation;
+        engine
+            .commit_observed_zone_move(oid, Zone::Graveyard, None, &mut movement_events)
+            .expect("return the candidate to the original public source zone");
+        assert_eq!(engine.state.objects[&oid].zone, Zone::Graveyard);
+        assert_eq!(
+            engine.state.zone_change_generation[&oid],
+            committed_output_generation + 2
+        );
+        assert!(
+            committed_choose_card_candidate(
+                &engine,
+                &entry,
+                0,
+                RelativePlayerSet::Controller,
+                &filter,
+            )
+            .is_none(),
+            "returning to Graveyard does not revive the old committed output generation"
+        );
+    }
+
+    #[test]
+    fn choose_card_accepts_only_exact_live_incarnations_from_each_supported_public_zone() {
+        for source_zone in [
+            Zone::Graveyard,
+            Zone::Battlefield,
+            Zone::Exile,
+            Zone::Stack,
+            Zone::Command,
+        ] {
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                90_120 + source_zone as u64,
+                &[0, 1],
+                20,
+                Some(vec![
+                    vec!["grizzly_bears".to_string(); 8],
+                    vec!["island".to_string(); 8],
+                ]),
+                true,
+            )
+            .expect("new game");
+            let oid = *engine.state.players[0]
+                .library
+                .front()
+                .expect("fixture bear is in the library");
+            let input_generation = engine
+                .state
+                .zone_change_generation
+                .get(&oid)
+                .copied()
+                .unwrap_or(0);
+            let mut movement_events = Vec::new();
+            engine
+                .commit_observed_zone_move(oid, source_zone, None, &mut movement_events)
+                .expect("move the fixture into the public output zone");
+            if source_zone == Zone::Stack {
+                let object = &engine.state.objects[&oid];
+                let generation = engine.state.zone_change_generation[&oid];
+                let mut item =
+                    linked_exile_test_item(crate::state::LinkedExileOccurrence::NativeOrTokenBase);
+                item.id = oid;
+                item.card_id = object.card_id.clone();
+                item.face_index = object.face_up_index;
+                item.prototyped = object.prototyped;
+                item.ability_text = None;
+                item.is_copy = false;
+                item.cast_occurrence = Some(crate::state::StackObjectRef {
+                    object_id: oid,
+                    zone_change_generation: Some(generation),
+                });
+                engine.state.stack.push(item);
+            }
+            let entry = payment::committed_card_result_entry(
+                &engine.state,
+                engine.registry,
+                CardResultAction::Mill,
+                0,
+                oid,
+                Zone::Library,
+                input_generation,
+            )
+            .expect("record exact public output");
+            let filter = ZoneCardFilter {
+                card_type: Some(CardTypeFilter::Creature),
+                ..Default::default()
+            };
+            let candidate = committed_choose_card_candidate(
+                &engine,
+                &entry,
+                0,
+                RelativePlayerSet::Controller,
+                &filter,
+            )
+            .unwrap_or_else(|| panic!("{source_zone:?} should be an eligible public source"));
+            assert_eq!(candidate.source_zone, source_zone);
+            assert_eq!(candidate.object_id, oid);
+            assert_eq!(
+                candidate.zone_change_generation,
+                entry.zone_change_generation
+            );
+
+            let mut stale = entry.clone();
+            stale.zone_change_generation = stale.zone_change_generation.saturating_sub(1);
+            assert!(
+                committed_choose_card_candidate(
+                    &engine,
+                    &stale,
+                    0,
+                    RelativePlayerSet::Controller,
+                    &filter,
+                )
+                .is_none(),
+                "{source_zone:?} must reject a stale generation"
+            );
+            if source_zone == Zone::Stack {
+                engine
+                    .state
+                    .stack
+                    .iter_mut()
+                    .find(|item| item.id == oid)
+                    .expect("exact physical stack spell")
+                    .is_copy = true;
+                assert!(
+                    committed_choose_card_candidate(
+                        &engine,
+                        &entry,
+                        0,
+                        RelativePlayerSet::Controller,
+                        &filter,
+                    )
+                    .is_none(),
+                    "a copied stack item has no physical candidate card"
+                );
+                let item = engine
+                    .state
+                    .stack
+                    .iter_mut()
+                    .find(|item| item.id == oid)
+                    .expect("exact physical stack spell");
+                item.is_copy = false;
+                item.ability_text = Some("activated ability".into());
+                assert!(
+                    committed_choose_card_candidate(
+                        &engine,
+                        &entry,
+                        0,
+                        RelativePlayerSet::Controller,
+                        &filter,
+                    )
+                    .is_none(),
+                    "an ability object is not a physical spell card"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn choose_card_battlefield_filter_uses_current_layer_characteristics() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            90_125,
+            &[0, 1],
+            20,
+            Some(vec![
+                vec!["grizzly_bears".to_string(); 8],
+                vec!["island".to_string(); 8],
+            ]),
+            true,
+        )
+        .expect("new game");
+        let oid = *engine.state.players[0]
+            .library
+            .front()
+            .expect("fixture bear is in the library");
+        let input_generation = engine
+            .state
+            .zone_change_generation
+            .get(&oid)
+            .copied()
+            .unwrap_or(0);
+        let mut movement_events = Vec::new();
+        engine
+            .commit_observed_zone_move(oid, Zone::Battlefield, None, &mut movement_events)
+            .expect("move the fixture into the public output zone");
+        let entry = payment::committed_card_result_entry(
+            &engine.state,
+            engine.registry,
+            CardResultAction::Mill,
+            0,
+            oid,
+            Zone::Library,
+            input_generation,
+        )
+        .expect("record the committed public output");
+        let creature_filter = ZoneCardFilter {
+            card_type: Some(CardTypeFilter::Creature),
+            ..Default::default()
+        };
+        assert!(committed_choose_card_candidate(
+            &engine,
+            &entry,
+            0,
+            RelativePlayerSet::Controller,
+            &creature_filter,
+        )
+        .is_some());
+        assert!(!engine.characteristics(oid).unwrap().colors.is_empty());
+
+        engine
+            .state
+            .continuous_effects
+            .push(crate::state::ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: crate::state::AffectedScope::Single(oid),
+                kind: tricerules_card_model::primitives::ContinuousEffectKind::Layer4RemoveCreature,
+                condition: None,
+                duration: tricerules_card_model::primitives::EffectDuration::UntilEndOfTurn,
+                timestamp: 0,
+            });
+        engine
+            .state
+            .continuous_effects
+            .push(crate::state::ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: crate::state::AffectedScope::Single(oid),
+                kind: tricerules_card_model::primitives::ContinuousEffectKind::Layer5SetColors(
+                    Vec::new(),
+                ),
+                condition: None,
+                duration: tricerules_card_model::primitives::EffectDuration::UntilEndOfTurn,
+                timestamp: 1,
+            });
+        let live = engine
+            .characteristics(oid)
+            .expect("layered Battlefield values");
+        assert!(!live.has_type("Creature"));
+        assert!(live.colors.is_empty());
+        assert_eq!(live.mana_value, 2);
+        assert!(committed_choose_card_candidate(
+            &engine,
+            &entry,
+            0,
+            RelativePlayerSet::Controller,
+            &creature_filter,
+        )
+        .is_none());
+        let colorless_and_mv_two = ZoneCardFilter {
+            is_colorless: Some(true),
+            min_mana_value: Some(2),
+            max_mana_value: Some(2),
+            ..Default::default()
+        };
+        assert!(committed_choose_card_candidate(
+            &engine,
+            &entry,
+            0,
+            RelativePlayerSet::Controller,
+            &colorless_and_mv_two,
+        )
+        .is_some());
+        let printed_color_filter = ZoneCardFilter {
+            is_colorless: Some(false),
+            ..Default::default()
+        };
+        assert!(committed_choose_card_candidate(
+            &engine,
+            &entry,
+            0,
+            RelativePlayerSet::Controller,
+            &printed_color_filter,
+        )
+        .is_none());
+        let wrong_mana_value = ZoneCardFilter {
+            max_mana_value: Some(1),
+            ..Default::default()
+        };
+        assert!(committed_choose_card_candidate(
+            &engine,
+            &entry,
+            0,
+            RelativePlayerSet::Controller,
+            &wrong_mana_value,
+        )
+        .is_none());
+    }
 
     fn linked_exile_test_item(occurrence: crate::state::LinkedExileOccurrence) -> StackItem {
         StackItem {

@@ -24,6 +24,8 @@ bool zoneForWord(const QString &word, ruled::v1::DevZone &out)
         {QStringLiteral("library"), ruled::v1::DEV_ZONE_LIBRARY},
         {QStringLiteral("lib"), ruled::v1::DEV_ZONE_LIBRARY},
         {QStringLiteral("deck"), ruled::v1::DEV_ZONE_LIBRARY},
+        {QStringLiteral("cmd"), ruled::v1::DEV_ZONE_COMMAND},
+        {QStringLiteral("command"), ruled::v1::DEV_ZONE_COMMAND},
     };
     const auto it = zones.constFind(word.toLower());
     if (it == zones.constEnd()) {
@@ -100,8 +102,10 @@ QString helpText()
         "mana [seat] <symbols>                  — add mana, e.g. 3RR or WWU. Empties at the\n"
         "    next step change, like real mana, so add it in the phase you will spend it.\n"
         "    Write generic without a space (mana 2UU): a lone leading number is read as a seat.\n"
+        "choice public-zones                    — open the fixed public multi-zone popup fixture.\n"
         "seat: 1-based ordinal; omit for yourself.\n"
-        "Examples:  put hand Serra Angel  |  put bf Grizzly Bears ready  |  move gy Serra Angel");
+        "Examples:  put hand Serra Angel  |  put bf Grizzly Bears ready  |  move gy Serra Angel\n"
+        "           move cmd Serra Angel   |  choice public-zones");
 }
 
 Result parse(const QString &line, int localPlayerId, const QVector<int> &seatIds)
@@ -126,6 +130,18 @@ Result parse(const QString &line, int localPlayerId, const QVector<int> &seatIds
         return r;
     }
 
+    if (verb == QLatin1String("choice")) {
+        if (tokens.size() != 1 || tokens.first().toLower() != QLatin1String("public-zones")) {
+            return failure(QStringLiteral("Use: choice public-zones"));
+        }
+        Result r;
+        r.ok = true;
+        auto *dev = r.command.mutable_dev_command();
+        dev->set_target_player_id(localPlayerId);
+        dev->mutable_open_public_zone_search_fixture();
+        return r;
+    }
+
     int seat = localPlayerId;
 
     // `put` and `move` share a grammar and differ only in which payload they build: put always
@@ -141,7 +157,7 @@ Result parse(const QString &line, int localPlayerId, const QVector<int> &seatIds
         }
         ruled::v1::DevZone zone{};
         if (!zoneForWord(tokens.first(), zone)) {
-            return failure(QStringLiteral("Unknown zone '%1'. Try hand, bf, gy, exile or library.")
+            return failure(QStringLiteral("Unknown zone '%1'. Try hand, bf, gy, exile, library or cmd.")
                                .arg(tokens.first()));
         }
         tokens.removeFirst();

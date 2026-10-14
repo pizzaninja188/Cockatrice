@@ -11,6 +11,7 @@ use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::dev_command::Dev;
 use tricerules_proto::ruled::v1::{
     permanent_moved, DevAddMana, DevCommand, DevMoveCard, DevPutCardInZone, DevZone,
+    OpenPublicZoneSearchFixture,
 };
 
 fn dev(target: i32, payload: Dev) -> RuledCommand {
@@ -622,6 +623,27 @@ fn dev_command_rejected_when_gate_is_off() {
         .hand
         .iter()
         .all(|oid| e.state.objects[oid].card_id != "grizzly_bears"));
+
+    let fixture_err = e
+        .apply_scenario_command(
+            0,
+            &dev(
+                0,
+                Dev::OpenPublicZoneSearchFixture(OpenPublicZoneSearchFixture {}),
+            ),
+        )
+        .expect_err("the public-zone fixture is also behind the engine dev gate");
+    assert!(
+        fixture_err
+            .to_string()
+            .contains("dev commands are not enabled"),
+        "unexpected error: {fixture_err}"
+    );
+    assert_eq!(
+        e.state.command_index, before,
+        "a rejected fixture command must not advance command_index"
+    );
+    assert!(e.state.pending_resolution.is_none());
 }
 
 /// Mid-mulligan zone moves would desync the opening bookkeeping, so the gate stays shut until the

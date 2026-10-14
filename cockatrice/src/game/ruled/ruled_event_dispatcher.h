@@ -42,6 +42,7 @@ class LegalActions;
 class LifeChanged;
 class ManaPoolUpdated;
 class PhaseChanged;
+class PermanentMoved;
 class ResolutionChoiceRequired;
 class ResolutionChoiceProgress;
 class ResolutionPromptState;
@@ -111,6 +112,7 @@ private:
     void applyStackPushed(const ruled::v1::StackPushed &sp, BatchContext &ctx);
     void applyStackResolved(const ruled::v1::StackResolved &sr, BatchContext &ctx);
     void applyStackObjectCountered(const ruled::v1::StackObjectCountered &countered, BatchContext &ctx);
+    void applyPermanentMoved(const ruled::v1::PermanentMoved &moved, BatchContext &ctx);
     void retireStackObject(quint32 objectId, BatchContext &ctx);
     void applyTriggerNeedsTarget(const ruled::v1::TriggerNeedsTarget &tnt, BatchContext &ctx);
     void applyTriggerOrderRequired(const ruled::v1::TriggerOrderRequired &tor, BatchContext &ctx);

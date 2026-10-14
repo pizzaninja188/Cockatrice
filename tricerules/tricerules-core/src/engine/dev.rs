@@ -16,6 +16,10 @@
 
 use super::events::{ev_log, finish_with_events};
 use super::*;
+use crate::state::{
+    CardChoiceCandidateRef, PendingResolutionPresentation, ResolutionContinuation,
+    ResolutionPromptId,
+};
 
 /// What a placement verb hands to the tail the two of them share. A struct rather than seven
 /// positional parameters, mirroring `EffectCx` in `engine::resolution`.
@@ -35,6 +39,7 @@ impl GameEngine {
     /// the session is known to allow dev commands.
     pub(super) fn apply_dev_command(
         &mut self,
+        actor: PlayerId,
         dc: &rv1::DevCommand,
     ) -> Result<RuledEventBatch, EngineError> {
         let target = dc.target_player_id;
@@ -52,8 +57,318 @@ impl GameEngine {
             Some(rv1::dev_command::Dev::AddPoisonCounters(add)) => {
                 self.dev_add_poison_counters(target, add, &mut ev)?
             }
+            Some(rv1::dev_command::Dev::OpenPublicZoneSearchFixture(_)) => {
+                if target != actor {
+                    return Err(EngineError::Illegal(
+                        "public zone choice fixture target must be the command actor",
+                    ));
+                }
+                self.dev_open_public_zone_search_fixture(actor, &mut ev)?;
+            }
         }
         Ok(finish_with_events(self, ev))
+    }
+
+    /// Park a bounded public-only snapshot for the multi-zone picker. The command owns no card
+    /// movement; every candidate and the displayed source are taken from the current game state.
+    fn dev_open_public_zone_search_fixture(
+        &mut self,
+        actor: PlayerId,
+        ev: &mut Vec<RuledEvent>,
+    ) -> Result<(), EngineError> {
+        if self.state.priority_player_id() != actor {
+            return Err(EngineError::Illegal(
+                "public zone choice fixture requires the current priority player",
+            ));
+        }
+        if self.state.blocking_choice().is_some() || self.state.pending_spell_cast.is_some() {
+            return Err(EngineError::Illegal(
+                "public zone choice fixture requires an ordinary priority window",
+            ));
+        }
+        let mut candidates = Vec::with_capacity(5);
+        let mut candidate_names = Vec::with_capacity(5);
+        let mut candidate_card_ids = Vec::with_capacity(5);
+        let mut candidate_source_zones = Vec::with_capacity(5);
+        let mut names = HashSet::new();
+        let mut fixture_stack_item = None;
+
+        for zone in [
+            Zone::Battlefield,
+            Zone::Graveyard,
+            Zone::Exile,
+            Zone::Stack,
+            Zone::Command,
+        ] {
+            let object_ids = match zone {
+                Zone::Battlefield => self
+                    .state
+                    .players
+                    .iter()
+                    .flat_map(|player| player.battlefield.iter().copied())
+                    .collect::<Vec<_>>(),
+                Zone::Graveyard => self
+                    .state
+                    .players
+                    .iter()
+                    .flat_map(|player| player.graveyard.iter().copied())
+                    .collect::<Vec<_>>(),
+                Zone::Exile => self
+                    .state
+                    .players
+                    .iter()
+                    .flat_map(|player| player.exile.iter().copied())
+                    .collect::<Vec<_>>(),
+                Zone::Stack => self.state.stack.iter().map(|item| item.id).collect(),
+                Zone::Command => self
+                    .state
+                    .players
+                    .iter()
+                    .flat_map(|player| player.command_zone.iter().copied())
+                    .collect::<Vec<_>>(),
+                _ => unreachable!("fixture zones are fixed above"),
+            };
+            let picked = object_ids.into_iter().find_map(|object_id| {
+                let generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0);
+                if !super::resolution::zones::live_choose_card_candidate(
+                    self, object_id, generation, zone,
+                ) {
+                    return None;
+                }
+                let name =
+                    super::events::object_display_name(&self.state, self.registry, object_id);
+                if !names.insert(name.clone()) {
+                    return None;
+                }
+                if zone == Zone::Stack {
+                    let item = self.state.stack.iter().find(|item| item.id == object_id)?;
+                    fixture_stack_item = Some(item.clone());
+                }
+                Some((
+                    CardChoiceCandidateRef {
+                        object_id,
+                        zone_change_generation: generation,
+                        source_zone: zone,
+                    },
+                    name,
+                    self.state.objects[&object_id].card_id.clone(),
+                ))
+            });
+            let Some((candidate, name, card_id)) = picked else {
+                return Err(EngineError::Illegal(
+                    "public zone choice fixture needs one distinct face-up card in each public zone",
+                ));
+            };
+            candidates.push(candidate);
+            candidate_names.push(name);
+            candidate_card_ids.push(card_id);
+            candidate_source_zones.push(match zone {
+                Zone::Battlefield => rv1::ChoiceCandidateSourceZone::Battlefield,
+                Zone::Graveyard => rv1::ChoiceCandidateSourceZone::Graveyard,
+                Zone::Exile => rv1::ChoiceCandidateSourceZone::Exile,
+                Zone::Stack => rv1::ChoiceCandidateSourceZone::Stack,
+                Zone::Command => rv1::ChoiceCandidateSourceZone::Command,
+                _ => unreachable!("fixture zones are fixed above"),
+            } as i32);
+        }
+
+        let stack_item = fixture_stack_item.ok_or(EngineError::Illegal(
+            "public zone choice fixture requires a live physical spell on the stack",
+        ))?;
+        let source_object_id = stack_item.id;
+        let candidate_object_ids = candidates
+            .iter()
+            .map(|candidate| candidate.object_id)
+            .collect::<Vec<_>>();
+        let prompt = format!("P{actor}: choose one card from the public zones shown.");
+        self.state.pending_resolution = Some(crate::state::PendingResolution {
+            deciding_player: actor,
+            presentation: PendingResolutionPresentation {
+                source_object_id,
+                candidates: candidate_object_ids.clone(),
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt: prompt.clone(),
+                choice_kind: rv1::ChoiceKind::ZoneSearch,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::PublicZoneSearchFixture {
+                stack_item: stack_item.clone(),
+                candidates,
+                priority_idx: self.state.priority_idx,
+                passes_since_stack_change: self.state.passes_since_stack_change,
+            },
+            resolution_prompt_id: ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+        });
+        ev.push(RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    resolution_prompt_id: 0,
+                    deciding_player_id: actor,
+                    source_object_id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ZoneSearch as i32,
+                    candidate_object_ids,
+                    candidate_card_ids,
+                    candidate_names,
+                    min: 1,
+                    max: 1,
+                    candidate_selectable: vec![true; 5],
+                    candidate_source_zones,
+                    ..Default::default()
+                },
+            )),
+        });
+        ev.push(ev_log(format!("[dev] {prompt}")));
+        Ok(())
+    }
+
+    /// Complete the read-only fixture prompt without resuming or removing its real stack item.
+    /// Invalid answers restore the exact pending continuation so the same prompt can be answered.
+    pub(super) fn finish_public_zone_search_fixture_choice(
+        &mut self,
+        pending: crate::state::PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        actor: PlayerId,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let ResolutionContinuation::PublicZoneSearchFixture {
+            stack_item,
+            candidates,
+            priority_idx,
+            passes_since_stack_change,
+        } = &pending.continuation
+        else {
+            return Err(EngineError::ProgramInvariant(
+                "public zone fixture received another continuation",
+            ));
+        };
+        let reject = |engine: &mut Self, reason| {
+            engine.state.pending_resolution = Some(pending.clone());
+            Err(EngineError::Illegal(reason))
+        };
+        if pending.deciding_player != actor {
+            return reject(self, "not the public zone fixture decider");
+        }
+        if answer.resolution_prompt_id == 0
+            || answer.resolution_prompt_id != pending.resolution_prompt_id.get()
+        {
+            return reject(self, "stale public zone fixture prompt");
+        }
+        if self.state.priority_idx != *priority_idx
+            || self.state.passes_since_stack_change != *passes_since_stack_change
+        {
+            return reject(
+                self,
+                "priority changed while the public zone fixture was parked",
+            );
+        }
+        if answer.decision != rv1::ResolutionChoiceDecision::Unspecified as i32
+            || !answer.chosen_player_ids.is_empty()
+            || answer.chosen_object_ids.len() != 1
+        {
+            return reject(self, "public zone fixture requires exactly one card choice");
+        }
+        let selected = answer.chosen_object_ids[0];
+        if !candidates
+            .iter()
+            .any(|candidate| candidate.object_id == selected)
+        {
+            return reject(
+                self,
+                "selected card was not in the public zone fixture snapshot",
+            );
+        }
+        if candidates
+            .iter()
+            .any(|candidate| !self.public_zone_fixture_candidate_is_live(candidate))
+        {
+            return reject(self, "public zone fixture candidate became stale");
+        }
+        let Some(live_stack_item) = self
+            .state
+            .stack
+            .iter()
+            .find(|item| item.id == stack_item.id)
+        else {
+            return reject(self, "public zone fixture stack spell became stale");
+        };
+        let captured_cast = stack_item.cast_occurrence;
+        let Some(stack_candidate) = candidates.iter().find(|candidate| {
+            candidate.object_id == stack_item.id && candidate.source_zone == Zone::Stack
+        }) else {
+            return reject(self, "public zone fixture lost its stack candidate");
+        };
+        if live_stack_item.ability_text.is_some()
+            || live_stack_item.is_copy
+            || live_stack_item.card_id != stack_item.card_id
+            || live_stack_item.controller != stack_item.controller
+            || live_stack_item.cast_by != stack_item.cast_by
+            || live_stack_item.face_index != stack_item.face_index
+            || live_stack_item.prototyped != stack_item.prototyped
+            || live_stack_item.cast_occurrence != captured_cast
+            || captured_cast
+                != Some(crate::state::StackObjectRef {
+                    object_id: stack_item.id,
+                    zone_change_generation: Some(stack_candidate.zone_change_generation),
+                })
+        {
+            return reject(
+                self,
+                "public zone fixture requires its captured physical stack spell",
+            );
+        }
+        let batch = finish_with_events(
+            self,
+            vec![ev_log(format!(
+                "[dev] public zone choice fixture selected object {selected}."
+            ))],
+        );
+        Ok(batch)
+    }
+
+    fn public_zone_fixture_candidate_is_live(&self, candidate: &CardChoiceCandidateRef) -> bool {
+        let listed = match candidate.source_zone {
+            Zone::Battlefield => self
+                .state
+                .players
+                .iter()
+                .any(|player| player.battlefield.contains(&candidate.object_id)),
+            Zone::Graveyard => self
+                .state
+                .players
+                .iter()
+                .any(|player| player.graveyard.contains(&candidate.object_id)),
+            Zone::Exile => self
+                .state
+                .players
+                .iter()
+                .any(|player| player.exile.contains(&candidate.object_id)),
+            Zone::Stack => self
+                .state
+                .stack
+                .iter()
+                .any(|item| item.id == candidate.object_id),
+            Zone::Command => self
+                .state
+                .players
+                .iter()
+                .any(|player| player.command_zone.contains(&candidate.object_id)),
+            _ => false,
+        };
+        listed
+            && super::resolution::zones::live_choose_card_candidate(
+                self,
+                candidate.object_id,
+                candidate.zone_change_generation,
+                candidate.source_zone,
+            )
     }
 
     /// Conjure a named card from outside the game into a zone.
@@ -557,4 +872,313 @@ fn mana_label(add: &rv1::DevAddMana) -> String {
         out.push_str("nothing");
     }
     out
+}
+
+#[cfg(test)]
+mod public_zone_search_fixture_tests {
+    use super::*;
+
+    fn fixture_engine() -> GameEngine {
+        let deck = |mainboard: Vec<String>, commanders: Vec<String>| EngineDeck {
+            mainboard,
+            commanders,
+        };
+        let player_zero = deck(
+            ["forest", "serra_angel", "shock", "opt"]
+                .into_iter()
+                .map(str::to_string)
+                .chain(std::iter::repeat_n("forest".to_string(), 12))
+                .collect(),
+            vec!["kami_of_the_crescent_moon".to_string()],
+        );
+        let player_one = deck(vec!["forest".to_string(); 16], vec![]);
+        let mut engine = GameEngine::new_with_commander_decks(
+            tricerules_cards::registry::global(),
+            882,
+            &[0, 1],
+            20,
+            Some(vec![player_zero, player_one]),
+            true,
+        )
+        .expect("fixture engine");
+        engine.dev_commands_enabled = true;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.priority_idx = 0;
+
+        let card = |engine: &GameEngine, id: &str| {
+            engine
+                .state
+                .objects
+                .values()
+                .find(|object| object.owner == 0 && object.card_id == id)
+                .expect("requested fixture card is in the deck")
+                .id
+        };
+        let move_card = |engine: &mut GameEngine, id: ObjectId, zone: Zone, controller| {
+            super::super::resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                id,
+                zone,
+                controller,
+            )
+            .expect("stage fixture card");
+        };
+        let forest = card(&engine, "forest");
+        let serra_angel = card(&engine, "serra_angel");
+        let shock = card(&engine, "shock");
+        move_card(&mut engine, forest, Zone::Battlefield, Some(0));
+        move_card(&mut engine, serra_angel, Zone::Graveyard, None);
+        move_card(&mut engine, shock, Zone::Exile, None);
+        let opt = card(&engine, "opt");
+        move_card(&mut engine, opt, Zone::Hand, None);
+        engine.state.players[0].mana_pool.blue = 1;
+        let hand_index = engine.state.players[0]
+            .hand
+            .iter()
+            .position(|object_id| *object_id == opt)
+            .unwrap() as u32;
+        engine
+            .apply_scenario_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
+                        cast_method: rv1::CastMethod::Normal as i32,
+                        source: Some(rv1::CastSource {
+                            expected_zone_change_generation: None,
+                            location: Some(rv1::cast_source::Location::HandIndex(hand_index)),
+                        }),
+                        ..Default::default()
+                    })),
+                },
+            )
+            .expect("real Opt cast");
+        engine
+    }
+
+    fn fixture_command(target_player_id: PlayerId) -> RuledCommand {
+        RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::DevCommand(rv1::DevCommand {
+                target_player_id,
+                dev: Some(rv1::dev_command::Dev::OpenPublicZoneSearchFixture(
+                    rv1::OpenPublicZoneSearchFixture {},
+                )),
+            })),
+        }
+    }
+
+    fn answer(prompt_id: u64, object_id: ObjectId) -> RuledCommand {
+        RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![object_id],
+                    resolution_prompt_id: prompt_id,
+                    ..Default::default()
+                },
+            )),
+        }
+    }
+
+    fn assert_refused_command_is_atomic(
+        engine: &mut GameEngine,
+        actor: PlayerId,
+        command: RuledCommand,
+    ) {
+        let before_diagnostic = engine.diagnostic_snapshot().expect("diagnostic snapshot");
+        let before_prompt_allocator = engine.state.next_resolution_prompt_id.clone();
+        let before_command_index = engine.state.command_index;
+
+        assert!(engine.apply_command(actor, &command).is_err());
+
+        assert_eq!(
+            engine.diagnostic_snapshot().expect("diagnostic snapshot"),
+            before_diagnostic,
+            "a refused command must leave the complete diagnostic state unchanged"
+        );
+        assert_eq!(
+            engine.state.next_resolution_prompt_id, before_prompt_allocator,
+            "a refused command must not consume a choice prompt ID"
+        );
+        assert_eq!(
+            engine.state.command_index, before_command_index,
+            "a refused command must not advance the replay command index"
+        );
+    }
+
+    #[test]
+    fn public_zone_snapshot_is_exact_read_only_and_refuses_stale_answers() {
+        let mut engine = fixture_engine();
+        let actor = engine.state.priority_player_id();
+        let wrong_target = if actor == 0 { 1 } else { 0 };
+        assert_refused_command_is_atomic(&mut engine, actor, fixture_command(wrong_target));
+        assert!(engine.state.pending_resolution.is_none());
+
+        let before_stack = engine.state.stack.clone();
+        let before_priority_idx = engine.state.priority_idx;
+        let before_passes = engine.state.passes_since_stack_change;
+        let batch = engine
+            .apply_scenario_command(actor, &fixture_command(actor))
+            .expect("open fixed fixture");
+        let choice = batch
+            .events
+            .iter()
+            .find_map(|event| match event.ev.as_ref() {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .expect("ZoneSearch event");
+        assert_eq!(choice.choice_kind, rv1::ChoiceKind::ZoneSearch as i32);
+        assert_eq!(choice.candidate_object_ids.len(), 5);
+        assert_eq!(choice.candidate_card_ids.len(), 5);
+        assert_eq!(choice.candidate_names.len(), 5);
+        assert_eq!(choice.candidate_selectable, [true; 5]);
+        assert_eq!(
+            choice.candidate_source_zones,
+            [
+                rv1::ChoiceCandidateSourceZone::Battlefield as i32,
+                rv1::ChoiceCandidateSourceZone::Graveyard as i32,
+                rv1::ChoiceCandidateSourceZone::Exile as i32,
+                rv1::ChoiceCandidateSourceZone::Stack as i32,
+                rv1::ChoiceCandidateSourceZone::Command as i32,
+            ]
+        );
+        assert_eq!(choice.source_object_id, before_stack.last().unwrap().id);
+        assert_eq!(choice.candidate_object_ids[3], choice.source_object_id);
+        assert_eq!(
+            choice.candidate_names.iter().collect::<HashSet<_>>().len(),
+            5
+        );
+        let prompt_id = choice.resolution_prompt_id;
+        let chosen = choice.candidate_object_ids[0];
+
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(pending.deciding_player, actor);
+        assert_ne!(prompt_id, 0);
+        assert_eq!(
+            engine.state.stack.last().unwrap().cast_occurrence,
+            before_stack.last().unwrap().cast_occurrence
+        );
+
+        assert_refused_command_is_atomic(&mut engine, actor, answer(prompt_id + 1, chosen));
+        let other = if actor == 0 { 1 } else { 0 };
+        assert_refused_command_is_atomic(&mut engine, other, answer(prompt_id, chosen));
+        let outside_snapshot = engine.state.players[other as usize].hand[0];
+        assert_refused_command_is_atomic(&mut engine, actor, answer(prompt_id, outside_snapshot));
+        assert!(engine.state.pending_resolution.is_some());
+
+        let candidate = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .continuation
+            .clone();
+        let ResolutionContinuation::PublicZoneSearchFixture { candidates, .. } = candidate else {
+            panic!("fixture continuation");
+        };
+        let candidate_snapshot = |engine: &GameEngine| {
+            candidates
+                .iter()
+                .map(|candidate| {
+                    let object = &engine.state.objects[&candidate.object_id];
+                    (
+                        candidate.object_id,
+                        object.owner,
+                        object.zone,
+                        engine
+                            .state
+                            .zone_change_generation
+                            .get(&candidate.object_id)
+                            .copied()
+                            .unwrap_or(0),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let before_candidate_snapshot = candidate_snapshot(&engine);
+        let battlefield = candidates[0];
+        let original_generation = engine.state.zone_change_generation[&battlefield.object_id];
+        engine
+            .state
+            .zone_change_generation
+            .insert(battlefield.object_id, original_generation + 1);
+        // The equality check snapshots after the intentional generation mutation and immediately
+        // before the refused answer, so it measures only effects of that answer.
+        assert_refused_command_is_atomic(
+            &mut engine,
+            actor,
+            answer(prompt_id, battlefield.object_id),
+        );
+        assert!(engine.state.pending_resolution.is_some());
+        engine
+            .state
+            .zone_change_generation
+            .insert(battlefield.object_id, original_generation);
+        engine
+            .state
+            .objects
+            .get_mut(&battlefield.object_id)
+            .unwrap()
+            .zone = Zone::Graveyard;
+        // As above, this baseline includes the deliberate zone mismatch.
+        assert_refused_command_is_atomic(
+            &mut engine,
+            actor,
+            answer(prompt_id, battlefield.object_id),
+        );
+        assert!(engine.state.pending_resolution.is_some());
+        engine
+            .state
+            .objects
+            .get_mut(&battlefield.object_id)
+            .unwrap()
+            .zone = Zone::Battlefield;
+
+        engine
+            .apply_command(actor, &answer(prompt_id, battlefield.object_id))
+            .expect("valid mapped candidate");
+        assert_eq!(
+            candidate_snapshot(&engine),
+            before_candidate_snapshot,
+            "a successful read-only fixture answer preserves every candidate's identity and zone"
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.stack.len(), before_stack.len());
+        assert_eq!(
+            engine.state.stack.last().unwrap().id,
+            before_stack.last().unwrap().id
+        );
+        assert_eq!(
+            engine.state.stack.last().unwrap().cast_occurrence,
+            before_stack.last().unwrap().cast_occurrence
+        );
+        assert_eq!(engine.state.priority_idx, before_priority_idx);
+        assert_eq!(engine.state.passes_since_stack_change, before_passes);
+        assert_eq!(
+            engine.state.objects[&battlefield.object_id].zone,
+            Zone::Battlefield
+        );
+        assert_eq!(
+            engine.state.zone_change_generation[&battlefield.object_id],
+            original_generation
+        );
+
+        engine
+            .apply_scenario_command(
+                actor,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                },
+            )
+            .expect("normal pass still advances priority");
+        assert_eq!(
+            engine.state.priority_idx,
+            (before_priority_idx + 1) % engine.state.players.len()
+        );
+        assert_eq!(engine.state.passes_since_stack_change, before_passes + 1);
+        assert_eq!(
+            engine.state.stack.last().unwrap().cast_occurrence,
+            before_stack.last().unwrap().cast_occurrence
+        );
+    }
 }

@@ -45,10 +45,13 @@
         put bf Grizzly Bears ready    a permanent that can attack this turn
         put 2 bf Hill Giant           give the other seat a blocker
         move gy Serra Angel           relocate something that already exists
+        move cmd Kami of the Crescent Moon  move an existing card to the command zone
+        choice public-zones           open the fixed public multi-zone mapping fixture
         help                          the full grammar
 
     put always conjures, so repeating it builds multiples. move relocates an existing object and
-    is the only way to reach graveyard, exile or library.
+    is the way to reach graveyard, exile, library or command. choice public-zones only snapshots
+    staged public cards; its Stack row must be a real cast spell and answering moves no card.
 
     Run -Stop first if servers are already up: the sidecar reads its half of the gate from its
     own environment at startup, so a reused one refuses dev commands.
@@ -221,7 +224,7 @@ Write-Host "Building Cockatrice..." -ForegroundColor Cyan
 $buildScript = Join-Path $PSScriptRoot "build-ninja.ps1"
 $buildProcess = Start-Process -FilePath "powershell.exe" -ArgumentList @(
     "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$buildScript`""
-) -NoNewWindow -PassThru
+) -WindowStyle Hidden -PassThru
 # Start-Process -Wait waits for descendants too, including compiler helpers that can
 # outlive a full build. Only the build shell's exit determines whether we can launch.
 # Cache its handle before waiting so Windows PowerShell retains the exit code.
@@ -283,7 +286,7 @@ if (-not $NoServers) {
             Write-Host "  warning: reused sidecar was started without TRICERULES_DEV_COMMANDS; dev commands will be refused. Run -Stop first." -ForegroundColor Yellow
         }
     } else {
-        $sidecarArgs = @{ FilePath = $sidecarExe; PassThru = $true; WorkingDirectory = $repoRoot }
+        $sidecarArgs = @{ FilePath = $sidecarExe; PassThru = $true; WorkingDirectory = $repoRoot; WindowStyle = "Hidden" }
         if ($Trace) { $sidecarArgs.RedirectStandardError = Join-Path $debugLogDir "tricerules-server.log" }
         $sidecar = Start-Process @sidecarArgs
         Register-LaunchedProcess -Process $sidecar -Label "tricerules-server"
@@ -305,6 +308,7 @@ if (-not $NoServers) {
     $servatriceArgs = @{
         FilePath = $servatriceExe; PassThru = $true; WorkingDirectory = $repoRoot
         ArgumentList = @("--config", "`"$configPath`"")
+        WindowStyle = "Hidden"
     }
     if ($Trace) { $servatriceArgs.RedirectStandardError = Join-Path $debugLogDir "servatrice.log" }
     $servatrice = Start-Process @servatriceArgs

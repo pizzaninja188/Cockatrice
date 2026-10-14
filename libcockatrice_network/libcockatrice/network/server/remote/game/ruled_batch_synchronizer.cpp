@@ -1054,6 +1054,7 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
         if (!startZone) {
             continue;
         }
+        const bool movedFromStack = startZone->getName() == ZoneNames::STACK;
         // `destX` is the insert position, not a grid column, for the zones without coords.
         // A pile zone renders only its *front* card (PileZone::paint draws index 0), so the most
         // recently added card must go to position 0 — that is what the freeform client sends for
@@ -1192,6 +1193,15 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
                            "permanentMoved")) {
             permanentMoveGesHasEvents = true;
             exactLibraryLandMoveOids.remove(oid);
+            // Preserve the exact cast binding through physical resolution above, then retire only
+            // the moved Stack OID. Unlike StackResolved/Countered this event describes a card
+            // moved by another effect, so their later cleanup path will not run.
+            if (movedFromStack) {
+                ruledStackTargetsByObjectId.remove(oid);
+                ruledStackObjectIdToServerCardId.remove(oid);
+                ruledStackObjectIdToCasterPlayerId.remove(oid);
+                ruledEngineStackPushDescriptionsByObjectId.remove(oid);
+            }
             // Capture the post-move physical identity before any positional reconciliation.
             // Tokens destroyed on departure are no longer in the destination zone.
             if (targetZone->getCards().contains(card)) {
@@ -1202,6 +1212,8 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
                     binding.exileEngineOidToServerCardId.insert(oid, card->getId());
                 } else if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_COMMAND) {
                     binding.commandZoneEngineOidToServerCardId.insert(oid, card->getId());
+                } else if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_LIBRARY) {
+                    binding.registerLibraryEngineOid(oid, card->getId());
                 } else if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_HAND ||
                            pm.destination() == ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD) {
                     // Bind the exact post-move card before reconciliation. Entry replacements

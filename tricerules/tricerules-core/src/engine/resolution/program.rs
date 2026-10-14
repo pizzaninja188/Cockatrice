@@ -569,6 +569,9 @@ impl GameEngine {
                             ProgramValue::HandSelection(objects) => {
                                 previous.selected_hand_cards = objects.clone();
                             }
+                            ProgramValue::CardResultCohort(cohort) => {
+                                previous.cards = cohort.cards.clone();
+                            }
                             _ => {
                                 return Err(EngineError::ProgramInvariant(
                                     "resolution program input has the wrong type",
@@ -837,6 +840,12 @@ fn capture_program_outputs(
             }
             ResultType::HandSelection { .. } => {
                 ProgramValue::HandSelection(result.selected_hand_cards.clone())
+            }
+            ResultType::CardResultCohort { .. } => {
+                ProgramValue::CardResultCohort(crate::state::CardResultCohort {
+                    cards: result.cards.clone(),
+                    program_discard_result: None,
+                })
             }
         };
         let destination =
