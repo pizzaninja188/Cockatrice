@@ -10,31 +10,15 @@
       ability_id: "chapter_i",
       presentation: OracleLines([2]),
       trigger: SagaChapter(chapters: [1]),
-      effect: [
-        DrawDiscard(draw_count: 1, discard_count: 1, order: DrawThenDiscard, optional: false),
-        ChooseResolutionBranch(
-          selection: FirstApplicable,
-          branches: [
-            (
-              branch_id: "create_a_soldier",
-              presentation: Fallback,
-              cost: None,
-              requirement: CardResultCount(
-                filter: (source: PreviousEffect, action: Discard, players: Controller, card_type: Some(Nonland)),
-                min: Some(1),
-              ),
-              effects: [CreateTokens(token: "human_soldier_w_1_1", count: 1)],
-            ),
-            (
-              branch_id: "no_soldier",
-              presentation: Fallback,
-              cost: None,
-              requirement: Always,
-              effects: [],
-            ),
-          ],
-        ),
-      ],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
+        (id: "discard_one", bind: ["discarded"], kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+        (id: "create_soldier_if_nonland", kind: IfResult(
+          condition: DiscardCount(result: "discarded", players: Controller, card_type: Some(Nonland), min: Some(1), max: None),
+          yes: (steps: [(id: "create_soldier", kind: Perform(CreateTokens(token: "human_soldier_w_1_1", count: 1, who: Controller, tapped: false, sacrifice_timing: None)))], yields: []),
+          no: (steps: [], yields: []))),
+      ], yields: []), target_bindings: [])),
     ),
     (
       ability_id: "chapter_ii",

@@ -1,4 +1,7 @@
-use tricerules_cards::primitives::{DrawDiscardOrder, PlayerRecipient, SpellEffectKind};
+use crate::common::draw_discard_program::{
+    assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
+};
+use tricerules_cards::primitives::PlayerRecipient;
 use tricerules_cards::{AbilityPresentation, TriggerCondition};
 
 #[test]
@@ -48,15 +51,20 @@ fn issue_275_registers_the_two_generated_cards_with_exact_optional_etb() {
             ability.targeting.is_none(),
             "discard/draw trigger has no targets"
         );
-        assert_eq!(
-            ability.effect,
-            [SpellEffectKind::DrawDiscard {
+        assert!(ability.effect.is_empty() && ability.program.is_some());
+        assert_ability_draw_discard_steps(
+            registry,
+            id,
+            &face.face_id,
+            &ability.ability_id,
+            AuthoredDrawDiscardExpectation {
+                first_instruction: 0,
+                trailing_instructions: 0,
                 who: PlayerRecipient::Controller,
                 draw_count: 1,
                 discard_count: 1,
-                order: DrawDiscardOrder::DiscardThenDraw,
-                optional: true,
-            }]
+                order: AuthoredDrawDiscardOrder::OptionalDiscardThenDraw,
+            },
         );
     }
 }

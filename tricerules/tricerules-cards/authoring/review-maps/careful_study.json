@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "oracle_id": "32e9aa23-fc0a-4b82-82f9-1659c304428c",
+  "spans": [
+    {
+      "face_id": "careful_study",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Discard"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_looting::careful_study_draws_two_then_discards_two_in_one_resolution",
+      "covers": "Draws two cards and then discards two in one spell resolution."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

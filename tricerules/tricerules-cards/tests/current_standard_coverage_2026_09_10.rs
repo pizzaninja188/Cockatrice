@@ -1,8 +1,12 @@
-use tricerules_cards::primitives::{
-    CardTypeFilter, CreatureScopeController, DrawDiscardOrder, EffectSubject, GraveyardDestination,
-    SpellEffectKind, TargetController, TargetKind,
+use crate::common::draw_discard_program::{
+    assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
 };
-use tricerules_cards::{Color, Keyword, SearchDestination, TriggerCondition};
+use tricerules_cards::primitives::{
+    CardTypeFilter, CompiledInstructionKind, CompiledProgramCondition,
+    CompiledProgramResultCondition, CreatureScopeController, EffectSubject, GraveyardDestination,
+    RelativePlayerSet, SpellEffectKind, TargetController, TargetKind,
+};
+use tricerules_cards::{Amount, Color, Keyword, SearchDestination, TriggerCondition};
 
 #[test]
 fn audited_cards_have_exact_oracle_characteristics() {
@@ -54,23 +58,59 @@ fn audited_cards_have_exact_oracle_characteristics() {
 
 #[test]
 fn mountain_kings_return_composes_recruit_reanimation_and_counter_chapters() {
-    let face = tricerules_cards::registry::global()
+    let registry = tricerules_cards::registry::global();
+    let face = registry
         .get("the_mountain-kings_return")
         .expect("The Mountain-king's Return")
         .primary_face();
     assert_eq!(face.triggered_abilities.len(), 3);
+    let chapter_one = &face.triggered_abilities[0];
+    assert!(chapter_one.effect.is_empty() && chapter_one.program.is_some());
+    let program = assert_ability_draw_discard_steps(
+        registry,
+        "the_mountain-kings_return",
+        &face.face_id,
+        &chapter_one.ability_id,
+        AuthoredDrawDiscardExpectation {
+            first_instruction: 0,
+            trailing_instructions: 1,
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
+            draw_count: 1,
+            discard_count: 1,
+            order: AuthoredDrawDiscardOrder::DrawThenDiscard,
+        },
+    );
+    let [_, discarded, branch] = program.body.steps.as_slice() else {
+        panic!("Chapter I preserves draw, discard, then its conditional token branch");
+    };
+    let CompiledInstructionKind::If { condition, yes, no } = &branch.kind else {
+        panic!("Chapter I creates a Soldier through a discard-result branch");
+    };
+    let CompiledProgramCondition::Result(CompiledProgramResultCondition::DiscardCount {
+        result,
+        players: RelativePlayerSet::Controller,
+        card_type: Some(CardTypeFilter::Nonland),
+        min: Some(1),
+        max: None,
+    }) = condition.as_ref()
+    else {
+        panic!("Chapter I checks for a committed nonland discard");
+    };
+    assert_eq!(Some(*result), discarded.outputs.first().copied());
+    assert!(no.steps.is_empty() && no.yields.is_empty());
+    let [soldier] = yes.steps.as_slice() else {
+        panic!("a qualifying discard creates exactly one Soldier");
+    };
     assert!(matches!(
-        face.triggered_abilities[0].effect.as_slice(),
-        [
-            SpellEffectKind::DrawDiscard {
-                draw_count: 1,
-                discard_count: 1,
-                order: DrawDiscardOrder::DrawThenDiscard,
-                optional: false,
-                ..
-            },
-            SpellEffectKind::ChooseResolutionBranch { branches, .. },
-        ] if branches.len() == 2
+        &soldier.kind,
+        CompiledInstructionKind::Perform(effect)
+            if **effect == (SpellEffectKind::CreateTokens {
+                token: "human_soldier_w_1_1".into(),
+                count: Amount::Fixed(1),
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            })
     ));
     assert!(matches!(
         face.triggered_abilities[1].effect.as_slice(),

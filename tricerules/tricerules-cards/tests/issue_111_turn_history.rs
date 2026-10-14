@@ -1,5 +1,8 @@
+use crate::common::draw_discard_program::{
+    assert_face_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
+};
 use tricerules_cards::primitives::{
-    ActivationLimit, DrawDiscardOrder, EffectSubject, GameCondition, RelativePlayerSet,
+    ActivationLimit, EffectSubject, GameCondition, PlayerRecipient, RelativePlayerSet,
     SpellCostModifier, SpellEffectKind,
 };
 use tricerules_cards::{AbilityCost, CastTriggerPlayer, TriggerCondition};
@@ -108,7 +111,8 @@ fn second_event_cards_use_shared_ordinal_triggers() {
 
 #[test]
 fn focus_the_mind_uses_per_player_cast_history_for_its_complete_effect() {
-    let focus = tricerules_cards::registry::global()
+    let registry = tricerules_cards::registry::global();
+    let focus = registry
         .get("focus_the_mind")
         .expect("Focus the Mind must be registered")
         .primary_face();
@@ -126,14 +130,18 @@ fn focus_the_mind_uses_per_player_cast_history_for_its_complete_effect() {
             },
         }]
     );
-    assert!(matches!(
-        focus.spell_effect.as_slice(),
-        [SpellEffectKind::DrawDiscard {
+    assert!(focus.spell_effect.is_empty() && focus.spell_program.is_some());
+    assert_face_draw_discard_steps(
+        registry,
+        "focus_the_mind",
+        &focus.face_id,
+        AuthoredDrawDiscardExpectation {
+            first_instruction: 0,
+            trailing_instructions: 0,
+            who: PlayerRecipient::Controller,
             draw_count: 3,
             discard_count: 1,
-            order: DrawDiscardOrder::DrawThenDiscard,
-            optional: false,
-            ..
-        }]
-    ));
+            order: AuthoredDrawDiscardOrder::DrawThenDiscard,
+        },
+    );
 }

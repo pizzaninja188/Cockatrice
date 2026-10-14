@@ -1,7 +1,7 @@
-use tricerules_cards::primitives::{
-    CastTriggerPlayer, DrawDiscardOrder, PermanentTypeFilter, PlayerRecipient, SpellEffectKind,
-    TriggerCondition,
+use crate::common::draw_discard_program::{
+    assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
 };
+use tricerules_cards::primitives::{CastTriggerPlayer, PermanentTypeFilter, TriggerCondition};
 use tricerules_cards::{AbilityPresentation, Layout};
 
 #[test]
@@ -41,14 +41,19 @@ fn quicksmith_genius_registers_its_artifact_loot_trigger() {
             creature_filter: None,
         } if filter.permanent_type == Some(PermanentTypeFilter::Artifact)
     ));
-    assert!(matches!(
-        ability.effect.as_slice(),
-        [SpellEffectKind::DrawDiscard {
-            who: PlayerRecipient::Controller,
+    assert!(ability.effect.is_empty() && ability.program.is_some());
+    assert_ability_draw_discard_steps(
+        registry,
+        "quicksmith_genius",
+        &face.face_id,
+        &ability.ability_id,
+        AuthoredDrawDiscardExpectation {
+            first_instruction: 0,
+            trailing_instructions: 0,
+            who: tricerules_cards::primitives::PlayerRecipient::Controller,
             draw_count: 1,
             discard_count: 1,
-            order: DrawDiscardOrder::DiscardThenDraw,
-            optional: true,
-        }]
-    ));
+            order: AuthoredDrawDiscardOrder::OptionalDiscardThenDraw,
+        },
+    );
 }

@@ -6,22 +6,33 @@
       "face_id": "currency_converter",
       "start_line": 1,
       "end_line": 1,
-      "typed_paths": ["/faces/0/triggered_abilities/0"]
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
     },
     {
       "face_id": "currency_converter",
       "start_line": 2,
       "end_line": 2,
-      "typed_paths": ["/faces/0/activated_abilities/0"]
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/program/body/steps/0",
+        "/faces/0/activated_abilities/0/program/body/steps/1"
+      ]
     },
     {
       "face_id": "currency_converter",
       "start_line": 3,
       "end_line": 3,
-      "typed_paths": ["/faces/0/activated_abilities/1"]
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
     }
   ],
-  "tokens": ["treasure", "rogue_b_2_2"],
+  "tokens": [
+    "treasure",
+    "rogue_b_2_2"
+  ],
   "semantic_fixtures": [
     {
       "test": "scenario deck_coverage_linked_exile_choice::currency_converter_is_registered_with_its_exact_card_identity",
@@ -64,5 +75,15 @@
       "covers": "wrong-player, malformed and stale linked-choice answers fail without consuming the pending choice or changing state"
     }
   ],
-  "complete_definition_review_confirmed": true
+  "complete_definition_review_confirmed": true,
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/1/kind/Perform/Discard"
+    }
+  ]
 }

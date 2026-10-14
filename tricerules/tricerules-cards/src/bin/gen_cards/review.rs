@@ -234,16 +234,35 @@ fn select_source<'a>(
     }
 }
 
-fn source_layout(layout: &str) -> Option<&'static str> {
+fn source_layout(source: &Value) -> Option<&'static str> {
+    let layout = source.get("layout")?.as_str()?;
     match layout {
         // Case, Class, and Prototype are rules treatments on one physical face. Prototype's
-        // alternative mana cost/P/T live in CardFace.prototype, not in the layout enum.
-        "normal" | "case" | "class" | "prototype" => Some("Normal"),
+        // alternative mana cost/P/T live in CardFace.prototype, not in the layout enum. Sagas
+        // also use the single-face authored definition model.
+        "normal" | "case" | "class" | "prototype" | "saga" => Some("Normal"),
         "split" => Some("Split"),
         "room" => Some("Room"),
         "modal_dfc" => Some("ModalDfc"),
         "transform" => Some("Transform"),
-        "adventure" => Some("Adventure"),
+        "adventure" => {
+            // Scryfall transports Omen cards with layout "adventure". Classify by the exact
+            // back face type line, matching the generator's source normalization, and fail
+            // closed when the face data is absent or malformed.
+            let faces = source.get("card_faces")?.as_array()?;
+            if faces.len() != 2 {
+                return None;
+            }
+            let back_type_line = faces[1].get("type_line")?.as_str()?.trim();
+            if back_type_line.is_empty() {
+                return None;
+            }
+            let is_omen = back_type_line
+                .split_once('—')
+                .map(|(_, subtypes)| subtypes.split_whitespace().any(|subtype| subtype == "Omen"))
+                .unwrap_or(false);
+            Some(if is_omen { "Omen" } else { "Adventure" })
+        }
         "flip" => Some("Flip"),
         _ => None,
     }
@@ -270,7 +289,7 @@ fn validate_identity(definition: &CardDefinition, source: &Value) -> Result<(), 
             source_name
         ));
     }
-    let expected_layout = source_layout(str_field(source, "layout")).ok_or_else(|| {
+    let expected_layout = source_layout(source).ok_or_else(|| {
         format!(
             "unsupported source layout {:?}",
             str_field(source, "layout")
@@ -872,6 +891,32 @@ pub(super) fn run_preparation(
     )
 }
 
+fn resolve_batch_review_draft(draft_directory: &Path, map_path: &Path) -> Result<PathBuf, String> {
+    let stem = map_path
+        .file_stem()
+        .ok_or_else(|| format!("review map has no filename stem: {}", map_path.display()))?;
+    let root_draft = draft_directory.join(stem).with_extension("ron");
+    let multiface_draft = draft_directory
+        .join("multiface")
+        .join(stem)
+        .with_extension("ron");
+    match (root_draft.is_file(), multiface_draft.is_file()) {
+        (true, false) => Ok(root_draft),
+        (false, true) => Ok(multiface_draft),
+        (false, false) => Err(format!(
+            "no review draft at either expected location: {} or {}",
+            root_draft.display(),
+            multiface_draft.display()
+        )),
+        (true, true) => Err(format!(
+            "ambiguous review draft path for {}: both {} and {} exist",
+            stem.to_string_lossy(),
+            root_draft.display(),
+            multiface_draft.display()
+        )),
+    }
+}
+
 fn run_with_confirmation(
     cards: Vec<Value>,
     draft_path: &Path,
@@ -903,7 +948,7 @@ fn run_with_confirmation(
         }
         for map in &maps {
             let stem = map.file_stem().ok_or("review map has no filename stem")?;
-            let draft = draft_path.join(stem).with_extension("ron");
+            let draft = resolve_batch_review_draft(draft_path, map)?;
             let packet = build_packet_from_sources(
                 &sources,
                 &draft,
@@ -962,9 +1007,63 @@ mod tests {
 
     #[test]
     fn prototype_source_layout_uses_the_single_face_definition_model() {
-        assert_eq!(source_layout("prototype"), Some("Normal"));
-        assert_eq!(source_layout("case"), Some("Normal"));
-        assert_eq!(source_layout("transform"), Some("Transform"));
+        let mut prototype = source("oracle-prototype", "Prototype", "");
+        prototype["layout"] = json!("prototype");
+        assert_eq!(source_layout(&prototype), Some("Normal"));
+
+        let mut case = source("oracle-case", "Case", "");
+        case["layout"] = json!("case");
+        assert_eq!(source_layout(&case), Some("Normal"));
+
+        let mut saga = source("oracle-saga", "Saga", "");
+        saga["layout"] = json!("saga");
+        assert_eq!(source_layout(&saga), Some("Normal"));
+
+        let mut transform = source("oracle-transform", "Transform", "");
+        transform["layout"] = json!("transform");
+        assert_eq!(source_layout(&transform), Some("Transform"));
+    }
+
+    #[test]
+    fn adventure_transport_layout_uses_exact_backface_omen_subtype_and_fails_closed() {
+        let mut omen = source("oracle-omen", "Stormshriek Feral // Flush Out", "");
+        omen["layout"] = json!("adventure");
+        omen["card_faces"] = json!([
+            {"type_line": "Creature — Beast"},
+            {"type_line": "Sorcery — Omen"}
+        ]);
+        assert_eq!(source_layout(&omen), Some("Omen"));
+
+        let mut adventure = source("oracle-adventure", "Adventure Card", "");
+        adventure["layout"] = json!("adventure");
+        adventure["card_faces"] = json!([
+            {"type_line": "Instant — Adventure"},
+            {"type_line": "Creature — Human Knight"}
+        ]);
+        assert_eq!(source_layout(&adventure), Some("Adventure"));
+
+        let mut non_exact_omen = source("oracle-non-exact", "Non Exact", "");
+        non_exact_omen["layout"] = json!("adventure");
+        non_exact_omen["card_faces"] = json!([
+            {"type_line": "Creature — Beast"},
+            {"type_line": "Creature — Omenwolf"}
+        ]);
+        assert_eq!(source_layout(&non_exact_omen), Some("Adventure"));
+
+        let mut malformed = source("oracle-malformed", "Malformed", "");
+        malformed["layout"] = json!("adventure");
+        assert_eq!(source_layout(&malformed), None);
+        malformed["card_faces"] = json!([{ "type_line": "Instant — Adventure" }]);
+        assert_eq!(source_layout(&malformed), None);
+        malformed["card_faces"] = json!([
+            {"type_line": "Instant — Adventure"},
+            {"type_line": ""}
+        ]);
+        assert_eq!(source_layout(&malformed), None);
+
+        let mut unknown = source("oracle-unknown", "Unknown", "");
+        unknown["layout"] = json!("future_layout");
+        assert_eq!(source_layout(&unknown), None);
     }
 
     #[test]
@@ -1086,6 +1185,77 @@ mod tests {
         )
         .unwrap_err()
         .contains("does not exist"));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn batch_existing_review_resolves_multiface_drafts_and_rejects_ambiguous_paths() {
+        let root = std::env::temp_dir().join(format!(
+            "card-review-multiface-batch-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let maps = root.join("maps");
+        let drafts = root.join("drafts");
+        let multiface = drafts.join("multiface");
+        fs::create_dir_all(&maps).unwrap();
+        fs::create_dir_all(&multiface).unwrap();
+
+        let sources = || vec![source("oracle-divination", "Divination", "Draw two cards.")];
+        fs::write(drafts.join("divination.ron"), draft("Divination", 2)).unwrap();
+        fs::write(multiface.join("nested_insight.ron"), draft("Divination", 2)).unwrap();
+        for (stem, name) in [
+            ("divination", "Divination"),
+            ("nested_insight", "Divination"),
+        ] {
+            fs::write(
+                maps.join(format!("{stem}.json")),
+                map(
+                    name,
+                    json!([{
+                        "face_id": slugify(name), "start_line": 1, "end_line": 1,
+                        "typed_paths": ["/faces/0/spell_effect/0"]
+                    }]),
+                ),
+            )
+            .unwrap();
+        }
+
+        let output = root.join("prepared");
+        run_preparation(sources(), &drafts, &maps, Some(&output), "fixture", true).unwrap();
+        assert!(output.join("divination.packet.json").is_file());
+        assert!(output.join("nested_insight.packet.json").is_file());
+
+        fs::write(drafts.join("nested_insight.ron"), draft("Divination", 2)).unwrap();
+        let ambiguous = run_preparation(
+            sources(),
+            &drafts,
+            &maps,
+            Some(&root.join("ambiguous")),
+            "fixture",
+            true,
+        )
+        .unwrap_err();
+        assert!(
+            ambiguous.contains("ambiguous review draft path"),
+            "{ambiguous}"
+        );
+
+        fs::remove_file(drafts.join("nested_insight.ron")).unwrap();
+        fs::remove_file(multiface.join("nested_insight.ron")).unwrap();
+        let missing = run_preparation(
+            sources(),
+            &drafts,
+            &maps,
+            Some(&root.join("missing")),
+            "fixture",
+            true,
+        )
+        .unwrap_err();
+        assert!(missing.contains("no review draft at"), "{missing}");
         fs::remove_dir_all(&root).unwrap();
     }
 

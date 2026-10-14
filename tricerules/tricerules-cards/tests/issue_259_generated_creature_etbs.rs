@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    DrawDiscardOrder, EffectSubject, PlayerRecipient, SpellEffectKind, TargetFilter,
+    EffectSubject, InstructionKind, PlayerRecipient, SpellEffectKind, TargetFilter,
 };
 use tricerules_cards::{AbilityPresentation, Amount, CounterKind, TriggerCondition};
 
@@ -87,15 +87,31 @@ fn issue_259_registers_all_thirteen_generated_cards_with_exact_typed_etbs() {
             .primary_face()
             .triggered_abilities[0];
         assert_etb_identity(ability, oracle_line);
+        assert!(ability.effect.is_empty());
+        let program = ability
+            .program
+            .as_ref()
+            .expect("authored draw-discard program");
+        assert!(program.target_bindings.is_empty());
+        assert!(program.body.yields.is_empty());
+        let [draw, discard] = program.body.steps.as_slice() else {
+            panic!("{id} must register exactly two ordered draw-discard steps");
+        };
+        assert_eq!(draw.id, "draw_cards");
         assert_eq!(
-            ability.effect,
-            [SpellEffectKind::DrawDiscard {
+            draw.kind,
+            InstructionKind::Perform(Box::new(SpellEffectKind::Draw {
                 who: PlayerRecipient::Controller,
-                draw_count: 1,
-                discard_count: 1,
-                order: DrawDiscardOrder::DrawThenDiscard,
-                optional: false,
-            }]
+                count: tricerules_cards::Amount::Fixed(1),
+            }))
+        );
+        assert_eq!(discard.id, "discard_cards");
+        assert_eq!(
+            discard.kind,
+            InstructionKind::Perform(Box::new(SpellEffectKind::Discard {
+                who: PlayerRecipient::Controller,
+                quantity: tricerules_cards::primitives::DiscardQuantity::Exact(1),
+            }))
         );
     }
 }

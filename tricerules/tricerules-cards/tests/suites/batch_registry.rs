@@ -1,5 +1,8 @@
 //! Registry regressions share one corpus initialization and executable.
 
+#[path = "../common/mod.rs"]
+mod common;
+
 #[path = "../issue_combat_tricks_batch.rs"]
 mod issue_combat_tricks_batch;
 #[path = "../issue_dies_batch.rs"]

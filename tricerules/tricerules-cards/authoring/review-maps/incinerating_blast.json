@@ -7,7 +7,9 @@
       "start_line": 1,
       "end_line": 1,
       "typed_paths": [
-        "/faces/0/spell_effect/0"
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/target_bindings/0",
+        "/faces/0/targeting"
       ]
     },
     {
@@ -15,18 +17,31 @@
       "start_line": 2,
       "end_line": 2,
       "typed_paths": [
-        "/faces/0/spell_effect/1"
+        "/faces/0/spell_program/body/steps/1",
+        "/faces/0/spell_program/body/steps/2"
       ]
     }
   ],
   "primitive_references": [
     {
       "symbol": "SpellEffectKind::DamageTarget",
-      "typed_path": "/faces/0/spell_effect/0"
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/DamageTarget"
     },
     {
-      "symbol": "SpellEffectKind::DrawDiscard",
-      "typed_path": "/faces/0/spell_effect/1"
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Discard"
+    },
+    {
+      "symbol": "InstructionKind::IfResult",
+      "typed_path": "/faces/0/spell_program/body/steps/2/kind/IfResult"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/2/kind/IfResult/yes/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "ProgramTargetRole::Target",
+      "typed_path": "/faces/0/spell_program/target_bindings/0/role"
     },
     {
       "symbol": "TargetingDef",
@@ -37,7 +52,7 @@
   "semantic_fixtures": [
     {
       "test": "scenario issue_misc44_batch::issue_misc44_incinerating_blast",
-      "covers": "six damage, optional discard then draw, decline, and illegal-target fizzle"
+      "covers": "six damage before the optional discard; taking it draws one, declining preserves the damage and skips the draw; illegal-target fizzle"
     },
     {
       "test": "batch_registry::issue_misc44_batch::issue_misc44_registers_five_exact_card_identities",

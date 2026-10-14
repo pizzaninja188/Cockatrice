@@ -9,8 +9,11 @@
 //! because a non-cohort printed clause still has no exact recipe; those cards must not appear in
 //! the registry until their narrower blockers land.
 
+use crate::common::draw_discard_program::{
+    assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
+};
 use tricerules_cards::primitives::{
-    CardTypeFilter, CombatRestriction, DrawDiscardOrder, PlayerRecipient, StaticAbilityDef,
+    CardTypeFilter, CombatRestriction, PlayerRecipient, StaticAbilityDef,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, BattlefieldAggregate,
@@ -305,7 +308,8 @@ fn issue_377_control_clause_payloads_are_exact() {
     let dreadwing = registry
         .get("dreadwing_scavenger")
         .expect("Dreadwing Scavenger");
-    let loot = &dreadwing.primary_face().triggered_abilities;
+    let dreadwing_face = dreadwing.primary_face();
+    let loot = &dreadwing_face.triggered_abilities;
     assert_eq!(loot.len(), 2, "the union authors one trigger per event");
     assert_eq!(loot[0].trigger, TriggerCondition::WhenSelfEntersBattlefield);
     assert_eq!(
@@ -315,15 +319,20 @@ fn issue_377_control_clause_payloads_are_exact() {
         }
     );
     for ability in loot {
-        assert_eq!(
-            ability.effect,
-            [SpellEffectKind::DrawDiscard {
+        assert!(ability.effect.is_empty() && ability.program.is_some());
+        assert_ability_draw_discard_steps(
+            registry,
+            "dreadwing_scavenger",
+            &dreadwing_face.face_id,
+            &ability.ability_id,
+            AuthoredDrawDiscardExpectation {
+                first_instruction: 0,
+                trailing_instructions: 0,
                 who: PlayerRecipient::Controller,
                 draw_count: 1,
                 discard_count: 1,
-                order: DrawDiscardOrder::DrawThenDiscard,
-                optional: false,
-            }]
+                order: AuthoredDrawDiscardOrder::DrawThenDiscard,
+            },
         );
     }
 

@@ -1,0 +1,51 @@
+{
+  "format_version": 1,
+  "oracle_id": "004f82f0-74cc-4bc7-ab22-ab1a5247bc29",
+  "spans": [
+    {
+      "face_id": "keldon_raider",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/1",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Discard"
+    },
+    {
+      "symbol": "InstructionKind::IfResult",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/Draw"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario spell_effects::issue_58_keldon_raider_decline_does_not_draw",
+      "covers": "Declining the optional discard does not draw."
+    },
+    {
+      "test": "scenario spell_effects::issue_58_keldon_raider_discard_then_draws",
+      "covers": "Accepting the optional discard completes the discard-then-draw sequence."
+    },
+    {
+      "test": "scenario deck_coverage_opponent_draw::narset_does_not_hide_keldon_raiders_optional_discard_choice",
+      "covers": "The optional discard choice remains available under the opponent-draw restriction."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

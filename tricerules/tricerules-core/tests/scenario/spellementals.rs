@@ -41,6 +41,9 @@ fn spellementals_damage_spells_reject_lands_and_damage_creatures() {
             "{card}"
         );
         let x = if card == "traumatic_critique" { 2 } else { 0 };
+        let hand_before_cast = e.state.players[0].hand.len();
+        let library_before_cast = e.state.players[0].library.len();
+        let draws_before = e.state.turn_history.current.player(0).cards_drawn;
         e.apply_scenario_command(0, &cast_spell_x(slot, target_object(creature), x))
             .expect("legal creature");
         pass_both_players(&mut e);
@@ -49,9 +52,45 @@ fn spellementals_damage_spells_reject_lands_and_damage_creatures() {
             matches!(card, "broadside_barrage" | "traumatic_critique")
         );
         if e.state.pending_resolution.is_some() {
+            let draw_count = if card == "broadside_barrage" { 1 } else { 2 };
+            assert_eq!(
+                e.state.players[0].library.len(),
+                library_before_cast - draw_count,
+                "{card} draws before the discard choice"
+            );
+            assert_eq!(
+                e.state.players[0].hand.len(),
+                hand_before_cast - 1 + draw_count,
+                "{card} completes its draw before the discard choice"
+            );
+            let choice = e
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("draw-discard program choice");
+            assert_eq!(choice.presentation.min, 1, "{card}");
+            assert_eq!(choice.presentation.max, 1, "{card}");
             let discard = e.state.players[0].hand[0];
             e.apply_scenario_command(0, &submit_resolution_choice(vec![discard]))
                 .expect("discard");
+            assert_eq!(e.state.objects[&discard].zone, Zone::Graveyard, "{card}");
+            assert!(e.state.pending_resolution.is_none(), "{card}");
+            assert!(e.state.stack.is_empty(), "{card}");
+            assert_eq!(
+                e.state.players[0].library.len(),
+                library_before_cast - draw_count,
+                "{card} draw count after the discard completes"
+            );
+            assert_eq!(
+                e.state.players[0].hand.len(),
+                hand_before_cast - 1 + draw_count - 1,
+                "{card} hand count after the discard completes"
+            );
+            assert_eq!(
+                e.state.turn_history.current.player(0).cards_drawn,
+                draws_before + draw_count as u32,
+                "{card} records exact draws"
+            );
         }
         assert_eq!(
             count_card_id_in_graveyard(&e, 1, "grizzly_bears"),

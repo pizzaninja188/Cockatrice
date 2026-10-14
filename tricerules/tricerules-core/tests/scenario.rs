@@ -1217,3 +1217,6 @@ mod deck_coverage_scrap_trawler;
 
 #[path = "scenario/deck_coverage_skitterbeam_battalion.rs"]
 mod deck_coverage_skitterbeam_battalion;
+
+#[path = "scenario/draw_discard_tail.rs"]
+mod draw_discard_tail;

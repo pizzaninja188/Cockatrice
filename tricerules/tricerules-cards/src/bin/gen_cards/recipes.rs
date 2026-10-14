@@ -4,15 +4,15 @@ use tricerules_cards::primitives::{
     CardResultFilter, CardResultSource, CardSearchZone, CardTypeFilter, CastCostGroupDef,
     CastCostOptionDef, CombatRestriction, CombatRestrictionScope, CombatRole, ConditionPlayerSet,
     CountExpression, CounterRemovalPaymentSource, CreatureScopeController, CreatureScopeFilter,
-    DelayedTokenSacrificeTiming, DiscardQuantity, DrawDiscardOrder, EffectSubject,
-    EntersTappedAffected, EntersWithCountersAffected, EntryCost, EventZone, FaceChangeAction,
-    GameCondition, GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner,
-    HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement, LifeAmount,
-    LifeChangeKind, ManaCostChoiceKind, ManaRetention, MassPlayerSet, ObjectCastCostKind,
-    ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
-    PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison,
-    PowerToughnessCharacteristic, PtScale, PtScaleBasis, QuantityTerm, RelativePlayerSet,
-    ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
+    DelayedTokenSacrificeTiming, DiscardQuantity, EffectSubject, EntersTappedAffected,
+    EntersWithCountersAffected, EntryCost, EventZone, FaceChangeAction, GameCondition,
+    GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner, HandCardAction,
+    HandCardChooser, HandChoiceVisibility, LibraryPlacement, LifeAmount, LifeChangeKind,
+    ManaCostChoiceKind, ManaRetention, MassPlayerSet, ObjectCastCostKind, ObjectContributionKind,
+    ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
+    PlayerQuantifier, PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, PtScale,
+    PtScaleBasis, QuantityTerm, RelativePlayerSet, ResolutionBranchDef,
+    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
     ResolvingEffectDuration, ResolvingPermanentModifier, SearchDestination, SearchZoneSelection,
     SpellCastFilter, SpellCostModifier, SpellManaSpentComparison, StackSpellFilter,
     StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
@@ -133,6 +133,12 @@ pub(super) enum RecipeEmission {
     Keywords(Vec<Keyword>),
     SpellEffect(SpellEffectKind),
     SpellEffects(Vec<SpellEffectKind>),
+    /// A complete resolution owner whose ordered steps need suspension-safe authored results.
+    SpellProgram(CardProgram),
+    SpellProgramWithTargeting {
+        program: CardProgram,
+        targeting: TargetingDef,
+    },
     SpellEffectsWithTargeting {
         effects: Vec<SpellEffectKind>,
         targeting: TargetingDef,
@@ -156,6 +162,10 @@ pub(super) enum RecipeEmission {
     StaticAbilities(Vec<StaticAbilityDef>),
     CharacteristicAbility(IdentifiedAbility<CharacteristicDefiningAbility>),
     ModalMode(ModalModeEmission),
+    ModalProgram {
+        program: CardProgram,
+        targeting: Option<TargetingDef>,
+    },
     ModalAssembly(ModalAssemblyEmission),
     TeamworkModalAssembly(TeamworkModalAssemblyEmission),
     TriggeredModalAssembly(TriggeredModalAssemblyEmission),
@@ -177,6 +187,80 @@ pub(super) enum RecipeEmission {
 pub(super) struct ModalModeEmission {
     pub(super) effects: Vec<SpellEffectKind>,
     pub(super) targeting: Option<TargetingDef>,
+}
+
+fn authored_program(steps: &str, target_bindings: &str) -> CardProgram {
+    ron::from_str(&format!(
+        "(body: (steps: [{steps}], yields: []), target_bindings: [{target_bindings}])"
+    ))
+    .expect("the fixed authored recipe program is valid RON")
+}
+
+pub(super) fn draw_then_discard_program(draw_count: u32, discard_count: u32) -> CardProgram {
+    authored_program(
+        &format!(
+            "(id: \"draw_cards\", kind: Perform(Draw(who: Controller, count: {draw_count}))), \
+             (id: \"discard_cards\", kind: Perform(Discard(who: Controller, quantity: Exact({discard_count}))))"
+        ),
+        "",
+    )
+}
+
+fn discard_then_draw_program(discard_count: u32, draw_count: u32) -> CardProgram {
+    authored_program(
+        &format!(
+            "(id: \"discard_cards\", kind: Perform(Discard(who: Controller, quantity: Exact({discard_count})))), \
+             (id: \"draw_cards\", kind: Perform(Draw(who: Controller, count: {draw_count})))"
+        ),
+        "",
+    )
+}
+
+pub(super) fn optional_discard_then_draw_program(draw_count: u32) -> CardProgram {
+    authored_program(
+        &format!(
+            "(id: \"discard_one\", bind: [\"discarded\"], kind: Perform(Discard(who: Controller, quantity: OptionalExact(1)))), \
+             (id: \"draw_if_discarded\", kind: IfResult(condition: DiscardOutcome(result: \"discarded\", outcome: ChosenToPay), \
+               yes: (steps: [(id: \"draw_cards\", kind: Perform(Draw(who: Controller, count: {draw_count})))], yields: []), \
+               no: (steps: [], yields: [])))"
+        ),
+        "",
+    )
+}
+
+fn counter_spell_then_draw_discard_program() -> CardProgram {
+    authored_program(
+        "(id: \"counter_spell\", kind: Perform(CounterTargetSpell(spell_filter: (), unless_controller_pays: None, unless_controller_pays_by_cast_cost: None))), \
+         (id: \"draw_cards\", kind: Perform(Draw(who: Controller, count: 1))), \
+         (id: \"discard_one\", kind: Perform(Discard(who: Controller, quantity: Exact(1))))",
+        "(instruction_id: \"counter_spell\", role: Spell, target_group_index: 0)",
+    )
+}
+
+fn counter_spell_unless_four_program() -> CardProgram {
+    authored_program(
+        "(id: \"counter_spell\", kind: Perform(CounterTargetSpell(spell_filter: (), unless_controller_pays: Some(4), unless_controller_pays_by_cast_cost: None)))",
+        "(instruction_id: \"counter_spell\", role: Spell, target_group_index: 0)",
+    )
+}
+
+fn single_program_targeting(prompt: &str) -> TargetingDef {
+    TargetingDef {
+        groups: vec![TargetGroupDef {
+            chooser: Default::default(),
+            min: 1,
+            max: 1,
+            prompt: prompt.into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    }
+}
+
+fn modal_program(program: CardProgram, targeting: Option<TargetingDef>) -> RecipeEmission {
+    RecipeEmission::ModalProgram { program, targeting }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -501,15 +585,8 @@ fn match_spell_draw_three_then_discard_one(
     text: &str,
     _: &RecipeContext,
 ) -> Option<RecipeEmission> {
-    (text == "Draw three cards, then discard a card.").then_some({
-        RecipeEmission::SpellEffect(SpellEffectKind::DrawDiscard {
-            who: PlayerRecipient::Controller,
-            draw_count: 3,
-            discard_count: 1,
-            order: DrawDiscardOrder::DrawThenDiscard,
-            optional: false,
-        })
-    })
+    (text == "Draw three cards, then discard a card.")
+        .then(|| RecipeEmission::SpellProgram(draw_then_discard_program(3, 1)))
 }
 
 fn match_spell_creature_plus_four_four_trample(
@@ -3123,30 +3200,16 @@ fn match_modal_surveil_two_draw_two(text: &str, _: &RecipeContext) -> Option<Rec
 
 fn match_modal_counter_spell_unless_four(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
     (text == "Counter target spell unless its controller pays {4}.").then(|| {
-        modal_mode(
-            vec![SpellEffectKind::CounterTargetSpell {
-                spell_filter: StackSpellFilter::default(),
-                unless_controller_pays: Some(Amount::Fixed(4)),
-                unless_controller_pays_by_cast_cost: None,
-            }],
-            modal_targeting("Choose target spell", 0),
+        modal_program(
+            counter_spell_unless_four_program(),
+            Some(single_program_targeting("Choose target spell")),
         )
     })
 }
 
 fn match_modal_draw_two_discard_one(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
-    (text == "Draw two cards, then discard a card.").then(|| {
-        modal_mode(
-            vec![SpellEffectKind::DrawDiscard {
-                who: PlayerRecipient::Controller,
-                draw_count: 2,
-                discard_count: 1,
-                order: DrawDiscardOrder::DrawThenDiscard,
-                optional: false,
-            }],
-            None,
-        )
-    })
+    (text == "Draw two cards, then discard a card.")
+        .then(|| modal_program(draw_then_discard_program(2, 1), None))
 }
 
 fn match_modal_creature_power_damage(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
@@ -8776,15 +8839,10 @@ fn match_etb_draw_discard_one(text: &str, context: &RecipeContext) -> Option<Rec
     (context.source_is_creature
         && text == "When this creature enters, draw a card, then discard a card.")
         .then(|| {
-            triggered_ability(
+            triggered_program_ability(
                 context,
-                SpellEffectKind::DrawDiscard {
-                    who: PlayerRecipient::Controller,
-                    draw_count: 1,
-                    discard_count: 1,
-                    order: DrawDiscardOrder::DrawThenDiscard,
-                    optional: false,
-                },
+                TriggerCondition::WhenSelfEntersBattlefield,
+                draw_then_discard_program(1, 1),
             )
         })
 }
@@ -9120,18 +9178,12 @@ fn match_self_attacks_optional_discard_then_draw(
         && text
             == "Whenever this creature attacks, you may discard a card. If you do, draw a card.")
         .then(|| {
-            triggered_ability_with(
+            triggered_program_ability(
                 context,
                 TriggerCondition::WheneverSelfAttacks {
                     minimum_other_attackers: 0,
                 },
-                vec![SpellEffectKind::DrawDiscard {
-                    who: PlayerRecipient::Controller,
-                    draw_count: 1,
-                    discard_count: 1,
-                    order: DrawDiscardOrder::DiscardThenDraw,
-                    optional: true,
-                }],
+                optional_discard_then_draw_program(1),
             )
         })
 }
@@ -9143,16 +9195,10 @@ fn match_self_becomes_tapped_draw_then_discard(
     (context.source_is_creature
         && text == "Whenever this creature becomes tapped, draw a card, then discard a card.")
         .then(|| {
-            triggered_ability_with(
+            triggered_program_ability(
                 context,
                 TriggerCondition::WheneverSelfBecomesTapped,
-                vec![SpellEffectKind::DrawDiscard {
-                    who: PlayerRecipient::Controller,
-                    draw_count: 1,
-                    discard_count: 1,
-                    order: DrawDiscardOrder::DrawThenDiscard,
-                    optional: false,
-                }],
+                draw_then_discard_program(1, 1),
             )
         })
 }
@@ -9165,16 +9211,10 @@ fn match_self_becomes_tapped_optional_discard_then_draw(
         && text
             == "Whenever this creature becomes tapped, you may discard a card. If you do, draw a card.")
         .then(|| {
-            triggered_ability_with(
+            triggered_program_ability(
                 context,
                 TriggerCondition::WheneverSelfBecomesTapped,
-                vec![SpellEffectKind::DrawDiscard {
-                    who: PlayerRecipient::Controller,
-                    draw_count: 1,
-                    discard_count: 1,
-                    order: DrawDiscardOrder::DiscardThenDraw,
-                    optional: true,
-                }],
+                optional_discard_then_draw_program(1),
             )
         })
 }
@@ -9186,16 +9226,10 @@ fn match_self_enters_optional_discard_then_draw(
     (context.source_is_creature
         && text == "When this creature enters, you may discard a card. If you do, draw a card.")
         .then(|| {
-            triggered_ability_with(
+            triggered_program_ability(
                 context,
                 TriggerCondition::WhenSelfEntersBattlefield,
-                vec![SpellEffectKind::DrawDiscard {
-                    who: PlayerRecipient::Controller,
-                    draw_count: 1,
-                    discard_count: 1,
-                    order: DrawDiscardOrder::DiscardThenDraw,
-                    optional: true,
-                }],
+                optional_discard_then_draw_program(1),
             )
         })
 }
@@ -9752,6 +9786,28 @@ fn utility_activated_ability(
         source_zone: AbilitySourceZone::Battlefield,
         costs,
         effect,
+        targeting,
+        timing: ActivationTiming::Normal,
+        conditions: Vec::new(),
+        activation_limit: None,
+    })
+}
+
+fn utility_activated_program_ability(
+    context: &RecipeContext,
+    costs: Vec<AbilityCost>,
+    program: CardProgram,
+    targeting: Option<TargetingDef>,
+) -> RecipeEmission {
+    RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        program: Some(program),
+        intrinsic_land_mana: false,
+        ability_id: context.activated_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        cost_modifiers: Vec::new(),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs,
+        effect: Vec::new(),
         targeting,
         timing: ActivationTiming::Normal,
         conditions: Vec::new(),
@@ -11752,16 +11808,10 @@ fn match_landfall_pump_self_plus_one_plus_one(
 /// discard-then-draw order, other counts, and timing restrictions stay unsupported.
 fn match_tap_loot_draw_discard(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == ISSUE_335_TAP_LOOT_CLAUSE).then(|| {
-        utility_activated_ability(
+        utility_activated_program_ability(
             context,
             vec![fixed_mana_cost("{1}{U}"), AbilityCost::Tap],
-            vec![SpellEffectKind::DrawDiscard {
-                who: PlayerRecipient::Controller,
-                draw_count: 1,
-                discard_count: 1,
-                order: DrawDiscardOrder::DrawThenDiscard,
-                optional: false,
-            }],
+            draw_then_discard_program(1, 1),
             None,
         )
     })
@@ -12608,21 +12658,9 @@ fn match_spell_counter_target_spell_draw_discard(
     text: &str,
     _: &RecipeContext,
 ) -> Option<RecipeEmission> {
-    (text == ISSUE_344_COUNTER_LOOT_CLAUSE).then(|| {
-        RecipeEmission::SpellEffects(vec![
-            SpellEffectKind::CounterTargetSpell {
-                spell_filter: StackSpellFilter::default(),
-                unless_controller_pays: None,
-                unless_controller_pays_by_cast_cost: None,
-            },
-            SpellEffectKind::DrawDiscard {
-                who: PlayerRecipient::Controller,
-                draw_count: 1,
-                discard_count: 1,
-                order: DrawDiscardOrder::DrawThenDiscard,
-                optional: false,
-            },
-        ])
+    (text == ISSUE_344_COUNTER_LOOT_CLAUSE).then(|| RecipeEmission::SpellProgramWithTargeting {
+        program: counter_spell_then_draw_discard_program(),
+        targeting: single_program_targeting("Choose target spell"),
     })
 }
 
@@ -12630,15 +12668,8 @@ fn match_spell_counter_target_spell_draw_discard(
 /// printed order. Discard-then-draw order, another count on either side, a whole-hand or filtered
 /// discard, the drawn-out loot wording, and riders stay unsupported.
 fn match_spell_discard_then_draw_two(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
-    (text == ISSUE_344_DISCARD_THEN_DRAW_TWO_CLAUSE).then_some({
-        RecipeEmission::SpellEffect(SpellEffectKind::DrawDiscard {
-            who: PlayerRecipient::Controller,
-            draw_count: 2,
-            discard_count: 1,
-            order: DrawDiscardOrder::DiscardThenDraw,
-            optional: false,
-        })
-    })
+    (text == ISSUE_344_DISCARD_THEN_DRAW_TWO_CLAUSE)
+        .then(|| RecipeEmission::SpellProgram(discard_then_draw_program(1, 2)))
 }
 
 /// CR 301.5 / 701.3 / 111.10a: an Equipment's own entry trigger creates the registered Ally token,
@@ -13587,24 +13618,18 @@ fn match_etb_enchantment_search_two_basic_lands_tapped(
 }
 
 /// CR 603.6a / 121.1 / 701.9: the enchantment's own entry trigger draws two cards (CR 121.1),
-/// then the controller privately discards one (CR 701.9), in printed order, through the shipped
-/// `DrawDiscard` loot shape. Draw one, discard two, discard-then-draw, "you may discard", and
+/// then the controller privately discards one (CR 701.9), in printed order, through the fixed
+/// authored program. Draw one, discard two, discard-then-draw, "you may discard", and
 /// riders stay unsupported.
 fn match_etb_enchantment_draw_two_then_discard_one(
     text: &str,
     context: &RecipeContext,
 ) -> Option<RecipeEmission> {
     (context.source_is_enchantment && text == ISSUE_363_DRAW_TWO_DISCARD_ONE_CLAUSE).then(|| {
-        triggered_ability_with(
+        triggered_program_ability(
             context,
             TriggerCondition::WhenSelfEntersBattlefield,
-            vec![SpellEffectKind::DrawDiscard {
-                who: PlayerRecipient::Controller,
-                draw_count: 2,
-                discard_count: 1,
-                order: DrawDiscardOrder::DrawThenDiscard,
-                optional: false,
-            }],
+            draw_then_discard_program(2, 1),
         )
     })
 }
@@ -15731,16 +15756,12 @@ fn match_enters_or_attacks_draw_discard(
     {
         return None;
     }
-    let effect = vec![SpellEffectKind::DrawDiscard {
-        who: PlayerRecipient::Controller,
-        draw_count: 1,
-        discard_count: 1,
-        order: DrawDiscardOrder::DrawThenDiscard,
-        optional: false,
-    }];
-    let RecipeEmission::TriggeredAbility(enters) =
-        triggered_ability_with(context, TriggerCondition::WhenSelfEntersBattlefield, effect)
-    else {
+    let program = draw_then_discard_program(1, 1);
+    let RecipeEmission::TriggeredAbility(enters) = triggered_program_ability(
+        context,
+        TriggerCondition::WhenSelfEntersBattlefield,
+        program,
+    ) else {
         unreachable!("triggered_ability_with always returns a triggered ability")
     };
     let suffix = context
@@ -16207,7 +16228,7 @@ fn match_spell_create_rat_tapped_for_each_creature_graveyard_card(
     })
 }
 
-/// Kiora's non-cohort ETB is the shipped loot shape with two cards in each direction; the
+/// Kiora's non-cohort ETB uses a fixed authored two-card loot program; the
 /// shortened self-reference (CR 201.5c) normalizes to `this creature`, so Jadzi, Steward of Fate's
 /// identical printed line is the second calibration consumer.
 fn match_triggered_etb_draw_two_then_discard_two(
@@ -16217,15 +16238,10 @@ fn match_triggered_etb_draw_two_then_discard_two(
     (context.source_is_creature
         && issue_377_self_name_normalized(text, context) == ISSUE_371_KIORA_ETB_CLAUSE)
         .then(|| {
-            triggered_ability(
+            triggered_program_ability(
                 context,
-                SpellEffectKind::DrawDiscard {
-                    who: PlayerRecipient::Controller,
-                    draw_count: 2,
-                    discard_count: 2,
-                    order: DrawDiscardOrder::DrawThenDiscard,
-                    optional: false,
-                },
+                TriggerCondition::WhenSelfEntersBattlefield,
+                draw_then_discard_program(2, 2),
             )
         })
 }
@@ -30069,16 +30085,8 @@ mod tests {
             panic!("issue 275 recipe must emit a triggered ability");
         };
         assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
-        assert_eq!(
-            ability.effect,
-            [SpellEffectKind::DrawDiscard {
-                who: PlayerRecipient::Controller,
-                draw_count: 1,
-                discard_count: 1,
-                order: DrawDiscardOrder::DiscardThenDraw,
-                optional: true,
-            }]
-        );
+        assert!(ability.effect.is_empty());
+        assert_eq!(ability.program, Some(optional_discard_then_draw_program(1)));
         for near_miss in [
             "When this creature enters, discard a card. If you do, draw a card.",
             "When this creature enters, you may draw a card, then discard a card.",
@@ -30111,20 +30119,16 @@ mod tests {
                 "Whenever this creature becomes tapped, draw a card, then discard a card.",
                 "triggered.self_becomes_tapped.draw_then_discard",
                 TriggerCondition::WheneverSelfBecomesTapped,
-                DrawDiscardOrder::DrawThenDiscard,
                 false,
             ),
             (
                 "Whenever this creature becomes tapped, you may discard a card. If you do, draw a card.",
                 "triggered.self_becomes_tapped.optional_discard_then_draw",
                 TriggerCondition::WheneverSelfBecomesTapped,
-                DrawDiscardOrder::DiscardThenDraw,
                 true,
             ),
         ];
-        for (clause, expected_id, expected_trigger, expected_order, expected_optional) in
-            cases.iter()
-        {
+        for (clause, expected_id, expected_trigger, expected_optional) in cases.iter() {
             let matched = match_clause(clause, false, &context())
                 .expect("issue #282 recipe matching should not be ambiguous")
                 .unwrap_or_else(|| panic!("issue #282 clause should match: {clause}"));
@@ -30137,17 +30141,13 @@ mod tests {
                 !ability.may,
                 "optional discard is an effect choice: {clause}"
             );
-            assert_eq!(
-                ability.effect,
-                [SpellEffectKind::DrawDiscard {
-                    who: PlayerRecipient::Controller,
-                    draw_count: 1,
-                    discard_count: 1,
-                    order: *expected_order,
-                    optional: *expected_optional,
-                }],
-                "{clause}"
-            );
+            assert!(ability.effect.is_empty(), "{clause}");
+            let expected_program = if *expected_optional {
+                optional_discard_then_draw_program(1)
+            } else {
+                draw_then_discard_program(1, 1)
+            };
+            assert_eq!(ability.program, Some(expected_program), "{clause}");
         }
 
         for near_miss in [
@@ -31677,16 +31677,8 @@ mod tests {
                 sacrifice_timing: None,
             }]
         );
-        assert_eq!(
-            abilities[3].effect,
-            [SpellEffectKind::DrawDiscard {
-                who: PlayerRecipient::Controller,
-                draw_count: 1,
-                discard_count: 1,
-                order: DrawDiscardOrder::DrawThenDiscard,
-                optional: false,
-            }]
-        );
+        assert!(abilities[3].effect.is_empty());
+        assert_eq!(abilities[3].program, Some(draw_then_discard_program(1, 1)));
     }
 
     #[test]
@@ -32255,16 +32247,8 @@ mod tests {
         else {
             panic!("optional attack recipe must emit a trigger");
         };
-        assert_eq!(
-            attack.effect,
-            [SpellEffectKind::DrawDiscard {
-                who: PlayerRecipient::Controller,
-                draw_count: 1,
-                discard_count: 1,
-                order: DrawDiscardOrder::DiscardThenDraw,
-                optional: true,
-            }]
-        );
+        assert!(attack.effect.is_empty());
+        assert_eq!(attack.program, Some(optional_discard_then_draw_program(1)));
 
         let matched = match_clause(
             "Search your library for a legendary creature card, reveal it, put it into your hand, then shuffle.",
@@ -38498,16 +38482,8 @@ mod tests {
                     AbilityCost::Tap,
                 ]
             );
-            assert_eq!(
-                ability.effect,
-                [SpellEffectKind::DrawDiscard {
-                    who: PlayerRecipient::Controller,
-                    draw_count: 1,
-                    discard_count: 1,
-                    order: DrawDiscardOrder::DrawThenDiscard,
-                    optional: false,
-                }]
-            );
+            assert!(ability.effect.is_empty());
+            assert_eq!(ability.program, Some(draw_then_discard_program(1, 1)));
             assert!(ability.targeting.is_none());
             assert_eq!(ability.timing, ActivationTiming::Normal);
             assert!(ability.activation_limit.is_none());
@@ -40303,30 +40279,17 @@ mod tests {
 
     #[test]
     fn issue_344_counter_loot_orders_draw_then_private_discard() {
-        let RecipeEmission::SpellEffects(effects) = match_spell_counter_target_spell_draw_discard(
-            ISSUE_344_COUNTER_LOOT_CLAUSE,
-            &context(),
-        )
-        .expect("the counter-loot clause should match") else {
-            panic!("the counter loot must emit ordered spell effects");
+        let RecipeEmission::SpellProgramWithTargeting { program, targeting } =
+            match_spell_counter_target_spell_draw_discard(
+                ISSUE_344_COUNTER_LOOT_CLAUSE,
+                &context(),
+            )
+            .expect("the counter-loot clause should match")
+        else {
+            panic!("the counter loot must emit one targeted authored program");
         };
-        assert_eq!(
-            effects,
-            [
-                SpellEffectKind::CounterTargetSpell {
-                    spell_filter: StackSpellFilter::default(),
-                    unless_controller_pays: None,
-                    unless_controller_pays_by_cast_cost: None,
-                },
-                SpellEffectKind::DrawDiscard {
-                    who: PlayerRecipient::Controller,
-                    draw_count: 1,
-                    discard_count: 1,
-                    order: DrawDiscardOrder::DrawThenDiscard,
-                    optional: false,
-                },
-            ]
-        );
+        assert_eq!(program, counter_spell_then_draw_discard_program());
+        assert_eq!(targeting, single_program_targeting("Choose target spell"));
         for negative in [
             "Counter target spell. Draw a card.",
             "Counter target spell. Discard a card, then draw a card.",
@@ -40357,22 +40320,13 @@ mod tests {
 
     #[test]
     fn issue_344_discard_then_draw_two_orders_private_discard_first() {
-        let RecipeEmission::SpellEffect(effect) =
+        let RecipeEmission::SpellProgram(program) =
             match_spell_discard_then_draw_two(ISSUE_344_DISCARD_THEN_DRAW_TWO_CLAUSE, &context())
                 .expect("the discard-then-draw-two clause should match")
         else {
-            panic!("the discard-then-draw-two must emit one spell effect");
+            panic!("the discard-then-draw-two must emit one authored program");
         };
-        assert_eq!(
-            effect,
-            SpellEffectKind::DrawDiscard {
-                who: PlayerRecipient::Controller,
-                draw_count: 2,
-                discard_count: 1,
-                order: DrawDiscardOrder::DiscardThenDraw,
-                optional: false,
-            }
-        );
+        assert_eq!(program, discard_then_draw_program(1, 2));
         for negative in [
             "Discard a card, then draw a card.",
             "Discard two cards, then draw two cards.",
@@ -42296,16 +42250,8 @@ mod tests {
             panic!("the draw-two-discard-one clause must emit a triggered ability");
         };
         assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
-        assert_eq!(
-            ability.effect,
-            [SpellEffectKind::DrawDiscard {
-                who: PlayerRecipient::Controller,
-                draw_count: 2,
-                discard_count: 1,
-                order: DrawDiscardOrder::DrawThenDiscard,
-                optional: false,
-            }]
-        );
+        assert!(ability.effect.is_empty());
+        assert_eq!(ability.program, Some(draw_then_discard_program(2, 1)));
     }
 
     #[test]
@@ -43915,16 +43861,8 @@ mod tests {
         assert_eq!(loot[0].ability_id.as_str(), "triggered_01");
         assert_eq!(loot[1].ability_id.as_str(), "triggered_02");
         for ability in &loot {
-            assert_eq!(
-                ability.effect,
-                [SpellEffectKind::DrawDiscard {
-                    who: PlayerRecipient::Controller,
-                    draw_count: 1,
-                    discard_count: 1,
-                    order: DrawDiscardOrder::DrawThenDiscard,
-                    optional: false,
-                }]
-            );
+            assert!(ability.effect.is_empty());
+            assert_eq!(ability.program, Some(draw_then_discard_program(1, 1)));
         }
 
         let RecipeEmission::ActivatedAbility(surveil_activation) = issue_377_emission(
@@ -44769,16 +44707,8 @@ mod tests {
         else {
             panic!("Kiora's ETB must emit one triggered ability");
         };
-        assert_eq!(
-            etb.effect,
-            [SpellEffectKind::DrawDiscard {
-                who: PlayerRecipient::Controller,
-                draw_count: 2,
-                discard_count: 2,
-                order: DrawDiscardOrder::DrawThenDiscard,
-                optional: false,
-            }]
-        );
+        assert!(etb.effect.is_empty());
+        assert_eq!(etb.program, Some(draw_then_discard_program(2, 2)));
 
         // Lluwen's non-cohort ETB binds the optional choice to the preceding mill cohort.
         let RecipeEmission::TriggeredAbility(lluwen) = issue_371_emission(

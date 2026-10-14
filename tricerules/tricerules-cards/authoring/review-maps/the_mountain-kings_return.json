@@ -1,0 +1,74 @@
+{
+  "format_version": 1,
+  "oracle_id": "32ad5b3e-92c0-45be-b2e4-6f1794552f36",
+  "spans": [
+    {
+      "face_id": "the_mountain_kings_return",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0"
+      ]
+    },
+    {
+      "face_id": "the_mountain_kings_return",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/1",
+        "/faces/0/triggered_abilities/0/program/body/steps/2",
+        "/faces/0/triggered_abilities/0/program/body/steps/2/kind/IfResult/yes/steps/0"
+      ]
+    },
+    {
+      "face_id": "the_mountain_kings_return",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    },
+    {
+      "face_id": "the_mountain_kings_return",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/Discard"
+    },
+    {
+      "symbol": "InstructionKind::IfResult",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/2/kind/IfResult"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/2/kind/IfResult/yes/steps/0/kind/Perform/CreateTokens"
+    }
+  ],
+  "tokens": [
+    "human_soldier_w_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario current_standard_coverage_2026_09_10::mountain_kings_return_recruit_creates_a_token_only_for_a_nonland_discard",
+      "covers": "Chapter I creates the Soldier only for a nonland discard."
+    },
+    {
+      "test": "scenario current_standard_coverage_2026_09_10::mountain_kings_return_chapter_two_returns_only_its_owners_small_creature_cards",
+      "covers": "Chapter II returns only a creature card the controller owns with mana value at most three."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -8,11 +8,13 @@
 //! source leaves), CR 614.1c/122.6 (enters with X counters), CR 702.8 (flash), CR 702.9 (flying),
 //! CR 702.29 (cycling), CR 702.34 (flashback), and CR 702.122 (crew).
 
+use crate::common::draw_discard_program::{
+    assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
+};
 use tricerules_cards::primitives::{
-    AbilityCost, AbilitySourceZone, Amount, DrawDiscardOrder, EffectSubject,
-    ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient,
-    SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
-    TriggerCondition,
+    AbilityCost, AbilitySourceZone, Amount, EffectSubject, ObjectContributionKind,
+    ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient, SpellCostModifier,
+    SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, Keyword, Layout};
 
@@ -176,19 +178,23 @@ fn issue_misc13_batch_maps_definitions() {
 
     // Ragged Short Spear: optional rummage on entry; attached +2/+0; equip {3}.
     let spear = primary(registry, "ragged_short_spear");
-    assert!(
-        matches!(
-            &spear.triggered_abilities[0].effect[0],
-            SpellEffectKind::DrawDiscard {
-                draw_count: 2,
-                discard_count: 1,
-                order: DrawDiscardOrder::DiscardThenDraw,
-                optional: true,
-                ..
-            }
-        ),
-        "{:?}",
-        spear.triggered_abilities[0].effect
+    let [spear_trigger] = spear.triggered_abilities.as_slice() else {
+        panic!("Ragged Short Spear has one entry trigger");
+    };
+    assert!(spear_trigger.effect.is_empty() && spear_trigger.program.is_some());
+    assert_ability_draw_discard_steps(
+        registry,
+        "ragged_short_spear",
+        &spear.face_id,
+        &spear_trigger.ability_id,
+        AuthoredDrawDiscardExpectation {
+            first_instruction: 0,
+            trailing_instructions: 0,
+            who: PlayerRecipient::Controller,
+            draw_count: 2,
+            discard_count: 1,
+            order: AuthoredDrawDiscardOrder::OptionalDiscardThenDraw,
+        },
     );
     assert!(
         matches!(

@@ -31,11 +31,11 @@
     presentation: OracleLines([2]),
     source_zone: Battlefield,
     costs: [Mana("{2}"), Tap],
-    effect: [DrawDiscard(
-      draw_count: 1,
-      discard_count: 1,
-      order: DrawThenDiscard,
-    )],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
+      (id: "discard_one", kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+    ], yields: []), target_bindings: [])),
   ), (
     ability_id: "return_linked_card",
     presentation: OracleLines([3]),

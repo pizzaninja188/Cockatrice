@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "86e0e718-82b5-4c99-9837-1b4d8729a27e",
+  "spans": [
+    {
+      "face_id": "melded_moxite",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/1",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/0"
+      ]
+    },
+    {
+      "face_id": "melded_moxite",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Discard"
+    },
+    {
+      "symbol": "InstructionKind::IfResult",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "robot_c_2_2"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_162_tapped_tokens::melded_moxite_sacrifices_then_creates_a_tapped_robot",
+      "covers": "The independent activated ability sacrifices Melded Moxite and creates a tapped Robot."
+    },
+    {
+      "test": "scenario issue_162_tapped_tokens::melded_moxite_cannot_be_sacrificed_when_its_mana_cost_is_unaffordable",
+      "covers": "The independent activated ability is unavailable when its mana cost cannot be paid."
+    },
+    {
+      "test": "scenario draw_discard_tail::melded_moxite_optional_discard_accepts_and_declines_with_exact_counts",
+      "covers": "The ETB trigger accepts or declines the optional discard with exact draw, hand, and library counts."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

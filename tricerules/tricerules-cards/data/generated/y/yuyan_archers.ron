@@ -8,5 +8,5 @@
   power: 3,
   toughness: 1,
   keywords: [Reach],
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [DrawDiscard(who:Controller,draw_count:1,discard_count:1,order:DiscardThenDraw,optional:true)])],
+  triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WhenSelfEntersBattlefield,effect:[],program:Some((body:(steps:[(id:"discard_one",bind:["discarded"],input:None,kind:Perform(Discard(who:Controller,quantity:OptionalExact(1)))),(id:"draw_if_discarded",bind:[],input:None,kind:IfResult(condition:DiscardOutcome(result:"discarded",outcome:ChosenToPay),yes:(steps:[(id:"draw_cards",bind:[],input:None,kind:Perform(Draw(who:Controller,count:1)))],yields:[]),no:(steps:[],yields:[])))],yields:[]))),modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
 )

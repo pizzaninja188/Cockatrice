@@ -2,9 +2,13 @@
 (
   id: "incinerating_blast", name: "Incinerating Blast", face_id: "incinerating_blast",
   mana_cost: "{4}{R}", types: ["Sorcery"],
-  spell_effect: [
-    DamageTarget(amount: 6, target: (kind: Creature)),
-    DrawDiscard(draw_count: 1, discard_count: 1, order: DiscardThenDraw, optional: true),
-  ],
-  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])])),
+  spell_effect: [],
+  spell_program: Some((body: (steps: [
+    (id: "damage_target", kind: Perform(DamageTarget(amount: 6, target: (kind: Creature)))),
+    (id: "discard_one", bind: ["discarded"], kind: Perform(Discard(who: Controller, quantity: OptionalExact(1)))),
+    (id: "draw_if_discarded", kind: IfResult(condition: DiscardOutcome(result: "discarded", outcome: ChosenToPay),
+      yes: (steps: [(id: "draw_one", kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+      no: (steps: [], yields: []))),
+  ], yields: []), target_bindings: [(instruction_id: "damage_target", role: Target, target_group_index: 0)])),
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [])])),
 )

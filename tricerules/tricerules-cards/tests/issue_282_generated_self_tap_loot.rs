@@ -1,18 +1,19 @@
-use tricerules_cards::primitives::{DrawDiscardOrder, PlayerRecipient, SpellEffectKind};
+use crate::common::draw_discard_program::{
+    assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
+};
 use tricerules_cards::{AbilityPresentation, TriggerCondition};
 
 #[test]
 fn issue_282_registers_the_four_generated_self_tap_loot_cards() {
     let registry = tricerules_cards::registry::global();
-    for (id, name, mana_cost, types, stats, order, optional) in [
+    for (id, name, mana_cost, types, stats, order) in [
         (
             "silvergill_peddler",
             "Silvergill Peddler",
             "{2}{U}",
             vec!["Creature", "Merfolk", "Citizen"],
             (2, 3),
-            DrawDiscardOrder::DrawThenDiscard,
-            false,
+            AuthoredDrawDiscardOrder::DrawThenDiscard,
         ),
         (
             "mechan_navigator",
@@ -20,8 +21,7 @@ fn issue_282_registers_the_four_generated_self_tap_loot_cards() {
             "{1}{U}",
             vec!["Artifact", "Creature", "Robot", "Pilot"],
             (2, 1),
-            DrawDiscardOrder::DrawThenDiscard,
-            false,
+            AuthoredDrawDiscardOrder::DrawThenDiscard,
         ),
         (
             "rescue_leopard",
@@ -29,8 +29,7 @@ fn issue_282_registers_the_four_generated_self_tap_loot_cards() {
             "{2}{R}",
             vec!["Creature", "Cat"],
             (4, 2),
-            DrawDiscardOrder::DiscardThenDraw,
-            true,
+            AuthoredDrawDiscardOrder::OptionalDiscardThenDraw,
         ),
         (
             "volatile_wanderglyph",
@@ -38,8 +37,7 @@ fn issue_282_registers_the_four_generated_self_tap_loot_cards() {
             "{1}{R}",
             vec!["Artifact", "Creature", "Golem"],
             (2, 2),
-            DrawDiscardOrder::DiscardThenDraw,
-            true,
+            AuthoredDrawDiscardOrder::OptionalDiscardThenDraw,
         ),
     ] {
         let definition = registry.get(id).unwrap_or_else(|| panic!("missing {id}"));
@@ -60,15 +58,20 @@ fn issue_282_registers_the_four_generated_self_tap_loot_cards() {
         assert_eq!(ability.trigger, TriggerCondition::WheneverSelfBecomesTapped);
         assert!(!ability.may, "optional discard belongs to the effect");
         assert!(ability.targeting.is_none(), "self-tap loot has no targets");
-        assert_eq!(
-            ability.effect,
-            [SpellEffectKind::DrawDiscard {
-                who: PlayerRecipient::Controller,
+        assert!(ability.effect.is_empty() && ability.program.is_some());
+        assert_ability_draw_discard_steps(
+            registry,
+            id,
+            &face.face_id,
+            &ability.ability_id,
+            AuthoredDrawDiscardExpectation {
+                first_instruction: 0,
+                trailing_instructions: 0,
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
                 draw_count: 1,
                 discard_count: 1,
                 order,
-                optional,
-            }]
+            },
         );
     }
 }

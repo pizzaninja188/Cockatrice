@@ -6,15 +6,17 @@ binding. The runner supports targetless program operations and four targetful ro
 spell faces, modal modes, activated abilities and triggered abilities. The DrawDiscard migration
 lowers whole legacy owners into the same runner, including every sibling of an affected modal
 container. Its original census is 41 existing card identities, 42 DrawDiscard bodies and three
-additional modal siblings: 45 compiled owners, not 45 card admissions. Typed discard outcomes and
-replacement/entry/payment continuations retain the owning frame. Authored-owner conversions cover
-Calamitous Tide's face, Agna Qel'a's activation, Uthros Scanship's ETB, all three Three Steps Ahead
-modes, and the exact Recruit generator pair for Long Lake Nuisance and Patient Instructor. The
+additional modal siblings: 45 compiled owners, not 45 card admissions. All 45 census owners are now
+explicitly authored, including the converted draw/discard tail; this migration added no card
+admissions. Typed discard outcomes and replacement/entry/payment continuations retain the owning
+frame. The mandatory retirement of the legacy DrawDiscard family remains next. Authored-owner
+conversions include Calamitous Tide's face, Agna Qel'a's activation, Uthros Scanship's ETB, all
+three Three Steps Ahead modes, and the exact Recruit generator pair for Long Lake Nuisance and
+Patient Instructor. The
 [active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs)
-owns accepted syntax and restrictions. The broader operations, contexts, remaining card/template
-conversion and retirement of the legacy DrawDiscard family remain migration targets. Prompt
-identity applies to legacy resolution choices as well as program choices; it does not widen the
-accepted syntax.
+owns accepted syntax and restrictions. Broader operations and contexts remain migration targets.
+Prompt identity applies to legacy resolution choices as well as program choices; it does not widen
+the accepted syntax.
 The initial design was reviewed against `41e4ccf463930d8384ac00eb60ac21f931646b38` (2026-10-12).
 The former deck campaign remains outside scope. Cards require complete-card evidence and the
 applicable verification and visible acceptance gates independently of this design.
@@ -327,8 +329,9 @@ lowering has a family-specific retirement condition; there is no permanent secon
 Pilot retirement inventory: `custom::Brainstorm`, `ResolutionStep::Draw`, `PostDrawPhase`,
 `DrawCompletion::BrainstormPutBack`, the custom draw-completion bridge and its library-placement
 helper are removed. Brainstorm uses shared draw, private ordered hand selection and bound top
-placement through the program runner. Legacy `DrawDiscard` remains for unmigrated definitions and
-templates; removing it requires their separate family migration. Retain `custom::GiftsUngiven`
+placement through the program runner. Legacy `DrawDiscard` remains in the compatibility path pending
+mandatory family retirement; all 45 compiled owners from its original census now use authored
+programs. Retain `custom::GiftsUngiven`
 until shared search/reveal, different chooser, subset/partition, movement and shuffle cover its full
 algorithm and target semantics, then retire its custom continuation use. Keep `custom_resolution/*`
 where it implements shared mechanic transactions, copy legality or entry/APNAP work; its directory

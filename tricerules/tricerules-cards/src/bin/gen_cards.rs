@@ -670,6 +670,9 @@ fn assemble_spell_effects(
     parsed: &mut ParsedRules,
     effects: Vec<SpellEffectKind>,
 ) -> Result<(), RulesParseError> {
+    if parsed.spell_program.is_some() {
+        return Err(RulesParseError::Unsupported);
+    }
     if !parsed.spell_effect.is_empty() || parsed.targeting.is_some() {
         if parsed.targeting.is_some() {
             if effects
@@ -705,7 +708,8 @@ fn assemble_spell_effects_with_targeting(
     effects: Vec<SpellEffectKind>,
     mut targeting: TargetingDef,
 ) -> Result<(), RulesParseError> {
-    if parsed.targeting.is_some()
+    if parsed.spell_program.is_some()
+        || parsed.targeting.is_some()
         || parsed
             .spell_effect
             .iter()
@@ -754,6 +758,7 @@ struct ParsedRules {
     harmonize_cost: Option<ManaCost>,
     cast_conditions: Vec<GameCondition>,
     spell_effect: Vec<SpellEffectKind>,
+    spell_program: Option<tricerules_cards::primitives::CardProgram>,
     targeting: Option<TargetingDef>,
     modal_spell: Option<ModalDef>,
     activated_abilities: Vec<ActivatedAbilityDef>,
@@ -910,19 +915,23 @@ fn assemble_modal_modes(
                     .map_err(RulesParseError::Ambiguous)?
                     .ok_or(RulesParseError::Unsupported)?,
             };
-        let RecipeEmission::ModalMode(emission) = matched.emission else {
-            return Err(RulesParseError::Unsupported);
+        let (effects, program, targeting) = match matched.emission {
+            RecipeEmission::ModalMode(emission) => (emission.effects, None, emission.targeting),
+            RecipeEmission::ModalProgram { program, targeting } => {
+                (Vec::new(), Some(program), targeting)
+            }
+            _ => return Err(RulesParseError::Unsupported),
         };
         mode_recipe_ids.push(matched.id);
         let mode_id = ModeId::new(format!("mode_{:02}", mode_index + 1))
             .map_err(|_| RulesParseError::Unsupported)?;
         modes.push(ModeDef {
-            program: None,
+            program,
             mode_id,
             presentation: context.presentation,
             linked_cast_cost: None,
-            effects: emission.effects,
-            targeting: emission.targeting,
+            effects,
+            targeting,
         });
         source_spans.push(ModalSourceSpan {
             start_line: line_number,
@@ -1138,6 +1147,30 @@ fn parse_rules_text(
                         TargetSchema::compile(&effects, Some(&targeting))
                             .map_err(|_| RulesParseError::Unsupported)?;
                         parsed.spell_effect = effects;
+                        parsed.targeting = Some(targeting);
+                        parsed.recipe_labels.push(matched.label);
+                        return Ok(parsed);
+                    }
+                    RecipeEmission::SpellProgram(program) => {
+                        if !parsed.spell_effect.is_empty()
+                            || parsed.spell_program.is_some()
+                            || parsed.modal_spell.is_some()
+                        {
+                            return Err(RulesParseError::Unsupported);
+                        }
+                        parsed.spell_program = Some(program);
+                        parsed.recipe_labels.push(matched.label);
+                        return Ok(parsed);
+                    }
+                    RecipeEmission::SpellProgramWithTargeting { program, targeting } => {
+                        if !parsed.spell_effect.is_empty()
+                            || parsed.spell_program.is_some()
+                            || parsed.targeting.is_some()
+                            || parsed.modal_spell.is_some()
+                        {
+                            return Err(RulesParseError::Unsupported);
+                        }
+                        parsed.spell_program = Some(program);
                         parsed.targeting = Some(targeting);
                         parsed.recipe_labels.push(matched.label);
                         return Ok(parsed);
@@ -1374,6 +1407,26 @@ fn parse_rules_text(
             RecipeEmission::SpellEffectsWithTargeting { effects, targeting } => {
                 assemble_spell_effects_with_targeting(&mut parsed, effects, targeting)?
             }
+            RecipeEmission::SpellProgram(program) => {
+                if !parsed.spell_effect.is_empty()
+                    || parsed.spell_program.is_some()
+                    || parsed.modal_spell.is_some()
+                {
+                    return Err(RulesParseError::Unsupported);
+                }
+                parsed.spell_program = Some(program);
+            }
+            RecipeEmission::SpellProgramWithTargeting { program, targeting } => {
+                if !parsed.spell_effect.is_empty()
+                    || parsed.spell_program.is_some()
+                    || parsed.targeting.is_some()
+                    || parsed.modal_spell.is_some()
+                {
+                    return Err(RulesParseError::Unsupported);
+                }
+                parsed.spell_program = Some(program);
+                parsed.targeting = Some(targeting);
+            }
             RecipeEmission::SpellCostModifier(modifier) => {
                 if !parsed.cost_modifiers.is_empty() {
                     return Err(RulesParseError::Unsupported);
@@ -1410,6 +1463,7 @@ fn parse_rules_text(
             | RecipeEmission::TeamworkModalAssembly(_)
             | RecipeEmission::TriggeredModalAssembly(_)
             | RecipeEmission::ModalMode(_)
+            | RecipeEmission::ModalProgram { .. }
             | RecipeEmission::StationAssembly(_) => {
                 return Err(RulesParseError::Unsupported);
             }
@@ -1580,6 +1634,7 @@ struct GenFace {
     harmonize_cost: Option<ManaCost>,
     cast_conditions: Vec<GameCondition>,
     spell_effect: Vec<SpellEffectKind>,
+    spell_program: Option<tricerules_cards::primitives::CardProgram>,
     targeting: Option<TargetingDef>,
     modal_spell: Option<ModalDef>,
     activated_abilities: Vec<ActivatedAbilityDef>,
@@ -1711,6 +1766,12 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
                 .map(render_generated_effect)
                 .collect::<Vec<_>>()
                 .join(", ")
+        ));
+    }
+    if let Some(program) = &face.spell_program {
+        s.push_str(&format!(
+            "{indent}spell_program: Some({}),\n",
+            ron::ser::to_string(program).expect("generated spell program should serialize")
         ));
     }
     if let Some(targeting) = &face.targeting {
@@ -2411,6 +2472,7 @@ fn parse_multiface_face(
         harmonize_cost: rules.harmonize_cost,
         cast_conditions: rules.cast_conditions,
         spell_effect: rules.spell_effect,
+        spell_program: rules.spell_program,
         targeting: rules.targeting,
         modal_spell: rules.modal_spell,
         activated_abilities: rules.activated_abilities,
@@ -2616,7 +2678,11 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     if !is_creature && !is_spell && rules.recipe_labels.is_empty() {
         return Err(Skip::NotCreature.into());
     }
-    if is_spell && rules.spell_effect.is_empty() && rules.modal_spell.is_none() {
+    if is_spell
+        && rules.spell_effect.is_empty()
+        && rules.spell_program.is_none()
+        && rules.modal_spell.is_none()
+    {
         return Err(Skip::NonKeywordText.into());
     }
     let mut types = card_types;
@@ -2646,6 +2712,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
             harmonize_cost: rules.harmonize_cost,
             cast_conditions: rules.cast_conditions,
             spell_effect: rules.spell_effect,
+            spell_program: rules.spell_program,
             targeting: rules.targeting,
             modal_spell: rules.modal_spell,
             activated_abilities: rules.activated_abilities,
@@ -3432,6 +3499,7 @@ fn run(args: Args) -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::recipes::{draw_then_discard_program, optional_discard_then_draw_program};
     use tricerules_cards::primitives::DrawDiscardOrder;
 
     type MutationCase = (&'static str, fn(&mut Value));
@@ -4512,7 +4580,10 @@ mod tests {
                 "{name}"
             );
             assert!(
-                modal.modes.iter().all(|mode| !mode.effects.is_empty()),
+                modal
+                    .modes
+                    .iter()
+                    .all(|mode| !mode.effects.is_empty() || mode.program.is_some()),
                 "{name}"
             );
         }
@@ -7287,17 +7358,13 @@ mod tests {
             );
             assert!(!ability.may, "optional discard belongs to the effect: {name}");
             assert!(ability.targeting.is_none(), "{name} has no targets");
-            assert_eq!(
-                ability.effect,
-                [SpellEffectKind::DrawDiscard {
-                    who: PlayerRecipient::Controller,
-                    draw_count: 1,
-                    discard_count: 1,
-                    order,
-                    optional,
-                }],
-                "{name}"
-            );
+            assert!(ability.effect.is_empty(), "{name}");
+            let expected_program = match (order, optional) {
+                (DrawDiscardOrder::DrawThenDiscard, false) => draw_then_discard_program(1, 1),
+                (DrawDiscardOrder::DiscardThenDraw, true) => optional_discard_then_draw_program(1),
+                _ => panic!("{name} has an unreviewed discard/draw order"),
+            };
+            assert_eq!(ability.program, Some(expected_program), "{name}");
         }
 
         for (name, type_line, oracle_text) in [

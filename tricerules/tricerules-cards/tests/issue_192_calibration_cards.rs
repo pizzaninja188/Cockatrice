@@ -1,6 +1,9 @@
+use crate::common::draw_discard_program::{
+    assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
+};
 use tricerules_cards::primitives::{
-    CombatRestrictionScope, DrawDiscardOrder, EffectSubject, PlayerRecipient, ResolutionCost,
-    SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
+    CombatRestrictionScope, EffectSubject, PlayerRecipient, ResolutionCost, SpellEffectKind,
+    StaticAbilityDef, TargetController, TargetKind,
 };
 use tricerules_cards::{
     AbilityCost, AbilitySourceZone, ActivationTiming, Color, CounterKind, Keyword,
@@ -364,16 +367,22 @@ fn issue_192_uses_generic_spell_equipment_and_turn_shapes() {
         &null_group.static_abilities[0].definition,
         StaticAbilityDef::ConditionalSelfModifier { keywords, .. } if keywords == &[Keyword::FirstStrike]
     ));
-    assert!(matches!(
-        null_group.triggered_abilities[0].effect.as_slice(),
-        [SpellEffectKind::DrawDiscard {
+    let trigger = &null_group.triggered_abilities[0];
+    assert!(trigger.effect.is_empty() && trigger.program.is_some());
+    assert_ability_draw_discard_steps(
+        registry,
+        "null_group_biological_assets",
+        &null_group.face_id,
+        &trigger.ability_id,
+        AuthoredDrawDiscardExpectation {
+            first_instruction: 0,
+            trailing_instructions: 0,
+            who: PlayerRecipient::Controller,
             draw_count: 1,
             discard_count: 1,
-            order: DrawDiscardOrder::DiscardThenDraw,
-            optional: true,
-            ..
-        }]
-    ));
+            order: AuthoredDrawDiscardOrder::OptionalDiscardThenDraw,
+        },
+    );
 
     let pizza = registry.get("spicy_oatmeal_pizza").unwrap().primary_face();
     assert!(matches!(

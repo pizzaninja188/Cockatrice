@@ -14,12 +14,10 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: AtBeginningOfDrawStep(player: AnyPlayer),
-    effect: [DrawDiscard(
-      who: AffectedPlayer,
-      draw_count: 1,
-      discard_count: 1,
-      order: DrawThenDiscard,
-      optional: false,
-    )],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "draw_one", kind: Perform(Draw(who: AffectedPlayer, count: 1))),
+      (id: "discard_one", kind: Perform(Discard(who: AffectedPlayer, quantity: Exact(1)))),
+    ], yields: []), target_bindings: [])),
   )],
 )

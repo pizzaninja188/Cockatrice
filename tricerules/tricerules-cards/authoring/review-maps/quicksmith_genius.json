@@ -7,7 +7,10 @@
       "start_line": 1,
       "end_line": 1,
       "typed_paths": [
-        "/faces/0/triggered_abilities/0"
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/1",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/0"
       ]
     }
   ],
@@ -17,12 +20,20 @@
       "typed_path": "/faces/0/triggered_abilities/0/trigger"
     },
     {
-      "symbol": "SpellEffectKind::DrawDiscard",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
     },
     {
-      "symbol": "DrawDiscardOrder::DiscardThenDraw",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0/DrawDiscard/order"
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Discard"
+    },
+    {
+      "symbol": "InstructionKind::IfResult",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/Draw"
     }
   ],
   "tokens": [],

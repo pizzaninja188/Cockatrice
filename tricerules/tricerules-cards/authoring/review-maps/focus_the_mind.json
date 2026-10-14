@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "695a84b5-96b0-4e48-b615-15624efab3b7",
+  "spans": [
+    {
+      "face_id": "focus_the_mind",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cost_modifiers/0"
+      ]
+    },
+    {
+      "face_id": "focus_the_mind",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Discard"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_111_turn_history::focus_the_mind_reduction_reads_prior_casts_not_the_current_spell",
+      "covers": "The cost reduction reads prior spell casts; Focus the Mind does not count itself as the first spell."
+    },
+    {
+      "test": "scenario draw_discard_tail::focus_the_mind_draws_three_then_finishes_one_required_discard",
+      "covers": "The actual spell draws exactly three, then completes its required one-card discard."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

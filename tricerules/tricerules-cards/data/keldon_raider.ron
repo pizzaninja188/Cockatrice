@@ -11,12 +11,13 @@
       ability_id: "triggered_01",
       presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [DrawDiscard(
-        draw_count: 1,
-        discard_count: 1,
-        order: DiscardThenDraw,
-        optional: true,
-      )],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "discard_one", bind: ["discarded"], kind: Perform(Discard(who: Controller, quantity: OptionalExact(1)))),
+        (id: "draw_if_discarded", kind: IfResult(condition: DiscardOutcome(result: "discarded", outcome: ChosenToPay),
+          yes: (steps: [(id: "draw_one", kind: Perform(Draw(who: Controller, count: 1)))], yields: []),
+          no: (steps: [], yields: []))),
+      ], yields: []), target_bindings: [])),
     ),
   ],
 )

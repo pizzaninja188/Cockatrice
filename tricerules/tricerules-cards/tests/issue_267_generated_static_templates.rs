@@ -1,7 +1,10 @@
+use crate::common::draw_discard_program::{
+    assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
+};
 use tricerules_cards::primitives::{
-    Amount, CardTypeFilter, CastTriggerPlayer, CreatureScopeController, DrawDiscardOrder,
-    GameCondition, GraveyardDestination, Keyword, PermanentTypeFilter, PlayerRecipient,
-    RelativePlayerSet, SearchDestination, SpellEffectKind, StaticAbilityDef, TriggerCondition,
+    Amount, CardTypeFilter, CastTriggerPlayer, CreatureScopeController, GameCondition,
+    GraveyardDestination, Keyword, PermanentTypeFilter, PlayerRecipient, RelativePlayerSet,
+    SearchDestination, SpellEffectKind, StaticAbilityDef, TriggerCondition,
 };
 use tricerules_cards::{AbilityPresentation, Layout};
 
@@ -180,26 +183,31 @@ fn issue_267_trigger_and_spell_effects_keep_exact_filters_and_order() {
         }]
     );
 
-    let null_group = &registry
+    let null_group_face = registry
         .get("null_group_biological_assets")
         .unwrap()
-        .primary_face()
-        .triggered_abilities[0];
+        .primary_face();
+    let null_group = &null_group_face.triggered_abilities[0];
     assert_eq!(
         null_group.trigger,
         TriggerCondition::WheneverSelfAttacks {
             minimum_other_attackers: 0
         }
     );
-    assert_eq!(
-        null_group.effect,
-        [SpellEffectKind::DrawDiscard {
+    assert!(null_group.effect.is_empty() && null_group.program.is_some());
+    assert_ability_draw_discard_steps(
+        registry,
+        "null_group_biological_assets",
+        &null_group_face.face_id,
+        &null_group.ability_id,
+        AuthoredDrawDiscardExpectation {
+            first_instruction: 0,
+            trailing_instructions: 0,
             who: PlayerRecipient::Controller,
             draw_count: 1,
             discard_count: 1,
-            order: DrawDiscardOrder::DiscardThenDraw,
-            optional: true,
-        }]
+            order: AuthoredDrawDiscardOrder::OptionalDiscardThenDraw,
+        },
     );
 
     let soulcaller = &registry

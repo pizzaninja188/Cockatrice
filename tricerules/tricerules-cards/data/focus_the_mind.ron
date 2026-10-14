@@ -12,9 +12,9 @@
     ),
   ],
   types: ["Instant"],
-  spell_effect: [DrawDiscard(
-    draw_count: 3,
-    discard_count: 1,
-    order: DrawThenDiscard,
-  )],
+  spell_effect: [],
+  spell_program: Some((body: (steps: [
+    (id: "draw_three", kind: Perform(Draw(who: Controller, count: 3))),
+    (id: "discard_one", kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+  ], yields: []), target_bindings: [])),
 )

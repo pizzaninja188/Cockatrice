@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "e24916ff-7566-4f27-8e31-732311a4a88c",
+  "spans": [
+    {
+      "face_id": "stormshriek_feral",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "stormshriek_feral",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "flush_out",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/1/spell_program/body/steps/0",
+        "/faces/1/spell_program/body/steps/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/1/spell_program/body/steps/0/kind/Perform/Discard"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/1/spell_program/body/steps/1/kind/Perform/Draw"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario draw_discard_tail::stormshriek_feral_front_face_keeps_flying_haste_and_activates_its_self_pump",
+      "covers": "Stormshriek Feral has flying and haste, and its {1}{R} source-bound activation resolves for +1/+0."
+    },
+    {
+      "test": "scenario draw_discard_tail::flush_out_omen_discards_draws_then_shuffles_after_successful_resolution",
+      "covers": "Successful Flush Out completes the mandatory discard, draws two, then returns to its owner's library and logs the shuffle after its resolution event."
+    },
+    {
+      "test": "scenario draw_discard_tail::countered_flush_out_omen_never_applies_its_discard_draw_or_shuffle_program",
+      "covers": "Countering Flush Out prevents its draw program and successful-resolution shuffle."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

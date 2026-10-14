@@ -1558,13 +1558,24 @@ mod invariant_rollback_tests {
             .expect("Anvil face");
         let mut legacy = trigger;
         legacy.card_id = "anvil_of_bogardan".into();
-        legacy.triggered_ability = Some(
-            anvil
-                .triggered_abilities
-                .first()
-                .expect("Anvil trigger")
-                .clone(),
-        );
+        let mut legacy_ability = anvil
+            .triggered_abilities
+            .first()
+            .expect("Anvil trigger")
+            .clone();
+        // The tail migration removes every legacy DrawDiscard data owner. Keep this captured
+        // pre-cutover shape synthetic so the unowned legacy fallback remains covered.
+        legacy_ability.program = None;
+        legacy_ability.effect = vec![
+            tricerules_card_model::primitives::SpellEffectKind::DrawDiscard {
+                who: tricerules_card_model::primitives::PlayerRecipient::Controller,
+                draw_count: 1,
+                discard_count: 1,
+                order: tricerules_card_model::primitives::DrawDiscardOrder::DrawThenDiscard,
+                optional: false,
+            },
+        ];
+        legacy.triggered_ability = Some(legacy_ability);
         assert!(legacy.triggered_ability.as_ref().unwrap().program.is_none());
         assert_eq!(
             engine

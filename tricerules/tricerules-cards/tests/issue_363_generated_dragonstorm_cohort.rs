@@ -6,9 +6,12 @@
 //! 603.6a/121.1/701.9 Roiling's draw-two-then-discard; CR 603.6a/111.1 Teeming's two 2/2 white
 //! Soldier tokens; and CR 603.6a/400.3 the shared return-self trigger on a controlled Dragon.
 
+use crate::common::draw_discard_program::{
+    assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
+};
 use tricerules_cards::primitives::{
-    CardTypeFilter, DrawDiscardOrder, EffectSubject, LifeAmount, PermanentEventFilter,
-    PlayerRecipient, SearchDestination, SearchZoneSelection, ZoneCardFilter,
+    CardTypeFilter, EffectSubject, LifeAmount, PermanentEventFilter, PlayerRecipient,
+    SearchDestination, SearchZoneSelection, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityPresentation, Amount, CastTriggerPlayer, Color, LibraryPartitionKind, SpellEffectKind,
@@ -160,7 +163,8 @@ fn issue_363_encroaching_dragonstorm_searches_up_to_two_basic_lands_tapped() {
 
 #[test]
 fn issue_363_roiling_dragonstorm_draws_two_then_discards_one() {
-    let definition = tricerules_cards::registry::global()
+    let registry = tricerules_cards::registry::global();
+    let definition = registry
         .get("roiling_dragonstorm")
         .expect("Roiling Dragonstorm");
     let face = definition.primary_face();
@@ -171,17 +175,22 @@ fn issue_363_roiling_dragonstorm_draws_two_then_discards_one() {
     let etb = &abilities[0];
     assert_eq!(etb.presentation, AbilityPresentation::OracleLines(vec![1]));
     assert_eq!(etb.trigger, TriggerCondition::WhenSelfEntersBattlefield);
-    assert_eq!(
-        etb.effect,
-        [SpellEffectKind::DrawDiscard {
+    assert!(etb.effect.is_empty() && etb.program.is_some());
+    assert!(etb.targeting.is_none());
+    assert_ability_draw_discard_steps(
+        registry,
+        "roiling_dragonstorm",
+        &face.face_id,
+        &etb.ability_id,
+        AuthoredDrawDiscardExpectation {
+            first_instruction: 0,
+            trailing_instructions: 0,
             who: PlayerRecipient::Controller,
             draw_count: 2,
             discard_count: 1,
-            order: DrawDiscardOrder::DrawThenDiscard,
-            optional: false,
-        }]
+            order: AuthoredDrawDiscardOrder::DrawThenDiscard,
+        },
     );
-    assert!(etb.targeting.is_none());
     assert_shared_dragon_return(face);
 }
 

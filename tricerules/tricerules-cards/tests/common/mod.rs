@@ -1,6 +1,9 @@
 //! Registry assertions accept reviewed constants, never generator-produced expectations.
+pub mod draw_discard_program;
+
 use tricerules_cards::{CardFace, Keyword};
 
+#[allow(dead_code)]
 pub struct FaceExpectation<'a> {
     pub id: &'a str,
     pub name: &'a str,
@@ -11,6 +14,7 @@ pub struct FaceExpectation<'a> {
     pub power_toughness: Option<(u32, u32)>,
 }
 
+#[allow(dead_code)]
 impl FaceExpectation<'_> {
     pub fn check(&self) -> &'static CardFace {
         let id = self.id;

@@ -11,11 +11,11 @@
       ability_id: "activated_01",
       presentation: OracleLines([1]),
       costs: [Mana("{1}{U}"), Tap],
-      effect: [DrawDiscard(
-        draw_count: 1,
-        discard_count: 1,
-        order: DrawThenDiscard,
-      )],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "draw_one", kind: Perform(Draw(who: Controller, count: 1))),
+        (id: "discard_one", kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+      ], yields: []), target_bindings: [])),
     ),
   ],
 )

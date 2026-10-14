@@ -1,0 +1,43 @@
+{
+  "format_version": 1,
+  "oracle_id": "b7163800-41fc-410a-9650-50ae90842170",
+  "spans": [
+    {
+      "face_id": "gristle_glutton",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/program/body/steps/0",
+        "/faces/0/activated_abilities/0/program/body/steps/1",
+        "/faces/0/activated_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform/Discard"
+    },
+    {
+      "symbol": "InstructionKind::IfResult",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/1/kind/IfResult"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/Draw"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario draw_discard_tail::gristle_glutton_draws_only_after_an_actual_discard",
+      "covers": "No discard with an empty hand produces no draw, while the activation still pays its costs."
+    },
+    {
+      "test": "scenario draw_discard_tail::gristle_glutton_counts_a_discard_replaced_to_a_hidden_zone",
+      "covers": "A committed discard replaced to the library still satisfies the conditional draw."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

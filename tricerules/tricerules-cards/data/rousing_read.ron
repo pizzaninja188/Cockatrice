@@ -10,11 +10,11 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [DrawDiscard(
-        draw_count: 2,
-        discard_count: 1,
-        order: DrawThenDiscard,
-      )],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "draw_two", kind: Perform(Draw(who: Controller, count: 2))),
+        (id: "discard_one", kind: Perform(Discard(who: Controller, quantity: Exact(1)))),
+      ], yields: []), target_bindings: [])),
     ),
   ],
   static_abilities: [

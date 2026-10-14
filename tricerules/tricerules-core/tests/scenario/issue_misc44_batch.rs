@@ -93,6 +93,36 @@ fn issue_misc44_incinerating_blast() {
         before + 1
     );
 
+    let mut declined = engine(844_012);
+    let target = inject_creature_on_battlefield(&mut declined, 1, "grizzly_bears");
+    declined
+        .state
+        .objects
+        .get_mut(&target)
+        .expect("target creature")
+        .toughness = Some(7);
+    let discard = inject_card_into_hand(&mut declined, 0, "forest");
+    let before = declined.state.turn_history.current.player(0).cards_drawn;
+    cast_regular(&mut declined, "incinerating_blast", target_object(target));
+    semantic::accepted(&mut declined, 0, &pass());
+    let parked = semantic::accepted(&mut declined, 1, &pass());
+    let choice = find_resolution_choice(&parked).expect("optional discard choice");
+    assert_eq!(choice.choice_kind(), ChoiceKind::HandCards);
+    assert_eq!((choice.min, choice.max), (0, 1));
+    assert!(choice.candidate_object_ids.contains(&discard));
+    assert_eq!(declined.state.objects[&target].zone, Zone::Battlefield);
+    assert_eq!(declined.state.objects[&target].damage, 6);
+    semantic::accepted(&mut declined, 0, &submit_resolution_choice(vec![]));
+    assert_eq!(declined.state.objects[&target].zone, Zone::Battlefield);
+    assert_eq!(declined.state.objects[&target].damage, 6);
+    assert_eq!(declined.state.objects[&discard].zone, Zone::Hand);
+    assert_eq!(
+        declined.state.turn_history.current.player(0).cards_drawn,
+        before
+    );
+    assert!(declined.state.pending_resolution.is_none());
+    assert!(declined.state.stack.is_empty());
+
     let mut fizzled = engine(844_011);
     let target = inject_creature_on_battlefield(&mut fizzled, 1, "grizzly_bears");
     let discard = inject_card_into_hand(&mut fizzled, 0, "forest");

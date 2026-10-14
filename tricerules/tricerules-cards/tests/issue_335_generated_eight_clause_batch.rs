@@ -8,10 +8,12 @@
 //! counter-filtered trample anthem; CR 603.6a/611.2a the Landfall self pump; and CR 602.2/701.9
 //! the {1}{U}, {T} draw-then-discard loot activation.
 
+use crate::common::draw_discard_program::{
+    assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
+};
 use tricerules_cards::primitives::{
-    CreatureScopeController, CreatureScopeFilter, DrawDiscardOrder, EffectSubject, LifeAmount,
-    PermanentEventFilter, PermanentTypeFilter, PlayerRecipient, StaticAbilityDef, TargetFilter,
-    TargetKind,
+    CreatureScopeController, CreatureScopeFilter, EffectSubject, LifeAmount, PermanentEventFilter,
+    PermanentTypeFilter, PlayerRecipient, StaticAbilityDef, TargetFilter, TargetKind,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, Color, CounterKind, Keyword,
@@ -362,9 +364,8 @@ fn issue_335_attercop_keeps_reach_deathtouch_and_landfall_pump() {
 
 #[test]
 fn issue_335_strix_lookout_keeps_flying_vigilance_and_tap_loot() {
-    let definition = tricerules_cards::registry::global()
-        .get("strix_lookout")
-        .expect("Strix Lookout");
+    let registry = tricerules_cards::registry::global();
+    let definition = registry.get("strix_lookout").expect("Strix Lookout");
     let face = definition.primary_face();
     assert_eq!(face.mana_cost.to_string(), "{1}{U}");
     assert_eq!(face.types, ["Creature", "Bird"]);
@@ -389,17 +390,22 @@ fn issue_335_strix_lookout_keeps_flying_vigilance_and_tap_loot() {
             AbilityCost::Tap,
         ]
     );
-    assert_eq!(
-        ability.effect,
-        [SpellEffectKind::DrawDiscard {
+    assert!(ability.effect.is_empty() && ability.program.is_some());
+    assert!(ability.targeting.is_none());
+    assert_ability_draw_discard_steps(
+        registry,
+        "strix_lookout",
+        &face.face_id,
+        &ability.ability_id,
+        AuthoredDrawDiscardExpectation {
+            first_instruction: 0,
+            trailing_instructions: 0,
             who: PlayerRecipient::Controller,
             draw_count: 1,
             discard_count: 1,
-            order: DrawDiscardOrder::DrawThenDiscard,
-            optional: false,
-        }]
+            order: AuthoredDrawDiscardOrder::DrawThenDiscard,
+        },
     );
-    assert!(ability.targeting.is_none());
 }
 
 #[test]

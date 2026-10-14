@@ -1,5 +1,8 @@
+use crate::common::draw_discard_program::{
+    assert_face_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
+};
 use tricerules_cards::primitives::{
-    CombatRestrictionScope, DrawDiscardOrder, EffectSubject, LibraryPartitionKind, SpellEffectKind,
+    CombatRestrictionScope, EffectSubject, LibraryPartitionKind, PlayerRecipient, SpellEffectKind,
     TargetController, TargetKind,
 };
 use tricerules_cards::{
@@ -374,14 +377,18 @@ fn issue_163_uses_generic_typecycling_condition_and_ordinal_shapes() {
     );
 
     let abandon = registry.get("abandon_attachments").unwrap().primary_face();
-    assert!(matches!(
-        abandon.spell_effect.as_slice(),
-        [SpellEffectKind::DrawDiscard {
+    assert!(abandon.spell_effect.is_empty() && abandon.spell_program.is_some());
+    assert_face_draw_discard_steps(
+        registry,
+        "abandon_attachments",
+        &abandon.face_id,
+        AuthoredDrawDiscardExpectation {
+            first_instruction: 0,
+            trailing_instructions: 0,
+            who: PlayerRecipient::Controller,
             draw_count: 2,
             discard_count: 1,
-            order: DrawDiscardOrder::DiscardThenDraw,
-            optional: true,
-            ..
-        }]
-    ));
+            order: AuthoredDrawDiscardOrder::OptionalDiscardThenDraw,
+        },
+    );
 }

@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "306549ad-84c7-4983-840b-9663799e9f40",
+  "spans": [
+    {
+      "face_id": "rousing_read",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "rousing_read",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/1"
+      ]
+    },
+    {
+      "face_id": "rousing_read",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/0/definition"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/Discard"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario spell_effects::issue_58_rousing_read_draws_then_discards_and_buffs_attached_creature",
+      "covers": "Exercises Aura attachment, ETB draw-then-discard, and the attached creature modifier in one card scenario."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -2822,7 +2822,11 @@ mod tests {
 
     #[test]
     fn issue_269_generated_modal_cohort_is_registered_with_exact_bounds_and_targets() {
-        use crate::AbilityPresentation;
+        use crate::primitives::{
+            CompiledInstructionKind, DiscardQuantity, PlayerRecipient, ProgramTargetBinding,
+            SpellEffectKind, StackSpellFilter,
+        };
+        use crate::{AbilityPresentation, Amount, ProgramOwnerId};
 
         let registry = crate::registry::from_embedded().expect("embedded registry");
         let cards = [
@@ -2865,9 +2869,88 @@ mod tests {
                     mode.presentation,
                     AbilityPresentation::OracleLines(vec![index as u16 + 2])
                 );
-                assert!(!mode.effects.is_empty(), "{card_id} mode {index}");
+                if card_id != "confusticate_and_bebother" {
+                    assert!(!mode.effects.is_empty(), "{card_id} mode {index}");
+                }
             }
         }
+
+        let confusticate = registry
+            .get("confusticate_and_bebother")
+            .unwrap()
+            .primary_face();
+        let modal = confusticate.modal_spell.as_ref().unwrap();
+        let [counter_mode, draw_discard_mode] = modal.modes.as_slice() else {
+            panic!("Confusticate and Bebother has exactly two modes");
+        };
+
+        assert!(counter_mode.effects.is_empty() && counter_mode.program.is_some());
+        let [counter_target] = counter_mode.targeting.as_ref().unwrap().groups.as_slice() else {
+            panic!("Confusticate's counter mode has exactly one target group");
+        };
+        assert_eq!((counter_target.min, counter_target.max), (1, 1));
+
+        let counter_owner = ProgramOwnerId::face_mode(
+            "confusticate_and_bebother",
+            confusticate.face_id.clone(),
+            counter_mode.mode_id.clone(),
+        );
+        let compiled_counter = registry
+            .compiled_program_for_owner(&counter_owner)
+            .expect("counter program compiles under its exact mode owner");
+        assert_eq!(compiled_counter.owner, counter_owner);
+        assert_eq!(
+            compiled_counter.target_bindings,
+            [ProgramTargetBinding {
+                instruction_address: 0,
+                target_group_index: 0,
+                role_index: 0,
+            }]
+        );
+        let [compiled_counter_spell] = compiled_counter.body.steps.as_slice() else {
+            panic!("compiled counter mode contains exactly one instruction");
+        };
+        assert!(matches!(
+            &compiled_counter_spell.kind,
+            CompiledInstructionKind::Perform(effect)
+                if **effect == (SpellEffectKind::CounterTargetSpell {
+                spell_filter: StackSpellFilter::default(),
+                unless_controller_pays: Some(Amount::Fixed(4)),
+                unless_controller_pays_by_cast_cost: None,
+            })
+        ));
+
+        assert!(draw_discard_mode.effects.is_empty());
+        assert!(draw_discard_mode.program.is_some() && draw_discard_mode.targeting.is_none());
+        let draw_discard_owner = ProgramOwnerId::face_mode(
+            "confusticate_and_bebother",
+            confusticate.face_id.clone(),
+            draw_discard_mode.mode_id.clone(),
+        );
+        let compiled_draw_discard = registry
+            .compiled_program_for_owner(&draw_discard_owner)
+            .expect("draw-discard program compiles under its exact mode owner");
+        assert_eq!(compiled_draw_discard.owner, draw_discard_owner);
+        assert!(compiled_draw_discard.target_bindings.is_empty());
+        let [compiled_draw, compiled_discard] = compiled_draw_discard.body.steps.as_slice() else {
+            panic!("compiled draw-discard mode preserves both ordered instructions");
+        };
+        assert!(matches!(
+            &compiled_draw.kind,
+            CompiledInstructionKind::Perform(effect)
+                if **effect == (SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(2),
+            })
+        ));
+        assert!(matches!(
+            &compiled_discard.kind,
+            CompiledInstructionKind::Perform(effect)
+                if **effect == (SpellEffectKind::Discard {
+                who: PlayerRecipient::Controller,
+                quantity: DiscardQuantity::Exact(1),
+            })
+        ));
 
         let azula = registry
             .get("azula_always_lies")

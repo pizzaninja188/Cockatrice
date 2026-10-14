@@ -6,13 +6,19 @@
       "face_id": "anvil_of_bogardan",
       "start_line": 1,
       "end_line": 1,
-      "typed_paths": ["/faces/0/static_abilities/0"]
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
     },
     {
       "face_id": "anvil_of_bogardan",
       "start_line": 2,
       "end_line": 2,
-      "typed_paths": ["/faces/0/triggered_abilities/0"]
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/1"
+      ]
     }
   ],
   "primitive_references": [
@@ -29,8 +35,24 @@
       "typed_path": "/faces/0/triggered_abilities/0/trigger"
     },
     {
-      "symbol": "SpellEffectKind::DrawDiscard",
-      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+      "symbol": "StaticAbilityDef::NoMaximumHandSize",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "NoMaximumHandSizeScope::AllPlayers",
+      "typed_path": "/faces/0/static_abilities/0/definition/NoMaximumHandSize/players"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfDrawStep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/Discard"
     }
   ],
   "tokens": [],

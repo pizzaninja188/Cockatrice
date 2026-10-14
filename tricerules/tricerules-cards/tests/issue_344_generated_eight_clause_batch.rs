@@ -7,13 +7,17 @@
 //! CR 614.1c/122/508.1 the conditional Raid entry counter; CR 603.6/508.1/120 the intervening Raid
 //! damage trigger; and CR 603.6/701.14/115.1 the Aura fight with its up-to-one target.
 
+use crate::common::draw_discard_program::{
+    assert_face_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
+};
 use tricerules_cards::primitives::{
-    CastTriggerPlayer, DrawDiscardOrder, EffectSubject, EntersWithCountersAffected, GameCondition,
-    PermanentEventFilter, PermanentTypeFilter, PlayerRecipient, RelativePlayerSet, SpellCastFilter,
-    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+    CastTriggerPlayer, CompiledInstructionKind, EffectSubject, EntersWithCountersAffected,
+    GameCondition, PermanentEventFilter, PermanentTypeFilter, PlayerRecipient,
+    ProgramTargetBinding, RelativePlayerSet, SpellCastFilter, SpellEffectKind, StackSpellFilter,
+    StaticAbilityDef, TargetController, TargetFilter, TargetKind,
 };
 use tricerules_cards::{
-    AbilityPresentation, Amount, Color, CounterKind, Keyword, SpellEffectKind, TriggerCondition,
+    AbilityPresentation, Amount, Color, CounterKind, Keyword, ProgramOwnerId, TriggerCondition,
 };
 
 #[test]
@@ -119,56 +123,82 @@ fn issue_344_icecave_crasher_keeps_trample_and_landfall() {
 
 #[test]
 fn issue_344_refute_counters_then_loots() {
-    let definition = tricerules_cards::registry::global()
-        .get("refute")
-        .expect("Refute");
+    let registry = tricerules_cards::registry::global();
+    let definition = registry.get("refute").expect("Refute");
     let face = definition.primary_face();
     assert_eq!(face.mana_cost.to_string(), "{1}{U}{U}");
     assert_eq!(face.types, ["Instant"]);
     assert_eq!(face.colors(), vec![Color::Blue]);
+    assert!(face.spell_effect.is_empty() && face.spell_program.is_some());
+    let [counter_target] = face.targeting.as_ref().unwrap().groups.as_slice() else {
+        panic!("Refute's counter owns exactly one target group");
+    };
+    assert_eq!((counter_target.min, counter_target.max), (1, 1));
+    let owner = ProgramOwnerId::face("refute", face.face_id.clone());
+    let program = registry
+        .compiled_program_for_owner(&owner)
+        .expect("Refute's authored program compiles under its face owner");
+    assert_eq!(program.owner, owner);
     assert_eq!(
-        face.spell_effect,
-        [
-            SpellEffectKind::CounterTargetSpell {
+        program.target_bindings,
+        [ProgramTargetBinding {
+            instruction_address: 0,
+            target_group_index: 0,
+            role_index: 0,
+        }]
+    );
+    let [counter, ..] = program.body.steps.as_slice() else {
+        panic!("Refute preserves its counter before drawing and discarding");
+    };
+    assert!(matches!(
+        &counter.kind,
+        CompiledInstructionKind::Perform(effect)
+            if **effect == (SpellEffectKind::CounterTargetSpell {
                 spell_filter: StackSpellFilter::default(),
                 unless_controller_pays: None,
                 unless_controller_pays_by_cast_cost: None,
-            },
-            SpellEffectKind::DrawDiscard {
-                who: PlayerRecipient::Controller,
-                draw_count: 1,
-                discard_count: 1,
-                order: DrawDiscardOrder::DrawThenDiscard,
-                optional: false,
-            },
-        ]
-    );
-    assert!(
-        face.targeting.is_none(),
-        "the counter owns the implicit one-spell target contract"
+            })
+    ));
+    assert_face_draw_discard_steps(
+        registry,
+        "refute",
+        &face.face_id,
+        AuthoredDrawDiscardExpectation {
+            first_instruction: 1,
+            trailing_instructions: 0,
+            who: PlayerRecipient::Controller,
+            draw_count: 1,
+            discard_count: 1,
+            order: AuthoredDrawDiscardOrder::DrawThenDiscard,
+        },
     );
 }
 
 #[test]
 fn issue_344_romantic_rendezvous_discards_then_draws_two() {
-    let definition = tricerules_cards::registry::global()
+    let registry = tricerules_cards::registry::global();
+    let definition = registry
         .get("romantic_rendezvous")
         .expect("Romantic Rendezvous");
     let face = definition.primary_face();
     assert_eq!(face.mana_cost.to_string(), "{1}{R}");
     assert_eq!(face.types, ["Sorcery"]);
     assert_eq!(face.colors(), vec![Color::Red]);
-    assert_eq!(
-        face.spell_effect,
-        [SpellEffectKind::DrawDiscard {
+    assert!(face.spell_effect.is_empty() && face.spell_program.is_some());
+    assert!(face.targeting.is_none());
+    assert_face_draw_discard_steps(
+        registry,
+        "romantic_rendezvous",
+        &face.face_id,
+        AuthoredDrawDiscardExpectation {
+            first_instruction: 0,
+            trailing_instructions: 0,
             who: PlayerRecipient::Controller,
             draw_count: 2,
             discard_count: 1,
-            order: DrawDiscardOrder::DiscardThenDraw,
-            optional: false,
-        }]
+            order: AuthoredDrawDiscardOrder::DiscardThenDraw,
+        },
     );
-    assert!(face.targeting.is_none());
 }
 
 #[test]

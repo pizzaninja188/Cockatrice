@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "dbf9feb3-0751-47bd-a8dc-ed1c076cf8c7",
+  "spans": [
+    {
+      "face_id": "broadside_barrage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/1",
+        "/faces/0/spell_program/body/steps/2",
+        "/faces/0/spell_program/target_bindings/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/DamageTarget"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/spell_program/body/steps/2/kind/Perform/Discard"
+    },
+    {
+      "symbol": "ProgramTargetRole::Target",
+      "typed_path": "/faces/0/spell_program/target_bindings/0/role"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario spellementals::spellementals_damage_spells_reject_lands_and_damage_creatures",
+      "covers": "Rejects an illegal land target and exercises a legal creature target through the spell and its discard choice."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

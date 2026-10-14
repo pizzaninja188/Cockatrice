@@ -7,6 +7,9 @@
 //! activated/triggered surfaces keep their printed timing and costs. Broodspinner stays excluded:
 //! its distinct-card-types quantity has no token-count consumer (blocker #364).
 
+use crate::common::draw_discard_program::{
+    assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
+};
 use tricerules_cards::primitives::{
     CardResultAction, CardResultSource, CardTypeFilter, GraveyardDestination, PlayerRecipient,
     ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, ZoneCardFilter,
@@ -329,7 +332,8 @@ fn issue_371_hydra_troopers_branches_villain_or_mill() {
 
 #[test]
 fn issue_371_kiora_etb_and_threshold_attack_are_exact() {
-    let face = tricerules_cards::registry::global()
+    let registry = tricerules_cards::registry::global();
+    let face = registry
         .get("kiora,_the_rising_tide")
         .expect("Kiora, the Rising Tide")
         .primary_face();
@@ -338,15 +342,21 @@ fn issue_371_kiora_etb_and_threshold_attack_are_exact() {
     let etb = &face.triggered_abilities[0];
     assert_eq!(etb.trigger, TriggerCondition::WhenSelfEntersBattlefield);
     assert_eq!(etb.presentation, AbilityPresentation::OracleLines(vec![1]));
-    assert_eq!(
-        etb.effect,
-        [SpellEffectKind::DrawDiscard {
+    assert!(etb.effect.is_empty() && etb.program.is_some());
+    assert!(etb.targeting.is_none());
+    assert_ability_draw_discard_steps(
+        registry,
+        "kiora,_the_rising_tide",
+        &face.face_id,
+        &etb.ability_id,
+        AuthoredDrawDiscardExpectation {
+            first_instruction: 0,
+            trailing_instructions: 0,
             who: PlayerRecipient::Controller,
             draw_count: 2,
             discard_count: 2,
-            order: tricerules_cards::primitives::DrawDiscardOrder::DrawThenDiscard,
-            optional: false,
-        }]
+            order: AuthoredDrawDiscardOrder::DrawThenDiscard,
+        },
     );
 
     let attack = &face.triggered_abilities[1];

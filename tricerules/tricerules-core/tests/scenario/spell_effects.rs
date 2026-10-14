@@ -2845,6 +2845,7 @@ fn issue_58_teferis_protege_draws_before_discard_choice() {
     );
     let hand_before = e.state.players[0].hand.len();
     let library_before = e.state.players[0].library.len();
+    let draws_before = e.state.turn_history.current.player(0).cards_drawn;
 
     e.apply_scenario_command(0, &activate_ability(protege, 0, vec![]))
         .expect("activate Teferi's Protege");
@@ -2863,6 +2864,23 @@ fn issue_58_teferis_protege_draws_before_discard_choice() {
         "the draw occurs before the discard choice"
     );
     assert_eq!(e.state.players[0].hand.len(), hand_before + 1);
+    assert_eq!(
+        e.state.turn_history.current.player(0).cards_drawn,
+        draws_before + 1
+    );
+    let discarded = e.state.players[0].hand[0];
+    assert!(choice.candidate_object_ids.contains(&discarded));
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![discarded]))
+        .expect("complete Teferi's Protege's required discard");
+    assert!(e.state.pending_resolution.is_none());
+    assert!(e.state.stack.is_empty());
+    assert_eq!(
+        e.state.objects[&discarded].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(e.state.players[0].library.len(), library_before - 1);
+    assert_eq!(e.state.players[0].hand.len(), hand_before);
+    assert!(e.state.objects[&protege].tapped);
 }
 
 #[test]
@@ -3187,7 +3205,9 @@ fn issue_58_rousing_read_draws_then_discards_and_buffs_attached_creature() {
     assert_eq!(e.effective_toughness(bear), Some(3));
     assert!(e.effective_has_keyword(bear, Keyword::Flying));
 
+    let hand_before_trigger = e.state.players[0].hand.len();
     let library_before = e.state.players[0].library.len();
+    let draws_before = e.state.turn_history.current.player(0).cards_drawn;
     e.apply_scenario_command(0, &pass())
         .expect("p0 pass on trigger");
     let batch = e
@@ -3196,6 +3216,26 @@ fn issue_58_rousing_read_draws_then_discards_and_buffs_attached_creature() {
     let choice = find_resolution_choice(&batch).expect("discard after drawing two");
     assert_eq!((choice.min, choice.max), (1, 1));
     assert_eq!(e.state.players[0].library.len(), library_before - 2);
+    assert_eq!(e.state.players[0].hand.len(), hand_before_trigger + 2);
+    assert_eq!(
+        e.state.turn_history.current.player(0).cards_drawn,
+        draws_before + 2
+    );
+    let discarded = e.state.players[0].hand[0];
+    assert!(choice.candidate_object_ids.contains(&discarded));
+    e.apply_scenario_command(0, &submit_resolution_choice(vec![discarded]))
+        .expect("complete Rousing Read's discard choice");
+    assert!(e.state.pending_resolution.is_none());
+    assert!(e.state.stack.is_empty());
+    assert_eq!(
+        e.state.objects[&discarded].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(e.state.players[0].library.len(), library_before - 2);
+    assert_eq!(e.state.players[0].hand.len(), hand_before_trigger + 1);
+    assert_eq!(e.effective_power(bear), Some(3));
+    assert_eq!(e.effective_toughness(bear), Some(3));
+    assert!(e.effective_has_keyword(bear, Keyword::Flying));
 }
 // ---------------------------------------------------------------------------
 // MoveGraveyardCards -> Battlefield (Zombify)
