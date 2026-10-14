@@ -1734,19 +1734,6 @@ pub enum SpellEffectKind {
     /// eligible incarnations at choice time, then sends the selected cohort through one entry
     /// batch so replacement effects and other entry choices see the simultaneous event.
     ReturnDifferentNamedPermanentsFromGraveyard,
-    /// Choose a card from the controller's graveyard when this instruction resolves rather than
-    /// targeting it while casting. Say Its Name mills first, then optionally chooses the current
-    /// creature-or-land cohort; Corpse Churn shares the same post-mill timing.
-    ChooseGraveyardCard {
-        filter: ZoneCardFilter,
-        destination: GraveyardDestination,
-        #[serde(default)]
-        optional: bool,
-        /// When present, candidates must be exact surviving entries from the immediately
-        /// preceding card-moving instruction rather than the whole current graveyard.
-        #[serde(default)]
-        from_result: Option<CardResultFilter>,
-    },
     /// Resolution-time selection and ordinary movement from either the current controller's
     /// graveyard or an explicitly bound typed card-result cohort. Program compilation enforces
     /// the required input for the cohort form; it never falls back to a broader live zone.
@@ -3574,7 +3561,6 @@ impl SpellEffectKind {
             | SpellEffectKind::ReturnAllGraveyardPermanents { .. }
             | SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { .. }
             | SpellEffectKind::ReturnDifferentNamedPermanentsFromGraveyard
-            | SpellEffectKind::ChooseGraveyardCard { .. }
             | SpellEffectKind::ChooseCard { .. }
             | SpellEffectKind::ChooseLinkedExiledCard { .. }
             | SpellEffectKind::PlayLinkedExiledCard { .. }
@@ -4490,20 +4476,6 @@ impl SpellEffectKind {
                 ) {
                     return Err(
                         "counter-placement reflexive trigger requires an immediately preceding PutCounters effect with the same counter kind"
-                            .into(),
-                    );
-                }
-            }
-            if let SpellEffectKind::ChooseGraveyardCard {
-                from_result: Some(filter),
-                ..
-            } = effect
-            {
-                if filter.source != CardResultSource::PreviousEffect
-                    || !previous.is_some_and(|effect| produces_card_result(effect, filter.action))
-                {
-                    return Err(
-                        "ChooseGraveyardCard result source requires an immediately preceding compatible card-moving effect"
                             .into(),
                     );
                 }
@@ -6550,22 +6522,6 @@ impl SpellEffectKind {
                     );
                 }
                 filter.as_ref().map_or(Ok(()), ZoneCardFilter::validate)
-            }
-            SpellEffectKind::ChooseGraveyardCard {
-                filter,
-                from_result,
-                ..
-            } => {
-                filter.validate()?;
-                if from_result.as_ref().is_some_and(|result| {
-                    result.source != CardResultSource::PreviousEffect
-                        || result.action != CardResultAction::Mill
-                }) {
-                    return Err(
-                        "ChooseGraveyardCard supports only a previous Mill result cohort".into(),
-                    );
-                }
-                Ok(())
             }
             SpellEffectKind::ChooseCard { filter, .. } => filter.validate(),
             // CR 701.18: scry is legal on spells and on abilities alike (scry lands, Sensei's

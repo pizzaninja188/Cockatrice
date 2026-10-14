@@ -20,11 +20,15 @@ the accepted syntax.
 The bounded 2026-10-14 Mill increment adds a typed `CardResultCohort` result from `Mill` and an
 earlier-result input to `ChooseCard`. The cohort records committed public output incarnations and
 the chooser revalidates their live identity and current characteristics before offering them.
-Midnight Tilling and Lluwen, Imperfect Naturalist's ETB use this form. Lluwen's activated ability
-that discards a land and creates Worm tokens remains unchanged. No admitted definition still uses
-legacy `from_result`. The old chooser and its compatibility path remain until the existing
-whole-graveyard consumers migrate and that path is retired. The developer `choice public-zones` fixture
-exercises the cross-zone candidate projection without moving a card or changing priority.
+Midnight Tilling and Lluwen, Imperfect Naturalist's ETB use this form. Say Its Name and Fell
+Gravship use `WholeCurrentGraveyard` in authored programs because their choice includes any
+currently matching graveyard card, including one present before the mill. The old
+`ChooseGraveyardCard`/`from_result` schema, adjacency validator, dispatch and parked continuation
+are retired; no admitted definition or runtime caller uses that compatibility family. Lluwen's
+activated ability that discards a land and creates Worm tokens remains unchanged. `CardResultFilter`
+remains available to typed result/count expressions and other operations. The developer
+`choice public-zones` fixture exercises the cross-zone candidate projection without moving a card
+or changing priority.
 The initial design was reviewed against `41e4ccf463930d8384ac00eb60ac21f931646b38` (2026-10-12).
 The former deck campaign remains outside scope. Cards require complete-card evidence and the
 applicable verification and visible acceptance gates independently of this design.

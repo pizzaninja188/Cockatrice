@@ -1510,12 +1510,6 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         sacrifice: PendingPlayerSetSacrifice,
     },
-    GraveyardChoice {
-        stack: ParkedStackResolution,
-        destination: tricerules_card_model::primitives::GraveyardDestination,
-        candidate_generations: Vec<(ObjectId, u64)>,
-        spell_label: String,
-    },
     ChooseCard {
         stack: ParkedStackResolution,
         chooser: PlayerId,
@@ -1902,7 +1896,6 @@ impl ResolutionContinuation {
             | Self::HandChoice { stack, .. }
             | Self::PlayerSetDiscard { stack, .. }
             | Self::PlayerSetSacrifice { stack, .. }
-            | Self::GraveyardChoice { stack, .. }
             | Self::ChooseCard { stack, .. }
             | Self::ChooseCardCommander { stack, .. }
             | Self::DifferentNamedGraveyardReturn { stack, .. }
@@ -1968,7 +1961,6 @@ impl ResolutionContinuation {
             | Self::HandChoice { stack, .. }
             | Self::PlayerSetDiscard { stack, .. }
             | Self::PlayerSetSacrifice { stack, .. }
-            | Self::GraveyardChoice { stack, .. }
             | Self::ChooseCard { stack, .. }
             | Self::ChooseCardCommander { stack, .. }
             | Self::DifferentNamedGraveyardReturn { stack, .. }

@@ -1,7 +1,7 @@
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, CardSearchZone, CardTypeFilter, GraveyardDestination, LibraryBottomOrder,
-    LibraryPlacement, PowerComparison, SearchDestination, SearchZoneSelection, SpellEffectKind,
-    ZoneCardFilter,
+    AbilityCost, CardProgram, CardSearchZone, CardTypeFilter, GraveyardDestination,
+    LibraryBottomOrder, LibraryPlacement, PowerComparison, SearchDestination, SearchZoneSelection,
+    SpellEffectKind, ZoneCardFilter,
 };
 
 fn card(id: &str) -> &'static tricerules_cards::CardDefinition {
@@ -77,22 +77,29 @@ fn issue_110_search_and_look_cards_use_the_shared_primitives() {
 #[test]
 fn issue_110_say_its_name_and_altanak_are_complete() {
     let say = card("say_its_name");
-    let [SpellEffectKind::Mill {
-        count: Amount::Fixed(3),
-        ..
-    }, SpellEffectKind::ChooseGraveyardCard {
-        filter: ZoneCardFilter {
-            any_of: Some(filters),
-            ..
-        },
-        destination: GraveyardDestination::Hand,
-        optional: true,
-        ..
-    }] = say.primary_face().spell_effect.as_slice()
-    else {
-        panic!("Say Its Name mills then chooses from the current graveyard");
-    };
-    assert_eq!(filters.len(), 2);
+    let expected_program: CardProgram = ron::from_str(
+        r#"(body: (steps: [
+            (id: "mill_three", bind: [], input: None,
+                kind: Perform(Mill(count: 3, who: Controller))),
+            (id: "choose_creature_or_land", bind: [], input: None,
+                kind: Perform(ChooseCard(
+                    source: WholeCurrentGraveyard,
+                    filter: (any_of: Some([
+                        (card_type: Some(Creature)),
+                        (card_type: Some(Land)),
+                    ])),
+                    destination: Hand,
+                    optional: true,
+                ))),
+        ], yields: []), target_bindings: [])"#,
+    )
+    .expect("Say Its Name's exact WholeCurrentGraveyard program is valid RON");
+    let say_face = say.primary_face();
+    assert!(
+        say_face.spell_effect.is_empty()
+            && say_face.spell_program.as_ref() == Some(&expected_program),
+        "Say Its Name must mill three, then optionally return a current graveyard creature or land"
+    );
     let ability = &say.primary_face().activated_abilities[0];
     assert!(matches!(
         ability.costs.as_slice(),

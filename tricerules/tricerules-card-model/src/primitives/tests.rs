@@ -878,17 +878,13 @@ fn issue_211_counter_reflexive_receipts_require_an_adjacent_matching_producer() 
 
 #[test]
 fn issue_159_exact_cohorts_grouped_permissions_and_second_from_top_deserialize() {
-    let graveyard: super::SpellEffectKind = ron::from_str(
+    let retired_graveyard_syntax = ron::from_str::<super::SpellEffectKind>(
         "ChooseGraveyardCard(filter: (card_type: Some(NonlandPermanent)), destination: Hand, optional: true, from_result: Some((source: PreviousEffect, action: Mill, players: Controller)))",
-    )
-    .expect("a graveyard choice can be constrained to the exact preceding mill cohort");
-    assert!(matches!(
-        graveyard,
-        super::SpellEffectKind::ChooseGraveyardCard {
-            from_result: Some(_),
-            ..
-        }
-    ));
+    );
+    assert!(
+        retired_graveyard_syntax.is_err(),
+        "the legacy ChooseGraveyardCard/from_result syntax must be rejected"
+    );
 
     let exile: super::SpellEffectKind = ron::from_str(
         "ExileTopWithPlayPermission(player: Controller, count: 2, count_by_cast_cost: Some((condition: (group_id: \"cast_cost_01\", option_id: \"option_01\", expected_selected: true), if_selected: 3, otherwise: 2)))",

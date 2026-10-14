@@ -9,11 +9,10 @@
 use std::collections::BTreeSet;
 
 use tricerules_cards::primitives::{
-    AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CardTypeFilter, CountExpression,
-    EffectSubject, GameCondition, GraveyardDestination, MassPlayerSet, ObjectPaymentConstraint,
-    PlayerRecipient, PowerToughnessCharacteristic, RelativePlayerSet, SpellEffectKind,
-    StaticAbilityDef, TargetController, TargetFilter, TargetKind, TriggerCondition,
-    TypeLineAddition, ZoneCardFilter,
+    AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CardProgram, CardTypeFilter,
+    CountExpression, EffectSubject, GameCondition, MassPlayerSet, ObjectPaymentConstraint,
+    PowerToughnessCharacteristic, RelativePlayerSet, SpellEffectKind, StaticAbilityDef,
+    TargetController, TargetFilter, TargetKind, TriggerCondition, TypeLineAddition,
 };
 use tricerules_cards::{AbilityPresentation, CounterKind, Keyword};
 
@@ -52,22 +51,6 @@ fn noncreature_target() -> TargetFilter {
         kind: TargetKind::AnyPermanent,
         excluded_permanent_types: vec![tricerules_cards::primitives::PermanentTypeFilter::Creature],
         ..TargetFilter::default()
-    }
-}
-
-fn fell_filter() -> ZoneCardFilter {
-    ZoneCardFilter {
-        any_of: Some(vec![
-            ZoneCardFilter {
-                card_type: Some(CardTypeFilter::Creature),
-                ..ZoneCardFilter::default()
-            },
-            ZoneCardFilter {
-                required_subtypes: vec!["Spacecraft".into()],
-                ..ZoneCardFilter::default()
-            },
-        ]),
-        ..ZoneCardFilter::default()
     }
 }
 
@@ -232,21 +215,25 @@ fn issue_313_cards_preserve_exact_faces_abilities_and_presentation_fingerprints(
             }
             "fell_gravship" => {
                 assert!(trigger.targeting.is_none());
-                assert_eq!(
-                    trigger.effect,
-                    [
-                        SpellEffectKind::Mill {
-                            count: Amount::Fixed(3),
-                            who: PlayerRecipient::Controller,
-                        },
-                        SpellEffectKind::ChooseGraveyardCard {
-                            filter: fell_filter(),
-                            destination: GraveyardDestination::Hand,
-                            optional: false,
-                            from_result: None,
-                        },
-                    ]
-                );
+                let expected_program: CardProgram = ron::from_str(
+                    r#"(body: (steps: [
+                        (id: "mill_three", bind: [], input: None,
+                            kind: Perform(Mill(count: 3, who: Controller))),
+                        (id: "choose_creature_or_spacecraft", bind: [], input: None,
+                            kind: Perform(ChooseCard(
+                                source: WholeCurrentGraveyard,
+                                filter: (any_of: Some([
+                                    (card_type: Some(Creature)),
+                                    (required_subtypes: ["Spacecraft"]),
+                                ])),
+                                destination: Hand,
+                                optional: false,
+                            ))),
+                    ], yields: []), target_bindings: [])"#,
+                )
+                .expect("Fell Gravship's exact WholeCurrentGraveyard program is valid RON");
+                assert!(trigger.effect.is_empty());
+                assert_eq!(trigger.program.as_ref(), Some(&expected_program));
             }
             _ => unreachable!(),
         }

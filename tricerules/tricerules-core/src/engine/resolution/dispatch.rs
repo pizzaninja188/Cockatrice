@@ -358,9 +358,6 @@ pub(super) fn execute_effect(
         SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { filter } => {
             zones::return_all_graveyard_permanents_with_mana_value_x_or_less(cx, &filter)?
         }
-        effect @ SpellEffectKind::ChooseGraveyardCard { .. } => {
-            zones::choose_graveyard_card(cx, effect)?
-        }
         effect @ SpellEffectKind::ChooseCard { .. } => zones::choose_card(cx, effect)?,
         effect @ SpellEffectKind::ChooseLinkedExiledCard { .. } => {
             zones::choose_linked_exiled_card(cx, effect)?

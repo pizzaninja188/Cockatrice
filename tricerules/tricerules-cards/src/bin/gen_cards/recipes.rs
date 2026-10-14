@@ -262,6 +262,26 @@ fn lluwen_mill_then_choose_program() -> CardProgram {
     )
 }
 
+fn fell_mill_then_choose_program() -> CardProgram {
+    ron::from_str(
+        r#"(body: (steps: [
+            (id: "mill_three", bind: [], input: None,
+                kind: Perform(Mill(count: 3, who: Controller))),
+            (id: "choose_creature_or_spacecraft", bind: [], input: None,
+                kind: Perform(ChooseCard(
+                    source: WholeCurrentGraveyard,
+                    filter: (any_of: Some([
+                        (card_type: Some(Creature)),
+                        (required_subtypes: ["Spacecraft"]),
+                    ])),
+                    destination: Hand,
+                    optional: false,
+                ))),
+        ], yields: []), target_bindings: [])"#,
+    )
+    .expect("the exact Fell Gravship authored program is valid RON")
+}
+
 fn single_program_targeting(prompt: &str) -> TargetingDef {
     TargetingDef {
         groups: vec![TargetGroupDef {
@@ -7221,33 +7241,10 @@ fn match_fell_etb_mill_then_return(text: &str, context: &RecipeContext) -> Optio
         && issue_313_is_fell(context)
         && text == ISSUE_313_FELL_ETB_TEXT)
         .then(|| {
-            triggered_ability_with(
+            triggered_program_ability(
                 context,
                 TriggerCondition::WhenSelfEntersBattlefield,
-                vec![
-                    SpellEffectKind::Mill {
-                        count: Amount::Fixed(3),
-                        who: PlayerRecipient::Controller,
-                    },
-                    SpellEffectKind::ChooseGraveyardCard {
-                        filter: ZoneCardFilter {
-                            any_of: Some(vec![
-                                ZoneCardFilter {
-                                    card_type: Some(CardTypeFilter::Creature),
-                                    ..ZoneCardFilter::default()
-                                },
-                                ZoneCardFilter {
-                                    required_subtypes: vec!["Spacecraft".into()],
-                                    ..ZoneCardFilter::default()
-                                },
-                            ]),
-                            ..ZoneCardFilter::default()
-                        },
-                        destination: GraveyardDestination::Hand,
-                        optional: false,
-                        from_result: None,
-                    },
-                ],
+                fell_mill_then_choose_program(),
             )
         })
 }
@@ -33650,33 +33647,25 @@ mod tests {
             panic!("Fell ETB must emit a triggered ability")
         };
         assert!(ability.targeting.is_none());
-        assert_eq!(
-            ability.effect,
-            [
-                SpellEffectKind::Mill {
-                    count: Amount::Fixed(3),
-                    who: PlayerRecipient::Controller,
-                },
-                SpellEffectKind::ChooseGraveyardCard {
-                    filter: ZoneCardFilter {
-                        any_of: Some(vec![
-                            ZoneCardFilter {
-                                card_type: Some(CardTypeFilter::Creature),
-                                ..ZoneCardFilter::default()
-                            },
-                            ZoneCardFilter {
-                                required_subtypes: vec!["Spacecraft".into()],
-                                ..ZoneCardFilter::default()
-                            },
-                        ]),
-                        ..ZoneCardFilter::default()
-                    },
-                    destination: GraveyardDestination::Hand,
-                    optional: false,
-                    from_result: None,
-                },
-            ]
-        );
+        let expected_program: CardProgram = ron::from_str(
+            r#"(body: (steps: [
+                (id: "mill_three", bind: [], input: None,
+                    kind: Perform(Mill(count: 3, who: Controller))),
+                (id: "choose_creature_or_spacecraft", bind: [], input: None,
+                    kind: Perform(ChooseCard(
+                        source: WholeCurrentGraveyard,
+                        filter: (any_of: Some([
+                            (card_type: Some(Creature)),
+                            (required_subtypes: ["Spacecraft"]),
+                        ])),
+                        destination: Hand,
+                        optional: false,
+                    ))),
+            ], yields: []), target_bindings: [])"#,
+        )
+        .expect("Fell Gravship's exact WholeCurrentGraveyard program is valid RON");
+        assert!(ability.effect.is_empty());
+        assert_eq!(ability.program.as_ref(), Some(&expected_program));
     }
 
     #[test]

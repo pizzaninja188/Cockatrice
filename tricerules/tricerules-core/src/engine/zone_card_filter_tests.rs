@@ -48,12 +48,41 @@ fn fixture_effect(effect: &str) -> SpellEffectKind {
 }
 
 fn zone_filter(predicate: &str) -> ZoneCardFilter {
-    let SpellEffectKind::ChooseGraveyardCard { filter, .. } = fixture_effect(&format!(
-        "ChooseGraveyardCard(filter: {predicate}, destination: Hand)"
-    )) else {
-        panic!("zone filter fixture");
+    let card = format!(
+        r#"(id: "test", name: "Test", face_id: "test", types: ["Instant"], spell_program: Some((
+            body: (steps: [
+                (id: "choose_card", kind: Perform(ChooseCard(
+                    source: WholeCurrentGraveyard,
+                    filter: {predicate},
+                    destination: Hand,
+                    optional: false,
+                ))),
+            ], yields: []),
+            target_bindings: [],
+        )))"#
+    );
+    let registry = CardRegistry::from_chunks_and_tokens(&[&card], &[])
+        .expect("authored ChooseCard filter fixture registry");
+    let program = registry
+        .get("test")
+        .expect("filter fixture card")
+        .primary_face()
+        .spell_program
+        .as_ref()
+        .expect("authored filter fixture program");
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("one authored filter instruction");
     };
-    filter
+    let tricerules_card_model::primitives::InstructionKind::Perform(effect) = &instruction.kind
+    else {
+        panic!("authored ChooseCard filter instruction");
+    };
+    let tricerules_card_model::primitives::SpellEffectKind::ChooseCard { filter, .. } =
+        effect.as_ref()
+    else {
+        panic!("authored ChooseCard filter operation");
+    };
+    filter.clone()
 }
 
 fn graveyard_filter(predicate: &str) -> GraveyardFilter {

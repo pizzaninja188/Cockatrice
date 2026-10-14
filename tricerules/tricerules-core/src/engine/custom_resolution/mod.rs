@@ -1206,9 +1206,6 @@ impl GameEngine {
             ResolutionContinuation::PlayerSetSacrifice { .. } => {
                 return self.finish_player_set_sacrifice_choice(pending, chosen);
             }
-            ResolutionContinuation::GraveyardChoice { .. } => {
-                return self.finish_graveyard_choice(pending, chosen);
-            }
             ResolutionContinuation::ChooseCard { .. } => {
                 return self.finish_choose_card(pending, chosen);
             }

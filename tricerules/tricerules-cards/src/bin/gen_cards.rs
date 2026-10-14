@@ -6400,33 +6400,25 @@ mod tests {
                 assert_eq!((group.min, group.max), (1, 1));
                 assert_eq!(group.effect_indices, [0]);
             } else {
-                assert_eq!(
-                    trigger.effect,
-                    [
-                        SpellEffectKind::Mill {
-                            count: Amount::Fixed(3),
-                            who: PlayerRecipient::Controller,
-                        },
-                        SpellEffectKind::ChooseGraveyardCard {
-                            filter: ZoneCardFilter {
-                                any_of: Some(vec![
-                                    ZoneCardFilter {
-                                        card_type: Some(CardTypeFilter::Creature),
-                                        ..ZoneCardFilter::default()
-                                    },
-                                    ZoneCardFilter {
-                                        required_subtypes: vec!["Spacecraft".into()],
-                                        ..ZoneCardFilter::default()
-                                    },
-                                ]),
-                                ..ZoneCardFilter::default()
-                            },
-                            destination: GraveyardDestination::Hand,
-                            optional: false,
-                            from_result: None,
-                        },
-                    ]
-                );
+                let expected_program: tricerules_cards::primitives::CardProgram = ron::from_str(
+                    r#"(body: (steps: [
+                            (id: "mill_three", bind: [], input: None,
+                                kind: Perform(Mill(count: 3, who: Controller))),
+                            (id: "choose_creature_or_spacecraft", bind: [], input: None,
+                                kind: Perform(ChooseCard(
+                                    source: WholeCurrentGraveyard,
+                                    filter: (any_of: Some([
+                                        (card_type: Some(Creature)),
+                                        (required_subtypes: ["Spacecraft"]),
+                                    ])),
+                                    destination: Hand,
+                                    optional: false,
+                                ))),
+                        ], yields: []), target_bindings: [])"#,
+                )
+                .expect("Fell Gravship's exact WholeCurrentGraveyard program is valid RON");
+                assert!(trigger.effect.is_empty());
+                assert_eq!(trigger.program.as_ref(), Some(&expected_program));
                 assert!(trigger.targeting.is_none());
             }
         }

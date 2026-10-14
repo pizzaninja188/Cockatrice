@@ -5,17 +5,23 @@
   face_id: "say_its_name",
   mana_cost: "{1}{G}",
   types: ["Sorcery"],
-  spell_effect: [
-    Mill(count: 3),
-    ChooseGraveyardCard(
-      filter: (any_of: Some([
-        (card_type: Some(Creature)),
-        (card_type: Some(Land)),
-      ])),
-      destination: Hand,
-      optional: true,
-    ),
-  ],
+  spell_program: Some((
+    body: (steps: [
+      (id: "mill_three", bind: [], input: None,
+        kind: Perform(Mill(count: 3, who: Controller))),
+      (id: "choose_creature_or_land", bind: [], input: None,
+        kind: Perform(ChooseCard(
+          source: WholeCurrentGraveyard,
+          filter: (any_of: Some([
+            (card_type: Some(Creature)),
+            (card_type: Some(Land)),
+          ])),
+          destination: Hand,
+          optional: true,
+        ))),
+    ], yields: []),
+    target_bindings: [],
+  )),
   activated_abilities: [(
     ability_id: "activated_01",
     presentation: OracleLines([2]),
